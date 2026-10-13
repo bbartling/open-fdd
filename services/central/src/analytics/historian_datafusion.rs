@@ -1,0 +1,6234 @@
+//! Historian Parquet bridge for DataFusion analytics (Milestone D1).
+
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::path::PathBuf;
+
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
+use datafusion::prelude::SessionContext;
+use fdd_sql::{new_historian_session, register_parquet_tree, run_sql};
+use fdd_store::HistorianConfig;
+use serde_json::{json, Value};
+
+use super::{
+    envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, DF_ENGINE, QV_DIURNAL, QV_ECONOMIZER,
+    QV_MECHANICAL_COOLING, QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_HEALTH, QV_SENSOR_STATS,
+    QV_SETPOINTS, QV_SQL_ANOMALY, QV_TOPOLOGY,
+};
+
+/// Production DataFusion session: shared process-wide FairSpillPool sized as a
+/// fraction of the detected cgroup/host limit, DiskManager spill under
+/// `OPENFDD_DATAFUSION_SPILL_DIR` (default `<storage_root>/.datafusion-spill`),
+/// and `OPENFDD_QUERY_MEMORY_MB` as the per-request ceiling (not the pool size).
+///
+/// Bare `SessionContext::new()` has no pool and no spill — never use it on
+/// product analytics / AFDD paths (#1179).
+///
+/// Wave-X ADR-010: when `OPENFDD_HISTORIAN=timescale` (product default), DataFusion
+/// sessions are forbidden on the product path — call Timescale SQL helpers instead.
+pub fn new_bounded_session() -> Result<SessionContext> {
+    if crate::timescale_historian::historian_is_timescale() {
+        anyhow::bail!(
+            "Wave-X 3.6.0: DataFusion SessionContext retired on product path \
+             (OPENFDD_HISTORIAN=timescale). Use Timescale SQL / fdd_tsdb."
+        );
+    }
+    let cfg = HistorianConfig::from_env().map_err(|e| anyhow!("historian config: {e}"))?;
+    new_historian_session(&cfg).map_err(|e| anyhow!("bounded DataFusion session: {e}"))
+}
+
+/// Canonical numeric role columns that may appear as `history` columns after
+/// ingest (see `fdd_core::columns::normalize_role`). `occ_mode` is Utf8 and is
+/// handled separately by the schedule path.
+const NUMERIC_ROLE_COLS: &[&str] = &[
+    "oa_t",
+    "web_oa_t",
+    "web_wb_t",
+    "rat",
+    "mat",
+    "sat",
+    "zone_t",
+    "zone_rh",
+    "zone_flow",
+    "fan_cmd",
+    "fan_status",
+    "oa_damper_pct",
+    "clg_valve_pct",
+    "htg_valve_pct",
+    "damper_pct",
+    "reheat_valve_pct",
+    "sat_sp",
+    "duct_static",
+    "duct_static_sp",
+    "chw_supply_t",
+    "chw_return_t",
+    "cw_supply_t",
+    "cw_return_t",
+    "hw_supply_t",
+    "hw_return_t",
+    "elec_power",
+    "gas_flow",
+    "chiller_power",
+    "chiller_amps",
+    "oa_h",
+    "return_fan",
+    "chw_supply_sp",
+    "chw_dp",
+    "chw_dp_sp",
+    "chw_flow",
+    "chw_pump_cmd",
+    "min_flow_sp",
+    "zone_t_sp",
+];
+
+/// Resolve Parquet historian root — same env fallbacks as edge FDD registry.
+///
+/// Wave L: hub-wide / unscoped paths go through a mode-OFF passthrough so the
+/// root stays the hub base. Request-scoped analytics with a real
+/// [`crate::tenant::TenantContext`] must call [`parquet_root_for_context`].
+pub fn parquet_root() -> PathBuf {
+    let passthrough = crate::tenant::TenantContext {
+        tenant_id: Some("legacy".into()),
+        building_ids: vec![],
+        hub_admin: true,
+        multi_tenant: false,
+    };
+    parquet_root_for_context(&passthrough).unwrap_or_else(|_| parquet_root_base())
+}
+
+/// Hub storage root (never tenant-prefixed). Prefer [`parquet_root`] when mode OFF.
+pub fn parquet_root_base() -> PathBuf {
+    if let Some(p) = fdd_store::local_file_root_from_env() {
+        return p;
+    }
+    if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
+        let under_ws = PathBuf::from(&ws).join(".cache/parquet");
+        if under_ws.is_dir() || PathBuf::from(&ws).is_dir() {
+            return under_ws;
+        }
+    }
+    for c in [
+        PathBuf::from(".cache/parquet"),
+        PathBuf::from("/var/openfdd/workspace/.cache/parquet"),
+        PathBuf::from("workspace/.cache/parquet"),
+    ] {
+        if c.is_dir() {
+            return c;
+        }
+    }
+    PathBuf::from(".cache/parquet")
+}
+
+/// Tenant-scoped Parquet root for DataFusion registration / writes.
+///
+/// Mode OFF → same as [`parquet_root`]. Mode ON → `{base}/tenants/{tid}`.
+pub fn parquet_root_for_context(ctx: &crate::tenant::TenantContext) -> Result<PathBuf, String> {
+    ctx.historian_root(&parquet_root_base())
+}
+
+fn session_is_metric() -> bool {
+    let path = if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
+        PathBuf::from(ws).join("data/session_config.json")
+    } else {
+        PathBuf::from("workspace/data/session_config.json")
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&text) else {
+        return false;
+    };
+    v.get("unit_system")
+        .and_then(|u| u.as_str())
+        .map(fdd_core::is_metric_unit_system)
+        .unwrap_or(false)
+}
+
+/// SQL expression: coerce a history role column to DOUBLE for aggregates.
+///
+/// Parquet ingest may store numeric points as Utf8View; AVG/STDDEV/SUM require
+/// an explicit cast (Railway wide hives hit `avg(Utf8View)` planning errors).
+pub(crate) fn history_role_numeric_sql(col: &str) -> String {
+    if col.is_empty() || !col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return "CAST(NULL AS DOUBLE)".to_string();
+    }
+    format!("try_cast(trim(CAST({col} AS VARCHAR)) AS DOUBLE)")
+}
+
+/// History temperature column as °F DOUBLE (cast + optional metric → imperial).
+fn history_temp_sql(col: &str) -> String {
+    let numeric = history_role_numeric_sql(col);
+    if session_is_metric() && fdd_core::is_temperature_role(col) {
+        format!("(({numeric}) * 9.0 / 5.0 + 32.0)")
+    } else {
+        numeric
+    }
+}
+
+/// Sanitize a `building_id` for use as a Hive path segment. Rejects any value
+/// with path separators or `..` so a query field can never escape the parquet
+/// root; returns `None` for empty/unsafe ids (caller falls back to whole tree).
+fn safe_building_segment(building_id: Option<&str>) -> Option<String> {
+    let bid = building_id.map(str::trim).filter(|s| !s.is_empty())?;
+    if bid.contains('/') || bid.contains('\\') || bid.contains("..") || bid.contains('\0') {
+        return None;
+    }
+    Some(bid.to_string())
+}
+
+/// Soft-OPEN 371 #1222: inventory equipment from on-disk partition directories.
+///
+/// Never run `SELECT … GROUP BY equipment_id` over a live wide hive (ACME
+/// ~100k parts → multi‑GiB DataFusion materialization → slope abort → central
+/// restart → nginx 502). Prefer:
+/// - hive `history/building_id={bid}/equipment_id=*` (hub + tenants)
+/// - legacy package `building={bid}/equipment=*`
+/// - additive `equipment_types.json` keys
+pub fn list_equipment_ids_from_hive(building_id: &str) -> Vec<String> {
+    let Some(bid) = safe_building_segment(Some(building_id)) else {
+        return Vec::new();
+    };
+    let mut out = BTreeSet::new();
+    let base = parquet_root_base();
+    collect_equipment_ids_under(
+        &base.join("history").join(format!("building_id={bid}")),
+        "equipment_id=",
+        &mut out,
+    );
+    collect_equipment_ids_under(
+        &base.join(format!("building={bid}")),
+        "equipment=",
+        &mut out,
+    );
+    let tenants = base.join("tenants");
+    if tenants.is_dir() {
+        if let Ok(rd) = std::fs::read_dir(&tenants) {
+            for entry in rd.flatten() {
+                let tenant_root = entry.path();
+                collect_equipment_ids_under(
+                    &tenant_root
+                        .join("history")
+                        .join(format!("building_id={bid}")),
+                    "equipment_id=",
+                    &mut out,
+                );
+                collect_equipment_ids_under(
+                    &tenant_root.join(format!("building={bid}")),
+                    "equipment=",
+                    &mut out,
+                );
+            }
+        }
+    }
+    // Registry keys are additive (stamped types without hive parts yet).
+    for id in open_fdd_edge_prototype::equipment_types::load_type_map(&base, Some(&bid)).keys() {
+        out.insert(id.clone());
+    }
+    for id in
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), Some(&bid)).keys()
+    {
+        out.insert(id.clone());
+    }
+    out.into_iter().collect()
+}
+
+fn collect_equipment_ids_under(parent: &std::path::Path, prefix: &str, out: &mut BTreeSet<String>) {
+    if !parent.is_dir() {
+        return;
+    }
+    let Ok(rd) = std::fs::read_dir(parent) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(eq) = name.strip_prefix(prefix) else {
+            continue;
+        };
+        if eq.is_empty()
+            || eq.contains('/')
+            || eq.contains('\\')
+            || eq.contains("..")
+            || eq.contains('\0')
+        {
+            continue;
+        }
+        out.insert(eq.to_string());
+    }
+}
+
+/// Register `history` for an optional `building_id` scope (OFDD-070).
+///
+/// When `building_id` is set, prefers canonical live Hive
+/// `history/building_id={id}/`, then legacy package sidecars `building={id}/`.
+/// Wave U V7 dual-read: newer of `tenants/{tid}/…` and hub-root (tie → hub).
+/// Does **not** fall back to the whole tree (that would mix other buildings).
+/// Returns `Ok(false)` when nothing usable is present.
+///
+/// Prefer [`open_history_scan`] / [`open_history_scan_for_tenant`] when the
+/// caller will run DataFusion SQL — those APIs return a scan permit that must
+/// be held for the full query lifetime.
+pub async fn try_register_history_scoped_for_tenant(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<bool> {
+    let hub = parquet_root_base();
+    if !hub.is_dir() {
+        return Ok(false);
+    }
+    match safe_building_segment(building_id) {
+        Some(bid) => {
+            let resolved = match fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::debug!(error = %e, building = %bid, "unsafe building dual-read");
+                    return Ok(false);
+                }
+            };
+            if !fdd_store::building_history_present(&resolved.root, &bid) {
+                tracing::debug!(
+                    building = %bid,
+                    root = %resolved.root.display(),
+                    source = ?resolved.source,
+                    "no building-scoped parquet; historian scope empty"
+                );
+                return Ok(false);
+            }
+            tracing::debug!(
+                building = %bid,
+                read_root = %resolved.root.display(),
+                read_source = resolved.source.as_str(),
+                tenant_id = resolved.tenant_id.as_deref().unwrap_or(""),
+                "historian dual-read root"
+            );
+            match fdd_sql::register_historian_building(ctx, &resolved.root, &bid).await {
+                Ok(_) => Ok(true),
+                Err(e) => {
+                    tracing::debug!(
+                        error = %e,
+                        building = %bid,
+                        root = %resolved.root.display(),
+                        "no building-scoped parquet; historian scope empty"
+                    );
+                    Ok(false)
+                }
+            }
+        }
+        None => match register_parquet_tree(ctx, &hub).await {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                tracing::debug!(error = %e, root = %hub.display(), "historian parquet register skipped");
+                Ok(false)
+            }
+        },
+    }
+}
+
+/// Register historian scope and return a scan permit the caller must hold until
+/// DataFusion collect/stream completes (serializes vs runtime H4 compaction).
+pub async fn open_history_scan(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+) -> Result<(bool, fdd_store::ScanPermit)> {
+    open_history_scan_for_tenant(ctx, building_id, None).await
+}
+
+/// Tenant-aware variant of [`open_history_scan`].
+pub async fn open_history_scan_for_tenant(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<(bool, fdd_store::ScanPermit)> {
+    let scan = fdd_store::try_historian_scan_permit()
+        .or_else(|_| Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait()))?;
+    let ok = try_register_history_scoped_for_tenant(ctx, building_id, preferred_tenant).await?;
+    Ok((ok, scan))
+}
+
+async fn history_columns_async(ctx: &SessionContext) -> Result<HashSet<String>> {
+    let df = ctx
+        .table("history")
+        .await
+        .map_err(|e| anyhow!("history table: {e}"))?;
+    Ok(df
+        .schema()
+        .fields()
+        .iter()
+        .map(|f| f.name().to_string())
+        .collect())
+}
+
+fn pick_ts_col(cols: &HashSet<String>) -> Option<&'static str> {
+    ["timestamp_utc", "ts", "timestamp"]
+        .into_iter()
+        .find(|&c| cols.contains(c))
+}
+
+/// Boolean on-expression preferring fan_status, then fan_cmd (normalized > 0.05).
+fn on_expr(cols: &HashSet<String>) -> Option<String> {
+    let has_status = cols.contains("fan_status");
+    let has_cmd = cols.contains("fan_cmd");
+    let fan_status = history_role_numeric_sql("fan_status");
+    let fan_cmd = history_role_numeric_sql("fan_cmd");
+    if has_status && has_cmd {
+        Some(format!(
+            "CASE \
+               WHEN {fan_status} IS NOT NULL THEN \
+                 CASE WHEN {fan_status} > 0.05 THEN true ELSE false END \
+               WHEN {fan_cmd} IS NOT NULL THEN \
+                 CASE WHEN (CASE WHEN {fan_cmd} > 1.0 THEN {fan_cmd} / 100.0 ELSE {fan_cmd} END) > 0.05 \
+                   THEN true ELSE false END \
+               ELSE false \
+             END"
+        ))
+    } else if has_status {
+        Some(format!(
+            "CASE WHEN {fan_status} IS NOT NULL AND {fan_status} > 0.05 THEN true ELSE false END"
+        ))
+    } else if has_cmd {
+        Some(format!(
+            "CASE WHEN {fan_cmd} IS NOT NULL AND \
+               (CASE WHEN {fan_cmd} > 1.0 THEN {fan_cmd} / 100.0 ELSE {fan_cmd} END) > 0.05 \
+             THEN true ELSE false END"
+        ))
+    } else {
+        None
+    }
+}
+
+/// Threshold on-expression for a single numeric status/amp column.
+fn col_on_gt(col: &str, threshold: f64) -> String {
+    let n = history_role_numeric_sql(col);
+    format!("CASE WHEN {n} IS NOT NULL AND {n} > {threshold} THEN true ELSE false END")
+}
+
+/// Mechanical-cooling proof (never fan).
+///
+/// Hierarchy matches pandas `_chiller_on_mask` / `_select_mech_cooling_proof`:
+/// prefer cmd/status; then amps; then power (`chiller_power` / `compressor_power`);
+/// never OR status with amps/power (amps linger after status off).
+fn cooling_on_expr(cols: &HashSet<String>) -> Option<String> {
+    let status_names = [
+        "chiller_status",
+        "compressor_status",
+        "comp_status",
+        "comp_1_status",
+        "comp_2_status",
+        "dx_status",
+        "chiller_cmd",
+        "compressor_cmd",
+    ];
+    let mut status_parts: Vec<String> = Vec::new();
+    for name in status_names {
+        if cols.contains(name) {
+            status_parts.push(col_on_gt(name, 0.05));
+        }
+    }
+    // Any remaining column name that clearly looks like chiller/compressor status/cmd.
+    for c in cols {
+        let u = c.to_ascii_lowercase();
+        if status_parts.iter().any(|p| p.contains(c.as_str())) {
+            continue;
+        }
+        if (u.contains("chiller") && (u.contains("status") || u.contains("cmd")))
+            || (u.contains("comp")
+                && (u.contains("status") || u.contains("cmd"))
+                && !u.contains("occup"))
+            || (u.contains("dx") && (u.contains("status") || u.contains("cmd")))
+        {
+            status_parts.push(col_on_gt(c, 0.05));
+        }
+    }
+    if !status_parts.is_empty() {
+        if status_parts.len() == 1 {
+            return Some(status_parts.remove(0));
+        }
+        return Some(format!("({})", status_parts.join(" OR ")));
+    }
+    let mut amp_parts: Vec<String> = Vec::new();
+    for name in ["chiller_amps", "comp_amps", "compressor_amps", "amps"] {
+        if cols.contains(name) {
+            amp_parts.push(col_on_gt(name, 2.0));
+        }
+    }
+    if !amp_parts.is_empty() {
+        if amp_parts.len() == 1 {
+            return Some(amp_parts.remove(0));
+        }
+        return Some(format!("({})", amp_parts.join(" OR ")));
+    }
+    let mut power_parts: Vec<String> = Vec::new();
+    for name in ["chiller_power", "compressor_power", "comp_power"] {
+        if cols.contains(name) {
+            power_parts.push(col_on_gt(name, 1.0));
+        }
+    }
+    for c in cols {
+        let u = c.to_ascii_lowercase();
+        if power_parts.iter().any(|p| p.contains(c.as_str())) {
+            continue;
+        }
+        if (u.contains("chiller") || u.contains("compressor") || u.contains("comp"))
+            && u.contains("power")
+            && !u.contains("fan")
+        {
+            power_parts.push(col_on_gt(c, 1.0));
+        }
+    }
+    if power_parts.is_empty() {
+        return None;
+    }
+    if power_parts.len() == 1 {
+        return Some(power_parts.remove(0));
+    }
+    Some(format!("({})", power_parts.join(" OR ")))
+}
+
+/// Plant weekly / equipment runtime on-proof: fan OR chiller/boiler/pump status.
+fn plant_runtime_on_expr(cols: &HashSet<String>) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(fan) = on_expr(cols) {
+        parts.push(format!("({fan})"));
+    }
+    if let Some(cool) = cooling_on_expr(cols) {
+        parts.push(format!("({cool})"));
+    }
+    for name in [
+        "boiler_status",
+        "boiler_cmd",
+        "hwp_status",
+        "hw_pump_status",
+        "cwp_status",
+    ] {
+        if cols.contains(name) {
+            parts.push(format!("({})", col_on_gt(name, 0.05)));
+        }
+    }
+    for c in cols {
+        let u = c.to_ascii_lowercase();
+        if (u.contains("boiler") && u.contains("status"))
+            || (u.contains("hwp") && (u.contains("status") || u.contains("_s")))
+            || (u.contains("cwp") && u.contains("status"))
+            || (u.contains("pump") && u.contains("status"))
+        {
+            let expr = col_on_gt(c, 0.05);
+            if !parts.iter().any(|p| p.contains(c.as_str())) {
+                parts.push(format!("({expr})"));
+            }
+        }
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    if parts.len() == 1 {
+        return Some(parts.remove(0));
+    }
+    Some(parts.join(" OR "))
+}
+
+fn round2(x: f64) -> f64 {
+    (x * 100.0).round() / 100.0
+}
+
+/// Map a stamped equipment kind → Overview plant chart group (air / boiler / chiller).
+///
+/// Missing or unrecognized stamps return `None`. Equipment-id text is not a group.
+pub fn plant_group_for_typed(
+    _equipment_id: &str,
+    stamped_type: Option<&str>,
+) -> Option<&'static str> {
+    let kind = stamped_type.and_then(open_fdd_edge_prototype::equipment_types::canonical_kind)?;
+    match kind {
+        "ahu" => Some("air"),
+        "chiller" | "cooling_tower" | "heatpump" => Some("chiller"),
+        "boiler" => Some("boiler"),
+        _ => None,
+    }
+}
+
+/// Load equipment type stamps from hub + every tenant root for `building_id`.
+///
+/// Live MQTT writes under `tenants/{tid}/building=…`; ops patches may land on
+/// the hub `building=…` map. Soft-OPEN 371 #1229: weather stamps must be found
+/// wherever they live so bas-vs-web can prune before DataFusion opens the hive.
+fn load_type_maps_for_building(building_id: &str) -> BTreeMap<String, String> {
+    let mut merged = BTreeMap::new();
+    let base = parquet_root_base();
+    for (id, stamp) in
+        open_fdd_edge_prototype::equipment_types::load_type_map(&base, Some(building_id))
+    {
+        merged.insert(id, stamp);
+    }
+    for (id, stamp) in
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), Some(building_id))
+    {
+        // Prefer an already-recognized weather stamp over a later zone_other.
+        if let Some(existing) = merged.get(&id) {
+            if open_fdd_edge_prototype::equipment_types::canonical_kind(existing) == Some("weather")
+            {
+                continue;
+            }
+        }
+        merged.insert(id, stamp);
+    }
+    let tenants = base.join("tenants");
+    if tenants.is_dir() {
+        if let Ok(rd) = std::fs::read_dir(&tenants) {
+            for entry in rd.flatten() {
+                let tenant_root = entry.path();
+                for (id, stamp) in open_fdd_edge_prototype::equipment_types::load_type_map(
+                    &tenant_root,
+                    Some(building_id),
+                ) {
+                    if let Some(existing) = merged.get(&id) {
+                        if open_fdd_edge_prototype::equipment_types::canonical_kind(existing)
+                            == Some("weather")
+                        {
+                            continue;
+                        }
+                    }
+                    // Tenant live stamps win over hub except weather protection above.
+                    merged.insert(id, stamp);
+                }
+            }
+        }
+    }
+    merged
+}
+
+/// Equipment ids whose stamp canonicalizes to `weather`.
+fn stamped_weather_ids(building_id: Option<&str>) -> Vec<String> {
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Vec::new();
+    };
+    let mut ids: Vec<String> = load_type_maps_for_building(bid)
+        .into_iter()
+        .filter(|(_, stamp)| {
+            open_fdd_edge_prototype::equipment_types::canonical_kind(stamp) == Some("weather")
+        })
+        .map(|(id, _)| id)
+        .collect();
+    ids.sort();
+    ids
+}
+
+/// SQL predicate for equipment whose package stamp is canonical kind `weather`.
+///
+/// An empty stamp set matches nothing (`AND 1 = 0`) or, when `negate`, leaves
+/// the predicate off so non-weather rows are not invented from id text.
+/// Prefer positive `IN` lists — `NOT IN` defeats Hive partition pruning on ACME.
+fn stamped_weather_id_predicate(building_id: Option<&str>, negate: bool) -> String {
+    let ids = stamped_weather_ids(building_id);
+    if ids.is_empty() {
+        return if negate {
+            String::new()
+        } else {
+            " AND 1 = 0".to_string()
+        };
+    }
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    // Keep equipment_id uncast so DataFusion can prune Hive partitions.
+    if negate {
+        format!(" AND equipment_id NOT IN ({list})")
+    } else {
+        format!(" AND equipment_id IN ({list})")
+    }
+}
+
+/// Positive equipment allow-list for bas-vs-web (weather + BAS OAT carriers).
+///
+/// Never returns the full ACME hive. When weather stamps exist, BAS carriers are
+/// caller filters, AHU stamps, or a schema peek for `oa_t` (metadata only).
+fn bas_vs_web_equipment_allow_list(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    equipment_filter: Option<&[String]>,
+) -> Vec<String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return Vec::new();
+    };
+    let weather = stamped_weather_ids(Some(&bid));
+    let mut allow: BTreeSet<String> = weather.iter().cloned().collect();
+    if let Some(filter) = equipment_filter {
+        for id in filter {
+            let id = id.trim();
+            if !id.is_empty() {
+                allow.insert(id.to_string());
+            }
+        }
+    }
+    let types = load_type_maps_for_building(&bid);
+    for (id, stamp) in &types {
+        if open_fdd_edge_prototype::equipment_types::canonical_kind(stamp) == Some("ahu") {
+            allow.insert(id.clone());
+        }
+    }
+    // Schema peek for BAS / web OAT carriers when stamps alone are incomplete
+    // (ACME MQTT often stamps everything zone_other; package fixtures may have
+    // web_oa_t on an unstamped weather equipment id).
+    let hub = parquet_root_base();
+    let read_root = fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+        .map(|r| r.root)
+        .unwrap_or(hub);
+    let need_bas_peek = allow.len() <= weather.len();
+    let need_web_peek = weather.is_empty();
+    if need_bas_peek || need_web_peek {
+        for id in list_equipment_ids_from_hive(&bid) {
+            if weather.iter().any(|w| w == &id) {
+                continue;
+            }
+            let cols = fdd_store::peek_equipment_history_columns(&read_root, &bid, &id);
+            let has_bas = cols.iter().any(|c| {
+                matches!(
+                    c.as_str(),
+                    "oa_t" | "outside_air_temp" | "outside_air_temperature"
+                )
+            });
+            let has_web = cols.iter().any(|c| {
+                matches!(
+                    c.as_str(),
+                    "web_oa_t" | "oa_t_web" | "oat_meteo" | "oa_t_meteo" | "dry_bulb_f"
+                )
+            });
+            if (need_bas_peek && has_bas) || (need_web_peek && has_web) {
+                allow.insert(id);
+            }
+        }
+    }
+    allow.into_iter().collect()
+}
+
+fn equipment_id_in_predicate(ids: &[String]) -> String {
+    if ids.is_empty() {
+        return " AND 1 = 0".to_string();
+    }
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(" AND equipment_id IN ({list})")
+}
+
+/// Soft-OPEN 371 #1230: motor/runtime carriers only — never the full ACME hive.
+///
+/// Prefer stamped ahu/chiller/boiler/heatpump, then schema-peek equipment that
+/// actually carries fan/pump/chiller/boiler status columns (MQTT sites often
+/// stamp everything `zone_other`).
+fn motor_runtime_equipment_allow_list(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    equipment_filter: Option<&[String]>,
+) -> Vec<String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return Vec::new();
+    };
+    let mut allow: BTreeSet<String> = BTreeSet::new();
+    if let Some(filter) = equipment_filter {
+        for id in filter {
+            let id = id.trim();
+            if !id.is_empty() {
+                allow.insert(id.to_string());
+            }
+        }
+    }
+    let types = load_type_maps_for_building(&bid);
+    for (id, stamp) in &types {
+        if let Some("ahu" | "chiller" | "boiler" | "heatpump" | "cooling_tower" | "weather") =
+            open_fdd_edge_prototype::equipment_types::canonical_kind(stamp)
+        {
+            allow.insert(id.clone());
+        }
+    }
+    // Weather ids for weekly OAT broadcast (not motors; tiny).
+    let weather = stamped_weather_ids(Some(&bid));
+    for id in &weather {
+        allow.insert(id.clone());
+    }
+    let hub = parquet_root_base();
+    let read_root = fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+        .map(|r| r.root)
+        .unwrap_or(hub);
+    // Peek when stamps alone are thin (ACME MQTT often stamps everything zone_other).
+    let motor_stamped = allow
+        .iter()
+        .filter(|id| !weather.iter().any(|w| w == *id))
+        .count();
+    if motor_stamped < 2 {
+        for id in list_equipment_ids_from_hive(&bid) {
+            let cols = fdd_store::peek_equipment_history_columns(&read_root, &bid, &id);
+            if cols.iter().any(|c| {
+                let u = c.to_ascii_lowercase();
+                matches!(
+                    u.as_str(),
+                    "fan_status"
+                        | "fan_cmd"
+                        | "chiller_status"
+                        | "compressor_status"
+                        | "boiler_status"
+                        | "boiler_cmd"
+                        | "hwp_status"
+                        | "cwp_status"
+                ) || ((u.contains("fan") || u.contains("pump") || u.contains("boiler"))
+                    && u.contains("status"))
+            }) {
+                allow.insert(id);
+            }
+        }
+    }
+    allow.into_iter().collect()
+}
+
+/// Exact stamped ids for a cohort, with a fan/sat peek fallback for AHU when
+/// MQTT defaults stamp everything `zone_other`.
+fn cohort_equipment_allow_list(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    kinds: &[&str],
+    equipment_filter: Option<&[String]>,
+) -> Vec<String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return Vec::new();
+    };
+    let mut allow: BTreeSet<String> = BTreeSet::new();
+    if let Some(filter) = equipment_filter {
+        for id in filter {
+            let id = id.trim();
+            if !id.is_empty() {
+                allow.insert(id.to_string());
+            }
+        }
+    }
+    let wanted = wanted_kinds(kinds);
+    if !wanted.is_empty() {
+        allow.extend(ids_from_stamp_map(Some(&bid), &wanted));
+    }
+    let wants_ahu = wanted.iter().any(|k| *k == "ahu");
+    if allow.is_empty() && wants_ahu {
+        let hub = parquet_root_base();
+        let read_root = fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid)
+            .map(|r| r.root)
+            .unwrap_or(hub);
+        for id in list_equipment_ids_from_hive(&bid) {
+            let cols = fdd_store::peek_equipment_history_columns(&read_root, &bid, &id);
+            if cols.iter().any(|c| {
+                matches!(
+                    c.as_str(),
+                    "fan_status" | "fan_cmd" | "sat" | "mat" | "rat" | "duct_static"
+                )
+            }) {
+                allow.insert(id);
+            }
+        }
+    }
+    allow.into_iter().collect()
+}
+
+/// OAT for mech-cooling bins: prefer web/meteo OAT (pandas Overview default).
+fn mech_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
+    web_oat_col(cols).or_else(|| {
+        if cols.contains("oa_t") {
+            Some("oa_t")
+        } else {
+            None
+        }
+    })
+}
+
+fn web_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
+    // dry_bulb_f is common on weather CSVs before role remap to web_oa_t.
+    [
+        "web_oa_t",
+        "oa_t_web",
+        "oat_meteo",
+        "oa_t_meteo",
+        "dry_bulb_f",
+    ]
+    .into_iter()
+    .find(|&c| cols.contains(c))
+}
+
+/// BAS / local OAT column — cookbook `oa_t` plus MQTT raw aliases that never
+/// went through package `normalize_role` renaming (Wave H bldg2 hive parquet).
+fn bas_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
+    ["oa_t", "outside_air_temp", "outside_air_temperature"]
+        .into_iter()
+        .find(|&c| cols.contains(c))
+}
+
+/// Prefer web/meteo OAT for weekly plant avg-while-on (vibe19 `prefer_web_oat`).
+fn weekly_oat_col(cols: &HashSet<String>) -> Option<&'static str> {
+    mech_oat_col(cols)
+}
+
+/// Short signal label for weekly chart series names (schema-level best effort).
+fn plant_signal_label(cols: &HashSet<String>) -> &'static str {
+    if cols.contains("fan_status") {
+        "fan-status"
+    } else if cols.contains("fan_cmd") {
+        "fan-cmd"
+    } else if cols.contains("chiller_status") {
+        "chiller-status"
+    } else if cols.contains("boiler_status") {
+        "boiler-status"
+    } else {
+        "status"
+    }
+}
+
+fn equipment_filter_sql(equipment_filter: Option<&[String]>) -> String {
+    match equipment_filter {
+        Some(ids) if !ids.is_empty() => {
+            let list = ids
+                .iter()
+                .map(|id| format!("'{}'", id.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(" AND equipment_id IN ({list})")
+        }
+        _ => String::new(),
+    }
+}
+
+/// SQL fragment for optional inclusive-start / exclusive-end historian window.
+///
+/// Literals match `fdd_rules` / DataFusion Parquet timestamp comparisons
+/// (`timestamp_utc >= '2026-01-01T00:00:00Z'`).
+fn time_range_sql(
+    ts_col: &str,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> String {
+    let mut out = String::new();
+    if let Some(t) = start {
+        out.push_str(&format!(
+            " AND {ts_col} >= '{}'",
+            t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        ));
+    }
+    if let Some(t) = end {
+        out.push_str(&format!(
+            " AND {ts_col} < '{}'",
+            t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        ));
+    }
+    out
+}
+
+/// Resolve analytics start/end: default lookback when start omitted; reject
+/// spans wider than [`ANALYTICS_MAX_LOOKBACK_DAYS`] (caller maps to 422).
+pub fn resolve_analytics_window(
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+    default_lookback_days: i64,
+) -> Result<(DateTime<Utc>, Option<DateTime<Utc>>), String> {
+    let end_t = end.unwrap_or_else(Utc::now);
+    let start_t =
+        start.unwrap_or_else(|| end_t - chrono::Duration::days(default_lookback_days.max(1)));
+    if start_t >= end_t {
+        return Err("query.start must be before query.end".into());
+    }
+    let span = end_t - start_t;
+    if span > chrono::Duration::days(ANALYTICS_MAX_LOOKBACK_DAYS) {
+        return Err(format!(
+            "analytics window exceeds {ANALYTICS_MAX_LOOKBACK_DAYS} days; pass a tighter query.start/end or page by month (refresh over full history is refused)"
+        ));
+    }
+    Ok((start_t, Some(end_t)))
+}
+
+/// Bucket width (seconds) so `date_bin` yields ≤ `max_points` buckets over span.
+fn date_bin_seconds_for_points(start: DateTime<Utc>, end: DateTime<Utc>, max_points: usize) -> i64 {
+    let span = (end - start).num_seconds().max(1);
+    let buckets = max_points.max(1) as i64;
+    (span / buckets).max(1)
+}
+
+/// Preset tokens name canonical kinds. They are not `equipment_id` prefixes.
+///
+/// `RTU` is kind `ahu`. It must not become `LIKE 'RTU%'`, which selects
+/// `RTU_010` whenever the operator asked for `RTU_01`.
+fn preset_token_kind(token: &str) -> Option<&'static str> {
+    match token.trim().to_ascii_lowercase().as_str() {
+        "chw" | "chw_plant" => Some("chiller"),
+        "ct" => Some("cooling_tower"),
+        other => open_fdd_edge_prototype::equipment_types::canonical_kind(other),
+    }
+}
+
+fn wanted_kinds(kinds: &[&str]) -> BTreeSet<&'static str> {
+    kinds
+        .iter()
+        .filter_map(|token| preset_token_kind(token))
+        .collect()
+}
+
+fn ids_from_stamp_map(building_id: Option<&str>, wanted: &BTreeSet<&str>) -> BTreeSet<String> {
+    open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id)
+        .into_iter()
+        .filter(|(_, stamp)| {
+            open_fdd_edge_prototype::equipment_types::canonical_kind(stamp)
+                .is_some_and(|kind| wanted.contains(kind))
+        })
+        .map(|(id, _)| id)
+        .collect()
+}
+
+async fn ids_from_history_type_column(
+    ctx: &SessionContext,
+    cols: &HashSet<String>,
+    wanted: &BTreeSet<&str>,
+) -> BTreeSet<String> {
+    let Some(col) = ["equipment_type", "equiptype"]
+        .into_iter()
+        .find(|name| cols.contains(*name))
+    else {
+        return BTreeSet::new();
+    };
+    let sql = format!(
+        "SELECT DISTINCT CAST(equipment_id AS VARCHAR) AS equipment_id, \
+         CAST({col} AS VARCHAR) AS equipment_type \
+         FROM history WHERE {col} IS NOT NULL AND equipment_id IS NOT NULL"
+    );
+    let Ok(result) = run_sql(ctx, &sql).await else {
+        return BTreeSet::new();
+    };
+    let mut ids = BTreeSet::new();
+    for row in result.rows {
+        let eq = row
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let stamp = row
+            .get("equipment_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if eq.is_empty() {
+            continue;
+        }
+        if open_fdd_edge_prototype::equipment_types::canonical_kind(stamp)
+            .is_some_and(|kind| wanted.contains(kind))
+        {
+            ids.insert(eq.to_string());
+        }
+    }
+    ids
+}
+
+/// Exact `equipment_id` list for a stamp cohort.
+///
+/// An empty kind list is no filter. A kind list with no matching stamp matches
+/// nothing. The predicate never uses `LIKE` or a prefix of `equipment_id`.
+async fn stamped_cohort_sql(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    kinds: &[&str],
+    cols: &HashSet<String>,
+) -> String {
+    if kinds.is_empty() {
+        return String::new();
+    }
+    let wanted = wanted_kinds(kinds);
+    if wanted.is_empty() {
+        return " AND 1 = 0".to_string();
+    }
+    let mut ids = ids_from_stamp_map(building_id, &wanted);
+    ids.extend(ids_from_history_type_column(ctx, cols, &wanted).await);
+    if ids.is_empty() {
+        return " AND 1 = 0".to_string();
+    }
+    let list = ids
+        .iter()
+        .map(|id| format!("'{}'", id.replace('\'', "''")))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(" AND CAST(equipment_id AS VARCHAR) IN ({list})")
+}
+
+/// Load runtime hours from historian Parquet via DataFusion.
+///
+/// Returns `Ok(None)` when parquet is missing/empty. When columns support Δt
+/// integration (`equipment_id`, timestamp, fan/status/pump proofs), computes real
+/// forward-interval run hours with gap clipping. Otherwise returns a count-based
+/// envelope with `engine=datafusion` and a warning that column-mapped runtime is next.
+///
+/// When `building_id` is set, scopes the Parquet read like economizer (OFDD-070).
+///
+/// `start` / `end` bound the Δt window (inclusive start, exclusive end). Callers
+/// should set a lookback on large historians — full-history LEAD over large-hive
+/// Parquet exceeds Railway edge timeouts (~180s) and surfaces as nginx 502.
+pub async fn runtime_from_history(
+    equipment_filter: Option<&[String]>,
+    max_gap_seconds: f64,
+    building_id: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let deadline = tokio::time::Instant::now() + RUNTIME_QUERY_TIMEOUT;
+    let query = AnalyticsQuery {
+        building_id: building_id.map(str::to_string),
+        start,
+        end,
+        ..AnalyticsQuery::default()
+    };
+    let max_gap = max_gap_seconds.max(0.0);
+    let stamped_types = rcx_type_stamps(building_id);
+
+    // Soft-OPEN 371 #1230: never LEAD over a named site's full hive. Register
+    // only motor carriers (stamped plant + fan/pump status peek). Building-less
+    // callers (unit fixtures) keep the legacy full open_history_scan path.
+    let (ctx, cols, _scan_guard) = if building_id.is_some() {
+        let allow = motor_runtime_equipment_allow_list(building_id, None, equipment_filter);
+        if allow.is_empty() {
+            let mut env = envelope_with_engine(
+                QV_RUNTIME,
+                &query,
+                vec![
+                    "runtime BLOCKED: no motor carriers in package/hive — need stamped \
+                     ahu/chiller/boiler/heatpump or columns fan_status|fan_cmd|chiller_status|\
+                     compressor_status|boiler_status|hwp_status|cwp_status (or *status with \
+                     fan/pump/boiler)"
+                        .into(),
+                ],
+                DF_ENGINE,
+            );
+            env.coverage = Some(json!({
+                "max_gap_seconds": max_gap,
+                "source": "historian_parquet",
+                "building_id": safe_building_segment(building_id),
+                "start": start.map(|t| t.to_rfc3339()),
+                "end": end.map(|t| t.to_rfc3339()),
+                "allow_list_empty": true,
+                "missing_roles": [
+                    "fan_status",
+                    "fan_cmd",
+                    "chiller_status",
+                    "compressor_status",
+                    "boiler_status",
+                    "hwp_status",
+                    "cwp_status"
+                ],
+            }));
+            return Ok(Some(env));
+        }
+        let Some((ctx, cols, _n, _scan, guard)) =
+            open_history_scoped_equipment_for_tenant(building_id, None, &allow).await?
+        else {
+            return Ok(None);
+        };
+        (ctx, cols, Some(guard))
+    } else {
+        let ctx = new_bounded_session()?;
+        let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
+        if !ok {
+            return Ok(None);
+        }
+        let cols = history_columns_async(&ctx).await?;
+        (ctx, cols, None)
+    };
+    let _keep_eq_scope = _scan_guard;
+    // Allow-list already selected carriers; keep IN filter for caller subsets.
+    let eq_filter = equipment_filter_sql(equipment_filter);
+
+    if cols.contains("equipment_id") {
+        // Fan for air handlers; chiller/boiler/pump status for plant motors.
+        if let (Some(ts_col), Some(on_sql)) = (pick_ts_col(&cols), plant_runtime_on_expr(&cols)) {
+            let range_sql = time_range_sql(ts_col, start, end);
+            let sql = format!(
+                r#"
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    {ts_col} AS ts,
+    {on_sql} AS is_on,
+    LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
+  FROM history
+  WHERE equipment_id IS NOT NULL{eq_filter}{range_sql}
+),
+raw_intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 AS dt_raw
+  FROM ordered
+  WHERE next_ts IS NOT NULL
+),
+intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    CASE
+      WHEN dt_raw < 0.0 THEN 0.0
+      WHEN dt_raw > {max_gap} THEN {max_gap}
+      ELSE dt_raw
+    END AS dt_sec
+  FROM raw_intervals
+),
+spans AS (
+  SELECT
+    equipment_id,
+    (CAST(MAX(ts) AS BIGINT) - CAST(MIN(ts) AS BIGINT)) / 1000000000.0 AS span_sec
+  FROM ordered
+  GROUP BY equipment_id
+),
+counts AS (
+  SELECT
+    equipment_id,
+    COUNT(*) AS samples,
+    SUM(CASE WHEN is_on THEN 1 ELSE 0 END) AS on_samples
+  FROM ordered
+  GROUP BY equipment_id
+)
+SELECT
+  i.equipment_id,
+  SUM(CASE WHEN i.is_on THEN i.dt_sec ELSE 0.0 END) / 3600.0 AS run_hours,
+  CASE
+    WHEN MAX(s.span_sec) > 0.0 THEN 100.0 * SUM(i.dt_sec) / MAX(s.span_sec)
+    ELSE 0.0
+  END AS coverage_pct,
+  MAX(c.samples) AS samples,
+  MAX(c.on_samples) AS on_samples
+FROM intervals i
+JOIN counts c ON c.equipment_id = i.equipment_id
+JOIN spans s ON s.equipment_id = i.equipment_id
+GROUP BY i.equipment_id
+ORDER BY i.equipment_id
+"#
+            );
+
+            // Keep a small portion of the request budget for the optional
+            // weekly chart query. A second full historian scan must not turn a
+            // usable runtime response into an HTTP-200 fail-closed envelope.
+            let main_budget = remaining_budget(deadline, RUNTIME_MAIN_QUERY_TIMEOUT);
+            let timed = tokio::time::timeout(main_budget, run_sql(&ctx, &sql)).await;
+            let sql_result = match timed {
+                Ok(inner) => inner,
+                Err(_) => {
+                    tracing::warn!(
+                        timeout_secs = RUNTIME_MAIN_QUERY_TIMEOUT.as_secs(),
+                        "runtime historian LEAD query exceeded budget; fail-closed empty rows"
+                    );
+                    let query = AnalyticsQuery {
+                        building_id: building_id.map(str::to_string),
+                        start,
+                        end,
+                        ..AnalyticsQuery::default()
+                    };
+                    let mut env = envelope_with_engine(
+                        QV_RUNTIME,
+                        &query,
+                        vec![format!(
+                            "runtime historian query exceeded {}s budget; fail-closed empty rows — pass a tighter query.start/end or compact the hive",
+                            RUNTIME_MAIN_QUERY_TIMEOUT.as_secs()
+                        )],
+                        DF_ENGINE,
+                    );
+                    env.coverage = Some(json!({
+                        "max_gap_seconds": max_gap,
+                        "source": "historian_parquet",
+                        "building_id": safe_building_segment(building_id),
+                        "start": start.map(|t| t.to_rfc3339()),
+                        "end": end.map(|t| t.to_rfc3339()),
+                        "timeout_secs": RUNTIME_QUERY_TIMEOUT.as_secs(),
+                        "fail_closed": true,
+                    }));
+                    return Ok(Some(env));
+                }
+            };
+            match sql_result {
+                Ok(result) => {
+                    if result.rows.is_empty() {
+                        return Ok(None);
+                    }
+                    let mut warnings = vec![
+                        "runtime hours from historian Parquet via DataFusion Δt integration".into(),
+                    ];
+                    let mut equipment = Vec::new();
+                    for row in &result.rows {
+                        let eq = row
+                            .get("equipment_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let run_hours =
+                            row.get("run_hours").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let coverage_pct = row
+                            .get("coverage_pct")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        let samples = row
+                            .get("samples")
+                            .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)))
+                            .unwrap_or(0);
+                        let on_samples = row
+                            .get("on_samples")
+                            .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)))
+                            .unwrap_or(0);
+                        let stamp = stamped_types.get(&eq).map(String::as_str);
+                        equipment.push(json!({
+                            "equipment_id": eq,
+                            "equipment_type": open_fdd_edge_prototype::equipment_types::api_equipment_type_for(&eq, stamp),
+                            "equipment_type_raw": stamp,
+                            "run_hours": round2(run_hours),
+                            "coverage_pct": round2(coverage_pct),
+                            "samples": samples,
+                            "on_samples": on_samples,
+                            "plant_group": plant_group_for_typed(&eq, stamp),
+                        }));
+                    }
+                    let weekly_budget = remaining_budget(deadline, RUNTIME_WEEKLY_QUERY_TIMEOUT);
+                    let weekly_rows = if weekly_budget.is_zero() {
+                        warnings.push(
+                            "weekly plant bins skipped because the shared runtime deadline was exhausted; runtime rows remain available".into(),
+                        );
+                        Vec::new()
+                    } else {
+                        match tokio::time::timeout(
+                            weekly_budget,
+                            runtime_weekly_plant_rows(
+                                &ctx,
+                                RuntimeWeeklyParams {
+                                    ts_col,
+                                    on_sql: &on_sql,
+                                    oat: weekly_oat_col(&cols),
+                                    max_gap,
+                                    eq_filter: &eq_filter,
+                                    range_sql: &range_sql,
+                                },
+                                (plant_signal_label(&cols), &stamped_types),
+                            ),
+                        )
+                        .await
+                        {
+                            Ok(Ok(rows)) => rows,
+                            Ok(Err(e)) => {
+                                warnings.push(format!("weekly plant bins skipped: {e}"));
+                                Vec::new()
+                            }
+                            Err(_) => {
+                                warnings.push(format!(
+                                "weekly plant bins skipped after {}s budget; runtime rows remain available",
+                                RUNTIME_WEEKLY_QUERY_TIMEOUT.as_secs()
+                            ));
+                                Vec::new()
+                            }
+                        }
+                    };
+                    if !weekly_rows.is_empty() {
+                        warnings.push(
+                            "rows include weekly per-equipment plant bins (runtime-weekly-v2)"
+                                .into(),
+                        );
+                    }
+                    let mut env = envelope_with_engine(QV_RUNTIME, &query, warnings, DF_ENGINE);
+                    env.equipment = equipment;
+                    env.rows = if weekly_rows.is_empty() {
+                        env.equipment.clone()
+                    } else {
+                        weekly_rows
+                    };
+                    env.coverage = Some(json!({
+                        "equipment_count": env.equipment.len(),
+                        "weekly_row_count": env.rows.len(),
+                        "max_gap_seconds": max_gap,
+                        "source": "historian_parquet",
+                        "building_id": safe_building_segment(building_id),
+                        "start": start.map(|t| t.to_rfc3339()),
+                        "end": end.map(|t| t.to_rfc3339()),
+                        "query_versions": ["runtime-v1", "runtime-weekly-v1"],
+                    }));
+                    return Ok(Some(env));
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "historian Δt runtime SQL failed; returning registered-history envelope");
+                }
+            }
+        }
+    }
+
+    // Minimum bridge: registered history with rows, engine honesty for DataFusion.
+    let warnings = vec![
+        "historian Parquet registered via DataFusion; column-mapped runtime Δt SQL is next \
+         (need equipment_id + timestamp_utc + fan/chiller/boiler/pump on-proof)"
+            .into(),
+    ];
+    let mut env = envelope_with_engine(QV_RUNTIME, &query, warnings, DF_ENGINE);
+    env.coverage = Some(json!({
+        "max_gap_seconds": max_gap,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+        "start": start.map(|t| t.to_rfc3339()),
+        "end": end.map(|t| t.to_rfc3339()),
+    }));
+    Ok(Some(env))
+}
+
+/// Weekly per-equipment run hours (Mon-start week labels) for Overview motor charts.
+/// Emits `kind=weekly_equipment` rows (one series per AHU/chiller/boiler), matching
+/// vibe19 `motor_run_hours_weekly` — does **not** fold equipment into plant totals.
+/// Site OAT is broadcast by timestamp so avg-while-on works when OAT lives on
+/// weather/web rows rather than on the motor equipment itself.
+struct RuntimeWeeklyParams<'a> {
+    ts_col: &'a str,
+    on_sql: &'a str,
+    oat: Option<&'a str>,
+    max_gap: f64,
+    eq_filter: &'a str,
+    range_sql: &'a str,
+}
+
+async fn runtime_weekly_plant_rows(
+    ctx: &SessionContext,
+    params: RuntimeWeeklyParams<'_>,
+    metadata: (&str, &BTreeMap<String, String>),
+) -> Result<Vec<Value>> {
+    let RuntimeWeeklyParams {
+        ts_col,
+        on_sql,
+        oat,
+        max_gap,
+        eq_filter,
+        range_sql,
+    } = params;
+    let (signal_label, stamped_types) = metadata;
+    let oat_by_ts_cte = match oat {
+        Some(c) => {
+            let c_f = history_temp_sql(c);
+            format!(
+                r#"
+oat_by_ts AS (
+  SELECT {ts_col} AS ts, AVG({c_f}) AS oat_f
+  FROM history
+  WHERE {c_f} IS NOT NULL{range_sql}
+  GROUP BY {ts_col}
+),"#
+            )
+        }
+        None => String::new(),
+    };
+    let oat_join = if oat.is_some() {
+        "LEFT JOIN oat_by_ts o ON h.ts = o.ts"
+    } else {
+        ""
+    };
+    let oat_sel = if oat.is_some() {
+        "o.oat_f AS oat_f,"
+    } else {
+        "CAST(NULL AS FLOAT) AS oat_f,"
+    };
+    let sql = format!(
+        r#"
+WITH {oat_by_ts_cte}
+ordered AS (
+  SELECT
+    h.equipment_id,
+    h.ts,
+    h.is_on,
+    {oat_sel}
+    LEAD(h.ts) OVER (PARTITION BY h.equipment_id ORDER BY h.ts) AS next_ts
+  FROM (
+    SELECT
+      equipment_id,
+      {ts_col} AS ts,
+      {on_sql} AS is_on
+    FROM history
+    WHERE equipment_id IS NOT NULL{eq_filter}{range_sql}
+  ) h
+  {oat_join}
+),
+raw_intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    oat_f,
+    date_trunc('week', CAST(ts AS TIMESTAMP)) AS week_start,
+    (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 AS dt_raw
+  FROM ordered
+  WHERE next_ts IS NOT NULL
+),
+intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    oat_f,
+    week_start,
+    CASE
+      WHEN dt_raw < 0.0 THEN 0.0
+      WHEN dt_raw > {max_gap} THEN {max_gap}
+      ELSE dt_raw
+    END AS dt_sec
+  FROM raw_intervals
+)
+SELECT
+  equipment_id,
+  CAST(week_start AS VARCHAR) AS week_label,
+  SUM(CASE WHEN is_on THEN dt_sec ELSE 0.0 END) / 3600.0 AS run_hours,
+  AVG(CASE WHEN is_on AND oat_f IS NOT NULL THEN oat_f ELSE NULL END) AS avg_oat_f
+FROM intervals
+GROUP BY equipment_id, week_start
+ORDER BY week_start, equipment_id
+"#
+    );
+    let result = run_sql(ctx, &sql).await?;
+    let mut out = Vec::new();
+    for row in &result.rows {
+        let eq = row
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let stamp = stamped_types.get(eq).map(String::as_str);
+        let Some(plant) = plant_group_for_typed(eq, stamp) else {
+            continue;
+        };
+        let week = row
+            .get("week_label")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .chars()
+            .take(10)
+            .collect::<String>();
+        if week.is_empty() {
+            continue;
+        }
+        let hours = row.get("run_hours").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        if hours <= 0.0 {
+            continue;
+        }
+        let oat_v = row.get("avg_oat_f").and_then(|v| v.as_f64());
+        let label = format!("{eq} · {signal_label}");
+        out.push(json!({
+            "kind": "weekly_equipment",
+            "query_version": "runtime-weekly-v2",
+            "equipment_id": eq,
+            "equipment_type": open_fdd_edge_prototype::equipment_types::api_equipment_type_for(eq, stamp),
+            "equipment_type_raw": stamp,
+            "label": label,
+            "plant_group": plant,
+            "week_label": week,
+            "run_hours": round2(hours),
+            "avg_oat_f": oat_v.map(round2),
+        }));
+    }
+    out.sort_by(|a, b| {
+        let wa = a.get("week_label").and_then(|v| v.as_str()).unwrap_or("");
+        let wb = b.get("week_label").and_then(|v| v.as_str()).unwrap_or("");
+        wa.cmp(wb).then_with(|| {
+            let pa = a.get("plant_group").and_then(|v| v.as_str()).unwrap_or("");
+            let pb = b.get("plant_group").and_then(|v| v.as_str()).unwrap_or("");
+            pa.cmp(pb).then_with(|| {
+                let ea = a.get("equipment_id").and_then(|v| v.as_str()).unwrap_or("");
+                let eb = b.get("equipment_id").and_then(|v| v.as_str()).unwrap_or("");
+                ea.cmp(eb)
+            })
+        })
+    });
+    Ok(out)
+}
+
+/// Register `history` and return `(ctx, columns, row_count, scan_permit)` when
+/// the parquet tree exists and has rows; `Ok(None)` when missing/empty.
+/// Optional `building_id` scopes the hive path (OFDD-070).
+/// The scan permit must stay alive for subsequent DataFusion work on `ctx`.
+async fn open_history_scoped(
+    building_id: Option<&str>,
+) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
+    open_history_scoped_for_tenant(building_id, None).await
+}
+
+async fn open_history_scoped_for_tenant(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+) -> Result<Option<(SessionContext, HashSet<String>, i64, fdd_store::ScanPermit)>> {
+    let ctx = new_bounded_session()?;
+    let (ok, scan) = open_history_scan_for_tenant(&ctx, building_id, preferred_tenant).await?;
+    if !ok {
+        return Ok(None);
+    }
+    // Same occupancy signal as VAV-1: saved Overview calendar fills occ_mode.
+    let _ = fdd_rules::occupancy_schedule::apply_session_occupancy_schedule(&ctx).await;
+    let count = run_sql(&ctx, "SELECT COUNT(*) AS n FROM history").await?;
+    let n = count
+        .rows
+        .first()
+        .and_then(|r| r.get("n"))
+        .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+        .unwrap_or(0);
+    if n <= 0 {
+        return Ok(None);
+    }
+    let cols = history_columns_async(&ctx).await?;
+    Ok(Some((ctx, cols, n, scan)))
+}
+
+/// Soft-OPEN 371 #1229: open only allow-listed equipment partitions.
+///
+/// Holds [`fdd_sql::EquipmentScopeGuard`] for the query lifetime so staging
+/// symlinks stay valid. `history_rows` is the allow-list size (not a full-hive
+/// `COUNT(*)` — that scan is what aborted ACME bas-vs-web).
+async fn open_history_scoped_equipment_for_tenant(
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    equipment_ids: &[String],
+) -> Result<
+    Option<(
+        SessionContext,
+        HashSet<String>,
+        i64,
+        fdd_store::ScanPermit,
+        fdd_sql::EquipmentScopeGuard,
+    )>,
+> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return Ok(None);
+    };
+    if equipment_ids.is_empty() {
+        return Ok(None);
+    }
+    let hub = parquet_root_base();
+    if !hub.is_dir() {
+        return Ok(None);
+    }
+    let resolved = match fdd_store::resolve_building_read_root(&hub, preferred_tenant, &bid) {
+        Ok(r) => r,
+        Err(_) => return Ok(None),
+    };
+    let scan = fdd_store::try_historian_scan_permit()
+        .or_else(|_| Ok::<_, anyhow::Error>(fdd_store::historian_scan_permit_wait()))?;
+    let ctx = new_bounded_session()?;
+    let (_reg, guard) = match fdd_sql::register_historian_building_equipment(
+        &ctx,
+        &resolved.root,
+        &bid,
+        equipment_ids,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(
+                error = %e,
+                building = %bid,
+                equipment_n = equipment_ids.len(),
+                "equipment-scoped historian register skipped"
+            );
+            return Ok(None);
+        }
+    };
+    let _ = fdd_rules::occupancy_schedule::apply_session_occupancy_schedule(&ctx).await;
+    let cols = history_columns_async(&ctx).await?;
+    // Avoid full-hive COUNT(*). Presence of columns is enough; coverage uses
+    // allow-list size as a bounded proxy.
+    let n = equipment_ids.len() as i64;
+    Ok(Some((ctx, cols, n, scan, guard)))
+}
+
+fn as_f64(v: Option<&serde_json::Value>) -> Option<f64> {
+    v.and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+}
+
+fn as_u64(v: Option<&serde_json::Value>) -> u64 {
+    v.and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)))
+        .unwrap_or(0)
+}
+
+/// Default lookback when `query.start` is omitted (large Parquet hives).
+/// Unbounded N×UNION ALL over full history hangs past Railway edge ~30–40s → 502.
+pub const SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Default lookback for `/api/analytics/runtime` when `query.start` is omitted.
+/// Shorter window keeps LEAD Δt under Railway edge budgets on large ACME hives
+/// (#1127 Soft-OPEN tip: 12s fail-closed under pressure).
+pub const RUNTIME_DEFAULT_LOOKBACK_DAYS: i64 = 7;
+
+/// Default lookback for BAS-vs-web and other hive chart queries (#1179).
+pub const BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS: i64 = RUNTIME_DEFAULT_LOOKBACK_DAYS;
+
+/// Default lookback for economizer historian path (Soft-OPEN 370 T1f / M70-07).
+/// Full-history GROUP BY / LEAD over large hives is refused without an explicit window.
+pub const ECONOMIZER_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Default lookback for VAV health matrix historian path (M70-07).
+pub const VAV_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Max allowed analytics span when `refresh:true` over a hive (#1179).
+/// Wider windows must page by month or pass an explicit bounded start/end.
+pub const ANALYTICS_MAX_LOOKBACK_DAYS: i64 = 90;
+
+/// Wall budget for BAS-vs-web historian path (fail-closed envelope, not 502).
+pub const BAS_VS_WEB_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Bounded expand when the default lookback is empty (synthetic fixtures outside
+/// wall-clock). Never use `start=None` — full-history LEAD hangs → nginx 502.
+pub const RUNTIME_RETAIN_FALLBACK_DAYS: i64 = 365;
+
+/// Same retain floor as runtime for BAS×web when the 7-day default misses hive rows.
+pub const BAS_VS_WEB_RETAIN_FALLBACK_DAYS: i64 = RUNTIME_RETAIN_FALLBACK_DAYS;
+
+/// Wall-clock budget for the historian sensor_health aggregate. Exceeding this
+/// fail-closes with an empty envelope (HTTP 200 + warning) instead of hanging.
+const SENSOR_HEALTH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Wall-clock budget for historian runtime LEAD Δt.
+/// Soft-OPEN ACME gate37: raised 12→30s so live hive fail-closed completes
+/// under budget without process death (still fail-closed empty rows on timeout).
+/// Override at deploy with a rebuild or future env-hook; nginx read stays 600s.
+pub const RUNTIME_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Reserve part of the request budget for the optional weekly chart query.
+const RUNTIME_MAIN_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Weekly plant bins are additive chart data; they must not make base runtime
+/// rows fail closed when a loaded historian needs more time.
+const RUNTIME_WEEKLY_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Default lookback for `/api/analytics/mechanical-cooling` when start omitted.
+pub const MECH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Bounded expand when the default lookback is empty (synthetic fixtures can
+/// be outside wall-clock). Never use `start=None` for this LEAD query.
+pub const MECH_RETAIN_FALLBACK_DAYS: i64 = 365;
+
+/// Wall-clock budget for mechanical-cooling OAT bin LEAD Δt (large hives).
+/// Soft-OPEN: raised 12→30s with runtime (same honesty as RUNTIME_QUERY_TIMEOUT).
+pub const MECH_QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Return the portion of a request budget that remains for a child operation.
+/// Every fallback/optional query must use the same request deadline rather than
+/// starting a fresh timeout window.
+pub(crate) fn remaining_budget(
+    deadline: tokio::time::Instant,
+    requested: std::time::Duration,
+) -> std::time::Duration {
+    deadline
+        .saturating_duration_since(tokio::time::Instant::now())
+        .min(requested)
+}
+
+/// Build single-pass sensor_health aggregate SQL (one scan, GROUP BY equipment_id).
+///
+/// Each present role contributes `COUNT`/`MIN`/`MAX`/`AVG`/`STDDEV_POP` columns;
+/// callers unpivot wide rows into per-role envelopes. Always includes a time
+/// bound via [`time_range_sql`] when `start`/`end` are set.
+pub(crate) fn build_sensor_health_sql(
+    role_cols: &[&str],
+    equipment_filter: Option<&[String]>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> String {
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let range_filter = time_range_sql("timestamp_utc", start, end);
+    let mut aggs = vec!["COUNT(*) AS n".to_string()];
+    for role in role_cols {
+        let num = history_role_numeric_sql(role);
+        aggs.push(format!("COUNT({num}) AS n_finite_{role}"));
+        aggs.push(format!("MIN({num}) AS minv_{role}"));
+        aggs.push(format!("MAX({num}) AS maxv_{role}"));
+        aggs.push(format!("AVG({num}) AS meanv_{role}"));
+        aggs.push(format!("STDDEV_POP({num}) AS stdv_{role}"));
+    }
+    format!(
+        "SELECT equipment_id, {} \
+         FROM history \
+         WHERE equipment_id IS NOT NULL{eq_filter}{range_filter} \
+         GROUP BY equipment_id \
+         ORDER BY equipment_id",
+        aggs.join(", ")
+    )
+}
+
+/// Sensor health from historian Parquet via DataFusion aggregate SQL.
+///
+/// For each canonical numeric role column present in `history`, computes
+/// per-`equipment_id` coverage, missingness, and flatline stats over a bounded
+/// window (`start`/`end`; callers default lookback when omitted). Single-pass
+/// GROUP BY replaces N×UNION ALL. Sets `engine=datafusion` when SQL runs.
+/// Times out after [`SENSOR_HEALTH_QUERY_TIMEOUT`] with empty rows (fail-closed).
+pub async fn sensor_health_from_history(
+    equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let ctx = new_bounded_session()?;
+    let (ok, _scan) = open_history_scan(&ctx, building_id).await?;
+    if !ok {
+        return Ok(None);
+    }
+    let cols = history_columns_async(&ctx).await?;
+
+    let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .collect();
+    if role_cols.is_empty() {
+        // No usable numeric role columns — let inline/central path handle it.
+        return Ok(None);
+    }
+
+    let sql = build_sensor_health_sql(&role_cols, equipment_filter, start, end);
+    let query = AnalyticsQuery {
+        building_id: building_id.map(str::to_string),
+        start,
+        end,
+        ..AnalyticsQuery::default()
+    };
+
+    let timed = tokio::time::timeout(SENSOR_HEALTH_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
+    let result = match timed {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => return Err(e),
+        Err(_) => {
+            tracing::warn!(
+                building_id = ?building_id,
+                timeout_secs = SENSOR_HEALTH_QUERY_TIMEOUT.as_secs(),
+                "sensor_health historian query exceeded budget; fail-closed empty rows"
+            );
+            let warnings = vec![format!(
+                "sensor_health historian query exceeded {}s budget; returning empty rows \
+                 (narrow query.start/end or compact Parquet parts under tenants/*/history)",
+                SENSOR_HEALTH_QUERY_TIMEOUT.as_secs()
+            )];
+            let mut env = envelope_with_engine(QV_SENSOR_HEALTH, &query, warnings, DF_ENGINE);
+            env.coverage = Some(json!({
+                "series_count": 0,
+                "history_rows": 0,
+                "roles": role_cols,
+                "source": "historian_parquet",
+                "timed_out": true,
+            }));
+            return Ok(Some(env));
+        }
+    };
+
+    let min_n = super::sensor_health::DEFAULT_FLATLINE_MIN_N as u64;
+    let eps = super::sensor_health::DEFAULT_FLATLINE_STD_EPS;
+
+    let mut rows = Vec::new();
+    let mut history_rows: u64 = 0;
+    for r in &result.rows {
+        let n_all = as_u64(r.get("n"));
+        history_rows = history_rows.saturating_add(n_all);
+        for role in &role_cols {
+            let n_finite = as_u64(r.get(format!("n_finite_{role}")));
+            if n_finite == 0 {
+                // Drop role columns that never applied to this equipment.
+                continue;
+            }
+            let coverage_pct = if n_all > 0 {
+                100.0 * n_finite as f64 / n_all as f64
+            } else {
+                0.0
+            };
+            let missingness = if n_all > 0 {
+                1.0 - (n_finite as f64 / n_all as f64)
+            } else {
+                0.0
+            };
+            let std = as_f64(r.get(format!("stdv_{role}")));
+            let flatline_flag = n_finite > min_n && std.map(|s| s <= eps).unwrap_or(false);
+            let mut obj = json!({
+                "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+                "role": *role,
+                "n": n_all,
+                "n_finite": n_finite,
+                "coverage_pct": round2(coverage_pct),
+                "missingness": round4(missingness),
+                "flatline_flag": flatline_flag,
+            });
+            if let Some(v) = as_f64(r.get(format!("minv_{role}"))) {
+                obj["min"] = json!(round4(v));
+            }
+            if let Some(v) = as_f64(r.get(format!("maxv_{role}"))) {
+                obj["max"] = json!(round4(v));
+            }
+            if let Some(v) = as_f64(r.get(format!("meanv_{role}"))) {
+                obj["mean"] = json!(round4(v));
+            }
+            if let Some(v) = std {
+                obj["std"] = json!(round6(v));
+            }
+            rows.push(obj);
+        }
+    }
+
+    let mut warnings = vec![
+        "sensor_health from historian Parquet via DataFusion single-pass aggregate SQL \
+         (coverage / missingness / flatline over canonical numeric roles)"
+            .into(),
+    ];
+    if start.is_some() || end.is_some() {
+        warnings.push(
+            "sensor_health window applied via timestamp_utc bound; pass query.start/end to override"
+                .into(),
+        );
+    }
+    let mut env = envelope_with_engine(QV_SENSOR_HEALTH, &query, warnings, DF_ENGINE);
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "series_count": env.rows.len(),
+        "history_rows": history_rows,
+        "roles": role_cols,
+        "source": "historian_parquet",
+        "window_start": start.map(|t| t.to_rfc3339()),
+        "window_end": end.map(|t| t.to_rfc3339()),
+    }));
+    Ok(Some(env))
+}
+
+/// Haystack-style role name used by Vibe19 analytics CSVs.
+fn role_to_haystack(role: &str) -> String {
+    match role {
+        "sat" => "discharge-air-temp".into(),
+        "sat_sp" => "discharge-air-temp-sp".into(),
+        "mat" => "mixed-air-temp".into(),
+        "rat" => "return-air-temp".into(),
+        "oa_t" => "outside-air-temp".into(),
+        "oa_h" => "outside-air-humidity".into(),
+        "oa_damper_pct" => "outside-air-damper".into(),
+        "clg_valve_pct" => "cooling-valve".into(),
+        "htg_valve_pct" => "heating-valve".into(),
+        "fan_cmd" => "fan-cmd".into(),
+        "fan_status" => "fan-status".into(),
+        "return_fan" => "return-fan-cmd".into(),
+        "duct_static" => "duct-static-pressure".into(),
+        "duct_static_sp" => "duct-static-pressure-sp".into(),
+        "zone_t" => "zone-air-temp".into(),
+        "zone_t_sp" => "zone-air-temp-sp".into(),
+        "zone_flow" => "zone-airflow".into(),
+        "min_flow_sp" => "min-flow-sp".into(),
+        "damper_pct" => "damper".into(),
+        "reheat_valve_pct" => "reheat-valve".into(),
+        "chw_supply_t" => "chilled-water-supply-temp".into(),
+        "chw_return_t" => "chilled-water-return-temp".into(),
+        "chw_supply_sp" => "chilled-water-supply-temp-sp".into(),
+        "hw_supply_t" => "hot-water-supply-temp".into(),
+        "hw_return_t" => "hot-water-return-temp".into(),
+        "chw_dp" => "chw-diff-pressure".into(),
+        "chw_dp_sp" => "chw-diff-pressure-sp".into(),
+        "chw_flow" => "chw-flow".into(),
+        "chw_pump_cmd" => "chw-pump-cmd".into(),
+        "web_oa_t" => "web-outside-air-temp".into(),
+        "web_wb_t" => "web-outside-air-wetbulb".into(),
+        other => other.to_string(),
+    }
+}
+
+fn equipment_stamp_map(building_id: Option<&str>) -> BTreeMap<String, String> {
+    open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id)
+}
+
+fn stamped_display_type(types: &BTreeMap<String, String>, equipment_id: &str) -> &'static str {
+    let stamp = types.get(equipment_id).map(String::as_str);
+    open_fdd_edge_prototype::equipment_types::api_equipment_type_for(equipment_id, stamp)
+}
+
+#[cfg(test)]
+fn stamped_kind(types: &BTreeMap<String, String>, equipment_id: &str) -> &'static str {
+    let stamp = types.get(equipment_id).map(String::as_str);
+    open_fdd_edge_prototype::equipment_types::kind_for(equipment_id, stamp)
+}
+
+fn fan_on_sql(cols: &HashSet<String>) -> String {
+    on_expr(cols).unwrap_or_else(|| "true".into())
+}
+
+/// Sensor stats (mean/min/max/n) optionally filtered to fan-on or fan-off.
+pub async fn sensor_stats_from_history(
+    equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
+    fan_state: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .collect();
+    if role_cols.is_empty() {
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let fan_sql = fan_on_sql(&cols);
+    let fan_where = match fan_state {
+        Some("on") => format!(" AND ({fan_sql})"),
+        Some("off") => format!(" AND NOT ({fan_sql})"),
+        _ => String::new(),
+    };
+    let selects: Vec<String> = role_cols
+        .iter()
+        .map(|role| {
+            let num = history_role_numeric_sql(role);
+            format!(
+                "SELECT equipment_id, '{role}' AS role, \
+                   COUNT(*) AS n, COUNT({num}) AS n_finite, \
+                   AVG({num}) AS meanv, STDDEV_POP({num}) AS stdv, \
+                   MIN({num}) AS minv, MAX({num}) AS maxv \
+                 FROM history \
+                 WHERE equipment_id IS NOT NULL{eq_filter}{fan_where} \
+                 GROUP BY equipment_id"
+            )
+        })
+        .collect();
+    let sql = format!(
+        "{} ORDER BY equipment_id, role",
+        selects.join(" UNION ALL ")
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(building_id);
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let n_finite = as_u64(r.get("n_finite"));
+        if n_finite == 0 {
+            continue;
+        }
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        rows.push(json!({
+            "equipment_id": eq,
+            "equipment_type": stamped_display_type(&stamps, &eq),
+            "role": role_to_haystack(role),
+            "source": "historian",
+            "n": as_u64(r.get("n")),
+            "valid_count": n_finite,
+            "count": as_u64(r.get("n")),
+            "mean": as_f64(r.get("meanv")).map(round4),
+            "std": as_f64(r.get("stdv")).map(round6),
+            "min": as_f64(r.get("minv")).map(round4),
+            "max": as_f64(r.get("maxv")).map(round4),
+            "fan_state": fan_state.unwrap_or("all"),
+        }));
+    }
+    let mut env = envelope_with_engine(
+        QV_SENSOR_STATS,
+        &AnalyticsQuery::default(),
+        vec!["sensor_stats from historian Parquet".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({"history_rows": n, "fan_state": fan_state.unwrap_or("all")}));
+    Ok(Some(env))
+}
+
+const SP_ROLES: &[&str] = &[
+    "sat_sp",
+    "zone_t_sp",
+    "chw_supply_sp",
+    "duct_static_sp",
+    "min_flow_sp",
+];
+
+/// Occupied / unoccupied setpoint medians.
+pub async fn setpoints_from_history(
+    equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let present: Vec<&str> = SP_ROLES
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .collect();
+    if present.is_empty() {
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let occ = if cols.contains("occ_mode") {
+        occupied_expr().to_string()
+    } else {
+        "true".into()
+    };
+    let selects: Vec<String> = present
+        .iter()
+        .map(|role| {
+            let num = history_role_numeric_sql(role);
+            format!(
+                "SELECT equipment_id, '{role}' AS role, \
+                   approx_percentile({num}, 0.5) FILTER (WHERE ({occ})) AS median_occupied, \
+                   approx_percentile({num}, 0.5) FILTER (WHERE NOT ({occ})) AS median_unoccupied, \
+                   approx_percentile({num}, 0.5) AS median_all, \
+                   COUNT({num}) FILTER (WHERE ({occ})) AS n_occupied, \
+                   COUNT({num}) FILTER (WHERE NOT ({occ})) AS n_unoccupied \
+                 FROM history \
+                 WHERE equipment_id IS NOT NULL{eq_filter} \
+                 GROUP BY equipment_id"
+            )
+        })
+        .collect();
+    let sql = selects.join(" UNION ALL ");
+    let result = match run_sql(&ctx, &sql).await {
+        Ok(r) => r,
+        Err(_) => {
+            // FILTER / approx_percentile may be unavailable — fall back to AVG.
+            let selects: Vec<String> = present
+                .iter()
+                .map(|role| {
+                    let num = history_role_numeric_sql(role);
+                    format!(
+                        "SELECT equipment_id, '{role}' AS role, \
+                           AVG({num}) AS median_all, \
+                           COUNT({num}) AS n_occupied, \
+                           CAST(0 AS BIGINT) AS n_unoccupied, \
+                           AVG({num}) AS median_occupied, \
+                           AVG({num}) AS median_unoccupied \
+                         FROM history \
+                         WHERE equipment_id IS NOT NULL{eq_filter} \
+                         GROUP BY equipment_id"
+                    )
+                })
+                .collect();
+            run_sql(&ctx, &selects.join(" UNION ALL ")).await?
+        }
+    };
+    let stamps = equipment_stamp_map(building_id);
+    let mut rows = Vec::new();
+    for r in &result.rows {
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        rows.push(json!({
+            "equipment_id": eq,
+            "equipment_type": stamped_display_type(&stamps, &eq),
+            "role": role_to_haystack(role),
+            "median_occupied": as_f64(r.get("median_occupied")).map(round4),
+            "median_unoccupied": as_f64(r.get("median_unoccupied")).map(round4),
+            "median_all": as_f64(r.get("median_all")).map(round4),
+            "n_occupied": as_u64(r.get("n_occupied")),
+            "n_unoccupied": as_u64(r.get("n_unoccupied")),
+        }));
+    }
+    let mut env = envelope_with_engine(
+        QV_SETPOINTS,
+        &AnalyticsQuery::default(),
+        vec!["setpoints from historian Parquet".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({"history_rows": n}));
+    Ok(Some(env))
+}
+
+/// 24h diurnal profiles by hour-of-day and fan state.
+pub async fn diurnal_from_history(
+    equipment_filter: Option<&[String]>,
+    building_id: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let role_cols: Vec<&str> = NUMERIC_ROLE_COLS
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .take(12)
+        .collect();
+    if role_cols.is_empty() {
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let fan_sql = fan_on_sql(&cols);
+    let selects: Vec<String> = role_cols
+        .iter()
+        .map(|role| {
+            let num = history_role_numeric_sql(role);
+            format!(
+                "SELECT equipment_id, '{role}' AS role, \
+                   date_part('hour', {ts_col}) AS hour, \
+                   CASE WHEN ({fan_sql}) THEN 'on' ELSE 'off' END AS fan_state, \
+                   COUNT({num}) AS n, AVG({num}) AS meanv, \
+                   MIN({num}) AS minv, MAX({num}) AS maxv \
+                 FROM history \
+                 WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter} \
+                 GROUP BY equipment_id, date_part('hour', {ts_col}), \
+                   CASE WHEN ({fan_sql}) THEN 'on' ELSE 'off' END"
+            )
+        })
+        .collect();
+    let sql = format!(
+        "{} ORDER BY equipment_id, role, hour, fan_state",
+        selects.join(" UNION ALL ")
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(building_id);
+    let mut rows = Vec::new();
+    for r in &result.rows {
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        rows.push(json!({
+            "equipment_id": eq,
+            "equipment_type": stamped_display_type(&stamps, &eq),
+            "role": role_to_haystack(role),
+            "source": "historian",
+            "day_type": "all",
+            "fan_state": r.get("fan_state").cloned().unwrap_or(json!("all")),
+            "hour": as_u64(r.get("hour")),
+            "n": as_u64(r.get("n")),
+            "mean": as_f64(r.get("meanv")).map(round4),
+            "min": as_f64(r.get("minv")).map(round4),
+            "max": as_f64(r.get("maxv")).map(round4),
+        }));
+    }
+    let mut env = envelope_with_engine(
+        QV_DIURNAL,
+        &AnalyticsQuery::default(),
+        vec!["sensor_diurnal_24h from historian Parquet".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({"history_rows": n}));
+    Ok(Some(env))
+}
+
+/// Equipment topology (feeds / fedBy).
+///
+/// Equipment labels come from the package stamp. A parent link is emitted only
+/// when `equipment_parents.json` names that parent and the parent id is present.
+/// A single AHU, or an AHU token inside another id, is not a parent.
+pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, _cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let result = run_sql(
+        &ctx,
+        "SELECT DISTINCT equipment_id FROM history WHERE equipment_id IS NOT NULL ORDER BY 1",
+    )
+    .await?;
+    let ids: Vec<String> = result
+        .rows
+        .iter()
+        .filter_map(|r| {
+            r.get("equipment_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+        .collect();
+    let stamps = equipment_stamp_map(building_id);
+    let parents =
+        open_fdd_edge_prototype::equipment_types::load_parent_map(&parquet_root(), building_id);
+    let mut rows = Vec::new();
+    let mut data_model = Vec::new();
+    for id in &ids {
+        data_model.push(json!({
+            "equipment_id": id,
+            "equipment_type": stamped_display_type(&stamps, id),
+            "haystack_point": "",
+            "csv_column": "",
+            "present_in_history": true,
+            "required_by_rules": "",
+        }));
+        if let Some(ahu) = package_parent_link(&parents, id, &ids) {
+            rows.push(json!({
+                "equipment_id": id,
+                "relation": "fedBy",
+                "related_ids": ahu,
+                "related_count": 1,
+                "parent_ahu": ahu,
+                "vav_id": id,
+            }));
+            rows.push(json!({
+                "equipment_id": ahu,
+                "relation": "feeds",
+                "related_ids": id,
+                "related_count": 1,
+                "parent_ahu": ahu,
+                "vav_id": id,
+            }));
+        }
+    }
+    let mut env = envelope_with_engine(
+        QV_TOPOLOGY,
+        &AnalyticsQuery::default(),
+        vec!["topology uses equipment stamps; a missing stamp is unclassified".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows;
+    env.equipment = data_model;
+    env.coverage = Some(json!({"history_rows": n, "equipment_count": ids.len()}));
+    Ok(Some(env))
+}
+
+/// Parent link from the package parent registry. A lone AHU is not a parent.
+///
+/// The parent id must equal a known equipment id. `AHU_1` does not select `AHU_10`.
+fn package_parent_link(
+    parents: &BTreeMap<String, String>,
+    equipment_id: &str,
+    known_ids: &[String],
+) -> Option<String> {
+    let parent = parents.get(equipment_id)?.as_str();
+    if parent == equipment_id {
+        return None;
+    }
+    known_ids.iter().find(|id| id.as_str() == parent).cloned()
+}
+
+/// Boolean occupied-expression from `occ_mode` (Utf8).
+///
+/// Packages commonly store binary occupancy as Utf8 `"0.0"` / `"1.0"` (float
+/// stringified), not `"0"` / `"1"`. Prefer numeric `try_cast` so `"0.0"` is
+/// unoccupied; fall back to common label tokens. Any other non-null non-numeric
+/// value is treated as occupied.
+fn occupied_expr() -> &'static str {
+    "CASE \
+       WHEN occ_mode IS NULL THEN NULL \
+       WHEN try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) IS NOT NULL THEN \
+         (try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) > 0.05) \
+       WHEN LOWER(trim(CAST(occ_mode AS VARCHAR))) IN \
+         ('unoccupied','unocc','off','false','night','standby','setback','no') THEN false \
+       ELSE true \
+     END"
+}
+
+/// Schedule occupied / unoccupied hours from historian Parquet via DataFusion
+/// Δt integration over the `occ_mode` mask. Returns `Ok(None)` when no
+/// `occ_mode` column exists (caller keeps inline central-analytics-v1).
+pub async fn schedule_from_history(
+    equipment_filter: Option<&[String]>,
+    max_gap_seconds: f64,
+    building_id: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    if !cols.contains("occ_mode") {
+        return Ok(None);
+    }
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let max_gap = max_gap_seconds.max(0.0);
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let occ_sql = occupied_expr();
+
+    let sql = format!(
+        r#"
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    {ts_col} AS ts,
+    {occ_sql} AS occ,
+    LEAD({ts_col}) OVER (PARTITION BY equipment_id ORDER BY {ts_col}) AS next_ts
+  FROM history
+  WHERE equipment_id IS NOT NULL AND occ_mode IS NOT NULL{eq_filter}
+),
+intervals AS (
+  SELECT
+    equipment_id,
+    occ,
+    CASE
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 < 0.0 THEN 0.0
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 > {max_gap} THEN {max_gap}
+      ELSE (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0
+    END AS dt_sec
+  FROM ordered
+  WHERE next_ts IS NOT NULL
+)
+SELECT
+  equipment_id,
+  SUM(CASE WHEN occ THEN dt_sec ELSE 0.0 END) / 3600.0 AS occupied_hours,
+  SUM(CASE WHEN occ THEN 0.0 ELSE dt_sec END) / 3600.0 AS unoccupied_hours,
+  SUM(dt_sec) / 3600.0 AS coverage_hours,
+  SUM(CASE WHEN occ THEN 1 ELSE 0 END) AS occupied_samples,
+  COUNT(*) AS total_samples
+FROM intervals
+GROUP BY equipment_id
+ORDER BY equipment_id
+"#
+    );
+
+    let result = run_sql(&ctx, &sql).await?;
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        rows.push(json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "occupied_hours": round4(as_f64(r.get("occupied_hours")).unwrap_or(0.0)),
+            "unoccupied_hours": round4(as_f64(r.get("unoccupied_hours")).unwrap_or(0.0)),
+            "coverage_hours": round4(as_f64(r.get("coverage_hours")).unwrap_or(0.0)),
+            "occupied_samples": as_u64(r.get("occupied_samples")),
+            "total_samples": as_u64(r.get("total_samples")),
+        }));
+    }
+
+    let warnings = vec![
+        "schedule occupied/unoccupied hours from historian Parquet via DataFusion \
+         Δt integration over occ_mode; after-hours fan overlay is inline-only"
+            .into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine(QV_SCHEDULE, &query, warnings, DF_ENGINE);
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "equipment_count": env.equipment.len(),
+        "history_rows": n,
+        "max_gap_seconds": max_gap,
+        "source": "historian_parquet",
+    }));
+    Ok(Some(env))
+}
+
+/// Economizer diagnostics from historian Parquet via DataFusion.
+///
+/// Requires an OAT column (`oa_t` or Liberty `web_oa_t`), plus `rat` and `mat`,
+/// and a fan on-expression. Returns per-equipment fan-on / identifiable counts
+/// plus downsampled fan-on points for Overview Plotly (delta scatter, MAT
+/// residual, temps+damper overlay) — vibe19 chart parity without pandas.
+pub async fn economizer_from_history(
+    equipment_filter: Option<&[String]>,
+    dt_min_f: f64,
+    building_id: Option<&str>,
+    max_points: usize,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    // OFDD-070 / ENH-OFDD-001: Liberty packages expose web_oa_t (not oa_t).
+    let oat_col = if cols.contains("oa_t") {
+        "oa_t"
+    } else if cols.contains("web_oa_t") {
+        "web_oa_t"
+    } else {
+        return Ok(None);
+    };
+    let rat_col = if cols.contains("rat") {
+        "rat"
+    } else if cols.contains("web_ra_t") {
+        "web_ra_t"
+    } else {
+        return Ok(None);
+    };
+    let mat_col = if cols.contains("mat") {
+        "mat"
+    } else if cols.contains("web_mat") || cols.contains("web_ma_t") {
+        if cols.contains("web_mat") {
+            "web_mat"
+        } else {
+            "web_ma_t"
+        }
+    } else {
+        return Ok(None);
+    };
+    let Some(on_sql) = on_expr(&cols) else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let (win_start, win_end) =
+        resolve_analytics_window(start, end, ECONOMIZER_DEFAULT_LOOKBACK_DAYS)
+            .map_err(|e| anyhow::anyhow!(e))?;
+    let win_end = win_end.unwrap_or_else(Utc::now);
+    // M70-07: never scan the full hive for economizer counts/plots.
+    let ts_window = format!(
+        " AND CAST({ts_col} AS TIMESTAMP) >= TIMESTAMP '{}' AND CAST({ts_col} AS TIMESTAMP) < TIMESTAMP '{}'",
+        win_start.to_rfc3339(),
+        win_end.to_rfc3339()
+    );
+    let dt_min = dt_min_f.max(0.0);
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let oat_expr = history_temp_sql(oat_col);
+    let rat_expr = history_temp_sql(rat_col);
+    let mat_expr = history_temp_sql(mat_col);
+    let damper_proj = if cols.contains("oa_damper_pct") {
+        format!(
+            "{} AS damper_fb_pct",
+            history_role_numeric_sql("oa_damper_pct")
+        )
+    } else {
+        "CAST(NULL AS DOUBLE) AS damper_fb_pct".to_string()
+    };
+    let sat_proj = if cols.contains("sat") {
+        format!("{} AS sat_f", history_temp_sql("sat"))
+    } else {
+        "CAST(NULL AS DOUBLE) AS sat_f".to_string()
+    };
+
+    let sql = format!(
+        r#"
+WITH base AS (
+  SELECT
+    equipment_id,
+    {oat_expr} AS oa_t,
+    {rat_expr} AS rat,
+    {mat_expr} AS mat,
+    {on_sql} AS fan_on,
+    {damper_proj},
+    {sat_proj}
+  FROM history
+  WHERE equipment_id IS NOT NULL{eq_filter}{ts_window}
+)
+SELECT
+  equipment_id,
+  SUM(CASE WHEN fan_on THEN 1 ELSE 0 END) AS n_fan_on,
+  SUM(CASE WHEN fan_on AND oa_t IS NOT NULL AND rat IS NOT NULL
+             AND ABS(oa_t - rat) >= {dt_min} THEN 1 ELSE 0 END) AS n_identifiable,
+  COUNT(damper_fb_pct) AS n_damper
+FROM base
+GROUP BY equipment_id
+ORDER BY equipment_id
+"#
+    );
+
+    let result = run_sql(&ctx, &sql).await?;
+    let mut equipment = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let n_fan_on = as_u64(r.get("n_fan_on"));
+        if n_fan_on == 0 {
+            continue;
+        }
+        equipment.push(json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "equipment_type": "AHU",
+            "n_fan_on_samples": n_fan_on,
+            "n_identifiable": as_u64(r.get("n_identifiable")),
+            "has_damper": as_u64(r.get("n_damper")) > 0,
+            "dt_min_f": dt_min,
+        }));
+    }
+
+    let limit = max_points.clamp(100, 8000);
+    // Keep aliases consistent in the CTE (sat_f / damper_fb_pct). Avoid bare
+    // `WHERE fan_on` + `THEN true/false` outer columns — those hit DataFusion
+    // SanityCheckPlan on some historian schemas (wide package hives).
+    let points_sql = format!(
+        r#"
+WITH base AS (
+  SELECT
+    equipment_id,
+    CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+    {oat_expr} AS oat_f,
+    {rat_expr} AS rat_f,
+    {mat_expr} AS mat_f,
+    {sat_proj},
+    {damper_proj},
+    CASE WHEN ({on_sql}) THEN 1 ELSE 0 END AS fan_on_i
+  FROM history
+  WHERE equipment_id IS NOT NULL{eq_filter}{ts_window}
+),
+fan_pts AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    oat_f,
+    rat_f,
+    mat_f,
+    sat_f,
+    damper_fb_pct,
+    (oat_f - rat_f) AS delta_or_f,
+    (mat_f - rat_f) AS delta_mr_f,
+    CASE
+      WHEN damper_fb_pct IS NOT NULL AND oat_f IS NOT NULL AND rat_f IS NOT NULL THEN
+        mat_f - (rat_f + (damper_fb_pct / 100.0) * (oat_f - rat_f))
+      ELSE NULL
+    END AS mat_resid_f,
+    CASE
+      WHEN oat_f IS NOT NULL AND rat_f IS NOT NULL AND ABS(oat_f - rat_f) >= {dt_min}
+      THEN 1 ELSE 0
+    END AS identifiable_i
+  FROM base
+  WHERE fan_on_i = 1
+    AND oat_f IS NOT NULL AND rat_f IS NOT NULL AND mat_f IS NOT NULL
+),
+ranked AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    oat_f,
+    rat_f,
+    mat_f,
+    sat_f,
+    damper_fb_pct,
+    delta_or_f,
+    delta_mr_f,
+    mat_resid_f,
+    identifiable_i,
+    ROW_NUMBER() OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS _rn,
+    COUNT(*) OVER (PARTITION BY equipment_id) AS _cnt
+  FROM fan_pts
+),
+sampled AS (
+  SELECT * FROM ranked
+  WHERE _rn = 1
+     OR _rn = _cnt
+     OR (_rn % (CASE
+          WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+          THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+          ELSE 1
+        END)) = 0
+)
+SELECT
+  equipment_id,
+  timestamp_utc,
+  oat_f,
+  rat_f,
+  mat_f,
+  sat_f,
+  damper_fb_pct,
+  delta_or_f,
+  delta_mr_f,
+  mat_resid_f,
+  identifiable_i
+FROM sampled
+ORDER BY equipment_id, timestamp_utc
+LIMIT {limit}
+"#
+    );
+    let mut points = Vec::new();
+    match run_sql(&ctx, &points_sql).await {
+        Ok(pres) => {
+            for r in &pres.rows {
+                points.push(json!({
+                    "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+                    "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+                    "oat_f": as_f64(r.get("oat_f")),
+                    "rat_f": as_f64(r.get("rat_f")),
+                    "mat_f": as_f64(r.get("mat_f")),
+                    "sat_f": as_f64(r.get("sat_f")),
+                    "damper_fb_pct": as_f64(r.get("damper_fb_pct")),
+                    "delta_or_f": as_f64(r.get("delta_or_f")),
+                    "delta_mr_f": as_f64(r.get("delta_mr_f")),
+                    "mat_resid_f": as_f64(r.get("mat_resid_f")),
+                    "identifiable": as_u64(r.get("identifiable_i")) > 0,
+                    "fan_on": true,
+                }));
+            }
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "economizer plot points SQL failed; counts only");
+        }
+    }
+
+    let mut warnings = vec![
+        "economizer fan-on counts + free-cooling plot points from historian DataFusion \
+         (vibe19 Overview chart parity)"
+            .into(),
+        format!(
+            "economizer window {} .. {} (default lookback {}d when start omitted)",
+            win_start.to_rfc3339(),
+            win_end.to_rfc3339(),
+            ECONOMIZER_DEFAULT_LOOKBACK_DAYS
+        ),
+    ];
+    if points.is_empty() {
+        warnings.push("no fan-on economizer points available for scatter/MAT/temps plots".into());
+    }
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine(QV_ECONOMIZER, &query, warnings, DF_ENGINE);
+    env.equipment = equipment.clone();
+    env.rows = equipment;
+    env.points = points;
+    env.coverage = Some(json!({
+        "equipment_count": env.equipment.len(),
+        "point_count": env.points.len(),
+        "history_rows": n,
+        "dt_min_f": dt_min,
+        "max_points": limit,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+        "oat_column": oat_col,
+        "rat_column": rat_col,
+        "mat_column": mat_col,
+        "window_start_utc": win_start.to_rfc3339(),
+        "window_end_utc": win_end.to_rfc3339(),
+    }));
+    Ok(Some(env))
+}
+
+/// Diagnostic warnings when mechanical-cooling OAT bins cannot be computed.
+pub async fn mech_cooling_evidence_warnings(building_id: Option<&str>) -> Result<Vec<String>> {
+    let Some((_ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(vec![
+            "mechanical_cooling: no historian parquet for this building — ingest history first"
+                .into(),
+        ]);
+    };
+    if n <= 0 {
+        return Ok(vec!["mechanical_cooling: historian parquet is empty".into()]);
+    }
+    let mut warnings = Vec::new();
+    if mech_oat_col(&cols).is_none() {
+        warnings.push(
+            "mechanical_cooling: missing OAT column (need web_oa_t, oa_t, or outside_air_temp)"
+                .into(),
+        );
+    }
+    if cooling_on_expr(&cols).is_none() {
+        warnings.push(
+            "mechanical_cooling: missing cooling-proof column (need chiller/compressor status, \
+             amps, or chiller_power/compressor_power > 1 kW — fan-only proof is rejected)"
+                .into(),
+        );
+    }
+    Ok(warnings)
+}
+
+/// Mechanical-cooling OAT bin hours (5°F bins) from historian when OAT + cooling
+/// proof exist. Never uses AHU fan as mechanical cooling.
+pub async fn mech_oat_bins_from_history(
+    equipment_filter: Option<&[String]>,
+    max_gap_seconds: f64,
+    building_id: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let Some(oat) = mech_oat_col(&cols) else {
+        return Ok(None);
+    };
+    // Require compressor/chiller proof — never fan_status/fan_cmd.
+    let Some(on_sql) = cooling_on_expr(&cols) else {
+        return Ok(None);
+    };
+    let max_gap = max_gap_seconds.max(0.0);
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let chiller_filter = stamped_cohort_sql(
+        &ctx,
+        building_id,
+        &["chiller", "cooling_tower", "heatpump"],
+        &cols,
+    )
+    .await;
+    let weather_ids = stamped_weather_id_predicate(building_id, false);
+    let range_sql = time_range_sql(ts_col, start, end);
+    let range_sql_h = time_range_sql(&format!("h.{ts_col}"), start, end);
+    let oat_f = history_temp_sql(oat);
+    let oa_t_f = history_temp_sql("oa_t");
+    // Prefer web/meteo OAT; when only `oa_t` exists, broadcast from weather
+    // equipment (pandas Overview) so AHU BAS oa_t does not dilute site AVG.
+    let (oat_prefix, oat_by_ts_body, oat_label, oat_join) = if web_oat_col(&cols).is_some() {
+        (
+            String::new(),
+            format!(
+                "SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
+  FROM history
+  WHERE {oat_f} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0{range_sql}
+  GROUP BY {ts_col}"
+            ),
+            oat,
+            "site_broadcast_web_by_ts",
+        )
+    } else if oat == "oa_t" {
+        (
+            format!(
+                "weather_oat AS (
+  SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
+  FROM history
+  WHERE {oa_t_f} IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}{weather_ids}
+  GROUP BY {ts_col}
+),
+fallback_oat AS (
+  SELECT {ts_col} AS ts, AVG({oa_t_f}) AS oat_f
+  FROM history
+  WHERE {oa_t_f} IS NOT NULL AND {oa_t_f} >= 40.0 AND {oa_t_f} <= 110.0{range_sql}
+  GROUP BY {ts_col}
+),"
+            ),
+            "SELECT ts, oat_f FROM weather_oat
+  UNION ALL
+  SELECT f.ts, f.oat_f FROM fallback_oat f
+  WHERE NOT EXISTS (SELECT 1 FROM weather_oat LIMIT 1)"
+                .to_string(),
+            "oa_t@weather_else_site",
+            "weather_equipment_oa_t_by_ts",
+        )
+    } else {
+        (
+            String::new(),
+            format!(
+                "SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
+  FROM history
+  WHERE {oat_f} IS NOT NULL AND {oat_f} >= 40.0 AND {oat_f} <= 110.0{range_sql}
+  GROUP BY {ts_col}"
+            ),
+            oat,
+            "site_broadcast_by_ts",
+        )
+    };
+    // Site OAT broadcast by timestamp (Liberty chillers often lack inline OAT).
+    let sql = format!(
+        r#"
+WITH {oat_prefix}
+oat_by_ts AS (
+  {oat_by_ts_body}
+),
+chiller_samp AS (
+  SELECT
+    h.equipment_id,
+    h.{ts_col} AS ts,
+    {on_sql} AS is_on,
+    o.oat_f
+  FROM history h
+  LEFT JOIN oat_by_ts o ON h.{ts_col} = o.ts
+  WHERE h.equipment_id IS NOT NULL{eq_filter}{chiller_filter}{range_sql_h}
+),
+ordered AS (
+  SELECT
+    equipment_id,
+    ts,
+    is_on,
+    oat_f,
+    LEAD(ts) OVER (PARTITION BY equipment_id ORDER BY ts) AS next_ts
+  FROM chiller_samp
+),
+intervals AS (
+  SELECT
+    equipment_id,
+    is_on,
+    oat_f,
+    CASE
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 < 0.0 THEN 0.0
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 > {max_gap} THEN {max_gap}
+      ELSE (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0
+    END AS dt_sec
+  FROM ordered
+  WHERE next_ts IS NOT NULL AND is_on AND oat_f IS NOT NULL
+),
+device_bins AS (
+  SELECT
+    equipment_id,
+    FLOOR(oat_f / 5.0) * 5.0 AS bin_lo,
+    SUM(dt_sec) / 3600.0 AS hours
+  FROM intervals
+  GROUP BY equipment_id, FLOOR(oat_f / 5.0) * 5.0
+),
+any_by_ts AS (
+  SELECT
+    ts,
+    BOOL_OR(is_on) AS any_on,
+    MAX(oat_f) AS oat_f
+  FROM chiller_samp
+  WHERE oat_f IS NOT NULL
+  GROUP BY ts
+),
+any_ordered AS (
+  SELECT
+    ts,
+    any_on,
+    oat_f,
+    LEAD(ts) OVER (ORDER BY ts) AS next_ts
+  FROM any_by_ts
+),
+any_intervals AS (
+  SELECT
+    oat_f,
+    CASE
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 < 0.0 THEN 0.0
+      WHEN (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0 > {max_gap} THEN {max_gap}
+      ELSE (CAST(next_ts AS BIGINT) - CAST(ts AS BIGINT)) / 1000000000.0
+    END AS dt_sec
+  FROM any_ordered
+  WHERE next_ts IS NOT NULL AND any_on AND oat_f IS NOT NULL
+),
+any_bins AS (
+  SELECT
+    FLOOR(oat_f / 5.0) * 5.0 AS bin_lo,
+    SUM(dt_sec) / 3600.0 AS hours
+  FROM any_intervals
+  GROUP BY FLOOR(oat_f / 5.0) * 5.0
+)
+SELECT
+  equipment_id,
+  'individual_device' AS series_kind,
+  bin_lo,
+  hours
+FROM device_bins
+UNION ALL
+SELECT
+  'ALL' AS equipment_id,
+  'aggregate_device_hours' AS series_kind,
+  bin_lo,
+  SUM(hours) AS hours
+FROM device_bins
+GROUP BY bin_lo
+UNION ALL
+SELECT
+  'ANY' AS equipment_id,
+  'aggregate_active_hours' AS series_kind,
+  bin_lo,
+  hours
+FROM any_bins
+ORDER BY series_kind, equipment_id, bin_lo
+"#
+    );
+    let timed = tokio::time::timeout(MECH_QUERY_TIMEOUT, run_sql(&ctx, &sql)).await;
+    let result = match timed {
+        Err(_) => {
+            tracing::warn!(
+                timeout_secs = MECH_QUERY_TIMEOUT.as_secs(),
+                "mech oat bin historian query exceeded budget; fail-closed empty rows"
+            );
+            let query = AnalyticsQuery {
+                building_id: building_id.map(str::to_string),
+                start,
+                end,
+                ..AnalyticsQuery::default()
+            };
+            let mut env = envelope_with_engine(
+                QV_MECHANICAL_COOLING,
+                &query,
+                vec![format!(
+                    "mechanical_cooling historian query exceeded {}s budget; fail-closed — pass query.start/end or compact the hive",
+                    MECH_QUERY_TIMEOUT.as_secs()
+                )],
+                DF_ENGINE,
+            );
+            env.coverage = Some(json!({
+                "history_rows": n,
+                "fail_closed": true,
+                "timeout_secs": MECH_QUERY_TIMEOUT.as_secs(),
+                "building_id": safe_building_segment(building_id),
+                "start": start.map(|t| t.to_rfc3339()),
+                "end": end.map(|t| t.to_rfc3339()),
+            }));
+            return Ok(Some(env));
+        }
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => {
+            tracing::warn!(error = %e, "mech oat bin SQL failed");
+            return Ok(None);
+        }
+    };
+    let mut rows = Vec::new();
+    for r in &result.rows {
+        let lo = as_f64(r.get("bin_lo")).unwrap_or(0.0);
+        let hours = as_f64(r.get("hours")).unwrap_or(0.0);
+        if hours <= 0.0 {
+            continue;
+        }
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let series_kind = r
+            .get("series_kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("individual_device")
+            .to_string();
+        rows.push(json!({
+            "kind": "oat_bin",
+            "query_version": "mechanical-cooling-oat-bins-v2",
+            "series_kind": series_kind,
+            "equipment_id": eq,
+            "bin_lo_f": round2(lo),
+            "bin_hi_f": round2(lo + 5.0),
+            "bin_label": format!("{:.0}-{:.0}", lo, lo + 5.0),
+            "hours": round2(hours),
+        }));
+    }
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    let warnings = vec!["mechanical cooling OAT bins from historian DataFusion \
+         (compressor/chiller proof × site-broadcast preferred web OAT; per-device + aggregates)"
+        .into()];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine(QV_MECHANICAL_COOLING, &query, warnings, DF_ENGINE);
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "bin_count": env.rows.len(),
+        "history_rows": n,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+        "oat_column": oat_label,
+        "oat_join": oat_join,
+    }));
+    Ok(Some(env))
+}
+
+/// BAS oa_t vs web OAT overlay samples + deviation histogram rows.
+/// Site-broadcasts BAS and web OAT by truncated-second timestamp so Liberty
+/// works when `oa_t` lives on AHU rows and `web_oa_t` on weather (not
+/// co-located on one row). MQTT poll clocks rarely share exact micros — join
+/// keys use `date_trunc('second', …)` so ACME rtu_01×hosted-weather aligns.
+/// When only `oa_t` exists (Liberty), weather equipment rows supply web OAT and
+/// non-weather rows supply BAS OAT.
+pub async fn bas_vs_web_from_history(
+    equipment_filter: Option<&[String]>,
+    max_points: usize,
+    building_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let defaulted_start = start.is_none();
+    let (start_t, end_opt) =
+        match resolve_analytics_window(start, end, BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS) {
+            Ok(w) => w,
+            Err(msg) => anyhow::bail!("{msg}"),
+        };
+    let end_t = end_opt.unwrap_or_else(Utc::now);
+    let deadline = tokio::time::Instant::now() + BAS_VS_WEB_QUERY_TIMEOUT;
+    // Soft-OPEN 371 #1229: never open_history_scoped the full ACME hive.
+    // Register only weather + BAS OAT carriers (positive IN on both CTEs).
+    let allow = bas_vs_web_equipment_allow_list(building_id, preferred_tenant, equipment_filter);
+    let weather_ids = stamped_weather_ids(building_id);
+    let has_weather_ids = !weather_ids.is_empty();
+    let bas_ids: Vec<String> = allow
+        .iter()
+        .filter(|id| !weather_ids.iter().any(|w| w == *id))
+        .cloned()
+        .collect();
+    let Some((ctx, cols, n, _scan, _eq_guard)) =
+        open_history_scoped_equipment_for_tenant(building_id, preferred_tenant, &allow).await?
+    else {
+        // Fall back only when allow-list is empty (no stamps / no oa_t peek).
+        // Still refuse full-hive open for known large sites with weather stamps.
+        if has_weather_ids {
+            tracing::warn!(
+                building = building_id.unwrap_or(""),
+                "bas-vs-web equipment scope empty despite weather stamps; fail-closed"
+            );
+            return Ok(None);
+        }
+        let Some((ctx, cols, n, _scan)) =
+            open_history_scoped_for_tenant(building_id, preferred_tenant).await?
+        else {
+            return Ok(None);
+        };
+        return bas_vs_web_run_on_ctx(BasVsWebRunArgs {
+            ctx,
+            cols,
+            n,
+            equipment_filter,
+            max_points,
+            building_id,
+            start_t,
+            end_t,
+            defaulted_start,
+            deadline,
+            has_weather_ids: false,
+            weather_ids: &[],
+            bas_ids: &[],
+        })
+        .await;
+    };
+    bas_vs_web_run_on_ctx(BasVsWebRunArgs {
+        ctx,
+        cols,
+        n,
+        equipment_filter,
+        max_points,
+        building_id,
+        start_t,
+        end_t,
+        defaulted_start,
+        deadline,
+        has_weather_ids,
+        weather_ids: &weather_ids,
+        bas_ids: &bas_ids,
+    })
+    .await
+}
+
+struct BasVsWebRunArgs<'a> {
+    ctx: SessionContext,
+    cols: HashSet<String>,
+    n: i64,
+    equipment_filter: Option<&'a [String]>,
+    max_points: usize,
+    building_id: Option<&'a str>,
+    start_t: DateTime<Utc>,
+    end_t: DateTime<Utc>,
+    defaulted_start: bool,
+    deadline: tokio::time::Instant,
+    has_weather_ids: bool,
+    weather_ids: &'a [String],
+    bas_ids: &'a [String],
+}
+
+async fn bas_vs_web_run_on_ctx(args: BasVsWebRunArgs<'_>) -> Result<Option<AnalyticsEnvelope>> {
+    let BasVsWebRunArgs {
+        ctx,
+        cols,
+        n,
+        equipment_filter,
+        max_points,
+        building_id,
+        mut start_t,
+        end_t,
+        defaulted_start,
+        deadline,
+        has_weather_ids,
+        weather_ids,
+        bas_ids,
+    } = args;
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let Some(bas) = bas_oat_col(&cols) else {
+        return Ok(None);
+    };
+    let web_col = web_oat_col(&cols);
+    let _eq_filter = equipment_filter_sql(equipment_filter);
+    let weather_only = if has_weather_ids {
+        equipment_id_in_predicate(weather_ids)
+    } else {
+        stamped_weather_id_predicate(building_id, false)
+    };
+    // Positive BAS IN — never NOT IN (defeats Hive pruning → ACME full scan).
+    let bas_scope = if has_weather_ids {
+        if bas_ids.is_empty() {
+            " AND 1 = 0".to_string()
+        } else {
+            equipment_id_in_predicate(bas_ids)
+        }
+    } else {
+        String::new()
+    };
+    let weather_split = has_weather_ids || web_col.is_none();
+    if !has_weather_ids && web_col == Some(bas) {
+        return Ok(None);
+    }
+    let limit = max_points.clamp(100, 5000);
+    let mut used_retain_fallback = false;
+    let mut bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
+    let web_label = if has_weather_ids {
+        web_col
+            .map(|c| format!("{c}@weather"))
+            .unwrap_or_else(|| "oa_t@weather".into())
+    } else {
+        web_col
+            .map(str::to_string)
+            .unwrap_or_else(|| "oa_t@weather".into())
+    };
+    let bas_f = history_temp_sql(bas);
+    let build_sql = |start_t: DateTime<Utc>, bin_secs: i64| -> String {
+        let range_sql = time_range_sql(ts_col, Some(start_t), Some(end_t));
+        let (web_f, bas_scope_sql, web_scope) = if has_weather_ids {
+            let web_f = history_temp_sql(web_col.unwrap_or(bas));
+            (web_f, bas_scope.as_str(), weather_only.as_str())
+        } else if let Some(web) = web_col {
+            (history_temp_sql(web), "", "")
+        } else {
+            (history_temp_sql(bas), "", " AND 1 = 0")
+        };
+        format!(
+            r#"
+WITH bas_by_ts AS (
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
+    AVG({bas_f}) AS bas_oat_f
+  FROM history
+  WHERE {bas_f} IS NOT NULL{bas_scope_sql}{range_sql}
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
+),
+web_by_ts AS (
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP)) AS bucket_ts,
+    AVG({web_f}) AS web_oat_f
+  FROM history
+  WHERE {web_f} IS NOT NULL{web_scope}{range_sql}
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, CAST({ts_col} AS TIMESTAMP))
+),
+joined AS (
+  SELECT
+    b.bucket_ts,
+    b.bas_oat_f,
+    w.web_oat_f,
+    (b.bas_oat_f - w.web_oat_f) AS delta_f
+  FROM bas_by_ts b
+  INNER JOIN web_by_ts w ON b.bucket_ts = w.bucket_ts
+)
+SELECT
+  CAST(bucket_ts AS VARCHAR) AS timestamp_utc,
+  'site' AS equipment_id,
+  bas_oat_f,
+  web_oat_f,
+  delta_f
+FROM joined
+ORDER BY bucket_ts
+LIMIT {limit}
+"#
+        )
+    };
+    let result = loop {
+        let sql = build_sql(start_t, bin_secs);
+        let budget = remaining_budget(deadline, BAS_VS_WEB_QUERY_TIMEOUT);
+        let timed = tokio::time::timeout(budget, run_sql(&ctx, &sql)).await;
+        let attempt = match timed {
+            Ok(inner) => inner?,
+            Err(_) => {
+                tracing::warn!(
+                    timeout_secs = BAS_VS_WEB_QUERY_TIMEOUT.as_secs(),
+                    "bas-vs-web historian path exceeded wall budget; fail-closed"
+                );
+                let query = AnalyticsQuery {
+                    building_id: building_id.map(str::to_string),
+                    start: Some(start_t),
+                    end: Some(end_t),
+                    ..AnalyticsQuery::default()
+                };
+                let mut env = envelope_with_engine(
+                    "bas-vs-web-oat-v3",
+                    &query,
+                    vec![format!(
+                        "bas-vs-web historian query exceeded {}s budget; fail-closed — pass a tighter query.start/end",
+                        BAS_VS_WEB_QUERY_TIMEOUT.as_secs()
+                    )],
+                    DF_ENGINE,
+                );
+                env.coverage = Some(json!({
+                    "fail_closed": true,
+                    "timeout_secs": BAS_VS_WEB_QUERY_TIMEOUT.as_secs(),
+                    "building_id": safe_building_segment(building_id),
+                    "start": start_t.to_rfc3339(),
+                    "end": end_t.to_rfc3339(),
+                }));
+                return Ok(Some(env));
+            }
+        };
+        if attempt.rows.is_empty() && defaulted_start && !used_retain_fallback {
+            // Synthetic / lab fixtures often sit outside the 7-day default.
+            // Expand once to the retain floor — still bounded, never start=None.
+            used_retain_fallback = true;
+            let max_span = std::env::var("OPENFDD_ANALYTICS_MAX_SPAN_DAYS")
+                .ok()
+                .and_then(|v| v.parse::<i64>().ok())
+                .filter(|v| *v > 0)
+                .unwrap_or(ANALYTICS_MAX_LOOKBACK_DAYS)
+                .min(BAS_VS_WEB_RETAIN_FALLBACK_DAYS);
+            start_t = end_t - chrono::Duration::days(max_span);
+            bin_secs = date_bin_seconds_for_points(start_t, end_t, limit);
+            continue;
+        }
+        break attempt;
+    };
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::new();
+    let mut hist: BTreeMap<i64, f64> = BTreeMap::new();
+    for r in &result.rows {
+        let delta = as_f64(r.get("delta_f")).unwrap_or(0.0);
+        points.push(json!({
+            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "bas_oat_f": as_f64(r.get("bas_oat_f")),
+            "web_oat_f": as_f64(r.get("web_oat_f")),
+            "delta_f": round2(delta),
+        }));
+        let bin = (delta / 1.0).floor() as i64;
+        *hist.entry(bin).or_insert(0.0) += 1.0;
+    }
+    let rows: Vec<Value> = hist
+        .into_iter()
+        .map(|(bin, count)| {
+            json!({
+                "kind": "delta_hist",
+                "bin_lo_f": bin as f64,
+                "bin_hi_f": (bin + 1) as f64,
+                "count": count,
+            })
+        })
+        .collect();
+    let mut warnings = vec![
+        "BAS vs web OAT from historian DataFusion (site-broadcast oa_t × web OAT by timestamp)"
+            .into(),
+        format!(
+            "bounded window {} .. {} with date_bin({bin_secs}s) downsample (no ROW_NUMBER OVER)",
+            start_t.to_rfc3339(),
+            end_t.to_rfc3339()
+        ),
+    ];
+    if used_retain_fallback {
+        warnings.push(format!(
+            "bas-vs-web {}-day default window was empty; expanded to historian retain floor ({} days, still bounded) — pass query.start/end to bound",
+            BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS, BAS_VS_WEB_RETAIN_FALLBACK_DAYS
+        ));
+    } else if defaulted_start {
+        warnings.push(format!(
+            "bas-vs-web defaulted start to last {} days; pass query.start for a custom window",
+            BAS_VS_WEB_DEFAULT_LOOKBACK_DAYS
+        ));
+    }
+    if weather_split {
+        warnings.push(
+            "web OAT sourced from equipment stamped kind weather (single oa_t column site)".into(),
+        );
+    }
+    let query = AnalyticsQuery {
+        building_id: building_id.map(str::to_string),
+        start: Some(start_t),
+        end: Some(end_t),
+        ..AnalyticsQuery::default()
+    };
+    let mut env = envelope_with_engine("bas-vs-web-oat-v3", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.rows = rows;
+    env.coverage = Some(json!({
+        "point_count": env.points.len(),
+        "hist_bins": env.rows.len(),
+        "history_rows": n,
+        "bas_column": bas,
+        "web_column": web_label,
+        "weather_equipment_split": weather_split,
+        "equipment_scope": if has_weather_ids {
+            "allow_list"
+        } else {
+            "building"
+        },
+        "weather_equipment_n": weather_ids.len(),
+        "bas_equipment_n": bas_ids.len(),
+        "oat_join": "site_broadcast_by_date_bin",
+        "downsample": "date_bin",
+        "bin_seconds": bin_secs,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+        "start": start_t.to_rfc3339(),
+        "end": end_t.to_rfc3339(),
+    }));
+    Ok(Some(env))
+}
+
+/// Raw equipment history for Overview data inspection (vibe19 equipment_inspection_chart).
+/// Returns plottable numeric columns + downsampled wide points — no FDD rule required.
+pub async fn inspect_from_history(
+    building_id: Option<&str>,
+    equipment_id: &str,
+    columns: Option<&[String]>,
+    max_points: usize,
+    preferred_tenant: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let eq = equipment_id.trim();
+    if eq.is_empty() {
+        return Ok(None);
+    }
+    // Soft-OPEN 371 #1230: never open the full ACME hive for one equipment id.
+    let allow = vec![eq.to_string()];
+    let Some((ctx, cols, n, _scan, _guard)) =
+        open_history_scoped_equipment_for_tenant(building_id, preferred_tenant, &allow).await?
+    else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    let skip = HashSet::from([
+        "equipment_id".to_string(),
+        "building".to_string(),
+        "building_id".to_string(),
+        ts_col.to_string(),
+        "timestamp_utc".to_string(),
+        "timestamp".to_string(),
+        "ts".to_string(),
+    ]);
+    let mut plottable: Vec<String> = cols
+        .iter()
+        .filter(|c| !skip.contains(c.as_str()))
+        .cloned()
+        .collect();
+    plottable.sort();
+    if plottable.is_empty() {
+        return Ok(None);
+    }
+    // Prefer AHU/zone roles so default inspect is useful on Liberty (not alphabetical
+    // boiler_/chiller_ columns from the Hive union schema).
+    const PREFERRED_INSPECT: &[&str] = &[
+        "sat",
+        "mat",
+        "web_mat",
+        "web_ma_t",
+        "rat",
+        "web_ra_t",
+        "oa_t",
+        "web_oa_t",
+        "oa_damper_pct",
+        "fan_status",
+        "fan_cmd",
+        "duct_static",
+        "duct_static_sp",
+        "sat_sp",
+        "clg_valve_pct",
+        "htg_valve_pct",
+        "zone_t",
+        "zone_flow",
+        "chw_supply_t",
+        "chw_return_t",
+        "hw_supply_t",
+        "hw_return_t",
+    ];
+    let selected: Vec<String> = match columns {
+        Some(want) if !want.is_empty() => want
+            .iter()
+            .filter(|c| plottable.iter().any(|p| p == *c))
+            .cloned()
+            .collect(),
+        _ => {
+            let mut picked: Vec<String> = PREFERRED_INSPECT
+                .iter()
+                .filter(|c| plottable.iter().any(|p| p == *c))
+                .map(|c| (*c).to_string())
+                .collect();
+            if picked.is_empty() {
+                picked = plottable.iter().take(8).cloned().collect();
+            } else if picked.len() < 6 {
+                for c in &plottable {
+                    if picked.len() >= 8 {
+                        break;
+                    }
+                    if !picked.iter().any(|p| p == c) {
+                        picked.push(c.clone());
+                    }
+                }
+            }
+            picked
+        }
+    };
+    if selected.is_empty() {
+        return Ok(None);
+    }
+    let limit = max_points.clamp(50, 8000);
+    let proj = selected
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let eq_lit = eq.replace('\'', "''");
+    // Span-preserving downsample (Wave I plot-default-full-span): keep first/last
+    // + evenly spaced rows across full coverage — not ORDER BY … LIMIT prefix.
+    let sql = format!(
+        r#"
+SELECT timestamp_utc, {proj}
+FROM (
+  SELECT
+    CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+    {proj},
+    ROW_NUMBER() OVER (ORDER BY {ts_col}) AS _rn,
+    COUNT(*) OVER () AS _cnt
+  FROM history
+  WHERE equipment_id = '{eq_lit}'
+)
+WHERE _rn = 1
+   OR _rn = _cnt
+   OR (_rn % (CASE
+        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+        ELSE 1
+      END)) = 0
+ORDER BY timestamp_utc
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let mut points = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let mut row = json!({
+            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            "equipment_id": eq,
+        });
+        if let Some(obj) = row.as_object_mut() {
+            for c in &selected {
+                obj.insert(c.clone(), r.get(c).cloned().unwrap_or(Value::Null));
+            }
+        }
+        points.push(row);
+    }
+    let first = points
+        .first()
+        .and_then(|p| p.get("timestamp_utc").and_then(|v| v.as_str()))
+        .map(str::to_string);
+    let last = points
+        .last()
+        .and_then(|p| p.get("timestamp_utc").and_then(|v| v.as_str()))
+        .map(str::to_string);
+    let warnings = vec![
+        "equipment inspection points from historian DataFusion (raw columns; no FDD rule)".into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("equipment-inspect-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.rows = selected.iter().map(|c| json!({ "column": c })).collect();
+    let mut coverage = json!({
+        "equipment_id": eq,
+        // equipment-scoped open uses allow-list len as `n`; point_count is the
+        // truthful returned sample size for this inspect window.
+        "row_count": env.points.len(),
+        "point_count": env.points.len(),
+        "registered_equipment_n": n,
+        "plottable_columns": plottable,
+        "columns_plotted": selected,
+        "first_timestamp": first,
+        "last_timestamp": last,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    });
+    // Record the same dual-read root the inspect query used.
+    if let Some(bid) = safe_building_segment(building_id) {
+        if let Ok(resolved) =
+            fdd_store::resolve_building_read_root(&parquet_root_base(), preferred_tenant, &bid)
+        {
+            if let Some(obj) = coverage.as_object_mut() {
+                obj.insert(
+                    "read_root".into(),
+                    json!(resolved.root.display().to_string()),
+                );
+                obj.insert("read_source".into(), json!(resolved.source.as_str()));
+                if let Some(tid) = resolved.tenant_id {
+                    obj.insert("read_tenant_id".into(), json!(tid));
+                }
+            }
+        }
+    }
+    env.coverage = Some(coverage);
+    Ok(Some(env))
+}
+
+/// Build the RCx equipment predicate from the persisted canonical type map.
+///
+/// RCx chart membership is a model decision, so equipment ids are only used
+/// as the join key for the already validated `equipment_types.json` entries.
+/// An empty map intentionally selects no equipment rather than reviving the
+/// old name based `LIKE` heuristics (which admitted ghost ids and missed opaque
+/// vendor ids). Each caller also requires its chart role to be non-null.
+#[cfg(test)]
+fn rcx_eq_filter_for_column(
+    kinds: &[&str],
+    stamped_types: &BTreeMap<String, String>,
+    equipment_column: &str,
+) -> String {
+    if kinds.is_empty() {
+        return String::new();
+    }
+    let requested: HashSet<&'static str> = kinds
+        .iter()
+        .filter_map(|kind| match kind.to_ascii_uppercase().as_str() {
+            "AHU" | "RTU" | "MAU" | "DOAS" => Some("ahu"),
+            "VAV" => Some("vav"),
+            "CHW" | "CHW_PLANT" | "CHILLER" => Some("chiller"),
+            "BOILER" => Some("boiler"),
+            "TOWER" | "CT" | "COOLING_TOWER" => Some("cooling_tower"),
+            "HP" | "HEATPUMP" | "HEAT_PUMP" => Some("heatpump"),
+            "METER" => Some("meter"),
+            "WEATHER" => Some("weather"),
+            _ => None,
+        })
+        .collect();
+    let ids: Vec<String> = stamped_types
+        .iter()
+        .filter_map(|(equipment_id, raw_type)| {
+            let canonical = open_fdd_edge_prototype::equipment_types::canonical_kind(raw_type)?;
+            requested
+                .contains(canonical)
+                .then(|| format!("'{}'", equipment_id.replace('\'', "''")))
+        })
+        .collect();
+    if ids.is_empty() {
+        return " AND 1=0".into();
+    }
+    format!(" AND {equipment_column} IN ({})", ids.join(", "))
+}
+
+/// Load RCx type stamps from the same resolved hub/tenant root used by the
+/// scoped historian query. This prevents a tenant's history from being joined
+/// with a conflicting hub registry (or vice versa).
+fn rcx_type_stamps(building_id: Option<&str>) -> BTreeMap<String, String> {
+    let Some(bid) = safe_building_segment(building_id) else {
+        return BTreeMap::new();
+    };
+    let root = fdd_store::resolve_building_read_root(&parquet_root_base(), None, &bid)
+        .map(|resolved| resolved.root)
+        .unwrap_or_else(|_| parquet_root_base());
+    open_fdd_edge_prototype::equipment_types::load_type_map(&root, Some(&bid))
+}
+
+/// Family Zones presets select by stamp + role, not `equipment_id` text.
+fn kinds_use_zone_family(kinds: &[&str]) -> bool {
+    if kinds.is_empty() {
+        return false;
+    }
+    const ZONE: &[&str] = &[
+        "ZONE_FAMILY",
+        "VAV",
+        "FCU",
+        "ZONE",
+        "ZONE_OTHER",
+        "HP",
+        "HEATPUMP",
+        "BASEBOARD",
+    ];
+    kinds
+        .iter()
+        .all(|k| ZONE.iter().any(|z| k.eq_ignore_ascii_case(z)))
+}
+
+fn safe_ident(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Equipment ids that belong on Family Zones plots for this role.
+async fn zone_family_eq_filter(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    role_col: &str,
+) -> Result<String> {
+    if !safe_ident(role_col) {
+        return Err(anyhow!("refusing unsafe role column"));
+    }
+    let sql = format!(
+        "SELECT DISTINCT equipment_id FROM history \
+         WHERE equipment_id IS NOT NULL AND {role_col} IS NOT NULL"
+    );
+    let result = run_sql(ctx, &sql).await?;
+    let stamps =
+        open_fdd_edge_prototype::equipment_types::load_type_map(&parquet_root(), building_id);
+    let mut ids = Vec::new();
+    for row in &result.rows {
+        let Some(eq) = row.get("equipment_id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        if eq.is_empty() {
+            continue;
+        }
+        let stamped = stamps.get(eq).map(String::as_str);
+        if open_fdd_edge_prototype::equipment_types::zone_comfort_member(stamped, true) {
+            ids.push(eq.to_string());
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() {
+        return Ok(" AND 1 = 0".to_string());
+    }
+    Ok(equipment_filter_sql(Some(&ids)))
+}
+
+async fn rcx_eq_filter(
+    ctx: &SessionContext,
+    building_id: Option<&str>,
+    kinds: &[&str],
+    cols: &HashSet<String>,
+    role_col: &str,
+) -> String {
+    if kinds_use_zone_family(kinds) {
+        return zone_family_eq_filter(ctx, building_id, role_col)
+            .await
+            .unwrap_or_else(|_| " AND 1 = 0".to_string());
+    }
+    stamped_cohort_sql(ctx, building_id, kinds, cols).await
+}
+
+/// Multi-equipment role timeseries for RCx presets (vibe19 multi_equipment_timeseries).
+pub async fn rcx_timeseries_from_history(
+    building_id: Option<&str>,
+    role_col: &str,
+    overlay_col: Option<&str>,
+    pair_return_col: Option<&str>,
+    eq_kinds: &[&str],
+    filter_fan_on: bool,
+    max_points: usize,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    if !cols.contains(role_col) {
+        return Ok(None);
+    }
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols, role_col).await;
+    let fan_filter = if filter_fan_on {
+        match on_expr(&cols) {
+            Some(expr) => format!(" AND ({expr})"),
+            None => String::new(),
+        }
+    } else {
+        String::new()
+    };
+    let limit = max_points.clamp(200, 20000);
+    let value_f = history_role_numeric_sql(role_col);
+    let overlay_sel = overlay_col
+        .filter(|c| cols.contains(*c))
+        .map(|c| format!(", {} AS overlay_f", history_role_numeric_sql(c)))
+        .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS overlay_f".into());
+    let return_sel = pair_return_col
+        .filter(|c| cols.contains(*c))
+        .map(|c| format!(", {} AS return_f", history_role_numeric_sql(c)))
+        .unwrap_or_else(|| ", CAST(NULL AS FLOAT) AS return_f".into());
+    // Optional motor/fan proof for vibe19 right-hand "motor on" y2 overlay.
+    let fan_status = history_role_numeric_sql("fan_status");
+    let fan_cmd = history_role_numeric_sql("fan_cmd");
+    let motor_sel = if cols.contains("fan_status") {
+        format!(", {fan_status} AS motor_f")
+    } else if cols.contains("fan_cmd") {
+        format!(
+            ", CASE WHEN {fan_cmd} IS NOT NULL AND {fan_cmd} > 0.05 THEN 1.0 ELSE 0.0 END AS motor_f"
+        )
+    } else {
+        ", CAST(NULL AS FLOAT) AS motor_f".into()
+    };
+    // Span-preserving downsample (vibe19): keep first/last + evenly spaced rows
+    // across the full historian range instead of LIMIT taking only the earliest.
+    // DataFusion 43 has no SQL `MOD()` / `GREATEST()` — use `%` and CASE.
+    let sql = format!(
+        r#"
+SELECT timestamp_utc, equipment_id, value_f, overlay_f, return_f, motor_f
+FROM (
+  SELECT
+    CAST({ts_col} AS VARCHAR) AS timestamp_utc,
+    equipment_id,
+    {value_f} AS value_f
+    {overlay_sel}
+    {return_sel}
+    {motor_sel},
+    ROW_NUMBER() OVER (ORDER BY {ts_col}, equipment_id) AS _rn,
+    COUNT(*) OVER () AS _cnt
+  FROM history
+  WHERE equipment_id IS NOT NULL AND {value_f} IS NOT NULL{eq_filter}{fan_filter}
+)
+WHERE _rn = 1
+   OR _rn = _cnt
+   OR (_rn % (CASE
+        WHEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT) > 1
+        THEN CAST((_cnt + {limit} - 1) / {limit} AS BIGINT)
+        ELSE 1
+      END)) = 0
+ORDER BY timestamp_utc, equipment_id
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let row = json!({
+            "timestamp_utc": r.get("timestamp_utc").cloned().unwrap_or(json!("")),
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "value_f": as_f64(r.get("value_f")),
+            "series": "primary",
+        });
+        points.push(row.clone());
+        if let Some(ov) = as_f64(r.get("overlay_f")) {
+            let mut o = row.clone();
+            if let Some(obj) = o.as_object_mut() {
+                obj.insert("value_f".into(), json!(ov));
+                obj.insert("series".into(), json!("overlay"));
+            }
+            points.push(o);
+        }
+        if let Some(ret) = as_f64(r.get("return_f")) {
+            let mut rr = row.clone();
+            if let Some(obj) = rr.as_object_mut() {
+                obj.insert("value_f".into(), json!(ret));
+                obj.insert("series".into(), json!("return"));
+            }
+            points.push(rr);
+            if let Some(sup) = as_f64(r.get("value_f")) {
+                let mut d = row.clone();
+                if let Some(obj) = d.as_object_mut() {
+                    obj.insert("value_f".into(), json!(round2(ret - sup)));
+                    obj.insert("series".into(), json!("delta_t"));
+                }
+                points.push(d);
+            }
+        }
+        if let Some(m) = as_f64(r.get("motor_f")) {
+            let mut mo = row;
+            if let Some(obj) = mo.as_object_mut() {
+                let on = if m > 0.05 { 1.0 } else { 0.0 };
+                obj.insert("value_f".into(), json!(on));
+                obj.insert("series".into(), json!("motor"));
+            }
+            points.push(mo);
+        }
+    }
+    let warnings = vec!["RCx role timeseries from historian DataFusion".into()];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-timeseries-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "role_col": role_col,
+        "chart_kind": "timeseries",
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// OAT scatter for RCx reset charts (vibe19 oat_scatter) with site-broadcast OAT.
+pub async fn rcx_oat_scatter_from_history(
+    building_id: Option<&str>,
+    y_col: &str,
+    eq_kinds: &[&str],
+    prefer_wetbulb: bool,
+    max_points: usize,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    if !cols.contains(y_col) {
+        return Ok(None);
+    }
+    let oat = if prefer_wetbulb {
+        ["web_wb_t", "oa_wb_t", "wetbulb_t"]
+            .into_iter()
+            .find(|&c| cols.contains(c))
+            .or_else(|| mech_oat_col(&cols))
+    } else {
+        mech_oat_col(&cols)
+    };
+    let Some(oat) = oat else {
+        return Ok(None);
+    };
+    let dry_ref = if prefer_wetbulb {
+        mech_oat_col(&cols).filter(|c| *c != oat)
+    } else {
+        None
+    };
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols, y_col).await;
+    // Prefixed for JOIN aliases (history AS h).
+    let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
+    let limit = max_points.clamp(200, 20000);
+    let dry_sel = if dry_ref.is_some() {
+        ", d.dry_f AS dry_bulb_f".to_string()
+    } else {
+        ", CAST(NULL AS FLOAT) AS dry_bulb_f".into()
+    };
+    let oat_f = history_temp_sql(oat);
+    let y_f = history_role_numeric_sql(y_col);
+    let dry_cte = dry_ref
+        .map(|c| {
+            let dry = history_temp_sql(c);
+            format!(
+                ", dry_by_ts AS (\n  SELECT {ts_col} AS ts, AVG({dry}) AS dry_f\n  FROM history\n  WHERE {dry} IS NOT NULL\n  GROUP BY {ts_col}\n)"
+            )
+        })
+        .unwrap_or_default();
+    let dry_join = if dry_ref.is_some() {
+        "LEFT JOIN dry_by_ts d ON h.{ts_col} = d.ts".replace("{ts_col}", ts_col)
+    } else {
+        String::new()
+    };
+    let sql = format!(
+        r#"
+WITH oat_by_ts AS (
+  SELECT {ts_col} AS ts, AVG({oat_f}) AS oat_f
+  FROM history
+  WHERE {oat_f} IS NOT NULL
+  GROUP BY {ts_col}
+){dry_cte}
+SELECT
+  CAST(h.{ts_col} AS VARCHAR) AS ts_utc,
+  h.equipment_id,
+  o.oat_f,
+  {y_f} AS y_f
+  {dry_sel}
+FROM history h
+LEFT JOIN oat_by_ts o ON h.{ts_col} = o.ts
+{dry_join}
+WHERE h.equipment_id IS NOT NULL
+  AND {y_f} IS NOT NULL
+  AND o.oat_f IS NOT NULL{eq_filter_h}
+ORDER BY h.{ts_col}, h.equipment_id
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let mut row = json!({
+            // Alias ts_utc avoids DataFusion ambiguity when ts_col is timestamp_utc.
+            "timestamp_utc": r.get("ts_utc").cloned().unwrap_or(json!("")),
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "oat_f": as_f64(r.get("oat_f")),
+            "y_f": as_f64(r.get("y_f")),
+        });
+        if let Some(d) = as_f64(r.get("dry_bulb_f")) {
+            if let Some(obj) = row.as_object_mut() {
+                obj.insert("dry_bulb_f".into(), json!(d));
+            }
+        }
+        points.push(row);
+    }
+    let warnings = vec!["RCx OAT scatter from historian DataFusion (site-broadcast OAT)".into()];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-oat-scatter-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "y_col": y_col,
+        "oat_column": oat,
+        "prefer_wetbulb": prefer_wetbulb,
+        "chart_kind": "scatter_oat",
+        "oat_join": "site_broadcast_by_ts",
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// Multi-equipment box-plot samples (vibe19 multi_equipment_box).
+pub async fn rcx_box_from_history(
+    building_id: Option<&str>,
+    role_col: &str,
+    eq_kinds: &[&str],
+    filter_fan_on: bool,
+    max_points: usize,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    if !cols.contains(role_col) {
+        return Ok(None);
+    }
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols, role_col).await;
+    let fan_filter = if filter_fan_on {
+        match on_expr(&cols) {
+            Some(expr) => format!(" AND ({expr})"),
+            None => String::new(),
+        }
+    } else {
+        String::new()
+    };
+    let limit = max_points.clamp(200, 20000);
+    let value_f = history_role_numeric_sql(role_col);
+    let sql = format!(
+        r#"
+SELECT equipment_id, {value_f} AS value_f
+FROM history
+WHERE equipment_id IS NOT NULL AND {value_f} IS NOT NULL{eq_filter}{fan_filter}
+LIMIT {limit}
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        points.push(json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "value_f": as_f64(r.get("value_f")),
+        }));
+    }
+    let warnings = vec!["RCx box samples from historian DataFusion".into()];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-box-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "role_col": role_col,
+        "chart_kind": "box",
+        "filter_fan_on": filter_fan_on,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// Zone comfort ranking — % of schedule-gated samples inside [low, high].
+///
+/// Membership is every zone-terminal stamp or any equipment that models
+/// `zone_t`. Uses `occ_mode` when present (same occupied gate as VAV-1).
+pub async fn rcx_zone_comfort_rank_from_history(
+    building_id: Option<&str>,
+    eq_kinds: &[&str],
+    comfort_low_f: f64,
+    comfort_high_f: f64,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    if !cols.contains("zone_t") {
+        return Ok(None);
+    }
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols, "zone_t").await;
+    // Match schedule `occupied_expr`: Utf8 "1.0" / "0.0" from packages, not only "1".
+    let occ_filter = if cols.contains("occ_mode") {
+        " AND (occ_mode IS NULL OR \
+          CASE \
+            WHEN try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) IS NOT NULL THEN \
+              try_cast(trim(CAST(occ_mode AS VARCHAR)) AS DOUBLE) > 0.05 \
+            ELSE UPPER(trim(CAST(occ_mode AS VARCHAR))) IN \
+              ('OCC','OCCUPIED','TRUE','YES','1','1.0','ON') \
+          END)"
+            .to_string()
+    } else {
+        String::new()
+    };
+    let zone_t = history_role_numeric_sql("zone_t");
+    let sql = format!(
+        r#"
+SELECT
+  equipment_id,
+  COUNT(*) AS n_samples,
+  SUM(CASE WHEN {zone_t} < {comfort_low_f} OR {zone_t} > {comfort_high_f} THEN 1 ELSE 0 END) AS n_fail
+FROM history
+WHERE equipment_id IS NOT NULL AND {zone_t} IS NOT NULL{eq_filter}{occ_filter}
+GROUP BY equipment_id
+ORDER BY (CAST(SUM(CASE WHEN {zone_t} < {comfort_low_f} OR {zone_t} > {comfort_high_f} THEN 1 ELSE 0 END) AS FLOAT)
+          / CAST(COUNT(*) AS FLOAT)) DESC
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::with_capacity(result.rows.len());
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let n_samples = as_u64(r.get("n_samples")) as f64;
+        let n_fail = as_u64(r.get("n_fail")) as f64;
+        let fail_pct = if n_samples > 0.0 {
+            round2(100.0 * n_fail / n_samples)
+        } else {
+            0.0
+        };
+        let in_band_pct = if n_samples > 0.0 {
+            round2(100.0 * (n_samples - n_fail) / n_samples)
+        } else {
+            0.0
+        };
+        let eq = r.get("equipment_id").cloned().unwrap_or(json!(""));
+        let row = json!({
+            "equipment_id": eq.clone(),
+            "n_samples": n_samples as u64,
+            "n_fail": n_fail as u64,
+            "n_in_band": (n_samples - n_fail) as u64,
+            "fail_pct": fail_pct,
+            "in_band_pct": in_band_pct,
+            "comfort_low_f": comfort_low_f,
+            "comfort_high_f": comfort_high_f,
+        });
+        rows.push(row.clone());
+        points.push(json!({
+            "equipment_id": eq,
+            "value_f": in_band_pct,
+            "in_band_pct": in_band_pct,
+            "fail_pct": fail_pct,
+            "series": "in_band_pct",
+        }));
+    }
+    rows.sort_by(|a, b| {
+        let av = a.get("in_band_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let bv = b.get("in_band_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        av.partial_cmp(&bv)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                a.get("equipment_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .cmp(b.get("equipment_id").and_then(|v| v.as_str()).unwrap_or(""))
+            })
+    });
+    points.sort_by(|a, b| {
+        let av = a.get("in_band_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let bv = b.get("in_band_pct").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let warnings = vec![
+        "RCx zone comfort ranking (% time in band, schedule-gated when occ_mode is present)".into(),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-ranking-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.rows = rows;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "chart_kind": "ranking",
+        "comfort_low_f": comfort_low_f,
+        "comfort_high_f": comfort_high_f,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// Monthly metering vs degree-days (vibe19 metering presets) — average power ×
+/// hours as kWh proxy; CDD/HDD from site-broadcast monthly mean OAT (65°F base).
+pub async fn rcx_metering_from_history(
+    building_id: Option<&str>,
+    role_col: &str,
+    eq_kinds: &[&str],
+    kind: &str,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(building_id).await? else {
+        return Ok(None);
+    };
+    let Some(ts_col) = pick_ts_col(&cols) else {
+        return Ok(None);
+    };
+    if !cols.contains(role_col) {
+        return Ok(None);
+    }
+    let Some(oat) = mech_oat_col(&cols) else {
+        return Ok(None);
+    };
+    let eq_filter = rcx_eq_filter(&ctx, building_id, eq_kinds, &cols, role_col).await;
+    let eq_filter_h = eq_filter.replace("equipment_id", "h.equipment_id");
+    let cooling = kind != "gas";
+    let oat_expr = history_temp_sql(oat);
+    let rate_expr = history_role_numeric_sql(role_col);
+    let sql = format!(
+        r#"
+WITH oat_month AS (
+  SELECT
+    substr(CAST({ts_col} AS VARCHAR), 1, 7) AS month,
+    AVG({oat_expr}) AS avg_oat_f,
+    COUNT(*) AS oat_n
+  FROM history
+  WHERE {oat_expr} IS NOT NULL
+  GROUP BY substr(CAST({ts_col} AS VARCHAR), 1, 7)
+),
+meter_month AS (
+  SELECT
+    h.equipment_id,
+    substr(CAST(h.{ts_col} AS VARCHAR), 1, 7) AS month,
+    AVG({rate_expr}) AS avg_rate,
+    COUNT(*) AS n_samples
+  FROM history h
+  WHERE h.equipment_id IS NOT NULL AND {rate_expr} IS NOT NULL{eq_filter_h}
+  GROUP BY h.equipment_id, substr(CAST(h.{ts_col} AS VARCHAR), 1, 7)
+)
+SELECT
+  m.equipment_id,
+  m.month,
+  m.avg_rate,
+  m.n_samples,
+  o.avg_oat_f
+FROM meter_month m
+LEFT JOIN oat_month o ON m.month = o.month
+ORDER BY m.equipment_id, m.month
+"#
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    if result.rows.is_empty() {
+        return Ok(None);
+    }
+    let mut points = Vec::new();
+    let mut rows = Vec::new();
+    for r in &result.rows {
+        let avg_rate = as_f64(r.get("avg_rate")).unwrap_or(0.0);
+        let n_samples = as_u64(r.get("n_samples")) as f64;
+        // Assume ~5-min samples → hours ≈ n * 5/60.
+        let hours = n_samples * (5.0 / 60.0);
+        let energy = round2(avg_rate * hours);
+        let avg_oat = as_f64(r.get("avg_oat_f")).unwrap_or(65.0);
+        let days = (n_samples * 5.0 / (60.0 * 24.0)).max(1.0);
+        let dd = if cooling {
+            round2((avg_oat - 65.0).max(0.0) * days)
+        } else {
+            round2((65.0 - avg_oat).max(0.0) * days)
+        };
+        let eq = r.get("equipment_id").cloned().unwrap_or(json!(""));
+        let month = r.get("month").cloned().unwrap_or(json!(""));
+        let row = json!({
+            "equipment_id": eq.clone(),
+            "month": month.clone(),
+            "energy": energy,
+            "avg_rate": round2(avg_rate),
+            "degree_days": dd,
+            "avg_oat_f": round2(avg_oat),
+            "n_samples": n_samples as u64,
+            "kind": kind,
+        });
+        rows.push(row.clone());
+        points.push(json!({
+            "equipment_id": eq,
+            "month": month,
+            "energy": energy,
+            "degree_days": dd,
+            "oat_f": dd,
+            "y_f": energy,
+            "value_f": energy,
+        }));
+    }
+    let warnings = vec![
+        format!(
+            "RCx metering from historian DataFusion ({kind}; energy ≈ avg_rate × sample-hours; DD base 65°F)"
+        ),
+    ];
+    let query = AnalyticsQuery::default();
+    let mut env = envelope_with_engine("rcx-metering-v1", &query, warnings, DF_ENGINE);
+    env.points = points;
+    env.rows = rows;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "point_count": env.points.len(),
+        "role_col": role_col,
+        "chart_kind": "metering",
+        "meter_kind": kind,
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+    }));
+    Ok(Some(env))
+}
+
+/// Generic descriptive per-equipment row-count evidence from historian Parquet
+/// via DataFusion. Used by families (mechanical_cooling, metering, rcx/*, plant)
+/// that do not yet have a family-specific DF metric. Honest: sets
+/// `engine=datafusion` only because a real `GROUP BY` count ran, and never
+/// invents engineering values (kW/ton, tons, etc.).
+pub async fn descriptive_counts_from_history(
+    query_version: &str,
+    equipment_filter: Option<&[String]>,
+    note: &str,
+    building_id: Option<&str>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    descriptive_counts_from_history_filtered(
+        query_version,
+        equipment_filter,
+        note,
+        building_id,
+        None,
+    )
+    .await
+}
+
+/// Like [`descriptive_counts_from_history`] with an optional stamp cohort.
+///
+/// Kinds select exact equipment ids. They are not an `equipment_id` substring.
+pub async fn descriptive_counts_from_history_filtered(
+    query_version: &str,
+    equipment_filter: Option<&[String]>,
+    note: &str,
+    building_id: Option<&str>,
+    cohort_kinds: Option<&[&str]>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    // Soft-OPEN 371 #1230: rcx cohorts must not open_history_scoped the full
+    // ACME hive (COUNT + GROUP BY OOM → nginx 502). Prefer equipment register.
+    // Legacy callers (metering) with no cohort/filter still use full scoped open.
+    let query = AnalyticsQuery::default();
+    let (ctx, _cols, n, _scan, _eq_guard) = match cohort_kinds {
+        Some(kinds) => {
+            let allow = cohort_equipment_allow_list(building_id, None, kinds, equipment_filter);
+            if allow.is_empty() {
+                let missing = if kinds.iter().any(|k| k.eq_ignore_ascii_case("ahu")) {
+                    "stamped ahu OR columns fan_status|fan_cmd|sat|mat|rat|duct_static"
+                } else if kinds
+                    .iter()
+                    .any(|k| matches!(k.to_ascii_lowercase().as_str(), "vav" | "zone" | "fcu"))
+                {
+                    "stamped vav/zone OR zone_t roles"
+                } else {
+                    "stamped cohort equipment_ids"
+                };
+                let mut env = envelope_with_engine(
+                    query_version,
+                    &query,
+                    vec![format!(
+                        "{note} — BLOCKED: empty equipment allow-list ({missing}); refusing full-hive scan"
+                    )],
+                    DF_ENGINE,
+                );
+                env.coverage = Some(json!({
+                    "equipment_count": 0,
+                    "history_rows": 0,
+                    "source": "historian_parquet",
+                    "building_id": safe_building_segment(building_id),
+                    "allow_list_empty": true,
+                    "missing_roles": missing,
+                }));
+                return Ok(Some(env));
+            }
+            let Some(opened) =
+                open_history_scoped_equipment_for_tenant(building_id, None, &allow).await?
+            else {
+                return Ok(None);
+            };
+            (opened.0, opened.1, opened.2, opened.3, Some(opened.4))
+        }
+        None => {
+            if let Some(filter) = equipment_filter.filter(|f| !f.is_empty()) {
+                let allow: Vec<String> = filter
+                    .iter()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                let Some(opened) =
+                    open_history_scoped_equipment_for_tenant(building_id, None, &allow).await?
+                else {
+                    return Ok(None);
+                };
+                (opened.0, opened.1, opened.2, opened.3, Some(opened.4))
+            } else {
+                let Some((ctx, cols, n, scan)) = open_history_scoped(building_id).await? else {
+                    return Ok(None);
+                };
+                (ctx, cols, n, scan, None)
+            }
+        }
+    };
+    let eq_filter = equipment_filter_sql(equipment_filter);
+    let sql = format!(
+        "SELECT equipment_id, COUNT(*) AS history_rows FROM history \
+         WHERE equipment_id IS NOT NULL{eq_filter} \
+         GROUP BY equipment_id ORDER BY equipment_id"
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        rows.push(json!({
+            "equipment_id": r.get("equipment_id").cloned().unwrap_or(json!("")),
+            "history_rows": as_u64(r.get("history_rows")),
+            "evidence_class": "descriptive_historian_counts",
+        }));
+    }
+
+    let warnings = vec![format!(
+        "{note} — descriptive historian row-count evidence via DataFusion only; \
+         family-specific engineering metrics are not fabricated"
+    )];
+    let history_rows_sum: u64 = rows
+        .iter()
+        .filter_map(|r| r.get("history_rows").and_then(|v| v.as_u64()))
+        .sum();
+    let mut env = envelope_with_engine(query_version, &query, warnings, DF_ENGINE);
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "equipment_count": env.equipment.len(),
+        // Prefer SUM of per-equipment counts — equipment-scoped open returns
+        // allow-list length as `n`, not Parquet row count.
+        "history_rows": if history_rows_sum > 0 { history_rows_sum } else { n as u64 },
+        "source": "historian_parquet",
+        "building_id": safe_building_segment(building_id),
+        "equipment_scoped": _eq_guard.is_some(),
+    }));
+    Ok(Some(env))
+}
+
+/// Sensor roles screened for Overview SQL anomaly table (SAT/OAT/zone-style).
+pub const ANOMALY_SCREEN_ROLES: &[&str] = &[
+    "oa_t",
+    "web_oa_t",
+    "rat",
+    "mat",
+    "sat",
+    "zone_t",
+    "zone_rh",
+    "duct_static",
+    "oa_h",
+];
+
+/// Default report lookback when callers omit `query.start` (Soft-OPEN 371 T1f).
+pub const ANOMALY_DEFAULT_LOOKBACK_DAYS: i64 = 14;
+
+/// Caller knobs for [`sql_anomaly_from_history`] (keeps the public arity clippy-clean).
+#[derive(Debug, Clone)]
+pub struct SqlAnomalyRequest<'a> {
+    pub equipment_filter: Option<&'a [String]>,
+    pub building_id: Option<&'a str>,
+    pub window_rows: u32,
+    pub z_threshold: f64,
+    pub method: &'a str,
+    pub transition_events: bool,
+    pub start: Option<DateTime<Utc>>,
+    pub end: Option<DateTime<Utc>>,
+}
+
+struct AnomalyRoleSql<'a> {
+    role: &'a str,
+    ts_col: &'a str,
+    window_rows: u32,
+    threshold: f64,
+    eq_filter: &'a str,
+    scan_filter: &'a str,
+    report_start_rfc3339: &'a str,
+    transition_events: bool,
+}
+
+/// Rolling Z-score (+ optional LAG transition events) per equipment × role.
+///
+/// Soft-OPEN 371 T1f: honor requested `start`/`end` (default 14d lookback). Scan
+/// includes a bounded warmup ahead of the report window for rolling stats; only
+/// in-window anomalies contribute to hours/events.
+pub async fn sql_anomaly_from_history(
+    req: SqlAnomalyRequest<'_>,
+) -> Result<Option<AnalyticsEnvelope>> {
+    let (report_start, report_end) =
+        match resolve_analytics_window(req.start, req.end, ANOMALY_DEFAULT_LOOKBACK_DAYS) {
+            Ok(w) => w,
+            Err(msg) => anyhow::bail!("{msg}"),
+        };
+    let win = req.window_rows.clamp(3, 168);
+    // Warmup for rolling z: assume ≤15 min samples; cap at 2 days.
+    let warmup =
+        chrono::Duration::minutes((win as i64).saturating_mul(15)).min(chrono::Duration::days(2));
+    let scan_start = report_start - warmup;
+    let scan_filter = time_range_sql("timestamp_utc", Some(scan_start), report_end);
+    let report_bound = report_start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+
+    let Some((ctx, cols, n, _scan)) = open_history_scoped(req.building_id).await? else {
+        return Ok(None);
+    };
+    let ts_col = pick_ts_col(&cols).unwrap_or("timestamp_utc");
+    let role_cols: Vec<&str> = ANOMALY_SCREEN_ROLES
+        .iter()
+        .copied()
+        .filter(|c| cols.contains(*c))
+        .collect();
+    if role_cols.is_empty() {
+        return Ok(None);
+    }
+    let eq_filter = equipment_filter_sql(req.equipment_filter);
+    let thr = req.z_threshold.clamp(1.0, 10.0);
+    let use_robust = req.method.eq_ignore_ascii_case("robust");
+    let mut parts = Vec::with_capacity(role_cols.len());
+    for role in &role_cols {
+        let opts = AnomalyRoleSql {
+            role,
+            ts_col,
+            window_rows: win,
+            threshold: thr,
+            eq_filter: &eq_filter,
+            scan_filter: &scan_filter,
+            report_start_rfc3339: &report_bound,
+            transition_events: req.transition_events,
+        };
+        parts.push(if use_robust {
+            robust_anomaly_role_sql(&opts)
+        } else {
+            zscore_anomaly_role_sql(&opts)
+        });
+    }
+    let sql = format!(
+        "{} ORDER BY anomaly_hours DESC, score DESC, equipment_id, role",
+        parts.join(" UNION ALL ")
+    );
+    let result = run_sql(&ctx, &sql).await?;
+    let stamps = equipment_stamp_map(req.building_id);
+    let mut rows = Vec::with_capacity(result.rows.len());
+    for r in &result.rows {
+        let eq = r
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let role = r.get("role").and_then(|v| v.as_str()).unwrap_or("");
+        let method_out = r
+            .get("method")
+            .and_then(|v| v.as_str())
+            .unwrap_or(if use_robust { "robust" } else { "zscore" });
+        rows.push(json!({
+            "equipment_id": eq,
+            "equipment_type": stamped_display_type(&stamps, &eq),
+            "role": role_to_haystack(role),
+            "metric": role,
+            "method": method_out,
+            "score": as_f64(r.get("score")).map(round4),
+            "threshold": as_f64(r.get("threshold")).map(round4),
+            "anomaly_hours": as_f64(r.get("anomaly_hours")).map(round4),
+            "anomaly_events": as_f64(r.get("anomaly_events")).map(round4),
+            "last_at": r.get("last_at").cloned().unwrap_or(json!(null)),
+            "source": "historian",
+        }));
+    }
+    let mut env = envelope_with_engine(
+        QV_SQL_ANOMALY,
+        &AnalyticsQuery::default(),
+        vec!["sql_anomaly rolling z-score from historian Parquet".into()],
+        DF_ENGINE,
+    );
+    env.rows = rows.clone();
+    env.equipment = rows;
+    env.coverage = Some(json!({
+        "history_rows": n,
+        "roles_screened": role_cols.len(),
+        "window_rows": win,
+        "z_threshold": thr,
+        "method": method_out_label(req.method),
+        "transition_events": req.transition_events,
+        "building_id": safe_building_segment(req.building_id),
+        "window_start": report_start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "window_end": report_end.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+        "scan_start": scan_start.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "warmup_minutes": warmup.num_minutes(),
+    }));
+    Ok(Some(env))
+}
+
+fn method_out_label(method: &str) -> &str {
+    if method.eq_ignore_ascii_case("robust") {
+        "robust"
+    } else {
+        "zscore"
+    }
+}
+
+fn zscore_anomaly_role_sql(opts: &AnomalyRoleSql<'_>) -> String {
+    let num = history_role_numeric_sql(opts.role);
+    let preceding = opts.window_rows.saturating_sub(1);
+    let in_report = format!("ts >= '{}'", opts.report_start_rfc3339);
+    let event_col = if opts.transition_events {
+        format!(
+            "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 AND {in_report} THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
+        )
+    } else {
+        "CAST(0 AS DOUBLE) AS anomaly_events".to_string()
+    };
+    let role = opts.role;
+    let ts_col = opts.ts_col;
+    let threshold = opts.threshold;
+    let eq_filter = opts.eq_filter;
+    let scan_filter = opts.scan_filter;
+    format!(
+        r#"
+SELECT equipment_id, '{role}' AS role, 'zscore' AS method,
+  MAX(CASE WHEN {in_report} THEN ABS(zscore) END) AS score,
+  {threshold} AS threshold,
+  CAST(SUM(CASE WHEN is_anom = 1 AND {in_report} THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_hours,
+  {event_col},
+  MAX(CASE WHEN is_anom = 1 AND {in_report} THEN ts END) AS last_at
+FROM (
+  SELECT equipment_id, ts, zscore, is_anom,
+    LAG(is_anom) OVER (PARTITION BY equipment_id ORDER BY ts) AS prev_anom
+  FROM (
+    SELECT equipment_id, ts, zscore,
+      CASE WHEN zscore IS NOT NULL AND ABS(zscore) > {threshold} THEN 1 ELSE 0 END AS is_anom
+    FROM (
+      SELECT equipment_id, ts, val,
+        CASE
+          WHEN roll_std IS NULL OR roll_std < 1e-9 THEN NULL
+          ELSE (val - roll_mean) / roll_std
+        END AS zscore
+      FROM (
+        SELECT equipment_id, {ts_col} AS ts, {num} AS val,
+          AVG({num}) OVER (
+            PARTITION BY equipment_id ORDER BY {ts_col}
+            ROWS BETWEEN {preceding} PRECEDING AND CURRENT ROW
+          ) AS roll_mean,
+          STDDEV_POP({num}) OVER (
+            PARTITION BY equipment_id ORDER BY {ts_col}
+            ROWS BETWEEN {preceding} PRECEDING AND CURRENT ROW
+          ) AS roll_std
+        FROM history
+        WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}{scan_filter}
+      ) w
+    ) z
+  ) flags
+) agg
+GROUP BY equipment_id
+HAVING SUM(CASE WHEN is_anom = 1 AND {in_report} THEN 1 ELSE 0 END) > 0"#
+    )
+}
+
+/// Static median / MAD-style robust z per equipment (Soft fallback when MAD window unsupported).
+fn robust_anomaly_role_sql(opts: &AnomalyRoleSql<'_>) -> String {
+    let num = history_role_numeric_sql(opts.role);
+    let in_report = format!("ts >= '{}'", opts.report_start_rfc3339);
+    let event_col = if opts.transition_events {
+        format!(
+            "CAST(SUM(CASE WHEN is_anom = 1 AND COALESCE(prev_anom, 0) = 0 AND {in_report} THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_events"
+        )
+    } else {
+        "CAST(0 AS DOUBLE) AS anomaly_events".to_string()
+    };
+    let role = opts.role;
+    let ts_col = opts.ts_col;
+    let threshold = opts.threshold;
+    let eq_filter = opts.eq_filter;
+    let scan_filter = opts.scan_filter;
+    format!(
+        r#"
+SELECT equipment_id, '{role}' AS role, 'robust' AS method,
+  MAX(CASE WHEN {in_report} THEN ABS(rz) END) AS score,
+  {threshold} AS threshold,
+  CAST(SUM(CASE WHEN is_anom = 1 AND {in_report} THEN 1 ELSE 0 END) AS DOUBLE) AS anomaly_hours,
+  {event_col},
+  MAX(CASE WHEN is_anom = 1 AND {in_report} THEN ts END) AS last_at
+FROM (
+  SELECT b.equipment_id AS equipment_id, b.ts AS ts, b.val,
+    CASE
+      WHEN s.sigma IS NULL OR s.sigma < 1e-9 THEN NULL
+      ELSE (b.val - s.med) / s.sigma
+    END AS rz,
+    CASE
+      WHEN s.sigma IS NOT NULL AND s.sigma >= 1e-9
+        AND ABS((b.val - s.med) / s.sigma) > {threshold} THEN 1
+      ELSE 0
+    END AS is_anom,
+    LAG(CASE
+      WHEN s.sigma IS NOT NULL AND s.sigma >= 1e-9
+        AND ABS((b.val - s.med) / s.sigma) > {threshold} THEN 1
+      ELSE 0
+    END) OVER (PARTITION BY b.equipment_id ORDER BY b.ts) AS prev_anom
+  FROM (
+    SELECT equipment_id, {ts_col} AS ts, {num} AS val
+    FROM history
+    WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}{scan_filter}
+  ) b
+  INNER JOIN (
+    SELECT equipment_id,
+      approx_percentile({num}, 0.5) AS med,
+      STDDEV_POP({num}) AS sigma
+    FROM history
+    WHERE equipment_id IS NOT NULL AND {num} IS NOT NULL{eq_filter}{scan_filter}
+    GROUP BY equipment_id
+  ) s ON b.equipment_id = s.equipment_id
+) agg
+GROUP BY equipment_id
+HAVING SUM(CASE WHEN is_anom = 1 AND {in_report} THEN 1 ELSE 0 END) > 0"#
+    )
+}
+
+fn round4(x: f64) -> f64 {
+    (x * 10_000.0).round() / 10_000.0
+}
+
+fn round6(x: f64) -> f64 {
+    (x * 1_000_000.0).round() / 1_000_000.0
+}
+
+#[cfg(test)]
+mod tests {
+    #![expect(
+        clippy::await_holding_lock,
+        reason = "historian tests hold the process env lock across await so other modules cannot swap OPENFDD_PARQUET_ROOT"
+    )]
+    use super::*;
+    use crate::analytics::AnalyticsRequest;
+    use chrono::TimeZone;
+    use std::io::Write;
+    /// Process-wide env lock. A private mutex does not stop `durable_storage`
+    /// and other modules from swapping `OPENFDD_PARQUET_ROOT` mid-query.
+    fn lock_shared_env() -> std::sync::MutexGuard<'static, ()> {
+        crate::test_env_lock::lock_env()
+    }
+
+    fn write_stamps(parquet: &std::path::Path, building_id: &str, body: &str) {
+        let dir = parquet.join(format!("building={building_id}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("equipment_types.json"), body).unwrap();
+    }
+
+    #[test]
+    fn zscore_role_sql_rolling_window_and_lag_transition() {
+        let sql = zscore_anomaly_role_sql(&AnomalyRoleSql {
+            role: "sat",
+            ts_col: "timestamp_utc",
+            window_rows: 24,
+            threshold: 3.0,
+            eq_filter: "",
+            scan_filter: " AND timestamp_utc >= '2026-01-01T00:00:00Z'",
+            report_start_rfc3339: "2026-01-15T00:00:00Z",
+            transition_events: true,
+        });
+        assert!(sql.contains("ROWS BETWEEN 23 PRECEDING"));
+        assert!(sql.contains("ABS(zscore) > 3"));
+        assert!(sql.contains("LAG(is_anom)"));
+        assert!(sql.contains("anomaly_events"));
+        assert!(sql.contains("timestamp_utc >= '2026-01-01T00:00:00Z'"));
+        assert!(sql.contains("ts >= '2026-01-15T00:00:00Z'"));
+    }
+
+    #[test]
+    fn anomaly_sql_binds_report_window_separate_from_scan_warmup() {
+        let sql = zscore_anomaly_role_sql(&AnomalyRoleSql {
+            role: "sat",
+            ts_col: "timestamp_utc",
+            window_rows: 24,
+            threshold: 3.0,
+            eq_filter: "",
+            scan_filter: " AND timestamp_utc >= '2026-06-01T00:00:00Z' AND timestamp_utc < '2026-07-01T00:00:00Z'",
+            report_start_rfc3339: "2026-06-15T00:00:00Z",
+            transition_events: false,
+        });
+        assert!(
+            sql.contains("2026-06-01T00:00:00Z") && sql.contains("2026-06-15T00:00:00Z"),
+            "scan and report bounds must both appear: {sql}"
+        );
+        assert!(sql.contains(
+            "SUM(CASE WHEN is_anom = 1 AND ts >= '2026-06-15T00:00:00Z' THEN 1 ELSE 0 END)"
+        ));
+    }
+
+    #[test]
+    fn rcx_eq_filter_uses_canonical_stamps_and_ignores_misleading_ids() {
+        let stamped = BTreeMap::from([
+            ("jci_vav_1".into(), "vav".into()),
+            ("bldg2-zone-loopback".into(), "ahu".into()),
+            ("AC_1".into(), "ahu".into()),
+            ("literal equipment_id 'quoted'".into(), "vav".into()),
+        ]);
+        let f = rcx_eq_filter_for_column(&["VAV"], &stamped, "equipment_id");
+        assert!(
+            f.contains("'jci_vav_1'"),
+            "stamped opaque/vendor VAV must match: {f}"
+        );
+        assert!(
+            !f.contains("bldg2-zone-loopback"),
+            "misleading unstamped name must not match VAV: {f}"
+        );
+        assert!(
+            !f.contains("LIKE"),
+            "RCx selection must not use id LIKE: {f}"
+        );
+        assert!(
+            f.contains("'literal equipment_id ''quoted'''")
+                && !f.contains("literal h.equipment_id"),
+            "equipment IDs must be escaped as literals, not qualified by text replacement: {f}"
+        );
+        let qualified = rcx_eq_filter_for_column(&["VAV"], &stamped, "h.equipment_id");
+        assert!(qualified.starts_with(" AND h.equipment_id IN ("));
+        assert!(qualified.contains("'literal equipment_id ''quoted'''"));
+    }
+
+    #[test]
+    fn child_query_budget_never_extends_shared_deadline() {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(50);
+        assert!(
+            remaining_budget(deadline, std::time::Duration::from_secs(2))
+                <= std::time::Duration::from_millis(50)
+        );
+        let expired = tokio::time::Instant::now() - std::time::Duration::from_secs(1);
+        assert!(remaining_budget(expired, std::time::Duration::from_secs(2)).is_zero());
+    }
+
+    #[tokio::test]
+    async fn rcx_type_stamps_follow_tenant_history_root() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let hub = tmp.path().join("hub");
+        let tenant = hub.join("tenants/tenant_a");
+        std::fs::create_dir_all(tenant.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("history/building_id=BLDG_A/part-20290101T000000Z-tenant.parquet"),
+            b"tenant history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tenant.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("building=BLDG_A/equipment_types.json"),
+            r#"{"tenant-vav":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &hub);
+        let stamps = rcx_type_stamps(Some("BLDG_A"));
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert_eq!(stamps.get("tenant-vav").map(String::as_str), Some("vav"));
+    }
+
+    #[tokio::test]
+    async fn rcx_type_stamps_follow_newer_conflicting_tenant_root() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let hub = tmp.path().join("hub");
+        std::fs::create_dir_all(hub.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            hub.join("history/building_id=BLDG_A/part-20280101T000000Z-hub.parquet"),
+            b"hub history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(hub.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            hub.join("building=BLDG_A/equipment_types.json"),
+            r#"{"conflicting-id":"ahu"}"#,
+        )
+        .unwrap();
+        let tenant = hub.join("tenants/tenant_a");
+        std::fs::create_dir_all(tenant.join("history/building_id=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("history/building_id=BLDG_A/part-20290101T000000Z-tenant.parquet"),
+            b"tenant history",
+        )
+        .unwrap();
+        std::fs::create_dir_all(tenant.join("building=BLDG_A")).unwrap();
+        std::fs::write(
+            tenant.join("building=BLDG_A/equipment_types.json"),
+            r#"{"conflicting-id":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &hub);
+        let stamps = rcx_type_stamps(Some("BLDG_A"));
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert_eq!(
+            stamps.get("conflicting-id").map(String::as_str),
+            Some("vav")
+        );
+    }
+
+    #[test]
+    fn zone_family_filter_uses_ids_not_name_like() {
+        assert!(kinds_use_zone_family(&["VAV"]));
+        assert!(kinds_use_zone_family(&["ZONE_FAMILY"]));
+        assert!(kinds_use_zone_family(&["FCU", "HP", "BASEBOARD"]));
+        assert!(!kinds_use_zone_family(&["AHU", "RTU", "MAU"]));
+        assert!(!kinds_use_zone_family(&["CHILLER", "AHU", "HP"]));
+        let sql =
+            equipment_filter_sql(Some(&["jci_vav_12".into(), "AC_FCU".into(), "BB_1".into()]));
+        let upper = sql.to_ascii_uppercase();
+        assert!(
+            !upper.contains("LIKE"),
+            "zone family filter must not use id LIKE: {sql}"
+        );
+        assert!(sql.contains("jci_vav_12"));
+        assert!(sql.contains("AC_FCU"));
+        assert!(!open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("ahu"), true));
+        assert!(
+            !open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("heatpump"), false)
+        );
+        assert!(
+            open_fdd_edge_prototype::equipment_types::zone_comfort_member(Some("heatpump"), true)
+        );
+    }
+
+    #[tokio::test]
+    async fn plot_cohort_uses_exact_stamp_not_id_prefix() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().join("building=site_plot");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("equipment_types.json"),
+            r#"{"RTU_01":"rtu","RTU_010":"vav","bldg2-zone-loopback":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.path());
+        let ctx = SessionContext::new();
+        let cols = HashSet::new();
+        let ahu = stamped_cohort_sql(&ctx, Some("site_plot"), &["AHU", "RTU"], &cols).await;
+        let vav = stamped_cohort_sql(&ctx, Some("site_plot"), &["VAV"], &cols).await;
+        let missing = stamped_cohort_sql(&ctx, Some("site_plot"), &["BOILER"], &cols).await;
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        let listed = |sql: &str| -> Vec<String> {
+            let Some(list) = sql.split("IN (").nth(1) else {
+                return Vec::new();
+            };
+            list.trim_end_matches(')')
+                .split(',')
+                .map(|part| part.trim().trim_matches('\'').to_string())
+                .filter(|id| !id.is_empty())
+                .collect()
+        };
+        assert_eq!(listed(&ahu), vec!["RTU_01".to_string()], "{ahu}");
+        assert!(!ahu.to_ascii_uppercase().contains("LIKE"), "{ahu}");
+        assert_eq!(
+            listed(&vav),
+            vec!["RTU_010".to_string(), "bldg2-zone-loopback".to_string()],
+            "{vav}"
+        );
+        assert!(!vav.contains("LOOPBACK%"), "{vav}");
+        assert_eq!(missing, " AND 1 = 0");
+    }
+
+    #[tokio::test]
+    async fn runtime_from_history_none_when_no_parquet() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let missing = tmp.path().join("no_such_parquet");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
+        let out = runtime_from_history(None, 900.0, None, None, None)
+            .await
+            .unwrap();
+        assert!(out.is_none());
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+
+    #[tokio::test]
+    async fn runtime_from_history_sets_datafusion_engine() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_TEST");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,100").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,100").unwrap();
+        writeln!(f, "2026-01-01T00:10:00Z,0").unwrap();
+
+        let parquet = tmp.path().join("parquet");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_TEST", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = runtime_from_history(None, 900.0, None, None, None)
+            .await
+            .unwrap()
+            .expect("expected historian envelope");
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.query_version, QV_RUNTIME);
+        assert!(!env.equipment.is_empty());
+        let hours = env.equipment[0]["run_hours"].as_f64().unwrap();
+        // Two on intervals of 300s → 600s = 1/6 h
+        assert!((hours - (600.0 / 3600.0)).abs() < 0.02, "hours={hours}");
+        let cov = env.equipment[0]["coverage_pct"].as_f64().unwrap();
+        assert!((cov - 100.0).abs() < 1.0, "coverage={cov}");
+
+        // Start after all samples → empty window → Ok(None).
+        let after = chrono::DateTime::parse_from_rfc3339("2026-02-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let empty = runtime_from_history(None, 900.0, None, Some(after), None)
+            .await
+            .unwrap();
+        assert!(empty.is_none(), "expected no rows after start filter");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+
+    /// Regression: package Utf8 occ_mode is often `"0.0"`/`"1.0"`, not `"0"`/`"1"`.
+    /// Older label lists treated `"0.0"` as occupied → unoccupied_hours always 0.
+    #[tokio::test]
+    async fn schedule_from_history_treats_float_string_zero_as_unoccupied() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_OCC");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_OCC1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nocc_cmd,occupied\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,occ_cmd").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,1.0").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,1.0").unwrap();
+        writeln!(f, "2026-01-01T00:10:00Z,0.0").unwrap();
+        writeln!(f, "2026-01-01T00:15:00Z,0.0").unwrap();
+
+        let parquet = tmp.path().join("parquet_occ");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_OCC", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = schedule_from_history(None, 900.0, Some("BUILDING_OCC"))
+            .await
+            .unwrap()
+            .expect("expected schedule historian envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.query_version, QV_SCHEDULE);
+        let row = &env.equipment[0];
+        let occ = row["occupied_hours"].as_f64().unwrap();
+        let unocc = row["unoccupied_hours"].as_f64().unwrap();
+        // Three 300s intervals: occ, occ, unocc → 600s occ / 300s unocc
+        assert!(
+            (occ - (600.0 / 3600.0)).abs() < 0.02,
+            "occupied_hours={occ} row={row}"
+        );
+        assert!(
+            (unocc - (300.0 / 3600.0)).abs() < 0.02,
+            "unoccupied_hours={unocc} row={row}"
+        );
+    }
+
+    #[tokio::test]
+    async fn sensor_health_from_history_none_when_no_parquet() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let missing = tmp.path().join("no_such_parquet_sh");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &missing);
+        let out = sensor_health_from_history(None, None, None, None)
+            .await
+            .unwrap();
+        assert!(out.is_none());
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+    }
+
+    #[test]
+    fn sensor_health_sql_includes_timestamp_bound() {
+        let start = Utc.with_ymd_and_hms(2026, 9, 1, 0, 0, 0).single().unwrap();
+        let end = Utc.with_ymd_and_hms(2026, 9, 15, 0, 0, 0).single().unwrap();
+        let sql = build_sensor_health_sql(&["sat", "mat"], None, Some(start), Some(end));
+        assert!(
+            sql.contains("timestamp_utc >= '2026-09-01T00:00:00Z'"),
+            "expected start bound in SQL: {sql}"
+        );
+        assert!(
+            sql.contains("timestamp_utc < '2026-09-15T00:00:00Z'"),
+            "expected end bound in SQL: {sql}"
+        );
+        assert!(
+            !sql.contains("UNION ALL"),
+            "sensor_health must be single-pass, not UNION ALL: {sql}"
+        );
+        assert!(
+            sql.contains("COUNT(try_cast(trim(CAST(sat AS VARCHAR)) AS DOUBLE)) AS n_finite_sat")
+                && sql.contains(
+                    "COUNT(try_cast(trim(CAST(mat AS VARCHAR)) AS DOUBLE)) AS n_finite_mat"
+                ),
+            "expected per-role aggregates with numeric cast: {sql}"
+        );
+        assert!(
+            sql.contains("AVG(try_cast(trim(CAST(sat AS VARCHAR)) AS DOUBLE))"),
+            "AVG must cast Utf8View/string roles before aggregate: {sql}"
+        );
+        assert!(
+            sql.contains("GROUP BY equipment_id"),
+            "expected GROUP BY: {sql}"
+        );
+    }
+
+    #[tokio::test]
+    async fn sensor_health_from_history_sets_datafusion_engine() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SH");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_SH1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nzone_temp_f,zone_temp\nmixed_air_temp_f,mixed_air_temp\n",
+        )
+        .unwrap();
+        // Timestamps inside a recent lookback so defaulted windows still hit.
+        let t0 = (Utc::now() - chrono::Duration::days(2))
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string();
+        let t1 = (Utc::now() - chrono::Duration::days(2) + chrono::Duration::minutes(5))
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string();
+        let t2 = (Utc::now() - chrono::Duration::days(2) + chrono::Duration::minutes(10))
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,zone_temp_f,mixed_air_temp_f").unwrap();
+        writeln!(f, "{t0},72.0,55.0").unwrap();
+        writeln!(f, "{t1},73.0,").unwrap();
+        writeln!(f, "{t2},74.0,57.0").unwrap();
+
+        let parquet = tmp.path().join("parquet_sh");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_SH", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let start = Utc::now() - chrono::Duration::days(14);
+        let env = sensor_health_from_history(None, Some("BUILDING_SH"), Some(start), None)
+            .await
+            .unwrap()
+            .expect("expected sensor_health historian envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.query_version, QV_SENSOR_HEALTH);
+        assert!(!env.rows.is_empty());
+
+        let zone = env
+            .rows
+            .iter()
+            .find(|r| r["role"] == "zone_t")
+            .expect("zone_t row present");
+        assert_eq!(zone["n"].as_u64().unwrap(), 3);
+        assert_eq!(zone["n_finite"].as_u64().unwrap(), 3);
+        assert!((zone["coverage_pct"].as_f64().unwrap() - 100.0).abs() < 1e-6);
+
+        let mat = env
+            .rows
+            .iter()
+            .find(|r| r["role"] == "mat")
+            .expect("mat row present");
+        // One of three MAT samples is missing → coverage ~66.67%.
+        assert_eq!(mat["n_finite"].as_u64().unwrap(), 2);
+        assert!((mat["coverage_pct"].as_f64().unwrap() - 66.67).abs() < 0.1);
+    }
+
+    #[tokio::test]
+    async fn sensor_health_from_history_multi_file_completes_with_bound() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SH_MF");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_MF");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nzone_temp_f,zone_temp\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,zone_temp_f").unwrap();
+        // Spread rows across several days inside the 14d lookback.
+        for day in 0..6 {
+            for minute in [0, 5, 10, 15] {
+                let ts = (Utc::now() - chrono::Duration::days(day)
+                    + chrono::Duration::minutes(minute))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string();
+                writeln!(f, "{ts},7{day}.0").unwrap();
+            }
+        }
+        let parquet = tmp.path().join("parquet_sh_mf");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_SH_MF", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let start = Utc::now() - chrono::Duration::days(14);
+        let env = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            sensor_health_from_history(None, Some("BUILDING_SH_MF"), Some(start), None),
+        )
+        .await
+        .expect("sensor_health must complete within 20s on multi-row fixture")
+        .unwrap()
+        .expect("expected envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(!env.rows.is_empty());
+        assert!(
+            env.coverage
+                .as_ref()
+                .and_then(|c| c.get("window_start"))
+                .is_some(),
+            "coverage should record window_start"
+        );
+    }
+
+    #[tokio::test]
+    async fn descriptive_counts_from_history_sets_datafusion_engine() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_DC");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_DC1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,100").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,0").unwrap();
+
+        let parquet = tmp.path().join("parquet_dc");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_DC", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = descriptive_counts_from_history(
+            crate::analytics::QV_METERING,
+            None,
+            "metering test note",
+            Some("BUILDING_DC"),
+        )
+        .await
+        .unwrap()
+        .expect("expected descriptive historian envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert_eq!(env.query_version, crate::analytics::QV_METERING);
+        assert!(!env.rows.is_empty());
+        assert_eq!(env.rows[0]["history_rows"].as_u64().unwrap(), 2);
+        assert!(env.warnings.iter().any(|w| w.contains("not fabricated")));
+        assert_eq!(env.coverage.as_ref().unwrap()["building_id"], "BUILDING_DC");
+    }
+
+    #[tokio::test]
+    async fn economizer_from_history_is_building_scoped() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let parquet = tmp.path().join("parquet_econ");
+
+        // Two buildings with distinct AHU ids, each with oat/rat/mat + fan.
+        for (bid, eq) in [("BUILDING_50", "AHU_B50"), ("BUILDING_100", "AHU_B100")] {
+            let building = tmp.path().join(bid);
+            let ahu = building.join(eq);
+            std::fs::create_dir_all(&ahu).unwrap();
+            std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+            std::fs::write(
+                ahu.join("columns.csv"),
+                "col,point_role\noat,outside_air_temp\nrat,return_air_temp\n\
+                 mat,mixed_air_temp\nfan,fan_status\n",
+            )
+            .unwrap();
+            let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+            writeln!(f, "timestamp_utc,oat,rat,mat,fan").unwrap();
+            writeln!(f, "2026-01-01T00:00:00Z,40,70,55,1").unwrap();
+            writeln!(f, "2026-01-01T00:05:00Z,41,70,56,1").unwrap();
+            fdd_store::ingest_building(tmp.path(), bid, &parquet).unwrap();
+        }
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let win_start = chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let win_end = chrono::Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap();
+        let b50 = economizer_from_history(
+            None,
+            10.0,
+            Some("BUILDING_50"),
+            4000,
+            Some(win_start),
+            Some(win_end),
+        )
+        .await
+        .unwrap()
+        .expect("B50 economizer envelope");
+        let b100 = economizer_from_history(
+            None,
+            10.0,
+            Some("BUILDING_100"),
+            4000,
+            Some(win_start),
+            Some(win_end),
+        )
+        .await
+        .unwrap()
+        .expect("B100 economizer envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        // Each scope sees only its own AHU — no cross-building bleed.
+        let ids_b50: Vec<String> = b50
+            .equipment
+            .iter()
+            .filter_map(|e| e["equipment_id"].as_str().map(str::to_string))
+            .collect();
+        let ids_b100: Vec<String> = b100
+            .equipment
+            .iter()
+            .filter_map(|e| e["equipment_id"].as_str().map(str::to_string))
+            .collect();
+        assert_eq!(ids_b50, vec!["AHU_B50".to_string()]);
+        assert_eq!(ids_b100, vec!["AHU_B100".to_string()]);
+        assert_eq!(
+            b50.coverage.as_ref().unwrap()["building_id"],
+            serde_json::json!("BUILDING_50")
+        );
+    }
+
+    #[tokio::test]
+    async fn economizer_from_history_with_damper_column_ok() {
+        // OFDD-070b: oa_damper_pct present on history must not schema-error.
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let parquet = tmp.path().join("parquet_econ_damp");
+        let building = tmp.path().join("BUILDING_50");
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\noat,outside_air_temp\nrat,return_air_temp\n\
+             mat,mixed_air_temp\nfan,fan_status\ndamp,oa_damper_pct\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,oat,rat,mat,fan,damp").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,40,70,55,1,0.4").unwrap();
+        writeln!(f, "2026-01-01T00:05:00Z,41,70,56,1,0.5").unwrap();
+        fdd_store::ingest_building(tmp.path(), "BUILDING_50", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = economizer_from_history(
+            None,
+            10.0,
+            Some("BUILDING_50"),
+            4000,
+            Some(chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+            Some(chrono::Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
+        )
+        .await
+        .unwrap()
+        .expect("economizer with damper");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(!env.equipment.is_empty());
+        assert!(env.equipment[0]["has_damper"].as_bool().unwrap_or(false));
+        assert!(!env
+            .warnings
+            .iter()
+            .any(|w| w.contains("historian/job economizer load is next")));
+    }
+
+    #[tokio::test]
+    async fn economizer_from_history_none_for_unknown_building() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let parquet = tmp.path().join("parquet_econ_missing");
+        let building = tmp.path().join("BUILDING_50");
+        let ahu = building.join("AHU_B50");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\noat,outside_air_temp\nrat,return_air_temp\n\
+             mat,mixed_air_temp\nfan,fan_status\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,oat,rat,mat,fan").unwrap();
+        writeln!(f, "2026-01-01T00:00:00Z,40,70,55,1").unwrap();
+        fdd_store::ingest_building(tmp.path(), "BUILDING_50", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        // Requesting a site that was never ingested must not fall back to the
+        // whole tree (that would leak BUILDING_50 into a BUILDING_999 scope).
+        let out = economizer_from_history(
+            None,
+            10.0,
+            Some("BUILDING_999"),
+            4000,
+            Some(chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+            Some(chrono::Utc.with_ymd_and_hms(2026, 1, 2, 0, 0, 0).unwrap()),
+        )
+        .await
+        .unwrap();
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert!(out.is_none());
+    }
+
+    #[test]
+    fn analytics_label_follows_stamp_not_id() {
+        let types = BTreeMap::from([
+            ("AC_1".into(), "ahu".into()),
+            ("CHILLER_HEAT_PUMP".into(), "chiller".into()),
+            ("jci_vav_1".into(), "vav".into()),
+        ]);
+        assert_eq!(stamped_display_type(&types, "AC_1"), "AHU");
+        assert_eq!(stamped_kind(&types, "CHILLER_HEAT_PUMP"), "chiller");
+        assert_eq!(stamped_kind(&types, "jci_vav_1"), "vav");
+        assert_eq!(stamped_display_type(&types, "AHU_1"), "GENERAL");
+        assert_eq!(stamped_kind(&types, "AHU_1"), "unknown");
+        assert_eq!(stamped_kind(&types, "bldg2-zone-loopback"), "unknown");
+        let known = vec![
+            "AHU_1".into(),
+            "VAV_9".into(),
+            "AHU_10".into(),
+            "box_12".into(),
+        ];
+        assert_eq!(
+            package_parent_link(&BTreeMap::new(), "VAV_9", &known),
+            None,
+            "one stamped AHU is not a parent"
+        );
+        let mut parents = BTreeMap::new();
+        parents.insert("box_12".into(), "AC_1".into());
+        assert_eq!(
+            package_parent_link(&parents, "box_12", &known),
+            None,
+            "declared parent must be an exact known id"
+        );
+        parents.insert("box_12".into(), "AHU_1".into());
+        assert_eq!(
+            package_parent_link(&parents, "box_12", &known).as_deref(),
+            Some("AHU_1")
+        );
+        parents.insert("VAV_9".into(), "AHU_1".into());
+        let prefix_ids = vec!["AHU_10".into(), "VAV_9".into()];
+        assert_eq!(
+            package_parent_link(&parents, "VAV_9", &prefix_ids),
+            None,
+            "AHU_1 must not select AHU_10"
+        );
+    }
+
+    #[test]
+    fn plant_group_follows_stamp_not_id() {
+        assert_eq!(plant_group_for_typed("AHU_1", Some("ahu")), Some("air"));
+        assert_eq!(plant_group_for_typed("jci_ahu_1", Some("rtu")), Some("air"));
+        assert_eq!(plant_group_for_typed("AC_1", Some("ahu")), Some("air"));
+        assert_eq!(
+            plant_group_for_typed("CHILLER_1", Some("chwPlant")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("CT_1", Some("coolingTower")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("HP_3", Some("heatPump")),
+            Some("chiller")
+        );
+        assert_eq!(
+            plant_group_for_typed("BOILER_1", Some("boiler")),
+            Some("boiler")
+        );
+        assert_eq!(plant_group_for_typed("jci_vav_1", Some("vav")), None);
+        assert_eq!(plant_group_for_typed("trane_vav_2", Some("vav")), None);
+        assert_eq!(plant_group_for_typed("OA_REF", Some("weather")), None);
+        assert_eq!(plant_group_for_typed("bldg2-zone-loopback", None), None);
+        assert_eq!(plant_group_for_typed("AHU_1", None), None);
+        assert_eq!(plant_group_for_typed("VAV_101", None), None);
+        assert_eq!(plant_group_for_typed("CHILLER_1", None), None);
+        assert_eq!(plant_group_for_typed("HP_3", None), None);
+        assert_eq!(plant_group_for_typed("EXHAUST_FAN_1", None), None);
+        assert_eq!(
+            plant_group_for_typed("AHU_1_VAV_12", Some("ahu")),
+            Some("air")
+        );
+        assert_eq!(
+            plant_group_for_typed("HP_HEAT_PUMP_X", Some("chiller")),
+            Some("chiller")
+        );
+    }
+
+    #[test]
+    fn cooling_on_expr_ignores_fan_only() {
+        let mut cols = HashSet::new();
+        cols.insert("fan_status".into());
+        cols.insert("fan_cmd".into());
+        cols.insert("oa_t".into());
+        assert!(cooling_on_expr(&cols).is_none());
+        assert!(on_expr(&cols).is_some());
+    }
+
+    #[test]
+    fn cooling_on_expr_uses_chiller_status() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_status".into());
+        cols.insert("web_oa_t".into());
+        let expr = cooling_on_expr(&cols).expect("cooling proof");
+        assert!(expr.contains("chiller_status"));
+        assert!(!expr.contains("fan_"));
+    }
+
+    #[test]
+    fn cooling_on_expr_prefers_status_over_amps() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_status".into());
+        cols.insert("chiller_amps".into());
+        let expr = cooling_on_expr(&cols).expect("cooling proof");
+        assert!(expr.contains("chiller_status"), "{expr}");
+        assert!(
+            !expr.contains("chiller_amps"),
+            "status must win over amps (status-before-amps hierarchy); got {expr}"
+        );
+    }
+
+    #[test]
+    fn cooling_on_expr_falls_back_to_amps_without_status() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_amps".into());
+        let expr = cooling_on_expr(&cols).expect("amps proof");
+        assert!(expr.contains("chiller_amps"));
+    }
+
+    #[test]
+    fn cooling_on_expr_uses_chiller_power_when_no_status_or_amps() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_power".into());
+        cols.insert("web_oa_t".into());
+        let expr = cooling_on_expr(&cols).expect("power proof");
+        assert!(expr.contains("chiller_power"));
+        assert!(expr.contains("> 1"));
+        assert!(!expr.contains("fan_"));
+    }
+
+    #[test]
+    fn cooling_on_expr_prefers_amps_over_power() {
+        let mut cols = HashSet::new();
+        cols.insert("chiller_amps".into());
+        cols.insert("chiller_power".into());
+        let expr = cooling_on_expr(&cols).expect("amps proof");
+        assert!(expr.contains("chiller_amps"), "{expr}");
+        assert!(
+            !expr.contains("chiller_power"),
+            "amps must win over power; got {expr}"
+        );
+    }
+
+    #[test]
+    fn cooling_on_expr_uses_compressor_power_alias() {
+        let mut cols = HashSet::new();
+        cols.insert("compressor_power".into());
+        let expr = cooling_on_expr(&cols).expect("compressor power");
+        assert!(expr.contains("compressor_power"));
+    }
+
+    #[tokio::test]
+    async fn mech_oat_bins_from_chiller_power_only_fixture() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_PWR");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ch = building.join("CHILLER_PWR");
+        std::fs::create_dir_all(&ch).unwrap();
+        std::fs::write(
+            ch.join("columns.csv"),
+            "col,point_role\nchiller_power,chiller_power\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ch.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,chiller_power,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,5.0,82").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,6.0,83").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,0.2,84").unwrap();
+
+        let parquet = tmp.path().join("parquet_pwr");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_PWR", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_PWR", r#"{"CHILLER_PWR":"chiller"}"#);
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_PWR"), None, None)
+            .await
+            .unwrap()
+            .expect("chiller_power-only fixture should produce oat bins");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(env.rows.iter().any(|r| r["equipment_id"] == "CHILLER_PWR"));
+    }
+
+    #[tokio::test]
+    async fn mech_cooling_evidence_warnings_fan_only() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FAN2");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\noa_temp_f,oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct,oa_temp_f").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,100,85").unwrap();
+
+        let parquet = tmp.path().join("parquet_fan2");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_FAN2", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let warnings = mech_cooling_evidence_warnings(Some("BUILDING_FAN2"))
+            .await
+            .unwrap();
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(
+            warnings.iter().any(|w| w.contains("cooling-proof")),
+            "{warnings:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn descriptive_counts_filtered_excludes_vav() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_MIX");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        for (eq, cols_line, row_line) in [
+            (
+                "CHILLER_1",
+                "col,point_role\nchiller_status,chiller_status\n",
+                "timestamp_utc,chiller_status\n2026-07-01T00:00:00Z,1\n",
+            ),
+            (
+                "CHILLER_10",
+                "col,point_role\nchiller_status,chiller_status\n",
+                "timestamp_utc,chiller_status\n2026-07-01T00:00:00Z,1\n",
+            ),
+            (
+                "VAV_101",
+                "col,point_role\ndamper_pct,damper\n",
+                "timestamp_utc,damper_pct\n2026-07-01T00:00:00Z,50\n",
+            ),
+        ] {
+            let dir = building.join(eq);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("columns.csv"), cols_line).unwrap();
+            std::fs::write(dir.join("history_wide.csv"), row_line).unwrap();
+        }
+
+        let parquet = tmp.path().join("parquet_mix");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_MIX", &parquet).unwrap();
+        let stamp_dir = parquet.join("building=BUILDING_MIX");
+        std::fs::create_dir_all(&stamp_dir).unwrap();
+        std::fs::write(
+            stamp_dir.join("equipment_types.json"),
+            r#"{"CHILLER_1":"chiller","CHILLER_10":"vav","VAV_101":"vav"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = descriptive_counts_from_history_filtered(
+            "mechanical-cooling-v1",
+            None,
+            "test",
+            Some("BUILDING_MIX"),
+            Some(&["chiller", "cooling_tower", "heatpump"]),
+        )
+        .await
+        .unwrap()
+        .expect("filtered descriptive counts");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        let ids: Vec<_> = env
+            .rows
+            .iter()
+            .filter_map(|r| r.get("equipment_id").and_then(|v| v.as_str()))
+            .collect();
+        assert_eq!(ids, vec!["CHILLER_1"]);
+    }
+
+    #[tokio::test]
+    async fn mech_oat_bins_none_for_fan_only_fixture() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_FAN");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_speed_pct,fan_cmd\noa_temp_f,oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_speed_pct,oa_temp_f").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,100,85").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,100,86").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,100,87").unwrap();
+
+        let parquet = tmp.path().join("parquet_fan");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_FAN", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let out = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_FAN"), None, None)
+            .await
+            .unwrap();
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        assert!(
+            out.is_none(),
+            "fan-only history must not produce mech oat bins"
+        );
+    }
+
+    #[tokio::test]
+    async fn mech_oat_bins_from_chiller_status_fixture() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_CH");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ch = building.join("CHILLER_1");
+        std::fs::create_dir_all(&ch).unwrap();
+        std::fs::write(
+            ch.join("columns.csv"),
+            "col,point_role\nchiller_status,chiller_status\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ch.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,chiller_status,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,1,82").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,1,83").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,0,84").unwrap();
+
+        let parquet = tmp.path().join("parquet_ch");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_CH", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_CH", r#"{"CHILLER_1":"chiller"}"#);
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_CH"), None, None)
+            .await
+            .unwrap()
+            .expect("chiller_status fixture should produce oat bins");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(!env.rows.is_empty());
+        assert_eq!(env.rows[0]["kind"], "oat_bin");
+        assert!(env.coverage.as_ref().unwrap()["oat_column"] == "web_oa_t");
+        let device_hours: f64 = env
+            .rows
+            .iter()
+            .filter(|r| r["series_kind"] == "individual_device")
+            .map(|r| r["hours"].as_f64().unwrap_or(0.0))
+            .sum();
+        // Two on intervals of 300s (t0→t1 and t1→t2 while status stays 1) → 600s
+        assert!(
+            (device_hours - (600.0 / 3600.0)).abs() < 0.02,
+            "device_hours={device_hours}"
+        );
+        assert!(env
+            .rows
+            .iter()
+            .any(|r| r["series_kind"] == "aggregate_device_hours"));
+        assert!(env.rows.iter().any(|r| r["equipment_id"] == "CHILLER_1"));
+    }
+
+    #[tokio::test]
+    async fn mech_oat_bins_joins_site_oat_from_weather_equipment() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_SPLIT");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let ch = building.join("CHILLER_2");
+        std::fs::create_dir_all(&ch).unwrap();
+        std::fs::write(
+            ch.join("columns.csv"),
+            "col,point_role\nchiller_status,chiller_status\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ch.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,chiller_status").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,1").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,1").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,0").unwrap();
+
+        let wx = building.join("weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
+        writeln!(wf, "2026-07-01T00:00:00Z,72").unwrap();
+        writeln!(wf, "2026-07-01T00:05:00Z,73").unwrap();
+        writeln!(wf, "2026-07-01T00:10:00Z,74").unwrap();
+
+        let parquet = tmp.path().join("parquet_split");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_SPLIT", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_SPLIT", r#"{"CHILLER_2":"chiller"}"#);
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = mech_oat_bins_from_history(None, 900.0, Some("BUILDING_SPLIT"), None, None)
+            .await
+            .unwrap()
+            .expect("site OAT join should produce oat bins without inline chiller OAT");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        let device: Vec<_> = env
+            .rows
+            .iter()
+            .filter(|r| r["series_kind"] == "individual_device")
+            .collect();
+        assert!(!device.is_empty());
+        assert_eq!(device[0]["equipment_id"], "CHILLER_2");
+        assert!(device.iter().any(|r| {
+            let lo = r["bin_lo_f"].as_f64().unwrap_or(-1.0);
+            (70.0..75.0).contains(&lo)
+        }));
+    }
+
+    #[tokio::test]
+    async fn mechanical_cooling_default_uses_bounded_retain_floor_for_old_fixture() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_MECH_FALLBACK");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ch = building.join("CHILLER_OPAQUE");
+        std::fs::create_dir_all(&ch).unwrap();
+        std::fs::write(
+            ch.join("columns.csv"),
+            "col,point_role\nchiller_status,chiller_status\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ch.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,chiller_status,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,1,82").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,1,83").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,0,84").unwrap();
+
+        let parquet = tmp.path().join("parquet_mech_fallback");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_MECH_FALLBACK", &parquet).unwrap();
+        write_stamps(
+            &parquet,
+            "BUILDING_MECH_FALLBACK",
+            r#"{"CHILLER_OPAQUE":"chiller"}"#,
+        );
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let req = AnalyticsRequest {
+            query: AnalyticsQuery {
+                building_id: Some("BUILDING_MECH_FALLBACK".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let env = crate::analytics::mechanical_cooling::handle_async(&req).await;
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(
+            env.rows.iter().any(|row| row["kind"] == "oat_bin"),
+            "old synthetic fixture must use bounded retain-floor fallback: {:?}",
+            env.rows
+        );
+        assert!(env
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("retain floor")));
+    }
+
+    #[tokio::test]
+    async fn runtime_weekly_emits_per_equipment_not_plant_sum() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_AIR");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        for (eq, fan_vals) in [("AHU_1", [1, 1, 1]), ("AHU_2", [1, 0, 1])] {
+            let dir = building.join(eq);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(
+                dir.join("columns.csv"),
+                "col,point_role\nfan_status,fan_status\nweb_oa_t,web_oa_t\n",
+            )
+            .unwrap();
+            let mut f = std::fs::File::create(dir.join("history_wide.csv")).unwrap();
+            writeln!(f, "timestamp_utc,fan_status,web_oa_t").unwrap();
+            writeln!(f, "2026-03-23T00:00:00Z,{},55", fan_vals[0]).unwrap();
+            writeln!(f, "2026-03-23T00:05:00Z,{},56", fan_vals[1]).unwrap();
+            writeln!(f, "2026-03-23T00:10:00Z,{},57", fan_vals[2]).unwrap();
+        }
+
+        let parquet = tmp.path().join("parquet_air");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_AIR", &parquet).unwrap();
+        write_stamps(&parquet, "BUILDING_AIR", r#"{"AHU_1":"ahu","AHU_2":"ahu"}"#);
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = runtime_from_history(None, 900.0, Some("BUILDING_AIR"), None, None)
+            .await
+            .unwrap()
+            .expect("runtime envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        let weekly: Vec<_> = env
+            .rows
+            .iter()
+            .filter(|r| r["kind"] == "weekly_equipment")
+            .collect();
+        assert!(
+            weekly.len() >= 2,
+            "expected per-AHU weekly rows, got {weekly:?}"
+        );
+        let eqs: HashSet<_> = weekly
+            .iter()
+            .filter_map(|r| r["equipment_id"].as_str())
+            .collect();
+        assert!(eqs.contains("AHU_1"));
+        assert!(eqs.contains("AHU_2"));
+        assert!(weekly.iter().all(|r| r.get("label").is_some()));
+        // Must not emit folded plant totals as the product rows.
+        assert!(env.rows.iter().all(|r| r["kind"] != "weekly_plant"));
+    }
+
+    #[tokio::test]
+    async fn rcx_oat_scatter_aliases_timestamp_without_schema_clash() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_OATSC");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nsat,sat\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,sat,web_oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,55,60").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,56,61").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,57,62").unwrap();
+
+        let wx = building.join("weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
+        writeln!(wf, "2026-07-01T00:00:00Z,60").unwrap();
+        writeln!(wf, "2026-07-01T00:05:00Z,61").unwrap();
+        writeln!(wf, "2026-07-01T00:10:00Z,62").unwrap();
+
+        let lookalike = building.join("AHU_10");
+        std::fs::create_dir_all(&lookalike).unwrap();
+        std::fs::write(
+            lookalike.join("columns.csv"),
+            "col,point_role\nsat,sat\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut lf = std::fs::File::create(lookalike.join("history_wide.csv")).unwrap();
+        writeln!(lf, "timestamp_utc,sat,web_oa_t").unwrap();
+        writeln!(lf, "2026-07-01T00:00:00Z,99,60").unwrap();
+        writeln!(lf, "2026-07-01T00:05:00Z,99,61").unwrap();
+        writeln!(lf, "2026-07-01T00:10:00Z,99,62").unwrap();
+
+        let parquet = tmp.path().join("parquet_oatsc");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_OATSC", &parquet).unwrap();
+        let stamp_dir = parquet.join("building=BUILDING_OATSC");
+        std::fs::create_dir_all(&stamp_dir).unwrap();
+        std::fs::write(
+            stamp_dir.join("equipment_types.json"),
+            r#"{"AHU_1":"ahu","AHU_10":"vav","weather":"weather"}"#,
+        )
+        .unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = rcx_oat_scatter_from_history(Some("BUILDING_OATSC"), "sat", &["AHU"], false, 500)
+            .await
+            .unwrap()
+            .expect("oat scatter envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        assert!(env.points[0].get("timestamp_utc").is_some());
+        assert!(env.points[0].get("oat_f").is_some());
+        assert!(env.points[0].get("y_f").is_some());
+        assert_eq!(env.engine, DF_ENGINE);
+        assert!(env.points.iter().all(|p| p["equipment_id"] == "AHU_1"));
+    }
+
+    #[test]
+    fn bas_oat_col_accepts_mqtt_outside_air_temperature() {
+        let mut cols = HashSet::new();
+        cols.insert("outside_air_temperature".into());
+        cols.insert("zone_t".into());
+        assert_eq!(bas_oat_col(&cols), Some("outside_air_temperature"));
+        cols.insert("oa_t".into());
+        assert_eq!(bas_oat_col(&cols), Some("oa_t"));
+    }
+
+    #[tokio::test]
+    async fn bas_vs_web_mqtt_outside_air_weather_split() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("bldg2_mqtt_oat");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let zone = building.join("bldg2-zone-loopback");
+        std::fs::create_dir_all(&zone).unwrap();
+        std::fs::write(
+            zone.join("columns.csv"),
+            "col,point_role\noutside_air_temperature,outside_air_temperature\nzone_t,zone_t\n",
+        )
+        .unwrap();
+        let mut zf = std::fs::File::create(zone.join("history_wide.csv")).unwrap();
+        writeln!(zf, "timestamp_utc,outside_air_temperature,zone_t").unwrap();
+        writeln!(zf, "2026-09-07T00:00:00Z,70,72").unwrap();
+        writeln!(zf, "2026-09-07T00:05:00Z,71,72").unwrap();
+        writeln!(zf, "2026-09-07T00:10:00Z,72,73").unwrap();
+
+        let wx = building.join("hosted-weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\noutside_air_temperature,outside_air_temperature\n",
+        )
+        .unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,outside_air_temperature").unwrap();
+        writeln!(wf, "2026-09-07T00:00:00Z,68").unwrap();
+        writeln!(wf, "2026-09-07T00:05:00Z,69").unwrap();
+        writeln!(wf, "2026-09-07T00:10:00Z,70").unwrap();
+
+        let parquet = tmp.path().join("parquet_mqtt_oat");
+        fdd_store::ingest_building(tmp.path(), "bldg2_mqtt_oat", &parquet).unwrap();
+        write_stamps(
+            &parquet,
+            "bldg2_mqtt_oat",
+            r#"{"hosted-weather":"weather"}"#,
+        );
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = bas_vs_web_from_history(None, 500, Some("bldg2_mqtt_oat"), None, None, None)
+            .await
+            .unwrap()
+            .expect("MQTT outside_air_temperature weather-split should yield points");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        assert!(env.rows.iter().any(|r| r["kind"] == "delta_hist"));
+    }
+
+    #[tokio::test]
+    async fn bas_vs_web_joins_site_oat_across_equipment() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_BAS");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(ahu.join("columns.csv"), "col,point_role\noa_t,oa_t\n").unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,70").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,71").unwrap();
+        writeln!(f, "2026-07-01T00:10:00Z,72").unwrap();
+
+        let wx = building.join("weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
+        writeln!(wf, "2026-07-01T00:00:00Z,68").unwrap();
+        writeln!(wf, "2026-07-01T00:05:00Z,69").unwrap();
+        writeln!(wf, "2026-07-01T00:10:00Z,70").unwrap();
+
+        let parquet = tmp.path().join("parquet_bas");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_BAS", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let july_start = Utc.with_ymd_and_hms(2026, 7, 1, 0, 0, 0).unwrap();
+        let july_end = Utc.with_ymd_and_hms(2026, 7, 2, 0, 0, 0).unwrap();
+        let env = bas_vs_web_from_history(
+            None,
+            500,
+            Some("BUILDING_BAS"),
+            None,
+            Some(july_start),
+            Some(july_end),
+        )
+        .await
+        .unwrap()
+        .expect("site BAS×web join should produce overlay points");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        assert_eq!(
+            env.coverage.as_ref().unwrap()["oat_join"],
+            "site_broadcast_by_date_bin"
+        );
+        assert!(env.rows.iter().any(|r| r["kind"] == "delta_hist"));
+    }
+
+    #[tokio::test]
+    async fn bas_vs_web_joins_when_bas_and_web_micros_differ() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_MICRO");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+
+        let ahu = building.join("rtu_01");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(ahu.join("columns.csv"), "col,point_role\noa_t,oa_t\n").unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,oa_t").unwrap();
+        // BAS poll clock with fractional seconds — must still join web on second.
+        writeln!(f, "2026-07-01T00:00:00.320474219Z,70").unwrap();
+        writeln!(f, "2026-07-01T00:05:00.416697337Z,71").unwrap();
+        writeln!(f, "2026-07-01T00:10:00.510652410Z,72").unwrap();
+
+        let wx = building.join("hosted-weather");
+        std::fs::create_dir_all(&wx).unwrap();
+        std::fs::write(
+            wx.join("columns.csv"),
+            "col,point_role\nweb_oa_t,web_oa_t\n",
+        )
+        .unwrap();
+        let mut wf = std::fs::File::create(wx.join("history_wide.csv")).unwrap();
+        writeln!(wf, "timestamp_utc,web_oa_t").unwrap();
+        writeln!(wf, "2026-07-01T00:00:00.111111111Z,68").unwrap();
+        writeln!(wf, "2026-07-01T00:05:00.222222222Z,69").unwrap();
+        writeln!(wf, "2026-07-01T00:10:00.333333333Z,70").unwrap();
+
+        let parquet = tmp.path().join("parquet_micro");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_MICRO", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let july_start = Utc.with_ymd_and_hms(2026, 7, 1, 0, 0, 0).unwrap();
+        let july_end = Utc.with_ymd_and_hms(2026, 7, 2, 0, 0, 0).unwrap();
+        let env = bas_vs_web_from_history(
+            None,
+            500,
+            Some("BUILDING_MICRO"),
+            None,
+            Some(july_start),
+            Some(july_end),
+        )
+        .await
+        .unwrap()
+        .expect("second-truncated join should align mismatched micros");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        // Retain-fallback windows can date_bin-collapse close samples into one
+        // bucket; the contract is micros still join on the second, not raw count.
+        assert!(
+            !env.points.is_empty(),
+            "expected at least one overlay bucket after second join, got {}",
+            env.points.len()
+        );
+        let p0 = &env.points[0];
+        assert!(p0["bas_oat_f"].as_f64().is_some());
+        assert!(p0["web_oat_f"].as_f64().is_some());
+        assert_eq!(
+            env.coverage.as_ref().unwrap()["oat_join"],
+            "site_broadcast_by_date_bin"
+        );
+    }
+
+    #[tokio::test]
+    async fn inspect_from_history_returns_raw_columns() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let building = tmp.path().join("BUILDING_INSP");
+        std::fs::create_dir_all(&building).unwrap();
+        std::fs::write(building.join("manifest.json"), r#"{"grid_minutes":5}"#).unwrap();
+        let ahu = building.join("AHU_1");
+        std::fs::create_dir_all(&ahu).unwrap();
+        std::fs::write(
+            ahu.join("columns.csv"),
+            "col,point_role\nfan_status,fan_status\noa_t,oa_t\n",
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(ahu.join("history_wide.csv")).unwrap();
+        writeln!(f, "timestamp_utc,fan_status,oa_t").unwrap();
+        writeln!(f, "2026-07-01T00:00:00Z,1,55").unwrap();
+        writeln!(f, "2026-07-01T00:05:00Z,1,56").unwrap();
+
+        let parquet = tmp.path().join("parquet_insp");
+        fdd_store::ingest_building(tmp.path(), "BUILDING_INSP", &parquet).unwrap();
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &parquet);
+
+        let env = inspect_from_history(Some("BUILDING_INSP"), "AHU_1", None, 500, None)
+            .await
+            .unwrap()
+            .expect("inspect envelope");
+        std::env::remove_var("OPENFDD_PARQUET_ROOT");
+
+        assert!(!env.points.is_empty());
+        let plotted = env.coverage.as_ref().unwrap()["columns_plotted"]
+            .as_array()
+            .unwrap();
+        assert!(!plotted.is_empty());
+        assert!(env.points[0].get("timestamp_utc").is_some());
+        assert_eq!(env.coverage.as_ref().unwrap()["read_source"], "hub");
+    }
+
+    #[test]
+    fn parquet_root_respects_env() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
+        let prev_parquet = std::env::var("OPENFDD_PARQUET_ROOT").ok();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", tmp.path());
+        assert_eq!(parquet_root(), tmp.path());
+        let storage = tmp.path().join("via-storage-url");
+        std::fs::create_dir_all(&storage).unwrap();
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", storage.display()),
+        );
+        assert_eq!(parquet_root(), storage);
+        if let Some(v) = prev_storage {
+            std::env::set_var("OPENFDD_STORAGE_URL", v);
+        } else {
+            std::env::remove_var("OPENFDD_STORAGE_URL");
+        }
+        if let Some(v) = prev_parquet {
+            std::env::set_var("OPENFDD_PARQUET_ROOT", v);
+        } else {
+            std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        }
+    }
+
+    #[test]
+    fn list_equipment_ids_from_hive_reads_partition_dirs_not_sql() {
+        let _guard = lock_shared_env();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
+        let prev_parquet = std::env::var("OPENFDD_PARQUET_ROOT").ok();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", tmp.path().display()),
+        );
+        let hub = tmp
+            .path()
+            .join("history/building_id=ACME/equipment_id=rtu_01");
+        let tenant = tmp
+            .path()
+            .join("tenants/acme/history/building_id=ACME/equipment_id=jci_vav_10");
+        let legacy = tmp.path().join("building=BUILDING_100/equipment=AHU_2");
+        std::fs::create_dir_all(&hub).unwrap();
+        std::fs::create_dir_all(&tenant).unwrap();
+        std::fs::create_dir_all(&legacy).unwrap();
+        // Decoy: year partition must not be treated as equipment.
+        std::fs::create_dir_all(
+            tmp.path()
+                .join("history/building_id=ACME/equipment_id=rtu_01/year=2026"),
+        )
+        .unwrap();
+        let ids = list_equipment_ids_from_hive("ACME");
+        assert!(ids.contains(&"rtu_01".into()), "{ids:?}");
+        assert!(ids.contains(&"jci_vav_10".into()), "{ids:?}");
+        assert!(!ids.iter().any(|id| id.starts_with("year")), "{ids:?}");
+        let b100 = list_equipment_ids_from_hive("BUILDING_100");
+        assert!(b100.contains(&"AHU_2".into()), "{b100:?}");
+        if let Some(v) = prev_storage {
+            std::env::set_var("OPENFDD_STORAGE_URL", v);
+        } else {
+            std::env::remove_var("OPENFDD_STORAGE_URL");
+        }
+        if let Some(v) = prev_parquet {
+            std::env::set_var("OPENFDD_PARQUET_ROOT", v);
+        } else {
+            std::env::remove_var("OPENFDD_PARQUET_ROOT");
+        }
+    }
+}

@@ -1,0 +1,5224 @@
+# SQL rule registry — source of truth for DataFusion deterministic rules.
+# Python oracle mapping: see fdd_app/export_pandas_oracle.py SQL_TO_COOKBOOK
+
+rules:
+  - rule_id: FAN-RUNTIME-HOURS
+    sql_file: fan_runtime_hours.sql
+    pandas_function: null
+    description: Fan running hours where fan_cmd > 5% (normalized 0-1)
+    required_roles: [fan_cmd]
+    output_columns: [equipment_id, fan_runtime_hours, total_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+
+  - rule_id: VAV-1
+    equipment_kinds: [vav, zone_other, heatpump, baseboard]
+    sql_file: vav1_comfort_fault.sql
+    pandas_function: vav1
+    description: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2
+    required_roles: [zone_t]
+    optional_roles: [occ_mode]
+    output_columns: [equipment_id, fault_hours, fault_pct]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      zone_t_lo:
+        label: Zone low
+        default: 70.0
+        min: 55.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      zone_t_hi:
+        label: Zone high
+        default: 75.0
+        min: 72.0
+        max: 85.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+      require_occupied:
+        label: Require occupied
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OCCUPIED
+      confirm_seconds:
+        label: Confirm time
+        default: 900
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: VAV-2
+    equipment_kinds: [vav, zone_other, heatpump, baseboard]
+    sql_file: vav2_night_setback.sql
+    pandas_function: vav2
+    description: Night setback miss — unoccupied zone above heating setback
+    required_roles: [zone_t, occ_mode]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      setback_hi:
+        label: Setback high
+        default: 68.0
+        min: 55.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SETBACK_HI
+      confirm_seconds:
+        label: Confirm time
+        default: 900
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: AVG-ZONE-TEMP
+    sql_file: avg_zone_temp.sql
+    pandas_function: null
+    description: Average zone temperature per equipment
+    required_roles: [zone_t]
+    output_columns: [equipment_id, avg_zone_temp, min_zone_temp, max_zone_temp]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      zone_t_lo:
+        label: Zone comfort low (reference)
+        default: 68.0
+        min: 60.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      zone_t_hi:
+        label: Zone comfort high (reference)
+        default: 76.0
+        min: 72.0
+        max: 85.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+
+  - rule_id: ZONE-COMFORT-PCT
+    sql_file: zone_comfort_pct.sql
+    pandas_function: null
+    description: Percent of samples in comfort band
+    required_roles: [zone_t]
+    output_columns: [equipment_id, comfort_pct]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      zone_t_lo:
+        label: Zone comfort low
+        default: 68.0
+        min: 60.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      zone_t_hi:
+        label: Zone comfort high
+        default: 76.0
+        min: 72.0
+        max: 85.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+
+  - rule_id: FAULT-ELAPSED-HOURS
+    sql_file: fault_elapsed_hours.sql
+    pandas_function: null
+    description: Comfort fault sample count → hours
+    required_roles: [zone_t]
+    output_columns: [equipment_id, fault_samples, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      zone_t_lo:
+        label: Zone comfort low
+        default: 68.0
+        min: 60.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      zone_t_hi:
+        label: Zone comfort high
+        default: 76.0
+        min: 72.0
+        max: 85.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+
+  - rule_id: OAT-METEO
+    equipment_kinds: [ahu]
+    sql_file: oat_meteo_fault.sql
+    pandas_function: oat_vs_meteo
+    description: Equipment OAT vs weather-staged wx OAT
+    required_roles: [oa_t]
+    optional_roles: [web_oa_t]
+    output_columns: [equipment_id, fault_hours, fault_pct]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      oat_err:
+        label: OAT vs meteo tolerance
+        default: 5.0
+        min: 2.0
+        max: 20.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: OAT_ERR
+      confirm_seconds:
+        label: Confirm time
+        default: 900
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC13-SAT-HIGH
+    equipment_kinds: [ahu]
+    aliases: [FC13]
+    sql_file: sat_high_fault.sql
+    pandas_function: fc13
+    description: SAT above setpoint at full cooling
+    required_roles: [sat, sat_sp, clg_valve_pct, oa_damper_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      econ_min_pos:
+        label: Econ damper min pos
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
+      clg_full_min:
+        label: Cooling valve full min
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_FULL_MIN
+      oa_damper_econ_low:
+        label: OA damper economizer low
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: OA_DAMPER_ECON_LOW
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: ECON-2
+    equipment_kinds: [ahu]
+    sql_file: economizer_fault.sql
+    pandas_function: econ2
+    description: Economizing when outdoor air unfavorable
+    required_roles: [oa_t, oa_damper_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      econ2_oat_hi:
+        label: OAT high cutoff
+        default: 63.0
+        min: 55.0
+        max: 80.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON2_OAT_HI
+      econ2_damper:
+        label: Damper open frac
+        default: 0.42
+        min: 0.2
+        max: 0.9
+        step: 0.02
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON2_DAMPER
+      confirm_seconds:
+        label: Confirm time
+        default: 300
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC1
+    equipment_kinds: [ahu]
+    sql_file: fc1_duct_static_low.sql
+    pandas_function: fc1
+    description: Duct static below SP at full fan
+    required_roles: [duct_static, duct_static_sp, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_dsp:
+        label: Duct-static error epsDSP (GL36 default 0.1 in.w.c.)
+        default: 0.12
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: inwc
+        frontend_control: slider
+        sql_placeholder: EPS_DSP
+      eps_vfd_spd:
+        label: VFD speed error epsVFDSPD (GL36 default 5%)
+        default: 0.13
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: EPS_VFD_SPD
+      confirm_seconds:
+        label: Confirm time
+        default: 300
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC2
+    equipment_kinds: [ahu]
+    sql_file: fc2_mat_low.sql
+    pandas_function: fc2
+    description: Mixed air below envelope
+    required_roles: [mat, oa_t, rat, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      eps_rat:
+        label: RAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_RAT
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC3
+    equipment_kinds: [ahu]
+    sql_file: fc3_mat_high.sql
+    pandas_function: fc3
+    description: Mixed air above envelope
+    required_roles: [mat, oa_t, rat, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_rat:
+        label: RAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_RAT
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      fan_on_min:
+        label: Fan ON fraction threshold
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC7
+    equipment_kinds: [ahu]
+    sql_file: fc7_sat_low_heating.sql
+    pandas_function: fc7
+    description: SAT low while heating at full
+    required_roles: [sat, sat_sp, htg_valve_pct]
+    optional_roles: [fan_cmd, fan_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    blocker: "htg_valve_pct missing on some AHUs — Python and SQL both skip"
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      htg_full_min:
+        label: Full-heating threshold (GL36 99%)
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_FULL_MIN
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC8
+    equipment_kinds: [ahu]
+    sql_file: fc8_sat_mat_econ.sql
+    pandas_function: fc8
+    description: SAT vs MAT while economizing
+    required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      supply_tol:
+        label: Supply tol (alias eps_sat)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SUPPLY_TOL
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      econ_min_pos:
+        label: Economizer OA damper minimum (fraction)
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      clg_inactive_max:
+        label: Cooling valve inactive max (fraction)
+        default: 0.1
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_INACTIVE_MAX
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC9
+    equipment_kinds: [ahu]
+    sql_file: fc9_oa_sat_sp_econ.sql
+    pandas_function: fc9
+    description: OAT high vs SAT SP while economizing
+    required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      econ_min_pos:
+        label: Economizer OA damper minimum (fraction)
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      clg_inactive_max:
+        label: Cooling valve inactive max (fraction)
+        default: 0.1
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_INACTIVE_MAX
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC10
+    equipment_kinds: [ahu]
+    sql_file: fc10_mat_oa_clg.sql
+    pandas_function: fc10
+    description: MAT-OAT delta while cooling and economizing
+    required_roles: [mat, oa_t, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      clg_on_min:
+        label: Cooling valve ON minimum (fraction)
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC11
+    equipment_kinds: [ahu]
+    sql_file: fc11_oa_sat_sp_clg.sql
+    pandas_function: fc11
+    description: OAT low vs SAT SP while cooling and economizing
+    required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_oat:
+        label: OAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_OAT
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      clg_on_min:
+        label: Cooling valve ON minimum (fraction)
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: FC12
+    equipment_kinds: [ahu]
+    sql_file: fc12_sat_mat_clg.sql
+    pandas_function: fc12
+    description: SAT above MAT while cooling
+    required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      supply_tol:
+        label: Supply tol (alias eps_sat)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SUPPLY_TOL
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      clg_on_min:
+        label: Cooling valve ON minimum (fraction)
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      econ_min_pos:
+        label: Economizer OA damper minimum (fraction)
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: ECON-1
+    equipment_kinds: [ahu]
+    sql_file: econ1_stuck_closed.sql
+    pandas_function: econ1
+    description: Economizer stuck closed when OAT favorable
+    required_roles: [fan_cmd, oa_damper_pct, oa_t]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      econ1_oat_min:
+        label: Favorable OAT
+        default: 55.0
+        min: 45.0
+        max: 70.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON1_OAT_MIN
+      econ1_damper_max:
+        label: Stuck-closed damper frac
+        default: 0.05
+        min: 0.0
+        max: 0.2
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON1_DAMPER_MAX
+
+  - rule_id: ECON-4
+    equipment_kinds: [ahu]
+    sql_file: econ4_low_oa_frac.sql
+    pandas_function: econ4
+    description: Low estimated OA fraction
+    required_roles: [mat, rat, oa_t, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      oa_min_pct:
+        label: Min OA fraction
+        default: 21.0
+        min: 5.0
+        max: 40.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: OA_MIN_PCT
+      oat_rat_delta_min:
+        label: Min |RAT−OAT| for OA-fraction estimate (°F)
+        default: 2.2
+        min: 0.5
+        max: 10.0
+        step: 0.1
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: OAT_RAT_DELTA_MIN
+      confirm_seconds:
+        label: Confirm time
+        default: 600
+        min: 0
+        max: 3600
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+# --- Ported from datafusion-sql-cookbook (feat/sql-rules-59) ---
+
+  - rule_id: SV-RANGE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump, meter]
+    sql_file: sv_range.sql
+    pandas_function: null
+    description: Sensor out of hard range
+    required_roles: []
+    # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, kwh, electric_kw, electric_kwh]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      range_scale_temperature:
+        label: Temp range scale
+        default: 1.0
+        min: 0.5
+        max: 2.0
+        step: 0.1
+        unit: x
+        frontend_control: slider
+        sql_placeholder: RANGE_SCALE_TEMPERATURE
+      range_scale_humidity:
+        label: Humidity range scale
+        default: 1.0
+        min: 0.5
+        max: 2.0
+        step: 0.1
+        unit: x
+        frontend_control: slider
+        sql_placeholder: RANGE_SCALE_HUMIDITY
+      range_scale_pressure:
+        label: Pressure / duct-static range scale
+        default: 1.0
+        min: 0.5
+        max: 2.0
+        step: 0.1
+        unit: x
+        frontend_control: slider
+        sql_placeholder: RANGE_SCALE_PRESSURE
+
+  - rule_id: SV-FLATLINE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
+    sql_file: sv_flatline.sql
+    pandas_function: null
+    description: Sensor flatline (stuck)
+    required_roles: []
+    # Pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      flatline_tol:
+        label: Flatline tolerance
+        default: 0.1
+        min: 0.02
+        max: 1.0
+        step: 0.02
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: FLATLINE_TOL
+      flatline_hours:
+        label: Flatline window
+        default: 1.0
+        min: 0.25
+        max: 12.0
+        step: 0.25
+        unit: h
+        frontend_control: slider
+        sql_placeholder: FLATLINE_HOURS
+
+  - rule_id: SV-SPIKE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
+    sql_file: sv_spike.sql
+    pandas_function: null
+    description: Sensor rate-of-change spike
+    required_roles: []
+    # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      spike_scale_pressure:
+        label: Spike scale pressure
+        default: 1.0
+        min: 0.25
+        max: 4.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: SPIKE_SCALE_PRESSURE
+      spike_scale_humidity:
+        label: Spike scale humidity
+        default: 1.0
+        min: 0.25
+        max: 4.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: SPIKE_SCALE_HUMIDITY
+      spike_scale_temperature:
+        label: Spike scale temperature
+        default: 1.0
+        min: 0.25
+        max: 4.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: SPIKE_SCALE_TEMPERATURE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      spike_scale:
+        label: Spike limit scale (global)
+        default: 1.0
+        min: 0.25
+        max: 3.0
+        step: 0.25
+        unit: x
+        frontend_control: slider
+        sql_placeholder: SPIKE_SCALE
+
+  - rule_id: SV-STALE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
+    sql_file: sv_stale.sql
+    pandas_function: null
+    description: Stale data (no fresh samples)
+    # Pandas gate is `always` (sensor sweep); do not require fan_cmd.
+    # Catalog matches pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
+    required_roles: []
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      stale_hours:
+        label: Stale window
+        default: 2.0
+        min: 0.5
+        max: 12.0
+        step: 0.5
+        unit: h
+        frontend_control: slider
+        sql_placeholder: STALE_HOURS
+      stale_tol:
+        label: Stale tolerance
+        default: 0.05
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: STALE_TOL
+
+  - rule_id: SV-RATE
+    equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
+    aliases: [SV-SLEW]
+    sql_file: sv_rate.sql
+    pandas_function: null
+    description: Context-aware sensor rate of change
+    required_roles: []
+    optional_roles: [oa_t, mat, zone_t, rat, sat]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      sensor_span:
+        label: Sensor span
+        default: 100.0
+        min: 1.0
+        max: 500.0
+        step: 1.0
+        unit: unit
+        frontend_control: slider
+        sql_placeholder: SENSOR_SPAN
+      max_gap_hours:
+        label: Max sample gap
+        default: 1.0
+        min: 0.1
+        max: 12.0
+        step: 0.1
+        unit: h
+        frontend_control: slider
+        sql_placeholder: MAX_GAP_HOURS
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      persistence_min:
+        label: Fault persistence
+        default: 10.0
+        min: 5.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: PERSISTENCE_MIN
+      steady_fault_per_hour:
+        label: Steady-state slew limit
+        default: 6.0
+        min: 1.0
+        max: 60.0
+        step: 0.5
+        unit: degF_per_h
+        frontend_control: slider
+        sql_placeholder: STEADY_FAULT_PER_HOUR
+
+  - rule_id: PID-HUNT-1
+    equipment_kinds: [ahu, vav, zone_other, chiller, boiler, heatpump]
+    sql_file: pid_hunt_1.sql
+    pandas_function: null
+    description: Suspected control-output hunting
+    required_roles: []
+    optional_roles: [oa_damper_pct, clg_valve_pct, htg_valve_pct, damper_pct, loop_enabled, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 0.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      window_hours:
+        label: Hunting lookback window
+        default: 1.0
+        min: 0.25
+        max: 4.0
+        step: 0.25
+        unit: h
+        frontend_control: slider
+        sql_placeholder: WINDOW_HOURS
+      change_deadband_pct:
+        label: Ignore changes below
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: CHANGE_DEADBAND_PCT
+      minimum_span_pct:
+        label: Minimum observed span
+        default: 20.0
+        min: 5.0
+        max: 100.0
+        step: 5.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_SPAN_PCT
+      total_variation_fault_pct:
+        label: Total variation fault threshold
+        default: 500.0
+        min: 50.0
+        max: 2000.0
+        step: 50.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: TOTAL_VARIATION_FAULT_PCT
+      minimum_equivalent_cycles:
+        label: Min equivalent cycles
+        default: 2.5
+        min: 0.5
+        max: 10.0
+        step: 0.5
+        unit: count
+        frontend_control: slider
+        sql_placeholder: MINIMUM_EQUIVALENT_CYCLES
+      minimum_reversals:
+        label: Min direction reversals
+        default: 4.0
+        min: 1.0
+        max: 20.0
+        step: 1.0
+        unit: count
+        frontend_control: slider
+        sql_placeholder: MINIMUM_REVERSALS
+      minimum_coverage_pct:
+        label: Min window sample coverage
+        default: 80.0
+        min: 50.0
+        max: 100.0
+        step: 5.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_COVERAGE_PCT
+
+  - rule_id: FC4
+    equipment_kinds: [ahu]
+    sql_file: fc4_os_hunting.sql
+    pandas_function: null
+    description: PID hunting (operating-state oscillation)
+    required_roles: [oa_damper_pct, clg_valve_pct, fan_cmd]
+    optional_roles: [fan_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 3600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      confirm_seconds:
+        label: Confirm time
+        default: 3600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      delta_os_max:
+        label: Max operating-state entries per hour
+        default: 5.0
+        min: 1.0
+        max: 30.0
+        step: 1.0
+        unit: count
+        frontend_control: slider
+        sql_placeholder: DELTA_OS_MAX
+
+  - rule_id: FC5
+    equipment_kinds: [ahu]
+    sql_file: fc5_sat_cold_heating.sql
+    pandas_function: null
+    description: SAT cold when heating commanded (GL36 D)
+    required_roles: [sat, mat, htg_valve_pct, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      eps_sat:
+        label: SAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_SAT
+      eps_mat:
+        label: MAT sensor eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_MAT
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+      htg_on_min:
+        label: Heating-command ON threshold
+        default: 0.01
+        min: 0.0
+        max: 0.25
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_ON_MIN
+      delta_supply_fan:
+        label: Supply-fan delta (GL36 0.55 °F)
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+
+  - rule_id: FC6
+    equipment_kinds: [ahu]
+    sql_file: fc6_oa_frac_mismatch.sql
+    pandas_function: null
+    description: Estimated OA fraction mismatch
+    required_roles: [mat, rat, oa_t, fan_cmd, vav_total_flow]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      oat_rat_delta_min:
+        label: Min |OAT-RAT|
+        default: 5.0
+        min: 0.0
+        max: 30.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: OAT_RAT_DELTA_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      eps_airflow:
+        label: Airflow fraction eps
+        default: 0.15
+        min: 0.05
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: EPS_AIRFLOW
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      min_cfm_design:
+        label: Design minimum outdoor airflow
+        default: 5000.0
+        min: 0.0
+        max: 200000.0
+        step: 100.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: MIN_CFM_DESIGN
+
+  - rule_id: FC14
+    equipment_kinds: [ahu]
+    sql_file: fc14_chw_coil_dt_inactive.sql
+    pandas_function: null
+    description: CHW coil ΔT when inactive (GL36 L)
+    required_roles: [clg_valve_pct]
+    optional_roles: [cooling_coil_entering_temp, cooling_coil_leaving_temp, mat, sat, oa_damper_pct, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      clg_on_min:
+        label: Cooling on min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      htg_on_min:
+        label: Heating on min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_ON_MIN
+      eps_cclt:
+        label: CHW coil leaving eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_CCLT
+      eps_ccet:
+        label: CHW coil entering eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_CCET
+      econ_min_pos:
+        label: Econ damper min pos
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      delta_supply_fan:
+        label: Supply-fan delta
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      clg_inactive_max:
+        label: Cooling inactive max
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_INACTIVE_MAX
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+
+  - rule_id: FC15
+    equipment_kinds: [ahu]
+    sql_file: fc15_hw_coil_dt_inactive.sql
+    pandas_function: null
+    description: HW coil ΔT when inactive (GL36 M)
+    required_roles: []
+    optional_roles: [heating_coil_entering_temp, heating_coil_leaving_temp, mat, sat, htg_valve_pct, clg_valve_pct, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      htg_on_min:
+        label: Heating on min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_ON_MIN
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      fan_on_min:
+        label: Fan-on command min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FAN_ON_MIN
+      mode_delay_min:
+        label: Mode delay after fan-on
+        default: 10.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: MODE_DELAY_MIN
+      eps_hclt:
+        label: HW coil leaving eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_HCLT
+      eps_hcet:
+        label: HW coil entering eps
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EPS_HCET
+      econ_min_pos:
+        label: Econ damper min pos
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_MIN_POS
+      econ_full_open:
+        label: Econ damper full-open
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON_FULL_OPEN
+      delta_supply_fan:
+        label: Supply-fan delta
+        default: 0.55
+        min: 0.0
+        max: 5.0
+        step: 0.05
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_SUPPLY_FAN
+      clg_on_min:
+        label: Cooling on min
+        default: 0.01
+        min: 0.0
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_ON_MIN
+      clg_inactive_max:
+        label: Cooling inactive max
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_INACTIVE_MAX
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mix_tol:
+        label: Legacy master sensor tolerance (sets all eps values)
+        default: 1.15
+        min: 0.0
+        max: 10.0
+        step: 0.25
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIX_TOL
+
+  - rule_id: AHU-SATDEV
+    equipment_kinds: [ahu]
+    sql_file: ahu_satdev.sql
+    pandas_function: null
+    description: SAT deviation from setpoint
+    required_roles: [sat, sat_sp]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      sat_dev_err:
+        label: SAT deviation
+        default: 5.0
+        min: 1.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SAT_DEV_ERR
+
+  - rule_id: AHU-DUCTHI
+    equipment_kinds: [ahu]
+    sql_file: ahu_ducthi.sql
+    pandas_function: null
+    description: Duct static pressure high
+    required_roles: [duct_static, duct_static_sp, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      duct_high_margin:
+        label: High margin
+        default: 0.25
+        min: 0.05
+        max: 1.0
+        step: 0.05
+        unit: in_wc
+        frontend_control: slider
+        sql_placeholder: DUCT_HIGH_MARGIN
+      pressure_on_min:
+        label: Pressure-on evidence
+        default: 0.2
+        min: 0.05
+        max: 1.0
+        step: 0.05
+        unit: in_wc
+        frontend_control: slider
+        sql_placeholder: PRESSURE_ON_MIN
+
+  - rule_id: AHU-SIMUL
+    equipment_kinds: [ahu]
+    sql_file: ahu_simul.sql
+    pandas_function: null
+    description: Heating and cooling simultaneous
+    required_roles: [htg_valve_pct, clg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      valve_open_pct:
+        label: Valve open threshold
+        default: 0.1
+        min: 0.05
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: VALVE_OPEN_PCT
+
+  - rule_id: ECON-3
+    equipment_kinds: [ahu]
+    sql_file: econ3_mech_without_econ.sql
+    pandas_function: null
+    description: Mech cooling without integrated economizer
+    required_roles: [oa_damper_pct, clg_valve_pct]
+    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      econ3_db_min:
+        label: Free-cool OA dry-bulb min
+        default: 60.0
+        min: 50.0
+        max: 68.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON3_DB_MIN
+      econ3_db_max:
+        label: Free-cool OA dry-bulb max
+        default: 72.0
+        min: 65.0
+        max: 80.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON3_DB_MAX
+      econ3_dp_max:
+        label: Free-cool OA dew point max
+        default: 60.0
+        min: 45.0
+        max: 68.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON3_DP_MAX
+      econ3_damper_hi:
+        label: Integrated economizer damper
+        default: 0.9
+        min: 0.5
+        max: 1.0
+        step: 0.02
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON3_DAMPER_HI
+      clg_open_min:
+        label: Cooling valve open minimum
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_OPEN_MIN
+
+  - rule_id: ECON-5
+    equipment_kinds: [ahu]
+    sql_file: econ5_preheat_over.sql
+    pandas_function: null
+    description: Preheat over-conditioning
+    required_roles: [preheat_leave_t, sat_sp, oa_t, htg_valve_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      preheat_over_f:
+        label: Preheat over ΔT
+        default: 2.2
+        min: 0.5
+        max: 8.0
+        step: 0.1
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: PREHEAT_OVER_F
+      htg_open_min:
+        label: Heating valve open minimum
+        default: 0.01
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: HTG_OPEN_MIN
+
+  - rule_id: ECON-6
+    equipment_kinds: [ahu]
+    sql_file: econ6_econ_freezing.sql
+    pandas_function: null
+    description: Economizing in freezing weather
+    required_roles: [oa_damper_pct]
+    optional_roles: [web_oa_t, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      econ6_oat_max_f:
+        label: Winter OAT ceiling
+        default: 25.0
+        min: 15.0
+        max: 40.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON6_OAT_MAX_F
+      econ6_damper_max:
+        label: Winter min-OA damper
+        default: 0.25
+        min: 0.05
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON6_DAMPER_MAX
+
+  - rule_id: ECON-7
+    equipment_kinds: [ahu]
+    sql_file: econ7_ok_not_economizing.sql
+    pandas_function: null
+    description: Economizer OK but not economizing
+    required_roles: [oa_damper_pct, clg_valve_pct]
+    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      econ7_db_min:
+        label: Econ-OK dry-bulb floor (freeze guard)
+        default: 35.0
+        min: 20.0
+        max: 50.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON7_DB_MIN
+      econ7_db_max:
+        label: Econ-OK dry-bulb max
+        default: 72.0
+        min: 65.0
+        max: 80.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON7_DB_MAX
+      econ7_dp_max:
+        label: Econ-OK dew point max
+        default: 60.0
+        min: 45.0
+        max: 68.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ECON7_DP_MAX
+      econ7_damper_min:
+        label: Economizing damper threshold
+        default: 0.5
+        min: 0.2
+        max: 0.9
+        step: 0.02
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ECON7_DAMPER_MIN
+      clg_open_min:
+        label: Cooling valve open minimum
+        default: 0.05
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: CLG_OPEN_MIN
+
+  - rule_id: MECH-OAT-1
+    equipment_kinds: [ahu, chiller, heatpump]
+    sql_file: mech_oat_1.sql
+    pandas_function: null
+    description: Mechanical cooling below 60°F web OAT
+    required_roles: [web_oa_t]
+    optional_roles: [clg_valve_pct, chiller_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mech_oat_max_f:
+        label: Mech-cool OAT ceiling
+        default: 60.0
+        min: 45.0
+        max: 65.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MECH_OAT_MAX_F
+
+  - rule_id: CMD-1
+    equipment_kinds: [ahu]
+    sql_file: cmd1_fan_mismatch.sql
+    pandas_function: null
+    description: Fan cmd/status mismatch
+    required_roles: [fan_cmd, fan_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: OA-1
+    equipment_kinds: [ahu]
+    sql_file: oa1_low_oa_frac.sql
+    pandas_function: null
+    description: Low OA fraction
+    required_roles: [mat, rat, oa_t, fan_cmd]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      min_oa_frac:
+        label: Min OA fraction
+        default: 0.15
+        min: 0.05
+        max: 0.4
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: MIN_OA_FRAC
+      oat_rat_guard:
+        label: OAT/RAT guard
+        default: 2.2
+        min: 0.5
+        max: 6.0
+        step: 0.1
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: OAT_RAT_GUARD
+
+  - rule_id: DMP-1
+    equipment_kinds: [ahu]
+    sql_file: dmp1_oa_damper_leak.sql
+    pandas_function: null
+    description: OA damper leakage
+    required_roles: [oa_damper_pct, oa_t, mat]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      leak_delta:
+        label: Leak ΔT
+        default: 2.0
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: LEAK_DELTA
+
+  - rule_id: VLV-1
+    equipment_kinds: [ahu]
+    sql_file: vlv1_clg_valve_leak.sql
+    pandas_function: null
+    description: Cooling valve leakage
+    required_roles: [clg_valve_pct, sat, sat_sp, mat]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      sat_err:
+        label: SAT vs SP leak ΔT
+        default: 2.0
+        min: 0.5
+        max: 8.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SAT_ERR
+      mat_leak_delta:
+        label: SAT vs MAT leak ΔT
+        default: 2.0
+        min: 0.5
+        max: 12.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MAT_LEAK_DELTA
+
+  - rule_id: VAV-3
+    equipment_kinds: [vav]
+    sql_file: vav3_excessive_reheat.sql
+    pandas_function: null
+    description: Excessive reheat during warm weather
+    required_roles: [oa_t, reheat_valve_pct, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      reheat_oat:
+        label: Warm OAT
+        default: 78.0
+        min: 65.0
+        max: 90.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: REHEAT_OAT
+      reheat_pct:
+        label: Reheat frac
+        default: 0.52
+        min: 0.1
+        max: 1.0
+        step: 0.02
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: REHEAT_PCT
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 5.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+
+  - rule_id: VAV-4
+    equipment_kinds: [vav]
+    sql_file: vav4_damper_full_open.sql
+    pandas_function: null
+    description: Damper stuck at full open
+    required_roles: [damper_pct, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      full_open_pct:
+        label: Full open frac
+        default: 0.975
+        min: 0.8
+        max: 1.0
+        step: 0.005
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: FULL_OPEN_PCT
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 5.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+      sustain_hours:
+        label: Sustain window
+        default: 1.5
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: h
+        frontend_control: slider
+        sql_placeholder: SUSTAIN_HOURS
+
+  - rule_id: VAV-5
+    equipment_kinds: [vav]
+    sql_file: vav5_airflow_bias.sql
+    pandas_function: null
+    description: Airflow sensor bias
+    required_roles: [zone_flow, damper_pct]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      flow_bias_cfm:
+        label: Airflow bias threshold
+        default: 50.0
+        min: 10.0
+        max: 200.0
+        step: 5.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_BIAS_CFM
+      damper_closed_max:
+        label: Damper closed maximum
+        default: 0.10
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: DAMPER_CLOSED_MAX
+
+  - rule_id: VAV-6
+    equipment_kinds: [vav]
+    sql_file: vav6_reheat_free_cool.sql
+    pandas_function: vav6
+    description: Reheat when cooling available
+    required_roles: [oa_t, reheat_valve_pct]
+    optional_roles: [clg_available]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      free_cool_oat:
+        label: Free-cool OAT
+        default: 65.0
+        min: 45.0
+        max: 75.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: FREE_COOL_OAT
+      reheat_pct:
+        label: Reheat frac
+        default: 0.25
+        min: 0.05
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: REHEAT_PCT
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: VAV-REHEAT
+    equipment_kinds: [vav]
+    sql_file: vav_reheat.sql
+    pandas_function: null
+    description: Reheat valve stuck / no temp rise
+    required_roles: [reheat_valve_pct, vav_discharge_t, vav_inlet_t, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      reheat_cmd:
+        label: Reheat open frac
+        default: 0.3
+        min: 0.1
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: REHEAT_CMD
+      min_rise:
+        label: Min temp rise
+        default: 3.0
+        min: 0.5
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIN_RISE
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 5.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+
+  - rule_id: VAV-AHU-LEAVE
+    equipment_kinds: [vav]
+    sql_file: vav_ahu_leave.sql
+    pandas_function: null
+    description: VAV leave vs parent AHU SAT (fedBy)
+    required_roles: [vav_discharge_t, ahu_sat, zone_flow]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      delta_f:
+        label: Leave Δ vs AHU SAT
+        default: 8.0
+        min: 2.0
+        max: 25.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: DELTA_F
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 5.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+
+  - rule_id: VAV-7
+    equipment_kinds: [vav]
+    sql_file: vav7_min_airflow.sql
+    pandas_function: null
+    description: Min airflow / fixed high flow
+    required_roles: [zone_flow]
+    optional_roles: [min_flow_sp, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      high_min_flow_sp:
+        label: High min-flow SP
+        default: 250.0
+        min: 50.0
+        max: 2000.0
+        step: 10.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: HIGH_MIN_FLOW_SP
+      flow_on_min:
+        label: Airflow-on min
+        default: 25.0
+        min: 0.0
+        max: 200.0
+        step: 5.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FLOW_ON_MIN
+      fixed_flow_hours:
+        label: Fixed-flow rolling window
+        default: 1.0
+        min: 0.25
+        max: 6.0
+        step: 0.25
+        unit: h
+        frontend_control: slider
+        sql_placeholder: FIXED_FLOW_HOURS
+      fixed_flow_max_std:
+        label: Fixed-flow max std
+        default: 15.0
+        min: 1.0
+        max: 80.0
+        step: 1.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FIXED_FLOW_MAX_STD
+      fixed_flow_min_mean:
+        label: Fixed-flow min mean
+        default: 200.0
+        min: 50.0
+        max: 2000.0
+        step: 10.0
+        unit: cfm
+        frontend_control: slider
+        sql_placeholder: FIXED_FLOW_MIN_MEAN
+
+  - rule_id: RESET-1
+    equipment_kinds: [ahu]
+    sql_file: reset1_sat_oa_reset.sql
+    pandas_function: reset1
+    description: SAT reset not tracking outdoor air
+    required_roles: [sat_sp, oa_t]
+    optional_roles: [fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: true
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      reset_err_f:
+        label: Reset error
+        default: 3.0
+        min: 0.5
+        max: 10.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: RESET_ERR_F
+      reset_sat_at_65:
+        label: SAT SP at 65F OAT
+        default: 52.0
+        min: 45.0
+        max: 65.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: RESET_SAT_AT_65
+      reset_slope:
+        label: Reset slope
+        default: 0.25
+        min: 0.05
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: RESET_SLOPE
+      reset_oat_ref:
+        label: Reset OAT ref
+        default: 65.0
+        min: 50.0
+        max: 80.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: RESET_OAT_REF
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+
+  - rule_id: CHW-NOLOAD-1
+    equipment_kinds: [chiller]
+    sql_file: chw_noload_1.sql
+    pandas_function: null
+    description: Chiller running with no building load
+    required_roles: []
+    optional_roles: [chiller_status, chiller_cmd, chw_pump_status, chw_pump_cmd, building_zone_load_satisfied, building_ahu_load_satisfied]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      load_sat_hi:
+        label: Load satisfaction high (no-load fault)
+        default: 0.5
+        min: 0.0
+        max: 1.0
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: LOAD_SAT_HI
+
+  - rule_id: CHW-1
+    equipment_kinds: [chiller]
+    sql_file: chw1_low_dt.sql
+    pandas_function: chw1
+    description: Low chilled-water ΔT
+    required_roles: [chw_supply_t, chw_return_t]
+    optional_roles: [chw_pump_cmd, pump_status, chiller_status, chiller_current, chiller_amps, chiller_power, chw_flow]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      min_dt:
+        label: Minimum delta-T
+        default: 4.0
+        min: 1.0
+        max: 12.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIN_DT
+
+  - rule_id: CHW-2
+    equipment_kinds: [chiller]
+    sql_file: chw2_dp_low.sql
+    pandas_function: null
+    description: DP below SP at max pump speed
+    required_roles: [chw_dp, chw_dp_sp, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      dp_margin:
+        label: DP margin
+        default: 2.2
+        min: 0.5
+        max: 6.0
+        step: 0.1
+        unit: psi
+        frontend_control: slider
+        sql_placeholder: DP_MARGIN
+      pump_hi:
+        label: Pump high-speed threshold
+        default: 0.87
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: PUMP_HI
+
+  - rule_id: CHW-3
+    equipment_kinds: [chiller]
+    sql_file: chw3_supply_band.sql
+    pandas_function: null
+    description: Plant supply temp outside deadband
+    required_roles: [chw_supply_t, chw_supply_sp, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      sp_band:
+        label: SP band
+        default: 2.2
+        min: 0.5
+        max: 6.0
+        step: 0.1
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SP_BAND
+
+  - rule_id: CHW-4
+    equipment_kinds: [chiller]
+    sql_file: chw4_flow_high.sql
+    pandas_function: null
+    description: Flow high at max pump
+    required_roles: [chw_flow, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      flow_hi:
+        label: Flow high
+        default: 1100.0
+        min: 200.0
+        max: 3000.0
+        step: 50.0
+        unit: gpm
+        frontend_control: slider
+        sql_placeholder: FLOW_HI
+      pump_hi:
+        label: Pump high-speed threshold
+        default: 0.87
+        min: 0.5
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: PUMP_HI
+
+  - rule_id: CW-OPT-1
+    equipment_kinds: [chiller, cooling_tower]
+    sql_file: cw_opt_1.sql
+    pandas_function: null
+    description: Condenser water not optimized vs wet-bulb
+    required_roles: [cw_supply_t, web_wb_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      cw_approach:
+        label: Design approach
+        default: 7.0
+        min: 3.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: CW_APPROACH
+      cw_slack:
+        label: Slack below target
+        default: 2.0
+        min: 0.5
+        max: 6.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: CW_SLACK
+
+  - rule_id: CW-APR-1
+    equipment_kinds: [chiller, cooling_tower]
+    sql_file: cw_apr_1.sql
+    pandas_function: null
+    description: High CW approach at full tower fan
+    required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      approach_max_f:
+        label: Max approach at full fan
+        default: 8.0
+        min: 5.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: APPROACH_MAX_F
+      tower_fan_hi:
+        label: Tower fan full-speed threshold
+        default: 0.95
+        min: 0.8
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: TOWER_FAN_HI
+
+  - rule_id: CW-FAN-1
+    equipment_kinds: [chiller, cooling_tower]
+    sql_file: cw_fan_1.sql
+    pandas_function: null
+    description: Excess tower fan energy vs wet-bulb limit
+    required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      cw_approach:
+        label: Design approach
+        default: 7.0
+        min: 3.0
+        max: 15.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: CW_APPROACH
+      excess_beyond_approach_f:
+        label: Excess beyond approach
+        default: 5.0
+        min: 2.0
+        max: 20.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: EXCESS_BEYOND_APPROACH_F
+      tower_fan_hi:
+        label: Tower fan full-speed threshold
+        default: 0.95
+        min: 0.8
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: TOWER_FAN_HI
+
+  - rule_id: HP-1
+    equipment_kinds: [heatpump]
+    sql_file: hp1_discharge_cold.sql
+    pandas_function: null
+    description: Discharge cold when heating
+    required_roles: [sat, zone_t, fan_cmd]
+    optional_roles: [compressor_status, fan_status]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 600
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      min_sat:
+        label: Min discharge SAT
+        default: 85.0
+        min: 70.0
+        max: 110.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: MIN_SAT
+      zone_cold:
+        label: Zone cold threshold
+        default: 69.0
+        min: 60.0
+        max: 72.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: ZONE_COLD
+
+  - rule_id: WX-1
+    equipment_kinds: [weather]
+    sql_file: wx1_oa_spike.sql
+    pandas_function: null
+    description: OA temperature spike
+    required_roles: [oa_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 300
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 300.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      spike_limit:
+        label: Spike limit
+        default: 16.0
+        min: 4.0
+        max: 40.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: SPIKE_LIMIT
+
+  - rule_id: TRIM-1
+    equipment_kinds: [ahu]
+    sql_file: trim1_duct_static.sql
+    pandas_function: null
+    description: Duct static trim advisory
+    required_roles: [duct_static]
+    optional_roles: [duct_static_sp, static_reset_request, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      duct_hi:
+        label: Duct static high
+        default: 1.35
+        min: 0.5
+        max: 3.0
+        step: 0.05
+        unit: in_wc
+        frontend_control: slider
+        sql_placeholder: DUCT_HI
+      request_lo:
+        label: Request sum low
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: count
+        frontend_control: slider
+        sql_placeholder: REQUEST_LO
+
+  - rule_id: TRIM-3
+    equipment_kinds: [boiler]
+    sql_file: trim3_hwst.sql
+    pandas_function: null
+    description: HWST trim advisory
+    required_roles: [hw_supply_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      hwst_hi:
+        label: HWST high
+        default: 160.0
+        min: 120.0
+        max: 200.0
+        step: 1.0
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: HWST_HI
+      request_lo:
+        label: Request sum low
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: count
+        frontend_control: slider
+        sql_placeholder: REQUEST_LO
+
+  - rule_id: TRIM-4
+    equipment_kinds: [chiller]
+    sql_file: trim4_chw_reset.sql
+    pandas_function: null
+    description: CHW plant reset advisory
+    required_roles: [chw_supply_t]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      minimum_active_coverage_pct:
+        label: Min active coverage
+        default: 5.0
+        min: 0.0
+        max: 100.0
+        step: 1.0
+        unit: pct
+        frontend_control: slider
+        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
+      startup_delay_min:
+        label: Startup delay
+        default: 0.0
+        min: 0.0
+        max: 60.0
+        step: 1.0
+        unit: min
+        frontend_control: slider
+        sql_placeholder: STARTUP_DELAY_MIN
+      require_operational_gate:
+        label: Require operational gate
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        frontend_control: slider
+        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      chw_lo:
+        label: CHWS low
+        default: 45.0
+        min: 35.0
+        max: 55.0
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: CHW_LO
+      request_lo:
+        label: Request sum low
+        default: 1.0
+        min: 0.0
+        max: 10.0
+        step: 0.5
+        unit: count
+        frontend_control: slider
+        sql_placeholder: REQUEST_LO
+
+  - rule_id: SCHED-1
+    equipment_kinds: [ahu, zone_other]
+    sql_file: sched1_unoccupied_runtime.sql
+    pandas_function: sched1
+    aliases: [excess_runtime]
+    description: >-
+      Excess / wasted unoccupied fan runtime when the zone is already in the
+      comfort band (optimal-start / schedule misconfig signal). Without zone_t,
+      falls back to unoccupied + fan_on (pandas sched1 base).
+    required_roles: [occ_mode, fan_status]
+    optional_roles: [zone_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      comfort_low_f:
+        label: Zone comfort low
+        default: 70.0
+        min: 50.0
+        max: 80.0
+        step: 0.5
+        unit: °F
+        frontend_control: slider
+        sql_placeholder: ZONE_T_LO
+      comfort_high_f:
+        label: Zone comfort high
+        default: 75.0
+        min: 55.0
+        max: 90.0
+        step: 0.5
+        unit: °F
+        frontend_control: slider
+        sql_placeholder: ZONE_T_HI
+
+  - rule_id: SCHED-247
+    equipment_kinds: [ahu, vav, zone_other, chiller, boiler, heatpump]
+    sql_file: sched247_always_on.sql
+    pandas_function: _sched247
+    description: Always-on fan or pump runtime
+    required_roles: []
+    optional_roles: [fan_status, pump_status, chiller_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P0
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 3600
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 3600.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      always_on_pct:
+        label: Always-on fraction
+        default: 0.95
+        min: 0.8
+        max: 1.0
+        step: 0.01
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: ALWAYS_ON_PCT
+
+  - rule_id: FCU-SENSOR-NULL
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_sensor_null.sql
+    pandas_function: fcu_sensor_null
+    description: Own zone setpoint present but zone temperature null for at least 90% of window
+    required_roles: [zone_air_temp_sp]
+    optional_roles: [zone_t]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      null_fraction:
+        label: Null fraction
+        default: 0.9
+        min: 0.5
+        max: 1
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: NULL_FRACTION
+  - rule_id: FCU-HTG-COIL
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_htg_coil.sql
+    pandas_function: fcu_htg_coil
+    description: Fan-on heating coil under-delivery
+    required_roles: [sat, zone_t, htg_valve_pct]
+    optional_roles: [clg_valve_pct, damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      valve_open:
+        label: Valve open threshold
+        default: 0.8
+        min: 0.5
+        max: 1
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: VALVE_OPEN
+      coil_delta_f:
+        label: Minimum heating rise
+        default: 5.4
+        min: 1
+        max: 20
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: COIL_DELTA_F
+  - rule_id: FCU-CLG-COIL
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_clg_coil.sql
+    pandas_function: fcu_clg_coil
+    description: Fan-on cooling coil under-delivery
+    required_roles: [sat, zone_t, clg_valve_pct, htg_valve_pct]
+    optional_roles: [damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      valve_open:
+        label: Valve open threshold
+        default: 0.8
+        min: 0.5
+        max: 1
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: VALVE_OPEN
+  - rule_id: FCU-VALVE-PASS-HTG
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_valve_pass_htg.sql
+    pandas_function: fcu_valve_pass_htg
+    description: Heating valve passing with both commands shut
+    required_roles: [sat, zone_t, htg_valve_pct, clg_valve_pct]
+    optional_roles: [damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      pass_delta_f:
+        label: Passing temperature rise
+        default: 5.4
+        min: 1
+        max: 20
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: PASS_DELTA_F
+  - rule_id: FCU-VALVE-PASS-CLG
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_valve_pass_clg.sql
+    pandas_function: fcu_valve_pass_clg
+    description: Cooling valve passing with both commands shut
+    required_roles: [sat, zone_t, htg_valve_pct, clg_valve_pct]
+    optional_roles: [damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      pass_delta_f:
+        label: Passing temperature drop
+        default: 5.4
+        min: 1
+        max: 20
+        step: 0.5
+        unit: degF
+        frontend_control: slider
+        sql_placeholder: PASS_DELTA_F
+  - rule_id: FCU-DAMPER-POS
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_damper_pos.sql
+    pandas_function: fcu_damper_pos
+    description: Damper feedback more than 15 points below command
+    required_roles: [damper_cmd, damper_pct]
+    optional_roles: [sat, zone_t, htg_valve_pct, clg_valve_pct, zone_co2, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      command_min:
+        label: Minimum command
+        default: 0.15
+        min: 0
+        max: 1
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: COMMAND_MIN
+      position_error:
+        label: Position error
+        default: 0.15
+        min: 0.05
+        max: 0.5
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: POSITION_ERROR
+  - rule_id: FCU-CO2-DAMPER
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_co2_damper.sql
+    pandas_function: fcu_co2_damper
+    description: High valid CO2 with low outdoor-air damper command
+    required_roles: [zone_co2, damper_cmd]
+    optional_roles: [sat, zone_t, htg_valve_pct, clg_valve_pct, damper_pct, fan_status, fan_cmd]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      co2_high_ppm:
+        label: High CO2
+        default: 1000
+        min: 600
+        max: 2000
+        step: 50
+        unit: ppm
+        frontend_control: slider
+        sql_placeholder: CO2_HIGH_PPM
+      damper_low:
+        label: Low damper command
+        default: 0.1
+        min: 0
+        max: 0.5
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: DAMPER_LOW
+  - rule_id: FCU-DEADBAND
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_deadband.sql
+    pandas_function: fcu_deadband
+    description: Heating/cooling pass-through setpoint deadband below 1 C
+    required_roles: [cooling_sp, heating_sp]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      deadband_c:
+        label: Minimum deadband
+        default: 1
+        min: 0
+        max: 5
+        step: 0.1
+        unit: degC
+        frontend_control: slider
+        sql_placeholder: DEADBAND_C
+  - rule_id: FCU-MODE-CYCLE
+    equipment_kinds: [zone_other, general, ahu]
+    sql_file: fcu_mode_cycle.sql
+    pandas_function: fcu_mode_cycle
+    description: Four or more heat/cool valve mode changes in window
+    required_roles: [htg_valve_pct, clg_valve_pct]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      mode_valve_min:
+        label: Active valve threshold
+        default: 0.1
+        min: 0
+        max: 0.5
+        step: 0.05
+        unit: frac
+        frontend_control: slider
+        sql_placeholder: MODE_VALVE_MIN
+      mode_changes:
+        label: Mode changes
+        default: 4
+        min: 1
+        max: 20
+        step: 1
+        unit: count
+        frontend_control: slider
+        sql_placeholder: MODE_CHANGES
+
+  - rule_id: UTIL-MONTHLY
+    equipment_kinds: [meter, ahu, heatpump]
+    sql_file: util_monthly_fault.sql
+    pandas_function: null
+    description: BAS monthly kWh vs utility monthly bills (% deviation)
+    required_roles: []
+    optional_roles: [kwh, electric_kw]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      util_pct_err:
+        label: Monthly kWh deviation
+        default: 10.0
+        min: 2.0
+        max: 50.0
+        step: 1.0
+        unit: '%'
+        frontend_control: slider
+        sql_placeholder: UTIL_PCT_ERR
+
+  - rule_id: UTIL-INTERVAL
+    equipment_kinds: [meter, ahu, heatpump]
+    sql_file: util_interval_fault.sql
+    pandas_function: null
+    description: BAS 15m vs utility interval (MAE threshold)
+    required_roles: []
+    optional_roles: [kwh, electric_kw]
+    output_columns: [equipment_id, fault_hours]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      util_interval_mae:
+        label: Interval MAE threshold
+        default: 5.0
+        min: 0.5
+        max: 100.0
+        step: 0.5
+        unit: kWh
+        frontend_control: slider
+        sql_placeholder: UTIL_INTERVAL_MAE

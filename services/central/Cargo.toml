@@ -1,26 +1,45 @@
 [package]
 name = "openfdd-central"
-version = "3.5.78"
+version = "3.6.0"
 edition = "2021"
 license = "MIT"
-description = "Open-FDD Central — MQTTS ingest, canonical Parquet historian, FDD, JWT REST + OpenAPI"
+description = "Open-FDD Central — MQTTS ingest, Timescale historian, SQL FDD, JWT REST + OpenAPI"
 
 [[bin]]
 name = "openfdd-central"
 path = "src/main.rs"
 
+# Wave-X default: Timescale-only product path (no DataFusion / Parquet writer).
+# Enable legacy-* only for pre-3.6.0 DF/Parquet bring-up tests.
+[features]
+default = []
+legacy-datafusion = [
+  "dep:datafusion",
+  "dep:fdd_sql",
+  "fdd_rules/legacy-datafusion",
+  "open_fdd_edge_prototype/legacy-datafusion",
+]
+legacy-parquet = ["legacy-datafusion"]
+
 [dependencies]
 openfdd_contracts = { path = "../../crates/openfdd_contracts", features = ["openapi"] }
 openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
-open_fdd_edge_prototype = { path = "../../edge" }
+open_fdd_edge_prototype = { path = "../../edge", default-features = false }
 fdd_core = { path = "../../crates/fdd_core" }
 fdd_rules = { path = "../../crates/fdd_rules" }
-fdd_sql = { path = "../../crates/fdd_sql" }
+fdd_sql = { path = "../../crates/fdd_sql", optional = true }
 fdd_resources = { path = "../../crates/fdd_resources" }
 fdd_store = { path = "../../crates/fdd_store" }
-datafusion.workspace = true
+fdd_tsdb = { path = "../../crates/fdd_tsdb" }
+datafusion = { workspace = true, optional = true }
 object_store.workspace = true
 url.workspace = true
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio",
+  "postgres",
+  "chrono",
+  "json",
+] }
 
 axum = { version = "0.8", features = ["macros"] }
 bytes = "1"

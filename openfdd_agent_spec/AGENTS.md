@@ -29,8 +29,8 @@ retest. Do not confuse those with this engineering OS.
 
 | Layer | Owns |
 | --- | --- |
-| `services/` + `sql_rules/` + `frontend/web` | **Product:** central DataFusion SQL FDD + analytics, React SPA (`openfdd-web`), fieldbus, mqtt |
-| `open_fdd/` | **PyPI libraries** for third-party tooling: ECM + pandas oracle (`rules` / `analytics` / `reporting`) — not the product runtime |
+| `services/` + `sql/` + `frontend/web` | **Product:** central Timescale historian + `.sql` FDD/analytics (Wave-X 3.6.0+), React SPA (`openfdd-web`), fieldbus, mqtt, timescale |
+| `open_fdd/` | **PyPI libraries** for third-party tooling + **test-only** pandas/DuckDB oracle — not the product runtime |
 | `mcp/` | Optional read-first MCP → central |
 | `edge/`, `os/` | Future concepts — **never delete** |
 | `docs/rules/cookbook/` | Dual expression cookbooks (SQL + pandas) + parity matrix |
@@ -57,10 +57,10 @@ retest. Do not confuse those with this engineering OS.
 0. **Low-RAM bensbench / machine port (always):** One agent only (no duplicate Task/subagents on the same train). Never local `docker build` of central/web/mqtt/fieldbus. Pull GHCR `sha-*` only; prune old images before pull. After ZAP/stress, `docker rm -f` leftover zap/MCP disposable containers — keep only needed fieldbus. Never run Vibe13 `cargo`/Ansible TX in parallel with Open-FDD ZAP/docker. Push often. Portable brain: [`docs/operations/recovery/AI_CONTEXT_HANDOFF.md`](../docs/operations/recovery/AI_CONTEXT_HANDOFF.md). **Wave K CLOSED / PINNED** (`sha-9c3e8b1` / **3.4.0**). **Wave L ACTIVE** — **3.5.x multi-client shared hosting** (tenant-partitioned Parquet + control plane — **not** Postgres time-series); L4 LIVE mode OFF; mid-wave = smoke + gates 11–14; **ONE** enhanced full stress at **L8**. Handbook: [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md) · [`PATCH_CYCLE.md`](../docs/operations/PATCH_CYCLE.md) · Cursor [`wave_l_shared_db_mega_master`](../../.cursor/plans/wave_l_shared_db_mega_master.plan.md).
 0b. **Local compile before Actions (always):** Before `git push` / `gh pr create` / `gh pr ready`, run the smallest local suite that would catch easy failures (`cargo fmt`/`clippy`/`test` for Rust crates touched; `npm test` / typecheck for SPA; `pytest tests/security` or qualification when those paths change). GitHub Actions are the second line — do not burn CI minutes on fmt/clippy/unit misses that local would have caught. Full protocol: [`PR_PROTOCOL.md`](PR_PROTOCOL.md) step 7.
 0c. **Agent takeover / single IDE:** If Codex or another agent is out of API budget, stalled, or the operator asks to run everything from one IDE, **take over** their open branch/PR (including security/profile work). Do not leave an open PR permanently “excluded” and do not open a competing PR on the same files. Prefer the existing worktree. Log takeover in [`SESSION_LOG.md`](SESSION_LOG.md) + PR body. Soft-OPEN license/field blockers stay Soft-OPEN.
-1. Product FDD + Overview analytics = **DataFusion SQL** on GHCR. Never silent pandas fallback in central.
-2. Pandas oracle stays forever on **PyPI** + cookbooks + vibe19 — never delete the pandas cookbook because production uses SQL.
-3. Never delete the SQL cookbook because pandas remains the oracle.
-4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) only. Overview = central `/api/analytics/*` (DataFusion) **tables + health matrices**. Plotly motor/mech/econ/BAS figures live on RCx (additive presets). Inspect radio hosts the CSV overlay. Browser → central Rust `/api` only — **no Python in the product request path**.
+1. Product FDD + Overview analytics = **Timescale + `sql/fdd/*.sql`** on GHCR (ADR-010). Never silent pandas fallback in central. Never dual-write. Never re-enable `legacy-datafusion` / `legacy-parquet` on the product tip.
+2. Pandas oracle stays forever on **PyPI** + cookbooks — **test-only** vs Timescale SQL; DuckDB harnesses only outside product containers.
+3. Never delete the SQL cookbook / `sql/fdd` pack because pandas remains the oracle.
+4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `compose.react.yml`) only. Overview = central `/api/analytics/*` (Timescale SQL) **tables + health matrices**. Plotly motor/mech/econ/BAS figures live on RCx (additive presets). Inspect radio hosts the CSV overlay. Browser → central Rust `/api` only — **no Python in the product request path**.
 5. **Internet-facing auth/UI hygiene:** Never put bench/dev secrets, credential file paths, default passwords, or JWT dumps on login or other product surfaces. Generic login errors only.
 6. Test containers on **`OPENFDD_IMAGE_TAG=nightly`**, but **pin/run `sha-*`** per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md).
 6b. **Rust lint hygiene:** eliminate `#[allow]` / `#![allow]` — see [`docs/RUST_LINT_HYGIENE.md`](docs/RUST_LINT_HYGIENE.md). Prefer fix / `_` / `?` / smallest-scope `#[expect]` + comment; never crate-wide `#![allow]`.

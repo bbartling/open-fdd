@@ -4,12 +4,17 @@ description = "SQL rule registry and batch execution"
 version.workspace = true
 edition.workspace = true
 
+# Wave-X: default has registry/params only. DataFusion runner behind legacy-datafusion.
+[features]
+default = []
+legacy-datafusion = ["dep:datafusion", "dep:fdd_sql"]
+
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
-datafusion.workspace = true
+datafusion = { workspace = true, optional = true }
 fdd_core = { path = "../fdd_core" }
-fdd_sql = { path = "../fdd_sql" }
+fdd_sql = { path = "../fdd_sql", optional = true }
 fdd_store = { path = "../fdd_store" }
 serde.workspace = true
 serde_yaml.workspace = true
@@ -19,3 +24,5 @@ walkdir.workspace = true
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["rt", "macros"] }
+datafusion = { workspace = true }
+fdd_sql = { path = "../fdd_sql" }

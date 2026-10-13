@@ -1,5 +1,25 @@
 # Open-FDD milestones
 
+## Wave-X — Timescale 3.6.0 hard cutover (2026-10-12) — Soft-OPEN tip (≠ FQ)
+
+**Plan (3.6.0):** [`.cursor/plans/timescale_sql_warehouse_greenfield_explore_20261012.plan.md`](.cursor/plans/timescale_sql_warehouse_greenfield_explore_20261012.plan.md)  
+**Next (3.6.1 patch train):** [`.cursor/plans/post_wave_x_361_patch_ghcr_20261012.plan.md`](.cursor/plans/post_wave_x_361_patch_ghcr_20261012.plan.md)  
+**ADR:** [`docs/architecture/adr-010-timescale-hard-cutover.md`](docs/architecture/adr-010-timescale-hard-cutover.md)  
+**Ops:** [`docs/operations/TIMESCALE_WAVE_X.md`](docs/operations/TIMESCALE_WAVE_X.md) · ART `/tmp/openfdd-softopen/3.6.0/` (`REBOOT_SAFE.md`, `DONE.md`)  
+**Pin tip:** **3.6.0** Timescale-only product historian + `sql/fdd` pack. Soft-OPEN ≠ FQ.  
+**Shape:** Rust BPS-core; fieldbus BACnet/Modbus unchanged → MQTTS → Timescale; Haystack optional; no dual-write; no DF/Parquet/Arrow product path. Default binary `legacy-*` OFF.
+
+| Track | Status | Notes |
+| --- | --- | --- |
+| Schema + compose + auto-seed | Soft-OPEN | `sql/schema`, `compose.timescale*.yml`, `scripts/timescale/auto_seed.py` |
+| Full `.sql` pack | LANDED (77) | warehouse handoff → `sql/fdd/` |
+| Ingest → Timescale | Soft-OPEN | `fdd_tsdb` + package COPY; MQTT soak deferred to 3.6.1 |
+| Analytics/FDD API → SQL | Soft-OPEN | Inspect/RCx/FDD series + run-now `timescale-sql`; FC1 hours MATCH W6 |
+| Pandas/DuckDB oracle | Soft-OPEN | test-only; FC1 pandas vs SQL ~9h stays Soft-OPEN |
+| Grok Soft-OPEN | HUMAN_PASTE | kickoff clipboard+open; prove = morning |
+| **Next** | **3.6.1** | bugfix patch cycle on Timescale tip only — see post_wave_x_361 plan |
+
+
 This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER.md) owns historical FQ/ops pins; [BUG_REPORT_WAVE_P](docs/operations/BUG_REPORT_WAVE_P.md) owns bugs and evidence. **Active product patch train (2026-10-03):** [`.cursor/plans/patch_all_open_issues_master.plan.md`](.cursor/plans/patch_all_open_issues_master.plan.md). Historical migration milestones remain under `docs/migration/` and `openfdd_agent_spec/`.
 
 ## Soft-OPEN 371 — memory completion + product smoke (2026-10-11) — IN PROGRESS

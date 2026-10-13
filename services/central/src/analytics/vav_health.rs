@@ -3,10 +3,9 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use fdd_sql::run_sql;
 use serde_json::{json, Value};
 
-use super::historian::{self, open_history_scan};
+use super::historian;
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
@@ -130,6 +129,27 @@ pub async fn vav_health_from_history(
         env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH}));
         return Ok(Some(env));
     };
+    #[cfg(not(feature = "legacy-datafusion"))]
+    {
+        let _ = (comfort_low, comfort_high, start, end);
+        // Wave-X: DF VAV matrix retired — Timescale plant_health covers /api/analytics/vav-health.
+        let q = AnalyticsQuery {
+            building_id: Some(bid.to_string()),
+            ..Default::default()
+        };
+        let mut env = envelope_with_engine(
+            QV_VAV_HEALTH,
+            &q,
+            vec!["Wave-X: use Timescale vav-health path (DataFusion retired)".into()],
+            "timescale-sql",
+        );
+        env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH, "building_id": bid}));
+        return Ok(Some(env));
+    }
+    #[cfg(feature = "legacy-datafusion")]
+    {
+    use fdd_sql::run_sql;
+    use super::historian::open_history_scan;
     let ctx = historian::new_bounded_session().map_err(|e| anyhow::anyhow!("{e}"))?;
     let (ok, _scan) = open_history_scan(&ctx, Some(bid)).await?;
     if !ok {
@@ -332,6 +352,7 @@ ORDER BY equipment_id
             .push("Run all rules to populate broken_box from VAV-3/4/5/7/REHEAT/AHU-LEAVE".into());
     }
     Ok(Some(env))
+    } // legacy-datafusion
 }
 
 #[cfg(test)]

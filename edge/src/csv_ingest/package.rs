@@ -7,8 +7,11 @@
 //!
 //! The package is materialized under `workspace/data/csv_buildings/<building_id>/`
 //! (the layout `fdd_store::ingest_building` already validates: manifest `grid_minutes`
-//! → poll_seconds, per-equipment `columns.csv` role map) and ingested to parquet so
-//! `/api/fdd/run` registry mode works immediately.
+//! → poll_seconds, per-equipment `columns.csv` role map).
+//!
+//! Wave-X 3.6.0: when `OPENFDD_DATABASE_URL` is set (or `OPENFDD_HISTORIAN=timescale`),
+//! Parquet ingest is **skipped** — central seeds Timescale from `package_root`
+//! (`needs_timescale_seed: true`). No dual-write.
 
 use crate::historian::store::workspace_dir;
 use fdd_core::haystack_point_to_role;
@@ -18,6 +21,17 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 pub const PACKAGE_SCHEMA: &str = "openfdd_package_v1";
+
+/// Wave-X: Timescale-only product path — do not write Parquet historian parts.
+pub fn timescale_historian_active() -> bool {
+    match std::env::var("OPENFDD_HISTORIAN") {
+        Ok(raw) => matches!(
+            raw.to_ascii_lowercase().as_str(),
+            "timescale" | "tsdb" | "postgres" | "sql"
+        ),
+        Err(_) => std::env::var("OPENFDD_DATABASE_URL").is_ok(),
+    }
+}
 
 fn env_cap_mb(name: &str, default_mb: u64) -> u64 {
     std::env::var(name)
@@ -893,6 +907,46 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }
     }
 
+    // Wave-X: Timescale sole historian — never dual-write Parquet.
+    if timescale_historian_active() {
+        let equipment_written = equipment_report.len();
+        if let Err(e) = crate::csv_ingest::dataset::register_package_dataset(
+            &building_id,
+            0,
+            equipment_written,
+            &json!({
+                "package_root": building_root.display().to_string(),
+                "historian": "timescale",
+            }),
+        ) {
+            warnings.push(format!("dataset registry: {e}"));
+        }
+        warnings.push(
+            "Wave-X: Parquet ingest skipped; central seeds Timescale from package_root".into(),
+        );
+        return json!({
+            "ok": true,
+            "schema_version": PACKAGE_SCHEMA,
+            "building_id": building_id,
+            "grid_minutes": manifest.grid_minutes,
+            "poll_seconds": manifest.grid_minutes.saturating_mul(60),
+            "timezone": manifest.timezone,
+            "equipment": equipment_report,
+            "equipment_written": equipment_written,
+            "total_rows": 0,
+            "total_ms": 0,
+            "out_dir": Value::Null,
+            "package_root": building_root.display().to_string(),
+            "session_config": session_config,
+            "utilities_written": utilities_written,
+            "semantic_meta": semantic_meta_result,
+            "warnings": warnings,
+            "historian": "timescale",
+            "needs_timescale_seed": true,
+            "dual_write": false,
+        });
+    }
+
     let out_dir = parquet_out_dir();
     match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
         Ok(report) => {
@@ -1159,6 +1213,21 @@ fn append_package_json(body: &Value) -> Value {
             }
             Err(e) => return json!({"ok": false, "error": e.to_string()}),
         }
+    }
+    if timescale_historian_active() {
+        return json!({
+            "ok": true,
+            "building_id": building_id,
+            "merges": merges,
+            "equipment_written": touched.len(),
+            "total_rows": 0,
+            "scoped_equipment": touched,
+            "historian": "timescale",
+            "needs_timescale_seed": true,
+            "package_root": building_root.display().to_string(),
+            "dual_write": false,
+            "warnings": ["Wave-X: Parquet append skipped; re-seed Timescale from package_root"],
+        });
     }
     let out_dir = parquet_out_dir();
     // Touched equipment only — no full-building / weather rebuild (M70-04).

@@ -496,10 +496,25 @@ fn analytics_http_max_inflight() -> usize {
 
 /// Public liveness body. No historian locks, so a wedged query cannot stall it.
 pub fn version_body() -> Value {
+    let historian = if crate::timescale_historian::historian_is_timescale() {
+        "timescale"
+    } else {
+        "parquet-legacy"
+    };
     json!({
         "ok": true,
         "service": "openfdd-central",
         "version": resolve_build_version(),
+        "historian": historian,
+        "fdd_engine": std::env::var("OPENFDD_FDD_ENGINE").unwrap_or_else(|_| {
+            if historian == "timescale" {
+                "postgres-sql".into()
+            } else {
+                "datafusion".into()
+            }
+        }),
+        "dual_write": false,
+        "wave": "Wave-X-3.6.0",
     })
 }
 
@@ -594,6 +609,21 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         uptime_secs,
         last_ingest_at,
         historian_present,
+        historian: Some(
+            if crate::timescale_historian::historian_is_timescale() {
+                "timescale".into()
+            } else {
+                "parquet-legacy".into()
+            },
+        ),
+        fdd_engine: Some(std::env::var("OPENFDD_FDD_ENGINE").unwrap_or_else(|_| {
+            if crate::timescale_historian::historian_is_timescale() {
+                "postgres-sql".into()
+            } else {
+                "datafusion".into()
+            }
+        })),
+        dual_write: false,
         memory_budget: Some(fdd_resources::memory_budget_json()),
     })
 }
@@ -3568,6 +3598,62 @@ pub async fn fdd_run(
         .and_then(|s| s.parse().ok())
         .filter(|&s| s > 0)
         .unwrap_or(900);
+
+    // Wave-X Timescale product path — never call DataFusion run_registry.
+    if crate::timescale_historian::historian_is_timescale() {
+        let mut ts_payload = payload.clone();
+        if let Some(obj) = ts_payload.as_object_mut() {
+            if let Some(eq) = body.equipment_id.clone() {
+                obj.insert("equipment_id".into(), json!(eq));
+            }
+        }
+        let mut result =
+            match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), async {
+                crate::timescale_product::run_fdd_registry(&ts_payload).await
+            })
+            .await
+            {
+                Ok(Ok(v)) => v,
+                Ok(Err(e)) => json!({
+                    "ok": false,
+                    "engine": "postgres-sql",
+                    "error": e.to_string(),
+                }),
+                Err(_) => json!({
+                    "ok": false,
+                    "timeout": true,
+                    "engine": "postgres-sql",
+                    "error": format!(
+                        "Timescale FDD run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS)"
+                    ),
+                }),
+            };
+        if let (Some(bid), Some(obj)) = (echo_building_id, result.as_object_mut()) {
+            let missing = obj.get("building_id").map(|v| v.is_null()).unwrap_or(true);
+            if missing {
+                obj.insert("building_id".into(), json!(bid));
+            }
+        }
+        if let Some(ref aid) = action_id {
+            let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+            let status = if ok { "ok" } else { "fail" };
+            let detail = json!({
+                "ok": ok,
+                "rules_succeeded": result.get("rules_succeeded"),
+                "rules_failed": result.get("rules_failed"),
+                "rules_skipped": result.get("rules_skipped"),
+                "total_ms": result.get("total_ms"),
+                "error": result.get("error"),
+                "engine": "postgres-sql",
+            });
+            let _ = actions::finish_action(aid, status, Some(detail));
+            if let Some(obj) = result.as_object_mut() {
+                obj.insert("action_id".into(), json!(aid));
+            }
+        }
+        return Ok(Json(result));
+    }
+
     let compute =
         fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::ManualFdd).ok_or_else(
             || {
@@ -3678,6 +3764,19 @@ pub async fn fdd_run(
 }
 
 pub async fn fdd_registry_rules() -> Json<Value> {
+    if crate::timescale_historian::historian_is_timescale() {
+        match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(tsdb) => match crate::timescale_analytics::fdd_registry(&tsdb).await {
+                Ok(v) => return Json(v),
+                Err(e) => {
+                    return Json(json!({"ok": false, "error": e.to_string(), "engine": "postgres-sql"}))
+                }
+            },
+            Err(e) => {
+                return Json(json!({"ok": false, "error": e.to_string(), "engine": "postgres-sql"}))
+            }
+        }
+    }
     Json(open_fdd_edge_prototype::fdd::registry_api::list_registry_rules())
 }
 
@@ -3710,6 +3809,18 @@ pub async fn fdd_equipment(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
+    }
+    if crate::timescale_historian::historian_is_timescale() {
+        return match crate::timescale_product::equipment_from_timescale(q.scoped()).await {
+            Ok(v) => Ok(Json(v)),
+            Err(e) => Ok(Json(json!({
+                "ok": false,
+                "error": e.to_string(),
+                "engine": "timescale-sql",
+                "equipment": [],
+                "count": 0,
+            }))),
+        };
     }
     let ctx = resolve_tenant_context(&state, &headers);
     let preferred = preferred_tenant_for_building_read(&ctx, q.scoped());
@@ -3793,6 +3904,25 @@ pub async fn fdd_series(
     let equipment_id = equipment_id.to_string();
     let rule_id = rule_id.to_string();
     let building_id = query.building_id.clone();
+    if crate::timescale_historian::historian_is_timescale() {
+        return match crate::timescale_product::fdd_series(
+            building_id.as_deref(),
+            &equipment_id,
+            &rule_id,
+        )
+        .await
+        {
+            Ok(v) => Ok(Json(v)),
+            Err(e) => Ok(Json(json!({
+                "ok": false,
+                "error": e.to_string(),
+                "engine": "timescale-sql",
+                "equipment_id": equipment_id,
+                "rule_id": rule_id,
+                "rows": [],
+            }))),
+        };
+    }
     let ctx = resolve_tenant_context(&state, &headers);
     let preferred = preferred_tenant_for_building_read(&ctx, building_id.as_deref());
     let result = tokio::task::spawn_blocking(move || {
@@ -4099,6 +4229,70 @@ pub async fn csv_import_package(
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package import task: {e}")}));
     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     if ok {
+        // Wave-X: seed Timescale from materialized package_root (no Parquet).
+        if crate::timescale_historian::historian_is_timescale()
+            && result
+                .get("needs_timescale_seed")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true)
+        {
+            if let (Some(bid), Some(root)) = (
+                result
+                    .get("building_id")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+                    .or(peeked_building.clone()),
+                result
+                    .get("package_root")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string),
+            ) {
+                let sql_root = std::env::var("OPENFDD_SQL_ROOT")
+                    .unwrap_or_else(|_| "sql/fdd".into());
+                match fdd_tsdb::Tsdb::connect_from_env().await {
+                    Ok(tsdb) => {
+                        match fdd_tsdb::seed_package_dir(
+                            &tsdb,
+                            std::path::Path::new(&root),
+                            &bid,
+                            std::path::Path::new(&sql_root),
+                        )
+                        .await
+                        {
+                            Ok(n) => {
+                                if let Some(obj) = result.as_object_mut() {
+                                    obj.insert("timescale_samples_upserted".into(), json!(n));
+                                    obj.insert("historian".into(), json!("timescale"));
+                                    obj.insert("dual_write".into(), json!(false));
+                                    obj.insert("total_rows".into(), json!(n));
+                                }
+                            }
+                            Err(e) => {
+                                return Err((
+                                    StatusCode::INTERNAL_SERVER_ERROR,
+                                    Json(json!({
+                                        "ok": false,
+                                        "error": format!("timescale package seed: {e:#}"),
+                                        "package_root": root,
+                                        "building_id": bid,
+                                    })),
+                                ));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        return Err((
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            Json(json!({
+                                "ok": false,
+                                "error": format!("timescale connect: {e}"),
+                                "hint": "OPENFDD_DATABASE_URL required",
+                            })),
+                        ));
+                    }
+                }
+            }
+        }
         // Promote package utilities_v1 → Metering fuel campus for the imported building.
         let _ =
             tokio::task::spawn_blocking(fuel::import::sync_campuses_from_package_utilities).await;
@@ -5464,6 +5658,19 @@ pub async fn fdd_schema_tables() -> Json<Value> {
 }
 
 pub async fn fdd_rules_list() -> Json<Value> {
+    if crate::timescale_historian::historian_is_timescale() {
+        match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(tsdb) => match crate::timescale_analytics::fdd_registry(&tsdb).await {
+                Ok(v) => return Json(v),
+                Err(e) => {
+                    return Json(json!({"ok": false, "error": e.to_string(), "engine": "postgres-sql"}))
+                }
+            },
+            Err(e) => {
+                return Json(json!({"ok": false, "error": e.to_string(), "engine": "postgres-sql"}))
+            }
+        }
+    }
     match serde_json::from_str(&open_fdd_edge_prototype::fdd::wires::api::list_rules_json()) {
         Ok(v) => Json(v),
         Err(e) => Json(json!({"ok": false, "error": e.to_string()})),
@@ -5949,6 +6156,12 @@ fn gate_analytics(
 macro_rules! cached_analytics {
     ($query_id:expr, $query_version:expr, $state:expr, $headers:expr, $req:expr, $compute:expr) => {{
         gate_analytics($state, $headers, &mut $req)?;
+        // Wave-X: never open DataFusion when Timescale is the product historian.
+        if crate::timescale_historian::historian_is_timescale() {
+            return crate::timescale_analytics::respond_query($query_id, $query_version, &$req)
+                .await
+                .map(Json);
+        }
         crate::analytics::result_cache::respond($query_id, $query_version, &$req, async || {
             $compute.await
         })
@@ -5961,6 +6174,31 @@ async fn analytics_runtime(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if crate::timescale_historian::historian_is_timescale() {
+        let building = req
+            .query
+            .building_id
+            .clone()
+            .unwrap_or_else(|| "BUILDING_50".into());
+        match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(tsdb) => match crate::timescale_analytics::motor_weekly_runtime(&tsdb, &building).await
+            {
+                Ok(v) => return Ok(Json(v)),
+                Err(e) => {
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
+                    ));
+                }
+            },
+            Err(e) => {
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
+                ));
+            }
+        }
+    }
     cached_analytics!(
         "runtime",
         analytics::QV_RUNTIME,
@@ -5991,6 +6229,32 @@ async fn analytics_ahu_health(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if crate::timescale_historian::historian_is_timescale() {
+        let building = req
+            .query
+            .building_id
+            .clone()
+            .unwrap_or_else(|| "BUILDING_50".into());
+        match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(tsdb) => {
+                match crate::timescale_analytics::plant_health_matrix(&tsdb, &building).await {
+                    Ok(v) => return Ok(Json(v)),
+                    Err(e) => {
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
+                        ));
+                    }
+                }
+            }
+            Err(e) => {
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
+                ));
+            }
+        }
+    }
     cached_analytics!(
         "ahu-health",
         analytics::plant_health::QV_AHU_HEALTH,
@@ -6201,6 +6465,30 @@ async fn analytics_bas_vs_web_oat(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if crate::timescale_historian::historian_is_timescale() {
+        let building = req
+            .query
+            .building_id
+            .clone()
+            .unwrap_or_else(|| "BUILDING_50".into());
+        match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(tsdb) => match crate::timescale_analytics::bas_vs_web_oat(&tsdb, &building).await {
+                Ok(v) => return Ok(Json(v)),
+                Err(e) => {
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
+                    ));
+                }
+            },
+            Err(e) => {
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
+                ));
+            }
+        }
+    }
     let ctx = resolve_tenant_context(&state, &headers);
     req.read_tenant_id = preferred_tenant_for_building_read(&ctx, req.query.building_id.as_deref());
     cached_analytics!(
@@ -7229,6 +7517,8 @@ mod version_tests {
         assert_eq!(receipt.message_id, message_id);
         assert_eq!(receipt.scope, "tenant=-;building=building");
 
+        #[cfg(feature = "legacy-datafusion")]
+        {
         let ctx = datafusion::prelude::SessionContext::new();
         fdd_sql::register_historian_building(&ctx, storage.path(), "building")
             .await
@@ -7255,6 +7545,7 @@ mod version_tests {
             .unwrap()
             .value(0);
         assert_eq!(value, 72.5);
+        }
         let shadow = central_state
             .edges
             .get("edge")
@@ -7748,6 +8039,8 @@ mod version_tests {
         );
         assert_eq!(*central_state.ingest_dup.lock().unwrap(), 0);
 
+        #[cfg(feature = "legacy-datafusion")]
+        {
         let ctx = datafusion::prelude::SessionContext::new();
         fdd_sql::register_historian_building(&ctx, storage.path(), "building")
             .await
@@ -7774,6 +8067,7 @@ mod version_tests {
             .unwrap()
             .value(0);
         assert_eq!(value, 72.5);
+        }
         central_server.abort();
     }
 

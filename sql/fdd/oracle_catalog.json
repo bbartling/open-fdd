@@ -1,0 +1,4417 @@
+[
+  {
+    "id": "SV-RANGE",
+    "title": "Sensor out of hard range",
+    "family": "sensor",
+    "equipment_kinds": [
+      "ahu",
+      "vav",
+      "chiller",
+      "boiler",
+      "weather",
+      "zone_other",
+      "heatpump"
+    ],
+    "required_roles": [],
+    "optional_roles": [],
+    "equation": "Any modeled sensor reads outside its physical hard range (e.g. OAT \u221260\u2013130\u00b0F, SAT 30\u2013150\u00b0F, CHWS 30\u201380\u00b0F).",
+    "summary": "Flags any modeled sensor reading outside its physical hard range.",
+    "confirm_seconds": 300,
+    "sensor_sweep": true,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "range_scale_temperature",
+        "label": "Temp range scale",
+        "unit": "x",
+        "min": 0.5,
+        "max": 2.0,
+        "step": 0.1,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "range_scale_humidity",
+        "label": "Humidity range scale",
+        "unit": "x",
+        "min": 0.5,
+        "max": 2.0,
+        "step": 0.1,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "range_scale_pressure",
+        "label": "Pressure range scale",
+        "unit": "x",
+        "min": 0.5,
+        "max": 2.0,
+        "step": 0.1,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "SV-FLATLINE",
+    "title": "Sensor flatline (stuck)",
+    "family": "sensor",
+    "equipment_kinds": [
+      "ahu",
+      "vav",
+      "chiller",
+      "boiler",
+      "weather",
+      "zone_other",
+      "heatpump"
+    ],
+    "required_roles": [],
+    "optional_roles": [],
+    "equation": "Sensor value unchanged (\u0394 \u2264 tolerance) across the flatline window \u2014 stuck / frozen sensor.",
+    "summary": "Flags a sensor that stays stuck within a tiny band for too long.",
+    "confirm_seconds": 300,
+    "sensor_sweep": true,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "flatline_tol",
+        "label": "Flatline tolerance",
+        "unit": "\u00b0F",
+        "min": 0.02,
+        "max": 1.0,
+        "step": 0.02,
+        "default": 0.1,
+        "direction": "stricter"
+      },
+      {
+        "key": "flatline_hours",
+        "label": "Flatline window",
+        "unit": "h",
+        "min": 0.5,
+        "max": 8.0,
+        "step": 0.5,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "SV-SPIKE",
+    "title": "Sensor rate-of-change spike",
+    "family": "sensor",
+    "equipment_kinds": [
+      "ahu",
+      "vav",
+      "chiller",
+      "boiler",
+      "weather",
+      "zone_other",
+      "heatpump"
+    ],
+    "required_roles": [],
+    "optional_roles": [],
+    "equation": "Sample-to-sample jump exceeds the physical spike limit for the sensor type.",
+    "summary": "Flags an implausible sample-to-sample jump for the sensor type.",
+    "confirm_seconds": 300,
+    "sensor_sweep": true,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "spike_scale",
+        "label": "Spike limit scale (global)",
+        "unit": "x",
+        "min": 0.25,
+        "max": 3.0,
+        "step": 0.25,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "spike_scale_temperature",
+        "label": "Temp spike scale",
+        "unit": "x",
+        "min": 0.25,
+        "max": 3.0,
+        "step": 0.25,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "spike_scale_humidity",
+        "label": "Humidity spike scale",
+        "unit": "x",
+        "min": 0.25,
+        "max": 3.0,
+        "step": 0.25,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "spike_scale_pressure",
+        "label": "Pressure spike scale",
+        "unit": "x",
+        "min": 0.25,
+        "max": 3.0,
+        "step": 0.25,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "SV-STALE",
+    "title": "Stale data (no fresh samples)",
+    "family": "sensor",
+    "equipment_kinds": [
+      "ahu",
+      "vav",
+      "chiller",
+      "boiler",
+      "weather",
+      "zone_other",
+      "heatpump"
+    ],
+    "required_roles": [],
+    "optional_roles": [],
+    "equation": "All modeled sensors unchanged over the stale window \u2014 data feed likely dropped.",
+    "summary": "Flags when all modeled sensors stop updating \u2014 likely a dead data feed.",
+    "confirm_seconds": 300,
+    "sensor_sweep": true,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "stale_hours",
+        "label": "Stale window",
+        "unit": "h",
+        "min": 0.5,
+        "max": 12.0,
+        "step": 0.5,
+        "default": 2.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "SV-RATE",
+    "title": "Context-aware sensor rate of change",
+    "family": "sensor",
+    "equipment_kinds": [
+      "ahu",
+      "vav",
+      "chiller",
+      "boiler",
+      "weather",
+      "zone_other",
+      "heatpump"
+    ],
+    "required_roles": [],
+    "optional_roles": [],
+    "equation": "Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults \u2014 tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.",
+    "summary": "Flags implausible sustained sensor rates of change using location- and state-aware thresholds.",
+    "confirm_seconds": 600,
+    "sensor_sweep": true,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "persistence_min",
+        "label": "Fault persistence",
+        "unit": "min",
+        "min": 5.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": ""
+      },
+      {
+        "key": "transition_window_min",
+        "label": "Transition window",
+        "unit": "min",
+        "min": 5.0,
+        "max": 60.0,
+        "step": 5.0,
+        "default": 20.0,
+        "direction": ""
+      },
+      {
+        "key": "max_gap_hours",
+        "label": "Max sample gap",
+        "unit": "h",
+        "min": 0.25,
+        "max": 6.0,
+        "step": 0.25,
+        "default": 2.0,
+        "direction": ""
+      },
+      {
+        "key": "design_flow",
+        "label": "Design flow (flow profiles)",
+        "unit": "cfm",
+        "min": 0.0,
+        "max": 100000.0,
+        "step": 100.0,
+        "default": 0.0,
+        "direction": ""
+      },
+      {
+        "key": "sensor_span",
+        "label": "Sensor span (flow/pressure)",
+        "unit": "eng",
+        "min": 0.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "default": 0.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "PID-HUNT-1",
+    "title": "Suspected control-output hunting",
+    "family": "control",
+    "equipment_kinds": [
+      "ahu",
+      "vav",
+      "chiller",
+      "boiler",
+      "heatpump"
+    ],
+    "required_roles": [],
+    "optional_roles": [
+      "loop-enabled"
+    ],
+    "equation": "Rolling 1h total variation of any 0\u2013100% control output (dampers, valves, fan speeds, heat/cool cmds) with span \u226520%, TV \u2265500 %\u00b7pts, \u22652.5 equivalent cycles, \u22654 reversals \u2014 suspected loop hunting (not proof of bad PID alone).",
+    "summary": "Flags control outputs that oscillate enough to suggest loop hunting.",
+    "confirm_seconds": 0,
+    "sensor_sweep": false,
+    "control_output_sweep": true,
+    "params": [
+      {
+        "key": "change_deadband_pct",
+        "label": "Ignore changes below",
+        "unit": "% out",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.5,
+        "default": 1.0,
+        "direction": ""
+      },
+      {
+        "key": "minimum_span_pct",
+        "label": "Minimum observed span",
+        "unit": "% out",
+        "min": 5.0,
+        "max": 100.0,
+        "step": 5.0,
+        "default": 20.0,
+        "direction": ""
+      },
+      {
+        "key": "total_variation_fault_pct",
+        "label": "Total travel threshold",
+        "unit": "%/h",
+        "min": 50.0,
+        "max": 2000.0,
+        "step": 50.0,
+        "default": 500.0,
+        "direction": ""
+      },
+      {
+        "key": "minimum_equivalent_cycles",
+        "label": "Min equivalent cycles",
+        "unit": "cyc/h",
+        "min": 0.5,
+        "max": 20.0,
+        "step": 0.5,
+        "default": 2.5,
+        "direction": ""
+      },
+      {
+        "key": "minimum_reversals",
+        "label": "Min direction reversals",
+        "unit": "count",
+        "min": 1,
+        "max": 40,
+        "step": 1,
+        "default": 4,
+        "direction": ""
+      },
+      {
+        "key": "minimum_coverage_pct",
+        "label": "Minimum data coverage",
+        "unit": "%",
+        "min": 25.0,
+        "max": 100.0,
+        "step": 5.0,
+        "default": 80.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC1",
+    "title": "Duct static below SP at full fan (GL36 A)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "duct-static-pressure",
+      "duct-static-pressure-sp",
+      "fan-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "DSP < DSPSP \u2212 \u03b5DSP AND VFDSPD \u2265 100% \u2212 \u03b5VFDSPD.",
+    "summary": "Flags duct static too low while the supply fan is near full speed.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_dsp",
+        "label": "Duct-static error \u03b5DSP (GL36 default 0.1 in.w.c.)",
+        "unit": "in. w.c.",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.12,
+        "direction": ""
+      },
+      {
+        "key": "eps_vfd_spd",
+        "label": "VFD speed error \u03b5VFDSPD (GL36 default 5%)",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.13,
+        "direction": ""
+      },
+      {
+        "key": "duct_static_err",
+        "label": "Legacy duct-static error (sets \u03b5DSP)",
+        "unit": "in. w.c.",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.12,
+        "direction": ""
+      },
+      {
+        "key": "fan_hi",
+        "label": "Legacy fan-high threshold (sets \u03b5VFDSPD)",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.87,
+        "direction": ""
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC2",
+    "title": "MAT below OAT/RAT envelope (GL36 B)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "mixed-air-temp",
+      "outside-air-temp",
+      "return-air-temp",
+      "fan-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "MATavg + \u03b5MAT < min(RATavg \u2212 \u03b5RAT, OATavg \u2212 \u03b5OAT).",
+    "summary": "Flags mixed-air temperature colder than the OAT/RAT mixing envelope allows.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_mat",
+        "label": "MAT sensor error \u03b5MAT (GL36 default 5\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_rat",
+        "label": "RAT sensor error \u03b5RAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_oat",
+        "label": "OAT sensor error \u03b5OAT (GL36 default 2\u00b0F local / 5\u00b0F global)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "fan_on_min",
+        "label": "Fan-on command threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC3",
+    "title": "MAT above OAT/RAT envelope (GL36 C)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "mixed-air-temp",
+      "outside-air-temp",
+      "return-air-temp",
+      "fan-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "MATavg \u2212 \u03b5MAT > max(RATavg + \u03b5RAT, OATavg + \u03b5OAT).",
+    "summary": "Flags mixed-air temperature warmer than the OAT/RAT mixing envelope allows.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_mat",
+        "label": "MAT sensor error \u03b5MAT (GL36 default 5\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_rat",
+        "label": "RAT sensor error \u03b5RAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_oat",
+        "label": "OAT sensor error \u03b5OAT (GL36 default 2\u00b0F local / 5\u00b0F global)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "fan_on_min",
+        "label": "Fan-on command threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC4",
+    "title": "PID hunting (operating-state oscillation)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-damper",
+      "cooling-valve",
+      "fan-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "\u0394OS > \u0394OSmax during the prior 60-minute moving window.",
+    "summary": "\u0394OS > \u0394OSmax during the prior 60-minute moving window.",
+    "confirm_seconds": 3600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "delta_os_max",
+        "label": "Max mode changes/hr \u0394OSmax (GL36 default 7)",
+        "unit": "count",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "default": 5,
+        "direction": "fewer"
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 60.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC5",
+    "title": "SAT cold when heating commanded (GL36 D)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "mixed-air-temp",
+      "fan-cmd",
+      "heating-valve"
+    ],
+    "optional_roles": [],
+    "equation": "SATavg + \u03b5SAT \u2264 MATavg \u2212 \u03b5MAT + \u0394TSF while heating is commanded.",
+    "summary": "SATavg + \u03b5SAT \u2264 MATavg \u2212 \u03b5MAT + \u0394TSF while heating is commanded.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_sat",
+        "label": "SAT sensor error \u03b5SAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_mat",
+        "label": "MAT sensor error \u03b5MAT (GL36 default 5\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "delta_supply_fan",
+        "label": "Supply-fan heat rise \u0394TSF (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.05,
+        "default": 0.55,
+        "direction": ""
+      },
+      {
+        "key": "htg_on_min",
+        "label": "Heating-command ON threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "fan_on_min",
+        "label": "Fan-on command threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC6",
+    "title": "Estimated OA fraction mismatch",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "mixed-air-temp",
+      "outside-air-temp",
+      "return-air-temp",
+      "vav-total-airflow"
+    ],
+    "optional_roles": [],
+    "equation": "|RATavg\u2212OATavg| \u2265 \u0394Tmin AND |estimated OA% \u2212 design min OA%| > \u03b5F.",
+    "summary": "|RATavg\u2212OATavg| \u2265 \u0394Tmin AND |estimated OA% \u2212 design min OA%| > \u03b5F.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_airflow",
+        "label": "Airflow error \u03b5F (GL36 default 30%)",
+        "unit": "frac",
+        "min": 0.05,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.15,
+        "direction": ""
+      },
+      {
+        "key": "delta_t_min",
+        "label": "Minimum |OAT\u2212RAT| \u0394Tmin (GL36 default 10\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 30.0,
+        "step": 0.5,
+        "default": 5.0,
+        "direction": ""
+      },
+      {
+        "key": "airflow_err",
+        "label": "Legacy OA-fraction error (sets \u03b5F)",
+        "unit": "frac",
+        "min": 0.05,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.15,
+        "direction": ""
+      },
+      {
+        "key": "oat_rat_delta_min",
+        "label": "Legacy OAT/RAT guard (sets \u0394Tmin)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 30.0,
+        "step": 0.5,
+        "default": 5.0,
+        "direction": ""
+      },
+      {
+        "key": "min_cfm_design",
+        "label": "Design min OA CFM",
+        "unit": "cfm",
+        "min": 500,
+        "max": 20000,
+        "step": 500,
+        "default": 5000,
+        "direction": ""
+      },
+      {
+        "key": "fan_on_min",
+        "label": "Fan-on command threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC7",
+    "title": "SAT low with full heating (GL36 E)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "discharge-air-temp-sp",
+      "fan-cmd",
+      "heating-valve"
+    ],
+    "optional_roles": [],
+    "equation": "SATavg < SATSP \u2212 \u03b5SAT AND HC \u2265 full-heating threshold.",
+    "summary": "SATavg < SATSP \u2212 \u03b5SAT AND HC \u2265 full-heating threshold.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_sat",
+        "label": "SAT sensor error \u03b5SAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "sat_err",
+        "label": "Legacy SAT error (sets \u03b5SAT)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.0,
+        "direction": ""
+      },
+      {
+        "key": "htg_full_min",
+        "label": "Full-heating threshold (GL36 99%)",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.9,
+        "direction": ""
+      },
+      {
+        "key": "fan_on_min",
+        "label": "Fan-on command threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC8",
+    "title": "SAT/MAT mismatch in economizer (GL36 F)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "mixed-air-temp",
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "|SATavg \u2212 \u0394TSF \u2212 MATavg| > \u221a(\u03b5SAT\u00b2 + \u03b5MAT\u00b2) in OS#2.",
+    "summary": "|SATavg \u2212 \u0394TSF \u2212 MATavg| > \u221a(\u03b5SAT\u00b2 + \u03b5MAT\u00b2) in OS#2.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_sat",
+        "label": "SAT sensor error \u03b5SAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_mat",
+        "label": "MAT sensor error \u03b5MAT (GL36 default 5\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "delta_supply_fan",
+        "label": "Supply-fan heat rise \u0394TSF (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.05,
+        "default": 0.55,
+        "direction": ""
+      },
+      {
+        "key": "econ_min_pos",
+        "label": "Economizer minimum-position threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.05,
+        "direction": ""
+      },
+      {
+        "key": "clg_inactive_max",
+        "label": "Cooling-command inactive ceiling",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.1,
+        "direction": "fewer"
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "supply_tol",
+        "label": "Legacy SAT tolerance master (sets \u03b5SAT)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC9",
+    "title": "OAT too warm for free cooling (GL36 G)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-temp",
+      "discharge-air-temp-sp",
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "OATavg \u2212 \u03b5OAT > SATSP \u2212 \u0394TSF + \u03b5SAT in OS#2.",
+    "summary": "OATavg \u2212 \u03b5OAT > SATSP \u2212 \u0394TSF + \u03b5SAT in OS#2.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_oat",
+        "label": "OAT sensor error \u03b5OAT (GL36 default 2\u00b0F local / 5\u00b0F global)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_sat",
+        "label": "SAT sensor error \u03b5SAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "delta_supply_fan",
+        "label": "Supply-fan heat rise \u0394TSF (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.05,
+        "default": 0.55,
+        "direction": ""
+      },
+      {
+        "key": "econ_min_pos",
+        "label": "Economizer minimum-position threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.05,
+        "direction": ""
+      },
+      {
+        "key": "clg_inactive_max",
+        "label": "Cooling-command inactive ceiling",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.1,
+        "direction": "fewer"
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC10",
+    "title": "OAT/MAT mismatch + mech cooling (GL36 H)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "mixed-air-temp",
+      "outside-air-temp",
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "|MATavg \u2212 OATavg| > \u221a(\u03b5MAT\u00b2 + \u03b5OAT\u00b2) in OS#3.",
+    "summary": "|MATavg \u2212 OATavg| > \u221a(\u03b5MAT\u00b2 + \u03b5OAT\u00b2) in OS#3.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_mat",
+        "label": "MAT sensor error \u03b5MAT (GL36 default 5\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_oat",
+        "label": "OAT sensor error \u03b5OAT (GL36 default 2\u00b0F local / 5\u00b0F global)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "econ_full_open",
+        "label": "Economizer full-open threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.9,
+        "direction": ""
+      },
+      {
+        "key": "clg_on_min",
+        "label": "Cooling-command ON threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC11",
+    "title": "OAT/MAT mismatch economizer-only (GL36 I)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-temp",
+      "discharge-air-temp-sp",
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "OATavg + \u03b5OAT < SATSP \u2212 \u0394TSF \u2212 \u03b5SAT in OS#3.",
+    "summary": "OATavg + \u03b5OAT < SATSP \u2212 \u0394TSF \u2212 \u03b5SAT in OS#3.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_oat",
+        "label": "OAT sensor error \u03b5OAT (GL36 default 2\u00b0F local / 5\u00b0F global)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_sat",
+        "label": "SAT sensor error \u03b5SAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "delta_supply_fan",
+        "label": "Supply-fan heat rise \u0394TSF (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.05,
+        "default": 0.55,
+        "direction": ""
+      },
+      {
+        "key": "econ_full_open",
+        "label": "Economizer full-open threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.9,
+        "direction": ""
+      },
+      {
+        "key": "clg_on_min",
+        "label": "Cooling-command ON threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC12",
+    "title": "SAT above blend in cooling (GL36 J)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "mixed-air-temp",
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "SATavg \u2212 \u03b5SAT \u2212 \u0394TSF \u2265 MATavg + \u03b5MAT in OS#3/OS#4.",
+    "summary": "SATavg \u2212 \u03b5SAT \u2212 \u0394TSF \u2265 MATavg + \u03b5MAT in OS#3/OS#4.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_sat",
+        "label": "SAT sensor error \u03b5SAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_mat",
+        "label": "MAT sensor error \u03b5MAT (GL36 default 5\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "delta_supply_fan",
+        "label": "Supply-fan heat rise \u0394TSF (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.05,
+        "default": 0.55,
+        "direction": ""
+      },
+      {
+        "key": "econ_min_pos",
+        "label": "Economizer minimum-position threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.05,
+        "direction": ""
+      },
+      {
+        "key": "econ_full_open",
+        "label": "Economizer full-open threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.9,
+        "direction": ""
+      },
+      {
+        "key": "clg_on_min",
+        "label": "Cooling-command ON threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "supply_tol",
+        "label": "Legacy SAT tolerance master (sets \u03b5SAT)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC13",
+    "title": "SAT above SP at full cooling (GL36 K)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "discharge-air-temp-sp",
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "SATavg > SATSP + \u03b5SAT AND CC \u2265 full-cooling threshold in OS#3/OS#4.",
+    "summary": "SATavg > SATSP + \u03b5SAT AND CC \u2265 full-cooling threshold in OS#3/OS#4.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_sat",
+        "label": "SAT sensor error \u03b5SAT (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "sat_err",
+        "label": "Legacy SAT error (sets \u03b5SAT)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.0,
+        "direction": ""
+      },
+      {
+        "key": "clg_full_min",
+        "label": "Full-cooling threshold (GL36 99%)",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "econ_min_pos",
+        "label": "Economizer minimum-position threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.05,
+        "direction": ""
+      },
+      {
+        "key": "econ_full_open",
+        "label": "Economizer full-open threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.9,
+        "direction": ""
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC14",
+    "title": "CHW coil \u0394T when inactive (GL36 L)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "cooling-coil-entering-temp",
+      "cooling-coil-leaving-temp",
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "Cooling-coil \u0394T \u2265 \u221a(\u03b5CCET\u00b2 + \u03b5CCLT\u00b2) + \u0394TSF while coil should be inactive.",
+    "summary": "Cooling-coil \u0394T \u2265 \u221a(\u03b5CCET\u00b2 + \u03b5CCLT\u00b2) + \u0394TSF while coil should be inactive.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_ccet",
+        "label": "Cooling-coil entering sensor error \u03b5CCET",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_cclt",
+        "label": "Cooling-coil leaving sensor error \u03b5CCLT",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "delta_supply_fan",
+        "label": "Supply-fan heat rise \u0394TSF (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.05,
+        "default": 0.55,
+        "direction": ""
+      },
+      {
+        "key": "econ_min_pos",
+        "label": "Economizer minimum-position threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.05,
+        "direction": ""
+      },
+      {
+        "key": "clg_inactive_max",
+        "label": "Cooling-command inactive ceiling",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.1,
+        "direction": "fewer"
+      },
+      {
+        "key": "htg_on_min",
+        "label": "Heating-command ON threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FC15",
+    "title": "HW coil \u0394T when inactive (GL36 M)",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "heating-coil-entering-temp",
+      "heating-coil-leaving-temp",
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "Heating-coil \u0394T \u2265 \u221a(\u03b5HCET\u00b2 + \u03b5HCLT\u00b2) + \u0394TSF while coil should be inactive.",
+    "summary": "Heating-coil \u0394T \u2265 \u221a(\u03b5HCET\u00b2 + \u03b5HCLT\u00b2) + \u0394TSF while coil should be inactive.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "eps_hcet",
+        "label": "Heating-coil entering sensor error \u03b5HCET",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "eps_hclt",
+        "label": "Heating-coil leaving sensor error \u03b5HCLT",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "delta_supply_fan",
+        "label": "Supply-fan heat rise \u0394TSF (GL36 default 2\u00b0F)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.05,
+        "default": 0.55,
+        "direction": ""
+      },
+      {
+        "key": "econ_min_pos",
+        "label": "Economizer minimum-position threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.05,
+        "direction": ""
+      },
+      {
+        "key": "econ_full_open",
+        "label": "Economizer full-open threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.9,
+        "direction": ""
+      },
+      {
+        "key": "clg_inactive_max",
+        "label": "Cooling-command inactive ceiling",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.1,
+        "direction": "fewer"
+      },
+      {
+        "key": "clg_on_min",
+        "label": "Cooling-command ON threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.25,
+        "step": 0.01,
+        "default": 0.01,
+        "direction": ""
+      },
+      {
+        "key": "mix_tol",
+        "label": "Legacy master sensor tolerance (sets all \u03b5 values)",
+        "unit": "\u00b0F",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.25,
+        "default": 1.15,
+        "direction": "fewer"
+      },
+      {
+        "key": "mode_delay_min",
+        "label": "Mode-change suspension (GL36 default 30)",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "AHU-SATDEV",
+    "title": "SAT deviation from setpoint",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "discharge-air-temp-sp"
+    ],
+    "optional_roles": [],
+    "equation": "|SAT \u2212 SAT SP| > 5\u00b0F.",
+    "summary": "|SAT \u2212 SAT SP| > 5\u00b0F.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "sat_dev_err",
+        "label": "SAT deviation",
+        "unit": "\u00b0F",
+        "min": 1.0,
+        "max": 15.0,
+        "step": 0.5,
+        "default": 5.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "AHU-DUCTHI",
+    "title": "Duct static pressure high",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "duct-static-pressure",
+      "duct-static-pressure-sp"
+    ],
+    "optional_roles": [],
+    "equation": "Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).",
+    "summary": "Duct static > static SP + margin.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "duct_high_margin",
+        "label": "High margin",
+        "unit": "in. w.c.",
+        "min": 0.05,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.25,
+        "direction": "fewer"
+      },
+      {
+        "key": "pressure_on_min",
+        "label": "Pressure-on evidence",
+        "unit": "in. w.c.",
+        "min": 0.05,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.2,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "AHU-SIMUL",
+    "title": "Heating and cooling simultaneous",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "heating-valve",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "Heating valve > 10% AND cooling valve > 10% at once.",
+    "summary": "Heating valve > 10% AND cooling valve > 10% at once.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "valve_open_pct",
+        "label": "Valve open threshold",
+        "unit": "frac",
+        "min": 0.05,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.1,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "OAT-METEO",
+    "title": "BAS outdoor-air sensor vs Open-Meteo",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-temp",
+      "web-outside-air-temp"
+    ],
+    "optional_roles": [],
+    "equation": "BAS OAT sensor differs from Open-Meteo dry bulb by more than 5\u00b0F.",
+    "summary": "Flags large disagreement between BAS outdoor-air temp and web weather OAT.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "oat_err",
+        "label": "Max OAT disagreement",
+        "unit": "\u00b0F",
+        "min": 2.0,
+        "max": 20.0,
+        "step": 0.5,
+        "default": 5.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "ECON-1",
+    "title": "Economizer stuck closed",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "fan-cmd",
+      "outside-air-damper",
+      "outside-air-temp"
+    ],
+    "optional_roles": [],
+    "equation": "Fan on, OA damper < 5%, OAT > 55\u00b0F (should be economizing).",
+    "summary": "Fan on, OA damper < 5%, OAT > 55\u00b0F (should be economizing).",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "econ1_oat_min",
+        "label": "Favorable OAT",
+        "unit": "\u00b0F",
+        "min": 45.0,
+        "max": 70.0,
+        "step": 1.0,
+        "default": 55.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "ECON-2",
+    "title": "Economizing when outdoor unfavorable",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-temp",
+      "outside-air-damper"
+    ],
+    "optional_roles": [],
+    "equation": "OAT > 63\u00b0F AND OA damper > 42% (should be at minimum).",
+    "summary": "OAT > 63\u00b0F AND OA damper > 42% (should be at minimum).",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "econ2_oat_hi",
+        "label": "OAT high cutoff",
+        "unit": "\u00b0F",
+        "min": 55.0,
+        "max": 80.0,
+        "step": 1.0,
+        "default": 63.0,
+        "direction": ""
+      },
+      {
+        "key": "econ2_damper",
+        "label": "Damper open frac",
+        "unit": "frac",
+        "min": 0.2,
+        "max": 0.9,
+        "step": 0.02,
+        "default": 0.42,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "ECON-3",
+    "title": "Mech cooling without integrated economizer",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-damper",
+      "cooling-valve"
+    ],
+    "optional_roles": [
+      "web-outside-air-temp",
+      "web-outside-air-dewpoint",
+      "web-outside-air-humidity"
+    ],
+    "equation": "Web free-cooling opportunity: 60\u00b0F \u2264 dry-bulb < 72\u00b0F AND dewpoint < 60\u00b0F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults \u2014 not code limits.",
+    "summary": "Flags mechanical cooling during web free-cool weather when the OA damper is not fully integrated.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "econ3_db_min",
+        "label": "Free-cool OA dry-bulb min",
+        "unit": "\u00b0F",
+        "min": 50.0,
+        "max": 68.0,
+        "step": 1.0,
+        "default": 60.0,
+        "direction": ""
+      },
+      {
+        "key": "econ3_db_max",
+        "label": "Free-cool OA dry-bulb max",
+        "unit": "\u00b0F",
+        "min": 65.0,
+        "max": 80.0,
+        "step": 1.0,
+        "default": 72.0,
+        "direction": ""
+      },
+      {
+        "key": "econ3_dp_max",
+        "label": "Free-cool OA dew point max",
+        "unit": "\u00b0F",
+        "min": 45.0,
+        "max": 68.0,
+        "step": 1.0,
+        "default": 60.0,
+        "direction": ""
+      },
+      {
+        "key": "econ3_damper_hi",
+        "label": "Integrated economizer damper",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.02,
+        "default": 0.9,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "ECON-4",
+    "title": "Low estimated OA fraction",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "mixed-air-temp",
+      "return-air-temp",
+      "outside-air-temp",
+      "fan-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "Fan on, |RAT\u2212OAT| > 2.2\u00b0F, estimated OA fraction < 21%.",
+    "summary": "Fan on, |RAT\u2212OAT| > 2.2\u00b0F, estimated OA fraction < 21%.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "oa_min_pct",
+        "label": "Min OA fraction",
+        "unit": "%",
+        "min": 5.0,
+        "max": 40.0,
+        "step": 1.0,
+        "default": 21.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "ECON-5",
+    "title": "Preheat over-conditioning",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "preheat-leaving-temp",
+      "discharge-air-temp-sp",
+      "outside-air-temp",
+      "heating-valve"
+    ],
+    "optional_roles": [],
+    "equation": "Preheat leaving air > 2.2\u00b0F above target while preheat active.",
+    "summary": "Preheat leaving air > 2.2\u00b0F above target while preheat active.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "preheat_over_f",
+        "label": "Preheat over \u0394T",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 8.0,
+        "step": 0.1,
+        "default": 2.2,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "ECON-6",
+    "title": "Economizing in freezing weather",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-damper"
+    ],
+    "optional_roles": [
+      "web-outside-air-temp"
+    ],
+    "equation": "Web dry-bulb < 25\u00b0F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.",
+    "summary": "Flags an AHU economizing above min-OA when web outdoor air is below freezing (25\u00b0F).",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "econ6_oat_max_f",
+        "label": "Winter OAT ceiling",
+        "unit": "\u00b0F",
+        "min": 15.0,
+        "max": 40.0,
+        "step": 1.0,
+        "default": 25.0,
+        "direction": ""
+      },
+      {
+        "key": "econ6_damper_max",
+        "label": "Winter min-OA damper",
+        "unit": "frac",
+        "min": 0.05,
+        "max": 0.5,
+        "step": 0.01,
+        "default": 0.25,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "ECON-7",
+    "title": "Economizer OK but not economizing",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-damper"
+    ],
+    "optional_roles": [
+      "web-outside-air-temp",
+      "web-outside-air-dewpoint",
+      "web-outside-air-humidity",
+      "cooling-valve",
+      "compressor-status",
+      "dx-cool-cmd"
+    ],
+    "equation": "Economizer-OK web weather: dew point < 60\u00b0F AND dry-bulb < 72\u00b0F (above a 35\u00b0F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 60\u00b0F DB (MECH-OAT-1) and mech + integrated economizer in the 60\u201372\u00b0F band (ECON-3). All thresholds are imperial sliders.",
+    "summary": "Flags cooling demand during economizer-OK web weather (dew point < 60\u00b0F, dry-bulb < 72\u00b0F) while the OA damper is not economizing.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "econ7_db_min",
+        "label": "Econ-OK dry-bulb floor (freeze guard)",
+        "unit": "\u00b0F",
+        "min": 20.0,
+        "max": 50.0,
+        "step": 1.0,
+        "default": 35.0,
+        "direction": ""
+      },
+      {
+        "key": "econ7_db_max",
+        "label": "Econ-OK dry-bulb max",
+        "unit": "\u00b0F",
+        "min": 65.0,
+        "max": 80.0,
+        "step": 1.0,
+        "default": 72.0,
+        "direction": ""
+      },
+      {
+        "key": "econ7_dp_max",
+        "label": "Econ-OK dew point max",
+        "unit": "\u00b0F",
+        "min": 45.0,
+        "max": 68.0,
+        "step": 1.0,
+        "default": 60.0,
+        "direction": ""
+      },
+      {
+        "key": "econ7_damper_min",
+        "label": "Economizing damper threshold",
+        "unit": "frac",
+        "min": 0.2,
+        "max": 0.9,
+        "step": 0.02,
+        "default": 0.5,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "MECH-OAT-1",
+    "title": "Mechanical cooling below 60\u00b0F web OAT",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu",
+      "chiller",
+      "heatpump"
+    ],
+    "required_roles": [],
+    "optional_roles": [
+      "web-outside-air-temp",
+      "compressor-status",
+      "chiller-status",
+      "chw-pump-status",
+      "dx-cool-cmd"
+    ],
+    "equation": "Proven DX/chiller mechanical cooling while web dry-bulb < 60\u00b0F. Uses compressor/chiller/pump/amps/power proof \u2014 not AHU cooling-valve alone. Below 60\u00b0F is outside the free-cool + integrated economizer band.",
+    "summary": "Flags proven DX or chiller cooling while web dry-bulb is below 60\u00b0F.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "mech_oat_max_f",
+        "label": "Mech-cool OAT ceiling",
+        "unit": "\u00b0F",
+        "min": 45.0,
+        "max": 65.0,
+        "step": 1.0,
+        "default": 60.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CHW-NOLOAD-1",
+    "title": "Chiller running with no building load",
+    "family": "plant",
+    "equipment_kinds": [
+      "chiller"
+    ],
+    "required_roles": [],
+    "optional_roles": [
+      "chiller-status",
+      "chw-pump-status",
+      "compressor-status",
+      "building-zone-load-satisfied",
+      "building-ahu-load-satisfied"
+    ],
+    "equation": "Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.",
+    "summary": "Flags a chiller running while mapped zones or AHU SAT show the building is satisfied.",
+    "confirm_seconds": 1800,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "comfort_low_f",
+        "label": "Comfort low",
+        "unit": "\u00b0F",
+        "min": 60.0,
+        "max": 78.0,
+        "step": 0.5,
+        "default": 70.0,
+        "direction": ""
+      },
+      {
+        "key": "comfort_high_f",
+        "label": "Comfort high",
+        "unit": "\u00b0F",
+        "min": 68.0,
+        "max": 85.0,
+        "step": 0.5,
+        "default": 75.0,
+        "direction": ""
+      },
+      {
+        "key": "sat_band_f",
+        "label": "AHU SAT\u2248SP band",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 6.0,
+        "step": 0.5,
+        "default": 2.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 30.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-SENSOR-NULL",
+    "title": "Missing FCU zone sensor",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "zone-air-temp-sp"
+    ],
+    "optional_roles": [
+      "zone-air-temp"
+    ],
+    "equation": "Own zone setpoint is present while zone temperature is null for at least 90% of the window.",
+    "summary": "Own zone setpoint is present while zone temperature is null for at least 90% of the window.",
+    "confirm_seconds": 0,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "null_fraction",
+        "label": "Null fraction",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.9,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-HTG-COIL",
+    "title": "FCU heating coil under-delivery",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "zone-air-temp",
+      "heating-valve"
+    ],
+    "optional_roles": [
+      "fan-status",
+      "fan-cmd"
+    ],
+    "equation": "Fan on and heating valve \u226580%, but discharge air is less than 5.4\u00b0F above zone temperature.",
+    "summary": "Fan on and heating valve \u226580%, but discharge air is less than 5.4\u00b0F above zone temperature.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "valve_open",
+        "label": "Valve open threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.8,
+        "direction": ""
+      },
+      {
+        "key": "coil_delta_f",
+        "label": "Minimum heating rise",
+        "unit": "\u00b0F",
+        "min": 1.0,
+        "max": 20.0,
+        "step": 0.5,
+        "default": 5.4,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-CLG-COIL",
+    "title": "FCU cooling coil under-delivery",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "zone-air-temp",
+      "cooling-valve",
+      "heating-valve"
+    ],
+    "optional_roles": [
+      "fan-status",
+      "fan-cmd"
+    ],
+    "equation": "Fan on, cooling valve \u226580%, and heating shut, but discharge air is not below zone temperature.",
+    "summary": "Fan on, cooling valve \u226580%, and heating shut, but discharge air is not below zone temperature.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "valve_open",
+        "label": "Valve open threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.8,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-VALVE-PASS-HTG",
+    "title": "FCU heating valve passing",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "zone-air-temp",
+      "heating-valve",
+      "cooling-valve"
+    ],
+    "optional_roles": [
+      "fan-status",
+      "fan-cmd"
+    ],
+    "equation": "Fan on and both valves shut, but discharge air exceeds zone temperature by more than 5.4\u00b0F.",
+    "summary": "Fan on and both valves shut, but discharge air exceeds zone temperature by more than 5.4\u00b0F.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "pass_delta_f",
+        "label": "Passing temperature rise",
+        "unit": "\u00b0F",
+        "min": 1.0,
+        "max": 20.0,
+        "step": 0.5,
+        "default": 5.4,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-VALVE-PASS-CLG",
+    "title": "FCU cooling valve passing",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "zone-air-temp",
+      "heating-valve",
+      "cooling-valve"
+    ],
+    "optional_roles": [
+      "fan-status",
+      "fan-cmd"
+    ],
+    "equation": "Fan on and both valves shut, but zone temperature exceeds discharge air by more than 5.4\u00b0F.",
+    "summary": "Fan on and both valves shut, but zone temperature exceeds discharge air by more than 5.4\u00b0F.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "pass_delta_f",
+        "label": "Passing temperature drop",
+        "unit": "\u00b0F",
+        "min": 1.0,
+        "max": 20.0,
+        "step": 0.5,
+        "default": 5.4,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-DAMPER-POS",
+    "title": "FCU damper command/position mismatch",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "damper-cmd",
+      "damper"
+    ],
+    "optional_roles": [
+      "fan-status",
+      "fan-cmd"
+    ],
+    "equation": "Fan on and damper command \u226515%, but feedback is more than 15 percentage points below command.",
+    "summary": "Fan on and damper command \u226515%, but feedback is more than 15 percentage points below command.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "command_min",
+        "label": "Minimum damper command",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.15,
+        "direction": ""
+      },
+      {
+        "key": "position_error",
+        "label": "Position error",
+        "unit": "frac",
+        "min": 0.05,
+        "max": 0.5,
+        "step": 0.05,
+        "default": 0.15,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-CO2-DAMPER",
+    "title": "FCU high CO2 with low outdoor-air command",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "zone-co2",
+      "damper-cmd"
+    ],
+    "optional_roles": [
+      "fan-status",
+      "fan-cmd"
+    ],
+    "equation": "Fan on and valid CO\u2082 exceeds 1000 ppm while damper command remains below 10%.",
+    "summary": "Fan on and valid CO\u2082 exceeds 1000 ppm while damper command remains below 10%.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "co2_high_ppm",
+        "label": "High CO\u2082",
+        "unit": "ppm",
+        "min": 600,
+        "max": 2000,
+        "step": 50,
+        "default": 1000,
+        "direction": ""
+      },
+      {
+        "key": "damper_low",
+        "label": "Low damper command",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.05,
+        "default": 0.1,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-DEADBAND",
+    "title": "FCU heat/cool deadband collapse",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "cooling-sp",
+      "heating-sp"
+    ],
+    "optional_roles": [],
+    "equation": "Pass-through cooling setpoint minus heating setpoint is less than 1\u00b0C.",
+    "summary": "Pass-through cooling setpoint minus heating setpoint is less than 1\u00b0C.",
+    "confirm_seconds": 0,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "deadband_c",
+        "label": "Minimum deadband",
+        "unit": "\u00b0C",
+        "min": 0.0,
+        "max": 5.0,
+        "step": 0.1,
+        "default": 1.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "FCU-MODE-CYCLE",
+    "title": "FCU heating/cooling mode cycling",
+    "family": "fcu",
+    "equipment_kinds": [
+      "zone_other",
+      "general",
+      "ahu"
+    ],
+    "required_roles": [
+      "heating-valve",
+      "cooling-valve"
+    ],
+    "optional_roles": [],
+    "equation": "At least four heating/cooling valve mode changes occur in the analysis window.",
+    "summary": "At least four heating/cooling valve mode changes occur in the analysis window.",
+    "confirm_seconds": 0,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "mode_valve_min",
+        "label": "Active valve threshold",
+        "unit": "frac",
+        "min": 0.0,
+        "max": 0.5,
+        "step": 0.05,
+        "default": 0.1,
+        "direction": ""
+      },
+      {
+        "key": "mode_changes",
+        "label": "Mode changes",
+        "unit": "count",
+        "min": 1,
+        "max": 20,
+        "step": 1,
+        "default": 4,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 0.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-1",
+    "title": "Zone comfort band",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav",
+      "zone_other",
+      "heatpump",
+      "baseboard"
+    ],
+    "required_roles": [
+      "zone-air-temp"
+    ],
+    "optional_roles": [
+      "occupied",
+      "occ-mode"
+    ],
+    "equation": "Zone temp outside zone_lo\u2013zone_hi (default 70\u201375\u00b0F) during occupied hours when an occupancy column or Overview calendar is set (require_occupied, default on). Unoccupied setback stays on VAV-2.",
+    "summary": "Flags occupied-band zone temperature violations.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "zone_lo",
+        "label": "Zone low",
+        "unit": "\u00b0F",
+        "min": 55.0,
+        "max": 72.0,
+        "step": 0.5,
+        "default": 70.0,
+        "direction": ""
+      },
+      {
+        "key": "zone_hi",
+        "label": "Zone high",
+        "unit": "\u00b0F",
+        "min": 72.0,
+        "max": 85.0,
+        "step": 0.5,
+        "default": 75.0,
+        "direction": ""
+      },
+      {
+        "key": "require_occupied",
+        "label": "Require occupied",
+        "unit": "bool",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 1.0,
+        "default": 1.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-2",
+    "title": "Night setback miss",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav",
+      "zone_other",
+      "heatpump",
+      "baseboard"
+    ],
+    "required_roles": [
+      "zone-air-temp",
+      "occupied"
+    ],
+    "optional_roles": [
+      "occ-mode"
+    ],
+    "equation": "Unoccupied AND zone temp > setback_hi (default 68\u00b0F) \u2014 heating setback not taken.",
+    "summary": "Flags unoccupied zones that never drop into heating setback.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "setback_hi",
+        "label": "Setback high",
+        "unit": "\u00b0F",
+        "min": 55.0,
+        "max": 72.0,
+        "step": 0.5,
+        "default": 68.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-3",
+    "title": "Excessive reheat during warm weather",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav"
+    ],
+    "required_roles": [
+      "outside-air-temp",
+      "reheat-valve"
+    ],
+    "optional_roles": [],
+    "equation": "Air flowing AND OAT > 78\u00b0F AND reheat valve > 52%.",
+    "summary": "Air flowing AND OAT > 78\u00b0F AND reheat valve > 52%.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "reheat_oat",
+        "label": "Warm OAT",
+        "unit": "\u00b0F",
+        "min": 65.0,
+        "max": 90.0,
+        "step": 1.0,
+        "default": 78.0,
+        "direction": ""
+      },
+      {
+        "key": "reheat_pct",
+        "label": "Reheat frac",
+        "unit": "frac",
+        "min": 0.1,
+        "max": 1.0,
+        "step": 0.02,
+        "default": 0.52,
+        "direction": ""
+      },
+      {
+        "key": "flow_on_min",
+        "label": "Airflow-on min",
+        "unit": "cfm",
+        "min": 0.0,
+        "max": 200.0,
+        "step": 5.0,
+        "default": 25.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-4",
+    "title": "Damper stuck at full open",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav"
+    ],
+    "required_roles": [
+      "damper"
+    ],
+    "optional_roles": [],
+    "equation": "Air flowing AND damper > 97.5% sustained across the window.",
+    "summary": "Air flowing AND damper > 97.5% sustained across the window.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "full_open_pct",
+        "label": "Full open frac",
+        "unit": "frac",
+        "min": 0.8,
+        "max": 1.0,
+        "step": 0.005,
+        "default": 0.975,
+        "direction": ""
+      },
+      {
+        "key": "sustain_hours",
+        "label": "Sustain window",
+        "unit": "h",
+        "min": 0.5,
+        "max": 6.0,
+        "step": 0.5,
+        "default": 1.5,
+        "direction": ""
+      },
+      {
+        "key": "flow_on_min",
+        "label": "Airflow-on min",
+        "unit": "cfm",
+        "min": 0.0,
+        "max": 200.0,
+        "step": 5.0,
+        "default": 25.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-5",
+    "title": "Airflow sensor bias",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav"
+    ],
+    "required_roles": [
+      "zone-airflow",
+      "damper"
+    ],
+    "optional_roles": [],
+    "equation": "Airflow > 50 cfm while damper < 10% (implausible flow).",
+    "summary": "Airflow > 50 cfm while damper < 10% (implausible flow).",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-6",
+    "title": "Reheat when cooling available",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav"
+    ],
+    "required_roles": [
+      "outside-air-temp",
+      "reheat-valve"
+    ],
+    "optional_roles": [
+      "cooling-available"
+    ],
+    "equation": "OAT < 65\u00b0F AND reheat valve > 25% (optional cooling-available must be true when mapped).",
+    "summary": "Flags reheat while outdoor air is cool enough for free cooling.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "free_cool_oat",
+        "label": "Free-cool OAT",
+        "unit": "\u00b0F",
+        "min": 45.0,
+        "max": 75.0,
+        "step": 1.0,
+        "default": 65.0,
+        "direction": ""
+      },
+      {
+        "key": "reheat_pct",
+        "label": "Reheat frac",
+        "unit": "frac",
+        "min": 0.05,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.25,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-REHEAT",
+    "title": "Reheat valve stuck / no temp rise",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav"
+    ],
+    "required_roles": [
+      "reheat-valve",
+      "vav-discharge-air-temp",
+      "vav-inlet-air-temp"
+    ],
+    "optional_roles": [],
+    "equation": "Air flowing AND reheat valve > 30% AND box discharge temp rises < 3\u00b0F above duct inlet (air from AHU) \u2014 stuck or failed reheat valve/coil.",
+    "summary": "Flags reheat commanded open with airflow but almost no discharge temperature rise.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "reheat_cmd",
+        "label": "Reheat open frac",
+        "unit": "frac",
+        "min": 0.1,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.3,
+        "direction": ""
+      },
+      {
+        "key": "min_rise",
+        "label": "Min temp rise",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 15.0,
+        "step": 0.5,
+        "default": 3.0,
+        "direction": ""
+      },
+      {
+        "key": "flow_on_min",
+        "label": "Airflow-on min",
+        "unit": "cfm",
+        "min": 0.0,
+        "max": 200.0,
+        "step": 5.0,
+        "default": 25.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-AHU-LEAVE",
+    "title": "VAV leave vs parent AHU SAT (fedBy)",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav"
+    ],
+    "required_roles": [
+      "vav-discharge-air-temp",
+      "ahu-discharge-air-temp"
+    ],
+    "optional_roles": [],
+    "equation": "Air flowing AND |VAV discharge \u2212 parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.",
+    "summary": "Flags VAV discharge far from the parent AHU SAT when topology feeds are known.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "delta_f",
+        "label": "Leave \u0394 vs AHU SAT",
+        "unit": "\u00b0F",
+        "min": 2.0,
+        "max": 25.0,
+        "step": 0.5,
+        "default": 8.0,
+        "direction": ""
+      },
+      {
+        "key": "flow_on_min",
+        "label": "Airflow-on min",
+        "unit": "cfm",
+        "min": 0.0,
+        "max": 200.0,
+        "step": 5.0,
+        "default": 25.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VAV-7",
+    "title": "Min airflow / fixed high flow",
+    "family": "vav",
+    "equipment_kinds": [
+      "vav"
+    ],
+    "required_roles": [
+      "zone-airflow"
+    ],
+    "optional_roles": [],
+    "equation": "Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.",
+    "summary": "Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "flow_on_min",
+        "label": "Airflow-on min",
+        "unit": "cfm",
+        "min": 0.0,
+        "max": 200.0,
+        "step": 5.0,
+        "default": 25.0,
+        "direction": ""
+      },
+      {
+        "key": "fixed_flow_max_std",
+        "label": "Fixed-flow max std",
+        "unit": "cfm",
+        "min": 1.0,
+        "max": 80.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "fixed_flow_min_mean",
+        "label": "Fixed-flow min mean",
+        "unit": "cfm",
+        "min": 50.0,
+        "max": 2000.0,
+        "step": 10.0,
+        "default": 200.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "high_min_flow_sp",
+        "label": "High min-flow SP",
+        "unit": "cfm",
+        "min": 50.0,
+        "max": 2000.0,
+        "step": 10.0,
+        "default": 250.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CHW-1",
+    "title": "Low chilled-water \u0394T",
+    "family": "plant",
+    "equipment_kinds": [
+      "chiller"
+    ],
+    "required_roles": [
+      "chilled-water-supply-temp",
+      "chilled-water-return-temp"
+    ],
+    "optional_roles": [],
+    "equation": "Pump on AND (CHWR \u2212 CHWS) < 4\u00b0F.",
+    "summary": "Pump on AND (CHWR \u2212 CHWS) < 4\u00b0F.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "min_dt",
+        "label": "Min \u0394T",
+        "unit": "\u00b0F",
+        "min": 1.0,
+        "max": 12.0,
+        "step": 0.5,
+        "default": 4.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CHW-2",
+    "title": "DP below SP at max pump speed",
+    "family": "plant",
+    "equipment_kinds": [
+      "chiller"
+    ],
+    "required_roles": [
+      "chw-diff-pressure",
+      "chw-diff-pressure-sp",
+      "chw-pump-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "Pump \u2265 87% AND CHW DP < DP SP \u2212 2.2.",
+    "summary": "Pump \u2265 87% AND CHW DP < DP SP \u2212 2.2.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "dp_margin",
+        "label": "DP margin",
+        "unit": "psi",
+        "min": 0.5,
+        "max": 6.0,
+        "step": 0.1,
+        "default": 2.2,
+        "direction": ""
+      },
+      {
+        "key": "pump_hi",
+        "label": "Pump high-speed threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.87,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CHW-3",
+    "title": "Plant supply temp outside deadband",
+    "family": "plant",
+    "equipment_kinds": [
+      "chiller"
+    ],
+    "required_roles": [
+      "chilled-water-supply-temp",
+      "chilled-water-supply-temp-sp",
+      "chw-pump-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "Pump on AND |CHWS \u2212 CHWS SP| > 2.2\u00b0F.",
+    "summary": "Pump on AND |CHWS \u2212 CHWS SP| > 2.2\u00b0F.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "sp_band",
+        "label": "SP band",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 6.0,
+        "step": 0.1,
+        "default": 2.2,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CHW-4",
+    "title": "Flow high at max pump",
+    "family": "plant",
+    "equipment_kinds": [
+      "chiller"
+    ],
+    "required_roles": [
+      "chw-flow",
+      "chw-pump-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "Pump \u2265 87% AND CHW flow > 1100 gpm.",
+    "summary": "Pump \u2265 87% AND CHW flow > 1100 gpm.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "flow_hi",
+        "label": "Flow high",
+        "unit": "gpm",
+        "min": 200,
+        "max": 3000,
+        "step": 50,
+        "default": 1100,
+        "direction": ""
+      },
+      {
+        "key": "pump_hi",
+        "label": "Pump high-speed threshold",
+        "unit": "frac",
+        "min": 0.5,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.87,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "HP-1",
+    "title": "Discharge cold when heating",
+    "family": "heatpump",
+    "equipment_kinds": [
+      "heatpump"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "zone-air-temp",
+      "fan-cmd"
+    ],
+    "optional_roles": [],
+    "equation": "Fan on, zone < 69\u00b0F, discharge SAT < 85\u00b0F.",
+    "summary": "Fan on, zone < 69\u00b0F, discharge SAT < 85\u00b0F.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "min_sat",
+        "label": "Min heating SAT",
+        "unit": "\u00b0F",
+        "min": 70.0,
+        "max": 110.0,
+        "step": 1.0,
+        "default": 85.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "zone_cold",
+        "label": "Zone cold",
+        "unit": "\u00b0F",
+        "min": 60.0,
+        "max": 72.0,
+        "step": 0.5,
+        "default": 69.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "WX-1",
+    "title": "OA temperature spike",
+    "family": "weather",
+    "equipment_kinds": [
+      "weather"
+    ],
+    "required_roles": [
+      "outside-air-temp"
+    ],
+    "optional_roles": [],
+    "equation": "OAT sample-to-sample jump > 16\u00b0F.",
+    "summary": "OAT sample-to-sample jump > 16\u00b0F.",
+    "confirm_seconds": 300,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "spike_limit",
+        "label": "Spike limit",
+        "unit": "\u00b0F",
+        "min": 4.0,
+        "max": 40.0,
+        "step": 1.0,
+        "default": 16.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 5.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CW-OPT-1",
+    "title": "Condenser water not optimized vs wet-bulb",
+    "family": "plant",
+    "equipment_kinds": [
+      "chiller",
+      "cooling_tower"
+    ],
+    "required_roles": [
+      "condenser-water-supply-temp"
+    ],
+    "optional_roles": [],
+    "equation": "CW supply significantly colder than web wet-bulb + design approach (Stull WB) \u2014 tower over-cooling / not optimized.",
+    "summary": "Flags condenser water colder than wet-bulb + approach \u2014 tower over-cooling / not optimized.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "cw_approach",
+        "label": "Design approach",
+        "unit": "\u00b0F",
+        "min": 3.0,
+        "max": 15.0,
+        "step": 0.5,
+        "default": 7.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "cw_slack",
+        "label": "Slack below target",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 6.0,
+        "step": 0.5,
+        "default": 2.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CW-APR-1",
+    "title": "High CW approach at full tower fan",
+    "family": "plant",
+    "equipment_kinds": [
+      "chiller",
+      "cooling_tower"
+    ],
+    "required_roles": [
+      "condenser-water-supply-temp"
+    ],
+    "optional_roles": [
+      "tower-fan-cmd",
+      "cw-fan-cmd",
+      "fan-cmd",
+      "web-outside-air-wetbulb"
+    ],
+    "equation": "At full tower fan speed, leaving CW \u2212 web wet-bulb exceeds approach_max (default 8\u00b0F, typically 5\u201310\u00b0F). Suspect OA\u2192wet-bulb / CW sensor mismatch or cooling-tower performance degradation.",
+    "summary": "Flags high CW\u2013wet-bulb approach at full tower fan \u2014 sensor mismatch or tower degradation.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "approach_max_f",
+        "label": "Max approach at full fan",
+        "unit": "\u00b0F",
+        "min": 5.0,
+        "max": 15.0,
+        "step": 0.5,
+        "default": 8.0,
+        "direction": ""
+      },
+      {
+        "key": "tower_fan_hi",
+        "label": "Tower fan full-speed threshold",
+        "unit": "frac",
+        "min": 0.8,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.95,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CW-FAN-1",
+    "title": "Excess tower fan energy vs wet-bulb limit",
+    "family": "plant",
+    "equipment_kinds": [
+      "chiller",
+      "cooling_tower"
+    ],
+    "required_roles": [
+      "condenser-water-supply-temp"
+    ],
+    "optional_roles": [
+      "tower-fan-cmd",
+      "cw-fan-cmd",
+      "fan-cmd",
+      "web-outside-air-wetbulb"
+    ],
+    "equation": "Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible \u2014 excess fan energy.",
+    "summary": "Flags full-speed tower fans while CW is well above theoretical WB+approach \u2014 excess fan energy.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "cw_approach",
+        "label": "Design approach",
+        "unit": "\u00b0F",
+        "min": 3.0,
+        "max": 15.0,
+        "step": 0.5,
+        "default": 7.0,
+        "direction": ""
+      },
+      {
+        "key": "excess_beyond_approach_f",
+        "label": "Excess beyond approach",
+        "unit": "\u00b0F",
+        "min": 2.0,
+        "max": 20.0,
+        "step": 0.5,
+        "default": 5.0,
+        "direction": ""
+      },
+      {
+        "key": "tower_fan_hi",
+        "label": "Tower fan full-speed threshold",
+        "unit": "frac",
+        "min": 0.8,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.95,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "TRIM-1",
+    "title": "Duct static trim advisory",
+    "family": "trim",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "duct-static-pressure",
+      "vav-pressure-request-sum"
+    ],
+    "optional_roles": [],
+    "equation": "Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low.",
+    "summary": "Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low.",
+    "confirm_seconds": 1800,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "duct_hi",
+        "label": "Duct static high",
+        "unit": "in. w.c.",
+        "min": 0.5,
+        "max": 3.0,
+        "step": 0.05,
+        "default": 1.35,
+        "direction": "fewer"
+      },
+      {
+        "key": "request_lo",
+        "label": "Request sum low",
+        "unit": "count",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.5,
+        "default": 1.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 30.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "TRIM-3",
+    "title": "HWST trim advisory",
+    "family": "trim",
+    "equipment_kinds": [
+      "boiler"
+    ],
+    "required_roles": [
+      "hot-water-supply-temp",
+      "hw-reset-request-sum"
+    ],
+    "optional_roles": [],
+    "equation": "HW supply > 160\u00b0F while reset requests are low.",
+    "summary": "HW supply > 160\u00b0F while reset requests are low.",
+    "confirm_seconds": 1800,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "hwst_hi",
+        "label": "HWST high",
+        "unit": "\u00b0F",
+        "min": 120.0,
+        "max": 200.0,
+        "step": 1.0,
+        "default": 160.0,
+        "direction": "fewer"
+      },
+      {
+        "key": "request_lo",
+        "label": "Request sum low",
+        "unit": "count",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.5,
+        "default": 1.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 30.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "TRIM-4",
+    "title": "CHW plant reset advisory",
+    "family": "trim",
+    "equipment_kinds": [
+      "chiller"
+    ],
+    "required_roles": [
+      "chilled-water-supply-temp",
+      "chw-reset-request-sum"
+    ],
+    "optional_roles": [],
+    "equation": "CHW supply < 45\u00b0F while reset requests are low.",
+    "summary": "CHW supply < 45\u00b0F while reset requests are low.",
+    "confirm_seconds": 1800,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "chw_lo",
+        "label": "CHWS low",
+        "unit": "\u00b0F",
+        "min": 35.0,
+        "max": 55.0,
+        "step": 0.5,
+        "default": 45.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "request_lo",
+        "label": "Request sum low",
+        "unit": "count",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.5,
+        "default": 1.0,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 30.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "SCHED-1",
+    "title": "Unoccupied runtime",
+    "family": "schedule",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "occupied",
+      "fan-status"
+    ],
+    "optional_roles": [
+      "zone-air-temp"
+    ],
+    "equation": "Fan running while occupancy is unoccupied (Overview calendar \u2192 occ_mode). When zone_t is mapped, also require zone inside comfort_low_f\u2026comfort_high_f (defaults 70\u201375\u00b0F; synced from Overview zone band).",
+    "summary": "Flags fan runtime during unoccupied hours from the Overview calendar.",
+    "confirm_seconds": 1800,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "comfort_low_f",
+        "label": "Comfort low",
+        "unit": "\u00b0F",
+        "min": 60.0,
+        "max": 78.0,
+        "step": 0.5,
+        "default": 70.0,
+        "direction": ""
+      },
+      {
+        "key": "comfort_high_f",
+        "label": "Comfort high",
+        "unit": "\u00b0F",
+        "min": 68.0,
+        "max": 85.0,
+        "step": 0.5,
+        "default": 75.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 30.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "SCHED-247",
+    "title": "Always-on fan or pump runtime",
+    "family": "schedule",
+    "equipment_kinds": [
+      "ahu",
+      "vav",
+      "chiller",
+      "boiler",
+      "heatpump"
+    ],
+    "required_roles": [],
+    "optional_roles": [
+      "fan-status",
+      "pump-status",
+      "chw-pump-status",
+      "hw-pump-status",
+      "chiller-status",
+      "compressor-status",
+      "tower-fan-cmd",
+      "cw-fan-cmd",
+      "fan-cmd",
+      "chw-pump-cmd",
+      "hw-pump-cmd",
+      "duct-static-pressure",
+      "chw-diff-pressure"
+    ],
+    "equation": "Ranked proof (status/current > command) is on for \u2265 always_on_pct of the window. Pressure is inferred runtime only and does not trip this rule ID.",
+    "summary": "Flags fans or pumps that stay on for nearly the entire analysis window (24/7 runtime).",
+    "confirm_seconds": 3600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "always_on_pct",
+        "label": "Always-on fraction",
+        "unit": "frac",
+        "min": 0.8,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.95,
+        "direction": "fewer"
+      },
+      {
+        "key": "pressure_on_min",
+        "label": "Pressure-on evidence",
+        "unit": "eng",
+        "min": 0.05,
+        "max": 2.0,
+        "step": 0.05,
+        "default": 0.2,
+        "direction": "stricter"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 60.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "RESET-1",
+    "title": "SAT reset not tracking outdoor air",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp-sp",
+      "outside-air-temp"
+    ],
+    "optional_roles": [
+      "fan-status",
+      "fan-cmd"
+    ],
+    "equation": "Fan on AND |SAT SP \u2212 (52 + 0.25\u00d7(OAT\u221265))| > 3\u00b0F.",
+    "summary": "Flags SAT setpoint that is not tracking the outdoor-air reset curve.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "reset_err_f",
+        "label": "Reset error",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 10.0,
+        "step": 0.5,
+        "default": 3.0,
+        "direction": ""
+      },
+      {
+        "key": "reset_sat_at_65",
+        "label": "SAT SP at 65\u00b0F OAT",
+        "unit": "\u00b0F",
+        "min": 45.0,
+        "max": 65.0,
+        "step": 0.5,
+        "default": 52.0,
+        "direction": ""
+      },
+      {
+        "key": "reset_slope",
+        "label": "Reset slope",
+        "unit": "\u00b0F/\u00b0F",
+        "min": 0.05,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.25,
+        "direction": ""
+      },
+      {
+        "key": "reset_oat_ref",
+        "label": "Reset OAT ref",
+        "unit": "\u00b0F",
+        "min": 50.0,
+        "max": 80.0,
+        "step": 1.0,
+        "default": 65.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "CMD-1",
+    "title": "Fan cmd/status mismatch",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "fan-cmd",
+      "fan-status"
+    ],
+    "optional_roles": [],
+    "equation": "Fan command and proven status disagree.",
+    "summary": "Fan command and proven status disagree.",
+    "confirm_seconds": 600,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 10.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "OA-1",
+    "title": "Low OA fraction",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "mixed-air-temp",
+      "return-air-temp",
+      "outside-air-temp",
+      "fan-status"
+    ],
+    "optional_roles": [],
+    "equation": "Estimated OA fraction < 15% with adequate OAT/RAT split.",
+    "summary": "Estimated OA fraction < 15% with adequate OAT/RAT split.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "min_oa_frac",
+        "label": "Min OA fraction",
+        "unit": "frac",
+        "min": 0.05,
+        "max": 0.4,
+        "step": 0.01,
+        "default": 0.15,
+        "direction": "stricter"
+      },
+      {
+        "key": "oat_rat_guard",
+        "label": "Min |RAT\u2212OAT| guard",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 6.0,
+        "step": 0.1,
+        "default": 2.2,
+        "direction": "fewer"
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "DMP-1",
+    "title": "OA damper leakage",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "outside-air-temp",
+      "mixed-air-temp",
+      "outside-air-damper"
+    ],
+    "optional_roles": [],
+    "equation": "Damper \u2264 5% but MAT tracks OAT within 2\u00b0F \u2014 leaking OA damper.",
+    "summary": "Damper \u2264 5% but MAT tracks OAT within 2\u00b0F \u2014 leaking OA damper.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "leak_delta",
+        "label": "Leak \u0394T",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 6.0,
+        "step": 0.5,
+        "default": 2.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  },
+  {
+    "id": "VLV-1",
+    "title": "Cooling valve leakage",
+    "family": "ahu",
+    "equipment_kinds": [
+      "ahu"
+    ],
+    "required_roles": [
+      "discharge-air-temp",
+      "discharge-air-temp-sp",
+      "cooling-valve"
+    ],
+    "optional_roles": [
+      "mixed-air-temp",
+      "fan-status",
+      "fan-cmd"
+    ],
+    "equation": "Cooling valve \u2264 5% AND (SAT < sat_sp \u2212 sat_err OR SAT < MAT \u2212 mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).",
+    "summary": "Flags a closed cooling valve while SAT still looks like valve leakage.",
+    "confirm_seconds": 900,
+    "sensor_sweep": false,
+    "control_output_sweep": false,
+    "params": [
+      {
+        "key": "sat_err",
+        "label": "SAT vs SP leak \u0394T",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 8.0,
+        "step": 0.5,
+        "default": 2.0,
+        "direction": ""
+      },
+      {
+        "key": "mat_leak_delta",
+        "label": "SAT vs MAT leak \u0394T",
+        "unit": "\u00b0F",
+        "min": 0.5,
+        "max": 12.0,
+        "step": 0.5,
+        "default": 2.0,
+        "direction": ""
+      },
+      {
+        "key": "confirm_min",
+        "label": "Fault confirm delay",
+        "unit": "min",
+        "min": 0.0,
+        "max": 60.0,
+        "step": 1.0,
+        "default": 15.0,
+        "direction": "fewer"
+      }
+    ]
+  }
+]

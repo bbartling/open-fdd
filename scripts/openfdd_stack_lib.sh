@@ -44,13 +44,17 @@ openfdd_stack_compose_args() {
       ;;
     csv)
       printf '%s\n' -f "$root/docker/compose.csv.yml"
+      # Wave-X 3.6.0: Timescale sole historian (required).
+      printf '%s\n' -f "$root/docker/compose.timescale.yml"
       ;;
     react)
       printf '%s\n' -f "$root/docker/compose.react.yml"
+      printf '%s\n' -f "$root/docker/compose.timescale.yml"
       ;;
     react-ot)
       printf '%s\n' -f "$root/docker/compose.react.yml"
       printf '%s\n' -f "$root/docker/compose.react.fieldbus.yml"
+      printf '%s\n' -f "$root/docker/compose.timescale.yml"
       local local_override="${OPENFDD_COMPOSE_LOCAL:-docker/compose.react.fieldbus.local.yml}"
       if [[ -f "$root/$local_override" ]]; then
         printf '%s\n' -f "$root/$local_override"

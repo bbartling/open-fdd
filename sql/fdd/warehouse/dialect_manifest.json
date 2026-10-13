@@ -1,0 +1,324 @@
+[
+  {
+    "file": "ahu_ducthi.sql",
+    "hooks": []
+  },
+  {
+    "file": "ahu_satdev.sql",
+    "hooks": []
+  },
+  {
+    "file": "ahu_simul.sql",
+    "hooks": []
+  },
+  {
+    "file": "avg_zone_temp.sql",
+    "hooks": []
+  },
+  {
+    "file": "chw1_low_dt.sql",
+    "hooks": []
+  },
+  {
+    "file": "chw2_dp_low.sql",
+    "hooks": []
+  },
+  {
+    "file": "chw3_supply_band.sql",
+    "hooks": []
+  },
+  {
+    "file": "chw4_flow_high.sql",
+    "hooks": []
+  },
+  {
+    "file": "chw_noload_1.sql",
+    "hooks": []
+  },
+  {
+    "file": "cmd1_fan_mismatch.sql",
+    "hooks": []
+  },
+  {
+    "file": "cw_apr_1.sql",
+    "hooks": []
+  },
+  {
+    "file": "cw_fan_1.sql",
+    "hooks": []
+  },
+  {
+    "file": "cw_opt_1.sql",
+    "hooks": []
+  },
+  {
+    "file": "dmp1_oa_damper_leak.sql",
+    "hooks": []
+  },
+  {
+    "file": "econ1_stuck_closed.sql",
+    "hooks": []
+  },
+  {
+    "file": "econ3_mech_without_econ.sql",
+    "hooks": []
+  },
+  {
+    "file": "econ4_low_oa_frac.sql",
+    "hooks": []
+  },
+  {
+    "file": "econ5_preheat_over.sql",
+    "hooks": []
+  },
+  {
+    "file": "econ6_econ_freezing.sql",
+    "hooks": []
+  },
+  {
+    "file": "econ7_ok_not_economizing.sql",
+    "hooks": []
+  },
+  {
+    "file": "economizer_fault.sql",
+    "hooks": []
+  },
+  {
+    "file": "fan_runtime_hours.sql",
+    "hooks": []
+  },
+  {
+    "file": "fault_elapsed_hours.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc10_mat_oa_clg.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc11_oa_sat_sp_clg.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc12_sat_mat_clg.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc14_chw_coil_dt_inactive.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc15_hw_coil_dt_inactive.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc1_duct_static_low.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc2_mat_low.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc3_mat_high.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc4_os_hunting.sql",
+    "hooks": [
+      "fdd_hour_bucket_utc"
+    ]
+  },
+  {
+    "file": "fc5_sat_cold_heating.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc6_oa_frac_mismatch.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc7_sat_low_heating.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc8_sat_mat_econ.sql",
+    "hooks": []
+  },
+  {
+    "file": "fc9_oa_sat_sp_econ.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_clg_coil.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_co2_damper.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_damper_pos.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_deadband.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_htg_coil.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_mode_cycle.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_sensor_null.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_valve_pass_clg.sql",
+    "hooks": []
+  },
+  {
+    "file": "fcu_valve_pass_htg.sql",
+    "hooks": []
+  },
+  {
+    "file": "hp1_discharge_cold.sql",
+    "hooks": []
+  },
+  {
+    "file": "mech_oat_1.sql",
+    "hooks": []
+  },
+  {
+    "file": "oa1_low_oa_frac.sql",
+    "hooks": []
+  },
+  {
+    "file": "oat_meteo_fault.sql",
+    "hooks": []
+  },
+  {
+    "file": "pid_hunt_1.sql",
+    "hooks": []
+  },
+  {
+    "file": "reset1_sat_oa_reset.sql",
+    "hooks": []
+  },
+  {
+    "file": "sat_high_fault.sql",
+    "hooks": []
+  },
+  {
+    "file": "sched1_unoccupied_runtime.sql",
+    "hooks": [
+      "fdd_try_double"
+    ]
+  },
+  {
+    "file": "sched247_always_on.sql",
+    "hooks": []
+  },
+  {
+    "file": "sv_flatline.sql",
+    "hooks": []
+  },
+  {
+    "file": "sv_range.sql",
+    "hooks": [
+      "fdd_is_nan"
+    ]
+  },
+  {
+    "file": "sv_rate.sql",
+    "hooks": [
+      "fdd_elapsed_seconds"
+    ]
+  },
+  {
+    "file": "sv_spike.sql",
+    "hooks": []
+  },
+  {
+    "file": "sv_stale.sql",
+    "hooks": []
+  },
+  {
+    "file": "trim1_duct_static.sql",
+    "hooks": []
+  },
+  {
+    "file": "trim3_hwst.sql",
+    "hooks": []
+  },
+  {
+    "file": "trim4_chw_reset.sql",
+    "hooks": []
+  },
+  {
+    "file": "util_interval_fault.sql",
+    "hooks": []
+  },
+  {
+    "file": "util_monthly_fault.sql",
+    "hooks": [
+      "fdd_month_key_utc"
+    ]
+  },
+  {
+    "file": "vav1_comfort_fault.sql",
+    "hooks": [
+      "fdd_try_double"
+    ]
+  },
+  {
+    "file": "vav2_night_setback.sql",
+    "hooks": [
+      "fdd_try_double"
+    ]
+  },
+  {
+    "file": "vav3_excessive_reheat.sql",
+    "hooks": []
+  },
+  {
+    "file": "vav4_damper_full_open.sql",
+    "hooks": []
+  },
+  {
+    "file": "vav5_airflow_bias.sql",
+    "hooks": []
+  },
+  {
+    "file": "vav6_reheat_free_cool.sql",
+    "hooks": []
+  },
+  {
+    "file": "vav7_min_airflow.sql",
+    "hooks": []
+  },
+  {
+    "file": "vav_ahu_leave.sql",
+    "hooks": []
+  },
+  {
+    "file": "vav_reheat.sql",
+    "hooks": []
+  },
+  {
+    "file": "vlv1_clg_valve_leak.sql",
+    "hooks": []
+  },
+  {
+    "file": "wx1_oa_spike.sql",
+    "hooks": []
+  },
+  {
+    "file": "zone_comfort_pct.sql",
+    "hooks": []
+  }
+]

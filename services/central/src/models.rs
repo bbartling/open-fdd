@@ -40,6 +40,15 @@ pub struct OkHealthResponse {
     /// True when OPENFDD storage/parquet root exists on disk (durable historian, not since-boot).
     #[serde(default)]
     pub historian_present: bool,
+    /// Wave-X: `timescale` | `parquet-legacy`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub historian: Option<String>,
+    /// Wave-X: `postgres-sql` | `datafusion`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fdd_engine: Option<String>,
+    /// Always false after Wave-X cutover (no Parquet+Timescale co-canonical).
+    #[serde(default)]
+    pub dual_write: bool,
     /// Portable cgroup/host memory budget (#1179): hard/pool/current/shed_state.
     /// Health stays HTTP 200 with shed_state when under memory pressure (capacity 24b).
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -6,7 +6,8 @@ nav_order: 10
 
 # DataFusion-first policy
 
-**Status:** **active product contract** (Wave J Stage A, 2026-09-08). Supersedes the 2026-07-25 “target / PR2+” wording below where they conflict.
+**Status:** **SUPERSEDED for product path by [ADR-010](adr-010-timescale-hard-cutover.md) (Wave-X 3.6.0 Timescale hard cutover).** Retained as historical DF-era contract.
+
 
 For tabular building telemetry computation in the **product**:
 

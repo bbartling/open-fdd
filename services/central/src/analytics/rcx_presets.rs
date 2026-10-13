@@ -469,11 +469,16 @@ fn annotate(mut env: AnalyticsEnvelope, meta: &RcxPresetMeta) -> AnalyticsEnvelo
 
 fn empty_stub(meta: &RcxPresetMeta, reason: &str) -> AnalyticsEnvelope {
     let query = AnalyticsQuery::default();
+    let engine = if crate::timescale_historian::historian_is_timescale() {
+        "timescale-sql"
+    } else {
+        DF_ENGINE
+    };
     let mut env = envelope_with_engine(
         &format!("rcx-preset-{}-v1", meta.id),
         &query,
         vec![reason.to_string()],
-        DF_ENGINE,
+        engine,
     );
     env.coverage = Some(json!({
         "preset_id": meta.id,
