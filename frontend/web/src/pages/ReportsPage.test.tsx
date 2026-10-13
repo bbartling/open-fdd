@@ -140,7 +140,12 @@ describe("ReportsPage FDD Plots", () => {
   it("auto-loads series without developer fault-lane debug chrome", async () => {
     renderPlots();
     await waitFor(() => {
-      expect(getFddSeries).toHaveBeenCalledWith("VAV_1", "VAV-1", "B1");
+      expect(getFddSeries).toHaveBeenCalledWith(
+        "VAV_1",
+        "VAV-1",
+        "B1",
+        expect.objectContaining({ maxPoints: 1500, signal: expect.any(AbortSignal) }),
+      );
       expect(screen.getByTestId("plots-chart")).toBeTruthy();
       expect(screen.getByTestId("plots-preview-table")).toBeTruthy();
       expect(screen.queryByTestId("plots-no-fault")).toBeNull();
