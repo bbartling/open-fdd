@@ -60,11 +60,34 @@ pub mod execution {
     }
 
     pub fn fdd_inputs_json() -> Value {
-        json!({"ok": true, "fdd_inputs": [], "engine": "timescale"})
+        // Keep commissioning / package validation aware of canonical roles even
+        // without DataFusion SessionContext (Wave-X Timescale product path).
+        json!({
+            "ok": true,
+            "engine": "timescale",
+            "fdd_inputs": [
+                {"id":"oa_t","label":"OA temperature","unit":"degF","equipment_types":["ahu"]},
+                {"id":"oa_h","label":"Outside Air Humidity","unit":"%RH","equipment_types":["ahu"]},
+                {"id":"sat","label":"Supply Air Temp","unit":"degF","equipment_types":["ahu","vav"]},
+                {"id":"duct_t","label":"Discharge/Duct Temp","unit":"degF","equipment_types":["ahu","vav"]},
+                {"id":"zn_t","label":"Zone Temp","unit":"degF","equipment_types":["vav","zone"]},
+                {"id":"sat_sp","label":"SAT Setpoint","unit":"degF","equipment_types":["ahu"]},
+                {"id":"fan_cmd","label":"Fan Command","unit":"bool","equipment_types":["ahu"]},
+                {"id":"occ","label":"Occupancy","unit":"bool","equipment_types":["ahu","zone"]}
+            ]
+        })
     }
 
     pub fn equipment_types_json() -> Value {
-        json!({"ok": true, "equipment_types": [], "engine": "timescale"})
+        json!({
+            "ok": true,
+            "engine": "timescale",
+            "equipment_types": [
+                {"id":"ahu","label":"Air Handling Unit"},
+                {"id":"vav","label":"VAV Box"},
+                {"id":"plant","label":"Central Plant"}
+            ]
+        })
     }
 
     pub fn builder_to_sql(builder: &Value) -> String {

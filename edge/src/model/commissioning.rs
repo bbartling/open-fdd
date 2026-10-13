@@ -381,7 +381,11 @@ mod tests {
                 "review_status": "draft"
             }]);
             let imported = super::import_commissioning(&json!({"payload": payload}));
-            assert_eq!(imported.get("ok").and_then(|v| v.as_bool()), Some(true));
+            assert_eq!(
+                imported.get("ok").and_then(|v| v.as_bool()),
+                Some(true),
+                "{imported}"
+            );
             let listed = rules::list_rules();
             assert!(listed
                 .get("rules")
