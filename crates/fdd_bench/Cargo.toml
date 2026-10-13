@@ -8,7 +8,7 @@ edition.workspace = true
 anyhow.workspace = true
 fdd_core = { path = "../fdd_core" }
 fdd_csv = { path = "../fdd_csv" }
-fdd_rules = { path = "../fdd_rules" }
+fdd_rules = { path = "../fdd_rules", features = ["legacy-datafusion"] }
 fdd_sql = { path = "../fdd_sql" }
 fdd_store = { path = "../fdd_store" }
 chrono.workspace = true

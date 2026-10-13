@@ -1,0 +1,75 @@
+-- Generic warehouse template: implement the documented dialect hooks. Render numeric template parameters with render_rule.py.
+-- Inputs must be scoped to one tenant/site and cadence; see README.md.
+-- vav1_comfort_fault.sql — zone comfort band with confirm window (Open-FDD parity)
+-- When occ_mode is present, require_occupied (default 1) scores the band only
+-- while occupied. The rule runner fills a missing or blank occ_mode from the
+-- saved Overview calendar (session occupancy_schedule). NULL occ_mode means
+-- neither a BAS occupied point nor that calendar is set. Unoccupied setback
+-- stays on VAV-2.
+-- OFDD-065: do not reference fan_cmd here. Zone-only parquet schemas
+-- often lack fan_cmd; DataFusion then schema-errors → SKIPPED_MISSING_ROLES.
+WITH h AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    zone_t,
+    occ_mode,
+    CAST(CASE WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN 1 ELSE 0 END AS INT) AS band_fault
+  FROM history
+  WHERE zone_t IS NOT NULL
+),
+base AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    CAST(CASE
+      WHEN {{REQUIRE_OCCUPIED}} >= 0.5
+       AND occ_mode IS NOT NULL
+       AND (
+         LOWER(trim(CAST(occ_mode AS VARCHAR))) IN
+           ('unoccupied','unocc','off','false','night','standby','setback','no')
+         OR (
+           fdd_try_double(trim(CAST(occ_mode AS VARCHAR))) IS NOT NULL
+           AND fdd_try_double(trim(CAST(occ_mode AS VARCHAR))) <= 0.05
+         )
+       )
+      THEN 0
+      ELSE band_fault
+    END AS INT) AS raw_fault
+  FROM h
+),
+lagged AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM base
+),
+grp AS (
+  SELECT
+    *,
+    SUM(is_new_streak)
+      OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
+  FROM lagged
+),
+ranked AS (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+  FROM grp
+),
+final AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+  FROM ranked
+)
+SELECT
+  equipment_id,
+  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours,
+  100.0 * SUM(confirmed) / COUNT(*) AS fault_pct
+FROM final
+GROUP BY equipment_id;

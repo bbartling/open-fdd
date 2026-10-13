@@ -1,12 +1,13 @@
 //! Building-scoped VAV health matrix (vav_health_matrix_v1). No Python.
 
+#[cfg(feature = "legacy-datafusion")]
 use std::collections::HashMap;
 
 use anyhow::Result;
-use fdd_sql::run_sql;
-use serde_json::{json, Value};
+use serde_json::json;
+#[cfg(feature = "legacy-datafusion")]
+use serde_json::Value;
 
-use super::historian::{self, open_history_scan};
 use super::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, DF_ENGINE};
 
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
@@ -47,6 +48,7 @@ pub const QV_VAV_HEALTH: &str = "vav-health-v1";
 pub const SCHEMA_VAV_HEALTH: &str = "vav_health_matrix_v1";
 
 /// Same default IDs as `open_fdd.analytics.vav_health.DEFAULT_BROKEN_RULES`.
+#[cfg(feature = "legacy-datafusion")]
 const BROKEN_RULE_IDS: &[&str] = &[
     "VAV-3",
     "VAV-4",
@@ -58,6 +60,7 @@ const BROKEN_RULE_IDS: &[&str] = &[
 
 /// Per-equipment broken-box from the last registry run. Empty map + `false`
 /// when no result JSON exists (unknown, not PASS).
+#[cfg(feature = "legacy-datafusion")]
 fn broken_box_from_fdd(building_id: &str) -> (bool, HashMap<String, (bool, String, f64)>) {
     let body = open_fdd_edge_prototype::fdd::registry_api::results_response(Some(building_id));
     let rows = body
@@ -130,9 +133,10 @@ pub async fn vav_health_from_history(
         env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH}));
         return Ok(Some(env));
     };
-    let ctx = historian::new_bounded_session().map_err(|e| anyhow::anyhow!("{e}"))?;
-    let (ok, _scan) = open_history_scan(&ctx, Some(bid)).await?;
-    if !ok {
+    #[cfg(not(feature = "legacy-datafusion"))]
+    {
+        let _ = (comfort_low, comfort_high, start, end);
+        // Wave-X: DF VAV matrix retired — Timescale plant_health covers /api/analytics/vav-health.
         let q = AnalyticsQuery {
             building_id: Some(bid.to_string()),
             ..Default::default()
@@ -140,28 +144,50 @@ pub async fn vav_health_from_history(
         let mut env = envelope_with_engine(
             QV_VAV_HEALTH,
             &q,
-            vec![
-                "no historian parquet for this building — run ingest then Update analytics".into(),
-            ],
-            DF_ENGINE,
+            vec!["Wave-X: use Timescale vav-health path (DataFusion retired)".into()],
+            "timescale-sql",
         );
         env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH, "building_id": bid}));
-        return Ok(Some(env));
+        Ok(Some(env))
     }
-    // No id-prefix SQL filter. Family Zones membership is a zone-terminal
-    // stamp (VAV, FCU, zone_other, heat pump, baseboard) or a modeled zone
-    // temperature. A non-zone stamp is excluded even when the id looks like a zone.
-    let (win_start, win_end) = historian::resolve_analytics_window(
-        start,
-        end,
-        historian::VAV_HEALTH_DEFAULT_LOOKBACK_DAYS,
-    )
-    .map_err(|e| anyhow::anyhow!(e))?;
-    let win_end = win_end.unwrap_or_else(chrono::Utc::now);
-    let zone_t = historian::history_role_numeric_sql("zone_t");
-    let damper_pct = historian::history_role_numeric_sql("damper_pct");
-    let sql = format!(
-        r#"
+    #[cfg(feature = "legacy-datafusion")]
+    {
+        use super::historian;
+        use super::historian::open_history_scan;
+        use fdd_sql::run_sql;
+        let ctx = historian::new_bounded_session().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let (ok, _scan) = open_history_scan(&ctx, Some(bid)).await?;
+        if !ok {
+            let q = AnalyticsQuery {
+                building_id: Some(bid.to_string()),
+                ..Default::default()
+            };
+            let mut env = envelope_with_engine(
+                QV_VAV_HEALTH,
+                &q,
+                vec![
+                    "no historian parquet for this building — run ingest then Update analytics"
+                        .into(),
+                ],
+                DF_ENGINE,
+            );
+            env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH, "building_id": bid}));
+            return Ok(Some(env));
+        }
+        // No id-prefix SQL filter. Family Zones membership is a zone-terminal
+        // stamp (VAV, FCU, zone_other, heat pump, baseboard) or a modeled zone
+        // temperature. A non-zone stamp is excluded even when the id looks like a zone.
+        let (win_start, win_end) = historian::resolve_analytics_window(
+            start,
+            end,
+            historian::VAV_HEALTH_DEFAULT_LOOKBACK_DAYS,
+        )
+        .map_err(|e| anyhow::anyhow!(e))?;
+        let win_end = win_end.unwrap_or_else(chrono::Utc::now);
+        let zone_t = historian::history_role_numeric_sql("zone_t");
+        let damper_pct = historian::history_role_numeric_sql("damper_pct");
+        let sql = format!(
+            r#"
 SELECT
   equipment_id,
   AVG(CASE WHEN {zone_t} IS NOT NULL THEN 1.0 ELSE 0.0 END) AS zone_cov,
@@ -181,108 +207,111 @@ WHERE CAST(timestamp_utc AS TIMESTAMP) >= TIMESTAMP '{start}'
 GROUP BY equipment_id
 ORDER BY equipment_id
 "#,
-        lo = comfort_low,
-        hi = comfort_high,
-        start = win_start.to_rfc3339(),
-        end = win_end.to_rfc3339(),
-    );
-    let result = match run_sql(&ctx, &sql).await {
-        Ok(r) => r,
-        Err(e) => {
-            let q = AnalyticsQuery {
-                building_id: Some(bid.to_string()),
-                ..Default::default()
+            lo = comfort_low,
+            hi = comfort_high,
+            start = win_start.to_rfc3339(),
+            end = win_end.to_rfc3339(),
+        );
+        let result = match run_sql(&ctx, &sql).await {
+            Ok(r) => r,
+            Err(e) => {
+                let q = AnalyticsQuery {
+                    building_id: Some(bid.to_string()),
+                    ..Default::default()
+                };
+                let mut env = envelope_with_engine(
+                    QV_VAV_HEALTH,
+                    &q,
+                    vec![format!("vav-health query failed: {e}")],
+                    DF_ENGINE,
+                );
+                env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH}));
+                return Ok(Some(env));
+            }
+        };
+        let q = AnalyticsQuery {
+            building_id: Some(bid.to_string()),
+            ..Default::default()
+        };
+        let mut env = envelope_with_engine(QV_VAV_HEALTH, &q, vec![], DF_ENGINE);
+        let mut n3 = 0u32;
+        let mut n2 = 0u32;
+        let mut n1 = 0u32;
+        let mut n0 = 0u32;
+        let mut nq = 0u32;
+        let (has_fdd, broken_map) = broken_box_from_fdd(bid);
+        let stamped_types = open_fdd_edge_prototype::equipment_types::load_type_map(
+            &super::historian::parquet_root(),
+            Some(bid),
+        );
+        for row in result.rows {
+            let eq = row
+                .get("equipment_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if eq.is_empty() {
+                continue;
+            }
+            let stamped = stamped_types.get(eq).map(String::as_str);
+            let zone_cov = row.get("zone_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            if !open_fdd_edge_prototype::equipment_types::zone_comfort_member(
+                stamped,
+                zone_cov > 0.0,
+            ) {
+                continue;
+            }
+            let dmp_cov = row.get("dmp_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let fail_h = row
+                .get("comfort_fail_h")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let open_h = row
+                .get("full_open_h")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let span = row.get("span_h").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let poor = if zone_cov < 0.01 {
+                Value::Null
+            } else {
+                json!(fail_h > 0.01)
             };
-            let mut env = envelope_with_engine(
-                QV_VAV_HEALTH,
-                &q,
-                vec![format!("vav-health query failed: {e}")],
-                DF_ENGINE,
-            );
-            env.coverage = Some(json!({"schema_version": SCHEMA_VAV_HEALTH}));
-            return Ok(Some(env));
-        }
-    };
-    let q = AnalyticsQuery {
-        building_id: Some(bid.to_string()),
-        ..Default::default()
-    };
-    let mut env = envelope_with_engine(QV_VAV_HEALTH, &q, vec![], DF_ENGINE);
-    let mut n3 = 0u32;
-    let mut n2 = 0u32;
-    let mut n1 = 0u32;
-    let mut n0 = 0u32;
-    let mut nq = 0u32;
-    let (has_fdd, broken_map) = broken_box_from_fdd(bid);
-    let stamped_types = open_fdd_edge_prototype::equipment_types::load_type_map(
-        &super::historian::parquet_root(),
-        Some(bid),
-    );
-    for row in result.rows {
-        let eq = row
-            .get("equipment_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        if eq.is_empty() {
-            continue;
-        }
-        let stamped = stamped_types.get(eq).map(String::as_str);
-        let zone_cov = row.get("zone_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        if !open_fdd_edge_prototype::equipment_types::zone_comfort_member(stamped, zone_cov > 0.0) {
-            continue;
-        }
-        let dmp_cov = row.get("dmp_cov").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let fail_h = row
-            .get("comfort_fail_h")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-        let open_h = row
-            .get("full_open_h")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
-        let span = row.get("span_h").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let poor = if zone_cov < 0.01 {
-            Value::Null
-        } else {
-            json!(fail_h > 0.01)
-        };
-        let rogue = if dmp_cov < 0.01 || span < 20.0 {
-            Value::Null
-        } else {
-            json!(span > 0.0 && (100.0 * open_h / span) >= 95.0)
-        };
-        let (broken, broken_ids, broken_h) = if !has_fdd {
-            (Value::Null, String::new(), 0.0)
-        } else if let Some((fault, ids, hours)) = broken_map.get(eq) {
-            (json!(*fault), ids.clone(), *hours)
-        } else {
-            (json!(false), String::new(), 0.0)
-        };
-        let evaluable = [&poor, &rogue, &broken]
-            .iter()
-            .filter(|v| !v.is_null())
-            .count();
-        let hit = [&poor, &rogue, &broken]
-            .iter()
-            .filter(|v| v.as_bool() == Some(true))
-            .count();
-        let label = if evaluable < 3 {
-            nq += 1;
-            "?/3"
-        } else if hit == 3 {
-            n3 += 1;
-            "3/3"
-        } else if hit == 2 {
-            n2 += 1;
-            "2/3"
-        } else if hit == 1 {
-            n1 += 1;
-            "1/3"
-        } else {
-            n0 += 1;
-            "0/3"
-        };
-        env.rows.push(json!({
+            let rogue = if dmp_cov < 0.01 || span < 20.0 {
+                Value::Null
+            } else {
+                json!(span > 0.0 && (100.0 * open_h / span) >= 95.0)
+            };
+            let (broken, broken_ids, broken_h) = if !has_fdd {
+                (Value::Null, String::new(), 0.0)
+            } else if let Some((fault, ids, hours)) = broken_map.get(eq) {
+                (json!(*fault), ids.clone(), *hours)
+            } else {
+                (json!(false), String::new(), 0.0)
+            };
+            let evaluable = [&poor, &rogue, &broken]
+                .iter()
+                .filter(|v| !v.is_null())
+                .count();
+            let hit = [&poor, &rogue, &broken]
+                .iter()
+                .filter(|v| v.as_bool() == Some(true))
+                .count();
+            let label = if evaluable < 3 {
+                nq += 1;
+                "?/3"
+            } else if hit == 3 {
+                n3 += 1;
+                "3/3"
+            } else if hit == 2 {
+                n2 += 1;
+                "2/3"
+            } else if hit == 1 {
+                n1 += 1;
+                "1/3"
+            } else {
+                n0 += 1;
+                "0/3"
+            };
+            env.rows.push(json!({
             "building_id": bid,
             "equipment_id": eq,
             "parent_ahu": "",
@@ -315,23 +344,25 @@ ORDER BY equipment_id
                 "broken_box unknown until Run all rules joins FDD results"
             },
         }));
-    }
-    env.coverage = Some(json!({
-        "schema_version": SCHEMA_VAV_HEALTH,
-        "building_id": bid,
-        "groups": {
-            "3/3": n3, "2/3": n2, "1/3": n1, "0/3": n0, "?/3": nq
         }
-    }));
-    if env.rows.is_empty() {
-        env.warnings
-            .push("no VAV equipment in historian (stamp equipType: vav)".into());
-    }
-    if !has_fdd {
-        env.warnings
-            .push("Run all rules to populate broken_box from VAV-3/4/5/7/REHEAT/AHU-LEAVE".into());
-    }
-    Ok(Some(env))
+        env.coverage = Some(json!({
+            "schema_version": SCHEMA_VAV_HEALTH,
+            "building_id": bid,
+            "groups": {
+                "3/3": n3, "2/3": n2, "1/3": n1, "0/3": n0, "?/3": nq
+            }
+        }));
+        if env.rows.is_empty() {
+            env.warnings
+                .push("no VAV equipment in historian (stamp equipType: vav)".into());
+        }
+        if !has_fdd {
+            env.warnings.push(
+                "Run all rules to populate broken_box from VAV-3/4/5/7/REHEAT/AHU-LEAVE".into(),
+            );
+        }
+        Ok(Some(env))
+    } // legacy-datafusion
 }
 
 #[cfg(test)]

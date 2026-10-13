@@ -31,6 +31,9 @@ mod tenant;
 mod tenant_budget;
 #[cfg(test)]
 mod test_env_lock;
+mod timescale_analytics;
+mod timescale_historian;
+mod timescale_product;
 mod user_store;
 mod vibe21;
 mod wattlab_dump;
@@ -141,35 +144,43 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn initialize_s3_scope_index() -> anyhow::Result<()> {
-    let Some(buildings) = fdd_sql::refresh_s3_scope_index_from_env().await? else {
-        return Ok(());
-    };
-    info!(
-        buildings,
-        "refreshed S3 historian building scope index (scratch metadata only)"
-    );
+    #[cfg(not(feature = "legacy-datafusion"))]
+    {
+        // Wave-X: Parquet/DF S3 scope index retired with DataFusion.
+        Ok(())
+    }
+    #[cfg(feature = "legacy-datafusion")]
+    {
+        let Some(buildings) = fdd_sql::refresh_s3_scope_index_from_env().await? else {
+            return Ok(());
+        };
+        info!(
+            buildings,
+            "refreshed S3 historian building scope index (scratch metadata only)"
+        );
 
-    let refresh_seconds = std::env::var("OPENFDD_S3_SCOPE_REFRESH_SECONDS")
-        .ok()
-        .and_then(|raw| raw.parse::<u64>().ok())
-        .filter(|seconds| *seconds > 0)
-        .unwrap_or(60);
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(refresh_seconds));
-        interval.tick().await;
-        loop {
+        let refresh_seconds = std::env::var("OPENFDD_S3_SCOPE_REFRESH_SECONDS")
+            .ok()
+            .and_then(|raw| raw.parse::<u64>().ok())
+            .filter(|seconds| *seconds > 0)
+            .unwrap_or(60);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(refresh_seconds));
             interval.tick().await;
-            match fdd_sql::refresh_s3_scope_index_from_env().await {
-                Ok(Some(buildings)) => {
-                    tracing::debug!(buildings, "refreshed S3 historian building scope index")
+            loop {
+                interval.tick().await;
+                match fdd_sql::refresh_s3_scope_index_from_env().await {
+                    Ok(Some(buildings)) => {
+                        tracing::debug!(buildings, "refreshed S3 historian building scope index")
+                    }
+                    Ok(None) => break,
+                    Err(error) => tracing::warn!(
+                        %error,
+                        "S3 historian building scope refresh failed; retaining last index"
+                    ),
                 }
-                Ok(None) => break,
-                Err(error) => tracing::warn!(
-                    %error,
-                    "S3 historian building scope refresh failed; retaining last index"
-                ),
             }
-        }
-    });
-    Ok(())
+        });
+        Ok(())
+    }
 }

@@ -5,6 +5,23 @@
 //! come from trusted/operator-authored fieldbus metadata; this module never
 //! parses BACnet/REST point IDs to invent historian identity.
 
+// Wave-X Soft-OPEN: Parquet MicroBatch helpers remain for `legacy-parquet` only;
+// default Timescale path uses timescale_writer_loop. Full delete in 3.6.1.
+#![cfg_attr(
+    not(feature = "legacy-parquet"),
+    expect(
+        dead_code,
+        reason = "Parquet MicroBatch path retained behind legacy-parquet; Timescale uses timescale_writer_loop"
+    )
+)]
+#![cfg_attr(
+    not(feature = "legacy-parquet"),
+    expect(
+        unused_imports,
+        reason = "Parquet-only imports still present until 3.6.1 live_historian split"
+    )
+)]
+
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fmt;
@@ -17,16 +34,20 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, bail, Context, Result};
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
+#[cfg(feature = "legacy-parquet")]
 use datafusion::arrow::array::{
     ArrayRef, BooleanArray, Float64Array, StringArray, TimestampNanosecondArray,
 };
+#[cfg(feature = "legacy-parquet")]
 use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+#[cfg(feature = "legacy-parquet")]
 use datafusion::arrow::record_batch::RecordBatch;
 use fdd_core::columns::normalize_role;
+#[cfg(feature = "legacy-parquet")]
+use fdd_store::ParquetPartWriter;
 use fdd_store::{
     safe_partition_value, tenant_storage_prefix, tenant_storage_root, CompletePartPublisher,
-    HistorianConfig, LocalStorage, MicroBatchFlush, MicroBatchHistorian, ParquetPartWriter,
-    StorageUrl,
+    HistorianConfig, LocalStorage, MicroBatchFlush, MicroBatchHistorian, StorageUrl,
 };
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
@@ -48,6 +69,7 @@ const LATEST_TELEMETRY_WATERMARK: &str = "state/live-historian/latest-telemetry.
 
 type EquipmentKey = (String, String);
 type EquipmentRoles = BTreeMap<String, RoleValue>;
+#[cfg(feature = "legacy-parquet")]
 type NormalizedBatches = (
     BTreeMap<EquipmentKey, RecordBatch>,
     usize,
@@ -391,6 +413,7 @@ fn parse_bool(name: &str, raw: &str) -> Result<bool> {
 }
 
 #[derive(Debug)]
+#[cfg(feature = "legacy-parquet")]
 pub struct LiveHistorian {
     scope: String,
     batches: MicroBatchHistorian,
@@ -404,6 +427,7 @@ pub struct LiveHistorian {
     next_provenance_token: u64,
 }
 
+#[cfg(feature = "legacy-parquet")]
 impl LiveHistorian {
     /// Build the H7 live writer from the canonical historian config.
     ///
@@ -927,8 +951,38 @@ impl Drop for LiveWriter {
     }
 }
 
-fn writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
-    let mut historians: HashMap<String, LiveHistorian> = HashMap::new();
+fn timescale_writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
+    let mut historian = match crate::timescale_historian::TimescaleLiveHistorian::connect() {
+        Ok(h) => h,
+        Err(error) => {
+            warn!(%error, "Timescale live historian failed to connect; ingest will error");
+            // Drain commands with errors so callers do not hang forever.
+            while let Ok(command) = rx.recv() {
+                match command {
+                    WriterCommand::Shutdown => break,
+                    WriterCommand::Ingest {
+                        queued_bytes,
+                        reply,
+                        ..
+                    } => {
+                        release_queue_bytes(queued_bytes);
+                        let _ =
+                            reply.send(Err(anyhow!("timescale historian unavailable: {error}")));
+                    }
+                    WriterCommand::Flush { reply, .. }
+                    | WriterCommand::PublishPending { reply, .. } => {
+                        let _ =
+                            reply.send(Err(anyhow!("timescale historian unavailable: {error}")));
+                    }
+                    #[cfg(test)]
+                    WriterCommand::Probe { reply } => {
+                        let _ = reply.send(true);
+                    }
+                }
+            }
+            return;
+        }
+    };
     while let Ok(command) = rx.recv() {
         match command {
             WriterCommand::Shutdown => break,
@@ -938,15 +992,15 @@ fn writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
                 queued_bytes,
                 reply,
             } => {
-                let result = ingest_scoped(&mut historians, &scope, &envelope);
+                let result = historian.ingest_envelope(&scope, &envelope);
                 release_queue_bytes(queued_bytes);
                 let _ = reply.send(result);
             }
             WriterCommand::Flush { graceful, reply } => {
-                let _ = reply.send(flush_all(&mut historians, graceful));
+                let _ = reply.send(historian.flush_all(graceful));
             }
             WriterCommand::PublishPending { scope, reply } => {
-                let _ = reply.send(publish_pending_scope(&mut historians, &scope));
+                let _ = reply.send(historian.publish_pending(&scope));
             }
             #[cfg(test)]
             WriterCommand::Probe { reply } => {
@@ -956,6 +1010,73 @@ fn writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
     }
 }
 
+fn writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
+    if crate::timescale_historian::historian_is_timescale() {
+        timescale_writer_loop(rx);
+        return;
+    }
+    #[cfg(not(feature = "legacy-parquet"))]
+    {
+        // Wave-X product default: refuse Parquet writer — fail closed.
+        warn!("Parquet live historian disabled (enable feature legacy-parquet or set OPENFDD_DATABASE_URL)");
+        while let Ok(command) = rx.recv() {
+            match command {
+                WriterCommand::Shutdown => break,
+                WriterCommand::Ingest {
+                    queued_bytes,
+                    reply,
+                    ..
+                } => {
+                    release_queue_bytes(queued_bytes);
+                    let _ = reply.send(Err(anyhow!(
+                        "Wave-X: Parquet historian retired; set OPENFDD_DATABASE_URL for Timescale"
+                    )));
+                }
+                WriterCommand::Flush { reply, .. }
+                | WriterCommand::PublishPending { reply, .. } => {
+                    let _ = reply.send(Err(anyhow!(
+                        "Wave-X: Parquet historian retired; set OPENFDD_DATABASE_URL for Timescale"
+                    )));
+                }
+                #[cfg(test)]
+                WriterCommand::Probe { reply } => {
+                    let _ = reply.send(true);
+                }
+            }
+        }
+    }
+    #[cfg(feature = "legacy-parquet")]
+    {
+        let mut historians: HashMap<String, LiveHistorian> = HashMap::new();
+        while let Ok(command) = rx.recv() {
+            match command {
+                WriterCommand::Shutdown => break,
+                WriterCommand::Ingest {
+                    scope,
+                    envelope,
+                    queued_bytes,
+                    reply,
+                } => {
+                    let result = ingest_scoped(&mut historians, &scope, &envelope);
+                    release_queue_bytes(queued_bytes);
+                    let _ = reply.send(result);
+                }
+                WriterCommand::Flush { graceful, reply } => {
+                    let _ = reply.send(flush_all(&mut historians, graceful));
+                }
+                WriterCommand::PublishPending { scope, reply } => {
+                    let _ = reply.send(publish_pending_scope(&mut historians, &scope));
+                }
+                #[cfg(test)]
+                WriterCommand::Probe { reply } => {
+                    let _ = reply.send(tokio::runtime::Handle::try_current().is_err());
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "legacy-parquet")]
 fn ingest_scoped(
     historians: &mut HashMap<String, LiveHistorian>,
     scope: &str,
@@ -971,6 +1092,7 @@ fn ingest_scoped(
     writer.ingest_envelope(envelope)
 }
 
+#[cfg(feature = "legacy-parquet")]
 fn publish_pending_scope(
     historians: &mut HashMap<String, LiveHistorian>,
     scope: &str,
@@ -981,6 +1103,7 @@ fn publish_pending_scope(
     historian.publish_pending()
 }
 
+#[cfg(feature = "legacy-parquet")]
 fn flush_all(
     historians: &mut HashMap<String, LiveHistorian>,
     graceful: bool,
@@ -1014,6 +1137,7 @@ enum RoleValue {
     Utf8(Option<String>),
 }
 
+#[cfg(feature = "legacy-parquet")]
 fn normalized_batches(env: &TelemetryEnvelope) -> Result<NormalizedBatches> {
     let mut grouped: BTreeMap<EquipmentKey, (DateTime<Utc>, EquipmentRoles)> = BTreeMap::new();
     let mut eligible = 0usize;
@@ -1247,9 +1371,13 @@ fn role_value(point: &TelemetryPoint) -> Result<Option<RoleValue>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "legacy-datafusion")]
     use datafusion::arrow::array::Array;
+    #[cfg(feature = "legacy-datafusion")]
     use datafusion::prelude::SessionContext;
+    #[cfg(feature = "legacy-datafusion")]
     use fdd_rules::{rule_params, substitute_sql};
+    #[cfg(feature = "legacy-datafusion")]
     use fdd_sql::{register_historian_building, run_sql};
     use openfdd_contracts::Protocol;
     use serde_json::json;
@@ -1283,6 +1411,7 @@ mod tests {
         env
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn metadata_tags_define_identity_without_parsing_point_id() {
         let env = envelope(vec![point("sat", json!(55.0))]);
@@ -1300,6 +1429,7 @@ mod tests {
             .is_err());
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn point_source_timestamp_is_preserved_in_historian_batch() {
         let mut point = point("sat", json!(55.0));
@@ -1324,6 +1454,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-datafusion")]
     #[test]
     fn untagged_point_is_not_canonicalized() {
         let mut p = point("sat", json!(55.0));
@@ -1338,6 +1469,7 @@ mod tests {
         point.tags.insert("non_finite_quality".into(), json!(true));
     }
 
+    #[cfg(feature = "legacy-datafusion")]
     #[test]
     fn bad_numeric_quality_preserves_schema_as_nan_marker() {
         let mut p = point("sat", json!(55.0));
@@ -1354,6 +1486,7 @@ mod tests {
         assert!(values.value(0).is_nan());
     }
 
+    #[cfg(feature = "legacy-datafusion")]
     #[test]
     fn generic_bad_quality_stays_null_instead_of_a_range_marker() {
         let mut p = point("sat", json!(55.0));
@@ -1369,6 +1502,7 @@ mod tests {
         assert!(values.is_null(0));
     }
 
+    #[cfg(feature = "legacy-parquet")]
     async fn sv_range_fault_hours(sample: TelemetryPoint) -> f64 {
         let tmp = TempDir::new().unwrap();
         let config = HistorianConfig {
@@ -1387,58 +1521,62 @@ mod tests {
         let mut live = LiveHistorian::from_config(&config).unwrap();
         live.ingest_envelope(&envelope(vec![sample])).unwrap();
 
-        let ctx = SessionContext::new();
-        register_historian_building(&ctx, tmp.path(), "BUILDING_100")
-            .await
-            .unwrap();
-        let optional = [
-            "oa_t",
-            "mat",
-            "zone_t",
-            "rat",
-            "chw_supply_t",
-            "chw_return_t",
-            "hw_supply_t",
-            "hw_return_t",
-            "oa_h",
-            "duct_static",
-            "fan_status",
-            "fan_cmd",
-            "pump_status",
-            "chw_pump_cmd",
-            "chiller_status",
-            "kwh",
-            "electric_kw",
-            "electric_kwh",
-        ];
-        let nulls = optional
-            .iter()
-            .map(|role| format!("CAST(NULL AS DOUBLE) AS {role}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let enriched = ctx
-            .sql(&format!("SELECT history.*, {nulls} FROM history"))
-            .await
-            .unwrap();
-        ctx.deregister_table("history").unwrap();
-        ctx.register_table("history", enriched.into_view()).unwrap();
+        #[cfg(feature = "legacy-datafusion")]
+        {
+            let ctx = SessionContext::new();
+            register_historian_building(&ctx, tmp.path(), "BUILDING_100")
+                .await
+                .unwrap();
+            let optional = [
+                "oa_t",
+                "mat",
+                "zone_t",
+                "rat",
+                "chw_supply_t",
+                "chw_return_t",
+                "hw_supply_t",
+                "hw_return_t",
+                "oa_h",
+                "duct_static",
+                "fan_status",
+                "fan_cmd",
+                "pump_status",
+                "chw_pump_cmd",
+                "chiller_status",
+                "kwh",
+                "electric_kw",
+                "electric_kwh",
+            ];
+            let nulls = optional
+                .iter()
+                .map(|role| format!("CAST(NULL AS DOUBLE) AS {role}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let enriched = ctx
+                .sql(&format!("SELECT history.*, {nulls} FROM history"))
+                .await
+                .unwrap();
+            ctx.deregister_table("history").unwrap();
+            ctx.register_table("history", enriched.into_view()).unwrap();
 
-        let sql = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sql_rules/sv_range.sql"),
-        )
-        .unwrap();
-        let mut params = rule_params(300.0, 0);
-        params.insert("RANGE_SCALE_TEMPERATURE".into(), "1".into());
-        params.insert("RANGE_SCALE_HUMIDITY".into(), "1".into());
-        params.insert("RANGE_SCALE_PRESSURE".into(), "1".into());
-        let sql = substitute_sql(&sql, &params);
-        let result = run_sql(&ctx, &sql).await.unwrap();
-        result.rows[0]
-            .get("fault_hours")
-            .and_then(|value| value.as_f64())
-            .unwrap()
+            let sql = std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sql_rules/sv_range.sql"),
+            )
+            .unwrap();
+            let mut params = rule_params(300.0, 0);
+            params.insert("RANGE_SCALE_TEMPERATURE".into(), "1".into());
+            params.insert("RANGE_SCALE_HUMIDITY".into(), "1".into());
+            params.insert("RANGE_SCALE_PRESSURE".into(), "1".into());
+            let sql = substitute_sql(&sql, &params);
+            let result = run_sql(&ctx, &sql).await.unwrap();
+            result.rows[0]
+                .get("fault_hours")
+                .and_then(|value| value.as_f64())
+                .unwrap()
+        }
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[tokio::test]
     async fn bad_quality_flows_through_historian_nan_to_sv_range() {
         let mut bad = point("sat", json!(55.0));
@@ -1447,6 +1585,7 @@ mod tests {
         assert_eq!(sv_range_fault_hours(bad).await, 300.0 / 3600.0);
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[tokio::test]
     async fn generic_poll_error_does_not_sv_range_fault() {
         let mut bad = point("sat", json!(55.0));
@@ -1454,6 +1593,7 @@ mod tests {
         assert_eq!(sv_range_fault_hours(bad).await, 0.0);
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn duplicate_role_drops_later_point_and_keeps_unique_points() {
         let env = envelope(vec![
@@ -1473,6 +1613,7 @@ mod tests {
         assert!(batch.schema().index_of("sat").is_ok());
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn local_live_writer_flushes_and_persists_watermark() {
         let tmp = TempDir::new().unwrap();
@@ -1526,6 +1667,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn weather_stamp_survives_zone_other_mqtt_default() {
         let tmp = TempDir::new().unwrap();
@@ -1582,6 +1724,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn s3_object_key_keeps_configured_prefix_and_canonical_path() {
         let key = object_path(
@@ -1626,6 +1769,7 @@ mod tests {
         env
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn time_flush_provenance_lists_only_published_batches() {
         let tmp = TempDir::new().unwrap();
@@ -1687,12 +1831,14 @@ mod tests {
         assert_eq!(later.persisted_message_groups[0].edge_id, "edge-c");
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[tokio::test]
     async fn dedicated_writer_publishes_outside_the_tokio_runtime() {
         let writer = LiveWriter::start();
         assert!(writer.runs_without_tokio_context().await.unwrap());
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn estimate_envelope_queue_bytes_grows_with_points() {
         let small = scoped_envelope("SITE", "unit-1");
@@ -1720,6 +1866,7 @@ mod tests {
         assert!(estimate_envelope_queue_bytes(&small) >= 1);
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[tokio::test]
     async fn live_writer_rejects_before_clone_when_byte_budget_full() {
         let _env = ScopedEnv::apply(&[
@@ -1744,6 +1891,7 @@ mod tests {
 
     /// #1064: a multi-tenant hub has no process-global tenant. The trusted
     /// scope (`tenant={tid};building={bid}`) is the partition.
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn multi_tenant_scope_partitions_without_process_tenant_env() {
         with_scoped_storage(
@@ -1773,6 +1921,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn multi_tenant_scope_tenant_wins_over_process_env() {
         with_scoped_storage(
@@ -1790,6 +1939,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn multi_tenant_legacy_dash_scope_uses_process_tenant() {
         with_scoped_storage(
@@ -1812,6 +1962,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn multi_tenant_rejects_empty_or_dash_scope_without_tenant() {
         with_scoped_storage(
@@ -1836,6 +1987,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "legacy-parquet")]
     #[test]
     fn single_tenant_dash_scope_stays_on_hub_root() {
         with_scoped_storage(

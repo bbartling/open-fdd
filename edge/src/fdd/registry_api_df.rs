@@ -1,0 +1,2138 @@
+//! Registry-backed FDD API - loads `sql_rules/registry.yaml` via `fdd_rules`.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+use fdd_rules::{
+    effective_param_strings, load_registry, load_tuning_profiles, read_poll_from_cache,
+    rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec, RunOptions,
+};
+use fdd_sql::{
+    new_historian_session, register_historian_building, register_parquet_tree,
+    register_weather_for_building, run_sql,
+};
+use fdd_store::HistorianConfig;
+use serde_json::{json, Value};
+
+/// Coerce historian column to DOUBLE for AVG downsample (Utf8View-safe).
+fn series_numeric_sql(col: &str) -> String {
+    if col.is_empty() || !col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return "CAST(NULL AS DOUBLE)".to_string();
+    }
+    format!("try_cast(trim(CAST({col} AS VARCHAR)) AS DOUBLE)")
+}
+
+fn sql_rules_dir() -> PathBuf {
+    if let Ok(p) = std::env::var("OPENFDD_SQL_RULES_DIR") {
+        return PathBuf::from(p);
+    }
+    for c in [
+        PathBuf::from("sql_rules"),
+        PathBuf::from("/app/sql_rules"),
+        PathBuf::from("../sql_rules"),
+    ] {
+        if c.join("registry.yaml").is_file() {
+            return c;
+        }
+    }
+    PathBuf::from("sql_rules")
+}
+
+/// Map cookbook slider keys onto SQL registry parameter keys.
+fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
+    match (rule_id, key) {
+        ("VAV-1", "zone_lo") | ("VAV-1", "zone_low") => "zone_t_lo",
+        ("VAV-1", "zone_hi") | ("VAV-1", "zone_high") => "zone_t_hi",
+        ("FC1", "duct_static_err") => "eps_dsp",
+        ("FC1", "fan_hi") => "eps_vfd_spd",
+        // Vibe19 / package aliases -> registry parameter keys
+        (_, "airflow_err") => "eps_airflow",
+        (_, "delta_t_min") => "oat_rat_delta_min",
+        (_, "oa_damper_econ_high") => "econ_full_open",
+        (_, "clg_valve_min") => "clg_full_min",
+        (_, "sat_err") => "eps_sat",
+        _ => key,
+    }
+}
+
+/// Persisted Lab / package params bag for one rule (aliases included).
+fn session_rule_param_bag(rule: &RuleSpec) -> Option<serde_json::Map<String, Value>> {
+    let wrap = crate::fdd::session_config::get_session_config();
+    let params = wrap.get("config")?.get("params")?.as_object()?;
+    let bag = params
+        .get(&rule.rule_id)
+        .or_else(|| rule.aliases.iter().find_map(|a| params.get(a)))?
+        .as_object()?;
+    Some(bag.clone())
+}
+
+/// Effective confirm_seconds after session_config confirm_min / confirm_seconds.
+fn confirm_seconds_from_session_bag(rule: &RuleSpec, bag: &serde_json::Map<String, Value>) -> u32 {
+    let mut confirm = rule.confirm_seconds;
+    if let Some(cm) = bag.get("confirm_min").and_then(|v| v.as_f64()) {
+        confirm = (cm * 60.0).round() as u32;
+    }
+    if let Some(cs) = bag.get("confirm_seconds").and_then(|v| v.as_f64()) {
+        confirm = cs.round() as u32;
+    }
+    confirm
+}
+
+/// True when session bag carries confirm or other numeric overrides for this rule.
+fn session_bag_has_overrides(bag: &serde_json::Map<String, Value>) -> bool {
+    bag.iter().any(|(k, v)| {
+        if k == "_ui" {
+            return false;
+        }
+        v.as_f64().is_some()
+    })
+}
+
+/// Fold session bag numbers into SQL placeholder map (same mapping as /api/fdd/run).
+fn apply_session_bag_to_sql_params(
+    rule: &RuleSpec,
+    bag: &serde_json::Map<String, Value>,
+    params: &mut HashMap<String, String>,
+) {
+    for (key, value) in bag {
+        if key == "confirm_min" || key == "_ui" {
+            continue;
+        }
+        let Some(mut number) = value.as_f64() else {
+            continue;
+        };
+        let mut mapped = alias_ui_param_key(&rule.rule_id, key).to_string();
+        if rule.rule_id == "FC1" && key == "fan_hi" {
+            if bag.get("eps_vfd_spd").and_then(|v| v.as_f64()).is_some() {
+                continue;
+            }
+            mapped = "eps_vfd_spd".into();
+            number = (1.0 - number).clamp(0.0, 1.0);
+        }
+        if let Some(def) = rule.parameters.get(&mapped) {
+            params.insert(def.sql_placeholder.clone(), number.to_string());
+        } else if let Some(def) = rule.parameters.get(key) {
+            params.insert(def.sql_placeholder.clone(), number.to_string());
+        } else if let Some((_, def)) = rule
+            .parameters
+            .iter()
+            .find(|(_, def)| def.sql_placeholder == *key || def.sql_placeholder == mapped)
+        {
+            params.insert(def.sql_placeholder.clone(), number.to_string());
+        }
+    }
+}
+
+pub(crate) fn parquet_root() -> PathBuf {
+    // Match CSV ingest + historian: OPENFDD_STORAGE_URL file root first (#528).
+    if let Some(p) = fdd_store::local_file_root_from_env() {
+        return p;
+    }
+    if let Ok(p) = std::env::var("OPENFDD_PARQUET_ROOT") {
+        return PathBuf::from(p);
+    }
+    // Prefer workspace-relative cache so CSV ingest and /api/fdd/run agree when
+    // only OPENFDD_WORKSPACE is set (standalone recipe parity with csv recipe).
+    if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
+        let under_ws = PathBuf::from(&ws).join(".cache/parquet");
+        if under_ws.is_dir() || PathBuf::from(&ws).is_dir() {
+            return under_ws;
+        }
+    }
+    for c in [
+        PathBuf::from(".cache/parquet"),
+        PathBuf::from("/var/openfdd/workspace/.cache/parquet"),
+        PathBuf::from("workspace/.cache/parquet"),
+    ] {
+        if c.is_dir() {
+            return c;
+        }
+    }
+    PathBuf::from(".cache/parquet")
+}
+
+fn preferred_tenant_from_env() -> Option<String> {
+    std::env::var("OPENFDD_TENANT_ID")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Wave U V7 dual-read: newer Parquet tree of `tenants/{tid}/…` and hub-root.
+fn building_has_history_for_tenant(pq: &Path, bid: &str, preferred_tenant: Option<&str>) -> bool {
+    match fdd_store::resolve_building_read_root(pq, preferred_tenant, bid) {
+        Ok(resolved) => fdd_store::building_history_present(&resolved.root, bid),
+        Err(_) => false,
+    }
+}
+
+/// Storage root for a building-scoped FDD/analytics read (tenant partition or hub).
+fn storage_root_for_building(pq: &Path, bid: &str, preferred_tenant: Option<&str>) -> PathBuf {
+    fdd_store::resolve_building_read_root(pq, preferred_tenant, bid)
+        .map(|r| r.root)
+        .unwrap_or_else(|_| pq.to_path_buf())
+}
+
+fn collect_equipment_prefix(root: &Path, prefix: &str, ids: &mut Vec<String>) {
+    if !root.is_dir() {
+        return;
+    }
+    for entry in walkdir::WalkDir::new(root)
+        .min_depth(1)
+        .max_depth(4)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_dir())
+    {
+        if let Some(id) = entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.strip_prefix(prefix))
+        {
+            if !id.is_empty() {
+                ids.push(id.to_string());
+            }
+        }
+    }
+}
+
+/// Wave M D2 - authoritative rule results live under parquet/workspace volume
+/// by default (not WORKDIR `.cache`). Override with `OPENFDD_RULE_RESULTS_DIR`.
+fn rule_results_base() -> PathBuf {
+    if let Ok(p) = std::env::var("OPENFDD_RULE_RESULTS_DIR") {
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    if let Ok(root) = std::env::var("OPENFDD_PARQUET_ROOT") {
+        let trimmed = root.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("rule_results");
+        }
+    }
+    if let Ok(url) = std::env::var("OPENFDD_STORAGE_URL") {
+        if let Some(path) = url.strip_prefix("file://") {
+            let trimmed = path.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed).join("rule_results");
+            }
+        }
+    }
+    if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
+        let trimmed = ws.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("openfdd").join("rule_results");
+        }
+    }
+    // Local/dev fallback only - central readiness fails this path in prod.
+    PathBuf::from(".cache/rule_results")
+}
+
+/// Results directory, optionally scoped to a building so per-site runs do not
+/// overwrite each other. `None` -> `<base>`; `Some(id)` -> `<base>/building={id}/`.
+fn results_dir(building_id: Option<&str>) -> PathBuf {
+    let base = rule_results_base();
+    match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bid) => base.join(format!("building={bid}")),
+        None => base,
+    }
+}
+
+const RUN_META_FILE: &str = "_run_meta.json";
+const DIRTY_FILE: &str = "_dirty.json";
+
+/// Mark a building's FDD results dirty so Overview re-enables Run all rules.
+pub fn mark_building_results_dirty(building_id: &str, reason: &str) {
+    let bid = building_id.trim();
+    if bid.is_empty() {
+        return;
+    }
+    let dir = results_dir(Some(bid));
+    let _ = std::fs::create_dir_all(&dir);
+    let body = json!({
+        "dirty": true,
+        "reason": reason,
+        "at": chrono::Utc::now().to_rfc3339(),
+    });
+    let path = dir.join(DIRTY_FILE);
+    let _ = std::fs::write(path, body.to_string());
+}
+
+fn clear_building_dirty(building_id: Option<&str>) {
+    let path = results_dir(building_id).join(DIRTY_FILE);
+    let _ = std::fs::remove_file(path);
+}
+
+fn rule_set_hash() -> String {
+    use sha2::{Digest, Sha256};
+    let mut ids: Vec<String> = load_reg()
+        .map(|r| r.rules.into_iter().map(|x| x.rule_id).collect())
+        .unwrap_or_default();
+    ids.sort();
+    let mut hasher = Sha256::new();
+    hasher.update(ids.join("|").as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn write_run_meta(building_id: Option<&str>, mode: &str, result_count: usize) {
+    let dir = results_dir(building_id);
+    let _ = std::fs::create_dir_all(&dir);
+    let body = json!({
+        "completed_at": chrono::Utc::now().to_rfc3339(),
+        "mode": mode,
+        "rule_set_hash": rule_set_hash(),
+        "result_count": result_count,
+    });
+    let _ = std::fs::write(dir.join(RUN_META_FILE), body.to_string());
+    if mode == "registry" || mode == "afdd" {
+        clear_building_dirty(building_id);
+    }
+}
+
+/// `GET /api/fdd/results/readiness` — clean/dirty for Overview one-shot grey-out.
+pub fn readiness_response(building_id: Option<&str>) -> Value {
+    let dir = results_dir(building_id);
+    let meta_path = dir.join(RUN_META_FILE);
+    let dirty_path = dir.join(DIRTY_FILE);
+    let mut result_count = 0usize;
+    if dir.is_dir() {
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            for ent in rd.flatten() {
+                let path = ent.path();
+                let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                if !name.ends_with(".json") || name.starts_with('_') {
+                    continue;
+                }
+                result_count += 1;
+            }
+        }
+    }
+    let meta: Option<Value> = std::fs::read_to_string(&meta_path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok());
+    let dirty_body: Option<Value> = std::fs::read_to_string(&dirty_path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok());
+    let mut dirty_reasons: Vec<String> = Vec::new();
+    if let Some(d) = &dirty_body {
+        if let Some(r) = d.get("reason").and_then(Value::as_str) {
+            dirty_reasons.push(r.to_string());
+        }
+    }
+    if meta.is_none() && result_count == 0 {
+        dirty_reasons.push("never_run".into());
+    } else if meta.is_none() && result_count > 0 {
+        dirty_reasons.push("missing_meta".into());
+    }
+    if let Some(m) = &meta {
+        let stored = m.get("rule_set_hash").and_then(Value::as_str).unwrap_or("");
+        if !stored.is_empty() && stored != rule_set_hash() {
+            dirty_reasons.push("rule_set_changed".into());
+        }
+    }
+    let has_results = result_count > 0;
+    let clean = has_results && meta.is_some() && dirty_reasons.is_empty();
+    json!({
+        "ok": true,
+        "has_results": has_results,
+        "clean": clean,
+        "dirty_reasons": dirty_reasons,
+        "completed_at": meta.as_ref().and_then(|m| m.get("completed_at").cloned()),
+        "result_count": meta
+            .as_ref()
+            .and_then(|m| m.get("result_count").and_then(Value::as_u64))
+            .unwrap_or(result_count as u64),
+        "mode": meta.as_ref().and_then(|m| m.get("mode").cloned()),
+    })
+}
+
+fn load_reg() -> Result<RuleRegistry, String> {
+    let dir = sql_rules_dir();
+    load_registry(&dir).map_err(|e| format!("load registry {}: {e}", dir.display()))
+}
+
+/// Registry rules keyed by rule_id and aliases (empty map when registry is unavailable).
+pub fn load_registry_rules_map() -> HashMap<String, RuleSpec> {
+    let mut out = HashMap::new();
+    if let Ok(reg) = load_reg() {
+        for rule in reg.rules {
+            for alias in &rule.aliases {
+                out.insert(alias.clone(), rule.clone());
+            }
+            out.insert(rule.rule_id.clone(), rule);
+        }
+    }
+    out
+}
+
+fn param_to_json(rule: &RuleSpec) -> Value {
+    let mut params = serde_json::Map::new();
+    for (key, def) in &rule.parameters {
+        // confirm_seconds is exposed only as confirm_min (minutes) below so Lab /
+        // Overview sliders match Vibe19 session_config + fault_settings units.
+        if key == "confirm_seconds" {
+            continue;
+        }
+        params.insert(
+            key.clone(),
+            json!({
+                "key": key,
+                "label": def.label,
+                "default": def.default,
+                "min": def.min,
+                "max": def.max,
+                "step": def.step,
+                "unit": def.unit,
+                "control": def.frontend_control,
+                "sql_placeholder": def.sql_placeholder,
+            }),
+        );
+    }
+    // Always expose confirm as confirm_min (minutes) for vibe19 UI parity.
+    if !params.contains_key("confirm_min") {
+        let default_min = rule
+            .parameters
+            .get("confirm_seconds")
+            .map(|def| def.default / 60.0)
+            .unwrap_or((rule.confirm_seconds as f64) / 60.0);
+        let (min_m, max_m, step_m) = rule
+            .parameters
+            .get("confirm_seconds")
+            .map(|def| (def.min / 60.0, def.max / 60.0, (def.step / 60.0).max(0.05)))
+            .unwrap_or((0.0, 120.0, 1.0));
+        params.insert(
+            "confirm_min".into(),
+            json!({
+                "key": "confirm_min",
+                "label": "Fault confirm delay",
+                "default": default_min,
+                "min": min_m,
+                "max": max_m,
+                "step": step_m,
+                "unit": "min",
+                "control": "slider",
+                "sql_placeholder": "CONFIRM_SECONDS",
+            }),
+        );
+    }
+    Value::Object(params)
+}
+
+fn rule_summary(rule: &RuleSpec) -> Value {
+    json!({
+        "rule_id": rule.rule_id,
+        "sql_file": rule.sql_file,
+        "description": rule.description,
+        "required_roles": rule.required_roles,
+        "optional_roles": rule.optional_roles,
+        "output_columns": rule.output_columns,
+        "confirm_seconds": rule.confirm_seconds,
+        "confirm_min": (rule.confirm_seconds as f64) / 60.0,
+        "parity_status": rule.parity_status,
+        "dashboard_wired": rule.dashboard_wired,
+        "parameter_count": rule.parameters.len(),
+        "aliases": rule.aliases,
+    })
+}
+
+/// `GET /api/fdd/rules` - full registry catalog.
+pub fn list_registry_rules() -> Value {
+    match load_reg() {
+        Ok(reg) => {
+            let rules: Vec<Value> = reg.rules.iter().map(rule_summary).collect();
+            json!({
+                "ok": true,
+                "rules_dir": reg.rules_dir,
+                "count": rules.len(),
+                "rules": rules,
+            })
+        }
+        Err(e) => json!({"ok": false, "error": e, "count": 0, "rules": []}),
+    }
+}
+
+/// `GET /api/fdd/rules/{id}/params` - tuning schema for one rule.
+pub fn rule_params_response(rule_id: &str) -> Value {
+    match load_reg() {
+        Ok(reg) => match reg.rules.iter().find(|r| r.rule_id == rule_id) {
+            Some(rule) => json!({
+                "ok": true,
+                "rule_id": rule.rule_id,
+                "confirm_seconds": rule.confirm_seconds,
+                "required_roles": rule.required_roles,
+                "params": param_to_json(rule),
+            }),
+            None => json!({"ok": false, "error": format!("unknown rule_id {rule_id}")}),
+        },
+        Err(e) => json!({"ok": false, "error": e}),
+    }
+}
+
+/// `GET /api/fdd/cache/status` - parquet ingest / results status.
+pub fn cache_status() -> Value {
+    let pq = parquet_root();
+    let results = results_dir(None);
+    let history = pq.join("history");
+    let parquet_files = walkdir_count(&pq, "parquet");
+    let result_files = walkdir_count(&results, "json");
+    json!({
+        "ok": true,
+        "parquet_root": pq.display().to_string(),
+        "parquet_exists": pq.is_dir(),
+        "history_exists": history.is_dir(),
+        "parquet_file_count": parquet_files,
+        "results_dir": results.display().to_string(),
+        "result_file_count": result_files,
+        "sql_rules_dir": sql_rules_dir().display().to_string(),
+        "sql_rules_present": sql_rules_dir().join("registry.yaml").is_file(),
+    })
+}
+
+fn walkdir_count(root: &Path, ext: &str) -> usize {
+    if !root.is_dir() {
+        return 0;
+    }
+    walkdir::WalkDir::new(root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.file_type().is_file()
+                && e.path()
+                    .extension()
+                    .and_then(|x| x.to_str())
+                    .is_some_and(|x| x.eq_ignore_ascii_case(ext))
+        })
+        .count()
+}
+
+fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
+    if kinds.is_empty() {
+        return true;
+    }
+    kinds.iter().any(|k| k.eq_ignore_ascii_case(kind))
+}
+
+/// `GET /api/fdd/equipment` - equipment present in the parquet cache.
+///
+/// When `building_id` is set, walk both legacy `building={id}/equipment=*` and
+/// canonical MQTT `history/building_id={id}/equipment_id=*` so Overview / AFDD
+/// see live sites the same as CSV packages (3.3.33). Wave U V7 dual-reads the
+/// newer of `tenants/{tid}/…` and hub-root.
+pub fn equipment_response(building_id: Option<&str>) -> Value {
+    equipment_response_scoped(building_id, preferred_tenant_from_env().as_deref())
+}
+
+/// Same as [`equipment_response`] with an explicit preferred tenant for MT dual-read.
+pub fn equipment_response_scoped(building_id: Option<&str>, tenant_id: Option<&str>) -> Value {
+    let pq = parquet_root();
+    let mut ids = Vec::new();
+    match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bid) => {
+            let root = storage_root_for_building(&pq, bid, tenant_id);
+            collect_equipment_prefix(
+                &root.join(format!("building={bid}")),
+                "equipment=",
+                &mut ids,
+            );
+            collect_equipment_prefix(
+                &root.join("history").join(format!("building_id={bid}")),
+                "equipment_id=",
+                &mut ids,
+            );
+        }
+        None => {
+            collect_equipment_prefix(&pq, "equipment=", &mut ids);
+            collect_equipment_prefix(&pq.join("history"), "equipment_id=", &mut ids);
+            // Also surface equipment under tenant partitions (post-migrate).
+            let tenants = pq.join("tenants");
+            if tenants.is_dir() {
+                if let Ok(rd) = std::fs::read_dir(&tenants) {
+                    for entry in rd.flatten() {
+                        if entry.path().is_dir() {
+                            collect_equipment_prefix(&entry.path(), "equipment=", &mut ids);
+                            collect_equipment_prefix(
+                                &entry.path().join("history"),
+                                "equipment_id=",
+                                &mut ids,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    let type_root = building_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|bid| storage_root_for_building(&pq, bid, tenant_id))
+        .unwrap_or_else(|| pq.clone());
+    let stamped_types = crate::equipment_types::load_type_map(&type_root, building_id);
+    let equipment: Vec<Value> = ids
+        .iter()
+        .map(|id| {
+            let stamped = stamped_types.get(id).map(String::as_str);
+            crate::equipment_types::type_report(id, stamped)
+        })
+        .collect();
+    json!({"ok": true, "count": equipment.len(), "equipment": equipment})
+}
+
+/// `GET /api/fdd/results` - normalized rows from the most recent registry run.
+///
+/// `building_id` reads from the site-scoped results dir so two buildings' runs
+/// do not clobber one another.
+pub fn results_response(building_id: Option<&str>) -> Value {
+    let dir = results_dir(building_id);
+    let stamped_types = crate::equipment_types::load_type_map(&parquet_root(), building_id);
+    let reg = load_reg().ok();
+    let mut metadata = HashMap::new();
+    let mut kinds_by_rule: HashMap<String, Vec<String>> = HashMap::new();
+    if let Some(reg) = &reg {
+        for rule in &reg.rules {
+            metadata.insert(rule.rule_id.clone(), rule.description.clone());
+            kinds_by_rule.insert(rule.rule_id.clone(), rule.equipment_kinds.clone());
+            for alias in &rule.aliases {
+                kinds_by_rule.insert(alias.clone(), rule.equipment_kinds.clone());
+            }
+        }
+    }
+    let mut rows = Vec::new();
+    if dir.is_dir() {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| {
+                p.extension().and_then(|x| x.to_str()) == Some("json")
+                    && p.file_name()
+                        .and_then(|x| x.to_str())
+                        .is_some_and(|n| !n.starts_with('_'))
+            })
+            .collect();
+        files.sort();
+        for path in files {
+            let Some(rule_id) = path.file_stem().and_then(|x| x.to_str()) else {
+                continue;
+            };
+            if rule_id.starts_with('_') {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(body) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
+            for row in body
+                .get("rows")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let equipment_id = row
+                    .get("equipment_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown");
+                let fault_hours = row
+                    .get("fault_hours")
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0);
+                // Emit status directly from the row when present (skip markers),
+                // otherwise derive FAULT/PASS from fault_hours (OFDD-066).
+                let stamped = stamped_types.get(equipment_id).map(String::as_str);
+                let kind = crate::equipment_types::kind_for(equipment_id, stamped);
+                let applies = kinds_by_rule
+                    .get(rule_id)
+                    .map(|k| rule_applies_to_kind(k, kind))
+                    .unwrap_or(true);
+                let status = if !applies {
+                    "NOT_APPLICABLE_EQUIPMENT_TYPE".to_string()
+                } else {
+                    row.get("status")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| {
+                            if fault_hours > 0.0 { "FAULT" } else { "PASS" }.to_string()
+                        })
+                };
+                let fault_hours = if applies { fault_hours } else { 0.0 };
+                let missing_roles = row
+                    .get("missing_roles")
+                    .cloned()
+                    .unwrap_or_else(|| json!([]));
+                rows.push(json!({
+                    "rule_id": rule_id,
+                    "title": metadata.get(rule_id).cloned().unwrap_or_default(),
+                    "equipment_id": equipment_id,
+                    "equipment_type": crate::equipment_types::api_equipment_type_for(equipment_id, stamped),
+                    "equipment_type_raw": stamped,
+                    "equipment_type_source": crate::equipment_types::equipment_type_source(stamped),
+                    "status": status,
+                    "fault_hours": fault_hours,
+                    "fault_pct": row.get("fault_pct").and_then(Value::as_f64),
+                    "missing_roles": missing_roles,
+                    "notes": row.get("notes").cloned().unwrap_or(Value::Null),
+                }));
+            }
+        }
+    }
+    json!({"ok": true, "count": rows.len(), "results": rows})
+}
+
+/// `GET /api/afdd/scheduler/result-slices` — per-rule window hashes.
+///
+/// Stress compares slices that sit outside the cycle window before and after
+/// a lookback upsert. The display `rows` array is not this proof: a full-file
+/// rewrite would still publish a fresh `rows` list.
+pub fn result_slice_report(building_id: Option<&str>) -> Value {
+    let dir = results_dir(building_id);
+    let mut rules = Vec::new();
+    if dir.is_dir() {
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.extension().and_then(|ext| ext.to_str()) == Some("json")
+                    && path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| !name.starts_with('_'))
+            })
+            .collect();
+        files.sort();
+        for path in files {
+            let Some(rule_id) = path.file_stem().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if rule_id.starts_with('_') {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(body) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
+            rules.push(json!({
+                "rule_id": rule_id,
+                "result_scope": body.get("result_scope").cloned().unwrap_or(Value::Null),
+                "windows": fdd_store::rule_result_window_fingerprints(&body),
+            }));
+        }
+    }
+    json!({
+        "ok": true,
+        "building_id": building_id,
+        "rules": rules,
+    })
+}
+
+/// Roles used for FDD Plots series SELECT (required ∪ optional, SQL-safe).
+///
+/// Portable rules keep `required_roles` empty and put sensors in
+/// `optional_roles`; Plots still need those columns or the UI shows
+/// "No plottable series".
+///
+/// ECON-1..7 always candidate `oa_damper_pct` so FDD Plots can dual-axis
+/// the damper when the historian has it (ECON-4 omits it from registry
+/// roles — OA fraction math — but operators still need the overlay).
+fn series_plot_columns(rule: &RuleSpec) -> Vec<&str> {
+    let mut columns: Vec<&str> = rule
+        .required_roles
+        .iter()
+        .chain(rule.optional_roles.iter())
+        .map(String::as_str)
+        .filter(|name| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+        .collect();
+    let id = rule.rule_id.to_ascii_uppercase();
+    if id.starts_with("ECON-")
+        && id
+            .as_bytes()
+            .get(5)
+            .copied()
+            .is_some_and(|c| c.is_ascii_digit())
+        && !columns.contains(&"oa_damper_pct")
+    {
+        columns.push("oa_damper_pct");
+    }
+    columns.sort_unstable();
+    columns.dedup();
+    columns
+}
+
+/// Downsampled history series for one equipment/rule. Rule math continues to
+/// use full-resolution parquet; only this display response is capped.
+pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&str>) -> Value {
+    series_response_scoped(
+        equipment_id,
+        rule_id,
+        building_id,
+        preferred_tenant_from_env().as_deref(),
+    )
+}
+
+/// Same as [`series_response`] with an explicit preferred tenant for MT dual-read.
+pub fn series_response_scoped(
+    equipment_id: &str,
+    rule_id: &str,
+    building_id: Option<&str>,
+    tenant_id: Option<&str>,
+) -> Value {
+    let reg = match load_reg() {
+        Ok(r) => r,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
+    let Some(rule) = reg
+        .rules
+        .iter()
+        .find(|r| r.rule_id == rule_id || r.aliases.iter().any(|a| a == rule_id))
+    else {
+        return json!({"ok": false, "error": format!("unknown rule_id {rule_id}")});
+    };
+    let columns = series_plot_columns(rule);
+    if columns.is_empty() {
+        return json!({"ok": true, "equipment_id": equipment_id, "rule_id": rule.rule_id, "rows": [], "roles": []});
+    }
+    let escaped_equipment = equipment_id.replace('\'', "''");
+    let pq = parquet_root();
+    // Prefer OFDD-070 registration (canonical history/building_id= then legacy)
+    // so MQTT live sites plot the same as CSV packages (3.3.33). Wave U V7
+    // dual-reads the newer of tenants/{tid}/ and hub-root.
+    let (storage_root, weather_root, scoped_bid, read_root, read_source): (
+        PathBuf,
+        PathBuf,
+        Option<String>,
+        String,
+        &'static str,
+    ) = match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bid) => {
+            if !building_has_history_for_tenant(&pq, bid, tenant_id) {
+                return json!({
+                    "ok": false,
+                    "error": format!(
+                        "no parquet for building_id={bid} under {} - ingest that package or wait for MQTT historian",
+                        pq.display()
+                    ),
+                    "missing_roles": rule.required_roles,
+                    "equipment_id": equipment_id,
+                    "rule_id": rule.rule_id,
+                    "building_id": bid,
+                    "rows": [],
+                });
+            }
+            let resolved = fdd_store::resolve_building_read_root(&pq, tenant_id, bid)
+                .unwrap_or_else(|_| fdd_store::BuildingReadRoot {
+                    root: pq.clone(),
+                    source: fdd_store::BuildingReadSource::HubRoot,
+                    tenant_id: None,
+                });
+            let read_root = resolved.root.display().to_string();
+            let read_source = resolved.source.as_str();
+            (
+                resolved.root.clone(),
+                resolved.root,
+                Some(bid.to_string()),
+                read_root,
+                read_source,
+            )
+        }
+        None => (
+            pq.clone(),
+            pq.clone(),
+            None,
+            pq.display().to_string(),
+            fdd_store::BuildingReadSource::HubRoot.as_str(),
+        ),
+    };
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => return json!({"ok": false, "error": format!("runtime: {e}")}),
+    };
+    let Some(_series_admit) =
+        fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Series)
+    else {
+        return json!({
+            "ok": false,
+            "error": "compute admission limit reached (OPENFDD_COMPUTE_MAX_INFLIGHT); retry later"
+        });
+    };
+    rt.block_on(async {
+        let mut columns = columns;
+        let hist_cfg = match HistorianConfig::from_env() {
+            Ok(c) => c,
+            Err(e) => return json!({"ok": false, "error": format!("historian config: {e}")}),
+        };
+        let ctx = match new_historian_session(&hist_cfg) {
+            Ok(c) => c,
+            Err(e) => {
+                return json!({"ok": false, "error": format!("bounded DataFusion session: {e}")})
+            }
+        };
+        if let Some(bid) = scoped_bid.as_deref() {
+            if let Err(e) = register_historian_building(&ctx, &storage_root, bid).await {
+                return json!({"ok": false, "error": e.to_string()});
+            }
+        } else if let Err(e) = register_parquet_tree(&ctx, &storage_root).await {
+            return json!({"ok": false, "error": e.to_string()});
+        }
+        let _ = register_weather_for_building(&ctx, &weather_root, scoped_bid.as_deref()).await;
+        let _ = fdd_rules::occupancy_schedule::apply_session_occupancy_schedule(&ctx).await;
+        // Prefer columns present on this equipment's history schema. Required
+        // roles still hard-fail when missing; optional roles are skipped so
+        // portable SV/PID rules can plot whatever is mapped.
+        let history_columns: std::collections::HashSet<String> = match ctx.table("history").await {
+            Ok(df) => df
+                .schema()
+                .fields()
+                .iter()
+                .map(|f| f.name().to_ascii_lowercase())
+                .collect(),
+            Err(_) => std::collections::HashSet::new(),
+        };
+        if !history_columns.is_empty() {
+            let missing_required: Vec<String> = rule
+                .required_roles
+                .iter()
+                .filter(|role| {
+                    role.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                        && !history_columns.contains(&role.to_ascii_lowercase())
+                })
+                .cloned()
+                .collect();
+            if !missing_required.is_empty() {
+                return json!({
+                    "ok": false,
+                    "error": format!(
+                        "missing roles for rule {}: {}",
+                        rule.rule_id,
+                        missing_required.join(", ")
+                    ),
+                    "missing_roles": missing_required,
+                    "equipment_id": equipment_id,
+                    "rule_id": rule.rule_id,
+                    "rows": [],
+                });
+            }
+            columns.retain(|c| history_columns.contains(&c.to_ascii_lowercase()));
+        }
+        if columns.is_empty() {
+            return json!({
+                "ok": true,
+                "equipment_id": equipment_id,
+                "rule_id": rule.rule_id,
+                "rows": [],
+                "roles": [],
+            });
+        }
+        // Bounded date_bin downsample (#1179) — no ROW_NUMBER/COUNT(*) OVER full set.
+        // Default lookback keeps series under the shared FairSpillPool.
+        const SERIES_MAX_POINTS: usize = 8000;
+        let limit = SERIES_MAX_POINTS;
+        let lookback_days = std::env::var("OPENFDD_SERIES_LOOKBACK_DAYS")
+            .ok()
+            .and_then(|s| s.trim().parse::<i64>().ok())
+            .unwrap_or(7)
+            .max(1);
+        let bin_secs = ((lookback_days * 86400) / (limit as i64)).max(1);
+        let sql = format!(
+            r#"
+WITH bounded AS (
+  SELECT
+    timestamp_utc,
+    equipment_id,
+    {cols}
+  FROM history
+  WHERE equipment_id = '{eq}'
+    AND timestamp_utc >= (NOW() - INTERVAL '{lookback_days}' DAY)
+),
+bucketed AS (
+  SELECT
+    date_bin(INTERVAL '{bin_secs}' SECOND, timestamp_utc) AS bucket_ts,
+    equipment_id,
+    {cols_avg}
+  FROM bounded
+  GROUP BY date_bin(INTERVAL '{bin_secs}' SECOND, timestamp_utc), equipment_id
+)
+SELECT CAST(bucket_ts AS VARCHAR) AS timestamp_utc, equipment_id, {cols}
+FROM bucketed
+ORDER BY bucket_ts
+LIMIT {limit}
+"#,
+            cols = columns.join(", "),
+            cols_avg = columns
+                .iter()
+                .map(|c| {
+                    let n = series_numeric_sql(c);
+                    format!("AVG({n}) AS {c}")
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
+            eq = escaped_equipment,
+            limit = limit,
+            lookback_days = lookback_days,
+            bin_secs = bin_secs,
+        );
+        match run_sql(&ctx, &sql).await {
+            Ok(mut result) => {
+                // Overlay confirmed_fault for the FDD Plots swim lane (vibe19).
+                // Registry JSON is equipment-level fault_hours only - when that
+                // index is empty, re-run the rule SQL rewritten to a per-timestamp
+                // confirmed series and join onto history rows.
+                // When Lab session_config has overrides (e.g. confirm_min), always
+                // recompute sql_detail with those params so Plots match Update rule.
+                let session_bag = session_rule_param_bag(rule);
+                let prefer_session_detail = session_bag
+                    .as_ref()
+                    .map(session_bag_has_overrides)
+                    .unwrap_or(false);
+                let mut fault_by_ts = if prefer_session_detail {
+                    HashMap::new()
+                } else {
+                    load_confirmed_fault_index(equipment_id, &rule.rule_id, building_id)
+                };
+                let mut overlay_source = if fault_by_ts.is_empty() {
+                    "none"
+                } else {
+                    "results"
+                };
+                if fault_by_ts.is_empty() {
+                    if let Some(detail) = compute_confirmed_fault_series(
+                        &ctx,
+                        &reg,
+                        rule,
+                        equipment_id,
+                        &storage_root,
+                        &history_columns,
+                        session_bag.as_ref(),
+                    )
+                    .await
+                    {
+                        fault_by_ts = detail;
+                        if !fault_by_ts.is_empty() {
+                            overlay_source = if prefer_session_detail {
+                                "sql_detail_session"
+                            } else {
+                                "sql_detail"
+                            };
+                        }
+                    }
+                }
+                let mut overlay_hits = 0usize;
+                let mut confirmed_true_hits = 0usize;
+                if !fault_by_ts.is_empty() {
+                    for row in &mut result.rows {
+                        if let Some(obj) = row.as_object_mut() {
+                            let ts = obj
+                                .get("timestamp_utc")
+                                .or_else(|| obj.get("timestamp"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            if let Some(flag) = lookup_fault_flag(&fault_by_ts, ts) {
+                                obj.insert("confirmed_fault".into(), json!(flag));
+                                overlay_hits += 1;
+                                if flag {
+                                    confirmed_true_hits += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                let stamped_types = crate::equipment_types::load_type_map(
+                    &storage_root,
+                    scoped_bid.as_deref(),
+                );
+                let stamped = stamped_types.get(equipment_id).map(String::as_str);
+                json!({
+                    "ok": true,
+                    "equipment_id": equipment_id,
+                    "equipment_type": crate::equipment_types::api_equipment_type_for(equipment_id, stamped),
+                    "equipment_type_raw": stamped,
+                    "equipment_type_source": crate::equipment_types::equipment_type_source(stamped),
+                    "rule_id": rule.rule_id,
+                    "roles": columns,
+                    "rows": result.rows,
+                    "downsampled": result.row_count >= SERIES_MAX_POINTS,
+                    "max_points": SERIES_MAX_POINTS,
+                    "has_confirmed_fault": confirmed_true_hits > 0,
+                    "fault_overlay_source": overlay_source,
+                    "fault_overlay_hits": overlay_hits,
+                    "fault_overlay_true_hits": confirmed_true_hits,
+                    "building_id": building_id,
+                    "read_root": read_root,
+                    "read_source": read_source,
+                })
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let lower = msg.to_ascii_lowercase();
+                if lower.contains("no field named") || lower.contains("schema error") {
+                    json!({
+                        "ok": false,
+                        "error": format!("missing roles for rule {}: {msg}", rule.rule_id),
+                        "missing_roles": rule.required_roles,
+                        "equipment_id": equipment_id,
+                        "rule_id": rule.rule_id,
+                        "rows": [],
+                    })
+                } else {
+                    json!({"ok": false, "error": msg})
+                }
+            }
+        }
+    })
+}
+
+/// Normalize timestamp keys so series rows join fault overlays across slight
+/// format drift (trim; `timestamp` vs `timestamp_utc`; fractional seconds;
+/// `Z` vs `+00:00`).
+fn normalize_ts_keys(raw: &str) -> Vec<String> {
+    let s = raw.trim().to_string();
+    if s.is_empty() {
+        return Vec::new();
+    }
+    let mut keys: Vec<String> = Vec::new();
+    fn push_unique(keys: &mut Vec<String>, k: String) {
+        if !k.is_empty() && !keys.iter().any(|x| x == &k) {
+            keys.push(k);
+        }
+    }
+    push_unique(&mut keys, s.clone());
+    // `T` vs space between date and time.
+    if s.len() > 10 {
+        let sep = s.as_bytes()[10];
+        if sep == b'T' {
+            push_unique(&mut keys, format!("{} {}", &s[..10], &s[11..]));
+        } else if sep == b' ' {
+            push_unique(&mut keys, format!("{}T{}", &s[..10], &s[11..]));
+        }
+    }
+    // Optional trailing Z / +00:00 / -00:00.
+    let snapshot = keys.clone();
+    for k in snapshot {
+        if k.ends_with('Z') {
+            push_unique(&mut keys, k[..k.len() - 1].to_string());
+            push_unique(&mut keys, format!("{}+00:00", &k[..k.len() - 1]));
+        } else if let Some(stripped) = k
+            .strip_suffix("+00:00")
+            .or_else(|| k.strip_suffix("-00:00"))
+        {
+            push_unique(&mut keys, stripped.to_string());
+            push_unique(&mut keys, format!("{stripped}Z"));
+        } else if k.len() >= 19 && !k.contains('Z') && !k.contains('+') {
+            // No zone suffix - add Z (date dashes are fine; `+` marks offsets).
+            push_unique(&mut keys, format!("{k}Z"));
+        }
+    }
+    // Strip fractional seconds (keep timezone suffix).
+    let snapshot = keys.clone();
+    for k in snapshot {
+        if let Some(dot) = k.find('.') {
+            let rest = &k[dot..];
+            if let Some(rel) = rest.find(['Z', '+', '-']) {
+                push_unique(&mut keys, format!("{}{}", &k[..dot], &rest[rel..]));
+            } else {
+                push_unique(&mut keys, k[..dot].to_string());
+            }
+        }
+    }
+    keys
+}
+
+/// Rewrite aggregated cookbook SQL (`final` <- `ranked` -> `fault_hours`) into a
+/// per-timestamp `confirmed_fault` series for one equipment (FDD Plots overlay).
+///
+/// Registry runs persist equipment-level `fault_hours` only; Plots need the
+/// swim-lane bool joined onto history timestamps. Returns `None` for analytics
+/// rollups / non-confirm SQL shapes.
+fn rewrite_rule_sql_to_fault_series(sql: &str, equipment_id: &str) -> Option<String> {
+    let sql = sql.trim().trim_end_matches(';');
+    let lower = sql.to_ascii_lowercase();
+    if !lower.contains("final as") || !lower.contains("from ranked") {
+        return None;
+    }
+    if !lower.contains("fault_hours") {
+        return None;
+    }
+    let final_at = lower.find("final as (")?;
+    let select_at = lower.rfind("select")?;
+    if select_at <= final_at {
+        return None;
+    }
+    // Outer aggregate SELECT must be the trailing one after `final`.
+    if !lower[select_at..].contains("fault_hours") {
+        return None;
+    }
+
+    let mut head = sql[..select_at].to_string();
+    // Inject timestamp_utc into the `final` CTE select list when missing.
+    let head_lower = head.to_ascii_lowercase();
+    if let Some(rel_final) = head_lower[final_at..].find("final as (") {
+        let body_start = final_at + rel_final + "final as (".len();
+        let body_slice = &head_lower[body_start..];
+        // Only the final CTE body (until FROM ranked).
+        let from_ranked = body_slice.find("from ranked")?;
+        let final_body = &head_lower[body_start..body_start + from_ranked];
+        if !final_body.contains("timestamp_utc") {
+            // Insert after first `equipment_id,` inside final.
+            if let Some(eq_rel) = final_body.find("equipment_id") {
+                let abs = body_start + eq_rel;
+                // Find comma after equipment_id (allow whitespace/newlines).
+                let after = &head[abs..];
+                if let Some(comma_rel) = after.find(',') {
+                    let insert_at = abs + comma_rel + 1;
+                    head.insert_str(insert_at, "\n    timestamp_utc,");
+                }
+            }
+        }
+    }
+
+    let escaped = equipment_id.replace('\'', "''");
+    Some(format!(
+        "{head}SELECT equipment_id, timestamp_utc, confirmed AS confirmed_fault\n\
+         FROM final\n\
+         WHERE equipment_id = '{escaped}'\n\
+         ORDER BY timestamp_utc"
+    ))
+}
+
+/// Inject NULL columns for optional roles missing from history (CTE form).
+fn sql_with_optional_null_roles_series(
+    sql: &str,
+    optional_roles: &[String],
+    history_columns: &std::collections::HashSet<String>,
+) -> String {
+    let missing: Vec<String> = optional_roles
+        .iter()
+        .filter(|role| !history_columns.contains(&role.to_ascii_lowercase()))
+        .cloned()
+        .collect();
+    if missing.is_empty() {
+        return sql.to_string();
+    }
+    let null_cols: String = missing
+        .iter()
+        .map(|r| {
+            let ty = if r.eq_ignore_ascii_case("occ_mode") {
+                "VARCHAR"
+            } else {
+                "DOUBLE"
+            };
+            format!("CAST(NULL AS {ty}) AS \"{r}\"")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let cte = format!("history_opt AS (SELECT history.*, {null_cols} FROM history)");
+    let rewritten = sql
+        .replace(" FROM history", " FROM history_opt")
+        .replace(" from history", " from history_opt")
+        .replace("\nFROM history", "\nFROM history_opt")
+        .replace("\nfrom history", "\nfrom history_opt");
+    if let Some(idx) = rewritten.find("WITH ") {
+        let (pre, rest) = rewritten.split_at(idx);
+        let rest = rest.trim_start_matches("WITH ");
+        format!("{pre}WITH {cte}, {rest}")
+    } else if let Some(idx) = rewritten.find("with ") {
+        let (pre, rest) = rewritten.split_at(idx);
+        let rest = rest.trim_start_matches("with ");
+        format!("{pre}WITH {cte}, {rest}")
+    } else {
+        format!("WITH {cte} {rewritten}")
+    }
+}
+
+/// Compute per-timestamp confirmed_fault by rewriting + running cookbook SQL.
+async fn compute_confirmed_fault_series(
+    ctx: &datafusion::prelude::SessionContext,
+    reg: &RuleRegistry,
+    rule: &RuleSpec,
+    equipment_id: &str,
+    parquet_root: &Path,
+    history_columns: &std::collections::HashSet<String>,
+    session_bag: Option<&serde_json::Map<String, Value>>,
+) -> Option<HashMap<String, bool>> {
+    let sql_path = Path::new(&reg.rules_dir).join(&rule.sql_file);
+    let raw_sql = std::fs::read_to_string(&sql_path).ok()?;
+    let detail = rewrite_rule_sql_to_fault_series(&raw_sql, equipment_id)?;
+    let poll = read_poll_from_cache(parquet_root).unwrap_or(300.0);
+    let confirm = session_bag
+        .map(|bag| confirm_seconds_from_session_bag(rule, bag))
+        .unwrap_or(rule.confirm_seconds);
+    let mut params = rule_params(poll, confirm);
+    if let Ok(tuning) = load_tuning_profiles(Path::new(&reg.rules_dir)) {
+        if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
+            for (k, v) in tuned {
+                if k == "CONFIRM_SECONDS" || k == "CONFIRM_ROWS" {
+                    continue;
+                }
+                params.insert(k, v);
+            }
+        }
+    }
+    // Catalog confirm defaults must not wipe session confirm_min.
+    let confirm_params = rule_params(poll, confirm);
+    for (k, v) in confirm_params {
+        params.insert(k, v);
+    }
+    if let Some(bag) = session_bag {
+        apply_session_bag_to_sql_params(rule, bag, &mut params);
+        // Re-assert confirm after bag fold (confirm_seconds key may also be present).
+        let confirm_params = rule_params(poll, confirm);
+        for (k, v) in confirm_params {
+            params.insert(k, v);
+        }
+    }
+    let mut sql = substitute_sql(&detail, &params);
+    sql = sql_with_optional_null_roles_series(&sql, &rule.optional_roles, history_columns);
+    let result = run_sql(ctx, &sql).await.ok()?;
+    let mut out = HashMap::new();
+    for row in result.rows {
+        let ts = row
+            .get("timestamp_utc")
+            .or_else(|| row.get("timestamp"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if ts.is_empty() {
+            continue;
+        }
+        let flag = row
+            .get("confirmed_fault")
+            .and_then(|v| v.as_bool())
+            .or_else(|| {
+                row.get("confirmed_fault")
+                    .and_then(|v| v.as_i64())
+                    .map(|n| n != 0)
+            })
+            .or_else(|| {
+                row.get("confirmed")
+                    .and_then(|v| v.as_i64())
+                    .map(|n| n != 0)
+            });
+        if let Some(f) = flag {
+            for key in normalize_ts_keys(ts) {
+                out.insert(key, f);
+            }
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+fn lookup_fault_flag(map: &HashMap<String, bool>, ts: &str) -> Option<bool> {
+    for key in normalize_ts_keys(ts) {
+        if let Some(v) = map.get(&key) {
+            return Some(*v);
+        }
+    }
+    None
+}
+
+/// Map RFC3339 (or raw) timestamp -> confirmed_fault bool from last rule result JSON.
+fn load_confirmed_fault_index(
+    equipment_id: &str,
+    rule_id: &str,
+    building_id: Option<&str>,
+) -> HashMap<String, bool> {
+    let mut out = HashMap::new();
+    let mut paths: Vec<PathBuf> = Vec::new();
+    // Prefer site-scoped results when building id is known.
+    if let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        paths.push(results_dir(Some(bid)).join(format!("{rule_id}.json")));
+    }
+    paths.push(results_dir(None).join(format!("{rule_id}.json")));
+    // Scan building=*/{rule_id}.json under the results root.
+    if let Ok(rd) = std::fs::read_dir(results_dir(None)) {
+        for ent in rd.flatten() {
+            let p = ent.path();
+            if p.is_dir() {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name.starts_with("building=") {
+                    let f = p.join(format!("{rule_id}.json"));
+                    if f.is_file() {
+                        paths.push(f);
+                    }
+                }
+            }
+        }
+    }
+    // Dedup while preserving order.
+    let mut seen = std::collections::HashSet::new();
+    paths.retain(|p| seen.insert(p.clone()));
+
+    for path in paths {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(body) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+        for row in body
+            .get("rows")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let eq = row
+                .get("equipment_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if eq != equipment_id {
+                continue;
+            }
+            let ts = row
+                .get("timestamp_utc")
+                .or_else(|| row.get("timestamp"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if ts.is_empty() {
+                continue;
+            }
+            let flag = row
+                .get("confirmed_fault")
+                .and_then(|v| v.as_bool())
+                .or_else(|| {
+                    row.get("confirmed_fault")
+                        .and_then(|v| v.as_i64())
+                        .map(|n| n != 0)
+                });
+            if let Some(f) = flag {
+                for key in normalize_ts_keys(ts) {
+                    out.insert(key, f);
+                }
+            }
+        }
+        if !out.is_empty() {
+            break;
+        }
+    }
+    out
+}
+
+/// `GET /api/fdd/roles` - role map file if present.
+pub fn roles_response() -> Value {
+    let candidates = [
+        PathBuf::from("configs/role_map.json"),
+        PathBuf::from("workspace/data/role_map.json"),
+        PathBuf::from("/app/configs/role_map.json"),
+    ];
+    for c in candidates {
+        if c.is_file() {
+            match std::fs::read_to_string(&c) {
+                Ok(text) => match serde_json::from_str::<Value>(&text) {
+                    Ok(v) => {
+                        return json!({
+                            "ok": true,
+                            "path": c.display().to_string(),
+                            "roles": v,
+                        })
+                    }
+                    Err(e) => {
+                        return json!({
+                            "ok": false,
+                            "error": format!("parse {}: {e}", c.display()),
+                        })
+                    }
+                },
+                Err(e) => {
+                    return json!({"ok": false, "error": e.to_string()});
+                }
+            }
+        }
+    }
+    json!({
+        "ok": true,
+        "path": null,
+        "roles": {},
+        "hint": "no role_map.json found; place under configs/ or workspace/data/"
+    })
+}
+
+/// `POST /api/fdd/run` body for registry engine (typed params only - no raw SQL).
+///
+/// ```json
+/// { "mode": "registry", "rule_ids": ["FC1","VAV-1"], "params": { "FC1": { "confirm_min": 5 } },
+///   "building_id": "BldgA" }
+/// ```
+/// Omit `rule_ids` to run all. Pass ``building_id`` to scope history via
+/// ``register_historian_building`` (canonical ``history/building_id=`` then
+/// legacy ``building=``) so MQTT live sites AFDD like CSV packages (3.3.33).
+/// Without parquet cache, returns a clear error.
+pub fn run_registry(payload: &Value) -> Value {
+    run_registry_with_cancel(payload, None)
+}
+
+/// Registry run with optional cooperative cancel flag (#1127 P2).
+pub fn run_registry_with_cancel(
+    payload: &Value,
+    cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Value {
+    let pq = parquet_root();
+    if !pq.is_dir() {
+        return json!({
+            "ok": false,
+            "error": format!(
+                "parquet cache missing at {} - set OPENFDD_PARQUET_ROOT or ingest a building package first",
+                pq.display()
+            ),
+            "cache": cache_status(),
+        });
+    }
+    let building_id = payload
+        .get("building_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let preferred = preferred_tenant_from_env();
+    let (history_root, weather_root): (PathBuf, PathBuf) = match building_id {
+        Some(bid) => {
+            if !building_has_history_for_tenant(&pq, bid, preferred.as_deref()) {
+                return json!({
+                    "ok": false,
+                    "error": format!(
+                        "no parquet for building_id={bid} under {} - ingest that package or wait for MQTT historian",
+                        pq.display()
+                    ),
+                    "cache": cache_status(),
+                    "building_id": bid,
+                });
+            }
+            // Dual-read root; runner scopes with register_historian_building.
+            let root = storage_root_for_building(&pq, bid, preferred.as_deref());
+            (root.clone(), root)
+        }
+        None => (pq.clone(), pq.clone()),
+    };
+    let reg = match load_reg() {
+        Ok(r) => r,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
+
+    let filter: Option<Vec<String>> = payload.get("rule_ids").and_then(|v| v.as_array()).map(|a| {
+        a.iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect()
+    });
+
+    let filtered = if let Some(ids) = filter {
+        let mut clone = reg.clone();
+        clone.rules.retain(|r| {
+            ids.iter()
+                .any(|id| id == &r.rule_id || r.aliases.iter().any(|a| a == id))
+        });
+        clone
+    } else {
+        reg
+    };
+
+    if filtered.rules.is_empty() {
+        return json!({"ok": false, "error": "no matching rules to run"});
+    }
+
+    // Normalize aliases and pass typed request overrides into the runner.
+    let mut effective = filtered.clone();
+    let mut session_overrides: HashMap<String, HashMap<String, f64>> = HashMap::new();
+    if let Some(params_by_rule) = payload.get("params").and_then(|v| v.as_object()) {
+        for rule in &mut effective.rules {
+            let supplied = params_by_rule.get(&rule.rule_id).or_else(|| {
+                rule.aliases
+                    .iter()
+                    .find_map(|alias| params_by_rule.get(alias))
+            });
+            if let Some(p) = supplied.and_then(|v| v.as_object()) {
+                // UI vibe19 sliders store confirm_min (minutes). Always fold into
+                // rule.confirm_seconds AND typed overrides so parameter-default
+                // CONFIRM_SECONDS cannot wipe the slider (soak BUG-2).
+                let mut confirm_override: Option<f64> = None;
+                if let Some(cm) = p.get("confirm_min").and_then(|v| v.as_f64()) {
+                    rule.confirm_seconds = (cm * 60.0).round() as u32;
+                    confirm_override = Some(rule.confirm_seconds as f64);
+                }
+                if let Some(cs) = p.get("confirm_seconds").and_then(|v| v.as_f64()) {
+                    rule.confirm_seconds = cs.round() as u32;
+                    confirm_override = Some(rule.confirm_seconds as f64);
+                }
+                let mut typed = HashMap::new();
+                for (key, value) in p {
+                    if key == "confirm_min" {
+                        continue;
+                    }
+                    let Some(mut number) = value.as_f64() else {
+                        continue;
+                    };
+                    // FC1 legacy fan_hi (fan-on frac) -> eps_vfd_spd = 1 - fan_hi
+                    let mut mapped = alias_ui_param_key(&rule.rule_id, key).to_string();
+                    if rule.rule_id == "FC1" && key == "fan_hi" {
+                        if p.get("eps_vfd_spd").and_then(|v| v.as_f64()).is_some() {
+                            continue;
+                        }
+                        mapped = "eps_vfd_spd".into();
+                        number = (1.0 - number).clamp(0.0, 1.0);
+                    }
+                    if rule.parameters.contains_key(&mapped) {
+                        typed.insert(mapped, number);
+                    } else if rule.parameters.contains_key(key) {
+                        typed.insert(key.clone(), number);
+                    } else if let Some((param_key, _)) = rule.parameters.iter().find(|(_, def)| {
+                        def.sql_placeholder == *key || def.sql_placeholder == mapped
+                    }) {
+                        typed.insert(param_key.clone(), number);
+                    }
+                }
+                if let Some(cs) = confirm_override {
+                    if rule.parameters.contains_key("confirm_seconds") {
+                        typed.insert("confirm_seconds".into(), cs);
+                    }
+                }
+                if !typed.is_empty() {
+                    session_overrides.insert(rule.rule_id.clone(), typed);
+                }
+            }
+        }
+    }
+
+    let out = results_dir(building_id);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build();
+    let rt = match rt {
+        Ok(r) => r,
+        Err(e) => return json!({"ok": false, "error": format!("runtime: {e}")}),
+    };
+    let session_units = crate::fdd::session_config::unit_system_from_session();
+    let unit_system = payload
+        .get("unit_system")
+        .and_then(Value::as_str)
+        .unwrap_or(session_units.as_str());
+    // Continuous AFDD lookback (top-level or nested under params for older callers).
+    let start_utc = payload
+        .get("start_utc")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            payload
+                .get("params")
+                .and_then(|p| p.get("start_utc"))
+                .and_then(Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let end_utc = payload
+        .get("end_utc")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            payload
+                .get("params")
+                .and_then(|p| p.get("end_utc"))
+                .and_then(Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let time_window = match (start_utc, end_utc) {
+        (Some(start), Some(end)) => Some((start, end)),
+        (None, None) => None,
+        _ => {
+            return json!({
+                "ok": false,
+                "error": "AFDD time window requires both start_utc and end_utc",
+            });
+        }
+    };
+    if let Err(err) = fdd_store::enforce_routine_result_scope(payload, time_window.is_some()) {
+        return json!({"ok": false, "error": err.to_string()});
+    }
+    match rt.block_on(run_all_rules_with_overrides(
+        &history_root,
+        &effective,
+        &out,
+        &session_overrides,
+        RunOptions {
+            equipment_filter: payload.get("equipment_id").and_then(Value::as_str),
+            weather_root: Some(weather_root.as_path()),
+            unit_system: Some(unit_system),
+            time_window,
+            building_id,
+            cancel: cancel.as_ref(),
+        },
+    )) {
+        Ok(report) => {
+            let normalized = results_response(building_id);
+            let result_count =
+                normalized.get("count").and_then(Value::as_u64).unwrap_or(0) as usize;
+            if !report.cancelled {
+                write_run_meta(building_id, "registry", result_count);
+            }
+            json!({
+                "ok": !report.cancelled,
+                "cancelled": report.cancelled,
+                "engine": "fdd_rules+DataFusion",
+                "mode": "registry",
+                "building_id": building_id,
+                "history_root": history_root.display().to_string(),
+                "start_utc": time_window.map(|(s, _)| s),
+                "end_utc": time_window.map(|(_, e)| e),
+                "rules_run": report.rules_run,
+                "rules_succeeded": report.rules_succeeded,
+                "rules_failed": report.rules_failed,
+                "rules_skipped": report.rules_skipped,
+                "poll_seconds": report.poll_seconds,
+                "total_ms": report.total_ms,
+                "timings": report.timings,
+                "results_dir": out.display().to_string(),
+                "results": normalized.get("results").cloned().unwrap_or_else(|| json!([])),
+                "error": report.cancelled.then_some("CANCELLED: cooperative cancel stopped registry run"),
+            })
+        }
+        Err(e) => json!({"ok": false, "error": e.to_string()}),
+    }
+}
+
+/// Preview substituted SQL for a rule (integrator lab only - not operator UI).
+pub fn preview_sql(rule_id: &str, overrides: &Value) -> Value {
+    let reg = match load_reg() {
+        Ok(r) => r,
+        Err(e) => return json!({"ok": false, "error": e}),
+    };
+    let Some(rule) = reg.rules.iter().find(|r| r.rule_id == rule_id) else {
+        return json!({"ok": false, "error": format!("unknown rule_id {rule_id}")});
+    };
+    let sql_path = Path::new(&reg.rules_dir).join(&rule.sql_file);
+    let raw = match std::fs::read_to_string(&sql_path) {
+        Ok(s) => s,
+        Err(e) => return json!({"ok": false, "error": e.to_string()}),
+    };
+    let poll = overrides
+        .get("poll_seconds")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(300.0);
+    let mut confirm = rule.confirm_seconds;
+    if let Some(cm) = overrides.get("confirm_min").and_then(|v| v.as_f64()) {
+        confirm = (cm * 60.0).round() as u32;
+    }
+    if let Some(cs) = overrides.get("confirm_seconds").and_then(|v| v.as_u64()) {
+        confirm = cs as u32;
+    }
+    let mut params = rule_params(poll, confirm);
+    if let Ok(tuning) = load_tuning_profiles(Path::new(&reg.rules_dir)) {
+        if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
+            for (k, v) in tuned {
+                params.insert(k, v);
+            }
+        }
+    }
+    if let Some(obj) = overrides.as_object() {
+        for (k, v) in obj {
+            if let Some(n) = v.as_f64() {
+                // Map param keys to SQL placeholders when present on the rule.
+                if let Some(def) = rule.parameters.get(k) {
+                    params.insert(def.sql_placeholder.clone(), n.to_string());
+                }
+            }
+        }
+    }
+    let sql = substitute_sql(&raw, &params);
+    json!({
+        "ok": true,
+        "rule_id": rule_id,
+        "params": params.into_iter().collect::<HashMap<_,_>>(),
+        "sql": sql,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oat_meteo_targets_stamped_ahu_not_id_prefix() {
+        let reg = load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "OAT-METEO")
+            .expect("OAT-METEO");
+        assert_eq!(rule.equipment_kinds, vec!["ahu".to_string()]);
+        let sql_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../sql_rules/oat_meteo_fault.sql");
+        let sql = std::fs::read_to_string(&sql_path).unwrap_or_else(|e| panic!("{e}"));
+        let upper = sql.to_ascii_uppercase();
+        assert!(
+            !upper.contains("EQUIPMENT_ID LIKE") && !upper.contains("ILIKE"),
+            "OAT-METEO must not filter equipment_id by text: {sql}"
+        );
+        assert!(rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("AC_1", Some("ahu"))
+        ));
+        assert!(rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("jci_ahu_1", Some("rtu"))
+        ));
+        assert!(!rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("AHU_BOX", Some("vav"))
+        ));
+        assert!(!rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("AHU_1", None)
+        ));
+        assert!(!rule_applies_to_kind(
+            &rule.equipment_kinds,
+            crate::equipment_types::kind_for("bldg2-zone-loopback", None)
+        ));
+    }
+
+    #[test]
+    fn typed_rules_do_not_run_against_unknown_equipment() {
+        let kinds = vec!["ahu".to_string(), "zone_other".to_string()];
+        assert!(rule_applies_to_kind(&kinds, "zone_other"));
+        assert!(!rule_applies_to_kind(&kinds, "unknown"));
+        assert!(!rule_applies_to_kind(&kinds, "general"));
+        assert!(rule_applies_to_kind(&["general".to_string()], "general"));
+        assert!(rule_applies_to_kind(&[], "unknown"));
+    }
+
+    #[test]
+    fn zone_other_registry_contract_covers_zone_rules() {
+        let reg = load_reg().expect("registry");
+        for id in [
+            "VAV-1",
+            "VAV-2",
+            "SV-RANGE",
+            "SV-FLATLINE",
+            "SV-SPIKE",
+            "SV-STALE",
+            "SV-RATE",
+            "PID-HUNT-1",
+            "SCHED-1",
+            "SCHED-247",
+        ] {
+            let rule = reg
+                .rules
+                .iter()
+                .find(|rule| rule.rule_id == id)
+                .unwrap_or_else(|| panic!("missing {id}"));
+            assert!(
+                rule.equipment_kinds.iter().any(|kind| kind == "zone_other"),
+                "{id} must apply to canonical zone_other equipment"
+            );
+            assert!(
+                !rule.equipment_kinds.iter().any(|kind| kind == "zone"),
+                "{id} must not use unreachable legacy zone kind"
+            );
+        }
+    }
+
+    #[test]
+    fn series_plot_columns_unions_optional_roles_for_portable_rules() {
+        let reg = load_reg().expect("registry");
+        let pid = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "PID-HUNT-1")
+            .expect("PID-HUNT-1");
+        assert!(
+            pid.required_roles.is_empty(),
+            "PID-HUNT-1 should keep required_roles empty"
+        );
+        let cols = series_plot_columns(pid);
+        assert!(
+            cols.iter()
+                .any(|c| *c == "oa_damper_pct" || *c == "damper_pct"),
+            "expected optional AO roles in plot columns, got {cols:?}"
+        );
+        let sv = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "SV-FLATLINE")
+            .expect("SV-FLATLINE");
+        let sv_cols = series_plot_columns(sv);
+        assert!(
+            !sv_cols.is_empty(),
+            "SV-FLATLINE must expose optional sensor roles for Plots"
+        );
+    }
+
+    #[test]
+    fn series_plot_columns_includes_oa_damper_for_econ4() {
+        let reg = load_reg().expect("registry");
+        let econ4 = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "ECON-4")
+            .expect("ECON-4");
+        assert!(
+            !econ4.required_roles.iter().any(|r| r == "oa_damper_pct"),
+            "ECON-4 registry should not require damper for OA-fraction math"
+        );
+        let cols = series_plot_columns(econ4);
+        assert!(
+            cols.contains(&"oa_damper_pct"),
+            "ECON-4 FDD Plots must candidate oa_damper_pct, got {cols:?}"
+        );
+    }
+
+    #[test]
+    fn list_rules_loads_repo_registry() {
+        let v = list_registry_rules();
+        assert_eq!(v["ok"], true, "{v}");
+        assert!(v["count"].as_u64().unwrap_or(0) >= 19, "{v}");
+    }
+
+    #[test]
+    fn vav1_params_include_sliders() {
+        let v = rule_params_response("VAV-1");
+        assert_eq!(v["ok"], true, "{v}");
+        assert!(v["params"]["zone_t_lo"]["control"].as_str().is_some());
+    }
+
+    #[test]
+    fn cache_status_ok_shape() {
+        let _env = crate::test_support::workspace_env_lock();
+        let v = cache_status();
+        assert_eq!(v["ok"], true);
+        assert!(v.get("parquet_root").is_some());
+    }
+
+    #[test]
+    fn equipment_response_lists_canonical_mqtt_hive() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd-equip-mqtt-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let equip = tmp
+            .join("history")
+            .join("building_id=bldg2")
+            .join("equipment_id=bldg2-zone-loopback")
+            .join("year=2026")
+            .join("month=09");
+        std::fs::create_dir_all(&equip).unwrap();
+        std::fs::write(equip.join("part-0.parquet"), b"PAR1").unwrap();
+        let prev = std::env::var("OPENFDD_PARQUET_ROOT").ok();
+        // Clear storage URL so parquet_root uses OPENFDD_PARQUET_ROOT.
+        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
+        std::env::remove_var("OPENFDD_STORAGE_URL");
+        std::env::set_var("OPENFDD_PARQUET_ROOT", &tmp);
+        let body = equipment_response(Some("bldg2"));
+        match prev {
+            Some(v) => std::env::set_var("OPENFDD_PARQUET_ROOT", v),
+            None => std::env::remove_var("OPENFDD_PARQUET_ROOT"),
+        }
+        match prev_storage {
+            Some(v) => std::env::set_var("OPENFDD_STORAGE_URL", v),
+            None => std::env::remove_var("OPENFDD_STORAGE_URL"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["count"], 1);
+        assert_eq!(body["equipment"][0]["equipment_id"], "bldg2-zone-loopback");
+    }
+
+    #[test]
+    fn confirmed_fault_index_reads_building_scoped_results() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd-fault-idx-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let building_dir = tmp.join("building=BldgA");
+        std::fs::create_dir_all(&building_dir).unwrap();
+        let payload = json!({
+            "rows": [{
+                "equipment_id": "ahu_1",
+                "timestamp": " 2024-01-01T00:00:00.000Z ",
+                "confirmed_fault": true
+            }]
+        });
+        std::fs::write(
+            building_dir.join("FC1.json"),
+            serde_json::to_string(&payload).unwrap(),
+        )
+        .unwrap();
+        let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
+        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", &tmp);
+        let idx = load_confirmed_fault_index("ahu_1", "FC1", Some("BldgA"));
+        match prev {
+            Some(v) => std::env::set_var("OPENFDD_RULE_RESULTS_DIR", v),
+            None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
+        assert!(
+            idx.values().any(|v| *v),
+            "expected confirmed_fault true in index, got {idx:?}"
+        );
+    }
+
+    #[test]
+    fn rewrite_fc1_sql_emits_confirmed_fault_series() {
+        let raw = std::fs::read_to_string("sql_rules/fc1_duct_static_low.sql")
+            .or_else(|_| std::fs::read_to_string("../sql_rules/fc1_duct_static_low.sql"))
+            .expect("fc1 sql");
+        let out = rewrite_rule_sql_to_fault_series(&raw, "AHU_1").expect("rewrite");
+        let lower = out.to_ascii_lowercase();
+        assert!(lower.contains("confirmed as confirmed_fault"), "{out}");
+        assert!(lower.contains("timestamp_utc"), "{out}");
+        assert!(
+            lower.contains("where equipment_id = 'ahu_1'")
+                || lower.contains("where equipment_id = 'AHU_1'"),
+            "{out}"
+        );
+        assert!(!lower.contains("fault_hours"), "{out}");
+        assert!(lower.contains("from final"), "{out}");
+    }
+
+    #[test]
+    fn rewrite_skips_analytics_rollups() {
+        let raw =
+            "SELECT equipment_id, AVG(zone_t) AS avg_zone_temp FROM history GROUP BY equipment_id";
+        assert!(rewrite_rule_sql_to_fault_series(raw, "VAV_1").is_none());
+    }
+
+    #[test]
+    fn normalize_ts_keys_strips_fractional_seconds() {
+        let keys = normalize_ts_keys("2024-01-01T00:00:00.123Z");
+        assert!(keys.contains(&"2024-01-01T00:00:00.123Z".to_string()));
+        assert!(keys.contains(&"2024-01-01T00:00:00Z".to_string()));
+    }
+
+    #[test]
+    fn normalize_ts_keys_joins_t_vs_space() {
+        let from_space = normalize_ts_keys("2024-01-01 00:00:00");
+        assert!(from_space.iter().any(|k| k.starts_with("2024-01-01T")));
+        let idx = {
+            let mut m = HashMap::new();
+            for k in normalize_ts_keys("2024-01-01T00:00:00.000Z") {
+                m.insert(k, true);
+            }
+            m
+        };
+        assert_eq!(
+            lookup_fault_flag(&idx, "2024-01-01 00:00:00"),
+            Some(true),
+            "T vs space + fractional seconds must join"
+        );
+    }
+
+    #[test]
+    fn normalize_ts_keys_joins_plus_zero_offset() {
+        let idx = {
+            let mut m = HashMap::new();
+            for k in normalize_ts_keys("2024-01-01T00:00:00+00:00") {
+                m.insert(k, true);
+            }
+            m
+        };
+        assert_eq!(
+            lookup_fault_flag(&idx, "2024-01-01T00:00:00Z"),
+            Some(true),
+            "+00:00 must join to Z"
+        );
+    }
+
+    struct RuleResultsDirGuard {
+        _keep: tempfile::TempDir,
+        prev: Option<String>,
+    }
+
+    impl RuleResultsDirGuard {
+        fn new() -> Self {
+            let tmp = tempfile::tempdir().expect("tempdir");
+            let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
+            std::env::set_var("OPENFDD_RULE_RESULTS_DIR", tmp.path());
+            Self { _keep: tmp, prev }
+        }
+    }
+
+    impl Drop for RuleResultsDirGuard {
+        fn drop(&mut self) {
+            match self.prev.take() {
+                Some(v) => std::env::set_var("OPENFDD_RULE_RESULTS_DIR", v),
+                None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),
+            }
+        }
+    }
+
+    #[test]
+    fn readiness_never_run_is_not_clean() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "READINESS_NEVER_RUN";
+        let v = readiness_response(Some(building));
+        assert_eq!(v["ok"], true, "{v}");
+        assert_eq!(v["clean"], false, "{v}");
+        let reasons: Vec<String> = v["dirty_reasons"]
+            .as_array()
+            .expect("dirty_reasons array")
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect();
+        assert!(
+            reasons.iter().any(|r| r == "never_run"),
+            "expected never_run in {reasons:?}, full={v}"
+        );
+    }
+
+    #[test]
+    fn readiness_after_run_meta_and_result_is_clean() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "READINESS_CLEAN";
+        let scoped = results_dir(Some(building));
+        std::fs::create_dir_all(&scoped).expect("mkdir results");
+        std::fs::write(scoped.join("FC1.json"), b"{}").expect("write result");
+        write_run_meta(Some(building), "registry", 1);
+        let v = readiness_response(Some(building));
+        assert_eq!(v["ok"], true, "{v}");
+        assert_eq!(v["clean"], true, "{v}");
+        assert!(
+            v["dirty_reasons"].as_array().is_some_and(|a| a.is_empty()),
+            "{v}"
+        );
+        assert_eq!(v["has_results"], true, "{v}");
+    }
+
+    #[test]
+    fn readiness_mark_building_dirty_is_not_clean() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "READINESS_DIRTY";
+        let scoped = results_dir(Some(building));
+        std::fs::create_dir_all(&scoped).expect("mkdir results");
+        std::fs::write(scoped.join("FC1.json"), b"{}").expect("write result");
+        write_run_meta(Some(building), "registry", 1);
+        mark_building_results_dirty(building, "package_reimport");
+        let v = readiness_response(Some(building));
+        assert_eq!(v["ok"], true, "{v}");
+        assert_eq!(v["clean"], false, "{v}");
+        let reasons: Vec<String> = v["dirty_reasons"]
+            .as_array()
+            .expect("dirty_reasons array")
+            .iter()
+            .filter_map(|x| x.as_str().map(str::to_string))
+            .collect();
+        assert!(
+            reasons.iter().any(|r| r == "package_reimport"),
+            "expected package_reimport in {reasons:?}, full={v}"
+        );
+    }
+}

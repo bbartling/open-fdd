@@ -6,6 +6,7 @@ use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::ipc::writer::FileWriter;
 use arrow::record_batch::RecordBatch;
 use chrono::Utc;
+#[cfg(feature = "legacy-datafusion")]
 use datafusion::prelude::*;
 use serde_json::{json, Value};
 use std::fs;
@@ -404,37 +405,49 @@ pub fn query_dataset_sql(dataset_id: &str, sql: &str) -> Value {
 }
 
 async fn query_arrow_file(path: &PathBuf, sql: &str, table: &str) -> Result<Vec<Value>, String> {
-    use arrow::ipc::reader::FileReader;
-    let file = fs::File::open(path).map_err(|e| e.to_string())?;
-    let reader = FileReader::try_new(file, None).map_err(|e| e.to_string())?;
-    let mut batches: Vec<RecordBatch> = Vec::new();
-    for b in reader {
-        batches.push(b.map_err(|e| e.to_string())?);
+    #[cfg(not(feature = "legacy-datafusion"))]
+    {
+        let _ = (path, sql, table);
+        Err(
+            "Wave-X: DataFusion SessionContext retired for dataset SQL (enable legacy-datafusion)"
+                .into(),
+        )
     }
-    if batches.is_empty() {
-        return Ok(Vec::new());
-    }
-    let ctx = SessionContext::new();
-    let schema = batches[0].schema();
-    let combined = arrow::compute::concat_batches(&schema, &batches).map_err(|e| e.to_string())?;
-    ctx.register_batch(table, combined)
-        .map_err(|e| e.to_string())?;
-    let df = ctx.sql(sql).await.map_err(|e| e.to_string())?;
-    let out = df.collect().await.map_err(|e| e.to_string())?;
-    let mut rows = Vec::new();
-    for batch in out {
-        for row_idx in 0..batch.num_rows() {
-            let mut obj = serde_json::Map::new();
-            for (col_idx, field) in batch.schema().fields().iter().enumerate() {
-                obj.insert(
-                    field.name().clone(),
-                    arrow_cell_json(batch.column(col_idx), row_idx),
-                );
-            }
-            rows.push(Value::Object(obj));
+    #[cfg(feature = "legacy-datafusion")]
+    {
+        use arrow::ipc::reader::FileReader;
+        let file = fs::File::open(path).map_err(|e| e.to_string())?;
+        let reader = FileReader::try_new(file, None).map_err(|e| e.to_string())?;
+        let mut batches: Vec<RecordBatch> = Vec::new();
+        for b in reader {
+            batches.push(b.map_err(|e| e.to_string())?);
         }
+        if batches.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ctx = SessionContext::new();
+        let schema = batches[0].schema();
+        let combined =
+            arrow::compute::concat_batches(&schema, &batches).map_err(|e| e.to_string())?;
+        ctx.register_batch(table, combined)
+            .map_err(|e| e.to_string())?;
+        let df = ctx.sql(sql).await.map_err(|e| e.to_string())?;
+        let out = df.collect().await.map_err(|e| e.to_string())?;
+        let mut rows = Vec::new();
+        for batch in out {
+            for row_idx in 0..batch.num_rows() {
+                let mut obj = serde_json::Map::new();
+                for (col_idx, field) in batch.schema().fields().iter().enumerate() {
+                    obj.insert(
+                        field.name().clone(),
+                        arrow_cell_json(batch.column(col_idx), row_idx),
+                    );
+                }
+                rows.push(Value::Object(obj));
+            }
+        }
+        Ok(rows)
     }
-    Ok(rows)
 }
 
 pub fn delete_dataset(dataset_id: &str) -> Result<(), String> {

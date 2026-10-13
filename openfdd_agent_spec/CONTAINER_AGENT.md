@@ -31,7 +31,10 @@ do not hand out `http://192.168.204.55/auth` and blame the user.
 ## Open-FDD stack (nightly → immutable)
 
 Product UI: **React** (`compose.react.yml` → host `:3000`). Central image is
-**Rust on debian-slim** (no Python). Analytics and FDD are DataFusion SQL.
+**Rust on debian-slim** (no Python). Wave-X **3.6.0+**: analytics and FDD are
+**Timescale + `sql/fdd/*.sql`** (no DataFusion/Parquet product path; no dual-write).
+Bring-up: [`docs/operations/TIMESCALE_WAVE_X.md`](../docs/operations/TIMESCALE_WAVE_X.md)
+· ADR-010 · ART REBOOT_SAFE under `/tmp/openfdd-softopen/3.6.0/`.
 
 OT LAN benches need fieldbus — recipe **`react-ot`**
 (`compose.react.yml` + `compose.react.fieldbus.yml`). Full stress suite:

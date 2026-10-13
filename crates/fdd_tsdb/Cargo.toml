@@ -1,0 +1,24 @@
+[package]
+name = "fdd_tsdb"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Open-FDD TimescaleDB historian + SQL FDD runner (Wave-X 3.6.0)"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+csv.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing = "0.1"
+tokio = { version = "1", features = ["rt", "macros", "sync", "time"] }
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio",
+  "postgres",
+  "chrono",
+  "json",
+  "uuid",
+] }
+uuid = { version = "1", features = ["v4", "serde"] }

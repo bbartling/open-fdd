@@ -141,6 +141,13 @@ impl TenantContext {
     /// Mode OFF: `base` unchanged (today's single-hub layout).
     /// Mode ON: `{base}/tenants/{tenant_id}` (hub_admin without a selected
     /// tenant must pass an explicit tid; otherwise fail closed).
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "MT partition helper; unit-tested; Wave-X Timescale uses DB scoping"
+        )
+    )]
     pub fn historian_root(&self, base: &std::path::Path) -> Result<std::path::PathBuf, String> {
         if !self.multi_tenant {
             return Ok(base.to_path_buf());

@@ -1,0 +1,97 @@
+-- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
+-- Inputs must be scoped to one tenant/site and cadence; see README.md.
+-- sv_spike.sql — Sensor rate-of-change spike — pandas SENSOR_LIMITS catalog
+-- Per-role spike limits (scaled by SPIKE_SCALE). Humidity/pressure included.
+WITH h AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    oa_t, mat, zone_t, rat, sat,
+    chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static,
+    LAG(oa_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_oa_t,
+    LAG(mat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_mat,
+    LAG(zone_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_zone_t,
+    LAG(rat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_rat,
+    LAG(sat) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_sat,
+    LAG(chw_supply_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_chw_supply_t,
+    LAG(chw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_chw_return_t,
+    LAG(hw_supply_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_hw_supply_t,
+    LAG(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_hw_return_t,
+    LAG(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_oa_h,
+    LAG(duct_static) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_duct_static,
+    fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status,
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS energized
+  FROM history
+),
+base AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    CAST(CASE
+      WHEN {{REQUIRE_OPERATIONAL_GATE}} >= 0.5 AND COALESCE(energized, 0) = 0 THEN 0
+      WHEN oa_t IS NOT NULL AND prev_oa_t IS NOT NULL AND ABS(oa_t - prev_oa_t) > 36.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN mat IS NOT NULL AND prev_mat IS NOT NULL AND ABS(mat - prev_mat) > 25.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN zone_t IS NOT NULL AND prev_zone_t IS NOT NULL AND ABS(zone_t - prev_zone_t) > 12.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN rat IS NOT NULL AND prev_rat IS NOT NULL AND ABS(rat - prev_rat) > 12.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN sat IS NOT NULL AND prev_sat IS NOT NULL AND ABS(sat - prev_sat) > 40.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN chw_supply_t IS NOT NULL AND prev_chw_supply_t IS NOT NULL AND ABS(chw_supply_t - prev_chw_supply_t) > 20.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN chw_return_t IS NOT NULL AND prev_chw_return_t IS NOT NULL AND ABS(chw_return_t - prev_chw_return_t) > 20.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN hw_supply_t IS NOT NULL AND prev_hw_supply_t IS NOT NULL AND ABS(hw_supply_t - prev_hw_supply_t) > 60.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN hw_return_t IS NOT NULL AND prev_hw_return_t IS NOT NULL AND ABS(hw_return_t - prev_hw_return_t) > 60.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN oa_h IS NOT NULL AND prev_oa_h IS NOT NULL AND ABS(oa_h - prev_oa_h) > 25.0 * {{SPIKE_SCALE_HUMIDITY}} THEN 1
+      WHEN duct_static IS NOT NULL AND prev_duct_static IS NOT NULL AND ABS(duct_static - prev_duct_static) > 2.0 * {{SPIKE_SCALE_PRESSURE}} THEN 1
+      ELSE 0
+    END AS INT) AS raw_fault
+  FROM h
+),
+lagged AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM base
+),
+grp AS (
+  SELECT
+    *,
+    SUM(is_new_streak)
+      OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
+  FROM lagged
+),
+ranked AS (
+  SELECT
+    *,
+    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+  FROM grp
+),
+final AS (
+  SELECT
+    equipment_id,
+    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+  FROM ranked
+)
+, cov AS (
+  SELECT equipment_id,
+    100.0 * AVG(CAST(COALESCE(energized, 1) AS DOUBLE PRECISION)) AS cov_pct
+  FROM h
+  GROUP BY equipment_id
+)
+SELECT
+  f.equipment_id,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+  END AS fault_hours
+FROM final f
+LEFT JOIN cov c ON f.equipment_id = c.equipment_id
+GROUP BY f.equipment_id;

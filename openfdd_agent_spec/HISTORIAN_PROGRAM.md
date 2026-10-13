@@ -1,11 +1,18 @@
 # Historian / Railway implementation program
 
-Last updated: 2026-08-27
+Last updated: 2026-10-12
 
-Canonical architecture: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTURE.md)  
-Full audit/design: [`../docs/architecture/historian.md`](../docs/architecture/historian.md)
+**Wave-X 3.6.0 SUPERSEDES this Parquet/DataFusion program for the product path.**
+Canonical product historian + FDD = **Timescale + `sql/fdd/*.sql`**
+([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md),
+[`TIMESCALE_WAVE_X.md`](../docs/operations/TIMESCALE_WAVE_X.md)).
+No dual-write. Soft-OPEN ≠ FQ. The ledger below remains historical evidence for
+the retired DF/Parquet era; do not treat H1–H10 as the live product contract.
 
-**Plan 4 (2026-08-27):** Feather / Arrow-IPC dual-write and `OPENFDD_LEGACY_INGEST_MIRROR` are **retired**. Canonical durability is Parquet under `OPENFDD_STORAGE_URL` only. App updates keep the same volume or S3 bucket — that is the restore path. H6 migrate CLI is **not** a product path (offline library helpers may remain in `fdd_store`; do not surface in `fdd_cli`).
+Canonical architecture (historical DF era): [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTURE.md)  
+Full audit/design (historical): [`../docs/architecture/historian.md`](../docs/architecture/historian.md)
+
+**Plan 4 (2026-08-27):** Feather / Arrow-IPC dual-write and `OPENFDD_LEGACY_INGEST_MIRROR` are **retired**. That era's canonical durability was Parquet under `OPENFDD_STORAGE_URL`. **Post–Wave-X:** Timescale is sole product store; do not resurrect Parquet/DF dual-write.
 
 Legend: `[x]` merged/complete · `[~]` active/partial · `[ ]` not yet merged
 

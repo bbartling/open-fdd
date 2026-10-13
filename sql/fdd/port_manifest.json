@@ -1,0 +1,674 @@
+{
+  "source": "bbartling/open-fdd",
+  "rules": [
+    {
+      "file": "fan_runtime_hours.sql",
+      "changed_body": false,
+      "source_sha256": "0327dd0f448d2bca6efea2e6b8d082008ad3aba1aad79c08e75f0d8b72d7b18d",
+      "controls_without_sql_effect": [
+        "confirm_min"
+      ]
+    },
+    {
+      "file": "vav1_comfort_fault.sql",
+      "changed_body": true,
+      "source_sha256": "054829297f8f7f9d9ef695c325da0728f1fa9b775a8bdb747953e0fa6860f0aa",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "vav2_night_setback.sql",
+      "changed_body": true,
+      "source_sha256": "4f4c46a5ffb13393d04edb71ce999e773e9e2f7d317974157388a30fe4343587",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "avg_zone_temp.sql",
+      "changed_body": false,
+      "source_sha256": "63759c7b81a2a09b4d41bee57c55fe3b3ea6e89568524c9eb10f959639b9de77",
+      "controls_without_sql_effect": [
+        "zone_t_lo",
+        "zone_t_hi",
+        "confirm_min"
+      ]
+    },
+    {
+      "file": "zone_comfort_pct.sql",
+      "changed_body": false,
+      "source_sha256": "579bfffcf7b6b41c6905940ffee533256dee0ec344dc206f17a83abec5679703",
+      "controls_without_sql_effect": [
+        "confirm_min"
+      ]
+    },
+    {
+      "file": "fault_elapsed_hours.sql",
+      "changed_body": false,
+      "source_sha256": "4f55c3f8bd6a6985e26a062129b11c25982b5b69ae69647452924222e9ffd149",
+      "controls_without_sql_effect": [
+        "confirm_min"
+      ]
+    },
+    {
+      "file": "oat_meteo_fault.sql",
+      "changed_body": false,
+      "source_sha256": "89d43ddafad6574bb0832107d7ce3cb634b557299f05bfc0292f4247b200f39d",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "sat_high_fault.sql",
+      "changed_body": true,
+      "source_sha256": "f9310024f6ebf9663ada3ef135a127a7f22a2fce08afa8fcf240735da7c0f368",
+      "controls_without_sql_effect": [
+        "econ_min_pos"
+      ]
+    },
+    {
+      "file": "economizer_fault.sql",
+      "changed_body": true,
+      "source_sha256": "1fe36b9df2d346f3500aa0a84fc5a9a626e51241d09d090a50f749c190d365e3",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "fc1_duct_static_low.sql",
+      "changed_body": true,
+      "source_sha256": "763863d6e0e1a543078ff2522f4e26e7fc727839bd2bf5468f1bcadd3ca00c7d",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fc2_mat_low.sql",
+      "changed_body": true,
+      "source_sha256": "0f5e6fabddbc7abba900f0b66aff0ffc4036f35a774d43e41c136dfa5a774ce0",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fc3_mat_high.sql",
+      "changed_body": true,
+      "source_sha256": "a389f246bc595e2ca07bec40aaaff6277273f16d5f3cc8c32de0de5895934f7b",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fc7_sat_low_heating.sql",
+      "changed_body": true,
+      "source_sha256": "e80d8f4b12ba0b32e2bc9bfc45a8c698556f499fbed1517aa8b09f2efdbba602",
+      "controls_without_sql_effect": [
+        "startup_delay_min",
+        "mode_delay_min"
+      ]
+    },
+    {
+      "file": "fc8_sat_mat_econ.sql",
+      "changed_body": true,
+      "source_sha256": "539aa0781bb6f4861529621505cb735f8d204f916be7e467aa14652e33a8ac4e",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fc9_oa_sat_sp_econ.sql",
+      "changed_body": true,
+      "source_sha256": "feb255da92188faa5aa27eec632b95c5f5b39ff8a0b54c83d479d6ef3df0106b",
+      "controls_without_sql_effect": [
+        "eps_sat",
+        "eps_oat"
+      ]
+    },
+    {
+      "file": "fc10_mat_oa_clg.sql",
+      "changed_body": true,
+      "source_sha256": "815e092cc239539db42353c7917b97e7dd7c13ff9bcfbd3ba541905d609687f9",
+      "controls_without_sql_effect": [
+        "eps_oat"
+      ]
+    },
+    {
+      "file": "fc11_oa_sat_sp_clg.sql",
+      "changed_body": true,
+      "source_sha256": "94e2ad6d61e6d1d9c7a62ff94dc784e218bf383be3a89be0f6a5a44a55fdccfc",
+      "controls_without_sql_effect": [
+        "eps_sat",
+        "eps_oat"
+      ]
+    },
+    {
+      "file": "fc12_sat_mat_clg.sql",
+      "changed_body": true,
+      "source_sha256": "15b5566aaf98c01569f3a16625c256f5ba2a53faae462924a6ae84953c685c88",
+      "controls_without_sql_effect": [
+        "supply_tol",
+        "eps_sat",
+        "eps_mat"
+      ]
+    },
+    {
+      "file": "econ1_stuck_closed.sql",
+      "changed_body": true,
+      "source_sha256": "8c19a25aedfe9dc080b378dfa9ded8d38094f24e11d0d6f0df70c886e290f38b",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "econ4_low_oa_frac.sql",
+      "changed_body": false,
+      "source_sha256": "44a8981f6a291b621b257376ebe9e821ebed7eeb24a4f0f650a8dc48f59df0d8",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "sv_range.sql",
+      "changed_body": true,
+      "source_sha256": "52a2ec2f10d17ea581b595bca5d5637bc90b781f8472f2266bf657bccf6e8b69",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "sv_flatline.sql",
+      "changed_body": false,
+      "source_sha256": "ff2d1f0e978df7b7718c65b450b35ffd6af6b7914bd5fea9fc17cbb1ca255eab",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "sv_spike.sql",
+      "changed_body": true,
+      "source_sha256": "a2ea75977cf857f0beb9fbfe02ba5fee66566932f1ce4886af031a8e56b4a2a1",
+      "controls_without_sql_effect": [
+        "startup_delay_min",
+        "spike_scale"
+      ]
+    },
+    {
+      "file": "sv_stale.sql",
+      "changed_body": false,
+      "source_sha256": "1b22417a762f77f1e96effaac172de66caa483e4fa61140682075d88eed136bd",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "sv_rate.sql",
+      "changed_body": true,
+      "source_sha256": "c719c77157cafea71fc8f2de8d11941d46af409473bf62bbbb627f455d0feb98",
+      "controls_without_sql_effect": [
+        "persistence_min"
+      ]
+    },
+    {
+      "file": "pid_hunt_1.sql",
+      "changed_body": false,
+      "source_sha256": "939a4ee08647f69332a85d202a8ded62eca1fc01fd8154fee1108209881205e1",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "fc4_os_hunting.sql",
+      "changed_body": true,
+      "source_sha256": "5b727d593e2bd3a6a505fc85c445c8d288ea24e3ff7d00b01e1766d5e6c2bef9",
+      "controls_without_sql_effect": [
+        "startup_delay_min",
+        "mode_delay_min"
+      ]
+    },
+    {
+      "file": "fc5_sat_cold_heating.sql",
+      "changed_body": true,
+      "source_sha256": "a97fd2ed358d000d07a62df7be3922f4c2649cc8ef60f145e2e54922002c80e6",
+      "controls_without_sql_effect": [
+        "eps_sat"
+      ]
+    },
+    {
+      "file": "fc6_oa_frac_mismatch.sql",
+      "changed_body": true,
+      "source_sha256": "cbbda51570528328b4319df94d3d56f2faacf336016dd133a4c14d67a321fee8",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fc14_chw_coil_dt_inactive.sql",
+      "changed_body": true,
+      "source_sha256": "bae193ad1cabd4bf690ac41a52e4fec908b61c9de4b496b086e4cf0ab20512bb",
+      "controls_without_sql_effect": [
+        "htg_on_min",
+        "eps_cclt",
+        "eps_ccet",
+        "econ_min_pos",
+        "clg_inactive_max"
+      ]
+    },
+    {
+      "file": "fc15_hw_coil_dt_inactive.sql",
+      "changed_body": true,
+      "source_sha256": "474977984a8019f27340e323766c8d2f4258973d2cc903d68b6ccf12a661d667",
+      "controls_without_sql_effect": [
+        "eps_hclt",
+        "eps_hcet",
+        "econ_min_pos",
+        "econ_full_open",
+        "clg_inactive_max"
+      ]
+    },
+    {
+      "file": "ahu_satdev.sql",
+      "changed_body": false,
+      "source_sha256": "24e7eeecc4a0deabb51236eed31408128921b14e7dab45e048684adfe4a8ba31",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "ahu_ducthi.sql",
+      "changed_body": false,
+      "source_sha256": "78c3fefe415a5466521818df312531cc7c120b101e8f2cbf345fc7fcaa5d8b9e",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "ahu_simul.sql",
+      "changed_body": false,
+      "source_sha256": "b202108059e9757df5a57cad6aaa5ff678d0569a3b86fba6e57698180b7fe4ba",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "econ3_mech_without_econ.sql",
+      "changed_body": false,
+      "source_sha256": "e5e1623dea29b085ef304d9713c0af0edf8b3f3d1d3b7f0a0ee9f61121b2aa1d",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "econ5_preheat_over.sql",
+      "changed_body": false,
+      "source_sha256": "b5d9c26eff360992051e37844a4b7cf7484ecfbed970d01883bbee73370dbc45",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "econ6_econ_freezing.sql",
+      "changed_body": false,
+      "source_sha256": "4ea54a7188b2bfd91aee5fa619088a1d3a06b3db75b8b88552767d0445ddb3d0",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "econ7_ok_not_economizing.sql",
+      "changed_body": false,
+      "source_sha256": "a433c4d754fcefbdaee6020d3aa90bf7ef2892989af48aa31a00ae739c9be85c",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "mech_oat_1.sql",
+      "changed_body": false,
+      "source_sha256": "7f72892e12031a708ac6f06bee4083772a3b3883c3c6c9bfc2694f9fd1ea980f",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "cmd1_fan_mismatch.sql",
+      "changed_body": false,
+      "source_sha256": "4e3014588e51ec4e46658b929a2dd3f9e1e4ab7b070c1789e0fa99652e90908c",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "oa1_low_oa_frac.sql",
+      "changed_body": false,
+      "source_sha256": "f32da6535c6dcac4709483e37a20b50f6e9d08d31a9fb58272168222828ef4fa",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "dmp1_oa_damper_leak.sql",
+      "changed_body": false,
+      "source_sha256": "65c4bc4826f5c316af7d283e90e2ba4389ea2a89a845dd3aab1ce2e2a3f0d621",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "vlv1_clg_valve_leak.sql",
+      "changed_body": false,
+      "source_sha256": "13bf33bf0f3111f41e08af9c6cbb90aecc3b0b953df8d72bf86e7e8fd730fa3e",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "vav3_excessive_reheat.sql",
+      "changed_body": false,
+      "source_sha256": "761a0bc39f4e5f7c519813790cf5c87fa04a31b5fb697375af5c80b51dcf4fd3",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "vav4_damper_full_open.sql",
+      "changed_body": false,
+      "source_sha256": "5c8a246339696641fcec7db801a003347eea7a0523d3b3edb2b5dba49a03ba17",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "vav5_airflow_bias.sql",
+      "changed_body": false,
+      "source_sha256": "45af7e17883267628d603d739446a14dc944f100707f3bd2aaf6f39ae7713c2f",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "vav6_reheat_free_cool.sql",
+      "changed_body": false,
+      "source_sha256": "0ff559cde429ff48505a41d1bee8a0e5f58b258c904b29bc551d5197f98b839b",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "vav_reheat.sql",
+      "changed_body": false,
+      "source_sha256": "a3c13a30e8c3995ce0b9065bff6d879c2d9c9b03c6329a034dd69f6dab673475",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "vav_ahu_leave.sql",
+      "changed_body": false,
+      "source_sha256": "7c7cc2d0f2c22f25fe023a39e32d7bdecd87e07b660a6442d2bf1ecd97c1f51a",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "vav7_min_airflow.sql",
+      "changed_body": false,
+      "source_sha256": "f9bb9f48cd2ec61a0316d25047c0b7942dc3efa0c79fbf1a82e80e18c86a73ff",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "reset1_sat_oa_reset.sql",
+      "changed_body": false,
+      "source_sha256": "e384970fdc1efb3c4ec9fdebdeef36d3b3b84215ea06eae9c1b286ac0db34b7d",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "chw_noload_1.sql",
+      "changed_body": false,
+      "source_sha256": "f71527cded9d0e091f98867b4d9d8b5e9331c57a761763b7de07b4f8146148f6",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "chw1_low_dt.sql",
+      "changed_body": false,
+      "source_sha256": "7b45ae09be50bcaa24f61ad222ced00f3a14d3a2c6f4115466e9839995f38162",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "chw2_dp_low.sql",
+      "changed_body": false,
+      "source_sha256": "6731916018333846d4c9c30a24c203fdb5a155f2930447740ba81ad18771f73d",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "chw3_supply_band.sql",
+      "changed_body": false,
+      "source_sha256": "8221030b1c028291aff097ed38257ccd8bf59c3f8c5a5add3e6a535bc44c118d",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "chw4_flow_high.sql",
+      "changed_body": false,
+      "source_sha256": "87889b43d15514c92ffecd4b8758ae481db35b804940a827b0f28be54158270b",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "cw_opt_1.sql",
+      "changed_body": false,
+      "source_sha256": "c58bfe603644654385991dabf5cd02347598bc867c0393c3466c3d4d86bacf55",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "cw_apr_1.sql",
+      "changed_body": false,
+      "source_sha256": "dea03aebd732dd96178c33c5aee604358206d1c42b4857a3f9d8eef50d7417da",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "cw_fan_1.sql",
+      "changed_body": false,
+      "source_sha256": "bd1db9bd403cc210a9ee67e42fe2297c116460ffd3b35c191a08ed4a951cffb5",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "hp1_discharge_cold.sql",
+      "changed_body": false,
+      "source_sha256": "263a25f33784738d8584169c0c19eadb6bb88070816b70d477c590cf75e0bdb1",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "wx1_oa_spike.sql",
+      "changed_body": false,
+      "source_sha256": "47e746308a46c17bff72eb6dc37252842229bc14075ce2b940409f41e6780dc0",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "trim1_duct_static.sql",
+      "changed_body": false,
+      "source_sha256": "479f593a7f687e0cfde40bc6f5bf8746a5eba57ed2f1d74b7cda4b8d63ca1cae",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "trim3_hwst.sql",
+      "changed_body": false,
+      "source_sha256": "6d02f38ea2abf7c502bddcd0f256e53e165d8ae3656e1c1b40f62007a607ef45",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "trim4_chw_reset.sql",
+      "changed_body": false,
+      "source_sha256": "417f80292d111c9c0348bca5dcc30b519e86bd2edd09fafd8e2beada80de5f8a",
+      "controls_without_sql_effect": [
+        "minimum_active_coverage_pct",
+        "startup_delay_min",
+        "require_operational_gate"
+      ]
+    },
+    {
+      "file": "sched1_unoccupied_runtime.sql",
+      "changed_body": true,
+      "source_sha256": "87ab2c9035512d953df57cbeca8d7fda440d1539fc6aa22a635969802edef6c6",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "sched247_always_on.sql",
+      "changed_body": true,
+      "source_sha256": "59e1f1f5debddf10281ffd1fc9897c29ab0df06815087efac161e17d426fe586",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fcu_sensor_null.sql",
+      "changed_body": true,
+      "source_sha256": "fc4cc185a3f4fc5f6c825448f4c7f0b668ac0f28bd86c6ea028b27214b426229",
+      "controls_without_sql_effect": [
+        "confirm_min"
+      ]
+    },
+    {
+      "file": "fcu_htg_coil.sql",
+      "changed_body": false,
+      "source_sha256": "eae6adaf86bf102cec720a7b5680df0027972ac79e4a2d7446cda38c4ef852ca",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fcu_clg_coil.sql",
+      "changed_body": false,
+      "source_sha256": "0abb1b56cac0cea08279cc49a9816609e83af4713f7f27b76d0564434be9dc15",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fcu_valve_pass_htg.sql",
+      "changed_body": false,
+      "source_sha256": "4ed6cac6994b06d34dd32faab68289c801af92a1827508b65fb9214396a377b2",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fcu_valve_pass_clg.sql",
+      "changed_body": false,
+      "source_sha256": "dfe19fb3b4cc4ec9dd8b82fa8f88c5247e7bd740e8b911daa76492a5f4b304a3",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fcu_damper_pos.sql",
+      "changed_body": false,
+      "source_sha256": "6825f960567ba0464663eecd2b9963b7647dc4d7de54ebb36d0d82249cf0f8aa",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fcu_co2_damper.sql",
+      "changed_body": false,
+      "source_sha256": "50e5f6d2ae6721396f6dbbf396fcf0659338f9902f8c734ab83d40dd1f2314e0",
+      "controls_without_sql_effect": []
+    },
+    {
+      "file": "fcu_deadband.sql",
+      "changed_body": false,
+      "source_sha256": "783f25d1dd7019eed11c949fb7246600436eaaf85c8225fc4ad3123b1e430aef",
+      "controls_without_sql_effect": [
+        "confirm_min"
+      ]
+    },
+    {
+      "file": "fcu_mode_cycle.sql",
+      "changed_body": false,
+      "source_sha256": "7dc9e181b96dcb5d8ee181aee6fa500188edea97fe0ef5e74042e766477e4e58",
+      "controls_without_sql_effect": [
+        "confirm_min"
+      ]
+    },
+    {
+      "file": "util_monthly_fault.sql",
+      "changed_body": true,
+      "source_sha256": "38606d84a33260f93b292f655d93b1ff11a978bacf0bb3ca63d8e669e5580863",
+      "controls_without_sql_effect": [
+        "confirm_min"
+      ]
+    },
+    {
+      "file": "util_interval_fault.sql",
+      "changed_body": true,
+      "source_sha256": "a6442b1c1d9825280fcf979ed9258a81558beea63d1b960e4466af0996614386",
+      "controls_without_sql_effect": [
+        "confirm_min"
+      ]
+    }
+  ]
+}

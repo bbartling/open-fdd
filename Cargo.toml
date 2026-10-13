@@ -8,6 +8,7 @@ members = [
     "crates/fdd_store",
     "crates/fdd_resources",
     "crates/fdd_sql",
+    "crates/fdd_tsdb",
     "crates/fdd_rules",
     "crates/fdd_bench",
     "crates/fdd_cli",
@@ -22,7 +23,7 @@ members = [
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bbartling/open-fdd"
-version = "3.5.78"
+version = "3.6.0"
 rust-version = "1.80"
 
 [workspace.dependencies]

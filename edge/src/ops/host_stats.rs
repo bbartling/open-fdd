@@ -235,9 +235,12 @@ fn effective_compute_settings() -> Value {
     let flush_secs = env::var("OPENFDD_PARQUET_FLUSH_SECS")
         .or_else(|_| env::var("OPENFDD_PARQUET_FLUSH_SECONDS"))
         .ok();
+    #[cfg(feature = "legacy-datafusion")]
     let shared = HistorianConfig::from_env()
         .ok()
         .and_then(|cfg| fdd_sql::shared_runtime_info(&cfg).ok());
+    #[cfg(not(feature = "legacy-datafusion"))]
+    let shared = None::<serde_json::Value>;
     json!({
         "OPENFDD_QUERY_MEMORY_MB": query_mb,
         "OPENFDD_COMPUTE_MEMORY_MB": compute_mb,

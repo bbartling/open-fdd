@@ -1,0 +1,9 @@
+{
+  "rules": 77,
+  "rendered": 77,
+  "duckdb_empty_execution_errors": [],
+  "duckdb_fixture_comparison_count": 76,
+  "duckdb_fixture_comparison_errors": [],
+  "postgresql_execution_tested": false,
+  "note": "DuckDB checks with an adapter for to_char/helper; not a PostgreSQL engine test or fault parity proof."
+}

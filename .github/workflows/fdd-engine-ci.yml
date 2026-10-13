@@ -1,4 +1,5 @@
 name: FDD DataFusion Engine CI
+# Wave-X: offline DF CLI / library path (legacy-datafusion). Product central is Timescale-only.
 
 on:
   push:
@@ -40,9 +41,16 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --all --check
       - name: cargo clippy (fdd crates)
-        run: cargo clippy -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench -p fdd_cli --all-targets -- -D warnings
+        run: |
+          cargo clippy -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_resources --all-targets -- -D warnings
+          cargo clippy -p fdd_rules --all-targets --features legacy-datafusion -- -D warnings
+          # fdd_cli / fdd_bench always enable fdd_rules/legacy-datafusion (offline DF path).
+          cargo clippy -p fdd_bench -p fdd_cli --all-targets -- -D warnings
       - name: cargo test (fdd crates)
-        run: cargo test -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_rules -p fdd_resources -p fdd_bench -p fdd_cli
+        run: |
+          cargo test -p fdd_core -p fdd_csv -p fdd_store -p fdd_sql -p fdd_resources
+          cargo test -p fdd_rules --features legacy-datafusion
+          cargo test -p fdd_bench -p fdd_cli
       - name: AFDD schedule and lookback-upsert contract
         run: bash scripts/gates/afdd_schedule_upsert_contract.sh --cargo
       - name: SQL registry files exist

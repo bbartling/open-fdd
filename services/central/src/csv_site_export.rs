@@ -6,12 +6,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use csv::WriterBuilder;
-use fdd_sql::QueryResult;
 use serde_json::Value;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
-use crate::analytics::historian;
 use crate::durable_storage;
 use crate::jobs::JobError;
 
@@ -38,21 +36,31 @@ async fn build_site_csv_bytes(
 }
 
 async fn historian_csv_async(building_id: &str) -> Result<Option<Vec<u8>>, JobError> {
-    let ctx = historian::new_bounded_session().map_err(|e| JobError::Io(e.to_string()))?;
-    let (ok, _scan) = historian::open_history_scan(&ctx, Some(building_id))
-        .await
-        .map_err(|e| JobError::Io(e.to_string()))?;
-    if !ok {
-        return Ok(None);
+    #[cfg(not(feature = "legacy-datafusion"))]
+    {
+        let _ = building_id;
+        // Wave-X: Parquet/DF historian export retired — package CSV fallback.
+        Ok(None)
     }
-    let sql = "SELECT * FROM history";
-    let result = fdd_sql::run_sql(&ctx, sql)
-        .await
-        .map_err(|e| JobError::Io(e.to_string()))?;
-    if result.row_count == 0 {
-        return Ok(None);
+    #[cfg(feature = "legacy-datafusion")]
+    {
+        use fdd_sql::QueryResult;
+        let ctx = historian::new_bounded_session().map_err(|e| JobError::Io(e.to_string()))?;
+        let (ok, _scan) = historian::open_history_scan(&ctx, Some(building_id))
+            .await
+            .map_err(|e| JobError::Io(e.to_string()))?;
+        if !ok {
+            return Ok(None);
+        }
+        let sql = "SELECT * FROM history";
+        let result = fdd_sql::run_sql(&ctx, sql)
+            .await
+            .map_err(|e| JobError::Io(e.to_string()))?;
+        if result.row_count == 0 {
+            return Ok(None);
+        }
+        Ok(Some(query_result_to_csv(&result)?))
     }
-    Ok(Some(query_result_to_csv(&result)?))
 }
 
 fn package_fallback_csv(building_id: &str, include_faults: bool) -> Result<Vec<u8>, JobError> {
@@ -167,7 +175,8 @@ fn collect_history_wide(
     Ok(())
 }
 
-fn query_result_to_csv(result: &QueryResult) -> Result<Vec<u8>, JobError> {
+#[cfg(feature = "legacy-datafusion")]
+fn query_result_to_csv(result: &fdd_sql::QueryResult) -> Result<Vec<u8>, JobError> {
     let mut wtr = WriterBuilder::new()
         .has_headers(true)
         .from_writer(Vec::new());
@@ -234,6 +243,7 @@ fn maybe_join_faults(
     wtr.into_inner().map_err(|e| JobError::Io(e.to_string()))
 }
 
+#[cfg(feature = "legacy-datafusion")]
 fn json_cell_string(value: Option<&Value>) -> String {
     match value {
         None | Some(Value::Null) => String::new(),
