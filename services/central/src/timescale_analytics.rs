@@ -212,10 +212,34 @@ pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
     .fetch_all(tsdb.pool())
     .await
     .context("fdd_registry")?;
+
+    // Wave-X C7: warehouse cases.json uses cookbook ids (e.g. FC13) while the
+    // product primary id may be FC13-SAT-HIGH. Surface yaml aliases so catalog
+    // presence matches /api/fdd/run + /api/fdd/plot resolution.
+    let aliases_by_id: std::collections::HashMap<String, Vec<String>> = {
+        let root = crate::timescale_product::sql_root_for_registry();
+        match fdd_rules::load_registry(&root) {
+            Ok(reg) => reg
+                .rules
+                .into_iter()
+                .map(|r| (r.rule_id, r.aliases))
+                .collect(),
+            Err(e) => {
+                tracing::warn!(error = %e, "fdd_registry: yaml aliases unavailable");
+                std::collections::HashMap::new()
+            }
+        }
+    };
+
     let mut out = Vec::new();
+    let mut alias_count = 0usize;
     for r in rows {
+        let rule_id = r.try_get::<String, _>("rule_id").unwrap_or_default();
+        let aliases = aliases_by_id.get(&rule_id).cloned().unwrap_or_default();
+        alias_count += aliases.len();
         out.push(json!({
-            "rule_id": r.try_get::<String, _>("rule_id").unwrap_or_default(),
+            "rule_id": rule_id,
+            "aliases": aliases,
             "sql_file": r.try_get::<String, _>("sql_file").unwrap_or_default(),
             "title": r.try_get::<Option<String>, _>("title").ok().flatten(),
             "enabled": r.try_get::<bool, _>("enabled").unwrap_or(true),
@@ -226,6 +250,7 @@ pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
         "ok": true,
         "engine": "postgres-sql",
         "count": out.len(),
+        "alias_count": alias_count,
         "rules": out,
     }))
 }
