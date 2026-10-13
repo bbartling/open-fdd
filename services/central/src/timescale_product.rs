@@ -19,6 +19,11 @@ use crate::analytics::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, 
 const TS_ENGINE: &str = "timescale-sql";
 
 fn sql_root() -> PathBuf {
+    sql_root_for_registry()
+}
+
+/// Shared SQL pack root for registry.yaml (catalog aliases + plot/run).
+pub(crate) fn sql_root_for_registry() -> PathBuf {
     if let Some(p) = std::env::var_os("OPENFDD_SQL_ROOT") {
         return PathBuf::from(p);
     }
