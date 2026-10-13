@@ -1,4 +1,7 @@
 //! Central HTTP integration: CSV upload → parquet ingest → FDD registry run.
+//!
+//! Wave-X Soft-OPEN: product FDD is Timescale `sql/fdd` only. Without
+//! `OPENFDD_DATABASE_URL`, `/api/fdd/run` must fail closed (no dual-write DF).
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -224,9 +227,20 @@ fn csv_upload_execute_then_fc1_registry_run() {
     .to_string();
     let (status, fdd) = post_json(&srv.url("/api/fdd/run"), &fdd_body);
     assert_eq!(status, 200, "fdd run: {fdd}");
-    assert_eq!(fdd.get("ok"), Some(&json!(true)), "fdd run: {fdd}");
-    assert!(
-        fdd.get("rules_run").and_then(|v| v.as_u64()).unwrap_or(0) >= 1,
-        "expected FC1 to run: {fdd}"
-    );
+    // No OPENFDD_DATABASE_URL in this harness → Timescale path unavailable;
+    // DF run_registry is retired. Soft-OPEN must not pretend registry green.
+    if std::env::var("OPENFDD_DATABASE_URL").is_ok() {
+        assert_eq!(fdd.get("ok"), Some(&json!(true)), "fdd run: {fdd}");
+        assert!(
+            fdd.get("rules_run").and_then(|v| v.as_u64()).unwrap_or(0) >= 1,
+            "expected FC1 to run: {fdd}"
+        );
+    } else {
+        assert_eq!(fdd.get("ok"), Some(&json!(false)), "fdd run: {fdd}");
+        let err = fdd.get("error").and_then(|v| v.as_str()).unwrap_or("");
+        assert!(
+            err.contains("Timescale") || err.contains("DataFusion run_registry retired"),
+            "expected Wave-X Timescale fail-closed: {fdd}"
+        );
+    }
 }
