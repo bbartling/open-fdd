@@ -1593,6 +1593,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "legacy-parquet")]
     #[expect(
         clippy::await_holding_lock,
         reason = "serialize process environment while the writer thread reads flush settings"

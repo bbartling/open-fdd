@@ -7141,35 +7141,54 @@ pub async fn fuel_campus_weather_fetch(Json(body): Json<FuelWeatherFetchBody>) -
 
 #[cfg(test)]
 mod version_tests {
+    #[cfg(feature = "legacy-parquet")]
+    use super::local_fieldbus_ingest;
     use super::{
         authorize_connector_scope, authorized_edge_ids, connector_proxy_role_allowed,
-        connector_trigger_role_allowed, local_fieldbus_ingest, login_throttle_ip,
-        request_scope_allowed, resolve_build_version, router,
+        connector_trigger_role_allowed, login_throttle_ip, request_scope_allowed,
+        resolve_build_version, router,
     };
     use crate::capabilities::{CapabilitiesAggregator, ConfiguredUpstream};
     use crate::state::AppState;
     use axum::body::Body;
+    #[cfg(feature = "legacy-parquet")]
     use axum::extract::Query;
     use axum::http::{HeaderMap, HeaderValue, Request, StatusCode};
+    #[cfg(feature = "legacy-parquet")]
+    use axum::middleware;
+    #[cfg(feature = "legacy-parquet")]
     use axum::response::IntoResponse;
-    use axum::routing::{get, post};
-    use axum::{middleware, Json, Router};
+    #[cfg(feature = "legacy-parquet")]
+    use axum::routing::get;
+    use axum::routing::post;
+    use axum::{Json, Router};
+    #[cfg(feature = "legacy-parquet")]
     use bytes::Bytes;
+    #[cfg(feature = "legacy-parquet")]
     use openfdd_connector_runtime::{auth_middleware, AuthState};
     use openfdd_contracts::{
-        ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorScope,
-        ConnectorServiceProfile, HaystackCurrentReadRequest, HaystackCurrentReadResponse,
-        HaystackHistoryReadRequest, HaystackHistoryReadResponse, InventoryProvenance,
-        LocalIngestReceipt, LocalIngestStatus, PriorityHistoryRequest, PriorityHistoryResponse,
+        ConnectorInventoryRequest, ConnectorInventoryResponse, InventoryProvenance,
+        LocalIngestStatus, PriorityHistoryRequest, PriorityHistoryResponse,
         PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse, PriorityScanStatus,
-        Protocol, Quality, RecipeKind, ServiceIdentity, TelemetryEnvelope, TelemetryPoint,
-        ValueKind, CONNECTOR_INVENTORY_CONTRACT_V1, HAYSTACK_READ_CONTRACT_V1,
-        PRIORITY_SCAN_CONTRACT_V1, PRIORITY_SCAN_TRIGGER_CONTRACT_V1,
+        CONNECTOR_INVENTORY_CONTRACT_V1, PRIORITY_SCAN_CONTRACT_V1,
+        PRIORITY_SCAN_TRIGGER_CONTRACT_V1,
     };
+    #[cfg(feature = "legacy-parquet")]
+    use openfdd_contracts::{
+        ConnectorScope, ConnectorServiceProfile, HaystackCurrentReadRequest,
+        HaystackCurrentReadResponse, HaystackHistoryReadRequest, HaystackHistoryReadResponse,
+        LocalIngestReceipt, Protocol, Quality, RecipeKind, ServiceIdentity, TelemetryEnvelope,
+        TelemetryPoint, ValueKind, HAYSTACK_READ_CONTRACT_V1,
+    };
+    #[cfg(feature = "legacy-parquet")]
     use serde_json::Value;
+    #[cfg(feature = "legacy-parquet")]
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    #[cfg(feature = "legacy-parquet")]
+    use std::sync::Mutex;
+    #[cfg(feature = "legacy-parquet")]
     use tokio::net::TcpListener;
     use tower::ServiceExt;
     use url::Url;
@@ -7267,6 +7286,7 @@ mod version_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "legacy-parquet")]
     #[expect(
         clippy::await_holding_lock,
         reason = "serialize process environment while exercising the loaded Haystack to Central path"
@@ -7602,6 +7622,7 @@ mod version_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "legacy-parquet")]
     #[expect(
         clippy::await_holding_lock,
         reason = "serialize process environment while exercising the complete manual connector path"
@@ -8515,6 +8536,7 @@ mod version_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "legacy-parquet")]
     #[expect(
         clippy::await_holding_lock,
         reason = "serialize process environment while exercising the async ingest handler"
