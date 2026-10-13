@@ -1,3 +1,5 @@
 # Transitive quick-xml 0.37.x via oxigraph 0.5.9 — upgrade in 3.2.8 (#437).
+# RUSTSEC-2023-0071 (rsa): pulled by sqlx-postgres SCRAM; no fixed upgrade.
+# Product JWT stays aws_lc_rs HS256 (no rsa). Timescale is LAN/VPN private.
 [advisories]
-ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]
+ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195", "RUSTSEC-2023-0071"]
