@@ -62,9 +62,18 @@ Date,Outdoor Air Temp,Supply Air Temp,Supply Air Temp Setpoint,Fan Status
 
         assert!(store::row_count() >= 2);
 
-        let sql = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 70.0 THEN true ELSE false END AS raw_fault FROM telemetry_pivot WHERE oa_t IS NOT NULL";
-        let eval = execution::run_rule_sql_from_historian(sql, 0, &json!({}));
-        assert_eq!(eval.get("ok").and_then(|v| v.as_bool()), Some(true));
+        // Wave-X: DF historian FDD eval is legacy-datafusion only.
+        #[cfg(feature = "legacy-datafusion")]
+        {
+            let sql = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 70.0 THEN true ELSE false END AS raw_fault FROM telemetry_pivot WHERE oa_t IS NOT NULL";
+            let eval = execution::run_rule_sql_from_historian(sql, 0, &json!({}));
+            assert_eq!(eval.get("ok").and_then(|v| v.as_bool()), Some(true));
+        }
+        #[cfg(not(feature = "legacy-datafusion"))]
+        {
+            let eval = execution::run_rule_sql_from_historian("SELECT 1", 0, &json!({}));
+            assert_eq!(eval.get("ok").and_then(|v| v.as_bool()), Some(false));
+        }
     });
 }
 
