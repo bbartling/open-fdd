@@ -31,7 +31,7 @@ todos:
     status: completed
   - id: w9-ship-pr
     content: "W9 Ship — commit+push wave-x/3.6.0-timescale; PR to master; docs/agent_spec Timescale; GH tidy; hand off 3.6.1 plan"
-    status: in_progress
+    status: completed
 isProject: true
 ---
 
