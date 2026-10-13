@@ -5,6 +5,23 @@
 //! come from trusted/operator-authored fieldbus metadata; this module never
 //! parses BACnet/REST point IDs to invent historian identity.
 
+// Wave-X Soft-OPEN: Parquet MicroBatch helpers remain for `legacy-parquet` only;
+// default Timescale path uses timescale_writer_loop. Full delete in 3.6.1.
+#![cfg_attr(
+    not(feature = "legacy-parquet"),
+    expect(
+        dead_code,
+        reason = "Parquet MicroBatch path retained behind legacy-parquet; Timescale uses timescale_writer_loop"
+    )
+)]
+#![cfg_attr(
+    not(feature = "legacy-parquet"),
+    expect(
+        unused_imports,
+        reason = "Parquet-only imports still present until 3.6.1 live_historian split"
+    )
+)]
+
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fmt;
@@ -26,12 +43,12 @@ use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 #[cfg(feature = "legacy-parquet")]
 use datafusion::arrow::record_batch::RecordBatch;
 use fdd_core::columns::normalize_role;
+#[cfg(feature = "legacy-parquet")]
+use fdd_store::ParquetPartWriter;
 use fdd_store::{
     safe_partition_value, tenant_storage_prefix, tenant_storage_root, CompletePartPublisher,
     HistorianConfig, LocalStorage, MicroBatchFlush, MicroBatchHistorian, StorageUrl,
 };
-#[cfg(feature = "legacy-parquet")]
-use fdd_store::ParquetPartWriter;
 use object_store::aws::AmazonS3Builder;
 use object_store::path::Path as ObjectPath;
 use object_store::ObjectStore;
@@ -949,11 +966,13 @@ fn timescale_writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
                         ..
                     } => {
                         release_queue_bytes(queued_bytes);
-                        let _ = reply.send(Err(anyhow!("timescale historian unavailable: {error}")));
+                        let _ =
+                            reply.send(Err(anyhow!("timescale historian unavailable: {error}")));
                     }
                     WriterCommand::Flush { reply, .. }
                     | WriterCommand::PublishPending { reply, .. } => {
-                        let _ = reply.send(Err(anyhow!("timescale historian unavailable: {error}")));
+                        let _ =
+                            reply.send(Err(anyhow!("timescale historian unavailable: {error}")));
                     }
                     #[cfg(test)]
                     WriterCommand::Probe { reply } => {
@@ -1025,7 +1044,6 @@ fn writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
                 }
             }
         }
-        return;
     }
     #[cfg(feature = "legacy-parquet")]
     {
@@ -1057,8 +1075,6 @@ fn writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
         }
     }
 }
-
-
 
 #[cfg(feature = "legacy-parquet")]
 fn ingest_scoped(
@@ -1486,6 +1502,7 @@ mod tests {
         assert!(values.is_null(0));
     }
 
+    #[cfg(feature = "legacy-parquet")]
     async fn sv_range_fault_hours(sample: TelemetryPoint) -> f64 {
         let tmp = TempDir::new().unwrap();
         let config = HistorianConfig {
@@ -1506,56 +1523,56 @@ mod tests {
 
         #[cfg(feature = "legacy-datafusion")]
         {
-        let ctx = SessionContext::new();
-        register_historian_building(&ctx, tmp.path(), "BUILDING_100")
-            .await
-            .unwrap();
-        let optional = [
-            "oa_t",
-            "mat",
-            "zone_t",
-            "rat",
-            "chw_supply_t",
-            "chw_return_t",
-            "hw_supply_t",
-            "hw_return_t",
-            "oa_h",
-            "duct_static",
-            "fan_status",
-            "fan_cmd",
-            "pump_status",
-            "chw_pump_cmd",
-            "chiller_status",
-            "kwh",
-            "electric_kw",
-            "electric_kwh",
-        ];
-        let nulls = optional
-            .iter()
-            .map(|role| format!("CAST(NULL AS DOUBLE) AS {role}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let enriched = ctx
-            .sql(&format!("SELECT history.*, {nulls} FROM history"))
-            .await
-            .unwrap();
-        ctx.deregister_table("history").unwrap();
-        ctx.register_table("history", enriched.into_view()).unwrap();
+            let ctx = SessionContext::new();
+            register_historian_building(&ctx, tmp.path(), "BUILDING_100")
+                .await
+                .unwrap();
+            let optional = [
+                "oa_t",
+                "mat",
+                "zone_t",
+                "rat",
+                "chw_supply_t",
+                "chw_return_t",
+                "hw_supply_t",
+                "hw_return_t",
+                "oa_h",
+                "duct_static",
+                "fan_status",
+                "fan_cmd",
+                "pump_status",
+                "chw_pump_cmd",
+                "chiller_status",
+                "kwh",
+                "electric_kw",
+                "electric_kwh",
+            ];
+            let nulls = optional
+                .iter()
+                .map(|role| format!("CAST(NULL AS DOUBLE) AS {role}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let enriched = ctx
+                .sql(&format!("SELECT history.*, {nulls} FROM history"))
+                .await
+                .unwrap();
+            ctx.deregister_table("history").unwrap();
+            ctx.register_table("history", enriched.into_view()).unwrap();
 
-        let sql = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sql_rules/sv_range.sql"),
-        )
-        .unwrap();
-        let mut params = rule_params(300.0, 0);
-        params.insert("RANGE_SCALE_TEMPERATURE".into(), "1".into());
-        params.insert("RANGE_SCALE_HUMIDITY".into(), "1".into());
-        params.insert("RANGE_SCALE_PRESSURE".into(), "1".into());
-        let sql = substitute_sql(&sql, &params);
-        let result = run_sql(&ctx, &sql).await.unwrap();
-        result.rows[0]
-            .get("fault_hours")
-            .and_then(|value| value.as_f64())
-            .unwrap()
+            let sql = std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../../sql_rules/sv_range.sql"),
+            )
+            .unwrap();
+            let mut params = rule_params(300.0, 0);
+            params.insert("RANGE_SCALE_TEMPERATURE".into(), "1".into());
+            params.insert("RANGE_SCALE_HUMIDITY".into(), "1".into());
+            params.insert("RANGE_SCALE_PRESSURE".into(), "1".into());
+            let sql = substitute_sql(&sql, &params);
+            let result = run_sql(&ctx, &sql).await.unwrap();
+            result.rows[0]
+                .get("fault_hours")
+                .and_then(|value| value.as_f64())
+                .unwrap()
         }
     }
 

@@ -119,9 +119,7 @@ impl TimescaleLiveHistorian {
             let et = env
                 .points
                 .iter()
-                .find_map(|p| {
-                    tag_str(p, TAG_EQUIPMENT_TYPE).or_else(|| tag_str(p, TAG_EQUIP_TYPE))
-                })
+                .find_map(|p| tag_str(p, TAG_EQUIPMENT_TYPE).or_else(|| tag_str(p, TAG_EQUIP_TYPE)))
                 .filter(|s| !s.is_empty());
             self.rt.block_on(async {
                 self.tsdb.ensure_site_building(building_id).await?;
@@ -194,7 +192,6 @@ impl TimescaleLiveHistorian {
         }
         Ok(report)
     }
-
 }
 
 fn merge_report(into: &mut LiveHistorianIngest, part: LiveHistorianIngest) {

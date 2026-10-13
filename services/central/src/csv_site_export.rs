@@ -10,7 +10,6 @@ use serde_json::Value;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
-use crate::analytics::historian;
 use crate::durable_storage;
 use crate::jobs::JobError;
 
@@ -41,7 +40,7 @@ async fn historian_csv_async(building_id: &str) -> Result<Option<Vec<u8>>, JobEr
     {
         let _ = building_id;
         // Wave-X: Parquet/DF historian export retired — package CSV fallback.
-        return Ok(None);
+        Ok(None)
     }
     #[cfg(feature = "legacy-datafusion")]
     {
@@ -244,6 +243,7 @@ fn maybe_join_faults(
     wtr.into_inner().map_err(|e| JobError::Io(e.to_string()))
 }
 
+#[cfg(feature = "legacy-datafusion")]
 fn json_cell_string(value: Option<&Value>) -> String {
     match value {
         None | Some(Value::Null) => String::new(),

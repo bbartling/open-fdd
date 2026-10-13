@@ -14,9 +14,7 @@ use fdd_tsdb::Tsdb;
 use serde_json::{json, Value};
 use sqlx::{PgConnection, Row};
 
-use crate::analytics::{
-    envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest,
-};
+use crate::analytics::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest};
 
 const TS_ENGINE: &str = "timescale-sql";
 
@@ -64,8 +62,16 @@ fn kind_aliases(kind: &str) -> Vec<&'static str> {
         "zone" | "zone_other" | "fcu" | "baseboard" => {
             vec!["zone", "zone_other", "fcu", "baseboard", "zone_other"]
         }
-        other if other == "zone_family" => {
-            vec!["vav", "fcu", "zone", "zone_other", "heatpump", "baseboard", "hp"]
+        "zone_family" => {
+            vec![
+                "vav",
+                "fcu",
+                "zone",
+                "zone_other",
+                "heatpump",
+                "baseboard",
+                "hp",
+            ]
         }
         _ => vec![],
     }
@@ -111,9 +117,7 @@ async fn list_equipment(tsdb: &Tsdb, building_id: &str) -> Result<Vec<(String, O
         .map(|r| {
             (
                 r.get::<String, _>("equipment_id"),
-                r.try_get::<Option<String>, _>("equip_type")
-                    .ok()
-                    .flatten(),
+                r.try_get::<Option<String>, _>("equip_type").ok().flatten(),
             )
         })
         .collect())
@@ -163,9 +167,26 @@ pub async fn inspect_equipment(
         return Ok(None);
     }
     const PREFERRED: &[&str] = &[
-        "sat", "mat", "rat", "oa_t", "web_oa_t", "oa_damper_pct", "fan_status", "fan_cmd",
-        "duct_static", "duct_static_sp", "sat_sp", "clg_valve_pct", "htg_valve_pct", "zone_t",
-        "zone_flow", "chw_supply_t", "chw_return_t", "hw_supply_t", "hw_return_t", "occ_mode",
+        "sat",
+        "mat",
+        "rat",
+        "oa_t",
+        "web_oa_t",
+        "oa_damper_pct",
+        "fan_status",
+        "fan_cmd",
+        "duct_static",
+        "duct_static_sp",
+        "sat_sp",
+        "clg_valve_pct",
+        "htg_valve_pct",
+        "zone_t",
+        "zone_flow",
+        "chw_supply_t",
+        "chw_return_t",
+        "hw_supply_t",
+        "hw_return_t",
+        "occ_mode",
     ];
     let selected: Vec<String> = match columns {
         Some(want) if !want.is_empty() => want
@@ -380,9 +401,7 @@ LIMIT $4
             .ok()
             .map(|t| t.to_rfc3339())
             .unwrap_or_default();
-        let eq = r
-            .try_get::<String, _>("equipment_id")
-            .unwrap_or_default();
+        let eq = r.try_get::<String, _>("equipment_id").unwrap_or_default();
         let value_f = r.try_get::<Option<f64>, _>("value_f").ok().flatten();
         let motor_f = r.try_get::<Option<f64>, _>("motor_f").ok().flatten();
         points.push(json!({
@@ -743,7 +762,10 @@ WHERE _rn = 1 OR _rn = _cnt
 ORDER BY timestamp_utc
 LIMIT $2
 "#,
-        sel = roles.iter().map(|r| format!(", \"{r}\"")).collect::<String>(),
+        sel = roles
+            .iter()
+            .map(|r| format!(", \"{r}\""))
+            .collect::<String>(),
         max_cols = max_cols,
         filters = filters,
     );
@@ -820,7 +842,10 @@ fn load_confirmed_fault_hint(
     let mut map = HashMap::new();
     if let Some(series) = body.get("fault_series").and_then(|v| v.as_array()) {
         for row in series {
-            let eq = row.get("equipment_id").and_then(|v| v.as_str()).unwrap_or("");
+            let eq = row
+                .get("equipment_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if eq != equipment_id {
                 continue;
             }
@@ -912,9 +937,7 @@ fn row_fault_hours(row: &sqlx::postgres::PgRow) -> f64 {
 }
 
 async fn ensure_history_table(conn: &mut PgConnection, roles: &[String]) -> Result<()> {
-    let mut cols = String::from(
-        "equipment_id text not null, timestamp_utc timestamptz not null",
-    );
+    let mut cols = String::from("equipment_id text not null, timestamp_utc timestamptz not null");
     for r in roles {
         cols.push_str(&format!(", \"{r}\" double precision"));
     }
@@ -1162,7 +1185,10 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         "results": all_results,
         "note": "Wave-X Soft-OPEN Timescale postgres-sql run-now; Soft-OPEN ≠ FQ",
     });
-    std::fs::write(out_dir.join("_run_meta.json"), serde_json::to_vec_pretty(&meta)?)?;
+    std::fs::write(
+        out_dir.join("_run_meta.json"),
+        serde_json::to_vec_pretty(&meta)?,
+    )?;
     Ok(meta)
 }
 
@@ -1190,9 +1216,4 @@ pub async fn equipment_from_timescale(building_id: Option<&str>) -> Result<Value
         "engine": TS_ENGINE,
         "building_id": bid,
     }))
-}
-
-/// Convert AnalyticsEnvelope helper for historian_stub.
-pub fn envelope_engine() -> &'static str {
-    TS_ENGINE
 }

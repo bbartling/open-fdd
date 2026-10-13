@@ -408,10 +408,10 @@ async fn query_arrow_file(path: &PathBuf, sql: &str, table: &str) -> Result<Vec<
     #[cfg(not(feature = "legacy-datafusion"))]
     {
         let _ = (path, sql, table);
-        return Err(
+        Err(
             "Wave-X: DataFusion SessionContext retired for dataset SQL (enable legacy-datafusion)"
                 .into(),
-        );
+        )
     }
     #[cfg(feature = "legacy-datafusion")]
     {

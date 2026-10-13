@@ -279,11 +279,17 @@ pub async fn respond_query(
     let result = match query_id {
         "runtime" => motor_weekly_runtime(&tsdb, &building).await,
         "bas-vs-web-oat" => bas_vs_web_oat(&tsdb, &building).await,
-        "ahu-health" | "vav-health" | "chiller-health" | "boiler-health" | "hp-health"
-        | "zone-other-health" | "cooling-tower-health" | "sensor-health"
-        | "ahu-temperature-health" | "ahu-pressure-health" | "ahu-economizer-health" => {
-            plant_health_matrix(&tsdb, &building).await
-        }
+        "ahu-health"
+        | "vav-health"
+        | "chiller-health"
+        | "boiler-health"
+        | "hp-health"
+        | "zone-other-health"
+        | "cooling-tower-health"
+        | "sensor-health"
+        | "ahu-temperature-health"
+        | "ahu-pressure-health"
+        | "ahu-economizer-health" => plant_health_matrix(&tsdb, &building).await,
         "economizer" | "rcx-ahu" => economizer_deltas(&tsdb, &building).await,
         "rcx-vav" => role_timeseries(&tsdb, &building, "zone_t", "rcx-vav", 2000).await,
         "rcx-chiller" => {
@@ -299,11 +305,18 @@ pub async fn respond_query(
             }
         }
         "mechanical-cooling" => {
-            role_timeseries(&tsdb, &building, "chiller_status", "mechanical-cooling", 2000).await
+            role_timeseries(
+                &tsdb,
+                &building,
+                "chiller_status",
+                "mechanical-cooling",
+                2000,
+            )
+            .await
         }
         "schedule" => role_timeseries(&tsdb, &building, "occ_mode", "schedule", 2000).await,
-        "sensor-faults" | "sensor-stats" | "pid-hunting" | "setpoints" | "diurnal"
-        | "topology" | "sql-anomaly" | "metering" | "mv-change-point" | "fuel" => {
+        "sensor-faults" | "sensor-stats" | "pid-hunting" | "setpoints" | "diurnal" | "topology"
+        | "sql-anomaly" | "metering" | "mv-change-point" | "fuel" => {
             // Honest thin envelope — data present, full algorithm port tracked.
             let samples = tsdb.sample_count(&building).await.unwrap_or(0);
             Ok(json!({

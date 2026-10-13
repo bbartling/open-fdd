@@ -12,13 +12,11 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use sqlx::Connection;
 
 use crate::client::Tsdb;
 
 fn load_json(path: &Path) -> Result<Value> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))
 }
 
@@ -154,10 +152,7 @@ fn equipment_id_from_csv(rel: &Path) -> String {
     if parts.first().map(|s| s.as_str()) == Some("VAV") && parts.len() >= 2 {
         return parts[1].clone();
     }
-    parts
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "equipment".into())
+    parts.first().cloned().unwrap_or_else(|| "equipment".into())
 }
 
 fn parse_ts(raw: &str) -> Option<DateTime<Utc>> {
@@ -251,11 +246,7 @@ async fn seed_one_csv(
 
     for rec in reader.records() {
         let rec = rec?;
-        let map: HashMap<&str, &str> = headers
-            .iter()
-            .zip(rec.iter())
-            .map(|(h, v)| (h, v))
-            .collect();
+        let map: HashMap<&str, &str> = headers.iter().zip(rec.iter()).collect();
         let Some(ts_raw) = map.get(ts_col.as_str()).copied() else {
             continue;
         };
@@ -361,13 +352,17 @@ pub async fn seed_package_dir(
             .unwrap_or_else(|| package_root.to_path_buf());
         let mut col_to_role = csv_to_sql_roles_from_columns_csv(&eq_dir)?;
         if col_to_role.is_empty() {
-            col_to_role =
-                csv_to_sql_roles_from_column_map(&equipment_id, &column_map, &hs_to_sql);
+            col_to_role = csv_to_sql_roles_from_column_map(&equipment_id, &column_map, &hs_to_sql);
         }
         // Weather packages often leave columns.csv roles blank — map dry_bulb → web_oa_t.
-        if equipment_id.eq_ignore_ascii_case("weather") && !col_to_role.values().any(|r| r == "web_oa_t" || r == "oa_t") {
+        if equipment_id.eq_ignore_ascii_case("weather")
+            && !col_to_role.values().any(|r| r == "web_oa_t" || r == "oa_t")
+        {
             if let Ok(headers) = csv::Reader::from_path(&csv_path).and_then(|mut r| {
-                Ok(r.headers()?.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+                Ok(r.headers()?
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>())
             }) {
                 for h in headers {
                     let low = h.to_ascii_lowercase();

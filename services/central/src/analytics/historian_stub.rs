@@ -1,6 +1,11 @@
 //! Wave-X default historian surface — DataFusion retired (ADR-010).
 //! Full Parquet/DF implementation: `historian_datafusion.rs` behind `legacy-datafusion`.
 
+#![expect(
+    dead_code,
+    reason = "API-parity stubs with historian_datafusion; Timescale product uses timescale_* modules"
+)]
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -24,7 +29,13 @@ pub const MECH_RETAIN_FALLBACK_DAYS: i64 = 365;
 pub const MECH_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 pub const ANOMALY_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 pub const ANOMALY_SCREEN_ROLES: &[&str] = &[
-    "sat", "mat", "rat", "oa_t", "zone_t", "chw_supply_t", "hw_supply_t",
+    "sat",
+    "mat",
+    "rat",
+    "oa_t",
+    "zone_t",
+    "chw_supply_t",
+    "hw_supply_t",
 ];
 
 #[derive(Debug, Clone)]
@@ -54,9 +65,7 @@ pub fn parquet_root_base() -> PathBuf {
         .join("openfdd-compat-retired")
 }
 
-pub fn parquet_root_for_context(
-    _ctx: &crate::tenant::TenantContext,
-) -> Result<PathBuf, String> {
+pub fn parquet_root_for_context(_ctx: &crate::tenant::TenantContext) -> Result<PathBuf, String> {
     Ok(parquet_root_base())
 }
 
@@ -75,10 +84,7 @@ pub(crate) fn history_role_numeric_sql(col: &str) -> String {
     format!("CAST({col} AS DOUBLE)")
 }
 
-pub(crate) fn remaining_budget(
-    deadline: tokio::time::Instant,
-    _nominal: Duration,
-) -> Duration {
+pub(crate) fn remaining_budget(deadline: tokio::time::Instant, _nominal: Duration) -> Duration {
     deadline.saturating_duration_since(tokio::time::Instant::now())
 }
 
@@ -142,9 +148,7 @@ pub async fn diurnal_from_history(
     retired()
 }
 
-pub async fn topology_from_history(
-    building_id: Option<&str>,
-) -> Result<Option<AnalyticsEnvelope>> {
+pub async fn topology_from_history(building_id: Option<&str>) -> Result<Option<AnalyticsEnvelope>> {
     let _ = building_id;
     retired()
 }
@@ -166,13 +170,18 @@ pub async fn economizer_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let _ = (equipment_filter, dt_min_f, building_id, max_points, start, end);
+    let _ = (
+        equipment_filter,
+        dt_min_f,
+        building_id,
+        max_points,
+        start,
+        end,
+    );
     retired()
 }
 
-pub async fn mech_cooling_evidence_warnings(
-    building_id: Option<&str>,
-) -> Result<Vec<String>> {
+pub async fn mech_cooling_evidence_warnings(building_id: Option<&str>) -> Result<Vec<String>> {
     let _ = building_id;
     retired()
 }
@@ -219,13 +228,8 @@ pub async fn inspect_from_history(
         let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
             return Ok(None);
         };
-        return crate::timescale_product::inspect_equipment(
-            bid,
-            equipment_id,
-            columns,
-            max_points,
-        )
-        .await;
+        return crate::timescale_product::inspect_equipment(bid, equipment_id, columns, max_points)
+            .await;
     }
     retired()
 }

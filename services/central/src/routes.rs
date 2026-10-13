@@ -609,13 +609,11 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         uptime_secs,
         last_ingest_at,
         historian_present,
-        historian: Some(
-            if crate::timescale_historian::historian_is_timescale() {
-                "timescale".into()
-            } else {
-                "parquet-legacy".into()
-            },
-        ),
+        historian: Some(if crate::timescale_historian::historian_is_timescale() {
+            "timescale".into()
+        } else {
+            "parquet-legacy".into()
+        }),
         fdd_engine: Some(std::env::var("OPENFDD_FDD_ENGINE").unwrap_or_else(|_| {
             if crate::timescale_historian::historian_is_timescale() {
                 "postgres-sql".into()
@@ -3607,27 +3605,26 @@ pub async fn fdd_run(
                 obj.insert("equipment_id".into(), json!(eq));
             }
         }
-        let mut result =
-            match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), async {
-                crate::timescale_product::run_fdd_registry(&ts_payload).await
-            })
-            .await
-            {
-                Ok(Ok(v)) => v,
-                Ok(Err(e)) => json!({
-                    "ok": false,
-                    "engine": "postgres-sql",
-                    "error": e.to_string(),
-                }),
-                Err(_) => json!({
-                    "ok": false,
-                    "timeout": true,
-                    "engine": "postgres-sql",
-                    "error": format!(
-                        "Timescale FDD run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS)"
-                    ),
-                }),
-            };
+        let mut result = match tokio::time::timeout(Duration::from_secs(fdd_timeout_secs), async {
+            crate::timescale_product::run_fdd_registry(&ts_payload).await
+        })
+        .await
+        {
+            Ok(Ok(v)) => v,
+            Ok(Err(e)) => json!({
+                "ok": false,
+                "engine": "postgres-sql",
+                "error": e.to_string(),
+            }),
+            Err(_) => json!({
+                "ok": false,
+                "timeout": true,
+                "engine": "postgres-sql",
+                "error": format!(
+                    "Timescale FDD run timed out after {fdd_timeout_secs}s (OPENFDD_FDD_RUN_TIMEOUT_SECS)"
+                ),
+            }),
+        };
         if let (Some(bid), Some(obj)) = (echo_building_id, result.as_object_mut()) {
             let missing = obj.get("building_id").map(|v| v.is_null()).unwrap_or(true);
             if missing {
@@ -3769,7 +3766,9 @@ pub async fn fdd_registry_rules() -> Json<Value> {
             Ok(tsdb) => match crate::timescale_analytics::fdd_registry(&tsdb).await {
                 Ok(v) => return Json(v),
                 Err(e) => {
-                    return Json(json!({"ok": false, "error": e.to_string(), "engine": "postgres-sql"}))
+                    return Json(
+                        json!({"ok": false, "error": e.to_string(), "engine": "postgres-sql"}),
+                    )
                 }
             },
             Err(e) => {
@@ -4247,8 +4246,8 @@ pub async fn csv_import_package(
                     .and_then(|v| v.as_str())
                     .map(str::to_string),
             ) {
-                let sql_root = std::env::var("OPENFDD_SQL_ROOT")
-                    .unwrap_or_else(|_| "sql/fdd".into());
+                let sql_root =
+                    std::env::var("OPENFDD_SQL_ROOT").unwrap_or_else(|_| "sql/fdd".into());
                 match fdd_tsdb::Tsdb::connect_from_env().await {
                     Ok(tsdb) => {
                         match fdd_tsdb::seed_package_dir(
@@ -5663,7 +5662,9 @@ pub async fn fdd_rules_list() -> Json<Value> {
             Ok(tsdb) => match crate::timescale_analytics::fdd_registry(&tsdb).await {
                 Ok(v) => return Json(v),
                 Err(e) => {
-                    return Json(json!({"ok": false, "error": e.to_string(), "engine": "postgres-sql"}))
+                    return Json(
+                        json!({"ok": false, "error": e.to_string(), "engine": "postgres-sql"}),
+                    )
                 }
             },
             Err(e) => {
@@ -6181,16 +6182,19 @@ async fn analytics_runtime(
             .clone()
             .unwrap_or_else(|| "BUILDING_50".into());
         match fdd_tsdb::Tsdb::connect_from_env().await {
-            Ok(tsdb) => match crate::timescale_analytics::motor_weekly_runtime(&tsdb, &building).await
-            {
-                Ok(v) => return Ok(Json(v)),
-                Err(e) => {
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
-                    ));
+            Ok(tsdb) => {
+                match crate::timescale_analytics::motor_weekly_runtime(&tsdb, &building).await {
+                    Ok(v) => return Ok(Json(v)),
+                    Err(e) => {
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(
+                                json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"}),
+                            ),
+                        ));
+                    }
                 }
-            },
+            }
             Err(e) => {
                 return Err((
                     StatusCode::SERVICE_UNAVAILABLE,
@@ -6242,7 +6246,9 @@ async fn analytics_ahu_health(
                     Err(e) => {
                         return Err((
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
+                            Json(
+                                json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"}),
+                            ),
                         ));
                     }
                 }
@@ -6477,7 +6483,9 @@ async fn analytics_bas_vs_web_oat(
                 Err(e) => {
                     return Err((
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
+                        Json(
+                            json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"}),
+                        ),
                     ));
                 }
             },
@@ -7519,32 +7527,32 @@ mod version_tests {
 
         #[cfg(feature = "legacy-datafusion")]
         {
-        let ctx = datafusion::prelude::SessionContext::new();
-        fdd_sql::register_historian_building(&ctx, storage.path(), "building")
-            .await
-            .unwrap();
-        let rows = ctx
-            .sql("SELECT timestamp_utc, sat FROM history")
-            .await
-            .unwrap()
-            .collect()
-            .await
-            .unwrap();
-        assert_eq!(rows.len(), 1);
-        let timestamp = rows[0]
-            .column(0)
-            .as_any()
-            .downcast_ref::<datafusion::arrow::array::TimestampNanosecondArray>()
-            .unwrap()
-            .value(0);
-        assert_eq!(timestamp, source_observed_at.timestamp_nanos_opt().unwrap());
-        let value = rows[0]
-            .column(1)
-            .as_any()
-            .downcast_ref::<datafusion::arrow::array::Float64Array>()
-            .unwrap()
-            .value(0);
-        assert_eq!(value, 72.5);
+            let ctx = datafusion::prelude::SessionContext::new();
+            fdd_sql::register_historian_building(&ctx, storage.path(), "building")
+                .await
+                .unwrap();
+            let rows = ctx
+                .sql("SELECT timestamp_utc, sat FROM history")
+                .await
+                .unwrap()
+                .collect()
+                .await
+                .unwrap();
+            assert_eq!(rows.len(), 1);
+            let timestamp = rows[0]
+                .column(0)
+                .as_any()
+                .downcast_ref::<datafusion::arrow::array::TimestampNanosecondArray>()
+                .unwrap()
+                .value(0);
+            assert_eq!(timestamp, source_observed_at.timestamp_nanos_opt().unwrap());
+            let value = rows[0]
+                .column(1)
+                .as_any()
+                .downcast_ref::<datafusion::arrow::array::Float64Array>()
+                .unwrap()
+                .value(0);
+            assert_eq!(value, 72.5);
         }
         let shadow = central_state
             .edges
@@ -8041,32 +8049,32 @@ mod version_tests {
 
         #[cfg(feature = "legacy-datafusion")]
         {
-        let ctx = datafusion::prelude::SessionContext::new();
-        fdd_sql::register_historian_building(&ctx, storage.path(), "building")
-            .await
-            .unwrap();
-        let rows = ctx
-            .sql("SELECT timestamp_utc, sat FROM history")
-            .await
-            .unwrap()
-            .collect()
-            .await
-            .unwrap();
-        assert_eq!(rows.len(), 4);
-        let timestamp = rows[0]
-            .column(0)
-            .as_any()
-            .downcast_ref::<datafusion::arrow::array::TimestampNanosecondArray>()
-            .unwrap()
-            .value(0);
-        assert_eq!(timestamp, 1_790_960_400_000_000_000);
-        let value = rows[0]
-            .column(1)
-            .as_any()
-            .downcast_ref::<datafusion::arrow::array::Float64Array>()
-            .unwrap()
-            .value(0);
-        assert_eq!(value, 72.5);
+            let ctx = datafusion::prelude::SessionContext::new();
+            fdd_sql::register_historian_building(&ctx, storage.path(), "building")
+                .await
+                .unwrap();
+            let rows = ctx
+                .sql("SELECT timestamp_utc, sat FROM history")
+                .await
+                .unwrap()
+                .collect()
+                .await
+                .unwrap();
+            assert_eq!(rows.len(), 4);
+            let timestamp = rows[0]
+                .column(0)
+                .as_any()
+                .downcast_ref::<datafusion::arrow::array::TimestampNanosecondArray>()
+                .unwrap()
+                .value(0);
+            assert_eq!(timestamp, 1_790_960_400_000_000_000);
+            let value = rows[0]
+                .column(1)
+                .as_any()
+                .downcast_ref::<datafusion::arrow::array::Float64Array>()
+                .unwrap()
+                .value(0);
+            assert_eq!(value, 72.5);
         }
         central_server.abort();
     }

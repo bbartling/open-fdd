@@ -4,20 +4,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use fdd_rules::{
-    effective_param_strings, load_registry, load_tuning_profiles, read_poll_from_cache,
-    rule_params, run_all_rules_with_overrides, substitute_sql, RuleRegistry, RuleSpec, RunOptions,
-};
-use fdd_store::HistorianConfig;
+use fdd_rules::{load_registry, RuleRegistry, RuleSpec};
 use serde_json::{json, Value};
-
-/// Coerce historian column to DOUBLE for AVG downsample (Utf8View-safe).
-fn series_numeric_sql(col: &str) -> String {
-    if col.is_empty() || !col.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
-        return "CAST(NULL AS DOUBLE)".to_string();
-    }
-    format!("try_cast(trim(CAST({col} AS VARCHAR)) AS DOUBLE)")
-}
 
 fn sql_rules_dir() -> PathBuf {
     if let Ok(p) = std::env::var("OPENFDD_SQL_RULES_DIR") {
@@ -33,91 +21,6 @@ fn sql_rules_dir() -> PathBuf {
         }
     }
     PathBuf::from("sql_rules")
-}
-
-/// Map cookbook slider keys onto SQL registry parameter keys.
-fn alias_ui_param_key<'a>(rule_id: &str, key: &'a str) -> &'a str {
-    match (rule_id, key) {
-        ("VAV-1", "zone_lo") | ("VAV-1", "zone_low") => "zone_t_lo",
-        ("VAV-1", "zone_hi") | ("VAV-1", "zone_high") => "zone_t_hi",
-        ("FC1", "duct_static_err") => "eps_dsp",
-        ("FC1", "fan_hi") => "eps_vfd_spd",
-        // Vibe19 / package aliases -> registry parameter keys
-        (_, "airflow_err") => "eps_airflow",
-        (_, "delta_t_min") => "oat_rat_delta_min",
-        (_, "oa_damper_econ_high") => "econ_full_open",
-        (_, "clg_valve_min") => "clg_full_min",
-        (_, "sat_err") => "eps_sat",
-        _ => key,
-    }
-}
-
-/// Persisted Lab / package params bag for one rule (aliases included).
-fn session_rule_param_bag(rule: &RuleSpec) -> Option<serde_json::Map<String, Value>> {
-    let wrap = crate::fdd::session_config::get_session_config();
-    let params = wrap.get("config")?.get("params")?.as_object()?;
-    let bag = params
-        .get(&rule.rule_id)
-        .or_else(|| rule.aliases.iter().find_map(|a| params.get(a)))?
-        .as_object()?;
-    Some(bag.clone())
-}
-
-/// Effective confirm_seconds after session_config confirm_min / confirm_seconds.
-fn confirm_seconds_from_session_bag(rule: &RuleSpec, bag: &serde_json::Map<String, Value>) -> u32 {
-    let mut confirm = rule.confirm_seconds;
-    if let Some(cm) = bag.get("confirm_min").and_then(|v| v.as_f64()) {
-        confirm = (cm * 60.0).round() as u32;
-    }
-    if let Some(cs) = bag.get("confirm_seconds").and_then(|v| v.as_f64()) {
-        confirm = cs.round() as u32;
-    }
-    confirm
-}
-
-/// True when session bag carries confirm or other numeric overrides for this rule.
-fn session_bag_has_overrides(bag: &serde_json::Map<String, Value>) -> bool {
-    bag.iter().any(|(k, v)| {
-        if k == "_ui" {
-            return false;
-        }
-        v.as_f64().is_some()
-    })
-}
-
-/// Fold session bag numbers into SQL placeholder map (same mapping as /api/fdd/run).
-fn apply_session_bag_to_sql_params(
-    rule: &RuleSpec,
-    bag: &serde_json::Map<String, Value>,
-    params: &mut HashMap<String, String>,
-) {
-    for (key, value) in bag {
-        if key == "confirm_min" || key == "_ui" {
-            continue;
-        }
-        let Some(mut number) = value.as_f64() else {
-            continue;
-        };
-        let mut mapped = alias_ui_param_key(&rule.rule_id, key).to_string();
-        if rule.rule_id == "FC1" && key == "fan_hi" {
-            if bag.get("eps_vfd_spd").and_then(|v| v.as_f64()).is_some() {
-                continue;
-            }
-            mapped = "eps_vfd_spd".into();
-            number = (1.0 - number).clamp(0.0, 1.0);
-        }
-        if let Some(def) = rule.parameters.get(&mapped) {
-            params.insert(def.sql_placeholder.clone(), number.to_string());
-        } else if let Some(def) = rule.parameters.get(key) {
-            params.insert(def.sql_placeholder.clone(), number.to_string());
-        } else if let Some((_, def)) = rule
-            .parameters
-            .iter()
-            .find(|(_, def)| def.sql_placeholder == *key || def.sql_placeholder == mapped)
-        {
-            params.insert(def.sql_placeholder.clone(), number.to_string());
-        }
-    }
 }
 
 pub(crate) fn parquet_root() -> PathBuf {
@@ -153,14 +56,6 @@ fn preferred_tenant_from_env() -> Option<String> {
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-}
-
-/// Wave U V7 dual-read: newer Parquet tree of `tenants/{tid}/…` and hub-root.
-fn building_has_history_for_tenant(pq: &Path, bid: &str, preferred_tenant: Option<&str>) -> bool {
-    match fdd_store::resolve_building_read_root(pq, preferred_tenant, bid) {
-        Ok(resolved) => fdd_store::building_history_present(&resolved.root, bid),
-        Err(_) => false,
-    }
 }
 
 /// Storage root for a building-scoped FDD/analytics read (tenant partition or hub).
@@ -256,6 +151,7 @@ pub fn mark_building_results_dirty(building_id: &str, reason: &str) {
     let _ = std::fs::write(path, body.to_string());
 }
 
+#[cfg(test)]
 fn clear_building_dirty(building_id: Option<&str>) {
     let path = results_dir(building_id).join(DIRTY_FILE);
     let _ = std::fs::remove_file(path);
@@ -272,6 +168,7 @@ fn rule_set_hash() -> String {
     format!("{:x}", hasher.finalize())
 }
 
+#[cfg(test)]
 fn write_run_meta(building_id: Option<&str>, mode: &str, result_count: usize) {
     let dir = results_dir(building_id);
     let _ = std::fs::create_dir_all(&dir);
@@ -730,39 +627,6 @@ pub fn result_slice_report(building_id: Option<&str>) -> Value {
     })
 }
 
-/// Roles used for FDD Plots series SELECT (required ∪ optional, SQL-safe).
-///
-/// Portable rules keep `required_roles` empty and put sensors in
-/// `optional_roles`; Plots still need those columns or the UI shows
-/// "No plottable series".
-///
-/// ECON-1..7 always candidate `oa_damper_pct` so FDD Plots can dual-axis
-/// the damper when the historian has it (ECON-4 omits it from registry
-/// roles — OA fraction math — but operators still need the overlay).
-fn series_plot_columns(rule: &RuleSpec) -> Vec<&str> {
-    let mut columns: Vec<&str> = rule
-        .required_roles
-        .iter()
-        .chain(rule.optional_roles.iter())
-        .map(String::as_str)
-        .filter(|name| name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
-        .collect();
-    let id = rule.rule_id.to_ascii_uppercase();
-    if id.starts_with("ECON-")
-        && id
-            .as_bytes()
-            .get(5)
-            .copied()
-            .is_some_and(|c| c.is_ascii_digit())
-        && !columns.contains(&"oa_damper_pct")
-    {
-        columns.push("oa_damper_pct");
-    }
-    columns.sort_unstable();
-    columns.dedup();
-    columns
-}
-
 /// Downsampled history series for one equipment/rule. Rule math continues to
 /// use full-resolution parquet; only this display response is capped.
 pub fn series_response(equipment_id: &str, rule_id: &str, building_id: Option<&str>) -> Value {
@@ -787,258 +651,6 @@ pub fn series_response_scoped(
         "engine": "postgres-sql",
         "error": "Wave-X: DataFusion series retired; use Timescale FDD / analytics",
     })
-}
-
-
-/// Normalize timestamp keys so series rows join fault overlays across slight
-/// format drift (trim; `timestamp` vs `timestamp_utc`; fractional seconds;
-/// `Z` vs `+00:00`).
-fn normalize_ts_keys(raw: &str) -> Vec<String> {
-    let s = raw.trim().to_string();
-    if s.is_empty() {
-        return Vec::new();
-    }
-    let mut keys: Vec<String> = Vec::new();
-    fn push_unique(keys: &mut Vec<String>, k: String) {
-        if !k.is_empty() && !keys.iter().any(|x| x == &k) {
-            keys.push(k);
-        }
-    }
-    push_unique(&mut keys, s.clone());
-    // `T` vs space between date and time.
-    if s.len() > 10 {
-        let sep = s.as_bytes()[10];
-        if sep == b'T' {
-            push_unique(&mut keys, format!("{} {}", &s[..10], &s[11..]));
-        } else if sep == b' ' {
-            push_unique(&mut keys, format!("{}T{}", &s[..10], &s[11..]));
-        }
-    }
-    // Optional trailing Z / +00:00 / -00:00.
-    let snapshot = keys.clone();
-    for k in snapshot {
-        if k.ends_with('Z') {
-            push_unique(&mut keys, k[..k.len() - 1].to_string());
-            push_unique(&mut keys, format!("{}+00:00", &k[..k.len() - 1]));
-        } else if let Some(stripped) = k
-            .strip_suffix("+00:00")
-            .or_else(|| k.strip_suffix("-00:00"))
-        {
-            push_unique(&mut keys, stripped.to_string());
-            push_unique(&mut keys, format!("{stripped}Z"));
-        } else if k.len() >= 19 && !k.contains('Z') && !k.contains('+') {
-            // No zone suffix - add Z (date dashes are fine; `+` marks offsets).
-            push_unique(&mut keys, format!("{k}Z"));
-        }
-    }
-    // Strip fractional seconds (keep timezone suffix).
-    let snapshot = keys.clone();
-    for k in snapshot {
-        if let Some(dot) = k.find('.') {
-            let rest = &k[dot..];
-            if let Some(rel) = rest.find(['Z', '+', '-']) {
-                push_unique(&mut keys, format!("{}{}", &k[..dot], &rest[rel..]));
-            } else {
-                push_unique(&mut keys, k[..dot].to_string());
-            }
-        }
-    }
-    keys
-}
-
-/// Rewrite aggregated cookbook SQL (`final` <- `ranked` -> `fault_hours`) into a
-/// per-timestamp `confirmed_fault` series for one equipment (FDD Plots overlay).
-///
-/// Registry runs persist equipment-level `fault_hours` only; Plots need the
-/// swim-lane bool joined onto history timestamps. Returns `None` for analytics
-/// rollups / non-confirm SQL shapes.
-fn rewrite_rule_sql_to_fault_series(sql: &str, equipment_id: &str) -> Option<String> {
-    let sql = sql.trim().trim_end_matches(';');
-    let lower = sql.to_ascii_lowercase();
-    if !lower.contains("final as") || !lower.contains("from ranked") {
-        return None;
-    }
-    if !lower.contains("fault_hours") {
-        return None;
-    }
-    let final_at = lower.find("final as (")?;
-    let select_at = lower.rfind("select")?;
-    if select_at <= final_at {
-        return None;
-    }
-    // Outer aggregate SELECT must be the trailing one after `final`.
-    if !lower[select_at..].contains("fault_hours") {
-        return None;
-    }
-
-    let mut head = sql[..select_at].to_string();
-    // Inject timestamp_utc into the `final` CTE select list when missing.
-    let head_lower = head.to_ascii_lowercase();
-    if let Some(rel_final) = head_lower[final_at..].find("final as (") {
-        let body_start = final_at + rel_final + "final as (".len();
-        let body_slice = &head_lower[body_start..];
-        // Only the final CTE body (until FROM ranked).
-        let from_ranked = body_slice.find("from ranked")?;
-        let final_body = &head_lower[body_start..body_start + from_ranked];
-        if !final_body.contains("timestamp_utc") {
-            // Insert after first `equipment_id,` inside final.
-            if let Some(eq_rel) = final_body.find("equipment_id") {
-                let abs = body_start + eq_rel;
-                // Find comma after equipment_id (allow whitespace/newlines).
-                let after = &head[abs..];
-                if let Some(comma_rel) = after.find(',') {
-                    let insert_at = abs + comma_rel + 1;
-                    head.insert_str(insert_at, "\n    timestamp_utc,");
-                }
-            }
-        }
-    }
-
-    let escaped = equipment_id.replace('\'', "''");
-    Some(format!(
-        "{head}SELECT equipment_id, timestamp_utc, confirmed AS confirmed_fault\n\
-         FROM final\n\
-         WHERE equipment_id = '{escaped}'\n\
-         ORDER BY timestamp_utc"
-    ))
-}
-
-/// Inject NULL columns for optional roles missing from history (CTE form).
-fn sql_with_optional_null_roles_series(
-    sql: &str,
-    optional_roles: &[String],
-    history_columns: &std::collections::HashSet<String>,
-) -> String {
-    let missing: Vec<String> = optional_roles
-        .iter()
-        .filter(|role| !history_columns.contains(&role.to_ascii_lowercase()))
-        .cloned()
-        .collect();
-    if missing.is_empty() {
-        return sql.to_string();
-    }
-    let null_cols: String = missing
-        .iter()
-        .map(|r| {
-            let ty = if r.eq_ignore_ascii_case("occ_mode") {
-                "VARCHAR"
-            } else {
-                "DOUBLE"
-            };
-            format!("CAST(NULL AS {ty}) AS \"{r}\"")
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-    let cte = format!("history_opt AS (SELECT history.*, {null_cols} FROM history)");
-    let rewritten = sql
-        .replace(" FROM history", " FROM history_opt")
-        .replace(" from history", " from history_opt")
-        .replace("\nFROM history", "\nFROM history_opt")
-        .replace("\nfrom history", "\nfrom history_opt");
-    if let Some(idx) = rewritten.find("WITH ") {
-        let (pre, rest) = rewritten.split_at(idx);
-        let rest = rest.trim_start_matches("WITH ");
-        format!("{pre}WITH {cte}, {rest}")
-    } else if let Some(idx) = rewritten.find("with ") {
-        let (pre, rest) = rewritten.split_at(idx);
-        let rest = rest.trim_start_matches("with ");
-        format!("{pre}WITH {cte}, {rest}")
-    } else {
-        format!("WITH {cte} {rewritten}")
-    }
-}
-
-/// Compute per-timestamp confirmed_fault by rewriting + running cookbook SQL.
-
-
-fn lookup_fault_flag(map: &HashMap<String, bool>, ts: &str) -> Option<bool> {
-    for key in normalize_ts_keys(ts) {
-        if let Some(v) = map.get(&key) {
-            return Some(*v);
-        }
-    }
-    None
-}
-
-/// Map RFC3339 (or raw) timestamp -> confirmed_fault bool from last rule result JSON.
-fn load_confirmed_fault_index(
-    equipment_id: &str,
-    rule_id: &str,
-    building_id: Option<&str>,
-) -> HashMap<String, bool> {
-    let mut out = HashMap::new();
-    let mut paths: Vec<PathBuf> = Vec::new();
-    // Prefer site-scoped results when building id is known.
-    if let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) {
-        paths.push(results_dir(Some(bid)).join(format!("{rule_id}.json")));
-    }
-    paths.push(results_dir(None).join(format!("{rule_id}.json")));
-    // Scan building=*/{rule_id}.json under the results root.
-    if let Ok(rd) = std::fs::read_dir(results_dir(None)) {
-        for ent in rd.flatten() {
-            let p = ent.path();
-            if p.is_dir() {
-                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                if name.starts_with("building=") {
-                    let f = p.join(format!("{rule_id}.json"));
-                    if f.is_file() {
-                        paths.push(f);
-                    }
-                }
-            }
-        }
-    }
-    // Dedup while preserving order.
-    let mut seen = std::collections::HashSet::new();
-    paths.retain(|p| seen.insert(p.clone()));
-
-    for path in paths {
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let Ok(body) = serde_json::from_str::<Value>(&text) else {
-            continue;
-        };
-        for row in body
-            .get("rows")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            let eq = row
-                .get("equipment_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if eq != equipment_id {
-                continue;
-            }
-            let ts = row
-                .get("timestamp_utc")
-                .or_else(|| row.get("timestamp"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if ts.is_empty() {
-                continue;
-            }
-            let flag = row
-                .get("confirmed_fault")
-                .and_then(|v| v.as_bool())
-                .or_else(|| {
-                    row.get("confirmed_fault")
-                        .and_then(|v| v.as_i64())
-                        .map(|n| n != 0)
-                });
-            if let Some(f) = flag {
-                for key in normalize_ts_keys(ts) {
-                    out.insert(key, f);
-                }
-            }
-        }
-        if !out.is_empty() {
-            break;
-        }
-    }
-    out
 }
 
 /// `GET /api/fdd/roles` - role map file if present.
@@ -1108,7 +720,6 @@ pub fn run_registry_with_cancel(
     })
 }
 
-
 /// Preview substituted SQL for a rule (integrator lab only - not operator UI).
 pub fn preview_sql(rule_id: &str, overrides: &Value) -> Value {
     let _ = (rule_id, overrides);
@@ -1118,7 +729,6 @@ pub fn preview_sql(rule_id: &str, overrides: &Value) -> Value {
         "error": "Wave-X: DataFusion preview_sql retired",
     })
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1205,55 +815,6 @@ mod tests {
     }
 
     #[test]
-    fn series_plot_columns_unions_optional_roles_for_portable_rules() {
-        let reg = load_reg().expect("registry");
-        let pid = reg
-            .rules
-            .iter()
-            .find(|r| r.rule_id == "PID-HUNT-1")
-            .expect("PID-HUNT-1");
-        assert!(
-            pid.required_roles.is_empty(),
-            "PID-HUNT-1 should keep required_roles empty"
-        );
-        let cols = series_plot_columns(pid);
-        assert!(
-            cols.iter()
-                .any(|c| *c == "oa_damper_pct" || *c == "damper_pct"),
-            "expected optional AO roles in plot columns, got {cols:?}"
-        );
-        let sv = reg
-            .rules
-            .iter()
-            .find(|r| r.rule_id == "SV-FLATLINE")
-            .expect("SV-FLATLINE");
-        let sv_cols = series_plot_columns(sv);
-        assert!(
-            !sv_cols.is_empty(),
-            "SV-FLATLINE must expose optional sensor roles for Plots"
-        );
-    }
-
-    #[test]
-    fn series_plot_columns_includes_oa_damper_for_econ4() {
-        let reg = load_reg().expect("registry");
-        let econ4 = reg
-            .rules
-            .iter()
-            .find(|r| r.rule_id == "ECON-4")
-            .expect("ECON-4");
-        assert!(
-            !econ4.required_roles.iter().any(|r| r == "oa_damper_pct"),
-            "ECON-4 registry should not require damper for OA-fraction math"
-        );
-        let cols = series_plot_columns(econ4);
-        assert!(
-            cols.contains(&"oa_damper_pct"),
-            "ECON-4 FDD Plots must candidate oa_damper_pct, got {cols:?}"
-        );
-    }
-
-    #[test]
     fn list_rules_loads_repo_registry() {
         let v = list_registry_rules();
         assert_eq!(v["ok"], true, "{v}");
@@ -1313,112 +874,6 @@ mod tests {
         assert_eq!(body["ok"], true);
         assert_eq!(body["count"], 1);
         assert_eq!(body["equipment"][0]["equipment_id"], "bldg2-zone-loopback");
-    }
-
-    #[test]
-    fn confirmed_fault_index_reads_building_scoped_results() {
-        let _env = crate::test_support::workspace_env_lock();
-        let tmp = std::env::temp_dir().join(format!(
-            "openfdd-fault-idx-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let _ = std::fs::remove_dir_all(&tmp);
-        let building_dir = tmp.join("building=BldgA");
-        std::fs::create_dir_all(&building_dir).unwrap();
-        let payload = json!({
-            "rows": [{
-                "equipment_id": "ahu_1",
-                "timestamp": " 2024-01-01T00:00:00.000Z ",
-                "confirmed_fault": true
-            }]
-        });
-        std::fs::write(
-            building_dir.join("FC1.json"),
-            serde_json::to_string(&payload).unwrap(),
-        )
-        .unwrap();
-        let prev = std::env::var("OPENFDD_RULE_RESULTS_DIR").ok();
-        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", &tmp);
-        let idx = load_confirmed_fault_index("ahu_1", "FC1", Some("BldgA"));
-        match prev {
-            Some(v) => std::env::set_var("OPENFDD_RULE_RESULTS_DIR", v),
-            None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),
-        }
-        let _ = std::fs::remove_dir_all(&tmp);
-        assert!(
-            idx.values().any(|v| *v),
-            "expected confirmed_fault true in index, got {idx:?}"
-        );
-    }
-
-    #[test]
-    fn rewrite_fc1_sql_emits_confirmed_fault_series() {
-        let raw = std::fs::read_to_string("sql_rules/fc1_duct_static_low.sql")
-            .or_else(|_| std::fs::read_to_string("../sql_rules/fc1_duct_static_low.sql"))
-            .expect("fc1 sql");
-        let out = rewrite_rule_sql_to_fault_series(&raw, "AHU_1").expect("rewrite");
-        let lower = out.to_ascii_lowercase();
-        assert!(lower.contains("confirmed as confirmed_fault"), "{out}");
-        assert!(lower.contains("timestamp_utc"), "{out}");
-        assert!(
-            lower.contains("where equipment_id = 'ahu_1'")
-                || lower.contains("where equipment_id = 'AHU_1'"),
-            "{out}"
-        );
-        assert!(!lower.contains("fault_hours"), "{out}");
-        assert!(lower.contains("from final"), "{out}");
-    }
-
-    #[test]
-    fn rewrite_skips_analytics_rollups() {
-        let raw =
-            "SELECT equipment_id, AVG(zone_t) AS avg_zone_temp FROM history GROUP BY equipment_id";
-        assert!(rewrite_rule_sql_to_fault_series(raw, "VAV_1").is_none());
-    }
-
-    #[test]
-    fn normalize_ts_keys_strips_fractional_seconds() {
-        let keys = normalize_ts_keys("2024-01-01T00:00:00.123Z");
-        assert!(keys.contains(&"2024-01-01T00:00:00.123Z".to_string()));
-        assert!(keys.contains(&"2024-01-01T00:00:00Z".to_string()));
-    }
-
-    #[test]
-    fn normalize_ts_keys_joins_t_vs_space() {
-        let from_space = normalize_ts_keys("2024-01-01 00:00:00");
-        assert!(from_space.iter().any(|k| k.starts_with("2024-01-01T")));
-        let idx = {
-            let mut m = HashMap::new();
-            for k in normalize_ts_keys("2024-01-01T00:00:00.000Z") {
-                m.insert(k, true);
-            }
-            m
-        };
-        assert_eq!(
-            lookup_fault_flag(&idx, "2024-01-01 00:00:00"),
-            Some(true),
-            "T vs space + fractional seconds must join"
-        );
-    }
-
-    #[test]
-    fn normalize_ts_keys_joins_plus_zero_offset() {
-        let idx = {
-            let mut m = HashMap::new();
-            for k in normalize_ts_keys("2024-01-01T00:00:00+00:00") {
-                m.insert(k, true);
-            }
-            m
-        };
-        assert_eq!(
-            lookup_fault_flag(&idx, "2024-01-01T00:00:00Z"),
-            Some(true),
-            "+00:00 must join to Z"
-        );
     }
 
     struct RuleResultsDirGuard {

@@ -20,9 +20,6 @@ mod historian_limits;
 mod ingest;
 mod jobs;
 mod live_historian;
-mod timescale_historian;
-mod timescale_analytics;
-mod timescale_product;
 mod logging;
 mod models;
 mod mqtt_monitor;
@@ -34,6 +31,9 @@ mod tenant;
 mod tenant_budget;
 #[cfg(test)]
 mod test_env_lock;
+mod timescale_analytics;
+mod timescale_historian;
+mod timescale_product;
 mod user_store;
 mod vibe21;
 mod wattlab_dump;
@@ -147,7 +147,7 @@ async fn initialize_s3_scope_index() -> anyhow::Result<()> {
     #[cfg(not(feature = "legacy-datafusion"))]
     {
         // Wave-X: Parquet/DF S3 scope index retired with DataFusion.
-        return Ok(());
+        Ok(())
     }
     #[cfg(feature = "legacy-datafusion")]
     {

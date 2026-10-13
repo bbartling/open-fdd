@@ -45,7 +45,10 @@ pub fn load_rule_sql(sql_root: &Path, sql_file: &str) -> Result<String> {
                 .with_context(|| format!("read rule sql {}", path.display()));
         }
     }
-    Err(anyhow!("rule sql not found: {sql_file} under {}", sql_root.display()))
+    Err(anyhow!(
+        "rule sql not found: {sql_file} under {}",
+        sql_root.display()
+    ))
 }
 
 pub fn render_placeholders(sql: &str, req: &RuleRunRequest) -> String {

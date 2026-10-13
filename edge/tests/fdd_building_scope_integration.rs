@@ -4,6 +4,11 @@
 //! distinct FDD results, site-scoped results directories, and echoed
 //! `building_id` — proving B50 and B100 no longer collide in the shared cache.
 //! Runs without any Liberty zip (none are shipped in CI).
+//!
+//! Wave-X: DataFusion/Parquet product path retired — keep this integration under
+//! `legacy-datafusion` only.
+
+#![cfg(feature = "legacy-datafusion")]
 
 use std::path::Path;
 use std::sync::Arc;
