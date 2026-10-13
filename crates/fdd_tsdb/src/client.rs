@@ -1,4 +1,5 @@
 use std::env;
+use std::sync::{Arc, OnceLock};
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
@@ -23,22 +24,48 @@ pub fn database_url_from_env() -> Result<String, TsdbError> {
     env::var("OPENFDD_DATABASE_URL").map_err(|_| TsdbError::MissingDatabaseUrl)
 }
 
+fn pool_max_connections() -> u32 {
+    env::var("OPENFDD_TIMESCALE_POOL")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8)
+        .clamp(1, 64)
+}
+
+/// Process-wide shared pool (Wave-X C3). Do not open a new pool per HTTP request.
+static SHARED: OnceLock<Arc<Tsdb>> = OnceLock::new();
+
 impl Tsdb {
+    pub async fn shared() -> Result<Arc<Self>, TsdbError> {
+        if let Some(existing) = SHARED.get() {
+            return Ok(Arc::clone(existing));
+        }
+        let created = Arc::new(Self::connect(&database_url_from_env()?).await?);
+        let _ = SHARED.set(Arc::clone(&created));
+        Ok(SHARED.get().cloned().unwrap_or(created))
+    }
+
     pub async fn connect_from_env() -> Result<Self, TsdbError> {
-        Self::connect(&database_url_from_env()?).await
+        Ok(Self::shared().await?.as_ref().clone())
     }
 
     pub async fn connect(url: &str) -> Result<Self, TsdbError> {
         let pool = PgPoolOptions::new()
-            .max_connections(
-                env::var("OPENFDD_TIMESCALE_POOL")
+            .max_connections(pool_max_connections())
+            .acquire_timeout(std::time::Duration::from_secs(
+                env::var("OPENFDD_TIMESCALE_ACQUIRE_SECS")
                     .ok()
                     .and_then(|s| s.parse().ok())
-                    .unwrap_or(8),
-            )
+                    .unwrap_or(30),
+            ))
+            .idle_timeout(Some(std::time::Duration::from_secs(60)))
             .connect(url)
             .await?;
         Ok(Self { pool })
+    }
+
+    pub fn from_pool(pool: PgPool) -> Self {
+        Self { pool }
     }
 
     pub fn pool(&self) -> &PgPool {
@@ -104,6 +131,8 @@ impl Tsdb {
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (site_id, openfdd_key, ts) DO UPDATE SET
                   val = EXCLUDED.val,
+                  unit = COALESCE(EXCLUDED.unit, sample.unit),
+                  quality = COALESCE(EXCLUDED.quality, sample.quality),
                   haystack_id = COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
                 "#,
             )
@@ -122,7 +151,9 @@ impl Tsdb {
                     r#"
                     INSERT INTO role_map(building_id, equipment_id, openfdd_key, role, unit)
                     VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT DO NOTHING
+                    ON CONFLICT (building_id, equipment_id, openfdd_key) DO UPDATE
+                      SET role = EXCLUDED.role,
+                          unit = COALESCE(EXCLUDED.unit, role_map.unit)
                     "#,
                 )
                 .bind(&row.site_id)
@@ -136,7 +167,11 @@ impl Tsdb {
                     r#"
                     INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, unit, equipment_id)
                     VALUES ($1, $2, $3, $4, $5, $6)
-                    ON CONFLICT DO NOTHING
+                    ON CONFLICT (site_id, openfdd_key) DO UPDATE
+                      SET haystack_id = EXCLUDED.haystack_id,
+                          role = EXCLUDED.role,
+                          unit = COALESCE(EXCLUDED.unit, point_map.unit),
+                          equipment_id = EXCLUDED.equipment_id
                     "#,
                 )
                 .bind(&row.site_id)
@@ -161,6 +196,17 @@ impl Tsdb {
         Ok(row.get::<i64, _>("n"))
     }
 
+    pub async fn max_sample_ts(
+        &self,
+        site_id: &str,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, TsdbError> {
+        let row = sqlx::query("SELECT max(ts) AS ts FROM sample WHERE site_id = $1")
+            .bind(site_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("ts")?)
+    }
+
     pub async fn rule_registry_count(&self) -> Result<i64, TsdbError> {
         let row = sqlx::query("SELECT count(*)::bigint AS n FROM fdd_rule_registry")
             .fetch_one(&self.pool)
@@ -170,6 +216,21 @@ impl Tsdb {
 
     pub async fn health_ping(&self) -> Result<(), TsdbError> {
         sqlx::query("SELECT 1").execute(&self.pool).await?;
+        Ok(())
+    }
+
+    /// Apply transaction-local statement/lock deadlines for a request-scoped txn.
+    pub async fn apply_request_timeouts(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        statement_ms: i64,
+        lock_ms: i64,
+    ) -> Result<(), TsdbError> {
+        sqlx::query(&format!("SET LOCAL statement_timeout = '{statement_ms}'"))
+            .execute(&mut **tx)
+            .await?;
+        sqlx::query(&format!("SET LOCAL lock_timeout = '{lock_ms}'"))
+            .execute(&mut **tx)
+            .await?;
         Ok(())
     }
 }

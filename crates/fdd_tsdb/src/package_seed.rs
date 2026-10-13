@@ -1,19 +1,21 @@
-//! Seed an Open-FDD package directory into Timescale (product import path).
+//! Seed / append an Open-FDD package directory into Timescale (product import path).
 //!
 //! Prefer per-equipment `columns.csv` (materialized by package import with SQL
 //! roles already stamped). Fall back to root `column_map.json` + `role_map.json`.
-//! Uses PostgreSQL COPY (no Parquet / DataFusion).
+//! Uses staging + atomic promote for full replace; upsert for incremental append.
+//! No Parquet / DataFusion.
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 use crate::client::Tsdb;
+use crate::sample::{SampleRow, UpsertBatch};
 
 fn load_json(path: &Path) -> Result<Value> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
@@ -29,7 +31,6 @@ fn hs_to_sql_map(sql_root: &Path) -> HashMap<String, String> {
     for path in candidates {
         if let Ok(v) = load_json(&path) {
             if let Some(obj) = v.as_object() {
-                // role_map.json is sql_role -> haystack-role
                 let mut out = HashMap::new();
                 for (sql, hs) in obj {
                     if let Some(hs) = hs.as_str() {
@@ -171,38 +172,140 @@ fn parse_ts(raw: &str) -> Option<DateTime<Utc>> {
         })
 }
 
-async fn copy_csv_body(tsdb: &Tsdb, body: &[u8]) -> Result<u64> {
+struct SeedPlan {
+    equipment_id: String,
+    equip_type: Option<String>,
+    csv_path: PathBuf,
+    col_to_role: HashMap<String, String>,
+}
+
+fn resolve_col_to_role(
+    equipment_id: &str,
+    eq_dir: &Path,
+    csv_path: &Path,
+    column_map: &Value,
+    hs_to_sql: &HashMap<String, String>,
+) -> Result<HashMap<String, String>> {
+    let mut col_to_role = csv_to_sql_roles_from_columns_csv(eq_dir)?;
+    if col_to_role.is_empty() {
+        col_to_role = csv_to_sql_roles_from_column_map(equipment_id, column_map, hs_to_sql);
+    }
+    if equipment_id.eq_ignore_ascii_case("weather")
+        && !col_to_role.values().any(|r| r == "web_oa_t" || r == "oa_t")
+    {
+        if let Ok(headers) = csv::Reader::from_path(csv_path).and_then(|mut r| {
+            Ok(r.headers()?
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>())
+        }) {
+            for h in headers {
+                let low = h.to_ascii_lowercase();
+                if low.contains("dry_bulb") || low == "web_oa_t" || low == "oa_t" {
+                    col_to_role.entry(h).or_insert_with(|| "web_oa_t".into());
+                }
+            }
+        }
+    }
+    Ok(col_to_role)
+}
+
+fn build_seed_plans(
+    package_root: &Path,
+    sql_root: &Path,
+    only_equipment: Option<&[String]>,
+) -> Result<(Value, HashMap<String, String>, Vec<SeedPlan>)> {
+    let column_map_path = package_root.join("column_map.json");
+    let column_map = if column_map_path.is_file() {
+        load_json(&column_map_path)?
+    } else {
+        Value::Object(Default::default())
+    };
+    let hs_to_sql = hs_to_sql_map(sql_root);
+    let type_reg = equip_types_registry(package_root);
+    let mut csvs = walkdir_history(package_root)?;
+    csvs.sort();
+    let mut plans = Vec::new();
+    for csv_path in csvs {
+        let rel = csv_path
+            .strip_prefix(package_root)
+            .unwrap_or(csv_path.as_path());
+        let equipment_id = equipment_id_from_csv(rel);
+        if let Some(only) = only_equipment {
+            if !only.iter().any(|e| e == &equipment_id) {
+                continue;
+            }
+        }
+        let eq_dir = csv_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| package_root.to_path_buf());
+        let col_to_role =
+            resolve_col_to_role(&equipment_id, &eq_dir, &csv_path, &column_map, &hs_to_sql)?;
+        if col_to_role.is_empty() {
+            bail!(
+                "equipment {equipment_id}: empty column→role map before Timescale mutation ({})",
+                csv_path.display()
+            );
+        }
+        let et = type_reg
+            .get(&equipment_id)
+            .cloned()
+            .or_else(|| equip_type_stamp(&equipment_id, &column_map));
+        plans.push(SeedPlan {
+            equipment_id,
+            equip_type: et,
+            csv_path,
+            col_to_role,
+        });
+    }
+    Ok((column_map, type_reg, plans))
+}
+
+async fn ensure_stage_table(tsdb: &Tsdb) -> Result<()> {
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS sample_import_stage (
+          import_id     uuid NOT NULL,
+          ts            timestamptz NOT NULL,
+          site_id       text NOT NULL,
+          openfdd_key   text NOT NULL,
+          haystack_id   text,
+          val           double precision,
+          PRIMARY KEY (import_id, site_id, openfdd_key, ts)
+        )
+        "#,
+    )
+    .execute(tsdb.pool())
+    .await
+    .context("create sample_import_stage")?;
+    Ok(())
+}
+
+async fn copy_stage_csv(tsdb: &Tsdb, body: &[u8]) -> Result<u64> {
     if body.is_empty() {
         return Ok(0);
     }
     let mut conn = tsdb.pool().acquire().await.context("acquire pool")?;
     let mut copy = conn
         .copy_in_raw(
-            "COPY sample (ts, site_id, openfdd_key, haystack_id, val) FROM STDIN WITH (FORMAT csv)",
+            "COPY sample_import_stage (import_id, ts, site_id, openfdd_key, haystack_id, val) FROM STDIN WITH (FORMAT csv)",
         )
         .await
-        .context("copy_in_raw")?;
+        .context("copy_in_raw stage")?;
     copy.send(body.to_vec()).await.context("copy send")?;
     let n = copy.finish().await.context("copy finish")?;
     Ok(n as u64)
 }
 
-async fn seed_one_csv(
+async fn stage_one_csv(
     tsdb: &Tsdb,
+    import_id: uuid::Uuid,
     building_id: &str,
     equipment_id: &str,
-    equip_type: Option<&str>,
     csv_path: &Path,
     col_to_role: &HashMap<String, String>,
-) -> Result<u64> {
-    if col_to_role.is_empty() {
-        tracing::warn!(%equipment_id, path = %csv_path.display(), "skip seed: empty column→role map");
-        return Ok(0);
-    }
-    tsdb.ensure_site_building(building_id).await?;
-    tsdb.upsert_equipment(building_id, equipment_id, equip_type)
-        .await?;
-
+) -> Result<(u64, HashSet<String>)> {
     let file = File::open(csv_path).with_context(|| format!("open {}", csv_path.display()))?;
     let mut reader = csv::ReaderBuilder::new()
         .flexible(true)
@@ -219,13 +322,14 @@ async fn seed_one_csv(
         .ok_or_else(|| anyhow!("no timestamp column in {}", csv_path.display()))?
         .to_string();
 
-    // Dedupe (ts, openfdd_key) — columns.csv can map multiple vendor cols → one SQL role.
+    // Dedupe across the whole equipment CSV (not only within a 50k flush).
     let mut pending: HashMap<(String, String), f64> = HashMap::new();
     let mut roles_seen: HashSet<String> = HashSet::new();
-    let mut total = 0u64;
+    let import_s = import_id.to_string();
 
-    async fn flush_pending(
+    async fn flush_stage(
         tsdb: &Tsdb,
+        import_s: &str,
         building_id: &str,
         equipment_id: &str,
         pending: &mut HashMap<(String, String), f64>,
@@ -233,17 +337,18 @@ async fn seed_one_csv(
         if pending.is_empty() {
             return Ok(0);
         }
-        let mut buf: Vec<u8> = Vec::with_capacity(pending.len() * 64);
+        let mut buf: Vec<u8> = Vec::with_capacity(pending.len() * 80);
         for ((ts_s, openfdd_key), val) in pending.drain() {
             writeln!(
                 &mut buf,
-                "{ts_s},{building_id},{openfdd_key},{equipment_id},{val}"
+                "{import_s},{ts_s},{building_id},{openfdd_key},{equipment_id},{val}"
             )
             .ok();
         }
-        copy_csv_body(tsdb, &buf).await
+        copy_stage_csv(tsdb, &buf).await
     }
 
+    let mut total = 0u64;
     for rec in reader.records() {
         let rec = rec?;
         let map: HashMap<&str, &str> = headers.iter().zip(rec.iter()).collect();
@@ -269,24 +374,33 @@ async fn seed_one_csv(
             pending.insert((ts_s.clone(), openfdd_key), val);
         }
         if pending.len() >= 50_000 {
-            total += flush_pending(tsdb, building_id, equipment_id, &mut pending).await?;
+            total += flush_stage(tsdb, &import_s, building_id, equipment_id, &mut pending).await?;
         }
     }
-    total += flush_pending(tsdb, building_id, equipment_id, &mut pending).await?;
+    total += flush_stage(tsdb, &import_s, building_id, equipment_id, &mut pending).await?;
+    Ok((total, roles_seen))
+}
 
+async fn upsert_roles(
+    tsdb: &Tsdb,
+    building_id: &str,
+    equipment_id: &str,
+    roles_seen: &HashSet<String>,
+) -> Result<()> {
     for role in roles_seen {
         let openfdd_key = format!("{equipment_id}.{role}");
         sqlx::query(
             r#"
             INSERT INTO role_map(building_id, equipment_id, openfdd_key, role)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (building_id, equipment_id, openfdd_key) DO UPDATE
+              SET role = EXCLUDED.role
             "#,
         )
         .bind(building_id)
         .bind(equipment_id)
         .bind(&openfdd_key)
-        .bind(&role)
+        .bind(role)
         .execute(tsdb.pool())
         .await
         .context("role_map")?;
@@ -294,101 +408,251 @@ async fn seed_one_csv(
             r#"
             INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, equipment_id)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (site_id, openfdd_key) DO UPDATE
+              SET haystack_id = EXCLUDED.haystack_id,
+                  role = EXCLUDED.role,
+                  equipment_id = EXCLUDED.equipment_id
             "#,
         )
         .bind(building_id)
         .bind(&openfdd_key)
         .bind(&openfdd_key)
-        .bind(&role)
+        .bind(role)
         .bind(equipment_id)
         .execute(tsdb.pool())
         .await
         .context("point_map")?;
     }
-
-    Ok(total)
+    Ok(())
 }
 
-/// Import package folder (BUILDING_50-style) into Timescale. No Parquet writes.
-///
-/// Replaces existing `sample` rows for `building_id` (fail-closed sole historian).
+/// Full package replace: validate → stage → atomic promote. Last-good survives failure.
 pub async fn seed_package_dir(
     tsdb: &Tsdb,
     package_root: &Path,
     building_id: &str,
     sql_root: &Path,
 ) -> Result<u64> {
-    let column_map_path = package_root.join("column_map.json");
-    let column_map = if column_map_path.is_file() {
-        load_json(&column_map_path)?
-    } else {
-        Value::Object(Default::default())
-    };
-    let hs_to_sql = hs_to_sql_map(sql_root);
-    let type_reg = equip_types_registry(package_root);
+    let (_column_map, _type_reg, plans) = build_seed_plans(package_root, sql_root, None)?;
+    if plans.is_empty() {
+        bail!("no history_wide.csv / history.csv under {}", package_root.display());
+    }
 
     tsdb.ensure_site_building(building_id).await?;
-    // Full replace for this building — product path is Timescale-only (no dual-write).
-    let deleted = sqlx::query("DELETE FROM sample WHERE site_id = $1")
-        .bind(building_id)
+    ensure_stage_table(tsdb).await?;
+    let import_id = uuid::Uuid::new_v4();
+
+    // Clean any leftover rows for this import id (shouldn't exist) then stage.
+    sqlx::query("DELETE FROM sample_import_stage WHERE import_id = $1")
+        .bind(import_id)
         .execute(tsdb.pool())
         .await
-        .context("delete prior samples")?
-        .rows_affected();
-    tracing::info!(%building_id, deleted, "Wave-X package seed: cleared prior samples");
+        .ok();
 
-    let mut total = 0u64;
-    let mut csvs = walkdir_history(package_root)?;
-    csvs.sort();
-    for csv_path in csvs {
-        let rel = csv_path
-            .strip_prefix(package_root)
-            .unwrap_or(csv_path.as_path());
-        let equipment_id = equipment_id_from_csv(rel);
-        let eq_dir = csv_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| package_root.to_path_buf());
-        let mut col_to_role = csv_to_sql_roles_from_columns_csv(&eq_dir)?;
-        if col_to_role.is_empty() {
-            col_to_role = csv_to_sql_roles_from_column_map(&equipment_id, &column_map, &hs_to_sql);
-        }
-        // Weather packages often leave columns.csv roles blank — map dry_bulb → web_oa_t.
-        if equipment_id.eq_ignore_ascii_case("weather")
-            && !col_to_role.values().any(|r| r == "web_oa_t" || r == "oa_t")
-        {
-            if let Ok(headers) = csv::Reader::from_path(&csv_path).and_then(|mut r| {
-                Ok(r.headers()?
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>())
-            }) {
-                for h in headers {
-                    let low = h.to_ascii_lowercase();
-                    if low.contains("dry_bulb") || low == "web_oa_t" || low == "oa_t" {
-                        col_to_role.entry(h).or_insert_with(|| "web_oa_t".into());
-                    }
-                }
-            }
-        }
-        let et = type_reg
-            .get(&equipment_id)
-            .cloned()
-            .or_else(|| equip_type_stamp(&equipment_id, &column_map));
-        let n = seed_one_csv(
+    let mut staged = 0u64;
+    let mut role_sets: Vec<(String, Option<String>, HashSet<String>)> = Vec::new();
+    for plan in &plans {
+        tsdb.upsert_equipment(building_id, &plan.equipment_id, plan.equip_type.as_deref())
+            .await?;
+        let (n, roles) = stage_one_csv(
             tsdb,
+            import_id,
             building_id,
-            &equipment_id,
-            et.as_deref(),
-            &csv_path,
-            &col_to_role,
+            &plan.equipment_id,
+            &plan.csv_path,
+            &plan.col_to_role,
         )
-        .await?;
-        tracing::info!(%equipment_id, n, roles = col_to_role.len(), "Wave-X package seed equipment");
+        .await
+        .with_context(|| {
+            format!(
+                "stage {} ({})",
+                plan.equipment_id,
+                plan.csv_path.display()
+            )
+        })?;
+        tracing::info!(
+            equipment_id = %plan.equipment_id,
+            n,
+            roles = plan.col_to_role.len(),
+            "Wave-X package seed staged equipment"
+        );
+        staged += n;
+        role_sets.push((plan.equipment_id.clone(), plan.equip_type.clone(), roles));
+    }
+
+    if staged == 0 {
+        sqlx::query("DELETE FROM sample_import_stage WHERE import_id = $1")
+            .bind(import_id)
+            .execute(tsdb.pool())
+            .await
+            .ok();
+        bail!("staged zero samples for {building_id}; preserving last-good Timescale history");
+    }
+
+    let mut tx = tsdb.pool().begin().await.context("begin promote txn")?;
+    let deleted = sqlx::query("DELETE FROM sample WHERE site_id = $1")
+        .bind(building_id)
+        .execute(&mut *tx)
+        .await
+        .context("delete prior samples in promote txn")?
+        .rows_affected();
+    let inserted = sqlx::query(
+        r#"
+        INSERT INTO sample (ts, site_id, openfdd_key, haystack_id, val)
+        SELECT ts, site_id, openfdd_key, haystack_id, val
+        FROM sample_import_stage
+        WHERE import_id = $1 AND site_id = $2
+        ON CONFLICT (site_id, openfdd_key, ts) DO UPDATE SET
+          val = EXCLUDED.val,
+          haystack_id = COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
+        "#,
+    )
+    .bind(import_id)
+    .bind(building_id)
+    .execute(&mut *tx)
+    .await
+    .context("promote stage → sample")?
+    .rows_affected();
+    sqlx::query("DELETE FROM sample_import_stage WHERE import_id = $1")
+        .bind(import_id)
+        .execute(&mut *tx)
+        .await
+        .context("cleanup stage")?;
+    tx.commit().await.context("commit promote")?;
+    tracing::info!(
+        %building_id,
+        deleted,
+        inserted,
+        staged,
+        "Wave-X package seed: atomic promote complete"
+    );
+
+    for (equipment_id, _et, roles) in &role_sets {
+        upsert_roles(tsdb, building_id, equipment_id, roles).await?;
+    }
+    Ok(inserted)
+}
+
+/// Incremental append/upsert for touched equipment only. Commits before success.
+pub async fn append_package_equipment(
+    tsdb: &Tsdb,
+    package_root: &Path,
+    building_id: &str,
+    sql_root: &Path,
+    equipment_ids: &[String],
+) -> Result<u64> {
+    if equipment_ids.is_empty() {
+        bail!("append requires at least one equipment_id");
+    }
+    let (_column_map, _type_reg, plans) =
+        build_seed_plans(package_root, sql_root, Some(equipment_ids))?;
+    if plans.is_empty() {
+        bail!(
+            "no history CSV for equipment {:?} under {}",
+            equipment_ids,
+            package_root.display()
+        );
+    }
+    tsdb.ensure_site_building(building_id).await?;
+    let mut total = 0u64;
+    for plan in plans {
+        tsdb.upsert_equipment(building_id, &plan.equipment_id, plan.equip_type.as_deref())
+            .await?;
+        let (n, roles) =
+            upsert_one_csv(tsdb, building_id, &plan.equipment_id, &plan.csv_path, &plan.col_to_role)
+                .await?;
+        upsert_roles(tsdb, building_id, &plan.equipment_id, &roles).await?;
+        tracing::info!(
+            equipment_id = %plan.equipment_id,
+            n,
+            "Wave-X package append equipment committed"
+        );
         total += n;
     }
     Ok(total)
+}
+
+/// Remap roles for one equipment and re-upsert its CSV into Timescale (no Parquet).
+pub async fn remap_equipment_roles(
+    tsdb: &Tsdb,
+    package_root: &Path,
+    building_id: &str,
+    equipment_id: &str,
+    sql_root: &Path,
+) -> Result<u64> {
+    append_package_equipment(
+        tsdb,
+        package_root,
+        building_id,
+        sql_root,
+        &[equipment_id.to_string()],
+    )
+    .await
+}
+
+async fn upsert_one_csv(
+    tsdb: &Tsdb,
+    building_id: &str,
+    equipment_id: &str,
+    csv_path: &Path,
+    col_to_role: &HashMap<String, String>,
+) -> Result<(u64, HashSet<String>)> {
+    let file = File::open(csv_path).with_context(|| format!("open {}", csv_path.display()))?;
+    let mut reader = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(BufReader::new(file));
+    let headers = reader.headers()?.clone();
+    let ts_col = headers
+        .iter()
+        .find(|h| {
+            matches!(
+                h.to_ascii_lowercase().as_str(),
+                "timestamp_utc" | "timestamp" | "ts" | "time"
+            )
+        })
+        .ok_or_else(|| anyhow!("no timestamp column in {}", csv_path.display()))?
+        .to_string();
+
+    let mut batch = UpsertBatch { rows: Vec::new() };
+    let mut roles_seen: HashSet<String> = HashSet::new();
+    let mut total = 0u64;
+
+    for rec in reader.records() {
+        let rec = rec?;
+        let map: HashMap<&str, &str> = headers.iter().zip(rec.iter()).collect();
+        let Some(ts_raw) = map.get(ts_col.as_str()).copied() else {
+            continue;
+        };
+        let Some(ts) = parse_ts(ts_raw) else {
+            continue;
+        };
+        for (csv_col, sql_role) in col_to_role {
+            let Some(raw) = map.get(csv_col.as_str()).copied() else {
+                continue;
+            };
+            if raw.is_empty() {
+                continue;
+            }
+            let Ok(val) = raw.parse::<f64>() else {
+                continue;
+            };
+            let openfdd_key = format!("{equipment_id}.{sql_role}");
+            roles_seen.insert(sql_role.clone());
+            let mut row = SampleRow::new(ts, building_id, openfdd_key, Some(val));
+            row.haystack_id = Some(equipment_id.to_string());
+            row.equipment_id = Some(equipment_id.to_string());
+            row.role = Some(sql_role.clone());
+            batch.rows.push(row);
+        }
+        if batch.rows.len() >= 5_000 {
+            total += tsdb.upsert_samples(&batch).await?;
+            batch.rows.clear();
+        }
+    }
+    if !batch.rows.is_empty() {
+        total += tsdb.upsert_samples(&batch).await?;
+    }
+    Ok((total, roles_seen))
 }
 
 fn walkdir_history(root: &Path) -> Result<Vec<PathBuf>> {

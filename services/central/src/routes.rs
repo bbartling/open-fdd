@@ -4392,13 +4392,85 @@ pub async fn csv_import_package_append(
                 Json(json!({"ok": false, "error": e})),
             )
         })?;
-    let result = tokio::task::spawn_blocking(move || {
+    let mut result = tokio::task::spawn_blocking(move || {
         let _compute = compute;
         let _import_slot = import_slot;
         open_fdd_edge_prototype::csv_ingest::package::append_package_handler(&ct, &body)
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package append task: {e}")}));
+    // Wave-X C4: CSV merge alone is not success — commit Timescale upsert first.
+    if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false)
+        && crate::timescale_historian::historian_is_timescale()
+        && result
+            .get("needs_timescale_seed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    {
+        let bid = result
+            .get("building_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or(building_id.clone());
+        let root = result
+            .get("package_root")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let touched: Vec<String> = result
+            .get("scoped_equipment")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if let (Some(bid), Some(root)) = (bid, root) {
+            let sql_root = std::env::var("OPENFDD_SQL_ROOT").unwrap_or_else(|_| "sql/fdd".into());
+            match fdd_tsdb::Tsdb::connect_from_env().await {
+                Ok(tsdb) => {
+                    match fdd_tsdb::append_package_equipment(
+                        &tsdb,
+                        std::path::Path::new(&root),
+                        &bid,
+                        std::path::Path::new(&sql_root),
+                        &touched,
+                    )
+                    .await
+                    {
+                        Ok(n) => {
+                            if let Some(obj) = result.as_object_mut() {
+                                obj.insert("timescale_samples_upserted".into(), json!(n));
+                                obj.insert("total_rows".into(), json!(n));
+                                obj.insert("historian".into(), json!("timescale"));
+                                obj.insert("needs_timescale_seed".into(), json!(false));
+                                obj.insert(
+                                    "warnings".into(),
+                                    json!(["Wave-X: Timescale append committed before success"]),
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            result = json!({
+                                "ok": false,
+                                "building_id": bid,
+                                "error": format!("timescale append failed (CSV merge rolled back from client view): {e:#}"),
+                                "historian": "timescale",
+                                "needs_timescale_seed": true,
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    result = json!({
+                        "ok": false,
+                        "error": format!("timescale connect for append: {e}"),
+                        "historian": "timescale",
+                    });
+                }
+            }
+        }
+    }
     if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
         if let Some(bid) = result
             .get("building_id")
@@ -4428,7 +4500,7 @@ pub async fn csv_import_package_roles(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
         return Err(deny);
     }
-    // Mapping-only edits still re-ingest Parquet for the touched equipment (M70-04).
+    // Wave-X C4: mapping edits update columns.csv then Timescale remap (no Parquet).
     let compute = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Import)
         .ok_or_else(|| {
             tracing::warn!(
@@ -4446,12 +4518,76 @@ pub async fn csv_import_package_roles(
                 })),
             )
         })?;
-    let result = tokio::task::spawn_blocking(move || {
+    let mut result = tokio::task::spawn_blocking(move || {
         let _compute = compute;
         open_fdd_edge_prototype::csv_ingest::package::update_package_roles_handler(&body)
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package roles task: {e}")}));
+    if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false)
+        && crate::timescale_historian::historian_is_timescale()
+    {
+        let bid = result
+            .get("building_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or(building_id.clone());
+        let eid = result
+            .get("equipment_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let root = result
+            .get("package_root")
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .or_else(|| {
+                bid.as_ref().map(|b| {
+                    format!(
+                        "{}/data/csv_buildings/{b}",
+                        std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into())
+                    )
+                })
+            });
+        if let (Some(bid), Some(eid), Some(root)) = (bid, eid, root) {
+            let sql_root = std::env::var("OPENFDD_SQL_ROOT").unwrap_or_else(|_| "sql/fdd".into());
+            match fdd_tsdb::Tsdb::connect_from_env().await {
+                Ok(tsdb) => {
+                    match fdd_tsdb::remap_equipment_roles(
+                        &tsdb,
+                        std::path::Path::new(&root),
+                        &bid,
+                        &eid,
+                        std::path::Path::new(&sql_root),
+                    )
+                    .await
+                    {
+                        Ok(n) => {
+                            if let Some(obj) = result.as_object_mut() {
+                                obj.insert("timescale_samples_upserted".into(), json!(n));
+                                obj.insert("historian".into(), json!("timescale"));
+                                obj.insert("parquet_ingest".into(), json!(false));
+                            }
+                        }
+                        Err(e) => {
+                            result = json!({
+                                "ok": false,
+                                "building_id": bid,
+                                "equipment_id": eid,
+                                "error": format!("timescale remap failed: {e:#}"),
+                                "historian": "timescale",
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    result = json!({
+                        "ok": false,
+                        "error": format!("timescale connect for remap: {e}"),
+                    });
+                }
+            }
+        }
+    }
     if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
         if let Some(bid) = building_id.as_deref() {
             open_fdd_edge_prototype::fdd::registry_api::mark_building_results_dirty(
@@ -6176,11 +6312,13 @@ async fn analytics_runtime(
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     if crate::timescale_historian::historian_is_timescale() {
-        let building = req
-            .query
-            .building_id
-            .clone()
-            .unwrap_or_else(|| "BUILDING_50".into());
+        gate_analytics(&state, &headers, &mut req)?;
+        let building = req.query.building_id.clone().ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": "building_id required"})),
+            )
+        })?;
         match fdd_tsdb::Tsdb::connect_from_env().await {
             Ok(tsdb) => {
                 match crate::timescale_analytics::motor_weekly_runtime(&tsdb, &building).await {
@@ -6234,11 +6372,13 @@ async fn analytics_ahu_health(
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     if crate::timescale_historian::historian_is_timescale() {
-        let building = req
-            .query
-            .building_id
-            .clone()
-            .unwrap_or_else(|| "BUILDING_50".into());
+        gate_analytics(&state, &headers, &mut req)?;
+        let building = req.query.building_id.clone().ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": "building_id required"})),
+            )
+        })?;
         match fdd_tsdb::Tsdb::connect_from_env().await {
             Ok(tsdb) => {
                 match crate::timescale_analytics::plant_health_matrix(&tsdb, &building).await {
@@ -6472,11 +6612,13 @@ async fn analytics_bas_vs_web_oat(
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     if crate::timescale_historian::historian_is_timescale() {
-        let building = req
-            .query
-            .building_id
-            .clone()
-            .unwrap_or_else(|| "BUILDING_50".into());
+        gate_analytics(&state, &headers, &mut req)?;
+        let building = req.query.building_id.clone().ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"ok": false, "error": "building_id required"})),
+            )
+        })?;
         match fdd_tsdb::Tsdb::connect_from_env().await {
             Ok(tsdb) => match crate::timescale_analytics::bas_vs_web_oat(&tsdb, &building).await {
                 Ok(v) => return Ok(Json(v)),

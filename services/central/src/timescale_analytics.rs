@@ -96,12 +96,16 @@ pub async fn plant_health_matrix(tsdb: &Tsdb, building_id: &str) -> Result<Value
     .await
     .context("plant_health_matrix")?;
 
+    // Wave-X C6: never fabricate score=1.0. Emit unavailable until scoped
+    // diagnostic SQL health is implemented per cohort (see completion audit WX12).
     let mut out = Vec::new();
     for r in rows {
         out.push(json!({
             "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
             "equip_type": r.try_get::<Option<String>, _>("equip_type").ok().flatten(),
-            "score": 1.0,
+            "score": Value::Null,
+            "status": "unavailable",
+            "reason": "plant_health_sql_pending",
         }));
     }
     Ok(envelope("plant-health", building_id, out))

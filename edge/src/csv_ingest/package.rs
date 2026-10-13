@@ -1310,8 +1310,25 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
     if let Err(e) = write_columns_csv(&eq_dir.join("columns.csv"), &headers, &roles) {
         return json!({"ok": false, "error": e});
     }
+    // Wave-X C4: Timescale product path — columns.csv only; central remaps SQL.
+    if timescale_historian_active() {
+        return json!({
+            "ok": true,
+            "building_id": building_id,
+            "equipment_id": equipment_id,
+            "roles": roles,
+            "ignored_columns": ignored,
+            "scoped_equipment": [equipment_id.clone()],
+            "package_root": building_root.display().to_string(),
+            "historian": "timescale",
+            "needs_timescale_remap": true,
+            "parquet_ingest": false,
+            "equipment_written": 0,
+            "total_rows": 0,
+        });
+    }
     let out_dir = parquet_out_dir();
-    // Mapping-only edit: re-ingest the affected equipment only (M70-04).
+    // Legacy Parquet path only when Timescale is not the product historian.
     match fdd_store::ingest_building_equipment(
         &data_root,
         &building_id,
