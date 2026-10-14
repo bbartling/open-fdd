@@ -29,7 +29,9 @@ pub async fn motor_weekly_runtime(tsdb: &Tsdb, building_id: &str) -> Result<Valu
 
     let mut out = Vec::new();
     for r in rows {
-        let runtime = r.try_get::<f64, _>("runtime_hours").ok()
+        let runtime = r
+            .try_get::<f64, _>("runtime_hours")
+            .ok()
             .or_else(|| r.try_get::<f64, _>("run_hours").ok());
         out.push(json!({
             "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
@@ -230,7 +232,9 @@ fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
     })
 }
 
-fn building_from(req: &AnalyticsRequest) -> Result<String, (axum::http::StatusCode, axum::Json<Value>)> {
+fn building_from(
+    req: &AnalyticsRequest,
+) -> Result<String, (axum::http::StatusCode, axum::Json<Value>)> {
     match req
         .query
         .building_id
