@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-sql-schema-fdd-v1",
-  "contract_version": "3.6.5-softopen",
+  "contract_version": "3.6.6-softopen",
   "engine": "timescale/postgresql",
   "product": "open-fdd",
   "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd + sql/analytics pack hash; twin layers must not fork equations",
@@ -12,8 +12,8 @@
   ],
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
-  "file_count": 88,
-  "pack_sha256": "733839b970ecf59ac3671ee42152a168c3d6e4a2fec10f486c3a65eb4194bf2c",
+  "file_count": 93,
+  "pack_sha256": "b6ba838d17c7b0cba969a02531829964eaf6cd469bf03cd171bc81dc55d25797",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -441,6 +441,11 @@
       "bytes": 1087
     },
     {
+      "path": "sql/analytics/postgres/queries/mechanical_cooling_oat_bins.sql",
+      "sha256": "1d0609685682bca7cb80fd7a1d0378a80229f908b7fca89e397e9c700d687043",
+      "bytes": 1677
+    },
+    {
       "path": "sql/analytics/postgres/queries/motor_weekly_runtime.sql",
       "sha256": "0b1c31c1d0885283e7e919b1b22e5c982ce6887c402e783ec690b59f3cfd287f",
       "bytes": 808
@@ -451,9 +456,29 @@
       "bytes": 248
     },
     {
+      "path": "sql/analytics/postgres/queries/role_timeseries.sql",
+      "sha256": "4396bb5ac488f1d5eece7fc86bc524d12fcfc9f7fe1b26f3de4446547d410e02",
+      "bytes": 305
+    },
+    {
+      "path": "sql/analytics/postgres/queries/schedule_occupancy.sql",
+      "sha256": "4acc49bc18c8604194333b92a4b8544b0a1f48f831a7657ae5c9e3afcfc4aeac",
+      "bytes": 286
+    },
+    {
+      "path": "sql/analytics/postgres/queries/sensor_stats.sql",
+      "sha256": "aa8a36b07cec2d6ad04da819856b95a7f72a50c7d47e84df272e16b361621097",
+      "bytes": 507
+    },
+    {
       "path": "sql/analytics/registry.json",
-      "sha256": "416115518bb9a3100f33e938aba4b1a9020f2c306485c2e7d1f8846cf9a3ca22",
-      "bytes": 1867
+      "sha256": "1a01c040b72083adaaffd4fa8374839e9dba8b9908be2dfddf76b68f088f063c",
+      "bytes": 2171
+    },
+    {
+      "path": "sql/contract/successor_bundle/manifest.softopen.json",
+      "sha256": "0d924504b838ebcd7fcb245835456c2130cf405892ee21d0279bbef1cb7aa7fe",
+      "bytes": 929
     }
   ]
 }

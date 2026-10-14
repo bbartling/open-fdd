@@ -1058,13 +1058,48 @@ fn load_confirmed_fault_hint(
     Ok(map)
 }
 
-fn render_rule_sql(reg: &RuleRegistry, rule: &RuleSpec, poll: f64, confirm: u32) -> Result<String> {
+fn session_override_for_rule(
+    payload: &Value,
+    rule_id: &str,
+) -> Option<std::collections::HashMap<String, f64>> {
+    let params = payload.get("params")?.as_object()?;
+    let rule_params = params.get(rule_id)?.as_object()?;
+    let mut out = std::collections::HashMap::new();
+    for (k, v) in rule_params {
+        if let Some(n) = v.as_f64().or_else(|| v.as_u64().map(|u| u as f64)) {
+            if n.is_finite() {
+                out.insert(k.clone(), n);
+            }
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+fn render_rule_sql(
+    reg: &RuleRegistry,
+    rule: &RuleSpec,
+    poll: f64,
+    confirm: u32,
+    building_id: &str,
+    equipment_id: Option<&str>,
+    session_override: Option<&std::collections::HashMap<String, f64>>,
+) -> Result<String> {
     let path = rule_sql_path(reg, &rule.sql_file);
     let raw = std::fs::read_to_string(&path)
         .with_context(|| format!("read rule sql {}", path.display()))?;
     let mut params = rule_params(poll, confirm);
     if let Ok(tuning) = load_tuning_profiles(Path::new(&reg.rules_dir)) {
-        if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
+        if let Ok(tuned) = effective_param_strings(
+            rule,
+            &tuning,
+            Some(building_id),
+            equipment_id,
+            session_override,
+        ) {
             for (k, v) in tuned {
                 params.insert(k, v);
             }
@@ -1073,16 +1108,29 @@ fn render_rule_sql(reg: &RuleRegistry, rule: &RuleSpec, poll: f64, confirm: u32)
     Ok(substitute_sql(&raw, &params))
 }
 
+fn rule_is_metric(rule: &RuleSpec) -> bool {
+    // Diagnostic rules expose fault_hours; metric/utility analytical outputs do not.
+    !rule
+        .output_columns
+        .iter()
+        .any(|c| c == "fault_hours" || c == "fault_pct" || c == "fault_samples")
+}
+
 /// Rule SQL often yields `fault_hours` as PostgreSQL `numeric` (CASE with `0.0`).
 /// sqlx `try_get::<f64>` fails on numeric → Soft-OPEN run-now reported 0h.
 /// Cast through a wrapper SELECT so the product path always gets float8.
-fn wrap_rule_sql_for_hours(sql_body: &str) -> String {
+/// Metric rules keep `SELECT *` so fan_runtime_hours / avg_zone_temp survive.
+fn wrap_rule_sql(sql_body: &str, rule: &RuleSpec) -> String {
     let inner = sql_body.trim().trim_end_matches(';').trim();
-    format!(
-        "SELECT equipment_id::text AS equipment_id, \
-         fault_hours::double precision AS fault_hours \
-         FROM ({inner}) AS _fdd_rule_q"
-    )
+    if rule_is_metric(rule) {
+        format!("SELECT * FROM ({inner}) AS _fdd_rule_q")
+    } else {
+        format!(
+            "SELECT equipment_id::text AS equipment_id, \
+             fault_hours::double precision AS fault_hours \
+             FROM ({inner}) AS _fdd_rule_q"
+        )
+    }
 }
 
 fn confirm_seconds_from_payload(payload: &Value, rule: &RuleSpec) -> u32 {
@@ -1148,6 +1196,8 @@ async fn fill_history_for_equipment(
     building_id: &str,
     equipment_id: &str,
     roles: &[String],
+    window_start: Option<&str>,
+    window_end: Option<&str>,
 ) -> Result<i64> {
     if roles.is_empty() {
         return Ok(0);
@@ -1165,6 +1215,18 @@ async fn fill_history_for_equipment(
         }
         filters.push_str(&format!("openfdd_key = '{equipment_id}.{role}'"));
     }
+    // Soft-OPEN R6: honor half-open [start, end) when caller supplies window.
+    let mut window_sql = String::new();
+    if let Some(start) = window_start.map(str::trim).filter(|s| !s.is_empty()) {
+        if safe_rfc3339(start) {
+            window_sql.push_str(&format!(" AND ts >= '{start}'::timestamptz"));
+        }
+    }
+    if let Some(end) = window_end.map(str::trim).filter(|s| !s.is_empty()) {
+        if safe_rfc3339(end) {
+            window_sql.push_str(&format!(" AND ts < '{end}'::timestamptz"));
+        }
+    }
     let insert_cols = roles
         .iter()
         .map(|r| format!("\"{r}\""))
@@ -1175,7 +1237,7 @@ async fn fill_history_for_equipment(
 INSERT INTO history (equipment_id, timestamp_utc, {insert_cols})
 SELECT '{equipment_id}', ts {max_cols}
 FROM sample
-WHERE site_id = $1 AND ({filters})
+WHERE site_id = $1 AND ({filters}){window_sql}
 GROUP BY ts
 "#
     );
@@ -1185,6 +1247,13 @@ GROUP BY ts
         .await
         .context("fill history")?;
     Ok(res.rows_affected() as i64)
+}
+
+fn safe_rfc3339(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 40
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | ':' | 'T' | 'Z' | '+' | '.'))
 }
 
 /// Timescale postgres-sql registry run-now (Soft-OPEN).
@@ -1223,10 +1292,44 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
     let tsdb = Tsdb::connect_from_env().await?;
     let mut equipment = list_equipment(&tsdb, &building_id).await?;
     if let Some(eq) = &equipment_filter {
+        // Soft-OPEN R6: never broaden an exact equipment_id miss into all equipment.
         equipment.retain(|(id, _)| id == eq);
-    }
-    if equipment.is_empty() {
-        // Fall back to distinct equipment from sample
+        if equipment.is_empty() {
+            // Exact id may exist only on samples (no equipment row yet).
+            let rows = sqlx::query(
+                r#"
+                SELECT DISTINCT split_part(openfdd_key,'.',1) AS equipment_id
+                FROM sample
+                WHERE site_id = $1 AND split_part(openfdd_key,'.',1) = $2
+                LIMIT 1
+                "#,
+            )
+            .bind(&building_id)
+            .bind(eq)
+            .fetch_all(tsdb.pool())
+            .await?;
+            equipment = rows
+                .into_iter()
+                .map(|r| (r.get::<String, _>("equipment_id"), None))
+                .collect();
+        }
+        if equipment.is_empty() {
+            return Ok(json!({
+                "ok": false,
+                "engine": TS_ENGINE,
+                "building_id": building_id,
+                "historian": "timescale",
+                "error": format!("equipment_id `{eq}` not found for site"),
+                "status": "INELIGIBLE_EQUIPMENT",
+                "rules_run": 0,
+                "rules_succeeded": 0,
+                "rules_failed": 0,
+                "rules_skipped": 0,
+                "results": [],
+            }));
+        }
+    } else if equipment.is_empty() {
+        // No selector: inventory from sample keys (site-scoped).
         let rows = sqlx::query(
             r#"
             SELECT DISTINCT split_part(openfdd_key,'.',1) AS equipment_id
@@ -1242,6 +1345,15 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
             .map(|r| (r.get::<String, _>("equipment_id"), None))
             .collect();
     }
+
+    let window_start = payload
+        .get("start")
+        .or_else(|| payload.get("window_start"))
+        .and_then(|v| v.as_str());
+    let window_end = payload
+        .get("end")
+        .or_else(|| payload.get("window_end"))
+        .and_then(|v| v.as_str());
 
     let out_dir = results_dir(&building_id);
     std::fs::create_dir_all(&out_dir)?;
@@ -1274,8 +1386,18 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         }
 
         let confirm = confirm_seconds_from_payload(payload, rule);
-        let sql_body = match render_rule_sql(&reg, rule, poll, confirm) {
-            Ok(s) => wrap_rule_sql_for_hours(&s),
+        let session_override = session_override_for_rule(payload, &rule.rule_id);
+        let metric = rule_is_metric(rule);
+        let sql_body = match render_rule_sql(
+            &reg,
+            rule,
+            poll,
+            confirm,
+            &building_id,
+            equipment_filter.as_deref(),
+            session_override.as_ref(),
+        ) {
+            Ok(s) => wrap_rule_sql(&s, rule),
             Err(e) => {
                 rules_failed += 1;
                 tracing::warn!(rule = %rule.rule_id, error = %e, "render rule sql failed");
@@ -1295,55 +1417,97 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
 
         let mut rule_rows = Vec::new();
         let mut ok_any = false;
+        let mut err_any = false;
         for (eq_id, _) in &targets {
             let mut tx = tsdb.pool().begin().await?;
             if let Err(e) = ensure_history_table(&mut tx, &roles).await {
                 rules_failed += 1;
+                err_any = true;
                 tracing::warn!(rule = %rule.rule_id, error = %e, "temp history");
                 break;
             }
-            let n = fill_history_for_equipment(&mut tx, &building_id, eq_id, &roles).await?;
+            let n = fill_history_for_equipment(
+                &mut tx,
+                &building_id,
+                eq_id,
+                &roles,
+                window_start,
+                window_end,
+            )
+            .await?;
             if n == 0 {
                 rule_rows.push(json!({
                     "equipment_id": eq_id,
                     "fault_hours": 0.0,
                     "status": "SKIP_NO_HISTORY",
                     "missing_roles": rule.required_roles,
+                    "output_kind": if metric { "metric" } else { "diagnostic" },
                 }));
                 let _ = tx.rollback().await;
                 continue;
             }
             match sqlx::query(&sql_body).fetch_all(&mut *tx).await {
                 Ok(rows) => {
-                    let mut hours = 0.0_f64;
-                    for r in &rows {
-                        hours += row_fault_hours(r);
+                    if metric {
+                        // Preserve first row metrics; do not invent FAULT/PASS.
+                        let mut row_json = json!({
+                            "equipment_id": eq_id,
+                            "status": "METRIC",
+                            "output_kind": "metric",
+                            "sample_rows": n,
+                            "confirm_seconds": confirm,
+                            "poll_seconds": poll,
+                        });
+                        if let Some(first) = rows.first() {
+                            if let Ok(v) = first.try_get::<f64, _>("fan_runtime_hours") {
+                                row_json["fan_runtime_hours"] = json!(v);
+                            }
+                            if let Ok(v) = first.try_get::<f64, _>("total_hours") {
+                                row_json["total_hours"] = json!(v);
+                            }
+                            if let Ok(v) = first.try_get::<f64, _>("avg_zone_temp") {
+                                row_json["avg_zone_temp"] = json!(v);
+                            }
+                            if let Ok(v) = first.try_get::<f64, _>("comfort_pct") {
+                                row_json["comfort_pct"] = json!(v);
+                            }
+                        }
+                        rule_rows.push(row_json);
+                    } else {
+                        let mut hours = 0.0_f64;
+                        for r in &rows {
+                            hours += row_fault_hours(r);
+                        }
+                        rule_rows.push(json!({
+                            "equipment_id": eq_id,
+                            "fault_hours": hours,
+                            "status": if hours > 0.0 { "FAULT" } else { "PASS" },
+                            "output_kind": "diagnostic",
+                            "sample_rows": n,
+                            "confirm_seconds": confirm,
+                            "poll_seconds": poll,
+                        }));
                     }
-                    rule_rows.push(json!({
-                        "equipment_id": eq_id,
-                        "fault_hours": hours,
-                        "status": if hours > 0.0 { "FAULT" } else { "PASS" },
-                        "sample_rows": n,
-                        "confirm_seconds": confirm,
-                        "poll_seconds": poll,
-                    }));
                     ok_any = true;
                     let _ = tx.commit().await;
                 }
                 Err(e) => {
+                    err_any = true;
                     rule_rows.push(json!({
                         "equipment_id": eq_id,
                         "fault_hours": 0.0,
                         "status": "ERROR",
+                        "output_kind": if metric { "metric" } else { "diagnostic" },
                         "notes": e.to_string(),
                     }));
                     let _ = tx.rollback().await;
                 }
             }
         }
-        if ok_any {
+        // Soft-OPEN: partial ERROR ≠ clean success.
+        if ok_any && !err_any {
             rules_succeeded += 1;
-        } else {
+        } else if err_any || !ok_any {
             rules_failed += 1;
         }
         let body = json!({
