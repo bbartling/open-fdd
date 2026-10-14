@@ -1,17 +1,28 @@
 # Historian / Continuous AFDD architecture contract
 
-This file is the software-engineering agent summary for the canonical Open-FDD historian. Full rationale and audit: [`../../docs/architecture/historian.md`](../../docs/architecture/historian.md).
+> **SUPERSEDED HARD LOCKS (Wave-X 3.6.0+ / ADR-010):** Product historian is **TimescaleDB only**.
+> **FORBIDDEN:** DataFusion product path, Arrow historian, Parquet co-canonical, Feather, dual-write,
+> dual-read, “Parquet if Timescale miss”, sidecar mirror. Soft-OPEN ≠ FQ.
+> Stay Rust for OSS central. Shared scientific truth = versioned `sql/schema` + `sql/fdd` pack hash
+> (`sql/contract/manifest.json`). See [`../../docs/architecture/adr-010-timescale-hard-cutover.md`](../../docs/architecture/adr-010-timescale-hard-cutover.md).
+>
+> Historical Parquet/DataFusion sections below are **retired product law** — do not follow for new work.
 
-## Hard locks
+## Hard locks (current — Timescale ONLY)
 
-- **Parquet is canonical durable history.**
-- **Arrow is in-memory execution.**
-- **DataFusion is SQL/FDD execution.**
-- Feather/Arrow IPC is cache/export/interchange only; never depend on it as the only durable copy.
-- No PostgreSQL, TimescaleDB, InfluxDB, ClickHouse, DuckDB, or SQLite as the canonical historian.
-- Do not add Railway-specific historian engine code.
-- Normal local installs must work without MinIO.
-- Historian, central, and dashboard ingress remain LAN/VPN/private-only. Do not describe product services as public.
+- **TimescaleDB / PostgreSQL is the canonical durable historian.**
+- **Versioned SQL** in `sql/fdd/` + `sql/schema/` is FDD/analytics execution truth.
+- **FORBIDDEN:** Parquet/Arrow/DataFusion/Feather as product historian or co-canonical store.
+- **FORBIDDEN:** dual-write, dual-read, “Parquet if Timescale miss”, sidecar mirror.
+- Feather/Arrow IPC (if any) is non-product interchange only — never the durable copy.
+- Do not add Railway-specific historian engine forks.
+- Historian, central, and dashboard ingress remain LAN/VPN/private-only (or authorized Soft-OPEN hub).
+- Soft-OPEN ≠ FQ.
+
+## Historical note (retired)
+
+The remainder of this file documents the pre-3.6.0 Parquet/DataFusion contract for audit history only.
+Do not implement dual-write bridges from it.
 
 ## Generic storage contract
 
@@ -43,202 +54,5 @@ Legacy `OPENFDD_PARQUET_ROOT` may be recognized for migration/backwards compatib
 history/
   building_id=<id>/
     equipment_id=<id>/
-      year=YYYY/
-        month=MM/
-          part-<timestamp>-<unique>.parquet
 
-weather/
-  building_id=<id>/
-    year=YYYY/
-      month=MM/
-        part-<timestamp>-<unique>.parquet
-```
-
-Initial partition strategy is building + equipment + year + month. Do not introduce daily partitioning without benchmark evidence.
-
-Partition values must reject traversal/separators/NUL/`=`. `timestamp_utc` remains a real Arrow timestamp; never invent timestamps for bad input.
-
-## Append and small-file contract
-
-Never append in place to one giant Parquet file and never emit one Parquet file per telemetry packet/sample.
-
-```text
-OPENFDD_PARQUET_FLUSH_ROWS=5000
-OPENFDD_PARQUET_FLUSH_SECONDS=60
-OPENFDD_PARQUET_TARGET_FILE_MB=128
-```
-
-Flush on rows OR time OR clean shutdown. Local publication is temporary-file + fsync/close + atomic rename where supported. Object storage uploads only complete objects.
-
-Initial Parquet compression direction is Snappy for low edge/VM CPU while retaining statistics/predicate pruning. Change only with measured evidence.
-
-## H7 live-ingest durability contract
-
-Live MQTT telemetry enters canonical history only when trusted publisher metadata supplies `building_id`, `equipment_id`, and `role`. The fieldbus publisher derives these from operator/configured building/device/point metadata; Central must never parse BACnet object IDs, REST point IDs, or MQTT topic strings to invent historian identity.
-
-H7 keeps the H2 `MicroBatchHistorian` as the buffering/flush primitive. The H2 writer now delegates only the final publication step through a backend-neutral complete-object publisher, so local and S3 paths retain the exact same validation, UTC month splitting, schema behavior, compression, statistics, and immutable part naming.
-
-For `file://`, publication remains crash-safe local atomic write/rename. For `s3://`, Central publishes the already-complete Parquet payload directly through the generic S3-compatible `object_store` contract. Container disk is not a canonical S3 fallback.
-
-The latest successfully persisted eligible telemetry timestamp is maintained independently of wall clock and persisted at:
-
-```text
-state/live-historian/latest-telemetry.json
-```
-
-under the configured canonical storage backend. H8 uses this watermark as the rolling AFDD end-time input after restart. The watermark may safely lag if its small state write fails after an immutable Parquet object succeeds; it must never advance ahead of successfully persisted Parquet. A later successful flush/shutdown rewrites the max watermark.
-
-The owning Central runtime calls elapsed-time flushes and a clean shutdown drain. If canonical live historian initialization fails, Central refuses to downgrade MQTT durability to the old Feather/JSONL mirror.
-
-The old MQTT Feather/JSONL mirror is compatibility-only and disabled by default:
-
-```text
-OPENFDD_LEGACY_INGEST_MIRROR=0
-```
-
-Enable it only for an audited compatibility/interchange consumer. It is never the canonical or only durable copy.
-
-## Compaction contract
-
-```text
-OPENFDD_COMPACTION_ENABLED=true
-OPENFDD_COMPACTION_MIN_FILES=8
-OPENFDD_PARQUET_TARGET_FILE_MB=128
-```
-
-H4 local compaction is an **offline maintenance primitive** with a **runtime coordinator**.
-It compacts one canonical building/equipment/year/month partition at a time with bounded
-memory, validates the replacement before changing the query surface, retires source
-`.parquet` files to hidden tombstones, publishes the validated replacement, fsyncs the
-partition directory, and only then deletes retired sources. Rollback and cleanup failures
-must be surfaced to the operator.
-
-**Operator offline surface (H4):**
-
-```bash
-# Plan only (no mutation)
-cargo run -p fdd_cli -- compact-history --storage-root /data/openfdd --plan-only
-
-# Fail closed if DataFusion scans are active
-cargo run -p fdd_cli -- compact-history --storage-root /data/openfdd
-
-# Wait for scan leases to drain, then compact
-cargo run -p fdd_cli -- compact-history --storage-root /data/openfdd --wait
-```
-
-**Runtime coordinator (Wave U V8):** `fdd_store::CompactionCoordinator` serializes
-many concurrent scan permits **or** one exclusive compact permit — never both.
-Admin `GET|POST /api/historian/compaction` (hub_admin, `confirm:true`) and FDD /
-analytics scan entry points take leases so Central cannot publish-first or retire-first
-under live DataFusion reads. Prefer maintenance windows for live Railway compact.
-
-## DataFusion/query contract
-
-Canonical `history` registration is rooted at the configured `history/` dataset, never physical part filenames. Local registration uses `<storage_root>/history/`; S3 registration uses the configured `s3://<bucket>/<prefix>/history/` object-store root. DataFusion exposes these Hive columns to SQL:
-
-```text
-building_id, equipment_id, year, month
-```
-
-Canonical Hive partition values are UTF-8 path literals. Use zero-padded string predicates such as `year = '2026'` and `month = '08'`; this keeps local and object-store pruning semantics aligned. Building-scoped S3 callers narrow object discovery to `building_id=<id>/` before DataFusion file discovery rather than registering the whole bucket and filtering afterward.
-
-When no canonical local `history/` dataset exists, the compatibility layer may fall back to the legacy recursive Parquet sidecar tree during migration. S3 compatibility registration is different: it fails closed without a trusted building scope. Explicit whole-dataset S3 registration is reserved for operator/global callers. Do not make compatibility paths the new abstraction. FDD SQL should never know physical part filenames.
-
-Parquet schema inference must tolerate safe nullable-role evolution across immutable parts. Adding an optional role is allowed; old parts surface null for the new column. Incompatible role datatypes must fail rather than be silently reinterpreted.
-
-A large historian must not be collected into RAM. The generic execution contracts are:
-
-- `collect_sql_bounded(ctx, sql, max_rows)` materializes at most `max_rows` and rejects larger interactive results;
-- `stream_sql(ctx, sql)` returns Arrow record batches without materializing the full result in Open-FDD.
-
-`DEFAULT_INTERACTIVE_MAX_ROWS` is 10,000. Deployment/API layers may wire their own explicit limit, but generic interactive callers must not use unbounded `DataFrame::collect()` by default. Existing rule/batch compatibility paths may retain bounded result behavior where FDD parity requires it.
-
-DataFusion historian sessions use bounded memory/spill plus tuning from the generic configuration. Important controls include:
-
-```text
-OPENFDD_QUERY_MEMORY_MB=512
-OPENFDD_DATAFUSION_SPILL_DIR=...
-OPENFDD_DATAFUSION_PUSHDOWN_FILTERS=true
-OPENFDD_DATAFUSION_REORDER_FILTERS=true
-OPENFDD_DATAFUSION_PARQUET_METADATA_HINT_KB=512
-OPENFDD_DATAFUSION_TARGET_PARTITIONS=...
-OPENFDD_DATAFUSION_BATCH_ROWS=...
-OPENFDD_DATAFUSION_META_FETCH_CONCURRENCY=...
-OPENFDD_DATAFUSION_REPARTITION_FILE_MIN_MB=...
-```
-
-Do not turn every DataFusion option on mechanically. Keep row-group pruning/page index behavior enabled, use late Parquet filter pushdown/reordering where beneficial, keep full statistics collection off by default for large object stores, and benchmark expensive options before changing defaults.
-
-## H6 migration contract
-
-Legacy migration is explicit operator/offline work. Discovery may classify Parquet, JSONL/NDJSON, and Feather/Arrow IPC, but a source is eligible only when trusted `building=<id>/equipment=<id>` path identity is present and safe. Never invent identity from point IDs, active-profile defaults, or filename guesses.
-
-Eligible sources are converted through bounded Arrow batches into the same canonical H2 writer. JSONL requires scalar fields with consistent types and a parseable timestamp; nested/mixed values fail closed. Arrow IPC/Feather requires a real Arrow timestamp; legacy `timestamp` may be normalized to `timestamp_utc`, while ambiguous timestamp columns fail closed.
-
-Every format uses one restart-safe protocol: write invisible staging parts, verify row preservation and part hashes, persist an atomic receipt containing the exact publish plan, then publish the recorded parts. Reruns resume that plan; changed source content fails closed. H6 does not delete legacy source data.
-
-Historian stats are footer/metadata oriented, not a full telemetry scan. Local canonical stats report files, bytes, rows, partitions, buildings, equipment, month range, invalid layout, and H4-aligned small-file health. The serializable Rust API and CLI are operator surfaces; do not enumerate an entire S3 historian on every request merely to display a dashboard counter.
-
-## Operating modes
-
-Explicitly distinguish:
-
-```text
-bulk        = import/history + operator-requested analysis; no scheduler
-continuous  = live/incremental append + rolling scheduled AFDD
-```
-
-Target config:
-
-```text
-OPENFDD_AFDD_MODE=bulk|continuous
-OPENFDD_AFDD_INTERVAL_MINUTES=60
-OPENFDD_AFDD_LOOKBACK_VALUE=24
-OPENFDD_AFDD_LOOKBACK_UNIT=hours|days|minutes
-```
-
-Interval and lookback are independent.
-
-Continuous AFDD uses a defined window ending at the latest successfully persisted eligible telemetry timestamp. Rolling windows intentionally overlap for late arrivals. Do not optimize to only `timestamp > last_run` unless a specific rule proves that safe.
-
-Ingest durability and FDD scheduling are decoupled: a Parquet flush does not synchronously run all FDD.
-
-## Scheduler locks
-
-- state/checkpoint survives restart;
-- one due catch-up run after downtime, not one job per missed tick;
-- prevent overlapping cycles for the same scope;
-- ingestion continues while AFDD runs;
-- scheduled and manual run-now use the same execution engine;
-- historical replay/backfill is explicit and chunked;
-- building/rule failures should be isolated where existing contracts allow it.
-
-## Continuous finding continuity
-
-Overlapping AFDD windows must continue one fault episode instead of inserting a visually new finding every hour. Preserve existing contracts first, then use stable episode identity with first/last seen, status, occurrence/evaluation metadata as needed.
-
-## Railway mapping
-
-Railway is deployment configuration only:
-
-```text
-private dashboard / VPN ingress
-  -> openfdd-central.railway.internal:8080 (private)
-  -> Railway Storage Bucket (private S3-compatible)
-```
-
-Map Railway bucket variables (`BUCKET`, `ENDPOINT`, `REGION`, `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`) into Open-FDD's generic `OPENFDD_*` variables. Do not read `RAILWAY_*` in historian engine code.
-
-The central container filesystem is ephemeral cloud scratch/spill, not the canonical historian. A volume may still hold small mutable application/session state where needed.
-
-## Local VM mapping
-
-IT-hosted VM/dashboard deployments use the same images and `file://` storage, with persistent Docker volume/host disk and central bound privately. MinIO is optional only for testing the S3 path and binds to loopback in the provided recipe.
-
-## Validation
-
-Every implementation PR touching this architecture must preserve FDD/weather behavior and run the relevant repo gates. Never weaken tests to get green.
-
-H1 through H6 are merged. H5 added provider-neutral S3/object-store registration, fail-closed building scoping, DataFusion tuning, MinIO qualification wiring, and private Railway bucket deployment mapping. H6 added restart-safe legacy migration and operator stats. H7 adds trusted-metadata live micro-batches, local/S3 complete-object durability, persisted latest-telemetry watermarking, graceful shutdown drain, and opt-in-only legacy mirroring. H8+ own continuous scheduling, UX, and scale qualification.
-
-Scale target: hundreds of GB to ~1 TB retained history while normal continuous AFDD scans only the configured building/equipment/time window through partition/statistics/column pruning.
+*(Historical body truncated in Soft-OPEN doc blast — full text in git history.)*

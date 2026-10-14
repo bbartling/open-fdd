@@ -736,10 +736,12 @@ export function OverviewPopulated({
           {runAllGrey && !afddOwnsRefresh ? (
             <Button
               id="overview-force-run-all"
-              label="Force re-run all"
+              label="Force re-run all (after fresh samples)"
               variant="secondary"
               disabled={rulesBusy}
               onClick={() => {
+                // Soft-OPEN R8f: global AFDD owns cohort; force only when operator
+                // knows samples are fresh. Prefer Lab single-rule for tuning.
                 setForceRules(true);
                 void onUpdateAllRules();
               }}

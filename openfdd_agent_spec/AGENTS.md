@@ -1,5 +1,7 @@
 # Open-FDD agent workspace — orientation
 
+**Wave-X historian lock:** Timescale ONLY. FORBIDDEN dual-write / Parquet co-canonical / DataFusion product path. Soft-OPEN ≠ FQ. Stay Rust OSS. Worktrees `/tmp/open-fdd-wt-*` only — never Desktop.
+
 Plain Markdown on disk is the source of truth for **Cursor**, **Codex CLI**, and
 similar agents. Product code lives in `services/`, `sql_rules/`, `frontend/`,
 `mcp/`, `edge/`, `os/`. PyPI libraries live in `open_fdd/`. Orchestration lives in

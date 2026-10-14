@@ -70,9 +70,8 @@ PyPI is **not** the production DataFusion FDD runtime.
 
 ### Open-FDD production
 
-Rust services; Arrow/Feather/Parquet historian; DataFusion SQL; canonical SQL
-registry; JWT APIs; GHCR stack; React SPA (`openfdd-web`). Must not silently fall
-back from SQL to pandas. Must not require Python in the product request path.
+Rust services; **Timescale** historian; versioned SQL FDD pack; JWT APIs; GHCR stack; React SPA (`openfdd-web`). Must not silently fall
+back from SQL to pandas. Must not require Python in the product request path. No dual-write / Parquet co-canonical.
 
 ---
 

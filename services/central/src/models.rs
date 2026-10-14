@@ -206,6 +206,10 @@ pub struct FddRunRequest {
     /// bleed). May also be nested under `params.building_id` (hunt curl form).
     #[serde(default)]
     pub building_id: Option<String>,
+    /// Soft-OPEN write-once (BPS parity): batch run-all returns cached results when
+    /// cohort records already exist unless this is true (fresh samples / explicit force).
+    #[serde(default)]
+    pub force_new_data: bool,
 }
 
 fn default_registry_mode() -> String {

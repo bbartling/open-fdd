@@ -148,6 +148,26 @@ fn templates() -> Vec<Template> {
                 "ORDER BY ?equipmentId ?column\n",
             ),
         },
+        // Soft-OPEN mech-system summary (R5): equipment typed for plant dashboard.
+        Template {
+            id: "mech_system_summary",
+            label: "Mechanical system summary (equip type tags for plant/AHU/VAV/CHW/HW)",
+            category: "summary",
+            query: concat!(
+                "SELECT ?equipmentId ?equipType WHERE {\n",
+                "  ?equip ofdd:equipmentId ?equipmentId .\n",
+                "  OPTIONAL { ?equip ofdd:equipType ?equipType . }\n",
+                "  OPTIONAL { ?equip ph:hasTag ?tag . }\n",
+                "  FILTER(\n",
+                "    BOUND(?equipType) ||\n",
+                "    ?tag = phIoT:ahu || ?tag = phIoT:vav || ?tag = phIoT:chiller ||\n",
+                "    ?tag = phIoT:boiler || ?tag = phIoT:pump || ?tag = phIoT:fan ||\n",
+                "    ?tag = phIoT:coolOnly || ?tag = phIoT:heatOnly\n",
+                "  )\n",
+                "}\n",
+                "ORDER BY ?equipType ?equipmentId\n",
+            ),
+        },
     ]
 }
 
