@@ -39,6 +39,8 @@ export interface FddRunRequest {
   building_id?: string;
   params?: Record<string, Record<string, number>>;
   confirmation_seconds?: number;
+  /** Soft-OPEN R8f: bypass write-once skipped_recompute after fresh samples. */
+  force_new_data?: boolean;
 }
 
 export interface FddRunTiming {
@@ -78,6 +80,9 @@ export interface FddRunResponse {
   results_dir?: string;
   results?: FddResultRow[];
   cache?: unknown;
+  /** Soft-OPEN write-once: cohort already on file; prefer Lab single-rule. */
+  skipped_recompute?: boolean;
+  message?: string;
 }
 
 export interface FddResultsResponse {
@@ -167,6 +172,7 @@ export async function runFdd(
       building_id: request.building_id,
       params: request.params ?? {},
       confirmation_seconds: request.confirmation_seconds,
+      ...(request.force_new_data ? { force_new_data: true } : {}),
     }),
     signal: init?.signal,
   });

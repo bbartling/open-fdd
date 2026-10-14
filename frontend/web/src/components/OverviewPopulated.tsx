@@ -525,14 +525,19 @@ export function OverviewPopulated({
     }
   };
 
-  const onUpdateAllRules = async () => {
+  const onUpdateAllRules = async (opts?: { force?: boolean }) => {
     if (!buildingId) {
       setRulesErr("Select an active site first");
       return;
     }
+    const force = Boolean(opts?.force || forceRules);
     setRulesBusy(true);
     setRulesErr(null);
-    setRulesNote("Running all rules with tuned params…");
+    setRulesNote(
+      force
+        ? "Force re-running all rules after fresh samples…"
+        : "Running all rules with tuned params…",
+    );
     try {
       // Same tuning source as Vibe19: package session_config.params (confirm_min=0
       // etc.), then Lab localStorage overrides.
@@ -554,12 +559,16 @@ export function OverviewPopulated({
         mode: "registry",
         building_id: buildingId,
         params,
+        force_new_data: force || undefined,
       });
       const n = result.results?.length ?? 0;
       setLastRuleResultCount(n);
       setForceRules(false);
       setRulesNote(
-        `Ran all rules · ${n} result row(s) · ${String(result.total_ms ?? "—")} ms`,
+        result.skipped_recompute
+          ? result.message ||
+              "Results current — use Lab single-rule for tuning, or Force after fresh samples"
+          : `Ran all rules · ${n} result row(s) · ${String(result.total_ms ?? "—")} ms`,
       );
       await refreshReadiness();
       try {
@@ -743,7 +752,7 @@ export function OverviewPopulated({
                 // Soft-OPEN R8f: global AFDD owns cohort; force only when operator
                 // knows samples are fresh. Prefer Lab single-rule for tuning.
                 setForceRules(true);
-                void onUpdateAllRules();
+                void onUpdateAllRules({ force: true });
               }}
               testId="overview-force-run-all"
             />

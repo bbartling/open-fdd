@@ -207,6 +207,16 @@ impl Tsdb {
         Ok(row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("ts")?)
     }
 
+    /// Global AFDD Soft-OPEN: newest sample across all Timescale sites.
+    pub async fn max_sample_ts_global(
+        &self,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, TsdbError> {
+        let row = sqlx::query("SELECT max(ts) AS ts FROM sample")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("ts")?)
+    }
+
     pub async fn rule_registry_count(&self) -> Result<i64, TsdbError> {
         let row = sqlx::query("SELECT count(*)::bigint AS n FROM fdd_rule_registry")
             .fetch_one(&self.pool)
