@@ -3548,6 +3548,26 @@ pub async fn fdd_run(
     let echo_building_id = building_id.clone();
 
     let run_all = rule_ids.as_ref().map(|r| r.is_empty()).unwrap_or(true);
+    let force_new_data = body.force_new_data
+        || body
+            .params
+            .get("force_new_data")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+    // Soft-OPEN write-once (BPS parity / R8f): batch run-all returns cached cohort
+    // when results already on file unless force_new_data or a single-rule update.
+    let single_update = rule_ids.as_ref().is_some_and(|r| r.len() == 1) && !run_all;
+    if crate::timescale_historian::historian_is_timescale()
+        && run_all
+        && !force_new_data
+        && !single_update
+    {
+        if let Some(bid) = building_id.as_deref() {
+            if let Some(cached) = crate::timescale_product::cached_run_all_if_present(bid) {
+                return Ok(Json(cached));
+            }
+        }
+    }
     let (kind, label) = if run_all {
         (
             "fdd_run_all",

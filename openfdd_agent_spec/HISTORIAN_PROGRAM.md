@@ -1,5 +1,10 @@
 # Historian / Railway implementation program
 
+> **Wave-X 3.6.0+ SUPERSESSION:** Product historian is **Timescale only** ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)).
+> Parquet/DataFusion program below is historical. **Do not** dual-write or treat Parquet as co-canonical.
+> Soft-OPEN ≠ FQ.
+
+
 Last updated: 2026-10-12
 
 **Wave-X 3.6.0 SUPERSEDES this Parquet/DataFusion program for the product path.**

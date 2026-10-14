@@ -974,6 +974,56 @@ fn results_dir(building_id: &str) -> PathBuf {
     base.join(format!("building={building_id}"))
 }
 
+/// Soft-OPEN write-once (R8f / BPS parity): if a prior run-all left `_run_meta.json`
+/// (or any rule result JSON), return it with `skipped_recompute` instead of re-running
+/// the full cohort. Callers pass `force_new_data` to bypass.
+pub fn cached_run_all_if_present(building_id: &str) -> Option<Value> {
+    let dir = results_dir(building_id);
+    let meta_path = dir.join("_run_meta.json");
+    if meta_path.is_file() {
+        if let Ok(text) = std::fs::read_to_string(&meta_path) {
+            if let Ok(mut body) = serde_json::from_str::<Value>(&text) {
+                if let Some(obj) = body.as_object_mut() {
+                    obj.insert("skipped_recompute".into(), json!(true));
+                    obj.insert(
+                        "message".into(),
+                        json!(
+                            "FDD results already on file for this site — UI should read records. \
+                             Use force_new_data=true only after new historian samples, \
+                             or run a single rule_id from Lab / rule tuning."
+                        ),
+                    );
+                    obj.insert("ok".into(), json!(true));
+                }
+                return Some(body);
+            }
+        }
+    }
+    // Any persisted rule JSON counts as "cohort has been run".
+    let has_rule = std::fs::read_dir(&dir).ok()?.any(|e| {
+        e.ok()
+            .map(|e| {
+                let name = e.file_name();
+                let s = name.to_string_lossy();
+                s.ends_with(".json") && !s.starts_with('_')
+            })
+            .unwrap_or(false)
+    });
+    if !has_rule {
+        return None;
+    }
+    Some(json!({
+        "ok": true,
+        "engine": TS_ENGINE,
+        "building_id": building_id,
+        "historian": "timescale",
+        "skipped_recompute": true,
+        "message": "FDD results already on file for this site — UI should read records. \
+                    Use force_new_data=true only after new historian samples, \
+                    or run a single rule_id from Lab / rule tuning.",
+    }))
+}
+
 fn load_confirmed_fault_hint(
     building_id: &str,
     equipment_id: &str,

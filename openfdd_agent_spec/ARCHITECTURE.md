@@ -12,7 +12,7 @@ Trust **tested current code**. Update this file when code truth changes.
 | --- | --- | --- |
 | **Open-FDD product** (GHCR stack) | Rust central (DataFusion SQL FDD + `/api/analytics/*`), React SPA (`openfdd-web`), fieldbus, mqtt. Deploy as **Recipe 1** cloud hub (mqtt+central+web, amd64) or **Recipe 2** OT edge (central+web+protocol; broker optional) — see [`docs/operations/build-recipes.md`](../docs/operations/build-recipes.md) | Python/pandas in the product request path; FDD math in TypeScript; treat fieldbus→hub MQTTS as the only OT story |
 | **React SPA** | Sole product UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
-| **Historian** | **Parquet durable history**, Arrow in-memory batches, DataFusion SQL; provider-neutral `file://` / `s3://` storage contract ([historian lock](docs/HISTORIAN_ARCHITECTURE.md)) | Treat Feather/IPC as canonical durability; one file per telemetry sample; hard-code Railway; introduce a traditional DB as historian |
+| **Historian** | **TimescaleDB durable history** + versioned SQL FDD (`sql/fdd`, `sql/schema`); ADR-010 Timescale hard cutover ([historian lock](docs/HISTORIAN_ARCHITECTURE.md)) | Dual-write; Parquet/Arrow/DataFusion co-canonical; Feather durability; Python on FDD equation path |
 | **Open-FDD PyPI** (`open-fdd`) | Third-party libraries: `ecm_engineering`, `rules`, `analytics`, `reporting` — runs **outside** the product app | Be mistaken for the product FDD runtime |
 | **Camber** (external) | [yroussev/camber](https://github.com/yroussev/camber) Apache-2.0 — algorithm reference for PyPI M&V / change-point ports only | GHCR request path; OT adapters; `camber serve` as product UI |
 | **Vibe 21 program kit** | [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/) — recovery → twin → Unity ZIP import | Skip Master Loop gates; Unity Editor in production |
@@ -26,16 +26,13 @@ Trust **tested current code**. Update this file when code truth changes.
 
 ## Historian ownership
 
-Canonical contract: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTURE.md). Full repository audit and rationale: [`../docs/architecture/historian.md`](../docs/architecture/historian.md).
+Canonical contract: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTURE.md) + [`../docs/architecture/adr-010-timescale-hard-cutover.md`](../docs/architecture/adr-010-timescale-hard-cutover.md).
 
-- Parquet is the canonical durable historian.
-- Arrow is the in-memory execution format.
-- DataFusion is the analytical SQL/FDD engine.
-- Feather / Arrow IPC is optional cache/export/interchange only.
-- Local/VM storage uses `OPENFDD_STORAGE_URL=file:///...`.
-- Cloud/object storage uses generic `s3://` + `OPENFDD_S3_*` configuration; deployment platforms map their own variables into those names.
-- Continuous telemetry is micro-batched into immutable monthly Hive-partitioned Parquet parts; never one file per point/poll.
-- Bulk analysis and continuous AFDD are explicit separate modes. Scheduled continuous AFDD uses rolling, overlapping persisted-data windows rather than rescanning retained history.
+- **TimescaleDB is the canonical durable historian** (Wave-X 3.6.0+).
+- FDD/analytics equations live in versioned SQL packs (`sql/fdd`, future `sql/analytics`); Rust binds/auth/serializes only.
+- **FORBIDDEN:** Parquet/Arrow/DataFusion/Feather co-canonical, dual-write, dual-read.
+- Continuous AFDD uses watermark/incremental windows over Timescale samples — not a full-DB hammer every tick.
+- Bulk package import and continuous AFDD remain separate modes.
 
 ---
 
@@ -43,7 +40,7 @@ Canonical contract: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTU
 
 | Cookbook | Location | Role |
 | --- | --- | --- |
-| DataFusion SQL expression cookbook | `docs/rules/cookbook/datafusion-sql-cookbook.md` + `sql_rules/` | Production execution |
+| PostgreSQL / Timescale SQL pack | `sql/fdd/` + `sql/schema/` (+ cookbook where dual-expression) | Production execution |
 | Pandas expression cookbook | `docs/rules/cookbook/pandas-cookbook.md` + `open_fdd.rules` | PyPI oracle / engineering explanation |
 | Parity matrix | `docs/rules/cookbook/parity-matrix.md` | Honesty about gaps |
 
