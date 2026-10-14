@@ -1,0 +1,27 @@
+{
+  "bundle_id": "openfdd-successor-contract-softopen",
+  "bundle_version": "3.6.6-softopen-scaffold",
+  "status": "softopen_scaffold",
+  "soft_open_neq_fq": true,
+  "preserve_original_warehouse": {
+    "name": "OPENFDD_WAREHOUSE_SYNTHETIC_HANDOFF_20261012.zip",
+    "sha256": "0597b6d6492750edae2c994ac5d2fcbb26a8a2bd6c122013da5399b94b8b24ec",
+    "immutable": true
+  },
+  "source_contract": "sql/contract/manifest.json",
+  "analytics_pack": "sql/analytics/registry.json",
+  "fdd_rules": "sql/fdd/postgres/rules",
+  "schema": "sql/schema",
+  "bps_oss_parity": "apples-to-apples: same schema + FDD + analytics pack hash",
+  "forbidden": [
+    "edit-original-goldens-in-place",
+    "dual-write",
+    "parquet-co-canonical",
+    "equation-fork"
+  ],
+  "next": [
+    "CI drift gate: image SQL hash == manifest",
+    "Known-answer fixtures for analytics Soft-OPEN routes",
+    "Clean-image bootstrap/upgrade/restore Soft-OPEN"
+  ]
+}

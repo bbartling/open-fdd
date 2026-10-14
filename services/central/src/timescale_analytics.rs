@@ -19,6 +19,14 @@ const ECONOMIZER_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/economizer_deltas.sql");
 const PLANT_HEALTH_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/plant_health_inventory.sql");
+const ROLE_TIMESERIES_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/role_timeseries.sql");
+const MECH_COOLING_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/mechanical_cooling_oat_bins.sql");
+const SENSOR_STATS_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/sensor_stats.sql");
+const SCHEDULE_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/schedule_occupancy.sql");
 
 pub async fn motor_weekly_runtime(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
     let rows = sqlx::query(MOTOR_WEEKLY_SQL)
@@ -98,22 +106,13 @@ pub async fn role_timeseries(
     limit: i64,
 ) -> Result<Value> {
     let pattern = format!("%.{role_suffix}");
-    let rows = sqlx::query(
-        r#"
-        SELECT ts, openfdd_key, val,
-               split_part(openfdd_key, '.', 1) AS equipment_id
-        FROM sample
-        WHERE site_id = $1 AND openfdd_key LIKE $2
-        ORDER BY ts DESC
-        LIMIT $3
-        "#,
-    )
-    .bind(building_id)
-    .bind(&pattern)
-    .bind(limit)
-    .fetch_all(tsdb.pool())
-    .await
-    .with_context(|| format!("role_timeseries {role_suffix}"))?;
+    let rows = sqlx::query(ROLE_TIMESERIES_SQL)
+        .bind(building_id)
+        .bind(&pattern)
+        .bind(limit)
+        .fetch_all(tsdb.pool())
+        .await
+        .with_context(|| format!("role_timeseries {role_suffix}"))?;
 
     let mut out = Vec::new();
     for r in rows {
@@ -125,6 +124,69 @@ pub async fn role_timeseries(
         }));
     }
     Ok(envelope(query_id, building_id, out))
+}
+
+pub async fn mechanical_cooling_oat_bins(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+    let rows = sqlx::query(MECH_COOLING_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("mechanical_cooling_oat_bins")?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(json!({
+            "kind": r.try_get::<String, _>("kind").unwrap_or_else(|_| "oat_bin".into()),
+            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "oat_bin": r.try_get::<String, _>("oat_bin").unwrap_or_default(),
+            "run_hours": r.try_get::<f64, _>("run_hours").ok(),
+        }));
+    }
+    Ok(envelope("mechanical-cooling", building_id, out))
+}
+
+pub async fn sensor_stats(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+    let rows = sqlx::query(SENSOR_STATS_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("sensor_stats")?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(json!({
+            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "role": r.try_get::<String, _>("role").unwrap_or_default(),
+            "n": r.try_get::<i64, _>("n").ok(),
+            "min_val": r.try_get::<f64, _>("min_val").ok(),
+            "max_val": r.try_get::<f64, _>("max_val").ok(),
+            "avg_val": r.try_get::<f64, _>("avg_val").ok(),
+            "stddev_val": r.try_get::<f64, _>("stddev_val").ok(),
+            "first_ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("first_ts")
+                .ok()
+                .map(|t| t.to_rfc3339()),
+            "last_ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("last_ts")
+                .ok()
+                .map(|t| t.to_rfc3339()),
+        }));
+    }
+    Ok(envelope("sensor-stats", building_id, out))
+}
+
+pub async fn schedule_occupancy(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+    let rows = sqlx::query(SCHEDULE_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("schedule_occupancy")?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(json!({
+            "ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("ts").ok().map(|t| t.to_rfc3339()),
+            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "openfdd_key": r.try_get::<String, _>("openfdd_key").unwrap_or_default(),
+            "val": r.try_get::<f64, _>("val").ok(),
+        }));
+    }
+    Ok(envelope("schedule", building_id, out))
 }
 
 pub async fn economizer_deltas(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
@@ -226,7 +288,7 @@ fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
         "building_id": building_id,
         "engine": "timescale-sql",
         "analytics_pack": "openfdd-analytics-sql-v1",
-        "pack_version": "3.6.5-softopen",
+        "pack_version": "3.6.6-softopen",
         "stale": false,
         "rows": rows,
     })
@@ -301,25 +363,19 @@ pub async fn respond_query(
                 Err(e) => Err(e),
             }
         }
-        "mechanical-cooling" => {
-            role_timeseries(
-                &tsdb,
-                &building,
-                "chiller_status",
-                "mechanical-cooling",
-                2000,
-            )
-            .await
-        }
-        "schedule" => role_timeseries(&tsdb, &building, "occ_mode", "schedule", 2000).await,
-        "sensor-faults" | "sensor-stats" | "pid-hunting" | "setpoints" | "diurnal" | "topology"
-        | "sql-anomaly" | "metering" | "mv-change-point" | "fuel" => {
+        "mechanical-cooling" => mechanical_cooling_oat_bins(&tsdb, &building).await,
+        "schedule" => schedule_occupancy(&tsdb, &building).await,
+        "sensor-stats" => sensor_stats(&tsdb, &building).await,
+        "sensor-faults" | "pid-hunting" | "setpoints" | "diurnal" | "topology" | "sql-anomaly"
+        | "metering" | "mv-change-point" | "fuel" => {
             // Honest thin envelope — data present, full algorithm port tracked.
             let samples = tsdb.sample_count(&building).await.unwrap_or(0);
             Ok(json!({
                 "query_id": query_id,
                 "building_id": building,
                 "engine": "timescale-sql",
+                "analytics_pack": "openfdd-analytics-sql-v1",
+                "pack_version": "3.6.6-softopen",
                 "stale": false,
                 "rows": [],
                 "sample_count": samples,
