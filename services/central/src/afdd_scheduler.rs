@@ -172,39 +172,46 @@ impl AfddSchedulerRuntime {
         Ok(Some(watermark.latest_persisted_timestamp_utc))
     }
 
-    /// Scoped watermark from Timescale `sample` max(ts) (Wave-X C6).
-    /// Falls back to global live-telemetry file only when Timescale is offline.
+    /// Scoped watermark from Timescale `sample` max(ts) (Wave-X C6 / R8e).
+    /// Scope `all` uses global max(ts) across sites (not the Parquet file watermark).
+    /// Falls back to live-telemetry file only when Timescale is offline.
     fn latest_telemetry_for_scope(&self, scope: &str) -> Result<Option<DateTime<Utc>>> {
-        if scope == "all" {
-            return self.latest_telemetry();
-        }
         if crate::timescale_historian::historian_is_timescale() {
-            let rt = tokio::runtime::Handle::try_current();
-            let query = async {
-                let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
-                tsdb.max_sample_ts(scope).await
-            };
-            match rt {
-                Ok(handle) => match handle.block_on(query) {
-                    Ok(ts) => return Ok(ts),
-                    Err(error) => {
-                        warn!(%error, %scope, "Timescale AFDD watermark failed; trying file fallback");
+            let scope_owned = scope.to_string();
+            let run_query = || -> Result<Option<DateTime<Utc>>> {
+                let scope_owned = scope_owned.clone();
+                let query = async move {
+                    let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
+                    if scope_owned == "all" {
+                        tsdb.max_sample_ts_global().await
+                    } else {
+                        tsdb.max_sample_ts(&scope_owned).await
                     }
-                },
-                Err(_) => {
-                    // Scheduler may already be inside a runtime; use a tiny current-thread RT.
-                    let local = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .context("afdd watermark runtime")?;
-                    match local.block_on(query) {
-                        Ok(ts) => return Ok(ts),
-                        Err(error) => {
-                            warn!(%error, %scope, "Timescale AFDD watermark failed; trying file fallback");
-                        }
+                };
+                match tokio::runtime::Handle::try_current() {
+                    Ok(handle) => handle
+                        .block_on(query)
+                        .context("Timescale AFDD watermark query"),
+                    Err(_) => {
+                        let local = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .context("afdd watermark runtime")?;
+                        local
+                            .block_on(query)
+                            .context("Timescale AFDD watermark query")
                     }
                 }
+            };
+            match run_query() {
+                Ok(ts) => return Ok(ts),
+                Err(error) => {
+                    warn!(%error, %scope, "Timescale AFDD watermark failed; trying file fallback");
+                }
             }
+        }
+        if scope == "all" {
+            return self.latest_telemetry();
         }
         // Legacy Parquet order path retained only when Timescale is not product historian.
         let workspace = PathBuf::from(

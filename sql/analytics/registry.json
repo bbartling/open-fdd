@@ -1,0 +1,67 @@
+{
+  "pack_id": "openfdd-analytics-sql-v1",
+  "pack_version": "3.6.5-softopen",
+  "engine": "timescale/postgresql",
+  "soft_open_neq_fq": true,
+  "bps_oss_parity": "same analytics pack hash — twin layers must not fork equations",
+  "queries": [
+    {
+      "query_id": "runtime",
+      "sql_path": "sql/analytics/postgres/queries/motor_weekly_runtime.sql",
+      "status": "softopen",
+      "notes": "status/cmd × 300s Soft-OPEN; plant_group typed Soft-OPEN later"
+    },
+    {
+      "query_id": "bas-vs-web-oat",
+      "sql_path": "sql/analytics/postgres/queries/bas_vs_web_oat.sql",
+      "status": "softopen",
+      "notes": "timestamp join Soft-OPEN; opaque point-map Soft-OPEN later"
+    },
+    {
+      "query_id": "economizer",
+      "aliases": ["rcx-ahu"],
+      "sql_path": "sql/analytics/postgres/queries/economizer_deltas.sql",
+      "status": "softopen",
+      "notes": "per-equipment group Soft-OPEN (was cross-equip)"
+    },
+    {
+      "query_id": "plant-health",
+      "aliases": [
+        "ahu-health",
+        "vav-health",
+        "chiller-health",
+        "boiler-health",
+        "hp-health",
+        "zone-other-health",
+        "cooling-tower-health",
+        "sensor-health",
+        "ahu-temperature-health",
+        "ahu-pressure-health",
+        "ahu-economizer-health"
+      ],
+      "sql_path": "sql/analytics/postgres/queries/plant_health_inventory.sql",
+      "status": "softopen_inventory",
+      "notes": "inventory only; score null / unavailable until cohort SQL"
+    }
+  ],
+  "remaining_routes": [
+    "mechanical-cooling",
+    "inspect",
+    "rcx-vav",
+    "rcx-chiller",
+    "rcx-boiler",
+    "schedule",
+    "sensor-faults",
+    "sensor-stats",
+    "pid-hunting",
+    "setpoints",
+    "diurnal",
+    "topology",
+    "sql-anomaly",
+    "metering",
+    "mv-change-point",
+    "fuel",
+    "rcx/preset",
+    "GET rcx/presets"
+  ]
+}

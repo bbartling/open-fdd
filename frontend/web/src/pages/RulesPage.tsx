@@ -356,6 +356,13 @@ export function RulesPage() {
             testId="fdd-run-all"
           />
         </div>
+        {runAll ? (
+          <p data-testid="fdd-run-all-softopen-hint" className="oracle-sidebar__caption">
+            Soft-OPEN: prefer single-rule / parameter tuning below when cohort
+            results already exist. Overview gates spam Run-all; use Force only
+            after fresh historian samples.
+          </p>
+        ) : null}
 
         {loading ? <p data-testid="rules-loading">Loading rules…</p> : null}
         {error ? (

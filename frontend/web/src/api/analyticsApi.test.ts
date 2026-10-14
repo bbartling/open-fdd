@@ -95,6 +95,36 @@ describe("unwrapAnalyticsEnvelope", () => {
     expect(env.rows).toHaveLength(1);
     expect(env.engine).toBe("datafusion");
   });
+
+  it("preserves Soft-OPEN pending note, stale, and cache metadata", async () => {
+    const { unwrapAnalyticsEnvelope } = await import("./analyticsApi");
+    const env = unwrapAnalyticsEnvelope({
+      ok: true,
+      stale: true,
+      cache: { hit: true },
+      analytics: {
+        schema_version: "v1",
+        query_version: "metering-v1",
+        generated_at: "",
+        engine: "timescale-sql",
+        warnings: [],
+        rows: [],
+        equipment: [],
+        points: [],
+        skipped: [],
+        note: "full metering SQL port pending",
+        query_id: "metering",
+        sample_count: 12,
+        pack_version: "3.6.5-softopen",
+      },
+    });
+    expect(env.note).toBe("full metering SQL port pending");
+    expect(env.stale).toBe(true);
+    expect(env.cache).toEqual({ hit: true });
+    expect(env.query_id).toBe("metering");
+    expect(env.sample_count).toBe(12);
+    expect(env.pack_version).toBe("3.6.5-softopen");
+  });
 });
 
 describe("listRcxPresets", () => {

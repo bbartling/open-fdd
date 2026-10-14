@@ -35,6 +35,13 @@ export interface AnalyticsEnvelope {
   equipment: Record<string, unknown>[];
   points: Record<string, unknown>[];
   skipped: Record<string, unknown>[];
+  /** Pending / Soft-OPEN notes from Timescale dispatch (must survive unwrap). */
+  note?: string | null;
+  query_id?: string | null;
+  sample_count?: number | null;
+  stale?: boolean;
+  cache?: Record<string, unknown> | null;
+  pack_version?: string | null;
 }
 
 /** Wire shape from central: `{ ok, analytics: <envelope> }` (see routes.rs). */
@@ -45,6 +52,7 @@ export interface AnalyticsApiResponse {
   analytics?: AnalyticsEnvelope;
   cache?: Record<string, unknown>;
   error?: string;
+  note?: string;
 }
 
 /** Normalize flat envelope or `{ok,analytics}` wrapper into a usable envelope. */
@@ -63,10 +71,15 @@ export function unwrapAnalyticsEnvelope(
     skipped: [],
   };
   if (!body || typeof body !== "object") return empty;
+  const wrapper = body as AnalyticsApiResponse;
   const nested =
     "analytics" in body && body.analytics && typeof body.analytics === "object"
       ? body.analytics
       : (body as AnalyticsEnvelope);
+  const note =
+    (typeof nested.note === "string" && nested.note) ||
+    (typeof wrapper.note === "string" && wrapper.note) ||
+    null;
   return {
     schema_version: String(nested.schema_version ?? ""),
     query_version: String(nested.query_version ?? ""),
@@ -81,6 +94,26 @@ export function unwrapAnalyticsEnvelope(
     equipment: Array.isArray(nested.equipment) ? nested.equipment : [],
     points: Array.isArray(nested.points) ? nested.points : [],
     skipped: Array.isArray(nested.skipped) ? nested.skipped : [],
+    note,
+    query_id:
+      (typeof nested.query_id === "string" && nested.query_id) || null,
+    sample_count:
+      typeof nested.sample_count === "number" ? nested.sample_count : null,
+    stale:
+      typeof nested.stale === "boolean"
+        ? nested.stale
+        : typeof wrapper.stale === "boolean"
+          ? wrapper.stale
+          : undefined,
+    cache:
+      (nested.cache && typeof nested.cache === "object"
+        ? nested.cache
+        : null) ??
+      (wrapper.cache && typeof wrapper.cache === "object"
+        ? wrapper.cache
+        : null),
+    pack_version:
+      (typeof nested.pack_version === "string" && nested.pack_version) || null,
   };
 }
 

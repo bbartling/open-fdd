@@ -1,9 +1,9 @@
 {
   "contract_id": "openfdd-sql-schema-fdd-v1",
-  "contract_version": "3.6.4-softopen",
+  "contract_version": "3.6.5-softopen",
   "engine": "timescale/postgresql",
   "product": "open-fdd",
-  "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd pack hash; twin layers must not fork equations",
+  "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd + sql/analytics pack hash; twin layers must not fork equations",
   "forbidden": [
     "dual-write",
     "parquet-co-canonical",
@@ -12,8 +12,8 @@
   ],
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
-  "file_count": 82,
-  "pack_sha256": "41f6dc05c4d904f648c5530571298be1ff144d5e7d09448d6a1dbf75e4e10021",
+  "file_count": 88,
+  "pack_sha256": "733839b970ecf59ac3671ee42152a168c3d6e4a2fec10f486c3a65eb4194bf2c",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -424,6 +424,36 @@
       "path": "sql/fdd/postgres/postgres_helpers.sql",
       "sha256": "66ada4dcd83f450df97c2fdcdc8cc6b65aee95831359390aaaa673f10dd6a80b",
       "bytes": 393
+    },
+    {
+      "path": "sql/fdd/input_contract.sql",
+      "sha256": "4309a54275bf101dbde26aeca860756db92d3dde2e5b5f08733eecf30adf1ab2",
+      "bytes": 2668
+    },
+    {
+      "path": "sql/analytics/postgres/queries/bas_vs_web_oat.sql",
+      "sha256": "57d08c62313d8b8f97b53dc2bb52be5d7f56e7e6746ab814bac37b07afc6070e",
+      "bytes": 585
+    },
+    {
+      "path": "sql/analytics/postgres/queries/economizer_deltas.sql",
+      "sha256": "65f85b6aee711a6b3331962fe56effdb9184efd8cdbbfca50d8848ef29c6cda3",
+      "bytes": 1087
+    },
+    {
+      "path": "sql/analytics/postgres/queries/motor_weekly_runtime.sql",
+      "sha256": "0b1c31c1d0885283e7e919b1b22e5c982ce6887c402e783ec690b59f3cfd287f",
+      "bytes": 808
+    },
+    {
+      "path": "sql/analytics/postgres/queries/plant_health_inventory.sql",
+      "sha256": "54d38c069d4e96eae42ab1940fc71e18b8118174163c869015107895f93685b4",
+      "bytes": 248
+    },
+    {
+      "path": "sql/analytics/registry.json",
+      "sha256": "416115518bb9a3100f33e938aba4b1a9020f2c306485c2e7d1f8846cf9a3ca22",
+      "bytes": 1867
     }
   ]
 }

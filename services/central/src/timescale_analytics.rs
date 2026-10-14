@@ -10,69 +10,56 @@ use sqlx::Row;
 
 use crate::analytics::AnalyticsRequest;
 
+/// Soft-OPEN: SQL body from `sql/analytics` pack (hash-pinned). Bind `$1` only.
+const MOTOR_WEEKLY_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/motor_weekly_runtime.sql");
+const BAS_VS_WEB_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/bas_vs_web_oat.sql");
+const ECONOMIZER_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/economizer_deltas.sql");
+const PLANT_HEALTH_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/plant_health_inventory.sql");
+
 pub async fn motor_weekly_runtime(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
-    let rows = sqlx::query(
-        r#"
-        SELECT
-          split_part(openfdd_key, '.', 1) AS equipment_id,
-          date_trunc('week', ts) AS week_start,
-          (COUNT(*) FILTER (WHERE COALESCE(val, 0) > 0.05)::double precision * 300.0 / 3600.0)
-            AS runtime_hours
-        FROM sample
-        WHERE site_id = $1
-          AND (openfdd_key LIKE '%.fan_status' OR openfdd_key LIKE '%.fan_cmd')
-        GROUP BY 1, 2
-        ORDER BY 1, 2
-        LIMIT 500
-        "#,
-    )
-    .bind(building_id)
-    .fetch_all(tsdb.pool())
-    .await
-    .context("motor_weekly_runtime")?;
+    let rows = sqlx::query(MOTOR_WEEKLY_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("motor_weekly_runtime")?;
 
     let mut out = Vec::new();
     for r in rows {
+        let runtime = r
+            .try_get::<f64, _>("runtime_hours")
+            .ok()
+            .or_else(|| r.try_get::<f64, _>("run_hours").ok());
         out.push(json!({
             "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "kind": r.try_get::<String, _>("kind").unwrap_or_else(|_| "motor".into()),
+            "plant_group": r.try_get::<String, _>("plant_group").ok(),
             "week_start": r.try_get::<chrono::DateTime<chrono::Utc>, _>("week_start")
                 .ok()
                 .map(|t| t.to_rfc3339()),
-            "runtime_hours": r.try_get::<f64, _>("runtime_hours").ok(),
+            "week_label": r.try_get::<String, _>("week_label").ok(),
+            "run_hours": runtime,
+            "runtime_hours": runtime,
         }));
     }
     Ok(envelope("motor-weekly-runtime", building_id, out))
 }
 
 pub async fn bas_vs_web_oat(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
-    let rows = sqlx::query(
-        r#"
-        WITH bas AS (
-          SELECT ts, val AS bas_oa_t
-          FROM sample
-          WHERE site_id = $1 AND openfdd_key LIKE '%.oa_t'
-        ),
-        web AS (
-          SELECT ts, val AS web_oa_t
-          FROM sample
-          WHERE site_id = $1 AND openfdd_key LIKE '%.web_oa_t'
-        )
-        SELECT b.ts, b.bas_oa_t, w.web_oa_t, (b.bas_oa_t - w.web_oa_t) AS delta_f
-        FROM bas b
-        JOIN web w ON w.ts = b.ts
-        ORDER BY b.ts DESC
-        LIMIT 2000
-        "#,
-    )
-    .bind(building_id)
-    .fetch_all(tsdb.pool())
-    .await
-    .context("bas_vs_web_oat")?;
+    let rows = sqlx::query(BAS_VS_WEB_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("bas_vs_web_oat")?;
 
     let mut out = Vec::new();
     for r in rows {
         out.push(json!({
             "ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("ts").ok().map(|t| t.to_rfc3339()),
+            "equipment_id": r.try_get::<String, _>("equipment_id").ok(),
             "bas_oa_t": r.try_get::<f64, _>("bas_oa_t").ok(),
             "web_oa_t": r.try_get::<f64, _>("web_oa_t").ok(),
             "delta_f": r.try_get::<f64, _>("delta_f").ok(),
@@ -82,19 +69,11 @@ pub async fn bas_vs_web_oat(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
 }
 
 pub async fn plant_health_matrix(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
-    let rows = sqlx::query(
-        r#"
-        SELECT equipment_id, equip_type
-        FROM equipment
-        WHERE building_id = $1
-        ORDER BY equip_type NULLS LAST, equipment_id
-        LIMIT 500
-        "#,
-    )
-    .bind(building_id)
-    .fetch_all(tsdb.pool())
-    .await
-    .context("plant_health_matrix")?;
+    let rows = sqlx::query(PLANT_HEALTH_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("plant_health_matrix")?;
 
     // Wave-X C6: never fabricate score=1.0. Emit unavailable until scoped
     // diagnostic SQL health is implemented per cohort (see completion audit WX12).
@@ -149,40 +128,12 @@ pub async fn role_timeseries(
 }
 
 pub async fn economizer_deltas(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
-    // Wide pivot for AHU sat/mat/rat/oa_t/oa_damper on shared timestamps (latest window).
-    let rows = sqlx::query(
-        r#"
-        WITH keys AS (
-          SELECT ts,
-            max(val) FILTER (WHERE openfdd_key LIKE '%.oa_t') AS oa_t,
-            max(val) FILTER (WHERE openfdd_key LIKE '%.rat') AS rat,
-            max(val) FILTER (WHERE openfdd_key LIKE '%.mat') AS mat,
-            max(val) FILTER (WHERE openfdd_key LIKE '%.sat') AS sat,
-            max(val) FILTER (WHERE openfdd_key LIKE '%.oa_damper_pct') AS oa_damper_pct,
-            max(split_part(openfdd_key, '.', 1))
-              FILTER (WHERE openfdd_key LIKE '%.sat') AS equipment_id
-          FROM sample
-          WHERE site_id = $1
-            AND (
-              openfdd_key LIKE '%.oa_t' OR openfdd_key LIKE '%.rat'
-              OR openfdd_key LIKE '%.mat' OR openfdd_key LIKE '%.sat'
-              OR openfdd_key LIKE '%.oa_damper_pct'
-            )
-          GROUP BY ts
-        )
-        SELECT ts, equipment_id, oa_t, rat, mat, sat, oa_damper_pct,
-               (oa_t - rat) AS delta_or_f,
-               (mat - rat) AS delta_mr_f
-        FROM keys
-        WHERE oa_t IS NOT NULL AND rat IS NOT NULL AND mat IS NOT NULL
-        ORDER BY ts DESC
-        LIMIT 2000
-        "#,
-    )
-    .bind(building_id)
-    .fetch_all(tsdb.pool())
-    .await
-    .context("economizer_deltas")?;
+    // Soft-OPEN: per-equipment pivot from analytics pack (not cross-equip GROUP BY ts).
+    let rows = sqlx::query(ECONOMIZER_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("economizer_deltas")?;
 
     let mut out = Vec::new();
     for r in rows {
@@ -274,16 +225,33 @@ fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
         "query_id": query_id,
         "building_id": building_id,
         "engine": "timescale-sql",
+        "analytics_pack": "openfdd-analytics-sql-v1",
+        "pack_version": "3.6.5-softopen",
         "stale": false,
         "rows": rows,
     })
 }
 
-fn building_from(req: &AnalyticsRequest) -> String {
-    req.query
+fn building_from(
+    req: &AnalyticsRequest,
+) -> Result<String, (axum::http::StatusCode, axum::Json<Value>)> {
+    match req
+        .query
         .building_id
-        .clone()
-        .unwrap_or_else(|| "BUILDING_50".into())
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(id) => Ok(id.to_string()),
+        None => Err((
+            axum::http::StatusCode::BAD_REQUEST,
+            axum::Json(json!({
+                "ok": false,
+                "error": "building_id is required",
+                "engine": "timescale-sql",
+            })),
+        )),
+    }
 }
 
 /// Universal product dispatch — never calls DataFusion.
@@ -292,7 +260,7 @@ pub async fn respond_query(
     _query_version: &str,
     req: &AnalyticsRequest,
 ) -> Result<Value, (axum::http::StatusCode, axum::Json<Value>)> {
-    let building = building_from(req);
+    let building = building_from(req)?;
     let tsdb = Tsdb::connect_from_env().await.map_err(|e| {
         (
             axum::http::StatusCode::SERVICE_UNAVAILABLE,
