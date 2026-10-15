@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 103,
-  "pack_sha256": "630b14f0cec94029b2d0ac572a9ee5eeea679ea731fb71320b36360cab3512a6",
+  "pack_sha256": "061a0963fd506f48189f1a8feb64f9268e2acbd254408b30f621c8d7fd7f771a",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -522,12 +522,12 @@
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "ee8f0b2e3e264051d304ebc936a9dafa59446bc187fb43e90b8a69e2fac9fdbf",
+      "sha256": "c403896545e92ec9a812edc21a1f71272b0ddf7b7bb0ecf5d983c20055d91e21",
       "bytes": 3998
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",
-      "sha256": "714f5db6f14a5b027a77f702d1a47ff7415d705aa58b3523710487efdb7d9106",
+      "sha256": "0cbcc8356b92efd22c1bd40a488b73926c761ee90d8cb65f46a83363e0ceab6e",
       "bytes": 1293
     }
   ]

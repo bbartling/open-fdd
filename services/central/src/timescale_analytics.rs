@@ -7,8 +7,29 @@ use anyhow::{Context, Result};
 use fdd_tsdb::Tsdb;
 use serde_json::{json, Value};
 use sqlx::Row;
+use std::sync::OnceLock;
 
 use crate::analytics::AnalyticsRequest;
+
+/// Pinned analytics registry — `pack_version` must match runtime envelopes (no silent drift).
+const ANALYTICS_REGISTRY_JSON: &str = include_str!("../../../sql/analytics/registry.json");
+
+/// Soft-OPEN pack version from `sql/analytics/registry.json` (compile-time include).
+fn analytics_pack_version() -> &'static str {
+    static PACK_VERSION: OnceLock<String> = OnceLock::new();
+    PACK_VERSION
+        .get_or_init(|| {
+            serde_json::from_str::<Value>(ANALYTICS_REGISTRY_JSON)
+                .ok()
+                .and_then(|v| {
+                    v.get("pack_version")
+                        .and_then(|x| x.as_str())
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| "unknown".into())
+        })
+        .as_str()
+}
 
 /// Soft-OPEN: SQL body from `sql/analytics` pack (hash-pinned). Bind `$1` only.
 const MOTOR_WEEKLY_SQL: &str =
@@ -527,7 +548,7 @@ fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
         "building_id": building_id,
         "engine": "timescale-sql",
         "analytics_pack": "openfdd-analytics-sql-v1",
-        "pack_version": "3.6.13-softopen",
+        "pack_version": analytics_pack_version(),
         "stale": false,
         "rows": rows,
     })
@@ -620,7 +641,7 @@ pub async fn respond_query(
             "building_id": building,
             "engine": "timescale-sql",
             "analytics_pack": "openfdd-analytics-sql-v1",
-            "pack_version": "3.6.13-softopen",
+            "pack_version": analytics_pack_version(),
             "stale": false,
             "rows": [],
             "note": "Wave-X Timescale dispatch — query SQL port pending; DataFusion disabled",
@@ -637,4 +658,33 @@ pub async fn respond_query(
             })),
         )
     })
+}
+
+#[cfg(test)]
+mod pack_version_tests {
+    use super::*;
+
+    #[test]
+    fn envelope_pack_version_matches_analytics_registry() {
+        let reg: Value =
+            serde_json::from_str(ANALYTICS_REGISTRY_JSON).expect("registry.json parses");
+        let declared = reg
+            .get("pack_version")
+            .and_then(|v| v.as_str())
+            .expect("registry pack_version");
+        assert_eq!(
+            analytics_pack_version(),
+            declared,
+            "runtime analytics envelope must advertise registry pack_version (no silent drift)"
+        );
+        let env = envelope("runtime", "SITE", vec![]);
+        assert_eq!(
+            env.get("pack_version").and_then(|v| v.as_str()),
+            Some(declared)
+        );
+        assert!(
+            declared.contains("softopen"),
+            "Soft-OPEN pack_version must include softopen marker"
+        );
+    }
 }
