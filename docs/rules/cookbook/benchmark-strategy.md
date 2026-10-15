@@ -3,6 +3,7 @@ title: Benchmark & regression strategy
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 8
+nav_exclude: true
 ---
 
 # Benchmark and regression strategy

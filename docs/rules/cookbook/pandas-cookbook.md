@@ -8,11 +8,11 @@ nav_order: 2
 
 **Oracle / documentation catalog:** packaged as `open_fdd.rules` on PyPI (`pip install "open-fdd[oracle]"`) — **71** executable diagnostics. Source of truth: [`open_fdd/rules/cookbook_catalog.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py). Consumers pin the wheel rather than maintaining a second copy.
 
-This cookbook is **intentionally maintained**. Production Open-FDD FDD math runs **Rust + Apache Arrow + DataFusion SQL** (`sql_rules/registry.yaml`, **77** entries = 71 diagnostic twins + 4 SQL analytics + 2 UTIL). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity testing. The nine FCU / `zone_other` rules are cataloged under [Fan coil / zone_other](#fan-coil--zone_other). Unit boundary and equipment kinds are in [FCU and zone_other rules](fcu-zone-other.html).
+This cookbook is **intentionally maintained**. Production FDD is **Timescale / PostgreSQL SQL** ([ADR-010](../../architecture/adr-010-timescale-hard-cutover.md); `sql_rules/registry.yaml`, **77** entries). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity. Soft-OPEN ≠ FQ.
 
-See also the [DataFusion SQL cookbook](datafusion-sql-cookbook.html), [parity matrix](parity-matrix.html), [generated parity report](generated-parity-report.html), and [P0 rule catalog](p0-rule-catalog.html).
+See also the [Timescale SQL cookbook](datafusion-sql-cookbook.html). FCU / `zone_other`: [FCU and zone_other rules](fcu-zone-other.html).
 
-**Updated:** 2026-09-29 (FCU / zone_other catalog) · PyPI `open-fdd` 4.4.1 (`open_fdd.rules`)
+**Updated:** 2026-10-15 · tip **3.6.14** · PyPI `open-fdd` **4.4.9**
 
 
 ---

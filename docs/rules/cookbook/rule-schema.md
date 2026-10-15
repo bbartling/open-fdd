@@ -3,6 +3,7 @@ title: Rule schema (source of truth)
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 2
+nav_exclude: true
 ---
 
 # Declarative rule schema

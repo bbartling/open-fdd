@@ -19,8 +19,8 @@
   <a href="https://bbartling.github.io/open-fdd/">
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
-  <a href="https://bbartling.github.io/open-fdd/rules/cookbook/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — SQL + Pandas">
+  <a href="https://bbartling.github.io/open-fdd/rules/">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-71%20%2F%2077%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 71 / 77 SQL + Pandas">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
@@ -82,7 +82,7 @@ AI Agent assistance : [AGENTS.md](https://github.com/bbartling/open-fdd/blob/mas
 pip install open-fdd
 ```
 
-This is a library of rule-based FDD equations built with Pandas that serves as a **third-party / oracle** reference for the Open-FDD platform, which runs production rules as Timescale / PostgreSQL SQL (`sql/fdd`). It also includes tooling for AI agents to assist with engineering calculations, EnergyPlus modeling, Open-FDD stress testing, and more. Future capabilities include report writing and daily HVAC-fault email alerts—yet to be tested with Grok, OpenClaw, or the AI agent tooling of your choice.
+Third-party / oracle library (`open_fdd.rules`) for notebooks and parity — not the product request path. Production FDD is Timescale / PostgreSQL SQL (`sql/fdd`, [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)). Human catalogs: [Rule Cookbook](https://bbartling.github.io/open-fdd/rules/) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html).
 
 
 <details>

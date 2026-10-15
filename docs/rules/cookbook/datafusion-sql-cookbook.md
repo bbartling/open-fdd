@@ -1,16 +1,18 @@
 ---
-title: DataFusion SQL cookbook
+title: Timescale SQL cookbook
 parent: Rule Cookbook
-nav_order: 1
+nav_order: 2
 ---
 
-# DataFusion SQL FDD Cookbook
+# Timescale / PostgreSQL SQL FDD Cookbook
 
-Open-FDD executes production fault detection as **DataFusion SQL** against Apache Arrow / parquet historian tables via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**77** entries = 71 diagnostic twins + 4 SQL analytics + 2 UTIL). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Integrators may also exercise rules through the registry APIs — raw arbitrary SQL is rejected.
+> **Engine (Wave-X 3.6+ / [ADR-010](../../architecture/adr-010-timescale-hard-cutover.md)):** Production FDD runs as **Timescale / PostgreSQL SQL** (`sql/fdd`). Soft-OPEN ≠ FQ. Historical “DataFusion / Arrow / Parquet” wording in rule bodies below is catalog text — not the live historian.
 
-**Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **71**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “71” as the production registry size. See [parity matrix](parity-matrix.html) and the [generated parity report](generated-parity-report.html). The nine FCU / `zone_other` rules are cataloged under [Fan coil / zone_other](#fan-coil--zone_other). Unit boundary (°F canonical temperatures versus °C pass-through setpoints) and equipment kinds are in [FCU and zone_other rules](fcu-zone-other.html).
+Open-FDD executes production fault detection via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**77** entries = 71 diagnostic twins + 4 SQL analytics + 2 UTIL). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Raw arbitrary SQL is rejected.
 
-**Updated:** 2026-09-29 (FCU / zone_other catalog) · PyPI `open-fdd` 4.4.1
+**Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **71**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “71” as the production registry size. FCU / `zone_other`: [FCU and zone_other rules](fcu-zone-other.html).
+
+**Updated:** 2026-10-15 (Timescale-only human docs) · tip **3.6.14** · PyPI `open-fdd` **4.4.9**
 
 ---
 

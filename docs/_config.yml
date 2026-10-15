@@ -1,5 +1,5 @@
 title: Open-FDD
-description: Local-first Rust edge platform for building telemetry, semantic modeling, and HVAC fault detection.
+description: Local-first Rust + TimescaleDB platform for building telemetry, semantic modeling, and HVAC fault detection (Soft-OPEN ≠ FQ).
 theme: just-the-docs
 
 url: https://bbartling.github.io

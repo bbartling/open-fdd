@@ -1,61 +1,38 @@
 ---
-title: Haystack Modeling
+title: Modeling
 layout: default
 nav_order: 6
 has_children: true
 permalink: /modeling/
 ---
 
-See also: [consumer / route matrix (DM-06)](consumer-route-matrix.md) · [tenant storage honesty (DM-05)](tenant-storage-honesty.md) · [ADR data model graph](../architecture/ADR_data_model_graph.md).
+# Modeling
 
+Haystack semantics → **SQL roles** after package ingest. Soft-OPEN ≠ FQ.
 
-# Haystack modeling
+Empty Overview / Inspect / health usually means **missing roles in the zip**, not a broken engine. See [Package authoring](../agent/PACKAGE_AUTHORING.md).
 
-Open-FDD uses **Project Haystack** semantics for sites, equipment, and points.
-Driver raw IDs map to Haystack refs through the assignment graph. Analytics and
-FDD rules consume **mapped SQL roles** after package ingest — not vendor point
-names.
+## Database design (Timescale)
 
-A ZIP that **imports successfully is not necessarily commissioning-grade**.
-Empty Overview / Inspect / health matrices almost always mean **missing roles
-in the package**, not a broken engine. See
-[Package authoring](../agent/PACKAGE_AUTHORING.md).
+Canonical store: **TimescaleDB / PostgreSQL** ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md), [TIMESCALE_WAVE_X](../operations/TIMESCALE_WAVE_X.md)). Schema in `sql/schema/` — no novel private layout.
+
+| Table | Role |
+|-------|------|
+| `sample` | Narrow hypertable `(site_id, openfdd_key, ts, …)` |
+| `point_map` | Opaque point → equipment / openfdd key |
+| `equipment` | Stamped `equip_type` (never invent from id text) |
+| `role_map` | Equipment → SQL roles |
+| `fdd_run` / `fdd_rule_registry` | Runs + registry metadata |
+
+Opaque point identity resolves via `GET /api/model/point-resolve` → SQL roles for FDD/analytics.
 
 ## Guides
 
 | Guide | Content |
 |-------|---------|
-| [**SQL rules → Haystack map**](sql-rules-haystack-map.html) | All production SQL rules + Haystack tags / SQL roles for the data model |
-| [Package schema](package-schema.html) | Compact ingest maps vs rich (SCAFFOLD) evidence |
-| [Heat-pump buildings](heat-pump-buildings.html) | WSHP topology, role tiers, anti-patterns |
-| [Zone terminals / FCU / UV](zone-terminals.html) | Haystack multi-tag (`equip` + `fanCoilUnit` + `zone`, point roles) collapses to a stamp plus mapped roles; UV = CV AHU |
-| [Tenant storage honesty](tenant-storage-honesty.html) | DM-05 hub-root paths vs optional `tenants/{tid}/` |
-| [Rule readiness](rule-readiness.html) | Runnable / missing / not applicable |
-| [Haystack model](haystack-model.html) | Sites, equipment, points, RDF APIs |
-| [Engineering quantities](engineering-quantities.html) | EQ-VOCAB capacities for ECM adapters |
-| [RDF vocabulary notes](rdf-vocabulary.html) | DM-10 projection honesty (no false markers) |
-| [**Haystack RDF profile**](haystack-rdf-profile.html) | `ofdd_haystack_projection_v1` strict interchange (C1 spec) |
-| [JSON / RDF crosswalk](data-model-json-rdf-crosswalk.html) | `openfdd_data_model_v1` ↔ native TTL ↔ strict Haystack |
-| [Haystack RDF evidence matrix (C1)](haystack-rdf-evidence-matrix.html) | HR/S5 reconciliation; Soft-OPEN rows stay open |
-| [Assignments](assignments.html) | Bind drivers → Haystack → FDD |
-
-## SQL FDD ↔ data model
-
-Commissioning-grade packages must map points so **every rule you care about** has its required Haystack tags (or package columns) → SQL roles. Full registry table:
-
-→ **[SQL rules → Haystack map](sql-rules-haystack-map.html)** (live count from `sql_rules/registry.yaml`)
-
-Rule recipes live in the **[Rule Cookbook]({{ site.baseurl }}/rules/)** (`/rules/` permalink is stable).
-
-## Agent entry points (repo)
-
-- Law: `AGENTS.md`
-- Authoring: `docs/agent/PACKAGE_AUTHORING.md`
-- Role aliases: `docs/migration/vibe19/ROLE_MAPPING_PARITY.md`
-- Ingest (read source): `edge/src/csv_ingest/package.rs`
-- SQL roles: `crates/fdd_core/src/columns.rs`
-- Equipment typing: `edge/src/equipment_types.rs`
-- Rules: `sql_rules/registry.yaml`
-
-**BUILDING_100**-style AHU/VAV archives are richness references only — do not
-copy that topology onto water-source heat-pump buildings.
+| [SQL rules → Haystack map](sql-rules-haystack-map.html) | Registry → tags / roles |
+| [Package schema](package-schema.html) | Ingest maps |
+| [Haystack model](haystack-model.html) | REST + SPARQL |
+| [Haystack RDF profile](haystack-rdf-profile.html) | Strict TTL projection |
+| [Zone terminals](zone-terminals.html) | FCU / UV stamps |
+| [Rule Cookbook]({{ site.baseurl }}/rules/) | SQL + pandas catalogs |

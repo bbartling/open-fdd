@@ -3,6 +3,7 @@ title: Generated parity report
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 5
+nav_exclude: true
 ---
 
 # Generated parity report

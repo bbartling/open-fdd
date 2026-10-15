@@ -3,6 +3,7 @@ title: Prerequisite macros
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 7
+nav_exclude: true
 ---
 
 # Reusable prerequisite macros

@@ -1,7 +1,8 @@
 ---
 title: Water & chiller FDD priority
 parent: Rule Cookbook
-nav_order: 1
+nav_order: 90
+nav_exclude: true
 permalink: /rules/water-chiller-fdd-priority/
 ---
 

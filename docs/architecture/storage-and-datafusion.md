@@ -1,44 +1,29 @@
 ---
-title: Storage & DataFusion
+title: Timescale historian & SQL
 parent: Architecture
 nav_order: 3
 ---
 
-# Storage & DataFusion
+# Timescale historian & SQL
 
-## Apache Parquet historian
+> Replaces the old “Storage & DataFusion” page. Soft-OPEN ≠ FQ.
 
-Telemetry is stored as **canonical Parquet** partitions under the configured storage root (`OPENFDD_STORAGE_URL` / workspace historian). Drivers and CSV/package import write columnar batches; DataFusion SQL FDD and Overview analytics scan those files.
+| Contract | Tip |
+|----------|-----|
+| Historian | **TimescaleDB** (`OPENFDD_DATABASE_URL`, `OPENFDD_HISTORIAN=timescale`) |
+| FDD / analytics | Versioned `.sql` packs (`sql/fdd`, `sql/analytics`) |
+| Forbidden | Dual-write, Parquet/DataFusion co-canonical ([ADR-010](adr-010-timescale-hard-cutover.md)) |
 
-Benefits at the edge:
+## Bring-up
 
-- Efficient columnar scans for trend plots and SQL rules
-- No external database server required
-- Portable files for backup and offline analysis
+See [TIMESCALE_WAVE_X](../operations/TIMESCALE_WAVE_X.md). Soft-OPEN Railway/ACME: no site backups unless asked; dual-write false.
 
-Query via REST:
-
-- `GET/POST /api/historian/query`
-- `GET /api/timeseries/readings`
-- Dashboard **Plots** tab
-
-## DataFusion SQL
-
-Fault detection rules are **DataFusion SQL** statements executed against historian tables. See the [**Rule Cookbook**]({{ site.baseurl }}/rules/cookbook/) for full HVAC patterns.
-
-API highlights:
+## APIs
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/rules` | List active rules |
-| POST | `/api/rules/save` | Save rule SQL |
-| POST | `/api/fdd/run` | Execute FDD run |
-| POST | `/api/fdd-rules/{id}/activate` | Activate rule |
+| GET | `/api/rules` | List rules |
+| POST | `/api/fdd/run` | Run registry FDD |
+| POST | `/api/analytics/*` | Overview / RCx SQL |
 
-Rules bind to Haystack point semantics through the assignment graph — configure assignments before expecting meaningful FDD output.
-
-## Data management
-
-The **Historian storage** tab (`/data-management`) inspects partitions and supports purge-by-source with preview/execute gates. Export CSV before destructive purges.
-
-See [DataFusion SQL Rules]({{ site.baseurl }}/rules/) for examples.
+Catalog: [Rule Cookbook]({{ site.baseurl }}/rules/). Schema: [Modeling → DB design]({{ site.baseurl }}/modeling/#database-design-timescale).

@@ -1,12 +1,12 @@
 ---
-title: DataFusion-first policy
+title: DataFusion-first (historical)
 parent: Architecture
 nav_order: 10
 ---
 
-# DataFusion-first policy
+# DataFusion-first policy (historical)
 
-**Status:** **SUPERSEDED for product path by [ADR-010](adr-010-timescale-hard-cutover.md) (Wave-X 3.6.0 Timescale hard cutover).** Retained as historical DF-era contract.
+> **SUPERSEDED.** Product path is Timescale-only ([ADR-010](adr-010-timescale-hard-cutover.md)). Soft-OPEN ≠ FQ. Live page: [Timescale historian & SQL](storage-and-datafusion.html).
 
 
 For tabular building telemetry computation in the **product**:

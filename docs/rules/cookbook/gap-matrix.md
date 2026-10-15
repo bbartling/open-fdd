@@ -3,6 +3,7 @@ title: Gap matrix
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 3
+nav_exclude: true
 ---
 
 # Gap matrix — cookbook vs public literature
