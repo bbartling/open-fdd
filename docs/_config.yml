@@ -45,6 +45,8 @@ exclude:
   # Historical ledgers — stay in git for agents/MCP; not human Pages nav.
   - migration
   - maintenance
+  - operations/patch_trains
+  - operations/recovery
   - PORT_FINISH_PLAN.md
   - PORT_FROM_VIBE19_INVENTORY.md
   - PORT_FROM_VIBE19_REMOVALS.md

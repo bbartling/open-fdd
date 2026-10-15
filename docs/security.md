@@ -28,7 +28,7 @@ The private report keeps the finding, discussion, evidence, affected versions, a
 
 If the form is unavailable, contact the maintainer only to request a private reporting path; do not send exploit details or secrets through a public channel.
 
-See the repository [`SECURITY.md`](../SECURITY.md) for the canonical reporting policy.
+See the repository [`SECURITY.md`](https://github.com/bbartling/open-fdd/blob/master/SECURITY.md) for the canonical reporting policy.
 
 ## Deployment posture
 
