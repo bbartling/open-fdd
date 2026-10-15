@@ -79,10 +79,22 @@ jobs:
                     [$a[] as $t | select(($b | index($t)) != null and ($c | index($t)) != null) | $t][0] // empty
                   ' <<<"$data")"
                 fi
-                # Last-known FQ OPS PINNED when GHCR listing is unavailable.
+                # Prefer central tip revision (nightly often retags without a fresh sha-* in mqtt top window).
+                if [[ -z "$tag" && -n "$data" ]]; then
+                  rev="$(jq -r '.[0].revision // empty' <<<"$data")"
+                  if [[ "$rev" =~ ^[0-9a-f]{40}$ ]]; then
+                    tip="sha-${rev:0:7}"
+                    if docker manifest inspect "ghcr.io/bbartling/openfdd-mqtt:${tip}" >/dev/null 2>&1                       && docker manifest inspect "ghcr.io/bbartling/openfdd-central:${tip}" >/dev/null 2>&1                       && docker manifest inspect "ghcr.io/bbartling/openfdd-fieldbus:${tip}" >/dev/null 2>&1; then
+                      tag="$tip"
+                      echo "using central tip revision tag ${tag}" >&2
+                    fi
+                  fi
+                fi
+                # Last-known published common tip when listing/API is unavailable (Wave-X 3.6.14).
+                # Do not use pruned historical FQ pins (sha-1677c33 / sha-7ad6479 are gone from GHCR).
                 if [[ -z "$tag" ]]; then
-                  tag="sha-1677c33"
-                  echo "newest-by-created unavailable; falling back to OPS PINNED ${tag}" >&2
+                  tag="sha-d252277"
+                  echo "newest-by-created unavailable; falling back to last-known published ${tag}" >&2
                 fi
               fi
               ;;
@@ -126,6 +138,7 @@ jobs:
             echo
             echo "- Open-FDD image tag: \`${{ steps.image.outputs.tag }}\`"
             echo "- BACnet simulator: BACpypes3 0.0.106 mini-device"
-            echo "- Product path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central parsed ingest + canonical historian"
+            echo "- Product path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central parsed ingest + Timescale historian"
+            echo "- Historian: Timescale via OPENFDD_DATABASE_URL (never Parquet; STORAGE-LOCK)"
             echo "- Product images are pulled from GHCR; only the lightweight Python simulator is built in this job."
           } >> "$GITHUB_STEP_SUMMARY"
