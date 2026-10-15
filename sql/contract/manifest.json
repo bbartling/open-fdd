@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 104,
-  "pack_sha256": "7d4b8294d16698a48e2dbbf940adaf93721fb24098c8c267b3b27f8951ae0cda",
+  "pack_sha256": "03c8ab4b4bd5a69c362407e89f8c2ce71c21224fd2328b17611ae85b6df8432c",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -447,8 +447,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/economizer_deltas.sql",
-      "sha256": "65f85b6aee711a6b3331962fe56effdb9184efd8cdbbfca50d8848ef29c6cda3",
-      "bytes": 1087
+      "sha256": "64dcfee4b807124d232836f6b95fd775016921fb4494ea5f57664394a6a7abf6",
+      "bytes": 1456
     },
     {
       "path": "sql/analytics/postgres/queries/fuel_daily.sql",
