@@ -384,9 +384,17 @@ pub async fn sensor_faults(
     ))
 }
 
-pub async fn setpoints_snapshot(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn setpoints_snapshot(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before latest-per-role (not building-only).
     let rows = sqlx::query(SETPOINTS_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("setpoints_snapshot")?;
@@ -399,12 +407,23 @@ pub async fn setpoints_snapshot(tsdb: &Tsdb, building_id: &str) -> Result<Value>
             "setpoint": r.try_get::<f64, _>("setpoint").ok(),
         }));
     }
-    Ok(envelope("setpoints", building_id, out))
+    Ok(with_scope_meta(
+        envelope("setpoints", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn diurnal_hourly(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn diurnal_hourly(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(DIURNAL_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("diurnal_hourly")?;
@@ -418,12 +437,23 @@ pub async fn diurnal_hourly(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
             "n": r.try_get::<i64, _>("n").ok(),
         }));
     }
-    Ok(envelope("diurnal", building_id, out))
+    Ok(with_scope_meta(
+        envelope("diurnal", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn topology_equipment(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn topology_equipment(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: equipment filter + window on sample subqueries (role_count / last_ts).
     let rows = sqlx::query(TOPOLOGY_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("topology_equipment")?;
@@ -441,12 +471,23 @@ pub async fn topology_equipment(tsdb: &Tsdb, building_id: &str) -> Result<Value>
                 .map(|t| t.to_rfc3339()),
         }));
     }
-    Ok(envelope("topology", building_id, out))
+    Ok(with_scope_meta(
+        envelope("topology", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn metering_kwh(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn metering_kwh(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(METERING_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("metering_kwh")?;
@@ -465,12 +506,23 @@ pub async fn metering_kwh(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
             "delta_val": r.try_get::<f64, _>("delta_val").ok(),
         }));
     }
-    Ok(envelope("metering", building_id, out))
+    Ok(with_scope_meta(
+        envelope("metering", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn pid_hunting_proxy(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn pid_hunting_proxy(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(PID_HUNTING_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("pid_hunting_proxy")?;
@@ -485,12 +537,23 @@ pub async fn pid_hunting_proxy(tsdb: &Tsdb, building_id: &str) -> Result<Value> 
             "hunt_flag": r.try_get::<String, _>("hunt_flag").unwrap_or_else(|_| "OK".into()),
         }));
     }
-    Ok(envelope("pid-hunting", building_id, out))
+    Ok(with_scope_meta(
+        envelope("pid-hunting", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn sql_anomaly_zscore(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn sql_anomaly_zscore(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(SQL_ANOMALY_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("sql_anomaly_zscore")?;
@@ -507,12 +570,23 @@ pub async fn sql_anomaly_zscore(tsdb: &Tsdb, building_id: &str) -> Result<Value>
             "anomaly_flag": r.try_get::<String, _>("anomaly_flag").unwrap_or_else(|_| "OK".into()),
         }));
     }
-    Ok(envelope("sql-anomaly", building_id, out))
+    Ok(with_scope_meta(
+        envelope("sql-anomaly", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn mv_change_point_daily(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn mv_change_point_daily(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(MV_CHANGE_POINT_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("mv_change_point_daily")?;
@@ -531,12 +605,23 @@ pub async fn mv_change_point_daily(tsdb: &Tsdb, building_id: &str) -> Result<Val
             "change_flag": r.try_get::<String, _>("change_flag").unwrap_or_else(|_| "STABLE".into()),
         }));
     }
-    Ok(envelope("mv-change-point", building_id, out))
+    Ok(with_scope_meta(
+        envelope("mv-change-point", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn fuel_daily(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn fuel_daily(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(FUEL_DAILY_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("fuel_daily")?;
@@ -555,12 +640,20 @@ pub async fn fuel_daily(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
             "delta_val": r.try_get::<f64, _>("delta_val").ok(),
         }));
     }
-    Ok(envelope("fuel", building_id, out))
+    Ok(with_scope_meta(envelope("fuel", building_id, out), scope))
 }
 
-pub async fn rcx_preset_role_coverage(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn rcx_preset_role_coverage(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(RCX_PRESET_COVERAGE_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("rcx_preset_role_coverage")?;
@@ -578,7 +671,10 @@ pub async fn rcx_preset_role_coverage(tsdb: &Tsdb, building_id: &str) -> Result<
                 .map(|t| t.to_rfc3339()),
         }));
     }
-    Ok(envelope("rcx-preset-coverage", building_id, out))
+    Ok(with_scope_meta(
+        envelope("rcx-preset-coverage", building_id, out),
+        scope,
+    ))
 }
 
 pub async fn economizer_deltas(
@@ -780,15 +876,15 @@ pub async fn respond_query(
         "schedule" => schedule_occupancy(&tsdb, &building, &scope).await,
         "sensor-stats" => sensor_stats(&tsdb, &building, &scope).await,
         "sensor-faults" => sensor_faults(&tsdb, &building, &scope).await,
-        "setpoints" => setpoints_snapshot(&tsdb, &building).await,
-        "diurnal" => diurnal_hourly(&tsdb, &building).await,
-        "topology" => topology_equipment(&tsdb, &building).await,
-        "metering" => metering_kwh(&tsdb, &building).await,
-        "pid-hunting" => pid_hunting_proxy(&tsdb, &building).await,
-        "sql-anomaly" => sql_anomaly_zscore(&tsdb, &building).await,
-        "mv-change-point" => mv_change_point_daily(&tsdb, &building).await,
-        "fuel" => fuel_daily(&tsdb, &building).await,
-        "rcx-preset-coverage" => rcx_preset_role_coverage(&tsdb, &building).await,
+        "setpoints" => setpoints_snapshot(&tsdb, &building, &scope).await,
+        "diurnal" => diurnal_hourly(&tsdb, &building, &scope).await,
+        "topology" => topology_equipment(&tsdb, &building, &scope).await,
+        "metering" => metering_kwh(&tsdb, &building, &scope).await,
+        "pid-hunting" => pid_hunting_proxy(&tsdb, &building, &scope).await,
+        "sql-anomaly" => sql_anomaly_zscore(&tsdb, &building, &scope).await,
+        "mv-change-point" => mv_change_point_daily(&tsdb, &building, &scope).await,
+        "fuel" => fuel_daily(&tsdb, &building, &scope).await,
+        "rcx-preset-coverage" => rcx_preset_role_coverage(&tsdb, &building, &scope).await,
         other => Ok(json!({
             "query_id": other,
             "building_id": building,
@@ -875,6 +971,20 @@ mod pack_version_tests {
             PLANT_HEALTH_SQL.contains("$2::text[]") || PLANT_HEALTH_SQL.contains("ANY ($2)"),
             "plant-health inventory must bind equipment_ids ($2)"
         );
+    }
+
+    #[test]
+    fn residual_traffic_sql_declares_window_and_equipment_binds() {
+        // Soft-OPEN post-#1265: remaining advertised sample/topology routes.
+        assert_window_equipment_binds(DIURNAL_SQL, "diurnal");
+        assert_window_equipment_binds(FUEL_DAILY_SQL, "fuel");
+        assert_window_equipment_binds(METERING_SQL, "metering");
+        assert_window_equipment_binds(SETPOINTS_SQL, "setpoints");
+        assert_window_equipment_binds(PID_HUNTING_SQL, "pid-hunting");
+        assert_window_equipment_binds(SQL_ANOMALY_SQL, "sql-anomaly");
+        assert_window_equipment_binds(MV_CHANGE_POINT_SQL, "mv-change-point");
+        assert_window_equipment_binds(RCX_PRESET_COVERAGE_SQL, "rcx-preset-coverage");
+        assert_window_equipment_binds(TOPOLOGY_SQL, "topology");
     }
 
     #[test]

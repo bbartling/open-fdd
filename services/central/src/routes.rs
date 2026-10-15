@@ -7495,27 +7495,36 @@ async fn analytics_fuel(
             .filter(|s| !s.is_empty())
         {
             match fdd_tsdb::Tsdb::connect_from_env().await {
-                Ok(tsdb) => match crate::timescale_analytics::fuel_daily(&tsdb, building).await {
-                    Ok(v) => {
-                        return Ok(Json(json!({
-                            "ok": true,
-                            "analytics": v,
-                            "engine": "timescale-sql",
-                            "soft_open_neq_fq": true,
-                            "note": "Timescale fuel_daily Soft-OPEN; campus EUI import path unchanged",
-                        })));
-                    }
-                    Err(e) => {
-                        return Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!({
-                                "ok": false,
-                                "error": e.to_string(),
+                Ok(tsdb) => {
+                    // FuelRequest has no window/equipment yet — open scope (all).
+                    // Universal /api/analytics/query?query_id=fuel binds from AnalyticsRequest.
+                    let scope = crate::timescale_analytics::AnalyticsSqlScope {
+                        start: None,
+                        end: None,
+                        equipment_ids: Vec::new(),
+                    };
+                    match crate::timescale_analytics::fuel_daily(&tsdb, building, &scope).await {
+                        Ok(v) => {
+                            return Ok(Json(json!({
+                                "ok": true,
+                                "analytics": v,
                                 "engine": "timescale-sql",
-                            })),
-                        ));
+                                "soft_open_neq_fq": true,
+                                "note": "Timescale fuel_daily Soft-OPEN; campus EUI import path unchanged",
+                            })));
+                        }
+                        Err(e) => {
+                            return Err((
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({
+                                    "ok": false,
+                                    "error": e.to_string(),
+                                    "engine": "timescale-sql",
+                                })),
+                            ));
+                        }
                     }
-                },
+                }
                 Err(e) => {
                     return Err((
                         StatusCode::SERVICE_UNAVAILABLE,
