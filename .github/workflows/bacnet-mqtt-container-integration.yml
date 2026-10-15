@@ -126,6 +126,7 @@ jobs:
             echo
             echo "- Open-FDD image tag: \`${{ steps.image.outputs.tag }}\`"
             echo "- BACnet simulator: BACpypes3 0.0.106 mini-device"
-            echo "- Product path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central parsed ingest + canonical historian"
+            echo "- Product path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central parsed ingest + Timescale historian"
+            echo "- Historian: Timescale via OPENFDD_DATABASE_URL (never Parquet; STORAGE-LOCK)"
             echo "- Product images are pulled from GHCR; only the lightweight Python simulator is built in this job."
           } >> "$GITHUB_STEP_SUMMARY"

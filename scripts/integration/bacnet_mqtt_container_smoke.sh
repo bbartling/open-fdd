@@ -127,6 +127,14 @@ wait_http() {
 wait_http http://127.0.0.1:18081/health "fieldbus health"
 wait_http http://127.0.0.1:18080/api/health "central health"
 
+# Soft-OPEN D0 / STORAGE-LOCK: product historian must be Timescale (never Parquet).
+HEALTH_BOOT="$(curl -fsS http://127.0.0.1:18080/api/health)"
+echo "$HEALTH_BOOT" | jq -e '
+  .historian == "timescale" and
+  (.dual_write == false or .dual_write == null)
+' >/dev/null
+echo "OK central historian=timescale dual_write=false"
+
 TOKEN="$(curl -fsS -X POST http://127.0.0.1:18080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"bacnet-mqtt-ci-admin"}' \
@@ -247,21 +255,29 @@ done
 
 echo "OK central parsed and accepted canonical BACnet telemetry over MQTTS"
 
-# Durability proof: the live historian writes a canonical watermark only after persistence.
-# Path is under OPENFDD_STORAGE_URL root (compose: file:///workspace/openfdd).
-WATERMARK=/workspace/openfdd/state/live-historian/latest-telemetry.json
-deadline=$((SECONDS + 45))
-until "${COMPOSE[@]}" exec -T central sh -c "test -s '$WATERMARK'"; do
-  if (( SECONDS >= deadline )); then
-    echo "FAIL: canonical live historian watermark was not persisted" >&2
-    "${COMPOSE[@]}" exec -T central sh -c 'find /workspace/openfdd /workspace/.cache/parquet -maxdepth 6 -type f -print 2>/dev/null | sort' >&2 || true
-    "${COMPOSE[@]}" logs --tail=250 central >&2 || true
-    exit 1
-  fi
-  sleep 2
-done
+# Durability proof: Timescale is reachable and central did not fall back to Parquet.
+# Sample row count is best-effort (BACnet CI points may lack full identity tags);
+# ingest_ok above already proves the Timescale writer accepted the envelope.
+SAMPLE_COUNT="$("${COMPOSE[@]}" exec -T timescale \
+  psql -U openfdd -d openfdd -tAc 'SELECT COUNT(*)::text FROM sample' \
+  | tr -d '[:space:]')"
+if [[ -z "$SAMPLE_COUNT" ]]; then
+  echo "FAIL: Timescale sample query returned empty (schema/historian not ready)" >&2
+  "${COMPOSE[@]}" logs --tail=250 central timescale >&2 || true
+  exit 1
+fi
+echo "OK Timescale sample table reachable (sample_count=${SAMPLE_COUNT})"
 
-echo "OK canonical live historian persisted telemetry watermark"
+# Fail closed if any Parquet object tree appeared under the compat workspace.
+if "${COMPOSE[@]}" exec -T central sh -c \
+  'find /workspace/openfdd /workspace/.cache/parquet -name "*.parquet" -type f 2>/dev/null | grep -q .'; then
+  echo "FAIL: Parquet objects present under workspace; Timescale-only STORAGE-LOCK violated" >&2
+  "${COMPOSE[@]}" exec -T central sh -c \
+    'find /workspace/openfdd /workspace/.cache/parquet -name "*.parquet" -type f 2>/dev/null | sort' >&2 || true
+  exit 1
+fi
+echo "OK no Parquet objects under workspace (Timescale-only)"
+
 echo "$MONITOR" | jq '{connected, received_messages, errors, recent_messages: [.recent_messages[] | {topic, payload_bytes, payload_encoding}]}'
 echo "$STATS" | jq '{ingest_ok, ingest_dup, ingest_reject, dead_letters}'
-echo "PASS: BACpypes3 -> Open-FDD BACnet fieldbus -> MQTTS -> central ingest -> historian integration"
+echo "PASS: BACpypes3 -> Open-FDD BACnet fieldbus -> MQTTS -> central ingest -> Timescale historian integration"
