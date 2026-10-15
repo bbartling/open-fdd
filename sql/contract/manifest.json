@@ -12,8 +12,8 @@
   ],
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
-  "file_count": 103,
-  "pack_sha256": "061a0963fd506f48189f1a8feb64f9268e2acbd254408b30f621c8d7fd7f771a",
+  "file_count": 104,
+  "pack_sha256": "7d4b8294d16698a48e2dbbf940adaf93721fb24098c8c267b3b27f8951ae0cda",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -429,6 +429,11 @@
       "path": "sql/fdd/input_contract.sql",
       "sha256": "4309a54275bf101dbde26aeca860756db92d3dde2e5b5f08733eecf30adf1ab2",
       "bytes": 2668
+    },
+    {
+      "path": "sql/fdd/registry.yaml",
+      "sha256": "af36eede34a508831f2eff809853e8c0b4c5cec97bc4e0150157f262e8514787",
+      "bytes": 145747
     },
     {
       "path": "sql/analytics/postgres/queries/bas_vs_web_oat.sql",

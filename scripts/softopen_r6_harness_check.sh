@@ -117,6 +117,15 @@ if drift:
 print(f"OK: installed checksum/size match ({len(files)} files, pack_sha256 pin)")
 PY
 
+# 7) C2 FDD SQL checksum compare (77 rules + registry vs contract; optional BPS vendor).
+#    Canonical pack is sql/fdd — not legacy sql_rules/. Soft-OPEN ≠ FQ.
+if ! python3 "$ROOT/scripts/sql_fdd_bps_checksum_compare.py"; then
+  echo "FAIL: C2 sql_fdd_bps_checksum_compare"
+  fail=1
+else
+  echo "OK: C2 FDD SQL checksum compare"
+fi
+
 if [[ "$fail" -ne 0 ]]; then
   echo "Soft-OPEN harness FAILED"
   exit 1
