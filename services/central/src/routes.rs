@@ -231,6 +231,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/fdd/results/readiness", get(fdd_results_readiness))
         .route("/api/fdd/series", get(fdd_series))
         .route("/api/fdd/plot", get(fdd_plot))
+        .route("/api/fdd/plots-by-rule", get(fdd_plots_by_rule))
         .route("/api/fdd/roles", get(fdd_roles))
         .route("/api/fdd/cookbook-roles", get(fdd_cookbook_roles))
         .route(
@@ -3988,6 +3989,26 @@ async fn fdd_plot_inner(
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("series task failed: {e}")}));
     Ok(Json(result))
+}
+
+/// Soft-OPEN R4: catalog lean-plot roles per rule (Timescale path).
+pub async fn fdd_plots_by_rule() -> Json<Value> {
+    if crate::timescale_historian::historian_is_timescale() {
+        return match crate::timescale_product::plots_by_rule_catalog() {
+            Ok(v) => Json(v),
+            Err(e) => Json(json!({
+                "ok": false,
+                "error": e.to_string(),
+                "engine": "timescale-sql",
+                "rules": [],
+            })),
+        };
+    }
+    Json(json!({
+        "ok": false,
+        "error": "plots-by-rule Soft-OPEN requires Timescale product historian",
+        "rules": [],
+    }))
 }
 
 pub async fn fdd_roles() -> Json<Value> {

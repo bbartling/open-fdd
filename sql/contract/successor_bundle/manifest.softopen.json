@@ -1,6 +1,6 @@
 {
   "bundle_id": "openfdd-successor-contract-softopen",
-  "bundle_version": "3.6.9-softopen",
+  "bundle_version": "3.6.10-softopen",
   "status": "softopen",
   "soft_open_neq_fq": true,
   "preserve_original_warehouse": {

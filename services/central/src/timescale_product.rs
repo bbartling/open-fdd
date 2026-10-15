@@ -940,6 +940,9 @@ LIMIT $2
     } else {
         json!(note_parts.join(" "))
     };
+    // Soft-OPEN R4: surface lean plot budgets for SPA (roles ≤6, pts hard-cap).
+    let approx_bytes =
+        point_count.saturating_mul(roles.len().saturating_mul(24).saturating_add(32));
     Ok(json!({
         "ok": true,
         "equipment_id": equipment_id,
@@ -954,10 +957,47 @@ LIMIT $2
         "point_count": point_count,
         "downsampled": true,
         "max_points": max_pts,
+        "lean_budget": {
+            "max_roles": LEAN_PLOT_MAX_ROLES,
+            "default_points": LEAN_PLOT_DEFAULT_POINTS,
+            "hard_cap_points": LEAN_PLOT_HARD_CAP,
+            "approx_payload_bytes": approx_bytes,
+        },
         "note": note,
         "has_confirmed_fault": out_rows.iter().any(|r| r.get("confirmed_fault").and_then(|v| v.as_bool()).is_some()),
         "engine": TS_ENGINE,
         "source": "timescale_sample",
+        "soft_open_neq_fq": true,
+    }))
+}
+
+/// Soft-OPEN R4: catalog plot roles per rule (no historian read) for SPA menus.
+pub fn plots_by_rule_catalog() -> Result<Value> {
+    let reg = load_reg()?;
+    let mut rules = Vec::with_capacity(reg.rules.len());
+    for rule in &reg.rules {
+        let roles = catalog_plot_roles(rule);
+        rules.push(json!({
+            "rule_id": rule.rule_id,
+            "aliases": rule.aliases,
+            "roles": roles,
+            "role_count": roles.len(),
+            "max_roles": LEAN_PLOT_MAX_ROLES,
+            "equipment_kinds": rule.equipment_kinds,
+        }));
+    }
+    Ok(json!({
+        "ok": true,
+        "engine": TS_ENGINE,
+        "count": rules.len(),
+        "lean_budget": {
+            "max_roles": LEAN_PLOT_MAX_ROLES,
+            "default_points": LEAN_PLOT_DEFAULT_POINTS,
+            "hard_cap_points": LEAN_PLOT_HARD_CAP,
+        },
+        "rules": rules,
+        "soft_open_neq_fq": true,
+        "note": "Soft-OPEN catalog plot roles — Soft-OPEN ≠ FQ",
     }))
 }
 

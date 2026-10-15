@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-sql-schema-fdd-v1",
-  "contract_version": "3.6.9-softopen",
+  "contract_version": "3.6.10-softopen",
   "engine": "timescale/postgresql",
   "product": "open-fdd",
   "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd + sql/analytics pack hash; twin layers must not fork equations",
@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 103,
-  "pack_sha256": "e7920f24ffcbb2e2832c151343930e5ee6c3591c23f5dc3ce1967f6a7499c488",
+  "pack_sha256": "bb0c495e41cb30e1740d1bbfb7026aca46b17acf6be72494bc484d4e3eda85d1",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -522,13 +522,13 @@
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "9cc9705aae49b26047f7fa5acfe71f330290198adcf6cac0b95b9ab28bd42fcc",
-      "bytes": 3997
+      "sha256": "87bd8c9796a57fe2fe61a631a256eb4f7fc8b81487e1c976d5f5e890e32acf33",
+      "bytes": 3998
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",
-      "sha256": "eb9c6a489639fb5dcd29923ec9d04f2b43c0bbd80b713746d9b1c483c51aa349",
-      "bytes": 1292
+      "sha256": "eb9fd5219b7aef4d12f370fa2e75b88f385ca64d8bc62c1a30586bedd0c9d31a",
+      "bytes": 1293
     }
   ]
 }
