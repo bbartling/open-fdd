@@ -18,7 +18,10 @@ import { getPackageMapping } from "../api/mappingApi";
 import {
   getFddResults,
   getFddSeries,
+  leanPlotDefaultPoints,
+  listFddPlotsByRule,
   listFddRules,
+  type FddPlotsByRuleLeanBudget,
   type FddResultRow,
   type FddRuleSummary,
 } from "../api/fddApi";
@@ -122,6 +125,10 @@ export function ReportsPage() {
   const [sensorFaultLoading, setSensorFaultLoading] = useState(false);
   const [sensorError, setSensorError] = useState<string | null>(null);
   const [sensorOpen, setSensorOpen] = useState(false);
+  /** Soft-OPEN R4: lean_budget from GET /api/fdd/plots-by-rule. */
+  const [leanBudget, setLeanBudget] = useState<FddPlotsByRuleLeanBudget | null>(
+    null,
+  );
 
   useEffect(() => {
     void listFddRules()
@@ -130,6 +137,12 @@ export function ReportsPage() {
         setRules(list);
       })
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    void listFddPlotsByRule()
+      .then((cat) => setLeanBudget(cat.lean_budget ?? null))
+      .catch(() => setLeanBudget(null));
   }, []);
 
   useEffect(() => {
@@ -276,7 +289,7 @@ export function ReportsPage() {
     try {
       const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined, {
         signal: ac.signal,
-        maxPoints: 1500,
+        maxPoints: leanPlotDefaultPoints(leanBudget),
       });
       let rows = (series.rows ?? []) as Array<Record<string, unknown>>;
       const zoneRule = isZoneTempRule(ruleId, rules);
@@ -368,7 +381,15 @@ export function ReportsPage() {
     } finally {
       if (!ac.signal.aborted) setLoading(false);
     }
-  }, [buildingId, equipmentId, ruleId, results, rules, applyZoneComfortGate]);
+  }, [
+    buildingId,
+    equipmentId,
+    ruleId,
+    results,
+    rules,
+    applyZoneComfortGate,
+    leanBudget,
+  ]);
 
   useEffect(() => {
     if (!buildingId || !equipmentId || !ruleId) return;
