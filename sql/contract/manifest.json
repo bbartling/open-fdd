@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-sql-schema-fdd-v1",
-  "contract_version": "3.6.6-softopen",
+  "contract_version": "3.6.7-softopen",
   "engine": "timescale/postgresql",
   "product": "open-fdd",
   "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd + sql/analytics pack hash; twin layers must not fork equations",
@@ -12,8 +12,8 @@
   ],
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
-  "file_count": 93,
-  "pack_sha256": "b6ba838d17c7b0cba969a02531829964eaf6cd469bf03cd171bc81dc55d25797",
+  "file_count": 99,
+  "pack_sha256": "a30ccec9e420928079bb39c13eccf02e57894db597ff0345f8cf3443c13aa71f",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -436,6 +436,11 @@
       "bytes": 585
     },
     {
+      "path": "sql/analytics/postgres/queries/diurnal_hourly.sql",
+      "sha256": "8df7ba971ab66685c48cdf31e1b699832829f20af354150b85eeb3e87af76e24",
+      "bytes": 580
+    },
+    {
       "path": "sql/analytics/postgres/queries/economizer_deltas.sql",
       "sha256": "65f85b6aee711a6b3331962fe56effdb9184efd8cdbbfca50d8848ef29c6cda3",
       "bytes": 1087
@@ -446,9 +451,19 @@
       "bytes": 1677
     },
     {
+      "path": "sql/analytics/postgres/queries/metering_kwh.sql",
+      "sha256": "de913f013a9973f8cfc6e23c98547b777c03eb2ba980db80cf324ae58a82d6fe",
+      "bytes": 768
+    },
+    {
       "path": "sql/analytics/postgres/queries/motor_weekly_runtime.sql",
       "sha256": "0b1c31c1d0885283e7e919b1b22e5c982ce6887c402e783ec690b59f3cfd287f",
       "bytes": 808
+    },
+    {
+      "path": "sql/analytics/postgres/queries/pid_hunting_proxy.sql",
+      "sha256": "fdf7f8a539fc6d8ee5cce7eff8200ac522d820b0b33e59a3e6e6787c30eb72c1",
+      "bytes": 740
     },
     {
       "path": "sql/analytics/postgres/queries/plant_health_inventory.sql",
@@ -466,19 +481,34 @@
       "bytes": 286
     },
     {
+      "path": "sql/analytics/postgres/queries/sensor_faults_staleness.sql",
+      "sha256": "6112ed0a8be1ca9bdcd9f29ef8eb7ac64ac6f0df464e4c17194d5f1321498a6e",
+      "bytes": 1262
+    },
+    {
       "path": "sql/analytics/postgres/queries/sensor_stats.sql",
       "sha256": "aa8a36b07cec2d6ad04da819856b95a7f72a50c7d47e84df272e16b361621097",
       "bytes": 507
     },
     {
+      "path": "sql/analytics/postgres/queries/setpoints_snapshot.sql",
+      "sha256": "81bfd8e39d143304e62af0e335d7a864fe0c510766fe7c3aae00fa50d801bde9",
+      "bytes": 826
+    },
+    {
+      "path": "sql/analytics/postgres/queries/topology_equipment.sql",
+      "sha256": "ab82256161cd89f14a0b76f1e21fdbab11aa21345bd3c00928876be9a1edc029",
+      "bytes": 662
+    },
+    {
       "path": "sql/analytics/registry.json",
-      "sha256": "1a01c040b72083adaaffd4fa8374839e9dba8b9908be2dfddf76b68f088f063c",
-      "bytes": 2171
+      "sha256": "5311a597d0bda6a9fc4ff64cac0c4ada67a86d4b44c52db3c1ae0535bb1835d7",
+      "bytes": 3068
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",
-      "sha256": "0d924504b838ebcd7fcb245835456c2130cf405892ee21d0279bbef1cb7aa7fe",
-      "bytes": 929
+      "sha256": "11ea0d6482d0cc418b4405ae3767150e304d9183076d50c568c22dfc74a394d7",
+      "bytes": 1289
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "pack_id": "openfdd-analytics-sql-v1",
-  "pack_version": "3.6.6-softopen",
+  "pack_version": "3.6.7-softopen",
   "engine": "timescale/postgresql",
   "soft_open_neq_fq": true,
   "bps_oss_parity": "same analytics pack hash — twin layers must not fork equations",
@@ -60,17 +60,42 @@
       "query_id": "sensor-stats",
       "sql_path": "sql/analytics/postgres/queries/sensor_stats.sql",
       "status": "softopen"
+    },
+    {
+      "query_id": "sensor-faults",
+      "sql_path": "sql/analytics/postgres/queries/sensor_faults_staleness.sql",
+      "status": "softopen",
+      "notes": "staleness/flatline/range Soft-OPEN; full SV suite later"
+    },
+    {
+      "query_id": "setpoints",
+      "sql_path": "sql/analytics/postgres/queries/setpoints_snapshot.sql",
+      "status": "softopen"
+    },
+    {
+      "query_id": "diurnal",
+      "sql_path": "sql/analytics/postgres/queries/diurnal_hourly.sql",
+      "status": "softopen"
+    },
+    {
+      "query_id": "topology",
+      "sql_path": "sql/analytics/postgres/queries/topology_equipment.sql",
+      "status": "softopen"
+    },
+    {
+      "query_id": "metering",
+      "sql_path": "sql/analytics/postgres/queries/metering_kwh.sql",
+      "status": "softopen"
+    },
+    {
+      "query_id": "pid-hunting",
+      "sql_path": "sql/analytics/postgres/queries/pid_hunting_proxy.sql",
+      "status": "softopen",
+      "notes": "stddev hunting proxy Soft-OPEN; full PID-HUNT later"
     }
   ],
   "remaining_routes": [
-    "inspect",
-    "sensor-faults",
-    "pid-hunting",
-    "setpoints",
-    "diurnal",
-    "topology",
     "sql-anomaly",
-    "metering",
     "mv-change-point",
     "fuel",
     "rcx/preset",

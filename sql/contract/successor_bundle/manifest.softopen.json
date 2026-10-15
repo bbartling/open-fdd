@@ -1,7 +1,7 @@
 {
   "bundle_id": "openfdd-successor-contract-softopen",
-  "bundle_version": "3.6.6-softopen-scaffold",
-  "status": "softopen_scaffold",
+  "bundle_version": "3.6.7-softopen",
+  "status": "softopen",
   "soft_open_neq_fq": true,
   "preserve_original_warehouse": {
     "name": "OPENFDD_WAREHOUSE_SYNTHETIC_HANDOFF_20261012.zip",
@@ -12,12 +12,20 @@
   "analytics_pack": "sql/analytics/registry.json",
   "fdd_rules": "sql/fdd/postgres/rules",
   "schema": "sql/schema",
+  "checksums": "sql/contract/successor_bundle/FILES.sha256",
+  "harness": "scripts/softopen_r6_harness_check.sh",
   "bps_oss_parity": "apples-to-apples: same schema + FDD + analytics pack hash",
   "forbidden": [
     "edit-original-goldens-in-place",
     "dual-write",
     "parquet-co-canonical",
     "equation-fork"
+  ],
+  "shipped_softopen": [
+    "analytics SQL pack bodies (runtime through pid-hunting Soft-OPEN)",
+    "R6 adapter gaps 1–12 Soft-OPEN dispositions",
+    "FILES.sha256 ledger aligned with contract manifest",
+    "smoke harness pin (77 rules + original hash)"
   ],
   "next": [
     "CI drift gate: image SQL hash == manifest",
