@@ -33,6 +33,7 @@ import {
   isZoneTerminalEquipment,
 } from "../lib/overviewMetrics";
 import { naturalCompare } from "../lib/naturalSort";
+import { normalizeTipOverviewEnvelope } from "./tipAnalyticsNormalize";
 
 function num(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -720,12 +721,25 @@ export async function fetchCentralOverview(opts: {
     ...(opts.refresh ? { refresh: true } : {}),
   };
 
-  // Heavy DataFusion POSTs stay sequential on large historians:
+  // Heavy analytics POSTs stay sequential on large historians:
   // Promise.all of runtime+mech+econ+bas starved central → nginx 502.
-  const runtime = await postRuntime(body, { signal });
-  const mech = await postMechanicalCooling(body, { signal });
-  const econ = await postEconomizer(body, { signal });
-  const bas = await postBasVsWebOat(body, { signal });
+  // Soft-OPEN C4: normalize tip Timescale row/column aliases before Plotly builders.
+  const runtime = normalizeTipOverviewEnvelope(
+    "runtime",
+    await postRuntime(body, { signal }),
+  );
+  const mech = normalizeTipOverviewEnvelope(
+    "mechanical-cooling",
+    await postMechanicalCooling(body, { signal }),
+  );
+  const econ = normalizeTipOverviewEnvelope(
+    "economizer",
+    await postEconomizer(body, { signal }),
+  );
+  const bas = normalizeTipOverviewEnvelope(
+    "bas-vs-web-oat",
+    await postBasVsWebOat(body, { signal }),
+  );
 
   const runtimeRows = runtime.rows?.length ? runtime.rows : runtime.equipment;
   const equipmentTotals =
@@ -803,7 +817,7 @@ export async function fetchCentralOverview(opts: {
   return {
     ok: true,
     building_id,
-    source: "central-datafusion",
+    source: "central-analytics",
     elapsed_s,
     equipment_count: equipmentIds.length,
     equipment_ids: equipmentIds,
