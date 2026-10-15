@@ -7,6 +7,7 @@ authority surface:
 
   - ``PUT /api/model/semantic-meta`` — dry_run + expected_revision CAS (HR-07)
   - ``GET /api/model/semantic-meta`` — tip meta + revision
+  - ``GET /api/model/agent-context`` — BPS-compatible recipe bundle (revision + tree)
   - ``GET /api/model/ttl`` — BPS-compatible alias → Haystack projection Turtle
   - Read: ``POST /api/model/sparql``, point-resolve
   - Write-ish (bundle): commissioning-import / assignments/save
@@ -148,6 +149,36 @@ def main(argv: list[str] | None = None) -> int:
                 f"(GET status={status_g} present={got.get('present') if isinstance(got, dict) else None})"
             )
 
+        # BPS-compatible agent-context bundle (read)
+        status_a, _, raw_a = http.request(
+            "GET",
+            "/api/model/agent-context",
+            headers=headers,
+            params={"building_id": building_id},
+            timeout=30.0,
+        )
+        try:
+            ctx = json.loads(raw_a.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            ctx = {}
+        safe_print(f"GET /api/model/agent-context -> HTTP {status_a}")
+        if status_a == 404:
+            safe_print(
+                "GAP: /api/model/agent-context missing on this tip — "
+                "need Soft-OPEN agent-context PR (#997/#1123)"
+            )
+            return 1
+        if status_a != 200 or not isinstance(ctx, dict) or ctx.get("ok") is not True:
+            safe_print(f"FAIL: agent-context contract missing ok=true — {ctx!r}")
+            return 1
+        if ctx.get("writable_layer") != "openfdd_semantic_meta_v1":
+            safe_print(f"FAIL: unexpected writable_layer — {ctx.get('writable_layer')!r}")
+            return 1
+        if not isinstance(ctx.get("recipes"), list) or not ctx["recipes"]:
+            safe_print("FAIL: agent-context recipes missing")
+            return 1
+        safe_print("  agent-context contract OK")
+
         # BPS-compatible TTL alias (read)
         status_t, hdrs_t, _raw_t = http.request(
             "GET",
@@ -163,8 +194,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     safe_print(
-        "PASS 10 — semantic-meta dry_run (+ optional CAS) + /api/model/ttl alias. "
-        "Soft-OPEN ≠ FQ (no full BPS overlay tombstone CRUD)"
+        "PASS 10 — semantic-meta dry_run (+ optional CAS) + agent-context + "
+        "/api/model/ttl alias. Soft-OPEN ≠ FQ (no full BPS overlay tombstone CRUD)"
     )
     return 0
 

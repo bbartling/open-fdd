@@ -235,6 +235,8 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/model/semantic-meta",
             get(csv_import_package_mapping_semantic_meta).put(model_semantic_meta_put),
         )
+        // Soft-OPEN: BPS-compatible agent recipe bundle (read-only; ≠ overlay equip CRUD).
+        .route("/api/model/agent-context", get(model_agent_context))
         // Soft-OPEN R8a: tip-safe read-only schema/contract probe (no migrator apply).
         .route(
             "/api/admin/schema-contract",
@@ -5190,6 +5192,193 @@ pub async fn model_semantic_meta_put(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AgentContextQuery {
+    /// Open-FDD building scope (preferred).
+    #[serde(default)]
+    building_id: Option<String>,
+    /// BPS alias for `building_id` (accepted when `building_id` is absent).
+    #[serde(default)]
+    site_id: Option<String>,
+}
+
+fn agent_context_model_tree(
+    meta: Option<&open_fdd_edge_prototype::csv_ingest::semantic_meta::SemanticMetaV1>,
+    inventory: &Value,
+) -> Value {
+    if let Some(m) = meta {
+        let equipment: Vec<Value> = m
+            .equipment
+            .iter()
+            .map(|e| {
+                json!({
+                    "equipment_id": e.equipment_id,
+                    "display_name": e.display_name,
+                    "haystack_tags": e.haystack_tags,
+                })
+            })
+            .collect();
+        let points: Vec<Value> = m
+            .points
+            .iter()
+            .map(|p| {
+                json!({
+                    "equipment_id": p.equipment_id,
+                    "point_id": p.point_id.as_deref().unwrap_or(p.column.as_str()),
+                    "column": p.column,
+                    "haystack_tags": p.haystack_tags,
+                    "unit": p.unit,
+                })
+            })
+            .collect();
+        return json!({
+            "source": "semantic_meta",
+            "equipment": equipment,
+            "points": points,
+            "equipment_count": equipment.len(),
+            "point_count": points.len(),
+        });
+    }
+    let inv_ok = inventory.get("ok").and_then(|v| v.as_bool()) == Some(true);
+    if inv_ok {
+        let equipment_ids = inventory
+            .get("equipment_ids")
+            .cloned()
+            .unwrap_or_else(|| json!([]));
+        let eq_count = inventory
+            .get("equipment")
+            .and_then(|v| v.as_array())
+            .map(|a| a.len())
+            .or_else(|| equipment_ids.as_array().map(|a| a.len()))
+            .unwrap_or(0);
+        return json!({
+            "source": "inventory",
+            "equipment_ids": equipment_ids,
+            "equipment_count": eq_count,
+            "point_count": 0,
+            "note": "semantic_meta absent — inventory ids only (no point overlay)",
+        });
+    }
+    json!({
+        "source": "empty",
+        "equipment": [],
+        "points": [],
+        "equipment_count": 0,
+        "point_count": 0,
+    })
+}
+
+/// Soft-OPEN: BPS-compatible agent context bundle (#997/#1123).
+///
+/// Read-only recipe + revision + lean model tree from native
+/// `openfdd_semantic_meta_v1` (not BPS Turtle overlay). Soft-OPEN ≠ FQ —
+/// does not ship overlay PUT or equip/point tombstone CRUD.
+pub async fn model_agent_context(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<AgentContextQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let building_id = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            q.site_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .map(str::to_string);
+    let Some(building_id) = building_id else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id (or site_id alias) query parameter required",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let result = tokio::task::spawn_blocking(move || {
+        let root = open_fdd_edge_prototype::historian::store::workspace_dir()
+            .join("data")
+            .join("csv_buildings")
+            .join(&building_id);
+        let meta = match open_fdd_edge_prototype::csv_ingest::semantic_meta::load_persisted(&root)
+        {
+            Ok(m) => m,
+            Err(e) => {
+                return json!({
+                    "ok": false,
+                    "error": e,
+                    "building_id": building_id,
+                    "soft_open_neq_fq": true,
+                });
+            }
+        };
+        let revision = meta
+            .as_ref()
+            .and_then(|m| m.revision.clone())
+            .map(Value::String)
+            .unwrap_or(Value::Null);
+        let inventory =
+            open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler_scoped(
+                &building_id,
+                None,
+                preferred.as_deref(),
+            );
+        let model_tree = agent_context_model_tree(meta.as_ref(), &inventory);
+        let recipes = json!([{
+            "id": "mutate-then-verify",
+            "steps": [
+                "GET /api/model/agent-context?building_id=…",
+                "PUT /api/model/semantic-meta with dry_run=true",
+                "PUT /api/model/semantic-meta with expected_revision (CAS)",
+                "GET /api/model/ttl?building_id=…",
+                "POST /api/model/sparql SELECT roles/markers",
+                "GET /api/fdd/equipment?building_id=…",
+            ],
+        }]);
+        json!({
+            "ok": true,
+            "building_id": building_id,
+            "site_id": building_id,
+            "revision": revision,
+            "semantic_meta_present": meta.is_some(),
+            "writable_layer": "openfdd_semantic_meta_v1",
+            "pack_immutable": true,
+            "model_tree": model_tree,
+            "recipes": recipes,
+            "openapi_tag": "model-crud",
+            "evidence_tier": "VERIFIED_SYNTHETIC",
+            "soft_open_neq_fq": true,
+            "gaps": [
+                "Turtle PUT /api/model/overlay not Soft-OPEN yet",
+                "POST/DELETE /api/model/equip|point tombstones not Soft-OPEN yet",
+            ],
+            "note": "Soft-OPEN agent-context — native semantic_meta authority (≠ BPS Turtle overlay FQ)",
+        })
+    })
+    .await
+    .unwrap_or_else(|e| {
+        json!({
+            "ok": false,
+            "error": format!("agent-context task: {e}"),
+            "soft_open_neq_fq": true,
+        })
+    });
+    if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        return Err((StatusCode::BAD_REQUEST, Json(result)));
+    }
+    Ok(Json(result))
+}
+
 fn project_haystack_for_building(
     building_id: String,
     equipment_id: Option<String>,
@@ -8157,6 +8346,128 @@ mod version_tests {
             .unwrap();
         let put2_resp = app.oneshot(put2).await.unwrap();
         assert_eq!(put2_resp.status(), StatusCode::OK);
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE while exercising agent-context GET"
+    )]
+    async fn agent_context_get_present_and_site_id_alias() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", workspace.path());
+
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("agent-context-test-secret".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let bid = "SYNTH_AGENT_CONTEXT";
+        let meta = sample_semantic_meta_body(bid);
+        let op = state
+            .auth
+            .issue_token_with_tenants("operator-ctx", crate::auth::Role::Operator, 60, &[])
+            .unwrap();
+
+        // empty building — honest present=false + empty tree
+        let empty_req = Request::builder()
+            .method("GET")
+            .uri(format!("/api/model/agent-context?building_id={bid}"))
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::empty())
+            .unwrap();
+        let empty_resp = app.clone().oneshot(empty_req).await.unwrap();
+        assert_eq!(empty_resp.status(), StatusCode::OK);
+        let empty_bytes = axum::body::to_bytes(empty_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let empty_json: serde_json::Value = serde_json::from_slice(&empty_bytes).unwrap();
+        assert_eq!(empty_json.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            empty_json
+                .get("semantic_meta_present")
+                .and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            empty_json.get("writable_layer").and_then(|v| v.as_str()),
+            Some("openfdd_semantic_meta_v1")
+        );
+        assert!(empty_json.get("recipes").and_then(|v| v.as_array()).is_some());
+
+        // publish meta then re-read via BPS site_id alias
+        let put = Request::builder()
+            .method("PUT")
+            .uri("/api/model/semantic-meta")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "meta": meta
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let put_resp = app.clone().oneshot(put).await.unwrap();
+        assert_eq!(put_resp.status(), StatusCode::OK);
+        let put_bytes = axum::body::to_bytes(put_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let put_json: serde_json::Value = serde_json::from_slice(&put_bytes).unwrap();
+        let rev = put_json
+            .get("revision")
+            .and_then(|v| v.as_str())
+            .expect("revision")
+            .to_string();
+
+        let alias_req = Request::builder()
+            .method("GET")
+            .uri(format!("/api/model/agent-context?site_id={bid}"))
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::empty())
+            .unwrap();
+        let alias_resp = app.oneshot(alias_req).await.unwrap();
+        assert_eq!(alias_resp.status(), StatusCode::OK);
+        let alias_bytes = axum::body::to_bytes(alias_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let alias_json: serde_json::Value = serde_json::from_slice(&alias_bytes).unwrap();
+        assert_eq!(alias_json.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            alias_json
+                .get("semantic_meta_present")
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            alias_json.get("revision").and_then(|v| v.as_str()),
+            Some(rev.as_str())
+        );
+        assert_eq!(
+            alias_json
+                .pointer("/model_tree/source")
+                .and_then(|v| v.as_str()),
+            Some("semantic_meta")
+        );
+        assert_eq!(
+            alias_json
+                .pointer("/model_tree/equipment_count")
+                .and_then(|v| v.as_u64()),
+            Some(1)
+        );
+        assert_eq!(
+            alias_json.get("soft_open_neq_fq").and_then(|v| v.as_bool()),
+            Some(true)
+        );
 
         std::env::remove_var("OPENFDD_WORKSPACE");
     }
