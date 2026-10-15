@@ -37,7 +37,8 @@
         "ahu-economizer-health"
       ],
       "sql_path": "sql/analytics/postgres/queries/plant_health_inventory.sql",
-      "status": "softopen_inventory"
+      "status": "softopen_inventory",
+      "notes": "equipment_ids bound ($2); window binds honestly unsupported (equipment inventory, no sample ts)"
     },
     {
       "query_id": "mechanical-cooling",

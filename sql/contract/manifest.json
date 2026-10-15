@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 104,
-  "pack_sha256": "2e543d58847a3dd64642f7238c531c104ea1f23d30185843f02e96f3b97f29a8",
+  "pack_sha256": "8b4c1e7a5e806504e5a82929b691bb6129e717347dee9306fb889121390bf6d0",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -482,8 +482,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/plant_health_inventory.sql",
-      "sha256": "54d38c069d4e96eae42ab1940fc71e18b8118174163c869015107895f93685b4",
-      "bytes": 248
+      "sha256": "d105ca6edb45a85ca7e25da8ba6b7c80e1f33f839602033029efc2bfb83423c6",
+      "bytes": 512
     },
     {
       "path": "sql/analytics/postgres/queries/rcx_preset_role_coverage.sql",
@@ -492,23 +492,23 @@
     },
     {
       "path": "sql/analytics/postgres/queries/role_timeseries.sql",
-      "sha256": "4396bb5ac488f1d5eece7fc86bc524d12fcfc9f7fe1b26f3de4446547d410e02",
-      "bytes": 305
+      "sha256": "8ca34c008a593685e7a023bdeb6ef0240069a6ee27cbdb7a3cfcae77d5e82558",
+      "bytes": 694
     },
     {
       "path": "sql/analytics/postgres/queries/schedule_occupancy.sql",
-      "sha256": "4acc49bc18c8604194333b92a4b8544b0a1f48f831a7657ae5c9e3afcfc4aeac",
-      "bytes": 286
+      "sha256": "937817101360bb5daffbc279d91df5c080847d04f2fdecf3812e8da083ec003f",
+      "bytes": 643
     },
     {
       "path": "sql/analytics/postgres/queries/sensor_faults_staleness.sql",
-      "sha256": "6112ed0a8be1ca9bdcd9f29ef8eb7ac64ac6f0df464e4c17194d5f1321498a6e",
-      "bytes": 1262
+      "sha256": "dd942608e911d1800264fb234e7ddc4598aa916f8fc045327a6fa827f650c3af",
+      "bytes": 1634
     },
     {
       "path": "sql/analytics/postgres/queries/sensor_stats.sql",
-      "sha256": "aa8a36b07cec2d6ad04da819856b95a7f72a50c7d47e84df272e16b361621097",
-      "bytes": 507
+      "sha256": "2211035cd51c05af0dd3884f34c42fd4e7671924591753cd61251ddac6210761",
+      "bytes": 865
     },
     {
       "path": "sql/analytics/postgres/queries/setpoints_snapshot.sql",
@@ -527,8 +527,8 @@
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "c403896545e92ec9a812edc21a1f71272b0ddf7b7bb0ecf5d983c20055d91e21",
-      "bytes": 3998
+      "sha256": "3911cc64f4019d8dc9d6b8a0784d2da2dad11476c1ea7ac62dccc3462458beaa",
+      "bytes": 4112
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",

@@ -1,5 +1,10 @@
 -- Soft-OPEN analytics pack: sensor staleness / range flags (not full SV suite).
--- Parameter: $1 = site_id. Soft-OPEN ≠ FQ.
+-- Parameters:
+--   $1 = site_id
+--   $2 = window start (timestamptz, NULL = open)
+--   $3 = window end   (timestamptz, NULL = open)
+--   $4 = equipment_ids (text[], NULL/empty = all)
+-- Soft-OPEN ≠ FQ.
 WITH role_stats AS (
   SELECT
     split_part(openfdd_key, '.', 1) AS equipment_id,
@@ -11,6 +16,13 @@ WITH role_stats AS (
     stddev_samp(val) AS stddev_val
   FROM sample
   WHERE site_id = $1
+    AND ($2::timestamptz IS NULL OR ts >= $2)
+    AND ($3::timestamptz IS NULL OR ts < $3)
+    AND (
+      $4::text[] IS NULL
+      OR cardinality($4) = 0
+      OR split_part(openfdd_key, '.', 1) = ANY ($4)
+    )
     AND val IS NOT NULL
     AND split_part(openfdd_key, '.', 2) <> ''
   GROUP BY 1, 2
