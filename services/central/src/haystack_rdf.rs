@@ -164,6 +164,9 @@ impl HaystackRdfCache {
     }
 
     /// Bounded read-only SELECT/ASK free-form SPARQL (N5).
+    /// Soft-OPEN R5: algebra policy (SELECT/ASK, no SERVICE/FROM/Update) runs
+    /// **before** Haystack dataset materialize so missing `semantic_meta` does
+    /// not mask mutation/federation rejects.
     pub fn execute_readonly_query(
         &self,
         building_id: &str,
@@ -171,6 +174,14 @@ impl HaystackRdfCache {
         preferred_tenant: Option<&str>,
         query_text: &str,
     ) -> Result<Value, Value> {
+        haystack_sparql_bindings::prepare_readonly_query_text(query_text).map_err(|e| {
+            json!({
+                "ok": false,
+                "error": e,
+                "schema": "ofdd_sparql_readonly_v1",
+                "soft_open_neq_fq": true,
+            })
+        })?;
         let (snap, _inventory) =
             self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
         haystack_sparql_bindings::execute_readonly_on_snapshot(&snap, query_text).map_err(|e| {

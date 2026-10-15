@@ -15,6 +15,7 @@ Soft-OPEN ≠ FQ. Source policy: `.cursor/agents/deployment_route_exposure_wave_
 | Method | Path | Cloud | Auth | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/fdd/plot` | Allow scoped | JWT + building | C12 lean Plotly; max_points≤5000 |
+| GET | `/api/fdd/plots-by-rule` | Allow scoped | JWT | Soft-OPEN R4 lean role catalog + lean_budget (Timescale); Soft-OPEN ≠ FQ |
 | POST | `/api/model/sparql` | Allow scoped | JWT + building | C13 free-form SELECT/ASK **or** `query_id` |
 | POST | `/api/model/sparql/query` | Allow scoped | JWT + building | Alias of free-form |
 | POST | `/api/model/sparql/upload` | Allow scoped | JWT + building | JSON `{query,building_id}` ≤200KiB |

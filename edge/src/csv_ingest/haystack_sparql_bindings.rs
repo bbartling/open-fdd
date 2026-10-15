@@ -247,6 +247,46 @@ fn pattern_forbids_service(pattern: &spargebra::algebra::GraphPattern) -> Result
     }
 }
 
+/// Soft-OPEN R5: reject obvious Update forms before Query parse / dataset load.
+fn reject_mutation_keywords(trimmed: &str) -> Result<(), String> {
+    let u = trimmed.to_ascii_uppercase();
+    // Word-ish starts after optional PREFIX block — scan whole text for Update verbs.
+    for kw in [
+        "INSERT DATA",
+        "INSERT {",
+        "DELETE DATA",
+        "DELETE {",
+        "DELETE WHERE",
+        "LOAD ",
+        "CLEAR ",
+        "DROP GRAPH",
+        "CREATE GRAPH",
+        "MOVE ",
+        "COPY ",
+        "ADD ",
+    ] {
+        if u.contains(kw) {
+            return Err("Only read-only SELECT and ASK are supported".into());
+        }
+    }
+    Ok(())
+}
+
+/// Soft-OPEN: prefix + readonly policy without loading a building dataset.
+pub fn prepare_readonly_query_text(query_text: &str) -> Result<String, String> {
+    let trimmed = query_text.trim();
+    if trimmed.is_empty() {
+        return Err("query text is required".into());
+    }
+    let full = if trimmed.to_ascii_uppercase().contains("PREFIX ") {
+        trimmed.to_string()
+    } else {
+        format!("{PREFIXES}\n{trimmed}")
+    };
+    ensure_readonly_query(&full)?;
+    Ok(full)
+}
+
 /// Parse + policy gate for product free-form SPARQL (SELECT/ASK only).
 pub fn ensure_readonly_query(query_text: &str) -> Result<spargebra::Query, String> {
     let trimmed = query_text.trim();
@@ -256,6 +296,7 @@ pub fn ensure_readonly_query(query_text: &str) -> Result<spargebra::Query, Strin
     if trimmed.len() > SPARQL_MAX_QUERY_BYTES {
         return Err(format!("query exceeds {SPARQL_MAX_QUERY_BYTES} byte limit"));
     }
+    reject_mutation_keywords(trimmed)?;
     let parsed = SparqlParser::new()
         .parse_query(trimmed)
         .map_err(|e| format!("SPARQL parse error: {e}"))?;
@@ -705,6 +746,11 @@ mod tests {
             ensure_readonly_query("SELECT * FROM <http://example/g> WHERE { ?s ?p ?o }")
                 .unwrap_err()
                 .contains("FROM")
+        );
+        assert!(
+            ensure_readonly_query("INSERT DATA { <urn:x> <urn:p> <urn:o> }")
+                .unwrap_err()
+                .contains("SELECT and ASK")
         );
     }
 

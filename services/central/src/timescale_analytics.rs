@@ -527,7 +527,7 @@ fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
         "building_id": building_id,
         "engine": "timescale-sql",
         "analytics_pack": "openfdd-analytics-sql-v1",
-        "pack_version": "3.6.11-softopen",
+        "pack_version": "3.6.12-softopen",
         "stale": false,
         "rows": rows,
     })
@@ -620,7 +620,7 @@ pub async fn respond_query(
             "building_id": building,
             "engine": "timescale-sql",
             "analytics_pack": "openfdd-analytics-sql-v1",
-            "pack_version": "3.6.11-softopen",
+            "pack_version": "3.6.12-softopen",
             "stale": false,
             "rows": [],
             "note": "Wave-X Timescale dispatch — query SQL port pending; DataFusion disabled",
