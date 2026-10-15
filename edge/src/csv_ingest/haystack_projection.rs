@@ -71,9 +71,23 @@ fn utf8_hex(bytes: &[u8]) -> String {
     out
 }
 
+fn hex_to_utf8(hex: &str) -> Result<String, String> {
+    if hex.is_empty() || !hex.len().is_multiple_of(2) {
+        return Err("invalid enc_ hex length".into());
+    }
+    let mut bytes = Vec::with_capacity(hex.len() / 2);
+    let chars: Vec<char> = hex.chars().collect();
+    for i in (0..chars.len()).step_by(2) {
+        let hi = chars[i].to_digit(16).ok_or("invalid enc_ hex")?;
+        let lo = chars[i + 1].to_digit(16).ok_or("invalid enc_ hex")?;
+        bytes.push(((hi << 4) | lo) as u8);
+    }
+    String::from_utf8(bytes).map_err(|_| "invalid enc_ utf8".into())
+}
+
 /// Encode a path segment for urn:openfdd:… IRIs. Trailing `.` and reserved
 /// punctuation are hex-escaped so identity never depends on Turtle local-name rules.
-fn iri_segment(s: &str) -> String {
+pub fn iri_segment(s: &str) -> String {
     let safe = s
         .bytes()
         .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
@@ -83,6 +97,33 @@ fn iri_segment(s: &str) -> String {
         return s.to_string();
     }
     format!("enc_{}", utf8_hex(s.as_bytes()))
+}
+
+/// Soft-OPEN R5: decode an IRI path segment minted by [`iri_segment`].
+pub fn decode_iri_segment(seg: &str) -> Result<String, String> {
+    let s = seg.trim();
+    if s.is_empty() {
+        return Err("empty IRI segment".into());
+    }
+    if let Some(hex) = s.strip_prefix("enc_") {
+        return hex_to_utf8(hex);
+    }
+    Ok(s.to_string())
+}
+
+/// Soft-OPEN R5: opaque point identity carried in Haystack/RDF IRIs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpaquePointRef {
+    pub building_id: String,
+    pub equipment_id: String,
+    pub point_key: String,
+}
+
+impl OpaquePointRef {
+    /// Exact Timescale `sample.openfdd_key` Soft-OPEN contract (`equip.role` / point key).
+    pub fn openfdd_key(&self) -> String {
+        format!("{}.{}", self.equipment_id, self.point_key)
+    }
 }
 
 fn site_iri(building_id: &str) -> String {
@@ -104,6 +145,31 @@ fn point_iri(building_id: &str, equipment_id: &str, point_key: &str) -> String {
         iri_segment(equipment_id),
         iri_segment(point_key)
     )
+}
+
+/// Soft-OPEN: mint the same opaque point IRI the projector writes into Turtle.
+pub fn mint_opaque_point_iri(building_id: &str, equipment_id: &str, point_key: &str) -> String {
+    point_iri(building_id, equipment_id, point_key)
+}
+
+/// Soft-OPEN R5: parse `urn:openfdd:site/{bid}/equip/{eid}/point/{key}` → opaque identity.
+/// Does **not** invent keys via `split_part` on historian rows — IRI is the opaque handle.
+pub fn parse_opaque_point_iri(iri: &str) -> Result<OpaquePointRef, String> {
+    let raw = iri.trim();
+    let rest = raw
+        .strip_prefix("urn:openfdd:site/")
+        .ok_or_else(|| "point IRI must start with urn:openfdd:site/".to_string())?;
+    let parts: Vec<&str> = rest.split('/').collect();
+    if parts.len() != 5 || parts[1] != "equip" || parts[3] != "point" {
+        return Err(
+            "point IRI shape must be urn:openfdd:site/{building}/equip/{equip}/point/{key}".into(),
+        );
+    }
+    Ok(OpaquePointRef {
+        building_id: decode_iri_segment(parts[0])?,
+        equipment_id: decode_iri_segment(parts[2])?,
+        point_key: decode_iri_segment(parts[4])?,
+    })
 }
 
 fn is_false_marker(tag: &str) -> bool {
@@ -1126,6 +1192,25 @@ mod tests {
         );
         assert!(result.turtle.contains("enc_") || result.turtle.contains("AHU"));
         assert!(result.turtle.contains("°F") || result.turtle.contains("\\u"));
+    }
+
+    #[test]
+    fn opaque_point_iri_roundtrip_soft_open() {
+        let cases = [
+            ("B1", "AHU_1", "sat"),
+            ("SITE.DOT", "AHU/1", "SAT."),
+            ("b", "eq", "pt:with-colon"),
+        ];
+        for (bid, eid, key) in cases {
+            let iri = mint_opaque_point_iri(bid, eid, key);
+            let parsed = parse_opaque_point_iri(&iri).expect(iri.as_str());
+            assert_eq!(parsed.building_id, bid);
+            assert_eq!(parsed.equipment_id, eid);
+            assert_eq!(parsed.point_key, key);
+            assert_eq!(parsed.openfdd_key(), format!("{eid}.{key}"));
+        }
+        assert!(parse_opaque_point_iri("urn:openfdd:site/B1/equip/AHU_1").is_err());
+        assert!(parse_opaque_point_iri("http://example/point").is_err());
     }
 
     #[test]

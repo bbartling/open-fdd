@@ -223,6 +223,13 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/model/sparql/consumers",
             post(central_package_sparql_consumers),
         )
+        // Soft-OPEN R5: opaque point IRI → openfdd_key (+ optional Timescale history).
+        .route("/api/model/point-resolve", get(model_point_resolve))
+        // Soft-OPEN R8a: tip-safe read-only schema/contract probe (no migrator apply).
+        .route(
+            "/api/admin/schema-contract",
+            get(admin_schema_contract_softopen),
+        )
         .route("/api/fdd/rules", get(fdd_registry_rules))
         .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
         .route("/api/fdd/cache/status", get(fdd_cache_status))
@@ -4009,6 +4016,121 @@ pub async fn fdd_plots_by_rule() -> Json<Value> {
         "error": "plots-by-rule Soft-OPEN requires Timescale product historian",
         "rules": [],
     }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PointResolveQuery {
+    /// Opaque `urn:openfdd:site/{bid}/equip/{eid}/point/{key}` Soft-OPEN R5.
+    pub point_iri: Option<String>,
+    /// When true (default false), attach bounded Timescale `sample` history.
+    pub include_history: Option<bool>,
+    pub max_points: Option<usize>,
+}
+
+/// Soft-OPEN R5: opaque point IRI → building/equip/point_key + openfdd_key (+ optional history).
+pub async fn model_point_resolve(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<PointResolveQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let iri = q
+        .point_iri
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "ok": false,
+                    "error": "point_iri query parameter required",
+                    "soft_open_neq_fq": true,
+                })),
+            )
+        })?;
+    let parsed =
+        open_fdd_edge_prototype::csv_ingest::haystack_projection::parse_opaque_point_iri(iri)
+            .map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "ok": false,
+                        "error": e,
+                        "soft_open_neq_fq": true,
+                    })),
+                )
+            })?;
+    if let Some(deny) =
+        deny_if_building_out_of_scope(&state, &headers, Some(parsed.building_id.as_str()))
+    {
+        return Err(deny);
+    }
+    let openfdd_key = parsed.openfdd_key();
+    let mut body = json!({
+        "ok": true,
+        "point_iri": iri,
+        "building_id": parsed.building_id,
+        "equipment_id": parsed.equipment_id,
+        "point_key": parsed.point_key,
+        "openfdd_key": openfdd_key,
+        "soft_open_neq_fq": true,
+        "note": "Soft-OPEN opaque point resolve — Soft-OPEN ≠ FQ",
+    });
+    if q.include_history.unwrap_or(false) {
+        let history = if !crate::timescale_historian::historian_is_timescale() {
+            json!({
+                "ok": false,
+                "error": "opaque point history Soft-OPEN requires Timescale product historian",
+                "soft_open_neq_fq": true,
+            })
+        } else {
+            let max_pts = q.max_points.unwrap_or(500);
+            match crate::timescale_product::opaque_point_history_softopen(
+                &parsed.building_id,
+                &openfdd_key,
+                max_pts,
+            )
+            .await
+            {
+                Ok(hist) => hist,
+                Err(e) => json!({
+                    "ok": false,
+                    "error": e.to_string(),
+                    "soft_open_neq_fq": true,
+                }),
+            }
+        };
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("history".into(), history);
+        }
+    }
+    Ok(Json(body))
+}
+
+/// Soft-OPEN R8a: hub-admin tip-safe schema/contract read (no migrator apply / no volume destroy).
+pub async fn admin_schema_contract_softopen(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin(&state, &headers)?;
+    if !crate::timescale_historian::historian_is_timescale() {
+        return Ok(Json(json!({
+            "ok": true,
+            "probe": "schema_contract_softopen",
+            "engine": "not-timescale",
+            "migrator": {"applied": false},
+            "soft_open_neq_fq": true,
+            "note": "Soft-OPEN schema-contract probe N/A without Timescale historian — Soft-OPEN ≠ FQ",
+        })));
+    }
+    match crate::timescale_product::schema_contract_softopen().await {
+        Ok(v) => Ok(Json(v)),
+        Err(e) => Ok(Json(json!({
+            "ok": false,
+            "error": e.to_string(),
+            "soft_open_neq_fq": true,
+        }))),
+    }
 }
 
 pub async fn fdd_roles() -> Json<Value> {

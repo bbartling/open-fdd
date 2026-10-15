@@ -7,8 +7,8 @@ Soft-OPEN ≠ FQ. Policy source: [deployment_route_exposure_wave_x_20261013.md](
 | Profile | Soft-OPEN tip evidence | Still FQ |
 | --- | --- | --- |
 | Railway / cloud | Tip JWT anon **401** on `/api/model/sparql`, `/api/fdd/plots-by-rule`, `/api/fdd/plot`; JWT plots-by-rule **200**; health lean public | Full profile matrix scan, proxy chain, Nessus |
-| Full OT LAN/server | Not exercised this Soft-OPEN night (mintbench OT off-limits for cloud tip) | Caddy+OT overlay + local-ingest denial |
-| Field-only edge | Not exercised this Soft-OPEN night | Field spool + MQTTS ACL Soft-OPEN |
+| Full OT LAN/server | Soft-OPEN **BLOCKED** — no OT edge on Railway tip Soft-OPEN night | Caddy+OT overlay + local-ingest denial |
+| Field-only edge | Soft-OPEN **BLOCKED** — no fieldbus edge attached to Soft-OPEN tip | Field spool + MQTTS ACL Soft-OPEN |
 
 ## Tip-proven Soft-OPEN negatives (3.6.12+)
 
