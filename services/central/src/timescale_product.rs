@@ -1161,6 +1161,41 @@ fn confirm_seconds_from_payload(payload: &Value, rule: &RuleSpec) -> u32 {
     rule.confirm_seconds
 }
 
+/// Soft-OPEN R6: cadence from payload / session params; default 300 (no parquet poll cache).
+fn poll_seconds_from_payload(payload: &Value) -> f64 {
+    if let Some(ps) = payload
+        .get("poll_seconds")
+        .and_then(|v| v.as_f64().or_else(|| v.as_u64().map(|u| u as f64)))
+        .filter(|v| v.is_finite() && *v > 0.0)
+    {
+        return ps;
+    }
+    if let Some(params) = payload.get("params") {
+        if let Some(ps) = params
+            .get("poll_seconds")
+            .and_then(|v| v.as_f64().or_else(|| v.as_u64().map(|u| u as f64)))
+            .filter(|v| v.is_finite() && *v > 0.0)
+        {
+            return ps;
+        }
+    }
+    300.0
+}
+
+fn is_weather_role(role: &str) -> bool {
+    matches!(
+        role,
+        "oa_t"
+            | "web_oa_t"
+            | "outside_air_temp"
+            | "web_outside_air_temp"
+            | "web-outside-air-temp"
+            | "oat"
+            | "oa_rh"
+            | "oa_enthalpy"
+    )
+}
+
 fn row_fault_hours(row: &sqlx::postgres::PgRow) -> f64 {
     if let Ok(v) = row.try_get::<f64, _>("fault_hours") {
         return v;
@@ -1214,6 +1249,34 @@ async fn fill_history_for_equipment(
             filters.push_str(" OR ");
         }
         filters.push_str(&format!("openfdd_key = '{equipment_id}.{role}'"));
+        // Soft-OPEN R6: weather/utility roles also from stamped weather equipment.
+        if is_weather_role(role) {
+            filters.push_str(&format!(
+                " OR (split_part(openfdd_key, '.', 2) = '{role}' \
+                 AND split_part(openfdd_key, '.', 1) IN ( \
+                   SELECT equipment_id FROM equipment \
+                   WHERE building_id = $1 \
+                     AND lower(coalesce(equip_type, '')) IN ('weather') \
+                 ))"
+            ));
+        }
+        // Soft-OPEN R6: CHW plant roles from stamped chiller/chwPlant equipment when
+        // the target itself has no local key (exact role match only).
+        if matches!(
+            role.as_str(),
+            "chw_supply_t" | "chw_return_t" | "chw_flow" | "chw_dp" | "chw_supply_sp"
+        ) {
+            filters.push_str(&format!(
+                " OR (split_part(openfdd_key, '.', 2) = '{role}' \
+                 AND split_part(openfdd_key, '.', 1) IN ( \
+                   SELECT equipment_id FROM equipment \
+                   WHERE building_id = $1 \
+                     AND lower(coalesce(equip_type, '')) IN ( \
+                       'chiller', 'chw', 'chwplant', 'chw_plant' \
+                     ) \
+                 ))"
+            ));
+        }
     }
     // Soft-OPEN R6: honor half-open [start, end) when caller supplies window.
     let mut window_sql = String::new();
@@ -1247,6 +1310,29 @@ GROUP BY ts
         .await
         .context("fill history")?;
     Ok(res.rows_affected() as i64)
+}
+
+/// Soft-OPEN R6: required roles must have ≥1 non-null sample in TEMP history.
+async fn missing_required_roles(
+    conn: &mut PgConnection,
+    required: &[String],
+) -> Result<Vec<String>> {
+    let mut missing = Vec::new();
+    for role in required {
+        if !safe_ident(role) {
+            missing.push(role.clone());
+            continue;
+        }
+        let sql = format!("SELECT COUNT(*)::bigint AS n FROM history WHERE \"{role}\" IS NOT NULL");
+        let n: i64 = sqlx::query_scalar(&sql)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap_or(0);
+        if n == 0 {
+            missing.push(role.clone());
+        }
+    }
+    Ok(missing)
 }
 
 fn safe_rfc3339(s: &str) -> bool {
@@ -1359,7 +1445,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
     std::fs::create_dir_all(&out_dir)?;
     let _ = std::fs::remove_file(out_dir.join("_dirty.json"));
 
-    let poll = 300.0_f64;
+    let poll = poll_seconds_from_payload(payload);
     let t0 = std::time::Instant::now();
     let mut rules_run = 0u32;
     let mut rules_succeeded = 0u32;
@@ -1370,16 +1456,22 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
     for rule in rules {
         rules_run += 1;
         let kinds: Vec<&str> = rule.equipment_kinds.iter().map(String::as_str).collect();
-        // Exact equipment_id (after caller filter) always runs; otherwise type-first.
-        let targets: Vec<(String, Option<String>)> = if equipment_filter.is_some() {
-            equipment.clone()
-        } else {
-            equipment
-                .iter()
-                .filter(|(_, t)| kinds.is_empty() || equip_matches_kinds(t.as_deref(), &kinds))
-                .cloned()
-                .collect()
-        };
+        // Soft-OPEN R6: type-first always. Exact id is allowed only after type filter
+        // when a stamp is present; missing/unrecognized stamp stays unclassified.
+        let targets: Vec<(String, Option<String>)> = equipment
+            .iter()
+            .filter(|(id, t)| {
+                if kinds.is_empty() {
+                    return true;
+                }
+                if equip_matches_kinds(t.as_deref(), &kinds) {
+                    return true;
+                }
+                // Exact id with no stamp: still allow (inventory from samples).
+                equipment_filter.as_deref() == Some(id.as_str()) && t.is_none()
+            })
+            .cloned()
+            .collect();
         if targets.is_empty() {
             rules_skipped += 1;
             continue;
@@ -1413,6 +1505,21 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         for extra in ["fan_status", "fan_cmd", "occ_mode"] {
             role_set.insert(extra.into());
         }
+        // Soft-OPEN R6: weather/CHW relation roles when SQL may need them.
+        for extra in [
+            "oa_t",
+            "web_oa_t",
+            "chw_supply_t",
+            "chw_return_t",
+            "chw_flow",
+            "chw_dp",
+        ] {
+            if rule.required_roles.iter().any(|r| r == extra)
+                || rule.optional_roles.iter().any(|r| r == extra)
+            {
+                role_set.insert(extra.into());
+            }
+        }
         let roles: Vec<String> = role_set.into_iter().filter(|r| safe_ident(r)).collect();
 
         let mut rule_rows = Vec::new();
@@ -1441,6 +1548,20 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                     "fault_hours": 0.0,
                     "status": "SKIP_NO_HISTORY",
                     "missing_roles": rule.required_roles,
+                    "output_kind": if metric { "metric" } else { "diagnostic" },
+                }));
+                let _ = tx.rollback().await;
+                continue;
+            }
+            // Soft-OPEN R6: required-role eligibility before SQL execute.
+            let missing = missing_required_roles(&mut tx, &rule.required_roles).await?;
+            if !missing.is_empty() {
+                rule_rows.push(json!({
+                    "equipment_id": eq_id,
+                    "fault_hours": 0.0,
+                    "status": "SKIP_MISSING_ROLES",
+                    "missing_roles": missing,
+                    "sample_rows": n,
                     "output_kind": if metric { "metric" } else { "diagnostic" },
                 }));
                 let _ = tx.rollback().await;
@@ -1478,14 +1599,24 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                         for r in &rows {
                             hours += row_fault_hours(r);
                         }
+                        // Soft-OPEN R6: publish confirm detail / fault_series stub.
+                        let status = if hours > 0.0 { "FAULT" } else { "PASS" };
                         rule_rows.push(json!({
                             "equipment_id": eq_id,
                             "fault_hours": hours,
-                            "status": if hours > 0.0 { "FAULT" } else { "PASS" },
+                            "status": status,
                             "output_kind": "diagnostic",
                             "sample_rows": n,
                             "confirm_seconds": confirm,
                             "poll_seconds": poll,
+                            "fault_series": {
+                                "kind": "confirm_aggregate",
+                                "fault_hours": hours,
+                                "confirm_seconds": confirm,
+                                "poll_seconds": poll,
+                                "status": status,
+                                "note": "Soft-OPEN confirm aggregate; per-sample series Soft-OPEN later"
+                            },
                         }));
                     }
                     ok_any = true;
