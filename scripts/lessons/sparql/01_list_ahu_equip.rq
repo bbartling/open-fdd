@@ -1,0 +1,18 @@
+# Soft-OPEN lesson SPARQL — list AHU-class equipment on package RDF.
+# POST /api/model/sparql  { "building_id": "<SYNTH>", "query": "<this>" }
+# Synthetic sites only. Soft-OPEN ≠ FQ.
+
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+PREFIX phIoT: <https://project-haystack.org/def/phIoT/4.0.0#>
+PREFIX ofdd: <urn:openfdd:ns#>
+
+SELECT DISTINCT ?equip ?equipmentId WHERE {
+  ?equip ofdd:equipmentId ?equipmentId .
+  {
+    ?equip rdf:type phIoT:ahu .
+  } UNION {
+    ?equip ph:hasTag phIoT:ahu .
+  }
+}
+ORDER BY ?equipmentId
