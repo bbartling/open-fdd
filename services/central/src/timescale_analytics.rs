@@ -62,7 +62,9 @@ fn analytics_pack_version() -> &'static str {
         .as_str()
 }
 
-/// Soft-OPEN: SQL body from `sql/analytics` pack (hash-pinned). Bind `$1` only.
+/// Soft-OPEN: SQL body from `sql/analytics` pack (hash-pinned).
+/// Sample queries bind `$1` site + `$2`/`$3` window + `$4` equipment_ids.
+/// Inventory (`plant_health`) binds `$1` building + `$2` equipment_ids only.
 const MOTOR_WEEKLY_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/motor_weekly_runtime.sql");
 const BAS_VS_WEB_SQL: &str =
@@ -187,9 +189,15 @@ pub async fn bas_vs_web_oat(
     ))
 }
 
-pub async fn plant_health_matrix(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn plant_health_matrix(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: equipment filter only — window honestly unsupported (equipment inventory).
     let rows = sqlx::query(PLANT_HEALTH_SQL)
         .bind(building_id)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("plant_health_matrix")?;
@@ -206,7 +214,10 @@ pub async fn plant_health_matrix(tsdb: &Tsdb, building_id: &str) -> Result<Value
             "reason": "plant_health_sql_pending",
         }));
     }
-    Ok(envelope("plant-health", building_id, out))
+    Ok(with_scope_meta(
+        envelope("plant-health", building_id, out),
+        scope,
+    ))
 }
 
 pub async fn role_timeseries(
@@ -215,10 +226,15 @@ pub async fn role_timeseries(
     role_suffix: &str,
     query_id: &str,
     limit: i64,
+    scope: &AnalyticsSqlScope,
 ) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before LIMIT (not building-only).
     let pattern = format!("%.{role_suffix}");
     let rows = sqlx::query(ROLE_TIMESERIES_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .bind(&pattern)
         .bind(limit)
         .fetch_all(tsdb.pool())
@@ -234,7 +250,7 @@ pub async fn role_timeseries(
             "val": r.try_get::<f64, _>("val").ok(),
         }));
     }
-    Ok(envelope(query_id, building_id, out))
+    Ok(with_scope_meta(envelope(query_id, building_id, out), scope))
 }
 
 pub async fn mechanical_cooling_oat_bins(
@@ -266,9 +282,17 @@ pub async fn mechanical_cooling_oat_bins(
     ))
 }
 
-pub async fn sensor_stats(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn sensor_stats(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(SENSOR_STATS_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("sensor_stats")?;
@@ -290,12 +314,23 @@ pub async fn sensor_stats(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
                 .map(|t| t.to_rfc3339()),
         }));
     }
-    Ok(envelope("sensor-stats", building_id, out))
+    Ok(with_scope_meta(
+        envelope("sensor-stats", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn schedule_occupancy(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn schedule_occupancy(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before LIMIT (not building-only).
     let rows = sqlx::query(SCHEDULE_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("schedule_occupancy")?;
@@ -308,12 +343,20 @@ pub async fn schedule_occupancy(tsdb: &Tsdb, building_id: &str) -> Result<Value>
             "val": r.try_get::<f64, _>("val").ok(),
         }));
     }
-    Ok(envelope("schedule", building_id, out))
+    Ok(with_scope_meta(envelope("schedule", building_id, out), scope))
 }
 
-pub async fn sensor_faults(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn sensor_faults(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(SENSOR_FAULTS_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("sensor_faults")?;
@@ -332,7 +375,10 @@ pub async fn sensor_faults(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
             "fault_flag": r.try_get::<String, _>("fault_flag").unwrap_or_else(|_| "OK".into()),
         }));
     }
-    Ok(envelope("sensor-faults", building_id, out))
+    Ok(with_scope_meta(
+        envelope("sensor-faults", building_id, out),
+        scope,
+    ))
 }
 
 pub async fn setpoints_snapshot(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
@@ -702,13 +748,25 @@ pub async fn respond_query(
         | "sensor-health"
         | "ahu-temperature-health"
         | "ahu-pressure-health"
-        | "ahu-economizer-health" => plant_health_matrix(&tsdb, &building).await,
+        | "ahu-economizer-health" => plant_health_matrix(&tsdb, &building, &scope).await,
         "economizer" | "rcx-ahu" => economizer_deltas(&tsdb, &building, &scope).await,
-        "rcx-vav" => role_timeseries(&tsdb, &building, "zone_t", "rcx-vav", 2000).await,
-        "rcx-chiller" => {
-            role_timeseries(&tsdb, &building, "chw_supply_t", "rcx-chiller", 2000).await
+        "rcx-vav" => {
+            role_timeseries(&tsdb, &building, "zone_t", "rcx-vav", 2000, &scope).await
         }
-        "rcx-boiler" => role_timeseries(&tsdb, &building, "hw_supply_t", "rcx-boiler", 2000).await,
+        "rcx-chiller" => {
+            role_timeseries(
+                &tsdb,
+                &building,
+                "chw_supply_t",
+                "rcx-chiller",
+                2000,
+                &scope,
+            )
+            .await
+        }
+        "rcx-boiler" => {
+            role_timeseries(&tsdb, &building, "hw_supply_t", "rcx-boiler", 2000, &scope).await
+        }
         "equipment-inspect" | "inspect" => {
             // Wide envelope for SPA Inspect (points + coverage), not long sample dump.
             let _ = tsdb;
@@ -718,9 +776,9 @@ pub async fn respond_query(
             }
         }
         "mechanical-cooling" => mechanical_cooling_oat_bins(&tsdb, &building, &scope).await,
-        "schedule" => schedule_occupancy(&tsdb, &building).await,
-        "sensor-stats" => sensor_stats(&tsdb, &building).await,
-        "sensor-faults" => sensor_faults(&tsdb, &building).await,
+        "schedule" => schedule_occupancy(&tsdb, &building, &scope).await,
+        "sensor-stats" => sensor_stats(&tsdb, &building, &scope).await,
+        "sensor-faults" => sensor_faults(&tsdb, &building, &scope).await,
         "setpoints" => setpoints_snapshot(&tsdb, &building).await,
         "diurnal" => diurnal_hourly(&tsdb, &building).await,
         "topology" => topology_equipment(&tsdb, &building).await,
@@ -786,6 +844,36 @@ mod pack_version_tests {
         assert_window_equipment_binds(BAS_VS_WEB_SQL, "bas-vs-web-oat");
         assert_window_equipment_binds(MECH_COOLING_SQL, "mechanical-cooling");
         assert_window_equipment_binds(MOTOR_WEEKLY_SQL, "runtime");
+    }
+
+    #[test]
+    fn rcx_sensor_schedule_sql_declares_window_and_equipment_binds() {
+        // Soft-OPEN post-#1264: RCx role_timeseries + sensor + schedule Overview/RCx traffic.
+        assert_window_equipment_binds(ROLE_TIMESERIES_SQL, "role-timeseries");
+        assert_window_equipment_binds(SENSOR_STATS_SQL, "sensor-stats");
+        assert_window_equipment_binds(SENSOR_FAULTS_SQL, "sensor-faults");
+        assert_window_equipment_binds(SCHEDULE_SQL, "schedule");
+        assert!(
+            ROLE_TIMESERIES_SQL.contains("LIKE $5"),
+            "role_timeseries must keep role pattern as $5 after window/equipment binds"
+        );
+        assert!(
+            ROLE_TIMESERIES_SQL.contains("LIMIT $6"),
+            "role_timeseries must keep limit as $6 after window/equipment binds"
+        );
+    }
+
+    #[test]
+    fn plant_health_inventory_binds_equipment_only() {
+        // Soft-OPEN: window honestly unsupported — equipment table inventory.
+        assert!(
+            !PLANT_HEALTH_SQL.contains("$2::timestamptz"),
+            "plant-health inventory must not fake window binds"
+        );
+        assert!(
+            PLANT_HEALTH_SQL.contains("$2::text[]") || PLANT_HEALTH_SQL.contains("ANY ($2)"),
+            "plant-health inventory must bind equipment_ids ($2)"
+        );
     }
 
     #[test]

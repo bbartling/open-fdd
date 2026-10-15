@@ -6709,7 +6709,10 @@ async fn analytics_ahu_health(
         })?;
         match fdd_tsdb::Tsdb::connect_from_env().await {
             Ok(tsdb) => {
-                match crate::timescale_analytics::plant_health_matrix(&tsdb, &building).await {
+                let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
+                match crate::timescale_analytics::plant_health_matrix(&tsdb, &building, &scope)
+                    .await
+                {
                     Ok(v) => return Ok(Json(v)),
                     Err(e) => {
                         return Err((
