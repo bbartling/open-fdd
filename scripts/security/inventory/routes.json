@@ -2781,6 +2781,44 @@
     },
     {
       "method": "GET",
+      "path": "/api/fdd/plots-by-rule",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_fdd_plots_by_rule",
+        "y.authz.get_api_fdd_plots_by_rule"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_fdd_plots_by_rule",
+        "y.authz.get_api_fdd_plots_by_rule"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN R4: lean plot role catalog per rule (Timescale); Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "GET",
       "path": "/api/fdd/roles",
       "section": "protected",
       "auth": "jwt_required",
