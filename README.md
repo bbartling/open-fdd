@@ -7,8 +7,8 @@
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
   <img src="https://img.shields.io/badge/status-Alpha-orange" alt="Alpha">
   <img src="https://img.shields.io/badge/Rust-1.93-orange?logo=rust&logoColor=white" alt="Rust 1.93">
-  <img src="https://img.shields.io/badge/Apache%20Arrow-53-blue" alt="Arrow">
-  <img src="https://img.shields.io/badge/DataFusion-SQL-purple" alt="DataFusion">
+  <img src="https://img.shields.io/badge/TimescaleDB-PostgreSQL-blue" alt="TimescaleDB">
+  <img src="https://img.shields.io/badge/SQL-FDD-purple" alt="SQL FDD">
 </p>
 
 <p align="center">
@@ -19,8 +19,8 @@
   <a href="https://bbartling.github.io/open-fdd/">
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
-  <a href="https://bbartling.github.io/open-fdd/rules/cookbook/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-71%20%2F%2077%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — datafusion-sql-cookbook · pandas-cookbook">
+  <a href="https://bbartling.github.io/open-fdd/rules/">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-71%20%2F%2077%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 71 / 77 SQL + Pandas">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
@@ -28,18 +28,18 @@
   <a href="https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html">
     <img src="https://img.shields.io/badge/Quick%20Start-GHCR%20stack-059669?style=for-the-badge" alt="Quick start">
   </a>
-  <a href="https://arrow.apache.org/">
-    <img src="https://img.shields.io/badge/Apache%20Arrow-columnar%20data-0B7285?style=for-the-badge" alt="Apache Arrow">
+  <a href="https://www.timescale.com/">
+    <img src="https://img.shields.io/badge/TimescaleDB-historian-0B7285?style=for-the-badge" alt="TimescaleDB historian">
   </a>
-  <a href="https://datafusion.apache.org/">
-    <img src="https://img.shields.io/badge/DataFusion-SQL%20engine-6D28D9?style=for-the-badge" alt="Apache DataFusion">
+  <a href="https://bbartling.github.io/open-fdd/architecture/adr-010-timescale-hard-cutover.html">
+    <img src="https://img.shields.io/badge/ADR--010-Timescale%20only-6D28D9?style=for-the-badge" alt="ADR-010 Timescale only">
   </a>
 </p>
 
 
-Open-FDD is a free, open-source building-to-cloud pipeline for HVAC analytics and fault detection. The same stack runs on-premises or in the cloud: high-performance Apache Arrow storage and Apache DataFusion SQL, a Rust central service, React operator UI, Mosquitto MQTTS ingest, and fieldbus edge agents for BACnet, Modbus, and Haystack — plus REST APIs and CSV/zip import when you are not on live OT.
+Open-FDD is a free, open-source building-to-cloud pipeline for HVAC analytics and fault detection. The same stack runs on-premises or in the cloud: a **TimescaleDB / PostgreSQL** historian with versioned `.sql` FDD, a Rust central service, React operator UI, Mosquitto MQTTS ingest, and fieldbus edge agents for BACnet, Modbus, and Haystack — plus REST APIs and CSV/zip import when you are not on live OT.
 
-Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or files. Today’s product is SQL-based FDD and RCx on that Arrow/DataFusion engine; the roadmap is ML and clustering on the same foundation.
+Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or files. Today’s product is SQL-based FDD and RCx on Timescale ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)); the roadmap includes ML and clustering on the same foundation. Soft-OPEN ≠ FQ.
 
 ---
 
@@ -48,7 +48,7 @@ Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or fil
 
 | Image | Role |
 |-------|------|
-| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, Feather historian, DataFusion FDD, REST `/api` |
+| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, **Timescale** historian, SQL FDD, REST `/api` |
 | [`ghcr.io/bbartling/openfdd-web`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-web) | React operator SPA (browser → central `/api` only) |
 | [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack / JSON edge |
 | [`ghcr.io/bbartling/openfdd-mqtt`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mqtt) | Mosquitto MQTTS broker |
@@ -82,7 +82,7 @@ AI Agent assistance : [AGENTS.md](https://github.com/bbartling/open-fdd/blob/mas
 pip install open-fdd
 ```
 
-This is a library of rule-based FDD equations built with Pandas that serves as a reference implementation for the Open-FDD platform, which uses Apache DataFusion and SQL for production rules. It also includes tooling for AI agents to assist with engineering calculations, EnergyPlus modeling, Open-FDD stress testing, and more. Future capabilities include report writing and daily HVAC-fault email alerts—yet to be tested with Grok, OpenClaw, or the AI agent tooling of your choice.
+Third-party / oracle library (`open_fdd.rules`) for notebooks and parity — not the product request path. Production FDD is Timescale / PostgreSQL SQL (`sql/fdd`, [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)). Human catalogs: [Rule Cookbook](https://bbartling.github.io/open-fdd/rules/) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html).
 
 
 <details>
@@ -104,4 +104,4 @@ Support for Open-FDD directly funds the monthly time and labor required to keep 
 
 MIT — see [LICENSE](LICENSE).
 
-Version **3.5.60** on tip · PyPI **4.4.9**
+Version **3.6.14** on tip · PyPI **4.4.9**

@@ -5,7 +5,9 @@ nav_exclude: true
 
 # S3-compatible historian operations
 
-Open-FDD uses the same canonical Parquet historian contract on local disk and S3-compatible object storage. The engine stays provider-neutral: AWS S3, MinIO, Railway Storage Buckets, and compatible providers map deployment settings into the same `OPENFDD_*` variables.
+> **SUPERSEDED (Wave-X 3.6.0+ / [ADR-010](../architecture/adr-010-timescale-hard-cutover.md)):** Product historian is **TimescaleDB only** — no dual-write, no Parquet/S3 co-canonical path. Soft-OPEN ≠ FQ. Live bring-up: [`TIMESCALE_WAVE_X.md`](TIMESCALE_WAVE_X.md). The Parquet/S3/DataFusion guidance below is **historical** (pre-3.6.0 H5) and must not guide new deploys.
+
+Open-FDD historically used the same Parquet historian contract on local disk and S3-compatible object storage. The engine stayed provider-neutral: AWS S3, MinIO, Railway Storage Buckets, and compatible providers mapped deployment settings into the same `OPENFDD_*` variables.
 
 ## Generic configuration
 
@@ -41,7 +43,7 @@ OPENFDD_QUERY_MEMORY_MB=512
 OPENFDD_DATAFUSION_SPILL_DIR=/var/tmp/openfdd-datafusion
 ```
 
-Interactive materialization stays row-bounded; streaming callers use Arrow record-batch streams. Canonical month/building/equipment predicates remain available for DataFusion partition pruning. H5 does not replace immutable Parquet parts with per-sample objects and does not introduce a database as the canonical historian.
+Interactive materialization stayed row-bounded; streaming callers used Arrow record-batch streams. Month/building/equipment predicates remained available for DataFusion partition pruning. H5 did not replace immutable Parquet parts with per-sample objects. **Current tip (ADR-010):** TimescaleDB is the canonical historian — do not treat this S3/Parquet path as live product law.
 
 Central keeps a small local building-scope index only to preserve the existing fail-closed `building=<id>` guard. This index contains empty directories, is refreshed from S3 delimiter listings, and is not durable historian data. Override its scratch location with `OPENFDD_S3_SCOPE_INDEX_DIR`. `OPENFDD_S3_SCOPE_REFRESH_SECONDS` controls the central refresh cadence (default 60 seconds).
 
@@ -83,4 +85,4 @@ OPENFDD_S3_ALLOW_HTTP=false
 
 Use the URL style shown by the bucket credentials/configuration for that bucket; older or non-Railway S3-compatible deployments may require path style. The Rust engine does not read `RAILWAY_*` variables or branch on the provider name.
 
-The Storage Bucket is the canonical durable historian in this topology. Container disk is scratch for DataFusion spill and the local building-scope index. Open-FDD services remain LAN/VPN/private-ingress deployments; object storage credentials and the central API must not be exposed through public unauthenticated ingress.
+In the pre-3.6.0 S3 topology the Storage Bucket was the durable Parquet historian; container disk was scratch for DataFusion spill and the local building-scope index. **Current tip:** Timescale is canonical ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). Open-FDD services remain LAN/VPN/private-ingress deployments; credentials and the central API must not be exposed through public unauthenticated ingress.

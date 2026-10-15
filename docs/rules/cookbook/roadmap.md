@@ -3,6 +3,7 @@ title: Rule roadmap
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 6
+nav_exclude: true
 ---
 
 # Priority-ranked rule roadmap

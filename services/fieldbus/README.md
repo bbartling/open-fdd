@@ -46,7 +46,7 @@ For local or dual mode set `OPENFDD_LOCAL_CENTRAL_URL` and a deployment-unique
 `OPENFDD_LOCAL_SPOOL_DIR` and `OPENFDD_LOCAL_SPOOL_MAX_RECORDS` provide a
 bounded retry queue. Central validates the bearer, tenant/building identity,
 message ID replay binding, payload size, and atomically deduplicates a dual
-delivery before writing canonical Parquet.
+delivery before writing the canonical Timescale historian ([ADR-010](../../docs/architecture/adr-010-timescale-hard-cutover.md)).
 
 ## Quick start (local dev)
 

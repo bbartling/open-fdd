@@ -8,25 +8,39 @@ permalink: /web-app/
 
 # Web application
 
-The product UI is the **React SPA** (`frontend/web` → `openfdd-web`). It talks only to **central** over same-origin **`/api`** (JWT). There is no Python UI path.
+React SPA (`openfdd-web`) → central `/api` (JWT). Soft-OPEN ≠ FQ.
 
-| Area | Path | What you get |
-|------|------|----------------|
-| Overview | `/` | Tables + plant / VAV health matrices (no Plotly) |
-| Lab / SQL FDD | `/lab`, `/sql-fdd` | Rule tuners, run all rules, registry SQL |
-| RCx Plots | `/rcx` | Plotly presets by HVAC family |
-| FDD Plots / Reports | `/fdd`, `/reports` | Series overlays and findings |
-| Inspect | `/inspect` | CSV / historian series radio |
-| Mapping / Admin | `/mapping`, `/admin` | Package map, capacity, ops |
+| Area | Path | Notes |
+|------|------|--------|
+| Overview | `/` | Tables + plant / VAV health |
+| Lab / SQL FDD | `/lab`, `/sql-fdd` | Tuners, `POST /api/fdd/run` |
+| RCx / FDD / Inspect | `/rcx`, `/fdd`, `/inspect` | Plots + series |
+| Model | `/model` | Assignments, SPARQL, TTL |
+| Mapping / Admin | `/mapping`, `/admin` | Package map, ops |
 
-Central (`:8080` in-container) owns auth, Parquet historian, and DataFusion FDD (`POST /api/fdd/run`).
+Central owns **Timescale** historian + `.sql` FDD ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)).
+
+## RDF / model APIs (tip)
+
+Where the model lives: **Timescale dims** (`equipment`, `role_map`, `point_map`) + package **semantic meta / TTL** — not Parquet. Details: [Modeling](../modeling/).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/model/sites`, `/equipment`, `/points` | Inventory |
+| GET/POST | `/api/model/assignments` | Driver → role binds |
+| POST | `/api/model/sparql` | Template / free-form SELECT·ASK |
+| GET | `/api/model/sparql/predefined` | Catalog |
+| GET | `/api/model/point-resolve` | Opaque point → SQL role |
+| GET | `…/mapping/haystack.ttl` | Strict Haystack projection |
+
+## Guides
 
 | Guide | Content |
 |-------|---------|
 | [Routes](routes.html) | SPA path map |
 | [SQL FDD Rules](sql-fdd-rules.html) | Registry workbench |
-| [CSV batch import](csv-batch-import.html) | Package / append ingest API |
-| [Plots & reports](plots-and-reports.html) | Trends and exports |
-| [**RCx & FDD plot examples**](rcx-plots-by-hvac.html) | Presets + screenshot gallery |
+| [CSV batch import](csv-batch-import.html) | Package / append |
+| [Plots & reports](plots-and-reports.html) | Trends |
+| [RCx plot examples](rcx-plots-by-hvac.html) | Presets |
 
-See [Architecture → Services](../architecture/services.html) and the [Rule Cookbook]({{ site.baseurl }}/rules/).
+[Architecture](../architecture/) · [Rule Cookbook]({{ site.baseurl }}/rules/)

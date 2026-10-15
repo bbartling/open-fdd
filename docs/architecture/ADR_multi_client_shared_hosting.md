@@ -6,19 +6,21 @@ nav_order: 12
 
 # ADR — Multi-client shared hosting (Wave L Phase 0)
 
-- **Status:** Accepted for Wave L Phase 1 scaffolding (mode **OFF** by default; Tier-2 enablement still gated)
+> **SUPERSEDED historian lock (Wave-X 3.6.0+ / [ADR-010](adr-010-timescale-hard-cutover.md)):** Product historian is **TimescaleDB only** — no dual-write, no Parquet/DataFusion co-canonical path. Soft-OPEN ≠ FQ. Live ops: [`../operations/TIMESCALE_WAVE_X.md`](../operations/TIMESCALE_WAVE_X.md). Tenant-isolation goals below may still inform Wave L scaffolding, but **do not** treat Parquet/DataFusion decision text as current product law.
+
+- **Status:** Accepted for Wave L Phase 1 scaffolding (mode **OFF** by default; Tier-2 enablement still gated). **Historian decision superseded by ADR-010.**
 - **Date:** 2026-09-09
 - **Program:** Wave L `3.5.x` — shared Railway hub for many engineering firms
 - **Depends on:** Wave K **3.4.0 PINNED** before product coding; this ADR may land as design-only K3 meanwhile
-- **Related:** [`historian.md`](historian.md), [`datafusion-first.md`](datafusion-first.md), [`SECURITY.md`](../../SECURITY.md), [`docs/operations/RAILWAY_DEPLOYMENT.md`](../operations/RAILWAY_DEPLOYMENT.md), [`docs/operations/STRESS_CLOSEOUT.md`](../operations/STRESS_CLOSEOUT.md), [`scripts/qualification/README.md`](../../scripts/qualification/README.md)
+- **Related:** [`historian.md`](historian.md), [`adr-010-timescale-hard-cutover.md`](adr-010-timescale-hard-cutover.md), [`SECURITY.md`](../../SECURITY.md), [`docs/operations/RAILWAY_DEPLOYMENT.md`](../operations/RAILWAY_DEPLOYMENT.md), [`docs/operations/STRESS_CLOSEOUT.md`](../operations/STRESS_CLOSEOUT.md), [`scripts/qualification/README.md`](../../scripts/qualification/README.md)
 
-## Context
+## Context (historical Wave L framing)
 
-Open-FDD today is effectively **single-tenant / single hub**: central JWT roles (`viewer` / `operator` / `admin` in `services/central/src/auth.rs`), a shared Parquet historian root (`parquet_root()` / `OPENFDD_STORAGE_URL` / `OPENFDD_PARQUET_ROOT` in `services/central/src/analytics/historian.rs`), building-scoped packages and `session_config.json`, and MQTTS ACL kits under `deploy/mqtt/`. The product UI is React (`frontend/web`); analytics and FDD remain DataFusion SQL on central.
+Open-FDD at Wave L design time was effectively **single-tenant / single hub**: central JWT roles (`viewer` / `operator` / `admin`), a shared Parquet historian root (pre-3.6.0), building-scoped packages and `session_config.json`, and MQTTS ACL kits under `deploy/mqtt/`. The product UI is React (`frontend/web`). **Current tip:** analytics and FDD are Timescale / PostgreSQL SQL on central ([ADR-010](adr-010-timescale-hard-cutover.md)).
 
 Operators want **one shared Railway hub** that hosts **multiple engineering firms (tenants)** without:
 
-1. Replacing the Parquet historian with Postgres (or any RDBMS) for time-series.
+1. ~~Replacing the Parquet historian with Postgres~~ *(superseded: Timescale **is** the product historian — ADR-010)*.
 2. Relying on a `customer_id` column plus a **UI filter alone** as isolation.
 3. Breaking the default single-tenant / local Docker path.
 
@@ -26,9 +28,9 @@ Wave L renames the older “shared DB mega” intent: **shared hosting**, not a 
 
 ## Decision
 
-1. **Historian stays Parquet + DataFusion.** Time-series remains immutable Parquet under storage roots resolved by central (`OPENFDD_STORAGE_URL` preferred; `OPENFDD_PARQUET_ROOT` legacy). Feather remains non-canonical cache/interop only ([`historian.md`](historian.md)). **Do not** introduce Postgres (or similar) as the telemetry store; **do not** dual-write Feather↔RDBMS for historian rows.
+1. **Historian (SUPERSEDED by ADR-010):** Wave L originally locked Parquet + DataFusion. **Current product law:** TimescaleDB only — no dual-write, no Parquet/DataFusion co-canonical path ([`adr-010-timescale-hard-cutover.md`](adr-010-timescale-hard-cutover.md)). Feather remains non-product interchange only.
 
-2. **Shared Railway hub + tenant-partitioned Parquet.** When multi-tenant mode is enabled, each tenant gets a **server-derived storage root** (or equivalent Hive prefix) so DataFusion registers **tenant-scoped providers/catalogs only**. Isolation is fail-closed provider scoping — **not** `WHERE tenant_id` over one shared registered mega-table.
+2. **Shared Railway hub + tenant isolation.** When multi-tenant mode is enabled, each tenant gets a **server-derived storage / DB scope** so queries see **tenant-scoped data only**. Isolation is fail-closed server scoping — **not** a UI `WHERE tenant_id` over one shared mega-table. (Wave L text assumed Parquet Hive prefixes; Timescale tip uses DB/schema or connection scoping instead.)
 
 3. **Optional transactional control plane (metadata only).** Tenants, users, memberships, buildings, and edge identity bindings may live in a small transactional store if file/`session_config` layouts prove insufficient. That store **must not** hold historian time-series. Building ∈ exactly one tenant.
 
@@ -45,9 +47,9 @@ Wave L renames the older “shared DB mega” intent: **shared hosting**, not a 
 ```text
                     ┌─ control plane (tenants/users/roles/buildings/edges)  [metadata]
 Railway shared hub ─┤
-                    └─ Parquet under server-derived tenant roots
+                    └─ Timescale (tip) / historical Parquet tenant roots
                               ↓
-                     DataFusion SessionContext + tenant-scoped providers only
+                     Tenant-scoped query context only (fail-closed)
                               ↓
                      /api/* + MCP + jobs (TenantContext fail-closed)
                               ↓
@@ -142,17 +144,16 @@ Never claim multi-tenant ready without **Tier-2** isolation evidence. L8 cutover
 
 ## Non-goals (this ADR / Wave L)
 
-- Postgres (or other RDBMS) time-series historian
-- Feather↔DB telemetry dual-write
+- Feather↔DB telemetry dual-write *(still forbidden; Timescale is sole historian — ADR-010)*
 - Licensing / paid point gates
 - Public multi-tenant enable without operator authorization
 - External IdP / MFA / dedicated SKU automation (Stage C — after shared baseline qualifies)
 
 ## Alternatives considered
 
-| Alternative | Why rejected (for Wave L) |
+| Alternative | Why rejected (for Wave L) / note |
 |-------------|---------------------------|
-| Postgres historian + SQL over RDBMS | Violates Parquet/DataFusion contract; heavy migration; dual-write risk |
+| Postgres historian + SQL over RDBMS | Rejected at Wave L under Parquet contract; **later accepted as Timescale-only product path (ADR-010)** |
 | Shared Parquet table + `WHERE tenant_id` | Easy to miss a path; unacceptable isolation story vs provider scoping |
 | UI-only `customer_id` filter | Trivially bypassed via API/MCP/jobs/MQTT |
 | Multi-tenant ON by default | Unsafe until Tier-2; breaks single-tenant expectation |

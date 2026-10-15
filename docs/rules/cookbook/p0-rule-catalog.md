@@ -3,6 +3,7 @@ title: P0 rule catalog (metadata)
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 10
+nav_exclude: true
 ---
 
 # P0 rule catalog — full metadata

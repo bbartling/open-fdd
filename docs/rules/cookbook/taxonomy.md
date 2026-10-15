@@ -3,6 +3,7 @@ title: Public FDD taxonomy
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 1
+nav_exclude: true
 ---
 
 # Canonical public FDD taxonomy

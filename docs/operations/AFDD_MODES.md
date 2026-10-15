@@ -1,6 +1,6 @@
 # AFDD operating modes (bulk vs continuous)
 
-Open-FDD uses **one** DataFusion SQL registry for fault detection. **AFDD** is how and when that registry runs — not a second rule engine.
+Open-FDD uses **one** Timescale / PostgreSQL SQL registry (`sql/fdd`) for fault detection ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). Soft-OPEN ≠ FQ. **AFDD** is how and when that registry runs — not a second rule engine. Do not revive DataFusion/Parquet as the product FDD path.
 
 | | Bulk / manual “run all” | Continuous AFDD |
 |--|-------------------------|-----------------|
@@ -10,7 +10,7 @@ Open-FDD uses **one** DataFusion SQL registry for fault detection. **AFDD** is h
 | Isolation | Explicit `building_id` | Per-`building_id` mutex + checkpoint |
 | Window | Full imported building history | Rolling lookback ending at live telemetry watermark |
 
-**Rule:** bulk CSV import never implicitly enables recurring AFDD. A Parquet flush does not run FDD by itself.
+**Rule:** bulk CSV import never implicitly enables recurring AFDD. A historian flush / commit does not run FDD by itself.
 
 ## Multi-site / Jobs
 
@@ -38,7 +38,7 @@ OPENFDD_AFDD_LOOKBACK_UNIT=hours
 
 The timezone is an operator IANA name. `America/Chicago` is the lab recipe so the cycle can finish before a 06:00 digest. It is not a product default and it is not a building id. The analysis window still ends at the latest persisted telemetry watermark (`start = end − lookback`). A missed day while the process is down is one lookback-sized cycle (`catch_up`), not one full-history pass per missed day.
 
-Lookback bounds are passed as `start_utc` / `end_utc` on the registry run and applied as DataFusion DataFrame filters on `history` (and `weather` when present) so partition and stats pruning stay on the scan. The result write upserts only that window. Slices outside the window stay unchanged (`rows_sha256` on `GET /api/afdd/scheduler/result-slices`). There is no scheduler "update all". If the existing result file is missing, the window is the first slice. If it cannot be read or parsed, the publish fails and the file is left unchanged.
+Lookback bounds are passed as `start_utc` / `end_utc` on the registry run and applied as SQL window filters on Timescale `history` (and `weather` when present). The result write upserts only that window. Slices outside the window stay unchanged (`rows_sha256` on `GET /api/afdd/scheduler/result-slices`). There is no scheduler "update all". If the existing result file is missing, the window is the first slice. If it cannot be read or parsed, the publish fails and the file is left unchanged.
 
 `lookback_matches_cadence` on scheduler status is true when that lookback equals the cadence: 24h for wall-clock, or `interval_minutes` for interval mode. A 3-hour interval with a 3-day lookback stays valid and reports false. Downtime does not stretch the window.
 
@@ -56,46 +56,42 @@ OPENFDD_AFDD_INTERVAL_MINUTES=1440
 OPENFDD_AFDD_LOOKBACK_VALUE=24
 OPENFDD_AFDD_LOOKBACK_UNIT=hours
 OPENFDD_AFDD_BUILDING_ID=ACME
-OPENFDD_PARQUET_FLUSH_SECONDS=300
 ```
 
 - **Cadence:** either `OPENFDD_AFDD_INTERVAL_MINUTES=1440` (checkpoint + interval) or `OPENFDD_AFDD_SCHEDULE=wall_clock` at `05:00` `America/Chicago`. Interval 1440 does not pin the clock. Wall-clock does. The live hub stays on interval until this build is the field tip.
 - **Ops clock (lab):** daily **05:00 America/Chicago**, lookback 24h / 1 day, so the cycle can finish before the **06:00** digest. That timezone is operator config for the lab, not a hardcoded site.
 - **Window:** lookback-sized only. `end` = latest persisted telemetry watermark; `start` = `end − lookback` (`plan_continuous_cycle`). Result rows outside that window are left unchanged (`merge_windowed_rule_result`). A rows-only file and a null-bound `preserved_unscoped` slice keep the same rows hash. After downtime, catch-up is still one lookback-sized window (`catch_up`). Historical rebuild is `POST /api/afdd/scheduler/backfill` with an explicit range (`plan_bounded_backfill`), never an update-all flag.
-- Compact ACME hive parts before enabling continuous AFDD (`scripts/ops/railway_compact_hub.sh` / hub-admin compaction).
+- Soft-OPEN ACME/Railway: Timescale-only, dual-write false, **no site backups** unless Ben asks ([TIMESCALE_WAVE_X.md](TIMESCALE_WAVE_X.md)).
 - Stress SoT: gate **38** `38_acme_afdd_qualification.sh` (MEGA required). Gate **19** remains synth flood only.
-- **RAM (portable, #1179):** Aggregate DataFusion pool = `(detected cgroup/host hard − reserves) × OPENFDD_COMPUTE_MEMORY_FRACTION` (default **0.50**) as a **FairSpillPool** with spill under `OPENFDD_DATAFUSION_SPILL_DIR` (default `<storage_root>/.datafusion-spill`). `OPENFDD_QUERY_MEMORY_MB` is the **per-request** ceiling (default pool/2), not the process pool. Absolute overrides (`OPENFDD_COMPUTE_MEMORY_MB`) are clamped to `hard − reserves`. Watch `/api/health.memory_budget` `{hard_limit_bytes, pool_bytes, current_bytes, peak_bytes, shed_state}` — not Railway-hardcoded 10/24 GB in product code. Example derived pools: ~3 GiB on 8 GiB edge, ~10 GiB on 24 GiB hub, ~46 GiB on 100 GiB VM (after reserves).
+- **RAM (portable):** Prefer lookback-bounded SQL cycles on small hosts. Watch `/api/health.memory_budget` when present — not Railway-hardcoded 10/24 GB in product code. Legacy DataFusion spill pool vars (`OPENFDD_DATAFUSION_SPILL_DIR`, FairSpillPool) are **not** the Timescale tip path ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)).
 
 ## Local == cloud
 
-Same GHCR central image and SQL path. Only storage env changes (`OPENFDD_PARQUET_ROOT` / volume vs `OPENFDD_STORAGE_URL=s3://…`). No Railway/AWS-specific SQL fork.
+Same GHCR central image and Timescale SQL path. Storage env is `OPENFDD_DATABASE_URL` / `OPENFDD_HISTORIAN=timescale`. No Railway/AWS-specific SQL fork. Soft-OPEN ≠ FQ.
 
 ## Low-RAM labs
 
 ```text
-# Prefer fraction defaults; pin absolutes only when measuring a known box.
-OPENFDD_COMPUTE_MEMORY_FRACTION=0.50
-OPENFDD_QUERY_MEMORY_MB=256
+# Prefer lookback-bounded continuous cycles on small hosts.
 OPENFDD_COMPUTE_MAX_INFLIGHT=2
 OPENFDD_MEMORY_SHED_FRACTION=0.75
 OPENFDD_MEMORY_ABORT_FRACTION=0.85
-OPENFDD_DATAFUSION_SPILL_DIR=/workspace/.cache/datafusion-spill
 ```
 
 Prefer lookback-bounded continuous cycles over full-history scans on small hosts. AFDD run-now is **chunked** (time × equipment) with cooperative cancel (`partial` / `cancelled`).
 
 ### Memory pressure policy (#1127 / #1179)
 
-Heavy analytics/AFDD **shed** new work at `OPENFDD_MEMORY_SHED_FRACTION` (default **0.75 × hard**) with HTTP 503 + `security_audit{event:"memory_shed"}`; **abort** in-flight heavy work at `OPENFDD_MEMORY_ABORT_FRACTION` (default **0.85**). A per-request **in-flight sampler** (`OPENFDD_MEMORY_SAMPLE_MS`, default **1000**) polls cgroup `memory.current` during analytics/SQL/AFDD chunks, sets the cancel flag, and drops DataFusion streams before the kernel OOMs; `/api/health.memory_budget` reports `sample_ms` and `last_trip`. Unlimited Docker cgroups use host **MemTotal** as the portable hard limit (`source=host_meminfo`). **Run-now** uses the **building-scoped** historian watermark (not the global live watermark); empty scoped windows return `status=no_data` quickly (#1192). Light paths (health, auth, ingest ack) never shed on memory alone — health stays **200** with `memory_budget.shed_state`. Ingest/control stay preferred; a deferred/cancelled AFDD cycle does **not** advance the checkpoint. Live Railway combined-load qualification remains operator/Grok Soft-OPEN after a GHCR pin — HTTP success alone is not survival proof; require `events` `oom_killed` watch + memory series.
+Heavy analytics/AFDD **shed** new work at `OPENFDD_MEMORY_SHED_FRACTION` (default **0.75 × hard**) with HTTP 503 + `security_audit{event:"memory_shed"}`; **abort** in-flight heavy work at `OPENFDD_MEMORY_ABORT_FRACTION` (default **0.85**). A per-request **in-flight sampler** (`OPENFDD_MEMORY_SAMPLE_MS`, default **1000**) polls cgroup `memory.current` during analytics/SQL/AFDD chunks and sets the cancel flag before the kernel OOMs; `/api/health.memory_budget` reports `sample_ms` and `last_trip` when present. Unlimited Docker cgroups use host **MemTotal** as the portable hard limit (`source=host_meminfo`). **Run-now** uses the **building-scoped** historian watermark (not the global live watermark); empty scoped windows return `status=no_data` quickly (#1192). Light paths (health, auth, ingest ack) never shed on memory alone — health stays **200** with `memory_budget.shed_state`. Ingest/control stay preferred; a deferred/cancelled AFDD cycle does **not** advance the checkpoint. Live Railway combined-load qualification remains operator/Grok Soft-OPEN after a GHCR pin — HTTP success alone is not survival proof; require `events` `oom_killed` watch + memory series.
 
 ### Lab ops (this Soft-OPEN program)
 
-- **No backups** unless Ben asks. Data continuity = keep historian volumes across `compose pull` + `up -d` (never `-v`).
+- **No backups** unless Ben asks. Soft-OPEN Railway/ACME = Timescale-only, dual-write false. Data continuity = keep Timescale / historian volumes across `compose pull` + `up -d` (never `-v`).
 - Docker maintenance before pulls: prune unused images/digests; **never** `docker volume prune` / `compose down -v` / delete `workspace/`.
 
-## Feather
+## Feather / Parquet dual-write
 
-Optional legacy dual-write / interchange only. **Not** the FDD or AFDD source of truth. Do not add a Feather hot tier for lookback. Freeze dual-write until an explicit consumer audit.
+**Forbidden on tip.** Timescale is the sole product historian ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). Do not add a Feather/Parquet hot tier for lookback or dual-write.
 
 ## Suspend telemetry (per site/edge)
 

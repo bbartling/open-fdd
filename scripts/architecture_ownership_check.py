@@ -33,19 +33,18 @@ COOKBOOK_MIN_BYTES = {
 }
 
 # README navigation / product wording invariants (C0).
+# Wave-X / ADR-010: Timescale-only product path (Soft-OPEN ≠ FQ).
 README_REQUIRED_MARKERS = (
     "FDD Rule Cookbook",
     "pypi.org/project/open-fdd",
-    "Apache DataFusion",
-    "Apache Arrow",
-    "datafusion-sql-cookbook",
+    "Timescale",
+    "ADR-010",
     "pandas-cookbook",
     "img.shields.io/badge/Docs-online",
     "FDD%20Rule%20Cookbook",
     "img.shields.io/pypi/v/open-fdd",
     "Quick%20Start-GHCR%20stack",
-    "Apache%20Arrow-columnar%20data",
-    "DataFusion-SQL%20engine",
+    "TimescaleDB",
 )
 
 
@@ -75,7 +74,7 @@ def _check_readme(errors: list[str]) -> None:
         ):
             errors.append("README.md must not claim React as the production operator UI")
     if "GHCR" not in text and "ghcr.io" not in text:
-        errors.append("README.md must mention GHCR stack for production DataFusion FDD")
+        errors.append("README.md must mention GHCR stack for production Timescale SQL FDD")
 
 
 def main() -> int:

@@ -3,6 +3,7 @@ title: Rule documentation template
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 9
+nav_exclude: true
 ---
 
 # Rule documentation template

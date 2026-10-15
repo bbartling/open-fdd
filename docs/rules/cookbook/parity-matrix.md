@@ -3,6 +3,7 @@ title: Parity matrix
 parent: Cookbook reference
 grand_parent: Rule Cookbook
 nav_order: 4
+nav_exclude: true
 ---
 
 # SQL ↔ Pandas parity matrix

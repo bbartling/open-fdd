@@ -10,7 +10,7 @@ Trust **tested current code**. Update this file when code truth changes.
 
 | Surface | Role | Must not |
 | --- | --- | --- |
-| **Open-FDD product** (GHCR stack) | Rust central (DataFusion SQL FDD + `/api/analytics/*`), React SPA (`openfdd-web`), fieldbus, mqtt. Deploy as **Recipe 1** cloud hub (mqtt+central+web, amd64) or **Recipe 2** OT edge (central+web+protocol; broker optional) — see [`docs/operations/build-recipes.md`](../docs/operations/build-recipes.md) | Python/pandas in the product request path; FDD math in TypeScript; treat fieldbus→hub MQTTS as the only OT story |
+| **Open-FDD product** (GHCR stack) | Rust central (Timescale historian + `sql/fdd` FDD + `/api/analytics/*`), React SPA (`openfdd-web`), fieldbus, mqtt. Deploy as **Recipe 1** cloud hub (mqtt+central+web, amd64) or **Recipe 2** OT edge (central+web+protocol; broker optional) — see [`docs/operations/build-recipes.md`](../docs/operations/build-recipes.md). Soft-OPEN ≠ FQ ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)) | Python/pandas in the product request path; FDD math in TypeScript; treat fieldbus→hub MQTTS as the only OT story; Parquet/DataFusion co-canonical |
 | **React SPA** | Sole product UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
 | **Historian** | **TimescaleDB durable history** + versioned SQL FDD (`sql/fdd`, `sql/schema`); ADR-010 Timescale hard cutover ([historian lock](docs/HISTORIAN_ARCHITECTURE.md)) | Dual-write; Parquet/Arrow/DataFusion co-canonical; Feather durability; Python on FDD equation path |
 | **Open-FDD PyPI** (`open-fdd`) | Third-party libraries: `ecm_engineering`, `rules`, `analytics`, `reporting` — runs **outside** the product app | Be mistaken for the product FDD runtime |
@@ -47,7 +47,7 @@ Canonical contract: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTU
 Never replace cookbooks with generated API docs alone.
 Never delete one cookbook because the other engine “won.”
 
-**Execution:** SQL registry (`sql_rules/registry.yaml`) on central DataFusion.
+**Execution:** versioned Timescale SQL packs (`sql/fdd/`, `sql/schema/`) on central — not DataFusion ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)).
 **Oracle / PyPI:** pandas cookbook + `open_fdd.rules`.
 **Recovery evidence:** [`docs/migration/react-rust/capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml).
 
@@ -63,7 +63,7 @@ Never delete one cookbook because the other engine “won.”
 
 - ADR: [`docs/architecture/ADR_data_model_graph.md`](../docs/architecture/ADR_data_model_graph.md)
 - Consumer/route matrix: [`docs/modeling/consumer-route-matrix.md`](../docs/modeling/consumer-route-matrix.md)
-- Telemetry/FDD = Parquet + DataFusion; RDF/SPARQL = relationships (when product central exposes them)
+- Telemetry/FDD = Timescale + `sql/fdd`; RDF/SPARQL = relationships (when product central exposes them)
 - Package TTL namespace: `urn:openfdd:ns#`; legacy commissioning RDF: `https://open-fdd.dev/model#`
 
 ---
