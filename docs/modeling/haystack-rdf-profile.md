@@ -27,7 +27,7 @@ Requirements source: [`openfdd_agent_spec/HAYSTACK_RDF_ROLLOUT.md`](../../openfd
 | RDF syntax | Parseable Turtle/JSON-LD | Native TTL is valid RDF; not yet strict Haystack |
 | Haystack semantics | Terms resolve to pinned `ph` defs; markers/refs valid | **Not claimed** for package TTL |
 | Site mapping completeness | Roles, topology, units sufficient for FDD | Package inventory + diagnostics |
-| FDD readiness | DataFusion roles populated | Existing SQL path |
+| FDD readiness | Timescale SQL roles populated | Existing SQL path ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)) |
 | Graph/API services | Central scoped dataset + SPARQL | Dataset **H8** + template SPARQL/bindings **H9** shipped; #1002 still needs H10+ consumers |
 
 ## Pinned vocabulary
@@ -75,7 +75,7 @@ profile distinguishes:
 | Concept | Strict Haystack projection | Native Open-FDD metadata |
 | --- | --- | --- |
 | Point `unit` def | Emit when known and def-backed | Store on point record |
-| Numeric reading | Value + compatible unit when spec allows | Parquet historian (canonical telemetry) |
+| Numeric reading | Value + compatible unit when spec allows | Timescale historian (canonical telemetry) |
 | Unknown unit | Omit typed strict literal; report `unknown_unit` | Retain `unit_status: unknown` and vendor text |
 
 Do not infer `unit` from column name suffixes or split SQL role strings.

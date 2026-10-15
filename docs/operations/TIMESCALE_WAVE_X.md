@@ -1,7 +1,11 @@
 # Wave-X Timescale 3.6.0 — bring-up
 
-Soft-OPEN ≠ FQ. Fieldbus BACnet/Modbus unchanged. No dual-write. Default
-binary Timescale-only (`legacy-datafusion` / `legacy-parquet` OFF).
+Soft-OPEN ≠ FQ. Fieldbus BACnet/Modbus unchanged. No dual-write
+(`dual_write` / dual-path false). Default binary Timescale-only
+(`legacy-datafusion` / `legacy-parquet` OFF).
+
+**Soft-OPEN Railway / ACME:** no site backups unless Ben asks — Timescale-only
+historian, dual-write false. Soft-OPEN is not full qualification.
 
 **Soft-OPEN R8d tip-safe:** no Soft-OPEN agent Railway/DB/volume backups; Parquet
 compaction/budget Soft-OPEN N/A on Timescale tip; Timescale WAL/PITR/restore

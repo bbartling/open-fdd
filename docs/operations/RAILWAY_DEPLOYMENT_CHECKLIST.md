@@ -25,7 +25,7 @@ Deploy **three** Railway services from GHCR, in order:
 
 | Order | Service | Image | Exposure | Purpose |
 |------:|---------|-------|----------|---------|
-| 1 | `openfdd-central` | `ghcr.io/bbartling/openfdd-central:sha-<7>` (or `:nightly` only if digest==tip) | **Private** | JWT API, Parquet historian, DataFusion FDD, MQTTS ingest client |
+| 1 | `openfdd-central` | `ghcr.io/bbartling/openfdd-central:sha-<7>` (or `:nightly` only if digest==tip) | **Private** | JWT API, **Timescale** historian, SQL FDD, MQTTS ingest client |
 | 2 | `openfdd-mqtt` | `ghcr.io/bbartling/openfdd-mqtt:sha-<7>` | **Private** MQTTS `:8883` | Cloud broker hub — **default for live OT** |
 | 3 | `openfdd-web` | `ghcr.io/bbartling/openfdd-web:sha-<7>` | **Public** HTTP | React SPA only |
 
@@ -42,14 +42,14 @@ Deploy **three** Railway services from GHCR, in order:
    - `OPENFDD_ADMIN_PASSWORD` — **human browser UI only**
    - `OPENFDD_AGENT_PASSWORD` — **external FDD AI / MCP only** (distinct from admin)
    - `OPENFDD_VIEWER_PASSWORD` — **optional** read-only UI/API (`username=viewer`; deployment-wide)
-4. Prefer historian via `OPENFDD_STORAGE_URL=file:///workspace/openfdd` (or Railway bucket `s3://…` per [historian-s3.md](historian-s3.md)). `OPENFDD_PARQUET_ROOT` is a legacy alias — avoid for new deploys.
+4. Prefer Timescale historian via `OPENFDD_DATABASE_URL` + `OPENFDD_HISTORIAN=timescale` ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md), [TIMESCALE_WAVE_X.md](TIMESCALE_WAVE_X.md)). Soft-OPEN ≠ FQ; no dual-write. Do **not** set Parquet/S3 as the product historian for new Soft-OPEN deploys (`OPENFDD_STORAGE_URL` / `OPENFDD_PARQUET_ROOT` are legacy).
 5. Set `OPENFDD_WORKSPACE=/workspace`, `OPENFDD_REACT_UI=1`, `OPENFDD_UI_GENERATION_DEFAULT=react`.
 6. Deploy **central → wait `/api/health` 200 → mqtt → web**.
 7. Web: `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (host:port only, no `http://`).
 8. Keep central + mqtt **private**; public domain on **web only**.
 9. Wire central’s MQTT client env to the private broker (host/port/certs) — see main Railway guide; never commit certs.
 10. Tell the human: FDD assistance = local Cursor/Claude/Codex + `agent` JWT; Railway AI does **not** run `openfdd-mcp`.
-11. **App updates must not wipe telemetry:** keep the same `/workspace` volume (or same `s3://` bucket). Only replace GHCR image tags. Canonical Parquet under `OPENFDD_STORAGE_URL` is the restore path — no Feather, no migrate-from-old-format step.
+11. **App updates must not wipe telemetry:** keep the same Timescale volume / `OPENFDD_DATABASE_URL` (and `/workspace` for non-historian scratch). Only replace GHCR image tags. Soft-OPEN Railway/ACME: **no site backups** unless Ben asks — Timescale-only, dual-write false ([TIMESCALE_WAVE_X.md](TIMESCALE_WAVE_X.md)).
 
 ### Auth model (human vs external AI)
 
@@ -127,10 +127,11 @@ Web upstream: `OPENFDD_CENTRAL_UPSTREAM=openfdd-central-cQ-F.railway.internal:80
   - `OPENFDD_ADMIN_PASSWORD` (human UI)
   - `OPENFDD_AGENT_PASSWORD` (external AI / MCP — **required** on Railway)
   - `OPENFDD_WORKSPACE=/workspace`
-  - `OPENFDD_STORAGE_URL=file:///workspace/openfdd` (preferred) *or* legacy `OPENFDD_PARQUET_ROOT=/workspace/.cache/parquet`
+  - `OPENFDD_DATABASE_URL=postgresql://…` (Timescale; required on tip)
+  - `OPENFDD_HISTORIAN=timescale`
   - `OPENFDD_REACT_UI=1`
   - `OPENFDD_UI_GENERATION_DEFAULT=react`
-- [ ] Optional low-RAM: `OPENFDD_QUERY_MEMORY_MB=512`, `OPENFDD_DATAFUSION_SPILL_DIR=/workspace/.cache/datafusion-spill`
+- [ ] Optional low-RAM: tune DB / central memory for the box — do **not** revive DataFusion spill vars as product defaults (legacy only; [ADR-010](../architecture/adr-010-timescale-hard-cutover.md))
 - [ ] For MQTTS hub: set Central MQTT client env to private broker (see [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md))
 - [ ] Deploy and wait until `GET /api/health` returns 200
 - [ ] From Railway shell: `getent hosts openfdd-central.railway.internal` and `curl -fsS http://openfdd-central.railway.internal:8080/api/health`
@@ -182,6 +183,6 @@ Cloud MQTTS is the hub: on-prem fieldbus publishes into Railway MQTTS; Central i
 - [ ] Public central or public MQTTS without explicit human approval
 - [ ] Admin password in MCP / Cursor / Claude config
 - [ ] Deploying fieldbus inside Railway for BACnet
-- [ ] Reintroducing Feather dual-write / `OPENFDD_LEGACY_INGEST_MIRROR` (retired; Parquet under `OPENFDD_STORAGE_URL` only)
+- [ ] Reintroducing Feather/Parquet dual-write or `legacy-datafusion` / `legacy-parquet` product features (Timescale-only — ADR-010)
 - [ ] Treating Railway AI as the FDD/HVAC assistant
-- [ ] Recreating an empty `/workspace` volume on every image upgrade (destroys Parquet history)
+- [ ] Recreating an empty Timescale / `/workspace` volume on every image upgrade (destroys history)

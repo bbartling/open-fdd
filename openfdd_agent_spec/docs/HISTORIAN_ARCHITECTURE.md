@@ -22,9 +22,10 @@
 ## Historical note (retired)
 
 The remainder of this file documents the pre-3.6.0 Parquet/DataFusion contract for audit history only.
-Do not implement dual-write bridges from it.
+Do not implement dual-write bridges from it. Live ops: [`TIMESCALE_WAVE_X.md`](../../docs/operations/TIMESCALE_WAVE_X.md)
+(`OPENFDD_DATABASE_URL`, `OPENFDD_HISTORIAN=timescale`, dual-write false). Soft-OPEN ≠ FQ.
 
-## Generic storage contract
+## Generic storage contract (historical — pre-3.6.0 Parquet)
 
 Local/VM:
 

@@ -6,17 +6,19 @@ nav_order: 6
 
 # Open-FDD historian architecture
 
-> Status: H1–H4 are merged. The canonical local Parquet contract, immutable micro-batch writer, DataFusion registration/query safeguards, and offline local compactor are implemented. H5 adds the S3-compatible backend and cloud runtime wiring; legacy Parquet/Feather/JSONL paths remain readable until H6/H7 migration and live-ingest cutover are complete.
+> **SUPERSEDED (Wave-X 3.6.0+ / [ADR-010](adr-010-timescale-hard-cutover.md)):** Product historian is **TimescaleDB only** — no dual-write, no Parquet/DataFusion co-canonical path. Soft-OPEN ≠ FQ. Live ops: [`../operations/TIMESCALE_WAVE_X.md`](../operations/TIMESCALE_WAVE_X.md). The H1–H10 Parquet/Arrow/DataFusion narrative below is **historical** and must not guide new work.
 
-## Architectural contract
+> Historical status (pre-3.6.0): H1–H4 merged the local Parquet contract, immutable micro-batch writer, DataFusion registration/query safeguards, and offline local compactor. H5 added S3-compatible backend wiring.
 
-**Parquet is the canonical durable Open-FDD historian format.**
+## Architectural contract (historical — pre-3.6.0)
 
-**Arrow is the in-memory execution format.**
+**Parquet was the canonical durable Open-FDD historian format (superseded by Timescale — ADR-010).**
 
-**DataFusion is the analytical SQL engine.**
+**Arrow was the in-memory execution format.**
 
-**Feather / Arrow IPC is optional cache, export, or interoperability storage only and is non-canonical.**
+**DataFusion was the analytical SQL engine.**
+
+**Feather / Arrow IPC was optional cache, export, or interoperability storage only and was non-canonical.**
 
 Open-FDD uses the same logical historian on a small local Docker/VM host and on object storage:
 
