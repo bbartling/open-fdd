@@ -21,6 +21,7 @@ def render(inv: dict) -> str:
         "parent: Cookbook reference",
         "grand_parent: Rule Cookbook",
         "nav_order: 5",
+        "nav_exclude: true",
         "---",
         "",
         "# Generated parity report",
