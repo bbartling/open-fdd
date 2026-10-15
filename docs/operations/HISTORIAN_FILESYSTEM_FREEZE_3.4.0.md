@@ -169,7 +169,7 @@ A tenant prefix is an **additive** isolation layer. It does not redefine what a 
 | [`PATCH_CYCLE.md`](PATCH_CYCLE.md) | Tiny VERSION rev + Railway hub stress template |
 | [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) | Full stress handbook (`run_railway_hub_stress.sh`) |
 | [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](RAILWAY_DEPLOYMENT_CHECKLIST.md) | Volume / image re-pin checklist |
-| [`HISTORIAN_SCALE_QUALIFICATION.md`](HISTORIAN_SCALE_QUALIFICATION.md) | Scale / qualification notes |
+| [`HISTORIAN_SCALE_QUALIFICATION.md`](HISTORIAN_SCALE_QUALIFICATION.md) | **Historical** H10 / DataFusion-era scale notes (workflow removed; not Timescale FQ) |
 | [`historian-s3.md`](historian-s3.md) | Object-store (`s3://`) variant of the same contract |
 | [`patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) | Wave K master (repo mirror) |
 | [`patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md) | Wave L queued program |

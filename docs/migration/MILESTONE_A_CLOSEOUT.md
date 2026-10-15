@@ -26,7 +26,7 @@ documented below and does **not** block Milestone B Jobs.
 |------|----------|----------|----------|-------|--------|-----------------|
 | Architecture docs | Human + machine ownership | `ARCHITECTURE.md` + `ownership.yaml` | openfdd_agent_spec | `scripts/architecture_ownership_check.py` | **Closed** | Keep CI green |
 | Architecture CI | Ownership + cookbook path gates | Script + cookbook parity | this PR / cookbook-parity | ownership check + `cookbook_parity_check.py --all` | **Closed (light)** | Harden later if needed |
-| PyPI package | ECM + oracle extras | `open-fdd` 4.1.1; modules `ecm_engineering`, `rules`, `analytics`, `reporting` | PyPI / `pyproject.toml` | python-package / ecm-python | **Closed** | Residual: generated version manifest |
+| PyPI package | ECM + oracle extras | `open-fdd` 4.1.1; modules `ecm_engineering`, `rules`, `analytics`, `reporting` | PyPI / `pyproject.toml` | `python-package.yml` (former `ecm-python.yml` alias consolidated 2026-10-15) | **Closed** | Residual: generated version manifest |
 | Vibe 19 consume oracle | Thin consumer | runner/analytics shims; pin `>=4.1.1,<5` | playground #59 | vibe19 pytest (known transient_threshold fail) | **Closed** | Full KEEP/SHIM matrix residual |
 | UI consume oracle | Thin shims | #579/#580 | open-fdd PRs | React SPA checks | **Closed** | — |
 | Vibe 20 ECM | Generic math from package | 8 twins delegated; keepers listed | `OPENFDD_ECM_TWINS.md` | ECM parity tests | **Partial** | Delete remaining generic twins after parity (A residual / parallel) |

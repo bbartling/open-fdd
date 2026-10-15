@@ -2,6 +2,13 @@
 
 Post PR #477 merge on `master` @ `3a7dafb5`.
 
+> **Supersession (2026-10-15 Stage A):** This dated inventory is not authoritative
+> for current workflow need. `docs-pdf.yml` and the retired
+> `historian-scale-qualification.yml` echo placeholders were **removed**;
+> `ecm-python.yml` was **consolidated into** `python-package.yml`. See
+> `openfdd_agent_spec/docs/WORKFLOWS.md` for the live file list. Do not restore
+> those placeholders from the **keep** rows below.
+
 ## Summary
 
 | Workflow | Era | Publishes images | PR | master | Nightly | Action |
@@ -17,10 +24,10 @@ Post PR #477 merge on `master` @ `3a7dafb5`.
 | `docker-publish.yml` | Python | manual only | no | no | no | **archived/gated** |
 | `ghcr-multiarch-publish.yml` | Python | manual only | no | no | no | **archived/gated** |
 | `publish-open-fdd.yml` | Python PyPI ECM 4.x | tags `open-fdd-v*` / `v*.*.*` + dispatch | no | no | dry_run / tag | **active** (ECM-only wheel) |
-| `ecm-python.yml` | Python ECM tests | path | yes | yes | no | **keep** |
+| `ecm-python.yml` | Python ECM tests | path | yes | yes | no | **removed 2026-10-15** → `python-package.yml` |
 | `docker-supervisor-check.yml` | ops | no | ? | ? | no | **keep** |
 | `docs-pages.yml` | docs | no | yes | yes (deploy master) | no | **keep** |
-| `docs-pdf.yml` | docs | no | manual | no | no | **keep** |
+| `docs-pdf.yml` | docs | no | manual | no | no | **removed 2026-10-15** (echo placeholder) |
 | `cookbook-parity.yml` | docs | no | path | path | no | **keep** |
 | `ghcr-prune.yml` | ops | no | manual | no | no | **keep** |
 

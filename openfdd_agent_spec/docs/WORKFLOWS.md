@@ -6,18 +6,23 @@ Actual workflow files under `.github/workflows/` (open-fdd). Re-list with
 | File | Typical purpose |
 | --- | --- |
 | `rust-ci.yml` | Rust workspace CI (+ docs-only cookbook check) |
-| `fdd-engine-ci.yml` | FDD engine / DataFusion focused CI |
-| `python-package.yml` | Python package tests |
-| `ecm-python.yml` | ECM Python package tests |
+| `fdd-engine-ci.yml` | FDD engine / SQL pack focused CI (+ DataFusion prohibition) |
+| `python-package.yml` | PyPI package tests (ECM + oracle; five suites + wheel/assets) |
 | `cookbook-parity.yml` | Cookbook parity (`scripts/cookbook_parity_check.py`) |
 | `docs-pages.yml` | GitHub Pages |
-| `docs-pdf.yml` | Docs PDF |
 | `publish-open-fdd.yml` | Publish `open-fdd` to PyPI |
 | `ghcr-openfdd-stack.yml` | Publish stack images; retarget `:nightly` on master |
 | `rust-ghcr-mcp.yml` | Publish `openfdd-mcp` (`:nightly`) |
 | `ghcr-prune.yml` | GHCR retention |
 | `rust-release.yml` | Rust release |
 | `security.yml` / `appsec.yml` | Security / AppSec |
+| `bacnet-mqtt-container-integration.yml` | BACnet→MQTT container integration |
+| `pypi-sql-parity.yml` | Published-package pandas oracle gate |
+| `wave-c-isolated.yml` | Isolated broker / ZAP qualification umbrella |
+
+Removed Stage A (2026-10-15, CI/docs cleanup; no product VERSION bump):
+`docs-pdf.yml` (manual echo placeholder), `historian-scale-qualification.yml`
+(retired DF echo placeholder), `ecm-python.yml` (alias → `python-package.yml`).
 
 Low-RAM hosts: **never** local `docker build` of stack images. Wait for GHCR publish, prune, pull `sha-*`, `openfdd_stack_up.sh --no-pull`.
 

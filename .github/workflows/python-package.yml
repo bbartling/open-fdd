@@ -1,29 +1,24 @@
 # PR/push gate for the open-fdd PyPI package (ECM + oracle libs).
+# Stage A (2026-10-15): consolidated former ecm-python.yml alias into this
+# canonical workflow. Trigger paths are the union of both prior filters so
+# tests/ecm_engineering (and broader tests/**) still fire the gate.
 name: Python package
 
 on:
   push:
     paths:
       - "open_fdd/**"
-      - "tests/ecm/**"
-      - "tests/rules/**"
-      - "tests/analytics/**"
-      - "tests/reporting/**"
+      - "tests/**"
       - "pyproject.toml"
       - "scripts/release/check_version.py"
-      - ".github/workflows/ecm-python.yml"
       - ".github/workflows/python-package.yml"
       - ".github/workflows/publish-open-fdd.yml"
   pull_request:
     paths:
       - "open_fdd/**"
-      - "tests/ecm/**"
-      - "tests/rules/**"
-      - "tests/analytics/**"
-      - "tests/reporting/**"
+      - "tests/**"
       - "pyproject.toml"
       - "scripts/release/check_version.py"
-      - ".github/workflows/ecm-python.yml"
       - ".github/workflows/python-package.yml"
       - ".github/workflows/publish-open-fdd.yml"
 
