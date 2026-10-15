@@ -1,6 +1,6 @@
 {
   "pack_id": "openfdd-analytics-sql-v1",
-  "pack_version": "3.6.7-softopen",
+  "pack_version": "3.6.8-softopen",
   "engine": "timescale/postgresql",
   "soft_open_neq_fq": true,
   "bps_oss_parity": "same analytics pack hash — twin layers must not fork equations",
@@ -92,13 +92,34 @@
       "sql_path": "sql/analytics/postgres/queries/pid_hunting_proxy.sql",
       "status": "softopen",
       "notes": "stddev hunting proxy Soft-OPEN; full PID-HUNT later"
+    },
+    {
+      "query_id": "sql-anomaly",
+      "sql_path": "sql/analytics/postgres/queries/sql_anomaly_zscore.sql",
+      "status": "softopen",
+      "notes": "z-score Soft-OPEN; full anomaly suite later"
+    },
+    {
+      "query_id": "mv-change-point",
+      "sql_path": "sql/analytics/postgres/queries/mv_change_point_daily.sql",
+      "status": "softopen",
+      "notes": "day-over-day mean change Soft-OPEN"
+    },
+    {
+      "query_id": "fuel",
+      "sql_path": "sql/analytics/postgres/queries/fuel_daily.sql",
+      "status": "softopen",
+      "notes": "historian fuel/utility daily Soft-OPEN; campus import path separate"
+    },
+    {
+      "query_id": "rcx-preset-coverage",
+      "sql_path": "sql/analytics/postgres/queries/rcx_preset_role_coverage.sql",
+      "status": "softopen",
+      "notes": "role coverage for RCx presets; GET rcx/presets catalog stays Rust"
     }
   ],
   "remaining_routes": [
-    "sql-anomaly",
-    "mv-change-point",
-    "fuel",
-    "rcx/preset",
-    "GET rcx/presets"
+    "GET rcx/presets (Rust catalog — Soft-OPEN already)",
+    "POST rcx/preset (Timescale product paths Soft-OPEN; full preset FQ later)"
   ]
 }
