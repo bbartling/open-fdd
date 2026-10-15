@@ -225,6 +225,16 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         // Soft-OPEN R5: opaque point IRI → openfdd_key (+ optional Timescale history).
         .route("/api/model/point-resolve", get(model_point_resolve))
+        // Soft-OPEN: BPS-compatible TTL alias → strict Haystack projection Turtle.
+        .route(
+            "/api/model/ttl",
+            get(csv_import_package_mapping_haystack_ttl),
+        )
+        // Soft-OPEN: revisioned semantic_meta CRUD (dry_run + expected_revision CAS).
+        .route(
+            "/api/model/semantic-meta",
+            get(csv_import_package_mapping_semantic_meta).put(model_semantic_meta_put),
+        )
         // Soft-OPEN R8a: tip-safe read-only schema/contract probe (no migrator apply).
         .route(
             "/api/admin/schema-contract",
@@ -4956,18 +4966,24 @@ pub async fn csv_import_package_mapping_semantic_meta(
             .join("csv_buildings")
             .join(&building_id);
         match open_fdd_edge_prototype::csv_ingest::semantic_meta::load_persisted(&root) {
-            Ok(Some(meta)) => json!({
-                "ok": true,
-                "present": true,
-                "schema": open_fdd_edge_prototype::csv_ingest::semantic_meta::SCHEMA,
-                "meta": meta,
-                "soft_open_neq_fq": true,
-            }),
+            Ok(Some(meta)) => {
+                let revision = meta.revision.clone();
+                json!({
+                    "ok": true,
+                    "present": true,
+                    "schema": open_fdd_edge_prototype::csv_ingest::semantic_meta::SCHEMA,
+                    "building_id": building_id,
+                    "revision": revision,
+                    "meta": meta,
+                    "soft_open_neq_fq": true,
+                })
+            }
             Ok(None) => json!({
                 "ok": true,
                 "present": false,
                 "schema": open_fdd_edge_prototype::csv_ingest::semantic_meta::SCHEMA,
                 "building_id": building_id,
+                "revision": Value::Null,
                 "soft_open_neq_fq": true,
                 "note": "Soft-OPEN tip-safe: missing semantic_meta is an honest present=false (≠ FQ RDF/SPARQL site proof)",
             }),
@@ -4980,6 +4996,198 @@ pub async fn csv_import_package_mapping_semantic_meta(
         return Err((StatusCode::BAD_REQUEST, Json(result)));
     }
     Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SemanticMetaPutBody {
+    /// Target building (must match `meta.building_id` when set).
+    pub building_id: String,
+    /// Native `openfdd_semantic_meta_v1` (or C1 sketch upgraded on parse).
+    pub meta: Value,
+    /// CAS precondition against tip revision (BPS `expected_revision` analogue).
+    pub expected_revision: Option<String>,
+    /// When true, validate + CAS-check without publishing (BPS `dry_run`).
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+/// Soft-OPEN: revisioned semantic_meta PUT with dry_run + expected_revision CAS (#997/#1123).
+///
+/// Authority stays `openfdd_semantic_meta_v1` (not BPS Turtle overlay). Soft-OPEN ≠ FQ —
+/// does not ship full equip/point tombstone overlay CRUD.
+pub async fn model_semantic_meta_put(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<SemanticMetaPutBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(&headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e, "soft_open_neq_fq": true})),
+        )
+    })?;
+    if matches!(user.role, auth::Role::Viewer) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "viewer role cannot mutate semantic_meta",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    }
+    let building_id = body.building_id.trim().to_string();
+    if building_id.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id required",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    }
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+
+    let expected = body
+        .expected_revision
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let dry_run = body.dry_run;
+    let meta_raw = body.meta;
+    let cache = state.haystack_rdf.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        let root = open_fdd_edge_prototype::historian::store::workspace_dir()
+            .join("data")
+            .join("csv_buildings")
+            .join(&building_id);
+        std::fs::create_dir_all(&root).map_err(|e| {
+            json!({
+                "ok": false,
+                "error": format!("create building root: {e}"),
+                "soft_open_neq_fq": true,
+            })
+        })?;
+
+        let mut meta =
+            open_fdd_edge_prototype::csv_ingest::semantic_meta::parse_semantic_meta(&meta_raw)
+                .map_err(|e| {
+                    json!({
+                        "ok": false,
+                        "error": e,
+                        "soft_open_neq_fq": true,
+                    })
+                })?;
+        if meta.building_id != building_id {
+            return Err(json!({
+                "ok": false,
+                "error": format!(
+                    "meta.building_id {:?} does not match request building_id {building_id:?}",
+                    meta.building_id
+                ),
+                "soft_open_neq_fq": true,
+            }));
+        }
+        // Tip revision for CAS / dry_run response (None when no head yet).
+        let current = open_fdd_edge_prototype::csv_ingest::semantic_meta::load_persisted(&root)
+            .map_err(|e| json!({"ok": false, "error": e, "soft_open_neq_fq": true}))?;
+        let current_rev = current
+            .as_ref()
+            .and_then(|m| m.revision.clone())
+            .unwrap_or_default();
+
+        if let Some(want) = expected.as_deref() {
+            let have = current.as_ref().and_then(|m| m.revision.as_deref());
+            let ok = match have {
+                Some(cur) => cur == want,
+                None => want.is_empty(),
+            };
+            if !ok {
+                return Err(json!({
+                    "ok": false,
+                    "conflict": true,
+                    "error": "semantic meta revision conflict (reload and retry)",
+                    "building_id": building_id,
+                    "revision": if current_rev.is_empty() {
+                        Value::Null
+                    } else {
+                        json!(current_rev)
+                    },
+                    "expected_revision": want,
+                    "soft_open_neq_fq": true,
+                }));
+            }
+        }
+
+        if dry_run {
+            return Ok(json!({
+                "ok": true,
+                "dry_run": true,
+                "building_id": building_id,
+                "revision": if current_rev.is_empty() {
+                    Value::Null
+                } else {
+                    json!(current_rev)
+                },
+                "would_publish": true,
+                "schema": open_fdd_edge_prototype::csv_ingest::semantic_meta::SCHEMA,
+                "soft_open_neq_fq": true,
+                "note": "dry_run validated parse + CAS; no head published",
+            }));
+        }
+
+        meta.building_id = building_id.clone();
+        let rev = open_fdd_edge_prototype::csv_ingest::semantic_meta::persist_atomic(
+            &root,
+            meta,
+            expected.as_deref(),
+        )
+        .map_err(|e| {
+            let conflict = e.contains("revision conflict");
+            json!({
+                "ok": false,
+                "conflict": conflict,
+                "error": e,
+                "building_id": building_id,
+                "soft_open_neq_fq": true,
+            })
+        })?;
+        cache.invalidate_building(&building_id);
+        Ok(json!({
+            "ok": true,
+            "dry_run": false,
+            "building_id": building_id,
+            "revision": rev.revision,
+            "content_sha256": rev.content_sha256,
+            "schema": rev.schema,
+            "soft_open_neq_fq": true,
+        }))
+    })
+    .await
+    .unwrap_or_else(|e| {
+        Err(json!({
+            "ok": false,
+            "error": format!("semantic-meta put task: {e}"),
+            "soft_open_neq_fq": true,
+        }))
+    });
+
+    match result {
+        Ok(body) => Ok(Json(body)),
+        Err(err) => {
+            let status = if err.get("conflict") == Some(&json!(true)) {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((status, Json(err)))
+        }
+    }
 }
 
 fn project_haystack_for_building(
@@ -7776,6 +7984,181 @@ mod version_tests {
                 .contains("viewer role cannot mutate package roles"),
             "unexpected body: {json}"
         );
+    }
+
+    fn sample_semantic_meta_body(building_id: &str) -> serde_json::Value {
+        serde_json::json!({
+            "schema": "openfdd_point_metadata_v1_sketch",
+            "building_id": building_id,
+            "points": [{
+                "equipment_id": "AHU_1",
+                "column": "SAT",
+                "haystack_tags": ["sensor", "point", "air", "temp"],
+                "unit": "°F",
+                "unit_source": "package_map"
+            }],
+            "equipment": [{
+                "equipment_id": "AHU_1",
+                "haystack_tags": ["ahu", "equip"],
+                "display_name": "AHU 1"
+            }]
+        })
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE while exercising semantic-meta HTTP CAS"
+    )]
+    async fn semantic_meta_put_dry_run_conflict_and_viewer_deny() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", workspace.path());
+
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("semantic-meta-cas-test-secret".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let bid = "SYNTH_SEMANTIC_META_CAS";
+        let meta = sample_semantic_meta_body(bid);
+
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("viewer-meta", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let viewer_req = Request::builder()
+            .method("PUT")
+            .uri("/api/model/semantic-meta")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {viewer}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "meta": meta,
+                    "dry_run": true
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let viewer_resp = app.clone().oneshot(viewer_req).await.unwrap();
+        assert_eq!(viewer_resp.status(), StatusCode::FORBIDDEN);
+
+        let op = state
+            .auth
+            .issue_token_with_tenants("operator-meta", crate::auth::Role::Operator, 60, &[])
+            .unwrap();
+
+        // dry_run must not publish a head
+        let dry_req = Request::builder()
+            .method("PUT")
+            .uri("/api/model/semantic-meta")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "meta": meta,
+                    "dry_run": true
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let dry_resp = app.clone().oneshot(dry_req).await.unwrap();
+        assert_eq!(dry_resp.status(), StatusCode::OK);
+        let dry_bytes = axum::body::to_bytes(dry_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let dry_json: serde_json::Value = serde_json::from_slice(&dry_bytes).unwrap();
+        assert_eq!(dry_json.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            dry_json.get("dry_run").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        let tip = workspace
+            .path()
+            .join("data/csv_buildings")
+            .join(bid)
+            .join("semantic_meta.json");
+        assert!(!tip.is_file(), "dry_run must not write semantic_meta.json");
+
+        // first publish
+        let put1 = Request::builder()
+            .method("PUT")
+            .uri("/api/model/semantic-meta")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "meta": meta
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let put1_resp = app.clone().oneshot(put1).await.unwrap();
+        assert_eq!(put1_resp.status(), StatusCode::OK);
+        let put1_bytes = axum::body::to_bytes(put1_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let put1_json: serde_json::Value = serde_json::from_slice(&put1_bytes).unwrap();
+        let rev = put1_json
+            .get("revision")
+            .and_then(|v| v.as_str())
+            .expect("revision")
+            .to_string();
+        assert!(tip.is_file());
+
+        // stale expected_revision → 409
+        let conflict = Request::builder()
+            .method("PUT")
+            .uri("/api/model/semantic-meta")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "meta": meta,
+                    "expected_revision": "stale-rev-not-current"
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let conflict_resp = app.clone().oneshot(conflict).await.unwrap();
+        assert_eq!(conflict_resp.status(), StatusCode::CONFLICT);
+        let conflict_bytes = axum::body::to_bytes(conflict_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let conflict_json: serde_json::Value = serde_json::from_slice(&conflict_bytes).unwrap();
+        assert_eq!(
+            conflict_json.get("conflict").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+
+        // matching CAS succeeds (idempotent same content still ok)
+        let put2 = Request::builder()
+            .method("PUT")
+            .uri("/api/model/semantic-meta")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "meta": meta,
+                    "expected_revision": rev
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let put2_resp = app.oneshot(put2).await.unwrap();
+        assert_eq!(put2_resp.status(), StatusCode::OK);
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
     }
 
     #[test]

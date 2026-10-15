@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Gate H — RDF / model mutation helpers (dry_run) or honest gap vs BPS.
+"""Gate H — RDF / model mutation helpers (dry_run + expected_revision CAS).
 
 BPS has revisioned overlay CRUD (``dry_run``, ``expected_revision``, tombstones)
-in ``bps/semantic/model_crud.py``. Open-FDD tip Soft-OPEN exposes:
+in ``bps/semantic/model_crud.py``. Open-FDD Soft-OPEN tip exposes the native
+authority surface:
 
-  - ``POST /api/model/commissioning-import`` (fail-closed validation)
-  - ``POST /api/model/assignments/save``
-  - Package mapping / Haystack TTL (read) + SPARQL (read-only)
+  - ``PUT /api/model/semantic-meta`` — dry_run + expected_revision CAS (HR-07)
+  - ``GET /api/model/semantic-meta`` — tip meta + revision
+  - ``GET /api/model/ttl`` — BPS-compatible alias → Haystack projection Turtle
+  - Read: ``POST /api/model/sparql``, point-resolve
+  - Write-ish (bundle): commissioning-import / assignments/save
 
-This gate probes whether a dry_run / revision contract exists. If not, it
-documents the gap and exits 0 with WARN (Soft-OPEN honesty — not a greenwash
-PASS claiming BPS parity). Soft-OPEN ≠ FQ.
+This is **not** full BPS Turtle overlay equip/point tombstone CRUD. Soft-OPEN ≠ FQ.
+Track: #997 / #1123. Synthetic sites only.
 
   python scripts/stress/10_model_crud_helpers.py --building-id SYNTH_01
 """
@@ -35,83 +37,134 @@ from helpers import (  # noqa: E402
     wait_until_ready,
 )
 
-GAP_DOC = """
-Open-FDD Soft-OPEN model mutation vs BPS model_crud
-===================================================
-
-BPS (Windows twin):
-  - Revisioned RDF overlay CRUD with dry_run + expected_revision + tombstones
-  - Acceptance wave w1_model_crud
-
-Open-FDD tip (this gate):
-  - Read: POST /api/model/sparql, GET package TTL / haystack.ttl, point-resolve
-  - Write-ish: POST /api/model/commissioning-import (full bundle, fail-closed)
-  - Write-ish: POST /api/model/assignments/save
-  - No first-class HTTP dry_run / expected_revision overlay CRUD matching BPS
-
-Track: #997 / #1123 / #1003 / #1004 (Haystack RDF) + PARITY-CORE RDF CRUD residual.
-Soft-OPEN ≠ FQ — do not claim BPS CRUD parity until a revisioned dry_run API lands.
-"""
+SKETCH_META = {
+    "schema": "openfdd_point_metadata_v1_sketch",
+    "points": [
+        {
+            "equipment_id": "AHU_1",
+            "column": "SAT",
+            "haystack_tags": ["sensor", "point", "air", "temp"],
+            "unit": "°F",
+            "unit_source": "package_map",
+        }
+    ],
+    "equipment": [
+        {
+            "equipment_id": "AHU_1",
+            "haystack_tags": ["ahu", "equip"],
+            "display_name": "AHU 1",
+        }
+    ],
+}
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_connection(argv)
     building_id = require_building_id(args)
     banner(
-        "Stress 10 — model CRUD helpers / gap doc",
+        "Stress 10 — model semantic-meta dry_run / CAS",
         base_url=args.base_url,
         building_id=building_id,
     )
+    meta = dict(SKETCH_META)
+    meta["building_id"] = building_id
+
     with client(args.base_url) as http:
         wait_until_ready(http)
         headers = login(http, user=args.user, password=args.password)
 
-        # Probe commissioning-import with dry_run-ish empty payload (expect 4xx, not 500).
+        # dry_run probe — must acknowledge without requiring a prior package
         status, _hdrs, raw = http.request(
-            "POST",
-            "/api/model/commissioning-import",
+            "PUT",
+            "/api/model/semantic-meta",
             headers=headers,
-            json_body={"dry_run": True, "building_id": building_id, "payload": {}},
+            json_body={
+                "building_id": building_id,
+                "meta": meta,
+                "dry_run": True,
+            },
             timeout=30.0,
         )
-        safe_print(f"POST /api/model/commissioning-import dry_run probe -> HTTP {status}")
+        safe_print(f"PUT /api/model/semantic-meta dry_run -> HTTP {status}")
         try:
             body = json.loads(raw.decode("utf-8") or "{}")
         except json.JSONDecodeError:
             body = {"raw": raw[:200].decode("utf-8", errors="replace")}
         safe_print(f"  body keys={list(body)[:12] if isinstance(body, dict) else type(body)}")
 
-        # If server echoes dry_run support explicitly, note it.
-        dry = None
-        if isinstance(body, dict):
-            dry = body.get("dry_run")
-            if "dry_run" in str(body.get("error", "")).lower():
-                dry = "mentioned-in-error"
-        if dry is True or dry == "mentioned-in-error":
-            safe_print("NOTE: commissioning-import acknowledges dry_run (partial)")
-        else:
+        if status == 404:
             safe_print(
-                "GAP: no BPS-equivalent revisioned overlay CRUD dry_run/expected_revision "
-                "on tip — see docstring / ART"
+                "GAP: /api/model/semantic-meta missing on this tip — "
+                "need Soft-OPEN RDF CRUD PR (#997/#1123)"
             )
+            return 1
+        if status == 403:
+            safe_print(
+                "WARN 10 — JWT lacks mutate permission for semantic-meta "
+                "(viewer?). Soft-OPEN ≠ FQ"
+            )
+            return 0
+        if status >= 500:
+            safe_print("FAIL: semantic-meta dry_run returned 5xx")
+            return 1
+        if not isinstance(body, dict) or body.get("ok") is not True or body.get("dry_run") is not True:
+            safe_print(f"FAIL: dry_run contract missing ok/dry_run=true — {body!r}")
+            return 1
+        safe_print("  dry_run contract OK")
 
-        # assignments/save probe — expect authz or validation, not crash
-        status2, _, raw2 = http.request(
-            "POST",
-            "/api/model/assignments/save",
+        # Optional: stale CAS should 409 when a tip exists (skip if building empty)
+        status_g, _, raw_g = http.request(
+            "GET",
+            "/api/model/semantic-meta",
             headers=headers,
-            json_body={"dry_run": True, "building_id": building_id, "assignments": []},
+            params={"building_id": building_id},
             timeout=30.0,
         )
-        safe_print(f"POST /api/model/assignments/save dry_run probe -> HTTP {status2}")
-        if status2 >= 500:
-            safe_print("FAIL: assignments/save returned 5xx")
+        try:
+            got = json.loads(raw_g.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            got = {}
+        rev = got.get("revision") if isinstance(got, dict) else None
+        if status_g == 200 and isinstance(got, dict) and got.get("present") and rev:
+            status_c, _, raw_c = http.request(
+                "PUT",
+                "/api/model/semantic-meta",
+                headers=headers,
+                json_body={
+                    "building_id": building_id,
+                    "meta": meta,
+                    "expected_revision": "stale-rev-not-current",
+                },
+                timeout=30.0,
+            )
+            safe_print(f"PUT semantic-meta stale CAS -> HTTP {status_c}")
+            if status_c != 409:
+                safe_print(f"FAIL: expected HTTP 409 conflict, got {status_c} {raw_c[:200]!r}")
+                return 1
+            safe_print("  revision conflict (409) OK")
+        else:
+            safe_print(
+                "NOTE: no tip revision yet — skip live 409 CAS "
+                f"(GET status={status_g} present={got.get('present') if isinstance(got, dict) else None})"
+            )
+
+        # BPS-compatible TTL alias (read)
+        status_t, hdrs_t, _raw_t = http.request(
+            "GET",
+            "/api/model/ttl",
+            headers=headers,
+            params={"building_id": building_id},
+            timeout=30.0,
+        )
+        ctype = (hdrs_t.get("content-type") or "").lower()
+        safe_print(f"GET /api/model/ttl -> HTTP {status_t} content-type={ctype!r}")
+        if status_t not in (200, 400, 404):
+            safe_print("FAIL: /api/model/ttl unexpected status")
             return 1
 
-    safe_print(GAP_DOC)
     safe_print(
-        "WARN 10 — OSS commissioning paths differ from BPS model_crud; "
-        "gap documented (not a false PASS). Soft-OPEN ≠ FQ"
+        "PASS 10 — semantic-meta dry_run (+ optional CAS) + /api/model/ttl alias. "
+        "Soft-OPEN ≠ FQ (no full BPS overlay tombstone CRUD)"
     )
     return 0
 

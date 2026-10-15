@@ -6441,19 +6441,134 @@
         "identity"
       ],
       "notes": "Soft-OPEN R5: opaque point IRI \u2192 openfdd_key (+ optional Timescale history); Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "GET",
+      "path": "/api/model/ttl",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_model_ttl",
+        "y.authz.get_api_model_ttl"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_model_ttl",
+        "y.authz.get_api_model_ttl"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "text/turtle",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity",
+        "semantic_meta"
+      ],
+      "notes": "Soft-OPEN BPS-compatible alias \u2192 strict Haystack projection Turtle; Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "GET",
+      "path": "/api/model/semantic-meta",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_model_semantic_meta",
+        "y.authz.get_api_model_semantic_meta"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_model_semantic_meta",
+        "y.authz.get_api_model_semantic_meta"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: tip semantic_meta + revision read; Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/model/semantic-meta",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.put_api_model_semantic_meta",
+        "y.authz.put_api_model_semantic_meta"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.put_api_model_semantic_meta",
+        "y.authz.put_api_model_semantic_meta"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "writes",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: dry_run + expected_revision CAS on openfdd_semantic_meta_v1; viewer deny; Soft-OPEN \u2260 FQ"
     }
   ],
   "counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 110,
+    "PLANNED": 113,
     "BLOCKED_POLICY": 29,
     "implemented": 30,
-    "planned": 110,
+    "planned": 113,
     "blocked_policy": 29
   },
   "summary": {
     "IMPLEMENTED": 30,
-    "PLANNED": 110,
+    "PLANNED": 113,
     "BLOCKED_POLICY": 29
   }
 }
