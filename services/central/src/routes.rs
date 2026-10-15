@@ -7251,6 +7251,50 @@ async fn analytics_fuel(
     {
         return Err(deny);
     }
+    // Soft-OPEN: Timescale historian fuel daily SQL when building_id is present.
+    // Campus bill/EUI path stays rust-fuel (separate Soft-OPEN surface).
+    if crate::timescale_historian::historian_is_timescale() {
+        if let Some(building) = req
+            .building_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            match fdd_tsdb::Tsdb::connect_from_env().await {
+                Ok(tsdb) => match crate::timescale_analytics::fuel_daily(&tsdb, building).await {
+                    Ok(v) => {
+                        return Ok(Json(json!({
+                            "ok": true,
+                            "analytics": v,
+                            "engine": "timescale-sql",
+                            "soft_open_neq_fq": true,
+                            "note": "Timescale fuel_daily Soft-OPEN; campus EUI import path unchanged",
+                        })));
+                    }
+                    Err(e) => {
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({
+                                "ok": false,
+                                "error": e.to_string(),
+                                "engine": "timescale-sql",
+                            })),
+                        ));
+                    }
+                },
+                Err(e) => {
+                    return Err((
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(json!({
+                            "ok": false,
+                            "error": e.to_string(),
+                            "engine": "timescale-sql",
+                        })),
+                    ));
+                }
+            }
+        }
+    }
     let qv = req.query_version.clone().unwrap_or_else(|| "fuel".into());
     let campus = req.campus_id.clone();
     let action_id = actions::start_action(

@@ -310,7 +310,9 @@ impl AfddSchedulerRuntime {
         }
         let now = Utc::now();
         let checkpoint = self.checkpoint()?;
-        let latest = self.latest_telemetry()?;
+        // Soft-OPEN R8e: Timescale product path uses sample max(ts) (scope=all
+        // → global). File live-telemetry watermark is fallback only.
+        let latest = self.latest_telemetry_for_scope(scope)?;
         let Some(window) = plan_continuous_cycle(checkpoint.as_ref(), now, latest, &config)? else {
             return Ok(None);
         };
@@ -698,7 +700,10 @@ impl AfddSchedulerRuntime {
     fn status_json(&self) -> Result<Value> {
         let config = self.config_snapshot();
         let checkpoint = self.checkpoint()?;
-        let latest_telemetry = self.latest_telemetry()?;
+        let timer_scope =
+            normalize_scope(std::env::var("OPENFDD_AFDD_BUILDING_ID").ok().as_deref());
+        // Soft-OPEN R8e: surface Timescale max(ts) when product historian is Timescale.
+        let latest_telemetry = self.latest_telemetry_for_scope(&timer_scope)?;
         let now = Utc::now();
         let next_due = next_due_at(checkpoint.as_ref(), now, &config)?;
         let next_due_local = config
@@ -706,16 +711,20 @@ impl AfddSchedulerRuntime {
             .as_deref()
             .and_then(|tz| wall_clock_local_rfc3339(next_due, tz).ok());
         let status = self.status.lock().unwrap();
-        let timer_scope =
-            normalize_scope(std::env::var("OPENFDD_AFDD_BUILDING_ID").ok().as_deref());
         let timer_enabled = config.mode == AfddMode::Continuous;
         let schedule_kind = config.schedule_kind;
+        let watermark_source = if crate::timescale_historian::historian_is_timescale() {
+            "timescale_sample_max_ts"
+        } else {
+            "live_telemetry_file"
+        };
         Ok(json!({
             "ok": true,
             "config": config,
             "schedule_kind": schedule_kind,
             "checkpoint": checkpoint,
             "latest_persisted_telemetry_utc": latest_telemetry,
+            "watermark_source": watermark_source,
             "next_due_at_utc": if timer_enabled { Some(next_due) } else { None },
             "next_due_local": if timer_enabled { next_due_local } else { None },
             "result_write": "lookback_window",
@@ -726,6 +735,7 @@ impl AfddSchedulerRuntime {
             "operator_schedule_editable": true,
             "operator_interval_minutes": OPERATOR_INTERVAL_MINUTES,
             "operator_lookback_days": OPERATOR_LOOKBACK_DAYS,
+            "soft_open_neq_fq": true,
         }))
     }
 }

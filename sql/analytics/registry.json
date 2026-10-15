@@ -1,6 +1,6 @@
 {
   "pack_id": "openfdd-analytics-sql-v1",
-  "pack_version": "3.6.8-softopen",
+  "pack_version": "3.6.9-softopen",
   "engine": "timescale/postgresql",
   "soft_open_neq_fq": true,
   "bps_oss_parity": "same analytics pack hash — twin layers must not fork equations",
