@@ -31,6 +31,16 @@ vi.mock("../api/fddApi", () => ({
       parameter_count: 0,
     },
   ]),
+  listFddPlotsByRule: vi.fn(async () => ({
+    ok: true,
+    lean_budget: { default_points: 1500, max_roles: 6 },
+    rules: [],
+    soft_open_neq_fq: true,
+  })),
+  leanPlotDefaultPoints: (budget?: { default_points?: number } | null) => {
+    const n = Number(budget?.default_points);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1500;
+  },
   getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
   getFddResults: vi.fn(async () => [
     { rule_id: "VAV-1", equipment_id: "VAV_1", status: "FAULT" },

@@ -5,6 +5,9 @@ import {
   buildFddRuleParamsPath,
   buildRuleParamPayload,
   clampRuleParam,
+  FDD_PLOTS_BY_RULE_PATH,
+  leanPlotDefaultPoints,
+  listFddPlotsByRule,
   resultsToCsvArtifact,
   resultsToJsonArtifact,
   runFdd,
@@ -89,6 +92,17 @@ describe("fddApi", () => {
             { status: 200, headers: { "Content-Type": "application/json" } },
           );
         }
+        if (u.includes("/api/fdd/plots-by-rule")) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              lean_budget: { default_points: 1200, max_roles: 6 },
+              rules: [{ rule_id: "FC1", roles: ["fan_status"] }],
+              soft_open_neq_fq: true,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
         return new Response("{}", { status: 404 });
       }),
     );
@@ -108,6 +122,15 @@ describe("fddApi", () => {
     expect(buildFddSeriesPath("AHU_1", "FC1", "B1")).toBe(
       "/api/fdd/plot?equipment_id=AHU_1&rule_id=FC1&building_id=B1&max_points=1500",
     );
+  });
+
+  it("Soft-OPEN lean plot catalog path and default points", async () => {
+    expect(FDD_PLOTS_BY_RULE_PATH).toBe("/api/fdd/plots-by-rule");
+    expect(leanPlotDefaultPoints(null)).toBe(1500);
+    expect(leanPlotDefaultPoints({ default_points: 1200 })).toBe(1200);
+    const cat = await listFddPlotsByRule();
+    expect(cat.ok).toBe(true);
+    expect(leanPlotDefaultPoints(cat.lean_budget)).toBe(1200);
   });
 
   it("lists rules and runs registry FDD", async () => {

@@ -113,6 +113,30 @@ export const FDD_RESULTS_PATH = "/api/fdd/results";
 export const FDD_SERIES_PATH = "/api/fdd/series";
 /** C12 lean Plotly — one rule+equip, catalog roles, max_points≈1500. */
 export const FDD_PLOT_PATH = "/api/fdd/plot";
+/** Soft-OPEN R4: lean plot role catalog per rule (Timescale). Soft-OPEN ≠ FQ. */
+export const FDD_PLOTS_BY_RULE_PATH = "/api/fdd/plots-by-rule";
+
+export interface FddPlotsByRuleLeanBudget {
+  max_roles?: number;
+  default_points?: number;
+  hard_cap_points?: number;
+}
+
+export interface FddPlotsByRuleEntry {
+  rule_id: string;
+  roles?: string[];
+  [key: string]: unknown;
+}
+
+export interface FddPlotsByRuleResponse {
+  ok: boolean;
+  engine?: string;
+  lean_budget?: FddPlotsByRuleLeanBudget;
+  rules?: FddPlotsByRuleEntry[];
+  soft_open_neq_fq?: boolean;
+  error?: string;
+  note?: string;
+}
 
 export function buildFddResultsPath(buildingId?: string): string {
   if (!buildingId) return FDD_RESULTS_PATH;
@@ -229,6 +253,28 @@ export async function getFddSeries(
   init?: { signal?: AbortSignal; maxPoints?: number },
 ): Promise<FddSeriesResponse> {
   return getFddPlot(equipmentId, ruleId, buildingId, init);
+}
+
+/** Soft-OPEN R4: catalog lean-plot roles / budgets (no historian read). */
+export async function listFddPlotsByRule(
+  init?: { signal?: AbortSignal },
+): Promise<FddPlotsByRuleResponse> {
+  const body = await apiFetch<FddPlotsByRuleResponse>(FDD_PLOTS_BY_RULE_PATH, {
+    signal: init?.signal,
+  });
+  if (!body.ok) {
+    throw new Error(body.error || "Failed to load FDD plots-by-rule catalog");
+  }
+  return body;
+}
+
+/** Prefer server lean_budget.default_points; Soft-OPEN fallback 1500. */
+export function leanPlotDefaultPoints(
+  budget?: FddPlotsByRuleLeanBudget | null,
+): number {
+  const n = Number(budget?.default_points);
+  if (Number.isFinite(n) && n > 0) return Math.floor(n);
+  return 1500;
 }
 
 /** C12: abortable lean plot fetch (flip rule/equip → one request). */
