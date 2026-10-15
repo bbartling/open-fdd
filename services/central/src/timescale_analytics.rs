@@ -343,7 +343,10 @@ pub async fn schedule_occupancy(
             "val": r.try_get::<f64, _>("val").ok(),
         }));
     }
-    Ok(with_scope_meta(envelope("schedule", building_id, out), scope))
+    Ok(with_scope_meta(
+        envelope("schedule", building_id, out),
+        scope,
+    ))
 }
 
 pub async fn sensor_faults(
@@ -750,9 +753,7 @@ pub async fn respond_query(
         | "ahu-pressure-health"
         | "ahu-economizer-health" => plant_health_matrix(&tsdb, &building, &scope).await,
         "economizer" | "rcx-ahu" => economizer_deltas(&tsdb, &building, &scope).await,
-        "rcx-vav" => {
-            role_timeseries(&tsdb, &building, "zone_t", "rcx-vav", 2000, &scope).await
-        }
+        "rcx-vav" => role_timeseries(&tsdb, &building, "zone_t", "rcx-vav", 2000, &scope).await,
         "rcx-chiller" => {
             role_timeseries(
                 &tsdb,
