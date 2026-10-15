@@ -3,7 +3,7 @@
 Thin re-export of ``scripts/stress/helpers`` so lesson scripts share the same
 Windows-friendly ``--host`` / JWT connection style as the stress gate.
 
-  python scripts/lessons/lesson_01_sites_and_equipment.py --host 192.168.204.55
+  python scripts/lessons/lesson_01_sites_and_equipment.py --host <lab-ip>
 
 Env: OPENFDD_API_BASE / OPENFDD_STRESS_BASE, OPENFDD_AGENT_PASSWORD,
 OPENFDD_STRESS_BUILDING_ID. Synthetic sites only.

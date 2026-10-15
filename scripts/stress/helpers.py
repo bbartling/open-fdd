@@ -3,8 +3,8 @@
 Port of the BPS ``scripts/stress/helpers.py`` connection style so a Windows
 laptop on the LAN can target a lab Open-FDD central:
 
-  python scripts/stress/run_gate.py --host 192.168.204.55
-  python scripts/stress/01_sparql_model.py --host 192.168.204.55
+  python scripts/stress/run_gate.py --host <lab-ip>
+  python scripts/stress/01_sparql_model.py --host <lab-ip>
 
 Open-FDD differences vs BPS (same scientific lesson):
   - Default port **8080** (BPS lab often 8090)
@@ -119,7 +119,7 @@ def add_connection_args(ap: argparse.ArgumentParser) -> None:
         "--host",
         default=None,
         help="Remote hostname/IP only — builds http://HOST:8080 "
-        "(Windows laptop → lab: --host 192.168.204.55)",
+        "(Windows laptop → lab: --host <lab-ip>)",
     )
     ap.add_argument("--port", type=int, default=DEFAULT_PORT, help="Port with --host")
     ap.add_argument("--user", default=DEFAULT_USER, help="Open-FDD login username")

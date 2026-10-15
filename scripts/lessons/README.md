@@ -12,8 +12,8 @@ Vocabulary: **Project Haystack RDF** / package `ofdd:` Turtle via central
 | Where you run | Command |
 | --- | --- |
 | Lab box (localhost) | `python scripts/lessons/… --building-id SYNTH_01` |
-| Windows / LAN laptop | `python scripts/lessons/… --host 192.168.204.55 --building-id SYNTH_01` |
-| Full URL | `--base-url http://192.168.204.55:8080` |
+| Windows / LAN laptop | `python scripts/lessons/… --host <lab-ip> --building-id SYNTH_01` |
+| Full URL | `--base-url http://<lab-ip>:8080` |
 
 Defaults: `http://127.0.0.1:8080`. Env: `OPENFDD_API_BASE`, `OPENFDD_AGENT_PASSWORD`,
 `OPENFDD_STRESS_BUILDING_ID`.

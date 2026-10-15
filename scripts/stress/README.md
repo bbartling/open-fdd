@@ -47,13 +47,13 @@ python scripts/stress/run_gate.py --building-id SYNTH_01
 
 ```bat
 set OPENFDD_AGENT_PASSWORD=…
-python scripts\stress\run_gate.py --host 192.168.204.55 --building-id SYNTH_01
+python scripts\stress\run_gate.py --host <lab-ip> --building-id SYNTH_01
 ```
 
 Non-localhost `--host` (or `--remote-api`) skips local-DB-only steps. Full URL:
 
 ```bat
-python scripts\stress\run_gate.py --base-url http://192.168.204.55:8080 --building-id SYNTH_01
+python scripts\stress\run_gate.py --base-url http://<lab-ip>:8080 --building-id SYNTH_01
 ```
 
 Env: `OPENFDD_STRESS_BASE` / `OPENFDD_API_BASE`, `OPENFDD_STRESS_USER`,

@@ -5,8 +5,8 @@ Linux (on the lab box, API at localhost:8080):
   python scripts/stress/run_gate.py --building-id SYNTH_01
 
 Windows / laptop on the LAN (API on the lab):
-  python scripts/stress/run_gate.py --host 192.168.204.55 --building-id SYNTH_01
-  python scripts/stress/run_gate.py --host 192.168.204.55 --remote-api --building-id SYNTH_01
+  python scripts/stress/run_gate.py --host <lab-ip> --building-id SYNTH_01
+  python scripts/stress/run_gate.py --host <lab-ip> --remote-api --building-id SYNTH_01
 
 ``--remote-api`` (or a non-localhost ``--host``) skips steps that need a local
 Timescale checkout and runs HTTP API gates only.
