@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 104,
-  "pack_sha256": "03c8ab4b4bd5a69c362407e89f8c2ce71c21224fd2328b17611ae85b6df8432c",
+  "pack_sha256": "2e543d58847a3dd64642f7238c531c104ea1f23d30185843f02e96f3b97f29a8",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -437,8 +437,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/bas_vs_web_oat.sql",
-      "sha256": "57d08c62313d8b8f97b53dc2bb52be5d7f56e7e6746ab814bac37b07afc6070e",
-      "bytes": 585
+      "sha256": "e079acd8d9ab388527a0a35dd077d0593f4dc11788f7e9722d6819e4d07381f7",
+      "bytes": 1056
     },
     {
       "path": "sql/analytics/postgres/queries/diurnal_hourly.sql",
@@ -457,8 +457,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/mechanical_cooling_oat_bins.sql",
-      "sha256": "1d0609685682bca7cb80fd7a1d0378a80229f908b7fca89e397e9c700d687043",
-      "bytes": 1677
+      "sha256": "e142946726d2833d9e9f349859d6efa823770ccbeee255e2f9b09d30bc61d096",
+      "bytes": 2136
     },
     {
       "path": "sql/analytics/postgres/queries/metering_kwh.sql",
@@ -467,8 +467,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/motor_weekly_runtime.sql",
-      "sha256": "0b1c31c1d0885283e7e919b1b22e5c982ce6887c402e783ec690b59f3cfd287f",
-      "bytes": 808
+      "sha256": "e53261c603ccdee41309b57f17333619b09a59285e7f08fb8508b33d8bd44475",
+      "bytes": 1166
     },
     {
       "path": "sql/analytics/postgres/queries/mv_change_point_daily.sql",

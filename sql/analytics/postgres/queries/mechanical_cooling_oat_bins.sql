@@ -1,5 +1,9 @@
 -- Soft-OPEN analytics pack: mechanical cooling × OAT bins (elapsed hours).
--- Parameters: $1 = site_id.
+-- Parameters:
+--   $1 = site_id
+--   $2 = window start (timestamptz, NULL = open)
+--   $3 = window end   (timestamptz, NULL = open)
+--   $4 = equipment_ids (text[], NULL/empty = all)
 -- Status/cmd proof preferred over amps (amps Soft-OPEN later). Prefer web_oa_t then oa_t.
 -- kind=oat_bin Soft-OPEN consumer shape.
 WITH oat AS (
@@ -10,6 +14,8 @@ WITH oat AS (
     ) AS oat_f
   FROM sample
   WHERE site_id = $1
+    AND ($2::timestamptz IS NULL OR ts >= $2)
+    AND ($3::timestamptz IS NULL OR ts < $3)
     AND (openfdd_key LIKE '%.web_oa_t' OR openfdd_key LIKE '%.oa_t')
   GROUP BY ts
 ),
@@ -25,6 +31,13 @@ comp AS (
     ) AS active
   FROM sample
   WHERE site_id = $1
+    AND ($2::timestamptz IS NULL OR ts >= $2)
+    AND ($3::timestamptz IS NULL OR ts < $3)
+    AND (
+      $4::text[] IS NULL
+      OR cardinality($4) = 0
+      OR split_part(openfdd_key, '.', 1) = ANY ($4)
+    )
     AND (
       openfdd_key LIKE '%.chiller_status' OR openfdd_key LIKE '%.compressor_status'
       OR openfdd_key LIKE '%.chiller_cmd' OR openfdd_key LIKE '%.compressor_cmd'
