@@ -764,7 +764,19 @@ pub struct RunNowRequest {
 
 /// Type-first equipment list for chunked AFDD. Exact `equipment_id` values only
 /// (no substring/prefix). Falls back to a single whole-building chunk when empty.
+/// Soft-OPEN: Timescale product path reads stamped `equipment` rows (not Parquet hive).
 fn list_equipment_ids_type_first(building_id: Option<&str>) -> Vec<String> {
+    if crate::timescale_historian::historian_is_timescale() {
+        if let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) {
+            match list_equipment_ids_timescale(bid) {
+                Ok(ids) if !ids.is_empty() => return ids,
+                Ok(_) => {}
+                Err(error) => {
+                    warn!(%error, building_id = %bid, "Timescale AFDD equipment list failed; falling back");
+                }
+            }
+        }
+    }
     let resp = open_fdd_edge_prototype::fdd::registry_api::equipment_response(building_id);
     let mut rows: Vec<(String, String)> = resp
         .get("equipment")
@@ -788,6 +800,45 @@ fn list_equipment_ids_type_first(building_id: Option<&str>) -> Vec<String> {
         .collect();
     rows.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
     rows.into_iter().map(|(_, id)| id).collect()
+}
+
+/// Soft-OPEN R8d/R8e: type-first equipment ids from Timescale `equipment` table.
+fn list_equipment_ids_timescale(building_id: &str) -> Result<Vec<String>> {
+    let bid = building_id.to_string();
+    let query = async move {
+        let env = crate::timescale_product::equipment_from_timescale(Some(&bid)).await?;
+        let mut rows: Vec<(String, String)> = env
+            .get("equipment")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|row| {
+                let id = row.get("equipment_id")?.as_str()?.trim();
+                if id.is_empty() {
+                    return None;
+                }
+                let kind = row
+                    .get("equipment_type")
+                    .or_else(|| row.get("equipType"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("unclassified")
+                    .to_ascii_lowercase();
+                Some((kind, id.to_string()))
+            })
+            .collect();
+        rows.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+        Ok::<Vec<String>, anyhow::Error>(rows.into_iter().map(|(_, id)| id).collect())
+    };
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => handle.block_on(query),
+        Err(_) => {
+            let local = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .context("afdd equipment list runtime")?;
+            local.block_on(query)
+        }
+    }
 }
 
 fn normalize_scope(building_id: Option<&str>) -> String {
