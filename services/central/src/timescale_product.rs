@@ -1001,6 +1001,144 @@ pub fn plots_by_rule_catalog() -> Result<Value> {
     }))
 }
 
+/// Soft-OPEN R5: bounded Timescale history for an opaque point (`openfdd_key` exact match).
+/// Does **not** invent identity via `split_part` — caller supplies the opaque key from IRI parse.
+pub async fn opaque_point_history_softopen(
+    building_id: &str,
+    openfdd_key: &str,
+    max_points: usize,
+) -> Result<Value> {
+    let bid = building_id.trim();
+    let key = openfdd_key.trim();
+    if bid.is_empty() || key.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "error": "building_id and openfdd_key required",
+            "soft_open_neq_fq": true,
+        }));
+    }
+    let limit = max_points.clamp(1, 2000) as i64;
+    let tsdb = Tsdb::connect_from_env().await?;
+    let rows = sqlx::query(
+        r#"
+        SELECT ts, openfdd_key, val
+        FROM sample
+        WHERE site_id = $1 AND openfdd_key = $2
+        ORDER BY ts DESC
+        LIMIT $3
+        "#,
+    )
+    .bind(bid)
+    .bind(key)
+    .bind(limit)
+    .fetch_all(tsdb.pool())
+    .await
+    .context("opaque_point_history_softopen")?;
+    let mut samples = Vec::with_capacity(rows.len());
+    for r in rows.into_iter().rev() {
+        let ts: DateTime<Utc> = r.get("ts");
+        let val: Option<f64> = r.try_get::<Option<f64>, _>("val").ok().flatten();
+        samples.push(json!({
+            "ts": ts.to_rfc3339(),
+            "val": val,
+        }));
+    }
+    Ok(json!({
+        "ok": true,
+        "building_id": bid,
+        "openfdd_key": key,
+        "point_count": samples.len(),
+        "max_points": limit,
+        "samples": samples,
+        "engine": TS_ENGINE,
+        "source": "timescale_sample",
+        "soft_open_neq_fq": true,
+        "note": "Soft-OPEN opaque point history via exact openfdd_key — Soft-OPEN ≠ FQ",
+    }))
+}
+
+/// Soft-OPEN R8a: tip-safe **read-only** schema/contract probe (no migrator apply, no volume destroy).
+/// Reports live `seed_meta.schema_version` when present + pinned `sql/contract/manifest.json`.
+pub async fn schema_contract_softopen() -> Result<Value> {
+    let contract_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../sql/contract/manifest.json")
+        .canonicalize()
+        .unwrap_or_else(|_| PathBuf::from("sql/contract/manifest.json"));
+    let (pinned_version, pack_sha, soft_open_flag) = match std::fs::read_to_string(&contract_path) {
+        Ok(raw) => {
+            let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+            (
+                v.get("contract_version")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("unknown")
+                    .to_string(),
+                v.get("pack_sha256")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
+                v.get("soft_open_neq_fq")
+                    .and_then(|x| x.as_bool())
+                    .unwrap_or(true),
+            )
+        }
+        Err(e) => (
+            format!("unreadable:{e}"),
+            None,
+            true,
+        ),
+    };
+
+    let mut seed_schema: Option<String> = None;
+    let mut seed_present = false;
+    let mut seed_error: Option<String> = None;
+    match Tsdb::connect_from_env().await {
+        Ok(tsdb) => match sqlx::query(
+            r#"
+            SELECT value FROM seed_meta WHERE key = 'schema_version' LIMIT 1
+            "#,
+        )
+        .fetch_optional(tsdb.pool())
+        .await
+        {
+            Ok(Some(row)) => {
+                seed_present = true;
+                seed_schema = row.try_get::<String, _>("value").ok();
+            }
+            Ok(None) => {
+                seed_present = false;
+            }
+            Err(e) => {
+                seed_error = Some(e.to_string());
+            }
+        },
+        Err(e) => {
+            seed_error = Some(e.to_string());
+        }
+    }
+
+    Ok(json!({
+        "ok": true,
+        "probe": "schema_contract_softopen",
+        "engine": TS_ENGINE,
+        "seed_meta": {
+            "present": seed_present,
+            "schema_version": seed_schema,
+            "error": seed_error,
+        },
+        "pinned_contract": {
+            "contract_version": pinned_version,
+            "pack_sha256": pack_sha,
+            "path": contract_path.display().to_string(),
+            "soft_open_neq_fq": soft_open_flag,
+        },
+        "migrator": {
+            "applied": false,
+            "note": "Soft-OPEN tip-safe read-only probe — migrator ≠ CREATE IF NOT EXISTS; no volume destroy",
+        },
+        "soft_open_neq_fq": true,
+        "note": "Soft-OPEN R8a schema/contract read — Soft-OPEN ≠ FQ bootstrap/migrator proof",
+    }))
+}
+
 fn results_dir(building_id: &str) -> PathBuf {
     let base = if let Ok(p) = std::env::var("OPENFDD_RULE_RESULTS_DIR") {
         PathBuf::from(p)
