@@ -512,18 +512,18 @@ pub async fn economizer_deltas(
     let mut env = envelope("economizer", building_id, out);
     if let Some(obj) = env.as_object_mut() {
         obj.insert(
-            "window_start",
+            "window_start".to_string(),
             json!(scope
                 .start
                 .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
         );
         obj.insert(
-            "window_end",
+            "window_end".to_string(),
             json!(scope
                 .end
                 .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
         );
-        obj.insert("equipment_ids", json!(scope.equipment_ids));
+        obj.insert("equipment_ids".to_string(), json!(scope.equipment_ids));
     }
     Ok(env)
 }
