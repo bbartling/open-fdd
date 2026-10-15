@@ -180,28 +180,16 @@ impl AfddSchedulerRuntime {
             let scope_owned = scope.to_string();
             let run_query = || -> Result<Option<DateTime<Utc>>> {
                 let scope_owned = scope_owned.clone();
-                let query = async move {
+                block_on_async(async move {
                     let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
-                    if scope_owned == "all" {
-                        tsdb.max_sample_ts_global().await
+                    let ts = if scope_owned == "all" {
+                        tsdb.max_sample_ts_global().await?
                     } else {
-                        tsdb.max_sample_ts(&scope_owned).await
-                    }
-                };
-                match tokio::runtime::Handle::try_current() {
-                    Ok(handle) => handle
-                        .block_on(query)
-                        .context("Timescale AFDD watermark query"),
-                    Err(_) => {
-                        let local = tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                            .context("afdd watermark runtime")?;
-                        local
-                            .block_on(query)
-                            .context("Timescale AFDD watermark query")
-                    }
-                }
+                        tsdb.max_sample_ts(&scope_owned).await?
+                    };
+                    Ok(ts)
+                })
+                .context("Timescale AFDD watermark query")
             };
             match run_query() {
                 Ok(ts) => return Ok(ts),
@@ -805,7 +793,7 @@ fn list_equipment_ids_type_first(building_id: Option<&str>) -> Vec<String> {
 /// Soft-OPEN R8d/R8e: type-first equipment ids from Timescale `equipment` table.
 fn list_equipment_ids_timescale(building_id: &str) -> Result<Vec<String>> {
     let bid = building_id.to_string();
-    let query = async move {
+    block_on_async(async move {
         let env = crate::timescale_product::equipment_from_timescale(Some(&bid)).await?;
         let mut rows: Vec<(String, String)> = env
             .get("equipment")
@@ -827,18 +815,33 @@ fn list_equipment_ids_timescale(building_id: &str) -> Result<Vec<String>> {
             })
             .collect();
         rows.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
-        Ok::<Vec<String>, anyhow::Error>(rows.into_iter().map(|(_, id)| id).collect())
-    };
-    match tokio::runtime::Handle::try_current() {
-        Ok(handle) => handle.block_on(query),
-        Err(_) => {
-            let local = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .context("afdd equipment list runtime")?;
-            local.block_on(query)
+        Ok(rows.into_iter().map(|(_, id)| id).collect())
+    })
+}
+
+/// Drive an async Timescale helper from sync AFDD paths without nesting a runtime.
+/// Matches `live_historian` / `canonical_state`: `block_in_place` on multi-thread
+/// workers; private current-thread runtime only when no Tokio context exists.
+fn block_on_async<F, T>(future: F) -> Result<T>
+where
+    F: std::future::Future<Output = Result<T>>,
+{
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        match handle.runtime_flavor() {
+            tokio::runtime::RuntimeFlavor::MultiThread => {
+                return tokio::task::block_in_place(|| handle.block_on(future));
+            }
+            tokio::runtime::RuntimeFlavor::CurrentThread => {
+                anyhow::bail!("AFDD Timescale sync helper requires a multi-thread Tokio runtime");
+            }
+            _ => anyhow::bail!("unsupported Tokio runtime flavor for AFDD Timescale helper"),
         }
     }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("afdd Timescale helper runtime")?;
+    runtime.block_on(future)
 }
 
 fn normalize_scope(building_id: Option<&str>) -> String {
@@ -989,5 +992,14 @@ mod tests {
         assert_eq!(result_scope_for("scheduled"), "lookback_window");
         assert_eq!(result_scope_for("run_now"), "lookback_window");
         assert_eq!(result_scope_for("backfill"), "bounded_backfill");
+    }
+
+    /// Soft-OPEN P1: bare Handle::block_on on a worker panics with
+    /// "Cannot start a runtime from within a runtime" (Grok ART 3.6.14 /scheduler/status 502).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn block_on_async_safe_inside_multi_thread_runtime() {
+        let value =
+            block_on_async(async { Ok::<_, anyhow::Error>(42u32) }).expect("nested-safe block_on");
+        assert_eq!(value, 42);
     }
 }
