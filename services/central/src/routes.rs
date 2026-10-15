@@ -8006,6 +8006,10 @@ mod version_tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE while exercising semantic-meta HTTP CAS"
+    )]
     async fn semantic_meta_put_dry_run_conflict_and_viewer_deny() {
         let _env_lock = crate::test_env_lock::lock_env();
         let workspace = tempfile::tempdir().unwrap();
