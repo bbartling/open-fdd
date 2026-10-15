@@ -56,6 +56,22 @@ paths:
             text/turtle:
               schema:
                 type: string
+  /api/model/agent-context:
+    get:
+      summary: Soft-OPEN AI agent bundle (revision, lean model tree, mutate recipes)
+      parameters:
+        - in: query
+          name: building_id
+          schema:
+            type: string
+        - in: query
+          name: site_id
+          schema:
+            type: string
+          description: BPS alias for building_id
+      responses:
+        "200":
+          description: Agent context JSON (native semantic_meta authority; Soft-OPEN ≠ FQ)
   /api/model/sparql/predefined:
     get:
       summary: SPARQL query catalog

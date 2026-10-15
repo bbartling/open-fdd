@@ -12,6 +12,7 @@ Open-FDD differences vs BPS (same scientific lesson):
   - SPARQL at ``POST /api/model/sparql`` (needs ``building_id`` + ``query`` or ``query_id``)
   - Package TTL at ``GET /api/csv/import/package/mapping/ttl`` (and haystack.ttl)
   - BPS-compatible ``GET /api/model/ttl`` (Haystack projection) + ``PUT /api/model/semantic-meta``
+    + ``GET /api/model/agent-context``
   - Timeseries via ``GET /api/timeseries/readings`` / ``GET|POST /api/historian/query``
 
 Env (optional): OPENFDD_STRESS_BASE / OPENFDD_API_BASE, OPENFDD_STRESS_USER,

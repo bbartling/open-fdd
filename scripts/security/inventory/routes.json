@@ -4,10 +4,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
-  "route_count": 169,
+  "route_count": 173,
   "disposition_counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 110,
+    "PLANNED": 114,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -6556,19 +6556,57 @@
         "identity"
       ],
       "notes": "Soft-OPEN: dry_run + expected_revision CAS on openfdd_semantic_meta_v1; viewer deny; Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "GET",
+      "path": "/api/model/agent-context",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_model_agent_context",
+        "y.authz.get_api_model_agent_context"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_model_agent_context",
+        "y.authz.get_api_model_agent_context"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: BPS-compatible agent recipe bundle (revision + lean model_tree + mutate recipes); native semantic_meta authority; Soft-OPEN \u2260 FQ"
     }
   ],
   "counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 113,
+    "PLANNED": 114,
     "BLOCKED_POLICY": 29,
     "implemented": 30,
-    "planned": 113,
+    "planned": 114,
     "blocked_policy": 29
   },
   "summary": {
     "IMPLEMENTED": 30,
-    "PLANNED": 113,
+    "PLANNED": 114,
     "BLOCKED_POLICY": 29
   }
 }
