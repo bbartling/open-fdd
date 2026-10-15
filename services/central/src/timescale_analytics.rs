@@ -4,12 +4,43 @@
 //! SessionContext — all query_ids dispatch here.
 
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use fdd_tsdb::Tsdb;
 use serde_json::{json, Value};
 use sqlx::Row;
 use std::sync::OnceLock;
 
 use crate::analytics::AnalyticsRequest;
+
+/// Validated window + equipment binds for Timescale analytics SQL (before aggregation).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnalyticsSqlScope {
+    pub start: Option<DateTime<Utc>>,
+    pub end: Option<DateTime<Utc>>,
+    pub equipment_ids: Vec<String>,
+}
+
+impl AnalyticsSqlScope {
+    pub fn from_request(req: &AnalyticsRequest) -> Self {
+        let mut equipment_ids = req.query.equipment_ids.clone().unwrap_or_default();
+        equipment_ids.retain(|id| !id.trim().is_empty());
+        equipment_ids.sort();
+        equipment_ids.dedup();
+        Self {
+            start: req.query.start,
+            end: req.query.end,
+            equipment_ids,
+        }
+    }
+
+    pub fn equipment_bind(&self) -> Option<Vec<String>> {
+        if self.equipment_ids.is_empty() {
+            None
+        } else {
+            Some(self.equipment_ids.clone())
+        }
+    }
+}
 
 /// Pinned analytics registry — `pack_version` must match runtime envelopes (no silent drift).
 const ANALYTICS_REGISTRY_JSON: &str = include_str!("../../../sql/analytics/registry.json");
@@ -449,10 +480,17 @@ pub async fn rcx_preset_role_coverage(tsdb: &Tsdb, building_id: &str) -> Result<
     Ok(envelope("rcx-preset-coverage", building_id, out))
 }
 
-pub async fn economizer_deltas(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
-    // Soft-OPEN: per-equipment pivot from analytics pack (not cross-equip GROUP BY ts).
+pub async fn economizer_deltas(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(ECONOMIZER_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("economizer_deltas")?;
@@ -471,7 +509,23 @@ pub async fn economizer_deltas(tsdb: &Tsdb, building_id: &str) -> Result<Value> 
             "delta_mr_f": r.try_get::<f64, _>("delta_mr_f").ok(),
         }));
     }
-    Ok(envelope("economizer", building_id, out))
+    let mut env = envelope("economizer", building_id, out);
+    if let Some(obj) = env.as_object_mut() {
+        obj.insert(
+            "window_start".to_string(),
+            json!(scope
+                .start
+                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
+        );
+        obj.insert(
+            "window_end".to_string(),
+            json!(scope
+                .end
+                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
+        );
+        obj.insert("equipment_ids".to_string(), json!(scope.equipment_ids));
+    }
+    Ok(env)
 }
 
 pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
@@ -595,6 +649,7 @@ pub async fn respond_query(
         )
     })?;
 
+    let scope = AnalyticsSqlScope::from_request(req);
     let result = match query_id {
         "runtime" => motor_weekly_runtime(&tsdb, &building).await,
         "bas-vs-web-oat" => bas_vs_web_oat(&tsdb, &building).await,
@@ -609,7 +664,7 @@ pub async fn respond_query(
         | "ahu-temperature-health"
         | "ahu-pressure-health"
         | "ahu-economizer-health" => plant_health_matrix(&tsdb, &building).await,
-        "economizer" | "rcx-ahu" => economizer_deltas(&tsdb, &building).await,
+        "economizer" | "rcx-ahu" => economizer_deltas(&tsdb, &building, &scope).await,
         "rcx-vav" => role_timeseries(&tsdb, &building, "zone_t", "rcx-vav", 2000).await,
         "rcx-chiller" => {
             role_timeseries(&tsdb, &building, "chw_supply_t", "rcx-chiller", 2000).await
@@ -663,6 +718,56 @@ pub async fn respond_query(
 #[cfg(test)]
 mod pack_version_tests {
     use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn economizer_sql_declares_window_and_equipment_binds() {
+        // Regression: building-only $1 was the Soft-OPEN residual — fail closed if lost.
+        assert!(
+            ECONOMIZER_SQL.contains("$2::timestamptz"),
+            "economizer SQL must bind window start ($2)"
+        );
+        assert!(
+            ECONOMIZER_SQL.contains("$3::timestamptz"),
+            "economizer SQL must bind window end ($3)"
+        );
+        assert!(
+            ECONOMIZER_SQL.contains("$4::text[]") || ECONOMIZER_SQL.contains("ANY ($4)"),
+            "economizer SQL must bind equipment_ids ($4)"
+        );
+    }
+
+    #[test]
+    fn analytics_sql_scope_from_request_keeps_window_and_equipment() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 1, 0, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2026, 4, 8, 0, 0, 0).unwrap();
+        let req = AnalyticsRequest {
+            query: crate::analytics::AnalyticsQuery {
+                building_id: Some("SYNTHETIC_ECON".into()),
+                start: Some(start),
+                end: Some(end),
+                equipment_ids: Some(vec![
+                    "AHU_A".into(),
+                    "".into(),
+                    "AHU_A".into(),
+                    "AHU_B".into(),
+                ]),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let scope = AnalyticsSqlScope::from_request(&req);
+        assert_eq!(scope.start, Some(start));
+        assert_eq!(scope.end, Some(end));
+        assert_eq!(
+            scope.equipment_ids,
+            vec!["AHU_A".to_string(), "AHU_B".to_string()]
+        );
+        assert_eq!(
+            scope.equipment_bind(),
+            Some(vec!["AHU_A".into(), "AHU_B".into()])
+        );
+    }
 
     #[test]
     fn envelope_pack_version_matches_analytics_registry() {
