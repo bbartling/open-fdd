@@ -38,13 +38,17 @@ Secure HVAC data collection, fault detection, and portfolio access for mechanica
 ## What it does
 
 - Collects live data from **BACnet**, **Modbus**, **Haystack**, **JSON API**, and **CSV** imports
-- Stores telemetry in an **Apache Parquet** historian (Arrow/DataFusion)
+- Stores telemetry in an **PostgreSQL / TimescaleDB** historian
 - Models sites with **Project Haystack** semantics
-- Runs **DataFusion SQL** rules (`sql_rules/` registry)
+- Runs **PostgreSQL SQL** rules (`sql/fdd/registry.yaml`)
 - Serves a **React** SPA — Overview, FDD, RCx, findings against central `/api` only
 - Exposes **JWT REST** and optional **MCP** for engineering agents
 
-Pandas recipes stay in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) for notebooks / PyPI. Production FDD is DataFusion SQL only.
+Pandas recipes stay in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) for notebooks / PyPI. Production FDD is PostgreSQL SQL only.
+
+The web application runs SQL. Python/pandas provides offline reference calculations
+for testing and validating that SQL. See [Database and SQL execution]({{ site.baseurl }}/architecture/database/)
+and the [Python analytics source examples]({{ site.baseurl }}/rules/pandas-analytics-cookbook/).
 
 ## Who it is for
 
@@ -70,7 +74,7 @@ Intended for **LAN, VPN, or OT-network** deployment. Do not expose the API on th
 ## Get started
 
 1. [Quick Start]({{ site.baseurl }}/quick-start/) — Compose + Railway + GHCR
-2. [**Rule Cookbook**]({{ site.baseurl }}/rules/) — DataFusion SQL + Pandas patterns (+ [anomaly screening]({{ site.baseurl }}/rules/sql-anomaly-detection.html))
+2. [**Rule Cookbook**]({{ site.baseurl }}/rules/) — PostgreSQL SQL + Pandas patterns (+ [anomaly screening]({{ site.baseurl }}/rules/sql-anomaly-detection/))
 3. [Haystack modeling]({{ site.baseurl }}/modeling/) — packages and SQL roles
 4. [Architecture]({{ site.baseurl }}/architecture/) — services and data flow
 5. [API & Security]({{ site.baseurl }}/api/) — REST + vulnerability reporting
