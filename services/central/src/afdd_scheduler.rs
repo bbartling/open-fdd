@@ -832,9 +832,7 @@ where
                 return tokio::task::block_in_place(|| handle.block_on(future));
             }
             tokio::runtime::RuntimeFlavor::CurrentThread => {
-                anyhow::bail!(
-                    "AFDD Timescale sync helper requires a multi-thread Tokio runtime"
-                );
+                anyhow::bail!("AFDD Timescale sync helper requires a multi-thread Tokio runtime");
             }
             _ => anyhow::bail!("unsupported Tokio runtime flavor for AFDD Timescale helper"),
         }
