@@ -237,7 +237,7 @@ describe("fetchCentralOverview", () => {
       ],
     });
     expect(out.ok).toBe(true);
-    expect(out.source).toBe("central-datafusion");
+    expect(out.source).toBe("central-analytics");
     expect(out.motor_weekly.plants[0]?.figure?.data?.length).toBeGreaterThan(0);
     expect(out.mech_cooling.figure?.data?.length).toBeGreaterThan(0);
     expect(out.economizer_free_cooling.delta_scatter?.meta?.provenance).toMatch(
@@ -372,6 +372,113 @@ describe("fetchCentralOverview", () => {
     expect(out.span.start).toBe("2026-03-16T00:40:00");
     expect(out.span.end).toBe("2026-07-17T10:00:00");
     expect(out.span.span_hours).toBe(2961.3);
+  });
+
+  it("tip Timescale envelopes (rows-only aliases) still populate Overview plots", async () => {
+    const {
+      postRuntime,
+      postMechanicalCooling,
+      postEconomizer,
+      postBasVsWebOat,
+    } = await import("./analyticsApi");
+    vi.mocked(postRuntime).mockResolvedValueOnce({
+      schema_version: "analytics-envelope-v1",
+      query_version: "runtime-v1",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: [],
+      rows: [
+        {
+          equipment_id: "SYN_AHU_1",
+          kind: "motor",
+          plant_group: "ahu",
+          week_label: "2026-W14",
+          run_hours: 40,
+          runtime_hours: 40,
+        },
+      ],
+      equipment: [],
+      points: [],
+      skipped: [],
+    } as never);
+    vi.mocked(postMechanicalCooling).mockResolvedValueOnce({
+      schema_version: "analytics-envelope-v1",
+      query_version: "mechanical-cooling-v1",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: [],
+      rows: [
+        {
+          kind: "oat_bin",
+          equipment_id: "SYN_CHW_1",
+          oat_bin: "60-70",
+          run_hours: 11,
+        },
+      ],
+      equipment: [],
+      points: [],
+      skipped: [],
+    } as never);
+    vi.mocked(postEconomizer).mockResolvedValueOnce({
+      schema_version: "analytics-envelope-v1",
+      query_version: "economizer-diagnostics-v1",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: [],
+      rows: Array.from({ length: 6 }, (_, i) => ({
+        ts: `2026-04-01T0${i}:00:00Z`,
+        equipment_id: "SYN_AHU_1",
+        oa_t: 48 + i,
+        rat: 72,
+        mat: 64,
+        sat: 55,
+        oa_damper_pct: 40,
+        delta_or_f: 48 + i - 72,
+        delta_mr_f: 64 - 72,
+      })),
+      equipment: [],
+      points: [],
+      skipped: [],
+    } as never);
+    vi.mocked(postBasVsWebOat).mockResolvedValueOnce({
+      schema_version: "analytics-envelope-v1",
+      query_version: "bas-vs-web-oat-v3",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: [],
+      rows: [
+        {
+          ts: "2026-04-01T00:00:00Z",
+          equipment_id: "SYN_WX",
+          bas_oa_t: 70,
+          web_oa_t: 68,
+          delta_f: 2,
+        },
+        {
+          ts: "2026-04-01T01:00:00Z",
+          equipment_id: "SYN_WX",
+          bas_oa_t: 71,
+          web_oa_t: 69,
+          delta_f: 2,
+        },
+      ],
+      equipment: [],
+      points: [],
+      skipped: [],
+    } as never);
+
+    const out = await fetchCentralOverview({
+      building_id: "SYNTHETIC_SITE",
+      equipment: [{ equipment_id: "SYN_AHU_1", equipment_type: "AHU" }],
+    });
+    expect(out.source).toBe("central-analytics");
+    expect(out.motor_weekly.plants[0]?.figure?.data?.length).toBeGreaterThan(0);
+    expect(out.mech_cooling.figure?.data?.length).toBeGreaterThan(0);
+    expect(out.economizer_free_cooling.delta_scatter).toBeTruthy();
+    expect(out.economizer_free_cooling.temps_overlay).toBeTruthy();
+    expect(out.bas_vs_web_oat.overlay?.data?.some((t) => t.name === "BAS oa_t")).toBe(
+      true,
+    );
   });
 });
 

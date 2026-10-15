@@ -24,6 +24,36 @@
     "bas_vs_web_oat",
     "bas_web_oat_deviation_hist"
   ],
+  "tip_timescale_field_aliases": {
+    "notes": [
+      "Soft-OPEN C4: tip Timescale /api/analytics envelopes use warehouse names;",
+      "Overview Plotly builders consume vibe19 names via tipAnalyticsNormalize."
+    ],
+    "runtime": {
+      "plant_group.ahu": "air",
+      "kind.motor+week_label": "weekly_equipment",
+      "runtime_hours": "run_hours"
+    },
+    "mechanical-cooling": {
+      "oat_bin": "bin_label",
+      "run_hours": "hours"
+    },
+    "economizer": {
+      "rows": "points",
+      "ts": "timestamp_utc",
+      "oa_t": "oat_f",
+      "rat": "rat_f",
+      "mat": "mat_f",
+      "sat": "sat_f",
+      "oa_damper_pct": "damper_fb_pct"
+    },
+    "bas-vs-web-oat": {
+      "rows": "points",
+      "ts": "timestamp_utc",
+      "bas_oa_t": "bas_oat_f",
+      "web_oa_t": "web_oat_f"
+    }
+  },
   "png_stem_vocabulary": {
     "notes": [
       "React Overview-RCx downloads use bare stems in overview_png_stems.",
