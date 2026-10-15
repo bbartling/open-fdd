@@ -16,7 +16,7 @@ oracle CI) — never on the product request path.
 | A2 | `02_sparql_fc1_points.py` | FC1 roles via SPARQL / templates | Optional later |
 | A3 | `03_sparql_zone_dataframe.py` | SPARQL → point-resolve/historian → pandas DF | Landed (T13) |
 | B–E | `04`–`07` | Local Timescale / warehouse (may stay BPS-side) | Optional |
-| F | `08_sql_vs_pandas_sparql.py` | Synthetic pack SQL FDD ↔ pandas via SPARQL DF; fail-closed (#1253) | Follow-up PR (T14) |
+| F | `08_sql_vs_pandas_sparql.py` | Synthetic pack SQL FDD ↔ pandas via SPARQL DF; fail-closed (#1253) | Landed (T14) |
 | G | `09_analytics_sql_vs_pandas.py` | Analytics SQL ↔ independent pandas | Follow-up PR (T15) |
 | H | `10_model_crud_helpers.py` | RDF mutation / dry_run or gap doc vs BPS | Follow-up PR (T16) |
 | Runner | `run_gate.py` + `helpers.py` | `--host` / `--base-url` JWT | **This PR (T12)** |
