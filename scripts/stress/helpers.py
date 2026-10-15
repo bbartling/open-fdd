@@ -1,0 +1,506 @@
+"""HTTP helpers for Open-FDD Soft-OPEN stress gate (SPARQL + FDD).
+
+Port of the BPS ``scripts/stress/helpers.py`` connection style so a Windows
+laptop on the LAN can target a lab Open-FDD central:
+
+  python scripts/stress/run_gate.py --host 192.168.204.55
+  python scripts/stress/01_sparql_model.py --host 192.168.204.55
+
+Open-FDD differences vs BPS (same scientific lesson):
+  - Default port **8080** (BPS lab often 8090)
+  - JWT via ``POST /api/auth/login`` → ``token`` or ``access_token``
+  - SPARQL at ``POST /api/model/sparql`` (needs ``building_id`` + ``query`` or ``query_id``)
+  - Package TTL at ``GET /api/csv/import/package/mapping/ttl`` (and haystack.ttl)
+  - Timeseries via ``GET /api/timeseries/readings`` / ``GET|POST /api/historian/query``
+
+Env (optional): OPENFDD_STRESS_BASE / OPENFDD_API_BASE, OPENFDD_STRESS_USER,
+OPENFDD_STRESS_PASS / OPENFDD_AGENT_PASSWORD / OPENFDD_ADMIN_PASSWORD,
+OPENFDD_STRESS_BUILDING_ID.
+
+Synthetic sites only — never hardcode private consumer campus names.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlencode
+
+REPO = Path(__file__).resolve().parents[2]
+DEFAULT_PORT = 8080
+DEFAULT_LOCAL = f"http://127.0.0.1:{DEFAULT_PORT}"
+DEFAULT_USER = (
+    os.environ.get("OPENFDD_STRESS_USER")
+    or os.environ.get("OPENFDD_USER")
+    or "agent"
+)
+DEFAULT_PASS = (
+    os.environ.get("OPENFDD_STRESS_PASS")
+    or os.environ.get("OPENFDD_AGENT_PASSWORD")
+    or os.environ.get("OPENFDD_ADMIN_PASSWORD")
+    or ""
+)
+# Caller-supplied synthetic building; gates must not invent private campus ids.
+DEFAULT_BUILDING_ID = (
+    os.environ.get("OPENFDD_STRESS_BUILDING_ID")
+    or os.environ.get("OPENFDD_BUILDING_ID")
+    or ""
+)
+
+
+def configure_stdio() -> None:
+    """Best-effort UTF-8 for Windows consoles (cp1252 otherwise crashes on arrows)."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+
+configure_stdio()
+
+
+def safe_print(*args: Any, **kwargs: Any) -> None:
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        text = " ".join(str(a) for a in args)
+        text = text.encode(enc, errors="replace").decode(enc, errors="replace")
+        print(text, **{k: v for k, v in kwargs.items() if k != "file"})
+
+
+def resolve_base_url(
+    *,
+    base_url: str | None = None,
+    host: str | None = None,
+    port: int = DEFAULT_PORT,
+) -> str:
+    """Explicit URL > --host > env OPENFDD_STRESS_BASE/OPENFDD_API_BASE > localhost."""
+    if base_url:
+        return base_url.rstrip("/")
+    if host:
+        h = host.strip().rstrip("/")
+        if h.startswith("http://") or h.startswith("https://"):
+            return h.rstrip("/")
+        return f"http://{h}:{port}"
+    env = os.environ.get("OPENFDD_STRESS_BASE") or os.environ.get("OPENFDD_API_BASE")
+    if env:
+        return env.rstrip("/")
+    return DEFAULT_LOCAL
+
+
+DEFAULT_BASE = resolve_base_url()
+
+
+def apply_base_url(base: str) -> str:
+    """Set process env so child imports see the chosen API root."""
+    global DEFAULT_BASE
+    base = base.rstrip("/")
+    DEFAULT_BASE = base
+    os.environ["OPENFDD_STRESS_BASE"] = base
+    return base
+
+
+def add_connection_args(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument(
+        "--base-url",
+        default=None,
+        help=f"Full API root (default: env or {DEFAULT_LOCAL})",
+    )
+    ap.add_argument(
+        "--host",
+        default=None,
+        help="Remote hostname/IP only — builds http://HOST:8080 "
+        "(Windows laptop → lab: --host 192.168.204.55)",
+    )
+    ap.add_argument("--port", type=int, default=DEFAULT_PORT, help="Port with --host")
+    ap.add_argument("--user", default=DEFAULT_USER, help="Open-FDD login username")
+    ap.add_argument(
+        "--password",
+        default=DEFAULT_PASS,
+        help="Open-FDD login password (env OPENFDD_AGENT_PASSWORD preferred)",
+    )
+    ap.add_argument(
+        "--building-id",
+        default=DEFAULT_BUILDING_ID or None,
+        help="Synthetic building_id for SPARQL/TTL/FDD scope "
+        "(env OPENFDD_STRESS_BUILDING_ID)",
+    )
+
+
+def parse_connection(argv: list[str] | None = None) -> argparse.Namespace:
+    ap = argparse.ArgumentParser(add_help=False)
+    add_connection_args(ap)
+    args, _unknown = ap.parse_known_args(argv)
+    args.base_url = apply_base_url(
+        resolve_base_url(base_url=args.base_url, host=args.host, port=args.port)
+    )
+    return args
+
+
+def short(value: str) -> str:
+    if not value:
+        return ""
+    return value.rsplit("#", 1)[-1].rsplit("/", 1)[-1]
+
+
+class HttpClient:
+    """Minimal urllib client with BPS-like ``base_url`` + timeout."""
+
+    def __init__(self, base_url: str, *, timeout: float = 120.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def __enter__(self) -> HttpClient:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+        json_body: Any | None = None,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> tuple[int, dict[str, str], bytes]:
+        url = path if path.startswith("http") else f"{self.base_url}{path}"
+        if params:
+            q = urlencode({k: v for k, v in params.items() if v is not None})
+            url = f"{url}?{q}" if q else url
+        data: bytes | None = None
+        hdrs = dict(headers or {})
+        if json_body is not None:
+            data = json.dumps(json_body).encode("utf-8")
+            hdrs.setdefault("Content-Type", "application/json")
+        req = urllib.request.Request(url, data=data, headers=hdrs, method=method.upper())
+        try:
+            with urllib.request.urlopen(req, timeout=timeout or self.timeout) as resp:
+                body = resp.read()
+                return int(resp.status), {k.lower(): v for k, v in resp.headers.items()}, body
+        except urllib.error.HTTPError as e:
+            body = e.read() if e.fp else b""
+            return int(e.code), {k.lower(): v for k, v in e.headers.items()}, body
+
+    def get_json(
+        self,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        status, _hdrs, raw = self.request(
+            "GET", path, headers=headers, params=params, timeout=timeout
+        )
+        if status >= 400:
+            raise RuntimeError(f"GET {path} -> HTTP {status}: {raw[:500]!r}")
+        return json.loads(raw.decode("utf-8") or "null")
+
+    def post_json(
+        self,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+        json_body: Any | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        status, _hdrs, raw = self.request(
+            "POST", path, headers=headers, json_body=json_body, timeout=timeout
+        )
+        if status >= 400:
+            raise RuntimeError(f"POST {path} -> HTTP {status}: {raw[:500]!r}")
+        return json.loads(raw.decode("utf-8") or "null")
+
+    def get_text(
+        self,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> tuple[str, dict[str, str]]:
+        status, hdrs, raw = self.request(
+            "GET", path, headers=headers, params=params, timeout=timeout
+        )
+        if status >= 400:
+            raise RuntimeError(f"GET {path} -> HTTP {status}: {raw[:500]!r}")
+        return raw.decode("utf-8", errors="replace"), hdrs
+
+
+def client(base_url: str | None = None) -> HttpClient:
+    return HttpClient((base_url or DEFAULT_BASE).rstrip("/"), timeout=120.0)
+
+
+def wait_until_ready(http: HttpClient, *, timeout_s: float = 90.0) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_s
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            status, _hdrs, raw = http.request("GET", "/api/health", timeout=15.0)
+            if status == 200:
+                body = json.loads(raw.decode("utf-8") or "{}")
+                # Open-FDD OkHealthResponse always includes ok=true when healthy.
+                if isinstance(body, dict) and body.get("ok") is not False:
+                    safe_print(f"GET /api/health -> ok (attempt {attempt})")
+                    return body
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            safe_print(f"waiting for API... attempt {attempt} ({type(exc).__name__})")
+        if time.monotonic() >= deadline:
+            raise SystemExit(
+                f"API not ready within {timeout_s:.0f}s at {http.base_url}\n"
+                "  Tip: on the lab box run ./scripts/openfdd_stack_up.sh react-ot\n"
+                "  From Windows/LAN: python scripts/stress/run_gate.py --host <lab-ip>"
+            )
+        time.sleep(2.0)
+
+
+def login(
+    http: HttpClient,
+    *,
+    user: str | None = None,
+    password: str | None = None,
+) -> dict[str, str]:
+    user = user or DEFAULT_USER
+    password = password if password is not None else DEFAULT_PASS
+    if not password:
+        raise SystemExit(
+            "login password required: pass --password or set OPENFDD_AGENT_PASSWORD "
+            "(or OPENFDD_STRESS_PASS / OPENFDD_ADMIN_PASSWORD)"
+        )
+    status, _hdrs, raw = http.request(
+        "POST",
+        "/api/auth/login",
+        json_body={"username": user, "password": password},
+        timeout=30.0,
+    )
+    if status >= 400:
+        raise SystemExit(f"login failed HTTP {status}: {raw[:300]!r}")
+    body = json.loads(raw.decode("utf-8") or "{}")
+    token = body.get("token") or body.get("access_token")
+    if not token:
+        raise SystemExit(f"login response missing token: {body!r}")
+    return {"Authorization": f"Bearer {token}"}
+
+
+def post_sparql(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    building_id: str,
+    query: str | None = None,
+    query_id: str | None = None,
+    equipment_id: str | None = None,
+) -> list[dict[str, str]]:
+    """POST /api/model/sparql — free-form ``query`` or template ``query_id``.
+
+    Tip Soft-OPEN (C13) accepts read-only SELECT/ASK free-form with building_id.
+    Template path returns typed bindings; free-form returns ``rows`` / ASK boolean.
+    """
+    if not building_id:
+        raise SystemExit("building_id required for POST /api/model/sparql")
+    body: dict[str, Any] = {"building_id": building_id}
+    if query_id:
+        body["query_id"] = query_id
+    if query:
+        body["query"] = query
+    if equipment_id:
+        body["equipment_id"] = equipment_id
+    if "query" not in body and "query_id" not in body:
+        raise SystemExit("post_sparql requires query or query_id")
+
+    status, _hdrs, raw = http.request(
+        "POST", "/api/model/sparql", headers=headers, json_body=body
+    )
+    if status >= 400:
+        raise RuntimeError(f"POST /api/model/sparql -> HTTP {status}: {raw[:800]!r}")
+    payload = json.loads(raw.decode("utf-8") or "{}")
+    return _normalize_sparql_rows(payload)
+
+
+def _normalize_sparql_rows(payload: Any) -> list[dict[str, str]]:
+    """Accept tip free-form shape, template bindings, or sparql-playground nesting."""
+    if not isinstance(payload, dict):
+        return []
+
+    # Free-form wrapper: { ok, results: { kind, rows|boolean, ... }, meta }
+    results = payload.get("results")
+    if isinstance(results, dict):
+        if "boolean" in results:
+            return [{"ask": str(results["boolean"])}]
+        if isinstance(results.get("rows"), list):
+            return [_stringify_row(r) for r in results["rows"] if isinstance(r, dict)]
+        # Nested sparql-json: results.results.bindings
+        inner = results.get("results")
+        if isinstance(inner, dict) and isinstance(inner.get("bindings"), list):
+            return [_from_sparql_json_binding(b) for b in inner["bindings"]]
+
+    # Flat free-form body (execute_readonly_on_snapshot): { kind, rows, boolean }
+    if "boolean" in payload and payload.get("kind") == "ask":
+        return [{"ask": str(payload["boolean"])}]
+    if isinstance(payload.get("rows"), list):
+        return [_stringify_row(r) for r in payload["rows"] if isinstance(r, dict)]
+
+    # Template bindings: equipment[].points[]
+    equipment = payload.get("equipment")
+    if isinstance(equipment, list):
+        rows: list[dict[str, str]] = []
+        for eq in equipment:
+            if not isinstance(eq, dict):
+                continue
+            eid = str(eq.get("equipment_id") or "")
+            for pt in eq.get("points") or []:
+                if not isinstance(pt, dict):
+                    continue
+                rows.append(
+                    {
+                        "equipmentId": eid,
+                        "pointId": str(pt.get("point_id") or ""),
+                        "column": str(pt.get("column") or ""),
+                        "canonicalRole": str(pt.get("canonical_role") or ""),
+                    }
+                )
+            if not eq.get("points"):
+                rows.append(
+                    {
+                        "equipmentId": eid,
+                        "equipType": str(eq.get("equip_type") or ""),
+                    }
+                )
+        return rows
+
+    return []
+
+
+def _stringify_row(row: dict[str, Any]) -> dict[str, str]:
+    return {k: "" if v is None else str(v) for k, v in row.items()}
+
+
+def _from_sparql_json_binding(binding: Any) -> dict[str, str]:
+    if not isinstance(binding, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in binding.items():
+        if isinstance(v, dict):
+            out[k] = str(v.get("value") or "")
+        else:
+            out[k] = str(v)
+    return out
+
+
+def get_package_ttl(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    building_id: str,
+    haystack: bool = False,
+) -> tuple[str, dict[str, str]]:
+    """Fetch package mapping TTL (Open-FDD product path).
+
+    ``haystack=False`` → ``/api/csv/import/package/mapping/ttl``
+    ``haystack=True``  → ``/api/csv/import/package/mapping/haystack.ttl``
+    """
+    if not building_id:
+        raise SystemExit("building_id required for package TTL")
+    path = (
+        "/api/csv/import/package/mapping/haystack.ttl"
+        if haystack
+        else "/api/csv/import/package/mapping/ttl"
+    )
+    return http.get_text(path, headers=headers, params={"building_id": building_id})
+
+
+def get_sparql_catalog(http: HttpClient, headers: dict[str, str]) -> dict[str, Any]:
+    return http.get_json("/api/model/sparql/predefined", headers=headers)
+
+
+def get_timeseries_readings(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    site_id: str,
+    columns: str,
+    hours: int | None = None,
+    all_rows: bool = False,
+) -> dict[str, Any]:
+    """GET /api/timeseries/readings — Open-FDD chart/readings path.
+
+    ``columns`` is comma-separated ``equipment_id:column`` or bare column keys.
+    """
+    params: dict[str, Any] = {"site_id": site_id, "columns": columns}
+    if all_rows:
+        params["all"] = "true"
+    elif hours is not None:
+        params["hours"] = hours
+    return http.get_json("/api/timeseries/readings", headers=headers, params=params)
+
+
+def historian_query(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    site_id: str | None = None,
+    equipment_id: str | None = None,
+    limit: int = 50_000,
+) -> dict[str, Any]:
+    """POST /api/historian/query — pivot rows for SPARQL→DF gates."""
+    body: dict[str, Any] = {"limit": min(max(limit, 1), 10_000)}
+    if site_id:
+        body["site_id"] = site_id
+    if equipment_id:
+        body["equipment_id"] = equipment_id
+    return http.post_json("/api/historian/query", headers=headers, json_body=body)
+
+
+def print_table(title: str, rows: list[dict[str, str]], *, limit: int = 20) -> None:
+    safe_print(f"\n{title}  ({len(rows)} rows)")
+    if not rows:
+        safe_print("  (empty)")
+        return
+    keys = list(rows[0].keys())
+    shown = rows[:limit]
+    cells = [[short(str(row.get(k, ""))) for k in keys] for row in shown]
+    widths = [max(len(k), *(len(r[i]) for r in cells)) for i, k in enumerate(keys)]
+    safe_print("  " + "  ".join(k.ljust(widths[i]) for i, k in enumerate(keys)))
+    safe_print("  " + "  ".join("-" * w for w in widths))
+    for row in cells:
+        safe_print("  " + "  ".join(row[i].ljust(widths[i]) for i in range(len(keys))))
+    if len(rows) > limit:
+        safe_print(f"  ... +{len(rows) - limit} more")
+
+
+def banner(name: str, *, base_url: str, building_id: str | None = None) -> None:
+    safe_print(name)
+    safe_print(f"  server       {base_url}")
+    if building_id:
+        safe_print(f"  building_id  {building_id}")
+    safe_print("  vocab        Project Haystack RDF (Turtle) / ofdd: package graph")
+    safe_print("  soft-open    Soft-OPEN ≠ FQ")
+
+
+def require_building_id(args: argparse.Namespace) -> str:
+    bid = (getattr(args, "building_id", None) or "").strip()
+    if not bid:
+        raise SystemExit(
+            "building_id required: pass --building-id or set OPENFDD_STRESS_BUILDING_ID "
+            "(synthetic site only — no private consumer names)"
+        )
+    return bid
+
+
+def ensure_repo_on_path() -> Path:
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    return REPO

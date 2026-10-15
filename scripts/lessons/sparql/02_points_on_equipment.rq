@@ -1,0 +1,17 @@
+# Soft-OPEN lesson SPARQL — points with equipRef + column/pointId.
+# Prefer template query_id=points_on_equipment when inventory is present.
+# Synthetic sites only. Soft-OPEN ≠ FQ.
+
+PREFIX phIoT: <https://project-haystack.org/def/phIoT/4.0.0#>
+PREFIX ofdd: <urn:openfdd:ns#>
+
+SELECT ?point ?equipmentId ?pointId ?column ?unit ?kind WHERE {
+  ?point phIoT:equipRef ?equip .
+  ?equip ofdd:equipmentId ?equipmentId .
+  OPTIONAL { ?point ofdd:pointId ?pointId }
+  OPTIONAL { ?point ofdd:column ?column }
+  OPTIONAL { ?point ofdd:unit ?unit }
+  OPTIONAL { ?point ofdd:kind ?kind }
+}
+ORDER BY ?equipmentId ?pointId
+LIMIT 200
