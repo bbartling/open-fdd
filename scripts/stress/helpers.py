@@ -464,6 +464,70 @@ def historian_query(
     return http.post_json("/api/historian/query", headers=headers, json_body=body)
 
 
+def mint_opaque_point_iri(building_id: str, equipment_id: str, point_key: str) -> str:
+    """Same Soft-OPEN R5 shape the Haystack projector emits into Turtle."""
+    return (
+        f"urn:openfdd:site/{building_id}/equip/{equipment_id}/point/{point_key}"
+    )
+
+
+def point_resolve(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    point_iri: str,
+    include_history: bool = True,
+    max_points: int = 2000,
+) -> dict[str, Any]:
+    """GET /api/model/point-resolve — opaque IRI → openfdd_key (+ Timescale samples)."""
+    return http.get_json(
+        "/api/model/point-resolve",
+        headers=headers,
+        params={
+            "point_iri": point_iri,
+            "include_history": "true" if include_history else "false",
+            "max_points": max_points,
+        },
+    )
+
+
+def fdd_run(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    building_id: str,
+    rule_ids: list[str] | None = None,
+    equipment_id: str | None = None,
+    params: dict[str, Any] | None = None,
+    force_new_data: bool = True,
+) -> dict[str, Any]:
+    """POST /api/fdd/run — registry mode only (no raw SQL on product path)."""
+    body: dict[str, Any] = {
+        "mode": "registry",
+        "building_id": building_id,
+        "force_new_data": force_new_data,
+    }
+    if rule_ids:
+        body["rule_ids"] = rule_ids
+    if equipment_id:
+        body["equipment_id"] = equipment_id
+    if params:
+        body["params"] = params
+    return http.post_json("/api/fdd/run", headers=headers, json_body=body)
+
+
+def analytics_post(
+    http: HttpClient,
+    headers: dict[str, str],
+    path: str,
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    """POST /api/analytics/* — path must start with /api/analytics/."""
+    if not path.startswith("/api/analytics/"):
+        raise ValueError(f"analytics path must be under /api/analytics/: {path}")
+    return http.post_json(path, headers=headers, json_body=body)
+
+
 def print_table(title: str, rows: list[dict[str, str]], *, limit: int = 20) -> None:
     safe_print(f"\n{title}  ({len(rows)} rows)")
     if not rows:

@@ -12,9 +12,9 @@ oracle CI) — never on the product request path.
 
 | Gate | Script | Proof | Soft-OPEN status |
 | --- | --- | --- | --- |
-| A1 | `01_sparql_model.py` | SPARQL + package TTL + predefined catalog | Follow-up PR (T13) |
+| A1 | `01_sparql_model.py` | SPARQL + package TTL + predefined catalog | Landed (T13) |
 | A2 | `02_sparql_fc1_points.py` | FC1 roles via SPARQL / templates | Optional later |
-| A3 | `03_sparql_zone_dataframe.py` | SPARQL → historian/timeseries → pandas DF | Follow-up PR (T13) |
+| A3 | `03_sparql_zone_dataframe.py` | SPARQL → point-resolve/historian → pandas DF | Landed (T13) |
 | B–E | `04`–`07` | Local Timescale / warehouse (may stay BPS-side) | Optional |
 | F | `08_sql_vs_pandas_sparql.py` | Synthetic pack SQL FDD ↔ pandas via SPARQL DF; fail-closed (#1253) | Follow-up PR (T14) |
 | G | `09_analytics_sql_vs_pandas.py` | Analytics SQL ↔ independent pandas | Follow-up PR (T15) |
