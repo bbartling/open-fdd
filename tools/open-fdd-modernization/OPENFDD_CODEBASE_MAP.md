@@ -89,7 +89,8 @@ while production FDD is DataFusion/GHCR. The new program goes further by
 removing Python from production runtime; it does not automatically erase the
 educational/reference package.
 
-Audit workflow `.github/workflows/ecm-python.yml` and all other Python Actions
+Audit workflow `.github/workflows/python-package.yml` (canonical PyPI/ECM gate;
+former `ecm-python.yml` alias removed 2026-10-15) and all other Python Actions
 before deciding which remain as oracle/library CI versus obsolete product CI.
 
 ## Rust workspace
@@ -257,7 +258,7 @@ Audit:
 
 - `.github/workflows/rust-ci.yml`;
 - `.github/workflows/rust-release.yml`;
-- `.github/workflows/ecm-python.yml`;
+- `.github/workflows/python-package.yml`;
 - all UI, docs, container, GHCR, nightly, security, and release workflows;
 - `docker/compose.*.yml`;
 - image/version manifests;

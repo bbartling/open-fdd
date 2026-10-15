@@ -161,7 +161,7 @@ Active under `.github/workflows/`:
 - `rust-ghcr-mcp.yml`, `ghcr-prune.yml`, `ghcr-multiarch-publish.yml`
 - `docker-publish.yml`, `docker-supervisor-check.yml`, `publish-open-fdd.yml`
 - `rust-release.yml`, `security.yml`, `appsec.yml`
-- `docs-pages.yml`, `docs-pdf.yml`, `cookbook-parity.yml`
+- `docs-pages.yml`, `cookbook-parity.yml` (`docs-pdf.yml` removed 2026-10-15 — was echo placeholder)
 
 ## Blockers (severity order)
 

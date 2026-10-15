@@ -1,17 +1,31 @@
-# Historian scale and release qualification
+# Historian scale and release qualification (HISTORICAL / SUPERSEDED)
 
-H10 provides a deterministic synthetic workload and a repeatable qualification path for the canonical Parquet/DataFusion historian. It is a test harness, not a second historian or a production data generator.
+> **Superseded 2026-10-15 (Actions cleanup Stage A).** The GitHub Actions
+> workflow `.github/workflows/historian-scale-qualification.yml` was a retired
+> DataFusion-era echo placeholder and has been **removed**. Product storage is
+> Timescale/PostgreSQL (ADR-010). This document is retained as dated H10
+> harness notes only.
+>
+> **Do not treat this page as current CI or as Timescale scale/restore proof.**
+> Soft-OPEN ≠ FQ. Preserve `scripts/ci/forbid_datafusion_product.sh` and current
+> SQL/Timescale gates (`fdd-engine-ci.yml`, related pack checks). Portable
+> generators under `scripts/historian_scale_*.py` / `historian_scale_workloads.sql`
+> may still be useful as synthetic inputs; they are not a passing scale gate.
 
-## Cheap changed-head gate
+H10 historically described a deterministic synthetic workload for the retired
+Parquet/DataFusion historian path. It was a test harness, not a second historian
+or a production data generator.
 
-Run before expensive image or deployment tests:
+## Cheap changed-head gate (historical)
+
+Former DataFusion-era commands (crates and workflow no longer product CI):
 
 ```bash
 python3 scripts/historian_scale_check.py
-cargo test -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench
+# cargo test -p fdd_store -p fdd_sql -p fdd_rules -p fdd_bench  # retired path
 ```
 
-The H10 GitHub Actions workflow also boots the local CSV central + React containers and verifies `/api/health` plus a CSV preview smoke.
+The former H10 GitHub Actions workflow no longer exists (removed Stage A).
 
 ## Synthetic source
 

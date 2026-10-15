@@ -1,9 +1,0 @@
-name: Historian scale qualification (retired)
-# Wave-X C2: DataFusion / fdd_sql / fdd_bench retired. Soft-OPEN ≠ FQ.
-on:
-  workflow_dispatch:
-jobs:
-  retired:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Retired with Wave-X Timescale cutover; see scripts/ci/forbid_datafusion_product.sh"
