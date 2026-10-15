@@ -226,7 +226,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         // Soft-OPEN R5: opaque point IRI → openfdd_key (+ optional Timescale history).
         .route("/api/model/point-resolve", get(model_point_resolve))
         // Soft-OPEN R8a: tip-safe read-only schema/contract probe (no migrator apply).
-        .route("/api/admin/schema-contract", get(admin_schema_contract_softopen))
+        .route(
+            "/api/admin/schema-contract",
+            get(admin_schema_contract_softopen),
+        )
         .route("/api/fdd/rules", get(fdd_registry_rules))
         .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
         .route("/api/fdd/cache/status", get(fdd_cache_status))

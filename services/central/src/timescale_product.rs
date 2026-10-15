@@ -1080,11 +1080,7 @@ pub async fn schema_contract_softopen() -> Result<Value> {
                     .unwrap_or(true),
             )
         }
-        Err(e) => (
-            format!("unreadable:{e}"),
-            None,
-            true,
-        ),
+        Err(e) => (format!("unreadable:{e}"), None, true),
     };
 
     let mut seed_schema: Option<String> = None;

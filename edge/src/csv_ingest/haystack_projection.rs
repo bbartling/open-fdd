@@ -72,7 +72,7 @@ fn utf8_hex(bytes: &[u8]) -> String {
 }
 
 fn hex_to_utf8(hex: &str) -> Result<String, String> {
-    if hex.len() % 2 != 0 || hex.is_empty() {
+    if hex.is_empty() || !hex.len().is_multiple_of(2) {
         return Err("invalid enc_ hex length".into());
     }
     let mut bytes = Vec::with_capacity(hex.len() / 2);
