@@ -98,9 +98,36 @@ const FUEL_DAILY_SQL: &str = include_str!("../../../sql/analytics/postgres/queri
 const RCX_PRESET_COVERAGE_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/rcx_preset_role_coverage.sql");
 
-pub async fn motor_weekly_runtime(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+fn with_scope_meta(mut env: Value, scope: &AnalyticsSqlScope) -> Value {
+    if let Some(obj) = env.as_object_mut() {
+        obj.insert(
+            "window_start".to_string(),
+            json!(scope
+                .start
+                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
+        );
+        obj.insert(
+            "window_end".to_string(),
+            json!(scope
+                .end
+                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
+        );
+        obj.insert("equipment_ids".to_string(), json!(scope.equipment_ids));
+    }
+    env
+}
+
+pub async fn motor_weekly_runtime(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(MOTOR_WEEKLY_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("motor_weekly_runtime")?;
@@ -123,12 +150,23 @@ pub async fn motor_weekly_runtime(tsdb: &Tsdb, building_id: &str) -> Result<Valu
             "runtime_hours": runtime,
         }));
     }
-    Ok(envelope("motor-weekly-runtime", building_id, out))
+    Ok(with_scope_meta(
+        envelope("motor-weekly-runtime", building_id, out),
+        scope,
+    ))
 }
 
-pub async fn bas_vs_web_oat(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn bas_vs_web_oat(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(BAS_VS_WEB_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("bas_vs_web_oat")?;
@@ -143,7 +181,10 @@ pub async fn bas_vs_web_oat(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
             "delta_f": r.try_get::<f64, _>("delta_f").ok(),
         }));
     }
-    Ok(envelope("bas-vs-web-oat", building_id, out))
+    Ok(with_scope_meta(
+        envelope("bas-vs-web-oat", building_id, out),
+        scope,
+    ))
 }
 
 pub async fn plant_health_matrix(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
@@ -196,9 +237,17 @@ pub async fn role_timeseries(
     Ok(envelope(query_id, building_id, out))
 }
 
-pub async fn mechanical_cooling_oat_bins(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+pub async fn mechanical_cooling_oat_bins(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+) -> Result<Value> {
+    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
     let rows = sqlx::query(MECH_COOLING_SQL)
         .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
         .context("mechanical_cooling_oat_bins")?;
@@ -211,7 +260,10 @@ pub async fn mechanical_cooling_oat_bins(tsdb: &Tsdb, building_id: &str) -> Resu
             "run_hours": r.try_get::<f64, _>("run_hours").ok(),
         }));
     }
-    Ok(envelope("mechanical-cooling", building_id, out))
+    Ok(with_scope_meta(
+        envelope("mechanical-cooling", building_id, out),
+        scope,
+    ))
 }
 
 pub async fn sensor_stats(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
@@ -509,23 +561,10 @@ pub async fn economizer_deltas(
             "delta_mr_f": r.try_get::<f64, _>("delta_mr_f").ok(),
         }));
     }
-    let mut env = envelope("economizer", building_id, out);
-    if let Some(obj) = env.as_object_mut() {
-        obj.insert(
-            "window_start".to_string(),
-            json!(scope
-                .start
-                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
-        );
-        obj.insert(
-            "window_end".to_string(),
-            json!(scope
-                .end
-                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
-        );
-        obj.insert("equipment_ids".to_string(), json!(scope.equipment_ids));
-    }
-    Ok(env)
+    Ok(with_scope_meta(
+        envelope("economizer", building_id, out),
+        scope,
+    ))
 }
 
 pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
@@ -651,8 +690,8 @@ pub async fn respond_query(
 
     let scope = AnalyticsSqlScope::from_request(req);
     let result = match query_id {
-        "runtime" => motor_weekly_runtime(&tsdb, &building).await,
-        "bas-vs-web-oat" => bas_vs_web_oat(&tsdb, &building).await,
+        "runtime" => motor_weekly_runtime(&tsdb, &building, &scope).await,
+        "bas-vs-web-oat" => bas_vs_web_oat(&tsdb, &building, &scope).await,
         "ahu-health"
         | "vav-health"
         | "chiller-health"
@@ -678,7 +717,7 @@ pub async fn respond_query(
                 Err(e) => Err(e),
             }
         }
-        "mechanical-cooling" => mechanical_cooling_oat_bins(&tsdb, &building).await,
+        "mechanical-cooling" => mechanical_cooling_oat_bins(&tsdb, &building, &scope).await,
         "schedule" => schedule_occupancy(&tsdb, &building).await,
         "sensor-stats" => sensor_stats(&tsdb, &building).await,
         "sensor-faults" => sensor_faults(&tsdb, &building).await,
@@ -720,21 +759,33 @@ mod pack_version_tests {
     use super::*;
     use chrono::TimeZone;
 
-    #[test]
-    fn economizer_sql_declares_window_and_equipment_binds() {
+    fn assert_window_equipment_binds(sql: &str, name: &str) {
         // Regression: building-only $1 was the Soft-OPEN residual — fail closed if lost.
         assert!(
-            ECONOMIZER_SQL.contains("$2::timestamptz"),
-            "economizer SQL must bind window start ($2)"
+            sql.contains("$2::timestamptz"),
+            "{name} SQL must bind window start ($2)"
         );
         assert!(
-            ECONOMIZER_SQL.contains("$3::timestamptz"),
-            "economizer SQL must bind window end ($3)"
+            sql.contains("$3::timestamptz"),
+            "{name} SQL must bind window end ($3)"
         );
         assert!(
-            ECONOMIZER_SQL.contains("$4::text[]") || ECONOMIZER_SQL.contains("ANY ($4)"),
-            "economizer SQL must bind equipment_ids ($4)"
+            sql.contains("$4::text[]") || sql.contains("ANY ($4)"),
+            "{name} SQL must bind equipment_ids ($4)"
         );
+    }
+
+    #[test]
+    fn economizer_sql_declares_window_and_equipment_binds() {
+        assert_window_equipment_binds(ECONOMIZER_SQL, "economizer");
+    }
+
+    #[test]
+    fn overview_traffic_sql_declares_window_and_equipment_binds() {
+        // Soft-OPEN post-#1258: highest-traffic Overview routes after economizer.
+        assert_window_equipment_binds(BAS_VS_WEB_SQL, "bas-vs-web-oat");
+        assert_window_equipment_binds(MECH_COOLING_SQL, "mechanical-cooling");
+        assert_window_equipment_binds(MOTOR_WEEKLY_SQL, "runtime");
     }
 
     #[test]

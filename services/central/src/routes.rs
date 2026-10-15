@@ -6646,7 +6646,10 @@ async fn analytics_runtime(
         })?;
         match fdd_tsdb::Tsdb::connect_from_env().await {
             Ok(tsdb) => {
-                match crate::timescale_analytics::motor_weekly_runtime(&tsdb, &building).await {
+                let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
+                match crate::timescale_analytics::motor_weekly_runtime(&tsdb, &building, &scope)
+                    .await
+                {
                     Ok(v) => return Ok(Json(v)),
                     Err(e) => {
                         return Err((
@@ -6945,17 +6948,20 @@ async fn analytics_bas_vs_web_oat(
             )
         })?;
         match fdd_tsdb::Tsdb::connect_from_env().await {
-            Ok(tsdb) => match crate::timescale_analytics::bas_vs_web_oat(&tsdb, &building).await {
-                Ok(v) => return Ok(Json(v)),
-                Err(e) => {
-                    return Err((
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(
-                            json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"}),
-                        ),
-                    ));
+            Ok(tsdb) => {
+                let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
+                match crate::timescale_analytics::bas_vs_web_oat(&tsdb, &building, &scope).await {
+                    Ok(v) => return Ok(Json(v)),
+                    Err(e) => {
+                        return Err((
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(
+                                json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"}),
+                            ),
+                        ));
+                    }
                 }
-            },
+            }
             Err(e) => {
                 return Err((
                     StatusCode::SERVICE_UNAVAILABLE,
