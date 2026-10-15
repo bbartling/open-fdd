@@ -8401,7 +8401,10 @@ mod version_tests {
             empty_json.get("writable_layer").and_then(|v| v.as_str()),
             Some("openfdd_semantic_meta_v1")
         );
-        assert!(empty_json.get("recipes").and_then(|v| v.as_array()).is_some());
+        assert!(empty_json
+            .get("recipes")
+            .and_then(|v| v.as_array())
+            .is_some());
 
         // publish meta then re-read via BPS site_id alias
         let put = Request::builder()
