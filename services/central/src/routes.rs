@@ -4689,6 +4689,22 @@ pub async fn csv_import_package_roles(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(&headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    // Scope alone is not mutation permission — viewers may read mapping, not rewrite roles.
+    if matches!(user.role, auth::Role::Viewer) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "viewer role cannot mutate package roles"
+            })),
+        ));
+    }
     let building_id = body
         .get("building_id")
         .and_then(|v| v.as_str())
@@ -7700,6 +7716,48 @@ mod version_tests {
         assert!(!connector_trigger_role_allowed(crate::auth::Role::Viewer));
         assert!(connector_trigger_role_allowed(crate::auth::Role::Operator));
         assert!(connector_trigger_role_allowed(crate::auth::Role::Admin));
+    }
+
+    #[tokio::test]
+    async fn package_roles_http_denies_viewer_before_mutation() {
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("package-roles-viewer-deny-test-secret".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("viewer-roles-deny", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let body = serde_json::json!({
+            "building_id": "SYNTHETIC_ROLES_DENY",
+            "equipment_id": "AHU_1",
+            "roles": {"fan_cmd": "fan-cmd"}
+        });
+        let request = Request::post("/api/csv/import/package/roles")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {viewer}"))
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(json.get("ok").and_then(|v| v.as_bool()), Some(false));
+        assert!(
+            json.get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .contains("viewer role cannot mutate package roles"),
+            "unexpected body: {json}"
+        );
     }
 
     #[test]
