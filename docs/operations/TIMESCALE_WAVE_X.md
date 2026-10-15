@@ -3,6 +3,10 @@
 Soft-OPEN ≠ FQ. Fieldbus BACnet/Modbus unchanged. No dual-write. Default
 binary Timescale-only (`legacy-datafusion` / `legacy-parquet` OFF).
 
+**Soft-OPEN R8d tip-safe:** no Soft-OPEN agent Railway/DB/volume backups; Parquet
+compaction/budget Soft-OPEN N/A on Timescale tip; Timescale WAL/PITR/restore
+remain FQ-open. See [`docs/softopen/SOFTOPEN_WAL_RESTORE_R8d.md`](../softopen/SOFTOPEN_WAL_RESTORE_R8d.md).
+
 **Morning / reboot:** ART one-pager
 `/tmp/openfdd-softopen/3.6.0/REBOOT_SAFE.md` (+ `DONE.md`, Grok prompt under
 `grok/`). ADR: [`adr-010-timescale-hard-cutover.md`](../architecture/adr-010-timescale-hard-cutover.md).
