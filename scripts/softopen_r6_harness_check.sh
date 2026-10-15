@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Soft-OPEN R6/R8c harness — smoke + pack pin (≠ equation FQ).
+# Installed-source checksum/size must match the contract ledger — no silent drift.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -17,13 +18,21 @@ else
   echo "OK: original warehouse sha256 preserved"
 fi
 
-# 2) Analytics pack version Soft-OPEN.
+# 2) Analytics pack version Soft-OPEN + aligned with contract_version prefix.
 pack_ver=$(python3 -c 'import json;print(json.load(open("sql/analytics/registry.json"))["pack_version"])')
+contract_ver=$(python3 -c 'import json;print(json.load(open("sql/contract/manifest.json"))["contract_version"])')
+bundle_ver=$(python3 -c 'import json;print(json.load(open("sql/contract/successor_bundle/manifest.softopen.json"))["bundle_version"])')
 if [[ "$pack_ver" != *softopen* ]]; then
   echo "FAIL: analytics pack_version missing softopen ($pack_ver)"
   fail=1
+elif [[ "$pack_ver" != "$contract_ver" ]]; then
+  echo "FAIL: analytics pack_version ($pack_ver) != contract_version ($contract_ver)"
+  fail=1
+elif [[ "$bundle_ver" != "$contract_ver" ]]; then
+  echo "FAIL: successor bundle_version ($bundle_ver) != contract_version ($contract_ver)"
+  fail=1
 else
-  echo "OK: analytics pack_version=$pack_ver"
+  echo "OK: analytics pack_version=$pack_ver (aligned with contract + successor)"
 fi
 
 # 3) Contract soft_open_neq_fq flag.
@@ -45,6 +54,68 @@ if [[ ! -f sql/contract/successor_bundle/FILES.sha256 ]]; then
 else
   echo "OK: successor_bundle/FILES.sha256 present ($(wc -l < sql/contract/successor_bundle/FILES.sha256) lines)"
 fi
+
+# 6) Installed-source checksum/size vs contract manifest (FAIL on drift — no silent accept).
+python3 <<'PY' || fail=1
+import hashlib, json, sys
+from pathlib import Path
+
+m = json.loads(Path("sql/contract/manifest.json").read_text(encoding="utf-8"))
+files = m.get("files") or []
+if len(files) != int(m.get("file_count") or -1):
+    print(f"FAIL: file_count {m.get('file_count')} != len(files) {len(files)}")
+    sys.exit(1)
+
+ledger_path = Path("sql/contract/successor_bundle/FILES.sha256")
+ledger = {}
+for line in ledger_path.read_text(encoding="utf-8").splitlines():
+    if not line.strip():
+        continue
+    sha, path = line.split(None, 1)
+    ledger[path] = sha
+
+h = hashlib.sha256()
+drift = []
+for entry in files:
+    path = entry["path"]
+    p = Path(path)
+    if not p.is_file():
+        drift.append(f"MISSING {path}")
+        continue
+    data = p.read_bytes()
+    dig = hashlib.sha256(data).hexdigest()
+    if dig != entry.get("sha256") or len(data) != int(entry.get("bytes") or -1):
+        drift.append(
+            f"{path}: manifest sha/bytes={entry.get('sha256','')[:16]}…/{entry.get('bytes')} "
+            f"disk={dig[:16]}…/{len(data)}"
+        )
+    if ledger.get(path) != dig:
+        drift.append(f"{path}: FILES.sha256 mismatch (ledger={ledger.get(path,'MISSING')[:16]}…)")
+    h.update(path.encode())
+    h.update(b"\0")
+    h.update(dig.encode())
+    h.update(b"\0")
+
+pack = h.hexdigest()
+if pack != m.get("pack_sha256"):
+    drift.append(
+        f"pack_sha256: manifest={m.get('pack_sha256')} recomputed_from_disk={pack}"
+    )
+
+extra = set(ledger) - {e["path"] for e in files}
+missing_ledger = {e["path"] for e in files} - set(ledger)
+if extra:
+    drift.append(f"FILES.sha256 extras: {sorted(extra)[:5]}")
+if missing_ledger:
+    drift.append(f"FILES.sha256 missing: {sorted(missing_ledger)[:5]}")
+
+if drift:
+    print("FAIL: installed contract checksum/size drift (no silent accept):")
+    for row in drift:
+        print(f"  - {row}")
+    sys.exit(1)
+print(f"OK: installed checksum/size match ({len(files)} files, pack_sha256 pin)")
+PY
 
 if [[ "$fail" -ne 0 ]]; then
   echo "Soft-OPEN harness FAILED"
