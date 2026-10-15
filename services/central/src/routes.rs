@@ -5650,6 +5650,29 @@ pub async fn data_management_budget(
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let _admin = require_hub_admin(&state, &headers)?;
+    // Soft-OPEN R8d: do not present Parquet hive budget as Timescale product historian retention.
+    if crate::timescale_historian::historian_is_timescale() {
+        let budget = fdd_store::DataBudget::from_env();
+        return Ok(Json(json!({
+            "ok": true,
+            "engine": "timescale-sql",
+            "soft_open_neq_fq": true,
+            "parquet_historian_budget": "not_applicable",
+            "enabled": budget.enabled,
+            "budget_bytes": budget.budget_bytes,
+            "budget_gib": budget.budget_bytes / fdd_store::GIB,
+            "default_budget_gib": fdd_store::DEFAULT_LOCAL_DATA_BUDGET_GIB,
+            "reserved_free_percent": budget.reserved_free_percent,
+            "used_bytes": 0,
+            "bytes_over_budget": 0,
+            "object_count": 0,
+            "would_drop_count": 0,
+            "would_drop_bytes": 0,
+            "keep_bytes": 0,
+            "policy": "Timescale product historian — Parquet oldest-first Soft-OPEN N/A (≠ FQ WAL/retention)",
+            "storage_root": null,
+        })));
+    }
     let budget = fdd_store::DataBudget::from_env();
     let root = data_budget_root();
     let objects = fdd_store::collect_budget_objects(&root);
@@ -5686,6 +5709,18 @@ pub async fn data_management_retention_apply(
     Json(body): Json<DataBudgetApplyBody>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let admin = require_hub_admin(&state, &headers)?;
+    if crate::timescale_historian::historian_is_timescale() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "engine": "timescale-sql",
+                "soft_open_neq_fq": true,
+                "parquet_historian_budget": "not_applicable",
+                "error": "Parquet data-budget apply Soft-OPEN N/A when OPENFDD_HISTORIAN=timescale (≠ FQ WAL/retention)",
+            })),
+        ));
+    }
     if body.confirm.trim() != "APPLY DATA BUDGET" {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -5810,6 +5845,22 @@ pub async fn historian_compaction_status(
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let _admin = require_hub_admin(&state, &headers)?;
+    // Soft-OPEN R8d: Timescale tip must not advertise empty Parquet compaction as product.
+    if crate::timescale_historian::historian_is_timescale() {
+        return Ok(Json(json!({
+            "ok": true,
+            "engine": "timescale-sql",
+            "soft_open_neq_fq": true,
+            "parquet_compaction": "not_applicable",
+            "note": "Product historian is Timescale; Parquet compaction Soft-OPEN N/A (≠ FQ WAL/restore)",
+            "coordinator": {
+                "mode": "n/a",
+                "scanners": 0,
+                "compacting": false,
+            },
+            "historian": Value::Null,
+        })));
+    }
     let coord = fdd_store::shared_compaction_coordinator().status();
     let stats = fdd_store::HistorianConfig::from_env()
         .ok()
@@ -5831,6 +5882,18 @@ pub async fn historian_compaction_run(
     Json(body): Json<HistorianCompactionBody>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let admin = require_hub_admin(&state, &headers)?;
+    if crate::timescale_historian::historian_is_timescale() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "engine": "timescale-sql",
+                "soft_open_neq_fq": true,
+                "parquet_compaction": "not_applicable",
+                "error": "Parquet historian compaction Soft-OPEN N/A when OPENFDD_HISTORIAN=timescale (≠ FQ WAL/restore)",
+            })),
+        ));
+    }
     if !body.confirm {
         return Err((
             StatusCode::BAD_REQUEST,
