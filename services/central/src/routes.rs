@@ -4823,14 +4823,17 @@ pub async fn csv_import_package_mapping_semantic_meta(
                 "present": true,
                 "schema": open_fdd_edge_prototype::csv_ingest::semantic_meta::SCHEMA,
                 "meta": meta,
+                "soft_open_neq_fq": true,
             }),
             Ok(None) => json!({
                 "ok": true,
                 "present": false,
                 "schema": open_fdd_edge_prototype::csv_ingest::semantic_meta::SCHEMA,
                 "building_id": building_id,
+                "soft_open_neq_fq": true,
+                "note": "Soft-OPEN tip-safe: missing semantic_meta is an honest present=false (≠ FQ RDF/SPARQL site proof)",
             }),
-            Err(e) => json!({"ok": false, "error": e}),
+            Err(e) => json!({"ok": false, "error": e, "soft_open_neq_fq": true}),
         }
     })
     .await
