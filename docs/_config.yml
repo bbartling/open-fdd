@@ -1,5 +1,5 @@
 title: Open-FDD
-description: Building telemetry, semantic modeling, and HVAC fault detection with Rust and PostgreSQL.
+description: Local-first Rust + TimescaleDB platform for building telemetry, semantic modeling, and HVAC fault detection (Soft-OPEN ≠ FQ).
 theme: just-the-docs
 
 url: https://bbartling.github.io

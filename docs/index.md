@@ -38,17 +38,15 @@ Secure HVAC data collection, fault detection, and portfolio access for mechanica
 ## What it does
 
 - Collects live data from **BACnet**, **Modbus**, **Haystack**, **JSON API**, and **CSV** imports
-- Stores telemetry in an **PostgreSQL / TimescaleDB** historian
+- Stores telemetry in a **TimescaleDB** historian (PostgreSQL + hypertables; [ADR-010]({{ site.baseurl }}/architecture/adr-010-timescale-hard-cutover.html))
 - Models sites with **Project Haystack** semantics
-- Runs **PostgreSQL SQL** rules (`sql/fdd/registry.yaml`)
+- Runs **Timescale / PostgreSQL SQL** rules (`sql/fdd/registry.yaml`) — not Arrow/DataFusion
 - Serves a **React** SPA — Overview, FDD, RCx, findings against central `/api` only
 - Exposes **JWT REST** and optional **MCP** for engineering agents
 
-Pandas recipes stay in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) for notebooks / PyPI. Production FDD is PostgreSQL SQL only.
+Pandas recipes stay in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) for notebooks / PyPI. Product FDD is **Timescale SQL only** (Soft-OPEN ≠ FQ; see [ADR-010]({{ site.baseurl }}/architecture/adr-010-timescale-hard-cutover.html)). No Parquet historian and no DataFusion on the product path.
 
-The web application runs SQL. Python/pandas provides offline reference calculations
-for testing and validating that SQL. See [Database and SQL execution]({{ site.baseurl }}/architecture/database/)
-and the [Python analytics source examples]({{ site.baseurl }}/rules/pandas-analytics-cookbook/).
+The web application runs SQL against Timescale. Python/pandas is offline/oracle validation only — see the [Python analytics source examples]({{ site.baseurl }}/rules/pandas-analytics-cookbook/) and [historian architecture]({{ site.baseurl }}/architecture/historian.html) (Timescale supersession note).
 
 ## Who it is for
 
@@ -74,7 +72,7 @@ Intended for **LAN, VPN, or OT-network** deployment. Do not expose the API on th
 ## Get started
 
 1. [Quick Start]({{ site.baseurl }}/quick-start/) — Compose + Railway + GHCR
-2. [**Rule Cookbook**]({{ site.baseurl }}/rules/) — PostgreSQL SQL + Pandas patterns (+ [anomaly screening]({{ site.baseurl }}/rules/sql-anomaly-detection/))
+2. [**Rule Cookbook**]({{ site.baseurl }}/rules/) — Timescale SQL + Pandas oracle patterns (+ [anomaly screening]({{ site.baseurl }}/rules/sql-anomaly-detection/))
 3. [Haystack modeling]({{ site.baseurl }}/modeling/) — packages and SQL roles
 4. [Architecture]({{ site.baseurl }}/architecture/) — services and data flow
 5. [API & Security]({{ site.baseurl }}/api/) — REST + vulnerability reporting
