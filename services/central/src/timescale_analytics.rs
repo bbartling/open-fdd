@@ -746,7 +746,12 @@ mod pack_version_tests {
                 building_id: Some("SYNTHETIC_ECON".into()),
                 start: Some(start),
                 end: Some(end),
-                equipment_ids: Some(vec!["AHU_A".into(), "".into(), "AHU_A".into(), "AHU_B".into()]),
+                equipment_ids: Some(vec![
+                    "AHU_A".into(),
+                    "".into(),
+                    "AHU_A".into(),
+                    "AHU_B".into(),
+                ]),
                 ..Default::default()
             },
             ..Default::default()
