@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-sql-schema-fdd-v1",
-  "contract_version": "3.6.7-softopen",
+  "contract_version": "3.6.8-softopen",
   "engine": "timescale/postgresql",
   "product": "open-fdd",
   "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd + sql/analytics pack hash; twin layers must not fork equations",
@@ -12,8 +12,8 @@
   ],
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
-  "file_count": 99,
-  "pack_sha256": "a30ccec9e420928079bb39c13eccf02e57894db597ff0345f8cf3443c13aa71f",
+  "file_count": 103,
+  "pack_sha256": "374da94b0178c3a58c2ccea8bc600872b654956cd257a2e8f86d9250b0a555b1",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -446,6 +446,11 @@
       "bytes": 1087
     },
     {
+      "path": "sql/analytics/postgres/queries/fuel_daily.sql",
+      "sha256": "7df89670d6c41c6ed8d6cf0c7c4d218e2cfa7d2c7c607a3cf068dbcda6538a93",
+      "bytes": 829
+    },
+    {
       "path": "sql/analytics/postgres/queries/mechanical_cooling_oat_bins.sql",
       "sha256": "1d0609685682bca7cb80fd7a1d0378a80229f908b7fca89e397e9c700d687043",
       "bytes": 1677
@@ -461,6 +466,11 @@
       "bytes": 808
     },
     {
+      "path": "sql/analytics/postgres/queries/mv_change_point_daily.sql",
+      "sha256": "96c647292be69684437808ff46f8f00b8539c70cce4e648a9e6bd2eeb60f49a6",
+      "bytes": 1265
+    },
+    {
       "path": "sql/analytics/postgres/queries/pid_hunting_proxy.sql",
       "sha256": "fdf7f8a539fc6d8ee5cce7eff8200ac522d820b0b33e59a3e6e6787c30eb72c1",
       "bytes": 740
@@ -469,6 +479,11 @@
       "path": "sql/analytics/postgres/queries/plant_health_inventory.sql",
       "sha256": "54d38c069d4e96eae42ab1940fc71e18b8118174163c869015107895f93685b4",
       "bytes": 248
+    },
+    {
+      "path": "sql/analytics/postgres/queries/rcx_preset_role_coverage.sql",
+      "sha256": "dc6ebf9bb9af7445303ae0042168a6c419a5c9d1c8b020c6a8afede9aaef3d03",
+      "bytes": 647
     },
     {
       "path": "sql/analytics/postgres/queries/role_timeseries.sql",
@@ -496,19 +511,24 @@
       "bytes": 826
     },
     {
+      "path": "sql/analytics/postgres/queries/sql_anomaly_zscore.sql",
+      "sha256": "cbdd1ee9c94bf4d2cb84d8abc892142e58543bd88ce09569552ef73f478e0f15",
+      "bytes": 1289
+    },
+    {
       "path": "sql/analytics/postgres/queries/topology_equipment.sql",
       "sha256": "ab82256161cd89f14a0b76f1e21fdbab11aa21345bd3c00928876be9a1edc029",
       "bytes": 662
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "5311a597d0bda6a9fc4ff64cac0c4ada67a86d4b44c52db3c1ae0535bb1835d7",
-      "bytes": 3068
+      "sha256": "982138f5bb106c78e14f9b9a62c44da21333ed5542f60693c9438eda249cc44f",
+      "bytes": 3997
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",
-      "sha256": "11ea0d6482d0cc418b4405ae3767150e304d9183076d50c568c22dfc74a394d7",
-      "bytes": 1289
+      "sha256": "99147a9eefdc0c8f3cb36902ed4b317a60f3b8b9a12671433d3afa1104fc415d",
+      "bytes": 1292
     }
   ]
 }

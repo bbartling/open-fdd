@@ -1,6 +1,6 @@
 {
   "bundle_id": "openfdd-successor-contract-softopen",
-  "bundle_version": "3.6.7-softopen",
+  "bundle_version": "3.6.8-softopen",
   "status": "softopen",
   "soft_open_neq_fq": true,
   "preserve_original_warehouse": {
@@ -23,7 +23,7 @@
   ],
   "shipped_softopen": [
     "analytics SQL pack bodies (runtime through pid-hunting Soft-OPEN)",
-    "R6 adapter gaps 1–12 Soft-OPEN dispositions",
+    "R6 adapter gaps 1\u201312 Soft-OPEN dispositions",
     "FILES.sha256 ledger aligned with contract manifest",
     "smoke harness pin (77 rules + original hash)"
   ],

@@ -38,6 +38,13 @@ const TOPOLOGY_SQL: &str =
 const METERING_SQL: &str = include_str!("../../../sql/analytics/postgres/queries/metering_kwh.sql");
 const PID_HUNTING_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/pid_hunting_proxy.sql");
+const SQL_ANOMALY_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/sql_anomaly_zscore.sql");
+const MV_CHANGE_POINT_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/mv_change_point_daily.sql");
+const FUEL_DAILY_SQL: &str = include_str!("../../../sql/analytics/postgres/queries/fuel_daily.sql");
+const RCX_PRESET_COVERAGE_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/rcx_preset_role_coverage.sql");
 
 pub async fn motor_weekly_runtime(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
     let rows = sqlx::query(MOTOR_WEEKLY_SQL)
@@ -328,6 +335,99 @@ pub async fn pid_hunting_proxy(tsdb: &Tsdb, building_id: &str) -> Result<Value> 
     Ok(envelope("pid-hunting", building_id, out))
 }
 
+pub async fn sql_anomaly_zscore(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+    let rows = sqlx::query(SQL_ANOMALY_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("sql_anomaly_zscore")?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(json!({
+            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "role": r.try_get::<String, _>("role").unwrap_or_default(),
+            "ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("ts").ok().map(|t| t.to_rfc3339()),
+            "val": r.try_get::<f64, _>("val").ok(),
+            "avg_val": r.try_get::<f64, _>("avg_val").ok(),
+            "stddev_val": r.try_get::<f64, _>("stddev_val").ok(),
+            "z_abs": r.try_get::<f64, _>("z_abs").ok(),
+            "anomaly_flag": r.try_get::<String, _>("anomaly_flag").unwrap_or_else(|_| "OK".into()),
+        }));
+    }
+    Ok(envelope("sql-anomaly", building_id, out))
+}
+
+pub async fn mv_change_point_daily(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+    let rows = sqlx::query(MV_CHANGE_POINT_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("mv_change_point_daily")?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(json!({
+            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "role": r.try_get::<String, _>("role").unwrap_or_default(),
+            "day_utc": r.try_get::<chrono::DateTime<chrono::Utc>, _>("day_utc")
+                .ok()
+                .map(|t| t.to_rfc3339()),
+            "avg_val": r.try_get::<f64, _>("avg_val").ok(),
+            "prev_avg": r.try_get::<f64, _>("prev_avg").ok(),
+            "delta_avg": r.try_get::<f64, _>("delta_avg").ok(),
+            "n": r.try_get::<i64, _>("n").ok(),
+            "change_flag": r.try_get::<String, _>("change_flag").unwrap_or_else(|_| "STABLE".into()),
+        }));
+    }
+    Ok(envelope("mv-change-point", building_id, out))
+}
+
+pub async fn fuel_daily(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+    let rows = sqlx::query(FUEL_DAILY_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("fuel_daily")?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(json!({
+            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "role": r.try_get::<String, _>("role").unwrap_or_default(),
+            "day_utc": r.try_get::<chrono::DateTime<chrono::Utc>, _>("day_utc")
+                .ok()
+                .map(|t| t.to_rfc3339()),
+            "n": r.try_get::<i64, _>("n").ok(),
+            "min_val": r.try_get::<f64, _>("min_val").ok(),
+            "max_val": r.try_get::<f64, _>("max_val").ok(),
+            "avg_val": r.try_get::<f64, _>("avg_val").ok(),
+            "delta_val": r.try_get::<f64, _>("delta_val").ok(),
+        }));
+    }
+    Ok(envelope("fuel", building_id, out))
+}
+
+pub async fn rcx_preset_role_coverage(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
+    let rows = sqlx::query(RCX_PRESET_COVERAGE_SQL)
+        .bind(building_id)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("rcx_preset_role_coverage")?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(json!({
+            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "role": r.try_get::<String, _>("role").unwrap_or_default(),
+            "n": r.try_get::<i64, _>("n").ok(),
+            "first_ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("first_ts")
+                .ok()
+                .map(|t| t.to_rfc3339()),
+            "last_ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("last_ts")
+                .ok()
+                .map(|t| t.to_rfc3339()),
+        }));
+    }
+    Ok(envelope("rcx-preset-coverage", building_id, out))
+}
+
 pub async fn economizer_deltas(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
     // Soft-OPEN: per-equipment pivot from analytics pack (not cross-equip GROUP BY ts).
     let rows = sqlx::query(ECONOMIZER_SQL)
@@ -427,7 +527,7 @@ fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
         "building_id": building_id,
         "engine": "timescale-sql",
         "analytics_pack": "openfdd-analytics-sql-v1",
-        "pack_version": "3.6.7-softopen",
+        "pack_version": "3.6.8-softopen",
         "stale": false,
         "rows": rows,
     })
@@ -511,27 +611,16 @@ pub async fn respond_query(
         "topology" => topology_equipment(&tsdb, &building).await,
         "metering" => metering_kwh(&tsdb, &building).await,
         "pid-hunting" => pid_hunting_proxy(&tsdb, &building).await,
-        "sql-anomaly" | "mv-change-point" | "fuel" => {
-            // Honest thin envelope — data present, full algorithm port tracked.
-            let samples = tsdb.sample_count(&building).await.unwrap_or(0);
-            Ok(json!({
-                "query_id": query_id,
-                "building_id": building,
-                "engine": "timescale-sql",
-                "analytics_pack": "openfdd-analytics-sql-v1",
-                "pack_version": "3.6.7-softopen",
-                "stale": false,
-                "rows": [],
-                "sample_count": samples,
-                "note": format!(
-                    "Wave-X Timescale path active; full {query_id} SQL port pending — no DataFusion fallback"
-                ),
-            }))
-        }
+        "sql-anomaly" => sql_anomaly_zscore(&tsdb, &building).await,
+        "mv-change-point" => mv_change_point_daily(&tsdb, &building).await,
+        "fuel" => fuel_daily(&tsdb, &building).await,
+        "rcx-preset-coverage" => rcx_preset_role_coverage(&tsdb, &building).await,
         other => Ok(json!({
             "query_id": other,
             "building_id": building,
             "engine": "timescale-sql",
+            "analytics_pack": "openfdd-analytics-sql-v1",
+            "pack_version": "3.6.8-softopen",
             "stale": false,
             "rows": [],
             "note": "Wave-X Timescale dispatch — query SQL port pending; DataFusion disabled",
