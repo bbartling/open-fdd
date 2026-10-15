@@ -192,6 +192,12 @@ impl HaystackRdfCache {
             })
         })
     }
+
+    /// Drop cached snapshots for a building after semantic_meta commit (HR-07).
+    pub fn invalidate_building(&self, building_id: &str) {
+        let prefix = format!("{building_id}|");
+        self.by_key.retain(|k, _| !k.starts_with(&prefix));
+    }
 }
 
 fn inventory_cache_token(inventory: &Value, preferred_tenant: Option<&str>) -> String {

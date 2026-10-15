@@ -11,6 +11,7 @@ Open-FDD differences vs BPS (same scientific lesson):
   - JWT via ``POST /api/auth/login`` → ``token`` or ``access_token``
   - SPARQL at ``POST /api/model/sparql`` (needs ``building_id`` + ``query`` or ``query_id``)
   - Package TTL at ``GET /api/csv/import/package/mapping/ttl`` (and haystack.ttl)
+  - BPS-compatible ``GET /api/model/ttl`` (Haystack projection) + ``PUT /api/model/semantic-meta``
   - Timeseries via ``GET /api/timeseries/readings`` / ``GET|POST /api/historian/query``
 
 Env (optional): OPENFDD_STRESS_BASE / OPENFDD_API_BASE, OPENFDD_STRESS_USER,
@@ -406,19 +407,22 @@ def get_package_ttl(
     *,
     building_id: str,
     haystack: bool = False,
+    model_alias: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Fetch package mapping TTL (Open-FDD product path).
 
+    ``model_alias=True`` → ``GET /api/model/ttl`` (BPS-compatible Soft-OPEN alias)
     ``haystack=False`` → ``/api/csv/import/package/mapping/ttl``
     ``haystack=True``  → ``/api/csv/import/package/mapping/haystack.ttl``
     """
     if not building_id:
         raise SystemExit("building_id required for package TTL")
-    path = (
-        "/api/csv/import/package/mapping/haystack.ttl"
-        if haystack
-        else "/api/csv/import/package/mapping/ttl"
-    )
+    if model_alias:
+        path = "/api/model/ttl"
+    elif haystack:
+        path = "/api/csv/import/package/mapping/haystack.ttl"
+    else:
+        path = "/api/csv/import/package/mapping/ttl"
     return http.get_text(path, headers=headers, params={"building_id": building_id})
 
 
