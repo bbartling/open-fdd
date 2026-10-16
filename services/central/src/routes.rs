@@ -240,7 +240,16 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/model/overlay",
             get(model_overlay_get).put(model_overlay_put),
         )
-        // Soft-OPEN: BPS-compatible agent recipe bundle (≠ equip/point tombstone CRUD).
+        // Soft-OPEN: BPS model_crud equip/point upsert + tombstones (overlay sidecar).
+        .route(
+            "/api/model/equip",
+            post(model_equip_post).delete(model_equip_delete),
+        )
+        .route(
+            "/api/model/point",
+            post(model_point_post).delete(model_point_delete),
+        )
+        // Soft-OPEN: BPS-compatible agent recipe bundle (overlay + equip/point CRUD).
         .route("/api/model/agent-context", get(model_agent_context))
         // Soft-OPEN R8a: tip-safe read-only schema/contract probe (no migrator apply).
         .route(
@@ -5021,7 +5030,7 @@ pub struct SemanticMetaPutBody {
 /// Soft-OPEN: revisioned semantic_meta PUT with dry_run + expected_revision CAS (#997/#1123).
 ///
 /// Authority stays `openfdd_semantic_meta_v1` (not BPS Turtle overlay). Soft-OPEN ≠ FQ —
-/// does not ship full equip/point tombstone overlay CRUD.
+/// overlay equip/point CRUD is a separate writable layer (`model_overlay.ttl`).
 pub async fn model_semantic_meta_put(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -5359,7 +5368,7 @@ pub struct ModelOverlayPutBody {
 /// Soft-OPEN: replace Turtle overlay with dry_run + expected_revision CAS (#997/#1123).
 ///
 /// Authority is the `model_overlay.ttl` sidecar (BPS overlay shape). Soft-OPEN ≠ FQ —
-/// does not union into SPARQL or ship equip/point tombstone CRUD.
+/// does not union into SPARQL pack graph.
 pub async fn model_overlay_put(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -5436,11 +5445,328 @@ pub async fn model_overlay_put(
     }
 }
 
+fn deny_viewer_model_mutate(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(), (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e, "soft_open_neq_fq": true})),
+        )
+    })?;
+    if matches!(user.role, auth::Role::Viewer) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "viewer role cannot mutate model overlay",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    }
+    Ok(())
+}
+
+fn csv_building_root(building_id: &str) -> std::path::PathBuf {
+    open_fdd_edge_prototype::historian::store::workspace_dir()
+        .join("data")
+        .join("csv_buildings")
+        .join(building_id)
+}
+
+fn overlay_mutate_result(
+    result: Result<Value, Value>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    match result {
+        Ok(body) => Ok(Json(body)),
+        Err(err) => {
+            let status = if err.get("conflict") == Some(&json!(true)) {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((status, Json(err)))
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModelEquipBody {
+    #[serde(default)]
+    pub building_id: Option<String>,
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub equipment_id: String,
+    #[serde(default)]
+    pub dis: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub markers: Vec<String>,
+    #[serde(default)]
+    pub expected_revision: Option<u64>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModelPointBody {
+    #[serde(default)]
+    pub building_id: Option<String>,
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub equipment_id: String,
+    pub point_id: String,
+    #[serde(default)]
+    pub dis: Option<String>,
+    #[serde(default)]
+    pub openfdd_key: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub markers: Vec<String>,
+    #[serde(default)]
+    pub expected_revision: Option<u64>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModelDeletePointBody {
+    #[serde(default)]
+    pub building_id: Option<String>,
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub point_id: String,
+    #[serde(default)]
+    pub also_exclude: Vec<String>,
+    #[serde(default)]
+    pub expected_revision: Option<u64>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModelDeleteEquipBody {
+    #[serde(default)]
+    pub building_id: Option<String>,
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub equipment_id: String,
+    #[serde(default)]
+    pub expected_revision: Option<u64>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+/// Soft-OPEN: upsert equipment into overlay TTL (BPS `POST /api/model/equip`).
+pub async fn model_equip_post(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<ModelEquipBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    deny_viewer_model_mutate(&state, &headers)?;
+    let Some(building_id) =
+        resolve_building_or_site(body.building_id.as_deref(), body.site_id.as_deref())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id (or site_id alias) required",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = body.equipment_id;
+    let dis = body.dis;
+    let kind = body.kind;
+    let markers = body.markers;
+    let expected = body.expected_revision;
+    let dry_run = body.dry_run;
+    let result = tokio::task::spawn_blocking(move || {
+        let root = csv_building_root(&building_id);
+        open_fdd_edge_prototype::csv_ingest::model_overlay::upsert_equipment(
+            &root,
+            &building_id,
+            &equipment_id,
+            dis.as_deref(),
+            kind.as_deref(),
+            &markers,
+            expected,
+            dry_run,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| {
+        Err(json!({
+            "ok": false,
+            "error": format!("equip upsert task: {e}"),
+            "soft_open_neq_fq": true,
+        }))
+    });
+    overlay_mutate_result(result)
+}
+
+/// Soft-OPEN: upsert point into overlay TTL (BPS `POST /api/model/point`).
+pub async fn model_point_post(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<ModelPointBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    deny_viewer_model_mutate(&state, &headers)?;
+    let Some(building_id) =
+        resolve_building_or_site(body.building_id.as_deref(), body.site_id.as_deref())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id (or site_id alias) required",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = body.equipment_id;
+    let point_id = body.point_id;
+    let dis = body.dis;
+    let openfdd_key = body.openfdd_key;
+    let role = body.role;
+    let markers = body.markers;
+    let expected = body.expected_revision;
+    let dry_run = body.dry_run;
+    let result = tokio::task::spawn_blocking(move || {
+        let root = csv_building_root(&building_id);
+        open_fdd_edge_prototype::csv_ingest::model_overlay::upsert_point(
+            &root,
+            &building_id,
+            &equipment_id,
+            &point_id,
+            dis.as_deref(),
+            openfdd_key.as_deref(),
+            role.as_deref(),
+            &markers,
+            expected,
+            dry_run,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| {
+        Err(json!({
+            "ok": false,
+            "error": format!("point upsert task: {e}"),
+            "soft_open_neq_fq": true,
+        }))
+    });
+    overlay_mutate_result(result)
+}
+
+/// Soft-OPEN: delete/hide point via overlay tombstone (BPS `DELETE /api/model/point`).
+pub async fn model_point_delete(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<ModelDeletePointBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    deny_viewer_model_mutate(&state, &headers)?;
+    let Some(building_id) =
+        resolve_building_or_site(body.building_id.as_deref(), body.site_id.as_deref())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id (or site_id alias) required",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let point_id = body.point_id;
+    let also_exclude = body.also_exclude;
+    let expected = body.expected_revision;
+    let dry_run = body.dry_run;
+    let result = tokio::task::spawn_blocking(move || {
+        let root = csv_building_root(&building_id);
+        open_fdd_edge_prototype::csv_ingest::model_overlay::delete_point(
+            &root,
+            &building_id,
+            &point_id,
+            &also_exclude,
+            expected,
+            dry_run,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| {
+        Err(json!({
+            "ok": false,
+            "error": format!("point delete task: {e}"),
+            "soft_open_neq_fq": true,
+        }))
+    });
+    overlay_mutate_result(result)
+}
+
+/// Soft-OPEN: delete/hide equipment via overlay tombstone (BPS `DELETE /api/model/equip`).
+pub async fn model_equip_delete(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<ModelDeleteEquipBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    deny_viewer_model_mutate(&state, &headers)?;
+    let Some(building_id) =
+        resolve_building_or_site(body.building_id.as_deref(), body.site_id.as_deref())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id (or site_id alias) required",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = body.equipment_id;
+    let expected = body.expected_revision;
+    let dry_run = body.dry_run;
+    let result = tokio::task::spawn_blocking(move || {
+        let root = csv_building_root(&building_id);
+        open_fdd_edge_prototype::csv_ingest::model_overlay::delete_equipment(
+            &root,
+            &building_id,
+            &equipment_id,
+            expected,
+            dry_run,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| {
+        Err(json!({
+            "ok": false,
+            "error": format!("equip delete task: {e}"),
+            "soft_open_neq_fq": true,
+        }))
+    });
+    overlay_mutate_result(result)
+}
+
 /// Soft-OPEN: BPS-compatible agent context bundle (#997/#1123).
 ///
 /// Read-only recipe + revision + lean model tree from native
-/// `openfdd_semantic_meta_v1` (primary) plus overlay GET/PUT recipes.
-/// Soft-OPEN ≠ FQ — does not ship equip/point tombstone CRUD or SPARQL union.
+/// `openfdd_semantic_meta_v1` (primary) plus overlay / equip / point recipes.
+/// Soft-OPEN ≠ FQ — overlay not unioned into SPARQL pack graph.
 pub async fn model_agent_context(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -5507,6 +5833,9 @@ pub async fn model_agent_context(
                 "PUT /api/model/semantic-meta with expected_revision (CAS)",
                 "PUT /api/model/overlay with dry_run=true (Turtle)",
                 "PUT /api/model/overlay with expected_revision (CAS)",
+                "POST /api/model/equip or /api/model/point (dry_run=true first)",
+                "POST same without dry_run with expected_revision",
+                "DELETE /api/model/point or /api/model/equip (tombstone; pack immutable)",
                 "GET /api/model/overlay?building_id=…",
                 "GET /api/model/ttl?building_id=…",
                 "POST /api/model/sparql SELECT roles/markers",
@@ -5530,7 +5859,7 @@ pub async fn model_agent_context(
             "evidence_tier": "VERIFIED_SYNTHETIC",
             "soft_open_neq_fq": true,
             "gaps": open_fdd_edge_prototype::csv_ingest::model_overlay::soft_open_gaps(),
-            "note": "Soft-OPEN agent-context — semantic_meta primary + overlay TTL sidecar (≠ SPARQL union / equip tombstone FQ)",
+            "note": "Soft-OPEN agent-context — semantic_meta primary + overlay equip/point CRUD (≠ SPARQL union FQ)",
         })
     })
     .await
@@ -8802,6 +9131,147 @@ mod version_tests {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .contains("AHU_1"));
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE while exercising equip/point overlay CRUD"
+    )]
+    async fn model_equip_point_upsert_tombstone_and_viewer_deny() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", workspace.path());
+
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("equip-point-crud-secret".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let bid = "SYNTH_EQUIP_POINT_CRUD";
+
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("viewer-equip", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let viewer_req = Request::builder()
+            .method("POST")
+            .uri("/api/model/equip")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {viewer}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "equipment_id": "AHU_1",
+                    "kind": "ahu",
+                    "dry_run": true
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let viewer_resp = app.clone().oneshot(viewer_req).await.unwrap();
+        assert_eq!(viewer_resp.status(), StatusCode::FORBIDDEN);
+
+        let op = state
+            .auth
+            .issue_token_with_tenants("operator-equip", crate::auth::Role::Operator, 60, &[])
+            .unwrap();
+
+        let upsert_eq = Request::builder()
+            .method("POST")
+            .uri("/api/model/equip")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "site_id": bid,
+                    "equipment_id": "AHU_1",
+                    "dis": "AHU 1",
+                    "kind": "ahu",
+                    "expected_revision": 0
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let eq_resp = app.clone().oneshot(upsert_eq).await.unwrap();
+        assert_eq!(eq_resp.status(), StatusCode::OK);
+        let eq_bytes = axum::body::to_bytes(eq_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let eq_json: serde_json::Value = serde_json::from_slice(&eq_bytes).unwrap();
+        assert_eq!(eq_json.get("revision").and_then(|v| v.as_u64()), Some(1));
+
+        let upsert_pt = Request::builder()
+            .method("POST")
+            .uri("/api/model/point")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "equipment_id": "AHU_1",
+                    "point_id": "SAT",
+                    "role": "discharge-air-temp",
+                    "openfdd_key": "AHU_1.discharge-air-temp",
+                    "expected_revision": 1
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let pt_resp = app.clone().oneshot(upsert_pt).await.unwrap();
+        assert_eq!(pt_resp.status(), StatusCode::OK);
+
+        let del_pt = Request::builder()
+            .method("DELETE")
+            .uri("/api/model/point")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "point_id": "SAT",
+                    "also_exclude": ["AHU_1.discharge-air-temp"],
+                    "expected_revision": 2
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let del_resp = app.clone().oneshot(del_pt).await.unwrap();
+        assert_eq!(del_resp.status(), StatusCode::OK);
+
+        let get_req = Request::builder()
+            .method("GET")
+            .uri(format!("/api/model/overlay?building_id={bid}"))
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::empty())
+            .unwrap();
+        let get_resp = app.oneshot(get_req).await.unwrap();
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let get_bytes = axum::body::to_bytes(get_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let get_json: serde_json::Value = serde_json::from_slice(&get_bytes).unwrap();
+        assert_eq!(get_json.get("revision").and_then(|v| v.as_u64()), Some(3));
+        let tombs = get_json
+            .get("tombstones")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        let points = tombs
+            .get("points")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        assert!(
+            points.iter().any(|v| v.as_str() == Some("SAT")),
+            "tombstones={tombs}"
+        );
 
         std::env::remove_var("OPENFDD_WORKSPACE");
     }
