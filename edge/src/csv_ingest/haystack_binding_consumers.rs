@@ -428,9 +428,9 @@ mod tests {
         let plan = history_binding_plan(&set, Some(&inv));
         assert!(plan["series"].as_array().unwrap().is_empty());
         let rejected = plan["rejected"].as_array().unwrap();
-        assert!(rejected.iter().any(|r| {
-            r["column"] == "SAT" && r["reason"] == "point_iri_equipment_mismatch"
-        }));
+        assert!(rejected
+            .iter()
+            .any(|r| { r["column"] == "SAT" && r["reason"] == "point_iri_equipment_mismatch" }));
     }
 
     #[test]
@@ -453,9 +453,11 @@ mod tests {
         });
         let plan = history_binding_plan(&set, Some(&inv));
         assert!(plan["series"].as_array().unwrap().is_empty());
-        assert!(plan["rejected"].as_array().unwrap().iter().any(|r| {
-            r["reason"] == "openfdd_key_conflict"
-        }));
+        assert!(plan["rejected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| { r["reason"] == "openfdd_key_conflict" }));
     }
 
     #[test]
