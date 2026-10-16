@@ -8,6 +8,20 @@ Vocabulary is **Project Haystack RDF** / package `ofdd:` Turtle. Production FDD
 is **Timescale SQL** on tip Soft-OPEN; pandas runs **only** in this gate (and
 oracle CI) — never on the product request path.
 
+### Gate 08 quality contract (#1253)
+
+| Surface | Quality layer | Role in gate 08 |
+| --- | --- | --- |
+| `POST /api/fdd/run` (Timescale SQL) | N/A (SQL has no OUT_OF_RANGE filter) | Product FDD — **strict match target** |
+| Pandas SQL-aligned oracle (`quality=False`) | OFF | **Contractual oracle** for SQL hours |
+| Full `run_rule` (`quality=True`) | ON | DIAG / reconciliation only |
+
+Fail-closed: SQL must match quality-OFF. Do not treat quality-ON hours as the SQL
+pass criterion. `--allow-satdev-drift` is WARN-only lab emergency. Unit CI:
+`tests/rules/test_sql_quality_contract.py`. Cookbook DF columns are Haystack
+roles (`discharge-air-temp`, …) — not warehouse short aliases (`sat` / `sat_sp`).
+Full write-up: [`docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md`](../../docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md).
+
 ## What we prove (gate matrix)
 
 | Gate | Script | Proof | Soft-OPEN status |
@@ -69,5 +83,5 @@ this gate for regression.
 
 ## Related
 
-- BPS parity audit (ART): Soft-OPEN Track C / issue [#1253](https://github.com/bbartling/open-fdd/issues/1253)
+- Quality contract: [`docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md`](../../docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md) · [#1253](https://github.com/bbartling/open-fdd/issues/1253)
 - Haystack RDF: [#997](https://github.com/bbartling/open-fdd/issues/997), [#1123](https://github.com/bbartling/open-fdd/issues/1123)
