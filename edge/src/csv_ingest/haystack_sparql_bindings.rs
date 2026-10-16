@@ -743,23 +743,16 @@ mod tests {
     fn mech_system_summary_equip_type_from_rdf_not_inventory() {
         // Strip inventory equipment_type so typed bindings cannot cheat.
         let mut inv = sample_inventory();
-        if let Some(arr) = inv
-            .get_mut("equipment")
-            .and_then(|v| v.as_array_mut())
-        {
+        if let Some(arr) = inv.get_mut("equipment").and_then(|v| v.as_array_mut()) {
             for eq in arr {
                 if let Some(obj) = eq.as_object_mut() {
                     obj.remove("equipment_type");
                 }
             }
         }
-        let set = execute_template_from_meta(
-            &sample_meta(),
-            Some(&inv),
-            None,
-            "mech_system_summary",
-        )
-        .expect("mech_system_summary");
+        let set =
+            execute_template_from_meta(&sample_meta(), Some(&inv), None, "mech_system_summary")
+                .expect("mech_system_summary");
         let by_id: BTreeMap<_, _> = set
             .equipment
             .iter()
