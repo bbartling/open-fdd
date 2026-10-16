@@ -147,22 +147,26 @@ fn templates() -> Vec<Template> {
                 "ORDER BY ?equipmentId ?column\n",
             ),
         },
-        // Soft-OPEN mech-system summary (R5): equipment typed for plant dashboard.
+        // Soft-OPEN mech-system summary (R5): plant equip types from projected
+        // ph:hasTag (strict Turtle never emits ofdd:equipType).
         Template {
             id: "mech_system_summary",
             label: "Mechanical system summary (equip type tags for plant/AHU/VAV/CHW/HW)",
             category: "summary",
             query: concat!(
-                "SELECT ?equipmentId ?equipType WHERE {\n",
+                "SELECT DISTINCT ?equipmentId ?equipType WHERE {\n",
                 "  ?equip ofdd:equipmentId ?equipmentId .\n",
-                "  OPTIONAL { ?equip ofdd:equipType ?equipType . }\n",
-                "  OPTIONAL { ?equip ph:hasTag ?tag . }\n",
-                "  FILTER(\n",
-                "    BOUND(?equipType) ||\n",
-                "    ?tag = phIoT:ahu || ?tag = phIoT:vav || ?tag = phIoT:chiller ||\n",
-                "    ?tag = phIoT:boiler || ?tag = phIoT:pump || ?tag = phIoT:fan ||\n",
-                "    ?tag = phIoT:coolOnly || ?tag = phIoT:heatOnly\n",
-                "  )\n",
+                "  VALUES (?tag ?equipType) {\n",
+                "    (phIoT:ahu \"ahu\")\n",
+                "    (phIoT:vav \"vav\")\n",
+                "    (phIoT:chiller \"chiller\")\n",
+                "    (phIoT:boiler \"boiler\")\n",
+                "    (phIoT:pump \"pump\")\n",
+                "    (phIoT:fan \"fan\")\n",
+                "    (phIoT:coolOnly \"coolOnly\")\n",
+                "    (phIoT:heatOnly \"heatOnly\")\n",
+                "  }\n",
+                "  ?equip ph:hasTag ?tag .\n",
                 "}\n",
                 "ORDER BY ?equipType ?equipmentId\n",
             ),
@@ -522,6 +526,32 @@ fn inventory_equip_types(inventory: Option<&Value>) -> BTreeMap<String, String> 
     out
 }
 
+/// Prefer SPARQL-bound `equipType` (RDF hasTag / VALUES) over inventory stamp.
+fn resolve_equip_type(
+    row: &BTreeMap<String, String>,
+    eid: &str,
+    inventory_types: &BTreeMap<String, String>,
+) -> Option<String> {
+    if let Some(t) = row
+        .get("equipType")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        return Some(t.to_ascii_lowercase());
+    }
+    inventory_types.get(eid).cloned()
+}
+
+fn apply_sparql_equip_type(entry: &mut TypedEquipmentBinding, row: &BTreeMap<String, String>) {
+    if let Some(t) = row
+        .get("equipType")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        entry.equip_type = Some(t.to_ascii_lowercase());
+    }
+}
+
 fn build_typed_bindings(
     snap: &CentralDatasetSnapshot,
     query_id: &str,
@@ -541,10 +571,11 @@ fn build_typed_bindings(
             .entry(eid.clone())
             .or_insert_with(|| TypedEquipmentBinding {
                 equipment_id: eid.clone(),
-                equip_type: types.get(&eid).cloned(),
+                equip_type: resolve_equip_type(row, &eid, &types),
                 equip_iri: row.get("equip").cloned(),
                 points: vec![],
             });
+        apply_sparql_equip_type(entry, row);
         if entry.equip_iri.is_none() {
             entry.equip_iri = row.get("equip").cloned();
         }
@@ -591,7 +622,7 @@ fn build_typed_bindings(
         });
     }
 
-    // Equip-only rows (AHU class template)
+    // Equip-only rows (AHU class / mech_system_summary templates)
     for row in &rows {
         if row.get("column").is_some() || row.get("point").is_some() {
             continue;
@@ -599,14 +630,18 @@ fn build_typed_bindings(
         let Some(eid) = row.get("equipmentId").cloned().filter(|s| !s.is_empty()) else {
             continue;
         };
-        by_equip
+        let entry = by_equip
             .entry(eid.clone())
             .or_insert_with(|| TypedEquipmentBinding {
                 equipment_id: eid.clone(),
-                equip_type: types.get(&eid).cloned(),
+                equip_type: resolve_equip_type(row, &eid, &types),
                 equip_iri: row.get("equip").cloned(),
                 points: vec![],
             });
+        apply_sparql_equip_type(entry, row);
+        if entry.equip_iri.is_none() {
+            entry.equip_iri = row.get("equip").cloned();
+        }
     }
 
     TypedBindingSet {
@@ -690,8 +725,83 @@ mod tests {
         let cat = catalog_payload();
         assert_eq!(cat["status"], "AVAILABLE");
         assert_eq!(cat["feature_closeable_by_unavailable"], false);
-        assert!(cat["queries"].as_array().unwrap().len() >= 3);
+        assert!(cat["queries"].as_array().unwrap().len() >= 4);
         assert!(cat["not_edge_prototype_graph"].as_bool().unwrap());
+        let ids: Vec<&str> = cat["queries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|q| q.get("id").and_then(|v| v.as_str()))
+            .collect();
+        assert!(
+            ids.contains(&"mech_system_summary"),
+            "catalog missing mech_system_summary: {ids:?}"
+        );
+    }
+
+    #[test]
+    fn mech_system_summary_equip_type_from_rdf_not_inventory() {
+        // Strip inventory equipment_type so typed bindings cannot cheat.
+        let mut inv = sample_inventory();
+        if let Some(arr) = inv.get_mut("equipment").and_then(|v| v.as_array_mut()) {
+            for eq in arr {
+                if let Some(obj) = eq.as_object_mut() {
+                    obj.remove("equipment_type");
+                }
+            }
+        }
+        let set =
+            execute_template_from_meta(&sample_meta(), Some(&inv), None, "mech_system_summary")
+                .expect("mech_system_summary");
+        let by_id: BTreeMap<_, _> = set
+            .equipment
+            .iter()
+            .map(|e| (e.equipment_id.as_str(), e.equip_type.as_deref()))
+            .collect();
+        assert_eq!(
+            by_id.get("AHU_CASE_1").copied().flatten(),
+            Some("ahu"),
+            "AHU type must come from ph:hasTag, not inventory: {by_id:?}"
+        );
+        assert_eq!(
+            by_id.get("VAV_CASE_1").copied().flatten(),
+            Some("vav"),
+            "VAV type must come from ph:hasTag: {by_id:?}"
+        );
+        assert_eq!(
+            by_id.get("VAV_EXCLUDED_1").copied().flatten(),
+            Some("vav"),
+            "excluded VAV still summarized by RDF type: {by_id:?}"
+        );
+        assert_eq!(set.equipment.len(), 3, "expected 3 plant equips: {by_id:?}");
+    }
+
+    #[test]
+    fn mech_system_summary_equipment_set_with_inventory() {
+        let set = execute_template_from_meta(
+            &sample_meta(),
+            Some(&sample_inventory()),
+            None,
+            "mech_system_summary",
+        )
+        .expect("mech_system_summary");
+        let mut ids: Vec<_> = set
+            .equipment
+            .iter()
+            .map(|e| e.equipment_id.as_str())
+            .collect();
+        ids.sort_unstable();
+        assert_eq!(
+            ids,
+            vec!["AHU_CASE_1", "VAV_CASE_1", "VAV_EXCLUDED_1"],
+            "mech summary equipment set: {ids:?}"
+        );
+        let ahu = set
+            .equipment
+            .iter()
+            .find(|e| e.equipment_id == "AHU_CASE_1")
+            .expect("ahu");
+        assert_eq!(ahu.equip_type.as_deref(), Some("ahu"));
     }
 
     #[test]
