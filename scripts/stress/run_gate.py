@@ -147,9 +147,17 @@ def main(argv: list[str] | None = None) -> int:
             return code
 
     if not args.skip_seed:
-        code = run_step("seed_sv_spike_fixture.py", conn_args)
-        if code != 0:
-            safe_print("WARN: seed failed — later oracle gates may FAIL without Timescale data")
+        if (HERE / "seed_sv_spike_fixture.py").is_file():
+            code = run_step("seed_sv_spike_fixture.py", conn_args)
+            if code != 0:
+                safe_print(
+                    "WARN: seed failed — later oracle gates may FAIL without Timescale data"
+                )
+        else:
+            safe_print(
+                "SKIP seed — seed_sv_spike_fixture.py is not in this tree; "
+                "import a package that already has timeseries and semantic_meta"
+            )
 
     if not args.skip_oracle:
         code = run_step("04_sql_vs_pandas_zone.py", conn_args)

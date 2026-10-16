@@ -1241,9 +1241,17 @@ fn session_override_for_rule(
     let mut out = std::collections::HashMap::new();
     for (k, v) in rule_params {
         if let Some(n) = v.as_f64().or_else(|| v.as_u64().map(|u| u as f64)) {
-            if n.is_finite() {
-                out.insert(k.clone(), n);
+            if !n.is_finite() {
+                continue;
             }
+            // UI sends confirm_min. The catalog key is confirm_seconds.
+            // Leaving confirm_min in the map makes effective_param_strings
+            // reject the whole bag, so MODE_DELAY_* placeholders stay in the SQL.
+            if k == "confirm_min" {
+                out.insert("confirm_seconds".into(), n * 60.0);
+                continue;
+            }
+            out.insert(k.clone(), n);
         }
     }
     if out.is_empty() {
@@ -1275,9 +1283,17 @@ fn render_rule_sql(
             session_override,
         ) {
             for (k, v) in tuned {
+                // Catalog confirm_seconds must not wipe the window already
+                // applied from confirm_min (including 0).
+                if k == "CONFIRM_SECONDS" || k == "CONFIRM_ROWS" {
+                    continue;
+                }
                 params.insert(k, v);
             }
         }
+    }
+    for (k, v) in rule_params(poll, confirm) {
+        params.insert(k, v);
     }
     Ok(substitute_sql(&raw, &params))
 }
@@ -1315,7 +1331,24 @@ fn confirm_seconds_from_payload(payload: &Value, rule: &RuleSpec) -> u32 {
     {
         return cs.round() as u32;
     }
-    if let Some(params) = payload.get("params") {
+    if let Some(params) = payload.get("params").and_then(|v| v.as_object()) {
+        if let Some(rule_bag) = params.get(&rule.rule_id).and_then(|v| v.as_object()) {
+            if let Some(cm) = rule_bag
+                .get("confirm_min")
+                .and_then(|v| v.as_f64().or_else(|| v.as_u64().map(|u| u as f64)))
+                .filter(|v| v.is_finite() && *v >= 0.0)
+            {
+                return (cm * 60.0).round() as u32;
+            }
+            if let Some(cs) = rule_bag
+                .get("confirm_seconds")
+                .or_else(|| rule_bag.get("confirmation_seconds"))
+                .and_then(|v| v.as_f64().or_else(|| v.as_u64().map(|u| u as f64)))
+                .filter(|v| v.is_finite() && *v >= 0.0)
+            {
+                return cs.round() as u32;
+            }
+        }
         if let Some(cs) = params
             .get("confirmation_seconds")
             .or_else(|| params.get("confirm_seconds"))
@@ -1326,7 +1359,7 @@ fn confirm_seconds_from_payload(payload: &Value, rule: &RuleSpec) -> u32 {
         }
         if let Some(cm) = params
             .get("confirm_min")
-            .and_then(|v| v.as_f64())
+            .and_then(|v| v.as_f64().or_else(|| v.as_u64().map(|u| u as f64)))
             .filter(|v| v.is_finite() && *v >= 0.0)
         {
             return (cm * 60.0).round() as u32;
@@ -1930,6 +1963,39 @@ mod plot_role_tests {
         assert!(
             roles.iter().any(|r| r.contains("oa") || r.contains("web")),
             "OAT-METEO should include OAT/web roles, got {roles:?}"
+        );
+    }
+
+    #[test]
+    fn fc1_confirm_min_zero_fills_sql_placeholders() {
+        let reg = load_reg().expect("load sql/fdd registry");
+        let rule = reg.rules.iter().find(|r| r.rule_id == "FC1").expect("FC1");
+        let payload = json!({
+            "params": { "FC1": { "confirm_min": 0 } }
+        });
+        let confirm = confirm_seconds_from_payload(&payload, rule);
+        assert_eq!(
+            confirm, 0,
+            "confirm_min=0 is immediate, not the catalog default"
+        );
+        let session = session_override_for_rule(&payload, "FC1");
+        let sql = render_rule_sql(
+            &reg,
+            rule,
+            300.0,
+            confirm,
+            "SYNTH",
+            Some("AHU_1"),
+            session.as_ref(),
+        )
+        .expect("render FC1");
+        assert!(
+            !sql.contains("{{"),
+            "unfilled placeholder left in FC1 SQL: {sql}"
+        );
+        assert!(
+            sql.contains("streak_len >= 1"),
+            "confirm_min=0 must still render CONFIRM_ROWS=1: {sql}"
         );
     }
 
