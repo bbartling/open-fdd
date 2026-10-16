@@ -6,9 +6,7 @@
 //! approved canonical role selections — SPARQL does not invent SQL roles.
 
 use std::collections::BTreeMap;
-use std::io::Cursor;
 
-use oxigraph::io::RdfFormat;
 use oxigraph::model::Term;
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
@@ -19,6 +17,7 @@ use spargebra::SparqlParser;
 use super::haystack_central_dataset::{self, CentralDatasetSnapshot};
 use super::haystack_defs::{DEFS_PIN, HAS_TAG_IRI, PHIOT_BASE, PH_BASE};
 use super::haystack_projection::{OFDD_NS, PROFILE};
+use super::model_overlay;
 use super::semantic_meta::SemanticMetaV1;
 
 pub const BINDING_SCHEMA: &str = "ofdd_haystack_typed_bindings_v1";
@@ -319,9 +318,21 @@ pub fn ensure_readonly_query(query_text: &str) -> Result<spargebra::Query, Strin
 }
 
 /// Execute a bounded read-only SELECT/ASK against a central package snapshot.
+///
+/// Soft-OPEN: when `overlay_turtle` is non-empty, the query store is
+/// **pack ∪ overlay** with tombstoned equip/point ids stripped.
 pub fn execute_readonly_on_snapshot(
     snap: &CentralDatasetSnapshot,
     query_text: &str,
+) -> Result<Value, String> {
+    execute_readonly_on_snapshot_with_overlay(snap, query_text, "")
+}
+
+/// Same as [`execute_readonly_on_snapshot`] with an optional overlay TTL union.
+pub fn execute_readonly_on_snapshot_with_overlay(
+    snap: &CentralDatasetSnapshot,
+    query_text: &str,
+    overlay_turtle: &str,
 ) -> Result<Value, String> {
     let trimmed = query_text.trim();
     if trimmed.is_empty() {
@@ -333,7 +344,8 @@ pub fn execute_readonly_on_snapshot(
         format!("{PREFIXES}\n{trimmed}")
     };
     let parsed = ensure_readonly_query(&full)?;
-    let store = load_store(&snap.turtle)?;
+    let store = load_store(&snap.turtle, overlay_turtle)?;
+    let overlay_applied = !overlay_turtle.trim().is_empty();
     let results = SparqlEvaluator::new()
         .parse_query(&full)
         .map_err(|e| format!("SPARQL parse error: {e}"))?
@@ -351,6 +363,7 @@ pub fn execute_readonly_on_snapshot(
             "defs_pin": DEFS_PIN,
             "turtle_sha256": snap.turtle_sha256,
             "model_revision": snap.model_revision,
+            "overlay_union": overlay_applied,
             "not_edge_prototype_graph": true,
         })),
         (spargebra::Query::Select { .. }, QueryResults::Solutions(solutions)) => {
@@ -389,6 +402,7 @@ pub fn execute_readonly_on_snapshot(
                 "defs_pin": DEFS_PIN,
                 "turtle_sha256": snap.turtle_sha256,
                 "model_revision": snap.model_revision,
+                "overlay_union": overlay_applied,
                 "not_edge_prototype_graph": true,
             }))
         }
@@ -396,12 +410,8 @@ pub fn execute_readonly_on_snapshot(
     }
 }
 
-fn load_store(turtle: &str) -> Result<Store, String> {
-    let store = Store::new().map_err(|e| format!("oxigraph store: {e}"))?;
-    store
-        .load_from_reader(RdfFormat::Turtle, Cursor::new(turtle.as_bytes()))
-        .map_err(|e| format!("load Turtle: {e}"))?;
-    Ok(store)
+fn load_store(pack_turtle: &str, overlay_turtle: &str) -> Result<Store, String> {
+    model_overlay::union_pack_overlay_for_sparql(pack_turtle, overlay_turtle)
 }
 
 fn term_lex(term: &Term) -> String {
@@ -629,10 +639,20 @@ pub fn execute_template_on_snapshot(
     inventory: Option<&Value>,
     template_id: &str,
 ) -> Result<TypedBindingSet, String> {
+    execute_template_on_snapshot_with_overlay(snap, inventory, template_id, "")
+}
+
+/// Soft-OPEN: template SPARQL over pack ∪ overlay (− tombstones).
+pub fn execute_template_on_snapshot_with_overlay(
+    snap: &CentralDatasetSnapshot,
+    inventory: Option<&Value>,
+    template_id: &str,
+    overlay_turtle: &str,
+) -> Result<TypedBindingSet, String> {
     let tmpl = template_by_id(template_id)
         .ok_or_else(|| format!("unknown SPARQL template id: {template_id}"))?;
     let query = format!("{PREFIXES}\n{}", tmpl.query);
-    let store = load_store(&snap.turtle)?;
+    let store = load_store(&snap.turtle, overlay_turtle)?;
     let (rows, truncated) = execute_select(&store, &query)?;
     Ok(build_typed_bindings(
         snap, tmpl.id, rows, truncated, inventory,
@@ -767,6 +787,52 @@ mod tests {
         assert_eq!(out["ok"], json!(true));
         assert_eq!(out["kind"], json!("select"));
         assert!(out["row_count"].as_u64().unwrap_or(0) >= 1);
+    }
+
+    #[test]
+    fn readonly_overlay_union_and_tombstone() {
+        let snap =
+            haystack_central_dataset::materialize(&sample_meta(), Some(&sample_inventory()), None)
+                .expect("materialize");
+        // Tombstone a pack equip id; add an overlay-only equip.
+        let overlay = r#"
+@prefix ofdd: <urn:openfdd:ns#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
+@prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .
+<urn:openfdd:site/B1#equip-AHU_OVERLAY> a phIoT:equip ;
+  ofdd:equipmentId "AHU_OVERLAY" ;
+  ofdd:overlay true ;
+  ph:hasTag phIoT:ahu .
+<urn:openfdd:site/B1#tombstone-equip-AHU_CASE_1> a ofdd:Tombstone ;
+  ofdd:excludesEquipmentId "AHU_CASE_1" ;
+  ofdd:siteId "B1" .
+"#;
+        let q = concat!(
+            "SELECT DISTINCT ?equipmentId WHERE {\n",
+            "  ?e ofdd:equipmentId ?equipmentId .\n",
+            "}\n",
+            "ORDER BY ?equipmentId\n",
+        );
+        let out = execute_readonly_on_snapshot_with_overlay(&snap, q, overlay).expect("union");
+        assert_eq!(out["overlay_union"], json!(true));
+        let ids: Vec<String> = out["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|r| {
+                r.get("equipmentId")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+            })
+            .collect();
+        assert!(
+            ids.iter().any(|id| id == "AHU_OVERLAY"),
+            "overlay equip missing: {ids:?}"
+        );
+        assert!(
+            !ids.iter().any(|id| id == "AHU_CASE_1"),
+            "tombstoned pack equip still visible: {ids:?}"
+        );
     }
 
     #[test]
