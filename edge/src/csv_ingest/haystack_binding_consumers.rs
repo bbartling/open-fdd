@@ -3,16 +3,56 @@
 //! One DataFusion FDD path: convert `TypedBindingSet` → session `role_map` +
 //! exact equipment ids (type-first callers still stamp equipType separately).
 //! History bindings only allow approved provider/series ids from inventory —
-//! no arbitrary URL fetch. ECM path is JSON contract for PyPI adapter.
+//! no arbitrary URL fetch. Soft-OPEN enriches approved series with opaque
+//! `point_iri` → Timescale `openfdd_key` (+ model_revision). Soft-OPEN ≠ FQ.
+//! ECM path is JSON contract for PyPI adapter.
 
 use serde_json::{json, Map, Value};
 
 use super::haystack_defs::DEFS_PIN;
+use super::haystack_projection::{mint_opaque_point_iri, parse_opaque_point_iri};
 use super::haystack_sparql_bindings::{TypedBindingSet, BINDING_SCHEMA, QUERY_ENGINE};
 
 pub const FDD_CONSUMER_SCHEMA: &str = "ofdd_haystack_fdd_binding_plan_v1";
-pub const HISTORY_CONSUMER_SCHEMA: &str = "ofdd_haystack_history_binding_plan_v1";
+/// Soft-OPEN: v2 adds opaque `point_iri` + `openfdd_key` on approved series rows.
+pub const HISTORY_CONSUMER_SCHEMA: &str = "ofdd_haystack_history_binding_plan_v2";
 pub const ECM_CONSUMER_SCHEMA: &str = "ofdd_haystack_ecm_binding_plan_v1";
+
+/// Soft-OPEN: opaque point IRI → Timescale `openfdd_key` for history series rows.
+/// Prefers SPARQL `point_iri`; otherwise mints from `point_id` (else column), matching
+/// the projector. Fail-closed on parse / building / equipment / key mismatch.
+fn enrich_opaque_series_identity(
+    building_id: &str,
+    equipment_id: &str,
+    column: &str,
+    point_id: &str,
+    point_iri: Option<&str>,
+) -> Result<(String, String), &'static str> {
+    let expected_key = {
+        let pid = point_id.trim();
+        if pid.is_empty() {
+            column
+        } else {
+            pid
+        }
+    };
+    let iri = match point_iri.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(iri) => iri.to_string(),
+        None => mint_opaque_point_iri(building_id, equipment_id, expected_key),
+    };
+    let parsed = parse_opaque_point_iri(&iri).map_err(|_| "point_iri_parse_error")?;
+    if parsed.building_id != building_id {
+        return Err("point_iri_building_mismatch");
+    }
+    if parsed.equipment_id != equipment_id {
+        return Err("point_iri_equipment_mismatch");
+    }
+    // Opaque key must match projector point_id (preferred) or the binding column.
+    if parsed.point_key != expected_key && parsed.point_key != column {
+        return Err("point_iri_key_mismatch");
+    }
+    Ok((iri, parsed.openfdd_key()))
+}
 
 /// Build FDD session role_map + equipment list from typed SPARQL bindings.
 /// Only `fdd_ready` points with approved canonical roles are included.
@@ -77,6 +117,8 @@ pub fn fdd_binding_plan(bindings: &TypedBindingSet) -> Value {
 }
 
 /// History/#1017 Soft-OPEN bind: approved provider/series from inventory only.
+/// Soft-OPEN enrichment: each approved series carries opaque `point_iri` +
+/// Timescale `openfdd_key` (+ binding `model_revision`). Soft-OPEN ≠ FQ.
 pub fn history_binding_plan(bindings: &TypedBindingSet, inventory: Option<&Value>) -> Value {
     let mut series = Vec::new();
     let mut rejected = Vec::new();
@@ -88,18 +130,58 @@ pub fn history_binding_plan(bindings: &TypedBindingSet, inventory: Option<&Value
             let key = (eq.equipment_id.clone(), pt.column.clone());
             match approved.get(&key) {
                 Some(entry) => {
-                    series.push(json!({
-                        "equipment_id": eq.equipment_id,
-                        "column": pt.column,
-                        "point_id": pt.point_id,
-                        "canonical_role": pt.canonical_role,
-                        "provider_id": entry.get("provider_id"),
-                        "series_id": entry.get("series_id"),
-                        "connection_ref": entry.get("connection_ref"),
-                        "unit": pt.unit,
-                        "tz_note": "source tz/quality retained by historian; not RDF samples",
-                        "approved": true,
-                    }));
+                    match enrich_opaque_series_identity(
+                        &bindings.building_id,
+                        &eq.equipment_id,
+                        &pt.column,
+                        &pt.point_id,
+                        pt.point_iri.as_deref(),
+                    ) {
+                        Ok((point_iri, openfdd_key)) => {
+                            // Inventory may stamp openfdd_key; conflict → fail-closed.
+                            if let Some(inv_key) = entry
+                                .get("openfdd_key")
+                                .and_then(|v| v.as_str())
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                            {
+                                if inv_key != openfdd_key {
+                                    rejected.push(json!({
+                                        "equipment_id": eq.equipment_id,
+                                        "column": pt.column,
+                                        "point_iri": point_iri,
+                                        "openfdd_key": openfdd_key,
+                                        "inventory_openfdd_key": inv_key,
+                                        "reason": "openfdd_key_conflict",
+                                    }));
+                                    continue;
+                                }
+                            }
+                            series.push(json!({
+                                "equipment_id": eq.equipment_id,
+                                "column": pt.column,
+                                "point_id": pt.point_id,
+                                "point_iri": point_iri,
+                                "openfdd_key": openfdd_key,
+                                "model_revision": bindings.model_revision,
+                                "canonical_role": pt.canonical_role,
+                                "provider_id": entry.get("provider_id"),
+                                "series_id": entry.get("series_id"),
+                                "connection_ref": entry.get("connection_ref"),
+                                "unit": pt.unit,
+                                "tz_note": "source tz/quality retained by historian; not RDF samples",
+                                "approved": true,
+                            }));
+                        }
+                        Err(reason) => {
+                            rejected.push(json!({
+                                "equipment_id": eq.equipment_id,
+                                "column": pt.column,
+                                "point_iri": pt.point_iri,
+                                "reason": reason,
+                            }));
+                        }
+                    }
                 }
                 None => {
                     // Points without an approved history registry entry stay unbound.
@@ -124,9 +206,10 @@ pub fn history_binding_plan(bindings: &TypedBindingSet, inventory: Option<&Value
         "model_revision": bindings.model_revision,
         "not_edge_prototype_graph": true,
         "arbitrary_url_fetch": false,
+        "soft_open_neq_fq": true,
         "series": series,
         "rejected": rejected,
-        "note": "Only inventory-approved provider/series ids; raw observations stay out of RDF",
+        "note": "Inventory-approved provider/series only; Soft-OPEN enriches opaque point_iri→openfdd_key; raw observations stay out of RDF",
     })
 }
 
@@ -251,6 +334,7 @@ pub fn consumer_bundle(bindings: &TypedBindingSet, inventory: Option<&Value>) ->
 mod tests {
     use super::*;
     use crate::csv_ingest::haystack_projection::fixtures::{sample_inventory, sample_meta};
+    use crate::csv_ingest::haystack_projection::mint_opaque_point_iri;
     use crate::csv_ingest::haystack_sparql_bindings::execute_template_from_meta;
 
     #[test]
@@ -296,10 +380,84 @@ mod tests {
         });
         let plan = history_binding_plan(&set, Some(&inv));
         assert_eq!(plan["arbitrary_url_fetch"], false);
+        assert_eq!(plan["schema"], HISTORY_CONSUMER_SCHEMA);
+        assert_eq!(plan["soft_open_neq_fq"], true);
         let series = plan["series"].as_array().unwrap();
         assert_eq!(series.len(), 1);
         assert_eq!(series[0]["provider_id"], "site_historian");
         assert_eq!(series[0]["series_id"], "ahu1.sat");
+        // Soft-OPEN: opaque point_iri → openfdd_key (point_id preferred over column).
+        let expected_iri = mint_opaque_point_iri(
+            "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
+            "AHU_CASE_1",
+            "ahu1-sat",
+        );
+        assert_eq!(series[0]["point_iri"], expected_iri);
+        assert_eq!(series[0]["openfdd_key"], "AHU_CASE_1.ahu1-sat");
+    }
+
+    #[test]
+    fn history_rejects_point_iri_equipment_mismatch() {
+        let mut set = execute_template_from_meta(
+            &sample_meta(),
+            Some(&sample_inventory()),
+            None,
+            "fdd_role_candidates",
+        )
+        .expect("bindings");
+        // Corrupt SAT point_iri to a different equipment — Soft-OPEN fail-closed.
+        for eq in &mut set.equipment {
+            for pt in &mut eq.points {
+                if pt.column == "SAT" {
+                    pt.point_iri = Some(mint_opaque_point_iri(
+                        "OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1",
+                        "OTHER_EQUIP",
+                        "ahu1-sat",
+                    ));
+                }
+            }
+        }
+        let inv = json!({
+            "history_bindings": [{
+                "equipment_id": "AHU_CASE_1",
+                "column": "SAT",
+                "provider_id": "site_historian",
+                "series_id": "ahu1.sat"
+            }]
+        });
+        let plan = history_binding_plan(&set, Some(&inv));
+        assert!(plan["series"].as_array().unwrap().is_empty());
+        let rejected = plan["rejected"].as_array().unwrap();
+        assert!(rejected
+            .iter()
+            .any(|r| { r["column"] == "SAT" && r["reason"] == "point_iri_equipment_mismatch" }));
+    }
+
+    #[test]
+    fn history_rejects_inventory_openfdd_key_conflict() {
+        let set = execute_template_from_meta(
+            &sample_meta(),
+            Some(&sample_inventory()),
+            None,
+            "fdd_role_candidates",
+        )
+        .expect("bindings");
+        let inv = json!({
+            "history_bindings": [{
+                "equipment_id": "AHU_CASE_1",
+                "column": "SAT",
+                "provider_id": "site_historian",
+                "series_id": "ahu1.sat",
+                "openfdd_key": "AHU_CASE_1.WRONG"
+            }]
+        });
+        let plan = history_binding_plan(&set, Some(&inv));
+        assert!(plan["series"].as_array().unwrap().is_empty());
+        assert!(plan["rejected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| { r["reason"] == "openfdd_key_conflict" }));
     }
 
     #[test]
