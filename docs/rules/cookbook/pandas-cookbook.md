@@ -1032,6 +1032,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 **Equation:** abs(SAT − SAT SP) > 5°F.  
 **Default confirmation:** 600 s
 
+**Quality vs SQL (#1253):** warehouse SQL does **not** null `OUT_OF_RANGE` / sentinel samples. Full pandas `run_rule` (quality ON) may drop dirty `discharge-air-temp` / `discharge-air-temp-sp` and report fewer fault hours. SQL parity oracles must use quality OFF (equation + fan gate + confirm). See [parity matrix — quality contract](parity-matrix.md#quality-layer-vs-warehouse-sql-1253).
+
 **Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`
 
 **Tunable params**

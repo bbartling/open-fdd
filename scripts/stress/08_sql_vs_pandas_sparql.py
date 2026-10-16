@@ -3,9 +3,17 @@
 
 Port of BPS ``08_building50_sql_vs_pandas_sparql.py`` to Open-FDD routes.
 
+Contract (#1253 — quality gap, not equation drift):
+  * Product FDD = warehouse/Timescale SQL (no ``open_fdd.quality`` OUT_OF_RANGE
+    / sentinel nulling).
+  * SQL parity oracle = equation + gate + confirm with ``quality=False``.
+  * Full ``run_rule`` (``quality=True``) is a *different* product surface; hour
+    deltas vs SQL must be DIAG'ed, never used as the SQL fail criterion.
+
 Flow:
   1. SPARQL discovers AHU + FC1 / SAT roles on package RDF (``ofdd:``)
   2. ``GET /api/model/point-resolve?include_history=true`` → pandas DataFrame
+     with Haystack cookbook column names (not SQL short aliases).
   3. pandas oracle locally:
        (A) full ``open_fdd.rules.run_rule`` (quality layer ON)
        (B) SQL-aligned oracle = equation + gate + confirm, quality OFF
@@ -14,7 +22,7 @@ Flow:
   6. Reconcile: quality-ON oracle on normalized frame ≈ (A)
 
 Fail-closed by default. ``--allow-satdev-drift`` downgrades only AHU-SATDEV
-SQL↔oracle mismatch to WARN (lab emergency; documents #1253 quality gap).
+SQL↔oracle mismatch to WARN (lab emergency; do not weaken default).
 
 Soft-OPEN ≠ FQ. Synthetic ``--building-id`` only.
 
@@ -55,10 +63,21 @@ from helpers import (  # noqa: E402
 POLL_S = 300.0
 HOURS_TOL = 0.05
 
-# Canonical cookbook roles used by FC1 / AHU-SATDEV (Open-FDD SQL registry).
-FC1_ROLES = ("rat", "mat", "oa_damper_pct", "fan_status")
-SATDEV_ROLES = ("sat", "sat_sp", "fan_status")
-DUCTHI_ROLES = ("duct_static_p", "duct_static_sp", "fan_status")
+# Canonical Haystack cookbook roles (must match open_fdd RULES_BY_ID columns).
+# Short SQL aliases (sat / sat_sp) are warehouse-only — never pandas DF columns.
+FC1_ROLES = (
+    "duct-static-pressure",
+    "duct-static-pressure-sp",
+    "fan-cmd",
+    "fan-status",
+)
+SATDEV_ROLES = (
+    "discharge-air-temp",
+    "discharge-air-temp-sp",
+    "fan-status",
+    "fan-cmd",
+)
+DUCTHI_ROLES = ("duct-static-pressure", "duct-static-pressure-sp", "fan-status")
 
 
 def _esc(v: str) -> str:
@@ -128,24 +147,27 @@ ORDER BY ?column
     return [r for r in rows if (r.get("equipmentId") or r.get("equipment_id")) == equipment_id or True]
 
 
-def _guess_role(column: str, selection: str) -> str | None:
+def _guess_role(column: str, selection: str, needed: tuple[str, ...]) -> str | None:
+    """Map SPARQL column/selection → Haystack cookbook role in ``needed``."""
+    sel = (selection or "").strip().lower().replace("_", "-")
+    if sel in needed:
+        return sel
     blob = f"{column} {selection}".lower().replace("-", "_")
     mapping = [
-        ("oa_damper", "oa_damper_pct"),
-        ("damper", "oa_damper_pct"),
-        ("fan_status", "fan_status"),
-        ("fan_cmd", "fan_status"),
-        ("sf_sts", "fan_status"),
-        ("sat_sp", "sat_sp"),
-        ("sat", "sat"),
-        ("rat", "rat"),
-        ("mat", "mat"),
-        ("duct_static_sp", "duct_static_sp"),
-        ("duct_static", "duct_static_p"),
-        ("dsp", "duct_static_p"),
+        ("discharge_air_temp_sp", "discharge-air-temp-sp"),
+        ("discharge_air_temp", "discharge-air-temp"),
+        ("sat_sp", "discharge-air-temp-sp"),
+        ("sat_setpoint", "discharge-air-temp-sp"),
+        ("duct_static_pressure_sp", "duct-static-pressure-sp"),
+        ("duct_static_sp", "duct-static-pressure-sp"),
+        ("duct_static_pressure", "duct-static-pressure"),
+        ("duct_static", "duct-static-pressure"),
+        ("fan_status", "fan-status"),
+        ("fan_cmd", "fan-cmd"),
+        ("sf_sts", "fan-status"),
     ]
     for needle, role in mapping:
-        if needle in blob:
+        if needle in blob and role in needed:
             return role
     return None
 
@@ -161,12 +183,12 @@ def _build_df_from_resolve(
 ):
     import pandas as pd
 
-    # Map role → column/point key
+    # Map Haystack role → column/point key (DF columns must be cookbook roles).
     by_role: dict[str, str] = {}
     for r in role_rows:
         col = (r.get("column") or r.get("pointId") or "").strip()
         sel = (r.get("fddSelection") or r.get("canonicalRole") or "").strip()
-        role = _guess_role(col, sel) or (sel if sel in needed else None)
+        role = _guess_role(col, sel, needed)
         if role and role in needed and col and role not in by_role:
             by_role[role] = col
     missing = [n for n in needed if n not in by_role]

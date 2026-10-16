@@ -1,6 +1,9 @@
 -- ahu_satdev.sql — SAT deviation from setpoint (fan_running + confirm)
 -- Gate: fan-on from fan_status then fan_cmd. Missing fan stays off
 -- (do not ELSE 1 / COALESCE to on — that invents on-hours).
+-- Quality (#1253): SQL does NOT apply open_fdd.quality OUT_OF_RANGE/sentinel
+-- nulling. Pandas SQL parity must use quality=False; run_rule(quality=True) is
+-- a different surface.
 WITH h AS (
   SELECT
     equipment_id,
