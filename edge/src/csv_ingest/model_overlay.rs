@@ -256,30 +256,36 @@ fn has_type(store: &Store, s: &NamedNode, class_iri: &str) -> Result<bool, Strin
     let pred = nn(RDF_TYPE)?;
     let class = nn(class_iri)?;
     let class_term = Term::from(class);
-    for q in store.quads_for_pattern(
-        Some(NamedOrBlankNode::from(s.clone()).as_ref()),
-        Some((&pred).into()),
-        Some((&class_term).into()),
-        None,
-    ) {
-        let _ = q.map_err(|e| format!("quads: {e}"))?;
-        return Ok(true);
+    match store
+        .quads_for_pattern(
+            Some(NamedOrBlankNode::from(s.clone()).as_ref()),
+            Some((&pred).into()),
+            Some((&class_term).into()),
+            None,
+        )
+        .next()
+    {
+        Some(Ok(_)) => Ok(true),
+        Some(Err(e)) => Err(format!("quads: {e}")),
+        None => Ok(false),
     }
-    Ok(false)
 }
 
 fn has_quad(store: &Store, s: &NamedNode, p: &str, o: &Term) -> Result<bool, String> {
     let pred = nn(p)?;
-    for q in store.quads_for_pattern(
-        Some(NamedOrBlankNode::from(s.clone()).as_ref()),
-        Some((&pred).into()),
-        Some(o.into()),
-        None,
-    ) {
-        let _ = q.map_err(|e| format!("quads: {e}"))?;
-        return Ok(true);
+    match store
+        .quads_for_pattern(
+            Some(NamedOrBlankNode::from(s.clone()).as_ref()),
+            Some((&pred).into()),
+            Some(o.into()),
+            None,
+        )
+        .next()
+    {
+        Some(Ok(_)) => Ok(true),
+        Some(Err(e)) => Err(format!("quads: {e}")),
+        None => Ok(false),
     }
-    Ok(false)
 }
 
 fn remove_subject(store: &Store, s: &NamedNode) -> Result<(), String> {
@@ -609,16 +615,37 @@ fn commit_store(
     )
 }
 
+/// CAS / dry_run options shared by overlay mutate helpers.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OverlayCasOpts {
+    pub expected_revision: Option<u64>,
+    pub dry_run: bool,
+}
+
+/// Optional fields for equipment upsert.
+#[derive(Debug, Clone, Copy)]
+pub struct EquipUpsertFields<'a> {
+    pub dis: Option<&'a str>,
+    pub kind: Option<&'a str>,
+    pub markers: &'a [String],
+}
+
+/// Optional fields for point upsert.
+#[derive(Debug, Clone, Copy)]
+pub struct PointUpsertFields<'a> {
+    pub dis: Option<&'a str>,
+    pub openfdd_key: Option<&'a str>,
+    pub role: Option<&'a str>,
+    pub markers: &'a [String],
+}
+
 /// Upsert equipment into the writable overlay (BPS `POST /api/model/equip`).
 pub fn upsert_equipment(
     building_root: &Path,
     building_id: &str,
     equipment_id: &str,
-    dis: Option<&str>,
-    kind: Option<&str>,
-    markers: &[String],
-    expected_revision: Option<u64>,
-    dry_run: bool,
+    fields: EquipUpsertFields<'_>,
+    opts: OverlayCasOpts,
 ) -> Result<Value, Value> {
     let eid = equipment_id.trim();
     if eid.is_empty() {
@@ -640,10 +667,10 @@ pub fn upsert_equipment(
     let mutate = (|| -> Result<(), String> {
         let site = ensure_site(&store, building_id)?;
         let equip = ensure_equip(&store, building_id, eid, &site)?;
-        if let Some(d) = dis.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(d) = fields.dis.map(str::trim).filter(|s| !s.is_empty()) {
             set_str(&store, &equip, &ph("dis"), d)?;
         }
-        if let Some(k) = kind.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(k) = fields.kind.map(str::trim).filter(|s| !s.is_empty()) {
             if let Some(tag) = kind_tag_iri(k) {
                 let tag_term = Term::from(nn(&tag)?);
                 if !has_quad(&store, &equip, HAS_TAG_IRI, &tag_term)? {
@@ -651,7 +678,7 @@ pub fn upsert_equipment(
                 }
             }
         }
-        for m in markers {
+        for m in fields.markers {
             let local = m.trim().to_ascii_lowercase();
             if local.is_empty() {
                 continue;
@@ -678,8 +705,8 @@ pub fn upsert_equipment(
         building_root,
         building_id,
         &store,
-        expected_revision,
-        dry_run,
+        opts.expected_revision,
+        opts.dry_run,
         &format!("upsert_equipment:{eid}"),
     )
 }
@@ -690,12 +717,8 @@ pub fn upsert_point(
     building_id: &str,
     equipment_id: &str,
     point_id: &str,
-    dis: Option<&str>,
-    openfdd_key: Option<&str>,
-    role: Option<&str>,
-    markers: &[String],
-    expected_revision: Option<u64>,
-    dry_run: bool,
+    fields: PointUpsertFields<'_>,
+    opts: OverlayCasOpts,
 ) -> Result<Value, Value> {
     let eid = equipment_id.trim();
     let pid = point_id.trim();
@@ -715,7 +738,8 @@ pub fn upsert_point(
             "soft_open_neq_fq": true,
         })
     })?;
-    let ofk = openfdd_key
+    let ofk = fields
+        .openfdd_key
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or(pid)
@@ -734,13 +758,13 @@ pub fn upsert_point(
         }
         set_ref(&store, &point, &phiot("equipRef"), &equip)?;
         set_str(&store, &point, &ofdd("openfddKey"), &ofk)?;
-        if let Some(d) = dis.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(d) = fields.dis.map(str::trim).filter(|s| !s.is_empty()) {
             set_str(&store, &point, &ph("dis"), d)?;
         }
-        if let Some(r) = role.map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(r) = fields.role.map(str::trim).filter(|s| !s.is_empty()) {
             set_str(&store, &point, &ofdd("role"), r)?;
         }
-        for m in markers {
+        for m in fields.markers {
             let local = m.trim().to_ascii_lowercase();
             if local.is_empty() {
                 continue;
@@ -771,8 +795,8 @@ pub fn upsert_point(
         building_root,
         building_id,
         &store,
-        expected_revision,
-        dry_run,
+        opts.expected_revision,
+        opts.dry_run,
         &format!("upsert_point:{pid}"),
     )
 }
@@ -911,17 +935,19 @@ pub fn delete_equipment(
         for pt in children {
             let mut pid: Option<String> = None;
             let p_id = nn(&ofdd("pointId"))?;
-            for q in store.quads_for_pattern(
-                Some(NamedOrBlankNode::from(pt.clone()).as_ref()),
-                Some((&p_id).into()),
-                None,
-                None,
-            ) {
-                if let Ok(quad) = q {
-                    if let Term::Literal(lit) = quad.object {
-                        pid = Some(lit.value().to_string());
-                        break;
-                    }
+            let point_id_quads: Vec<Quad> = store
+                .quads_for_pattern(
+                    Some(NamedOrBlankNode::from(pt.clone()).as_ref()),
+                    Some((&p_id).into()),
+                    None,
+                    None,
+                )
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("quads: {e}"))?;
+            for quad in point_id_quads {
+                if let Term::Literal(lit) = quad.object {
+                    pid = Some(lit.value().to_string());
+                    break;
                 }
             }
             remove_subject(&store, &pt)?;
@@ -1037,17 +1063,19 @@ mod tests {
         let root = dir.path();
         let bid = "lab-crud";
 
+        let markers = ["sensor".into(), "temp".into()];
         let r0 = upsert_point(
             root,
             bid,
             "AHU-1",
             "SAT",
-            None,
-            None,
-            Some("discharge-air-temp"),
-            &["sensor".into(), "temp".into()],
-            None,
-            false,
+            PointUpsertFields {
+                dis: None,
+                openfdd_key: None,
+                role: Some("discharge-air-temp"),
+                markers: &markers,
+            },
+            OverlayCasOpts::default(),
         )
         .unwrap();
         assert_eq!(r0.get("ok").and_then(|v| v.as_bool()), Some(true));
@@ -1058,12 +1086,16 @@ mod tests {
             bid,
             "AHU-1",
             "RAT",
-            None,
-            None,
-            None,
-            &[],
-            Some(1),
-            true,
+            PointUpsertFields {
+                dis: None,
+                openfdd_key: None,
+                role: None,
+                markers: &[],
+            },
+            OverlayCasOpts {
+                expected_revision: Some(1),
+                dry_run: true,
+            },
         )
         .unwrap();
         assert_eq!(dry.get("dry_run").and_then(|v| v.as_bool()), Some(true));
@@ -1075,12 +1107,16 @@ mod tests {
             bid,
             "AHU-1",
             "MAT",
-            None,
-            None,
-            None,
-            &[],
-            Some(0),
-            false,
+            PointUpsertFields {
+                dis: None,
+                openfdd_key: None,
+                role: None,
+                markers: &[],
+            },
+            OverlayCasOpts {
+                expected_revision: Some(0),
+                dry_run: false,
+            },
         )
         .unwrap_err();
         assert_eq!(
@@ -1107,12 +1143,13 @@ mod tests {
             bid,
             "AHU-1",
             "ZN_T",
-            None,
-            Some("AHU-1.zone-air-temp"),
-            None,
-            &[],
-            None,
-            false,
+            PointUpsertFields {
+                dis: None,
+                openfdd_key: Some("AHU-1.zone-air-temp"),
+                role: None,
+                markers: &[],
+            },
+            OverlayCasOpts::default(),
         )
         .unwrap();
 
@@ -1146,12 +1183,16 @@ mod tests {
             bid,
             "AHU-1",
             "ZN_T",
-            None,
-            Some("AHU-1.zone-air-temp"),
-            None,
-            &[],
-            Some(2),
-            false,
+            PointUpsertFields {
+                dis: None,
+                openfdd_key: Some("AHU-1.zone-air-temp"),
+                role: None,
+                markers: &[],
+            },
+            OverlayCasOpts {
+                expected_revision: Some(2),
+                dry_run: false,
+            },
         )
         .unwrap();
         let tombs2 = list_tombstones(root).unwrap();
@@ -1182,11 +1223,12 @@ mod tests {
             root,
             bid,
             "AHU-X",
-            Some("AHU X"),
-            Some("ahu"),
-            &[],
-            None,
-            false,
+            EquipUpsertFields {
+                dis: Some("AHU X"),
+                kind: Some("ahu"),
+                markers: &[],
+            },
+            OverlayCasOpts::default(),
         )
         .unwrap();
         upsert_point(
@@ -1194,12 +1236,16 @@ mod tests {
             bid,
             "AHU-X",
             "SAT",
-            None,
-            None,
-            None,
-            &[],
-            Some(1),
-            false,
+            PointUpsertFields {
+                dis: None,
+                openfdd_key: None,
+                role: None,
+                markers: &[],
+            },
+            OverlayCasOpts {
+                expected_revision: Some(1),
+                dry_run: false,
+            },
         )
         .unwrap();
 

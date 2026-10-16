@@ -5594,11 +5594,15 @@ pub async fn model_equip_post(
             &root,
             &building_id,
             &equipment_id,
-            dis.as_deref(),
-            kind.as_deref(),
-            &markers,
-            expected,
-            dry_run,
+            open_fdd_edge_prototype::csv_ingest::model_overlay::EquipUpsertFields {
+                dis: dis.as_deref(),
+                kind: kind.as_deref(),
+                markers: &markers,
+            },
+            open_fdd_edge_prototype::csv_ingest::model_overlay::OverlayCasOpts {
+                expected_revision: expected,
+                dry_run,
+            },
         )
     })
     .await
@@ -5649,12 +5653,16 @@ pub async fn model_point_post(
             &building_id,
             &equipment_id,
             &point_id,
-            dis.as_deref(),
-            openfdd_key.as_deref(),
-            role.as_deref(),
-            &markers,
-            expected,
-            dry_run,
+            open_fdd_edge_prototype::csv_ingest::model_overlay::PointUpsertFields {
+                dis: dis.as_deref(),
+                openfdd_key: openfdd_key.as_deref(),
+                role: role.as_deref(),
+                markers: &markers,
+            },
+            open_fdd_edge_prototype::csv_ingest::model_overlay::OverlayCasOpts {
+                expected_revision: expected,
+                dry_run,
+            },
         )
     })
     .await
