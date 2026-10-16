@@ -440,7 +440,9 @@ impl SparqlBinding {
     }
 }
 
-fn term_to_binding(term: &Term) -> SparqlBinding {
+/// Map an Oxigraph term to W3C SPARQL JSON Results binding (DM-07).
+/// Soft-OPEN: shared by legacy edge SPARQL and central package readonly SELECT.
+pub fn term_to_binding(term: &Term) -> SparqlBinding {
     match term {
         Term::Literal(lit) => {
             let value = lit.value().to_string();

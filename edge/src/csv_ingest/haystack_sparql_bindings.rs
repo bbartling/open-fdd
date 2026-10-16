@@ -7,7 +7,6 @@
 
 use std::collections::BTreeMap;
 
-use oxigraph::model::Term;
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
 use serde::{Deserialize, Serialize};
@@ -19,9 +18,14 @@ use super::haystack_defs::{DEFS_PIN, HAS_TAG_IRI, PHIOT_BASE, PH_BASE};
 use super::haystack_projection::{OFDD_NS, PROFILE};
 use super::model_overlay;
 use super::semantic_meta::SemanticMetaV1;
+use crate::model::rdf::term_to_binding;
 
 pub const BINDING_SCHEMA: &str = "ofdd_haystack_typed_bindings_v1";
 pub const QUERY_ENGINE: &str = "central_package_sparql_templates_v1";
+/// Free-form SELECT/ASK result envelope (typed terms; Soft-OPEN DM-07).
+pub const READONLY_SCHEMA: &str = "ofdd_sparql_readonly_v2";
+pub const READONLY_QUERY_ENGINE: &str = "central_package_sparql_readonly_v1";
+pub const READONLY_BINDING_FORMAT: &str = "sparql-results-json-v1";
 pub const SPARQL_MAX_ROWS: usize = 2000;
 
 const PREFIXES: &str = concat!(
@@ -361,8 +365,9 @@ pub fn execute_readonly_on_snapshot_with_overlay(
             "ok": true,
             "kind": "ask",
             "boolean": b,
-            "schema": "ofdd_sparql_readonly_v1",
-            "query_engine": "central_package_sparql_readonly_v1",
+            "schema": READONLY_SCHEMA,
+            "query_engine": READONLY_QUERY_ENGINE,
+            "binding_format": READONLY_BINDING_FORMAT,
             "building_id": snap.building_id,
             "defs_pin": DEFS_PIN,
             "turtle_sha256": snap.turtle_sha256,
@@ -379,15 +384,16 @@ pub fn execute_readonly_on_snapshot_with_overlay(
                     break;
                 }
                 let sol = sol.map_err(|e| format!("SPARQL solution error: {e}"))?;
-                let mut map = BTreeMap::new();
+                let mut map = serde_json::Map::new();
                 for (var, term) in sol.iter() {
                     let name = var.as_str().to_string();
                     if !columns.iter().any(|c| c == &name) {
                         columns.push(name.clone());
                     }
-                    map.insert(name, term_lex(term));
+                    // Soft-OPEN: W3C SPARQL JSON Results term (not plain String collapse).
+                    map.insert(name, term_to_binding(term).to_json());
                 }
-                rows.push(map);
+                rows.push(Value::Object(map));
             }
             let truncated = rows.len() > SPARQL_MAX_ROWS;
             if truncated {
@@ -400,8 +406,9 @@ pub fn execute_readonly_on_snapshot_with_overlay(
                 "rows": rows,
                 "row_count": rows.len(),
                 "truncated": truncated,
-                "schema": "ofdd_sparql_readonly_v1",
-                "query_engine": "central_package_sparql_readonly_v1",
+                "schema": READONLY_SCHEMA,
+                "query_engine": READONLY_QUERY_ENGINE,
+                "binding_format": READONLY_BINDING_FORMAT,
                 "building_id": snap.building_id,
                 "defs_pin": DEFS_PIN,
                 "turtle_sha256": snap.turtle_sha256,
@@ -416,14 +423,6 @@ pub fn execute_readonly_on_snapshot_with_overlay(
 
 fn load_store(pack_turtle: &str, overlay_turtle: &str) -> Result<Store, String> {
     model_overlay::union_pack_overlay_for_sparql(pack_turtle, overlay_turtle)
-}
-
-fn term_lex(term: &Term) -> String {
-    match term {
-        Term::NamedNode(n) => n.as_str().to_string(),
-        Term::BlankNode(b) => b.as_str().to_string(),
-        Term::Literal(l) => l.value().to_string(),
-    }
 }
 
 fn execute_select(
@@ -448,7 +447,11 @@ fn execute_select(
                 let sol = sol.map_err(|e| format!("SPARQL solution error: {e}"))?;
                 let mut map = BTreeMap::new();
                 for (var, term) in sol.iter() {
-                    map.insert(var.as_str().to_string(), term_lex(term));
+                    // Template → typed FDD bindings still consume lexical values.
+                    map.insert(
+                        var.as_str().to_string(),
+                        term_to_binding(term).lexical().to_string(),
+                    );
                 }
                 rows.push(map);
             }
@@ -929,11 +932,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .filter_map(|r| {
-                r.get("equipmentId")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string)
-            })
+            .filter_map(|r| term_value(r.get("equipmentId")))
             .collect();
         assert!(
             ids.iter().any(|id| id == "AHU_OVERLAY"),
@@ -943,6 +942,69 @@ mod tests {
             !ids.iter().any(|id| id == "AHU_CASE_1"),
             "tombstoned pack equip still visible: {ids:?}"
         );
+    }
+
+    #[test]
+    fn readonly_select_emits_typed_sparql_terms() {
+        let snap =
+            haystack_central_dataset::materialize(&sample_meta(), Some(&sample_inventory()), None)
+                .expect("materialize");
+        let out = execute_readonly_on_snapshot(
+            &snap,
+            concat!(
+                "SELECT ?equip ?equipmentId (COUNT(?equipmentId) AS ?n) WHERE {\n",
+                "  ?equip ofdd:equipmentId ?equipmentId .\n",
+                "}\n",
+                "GROUP BY ?equip ?equipmentId\n",
+                "ORDER BY ?equipmentId\n",
+                "LIMIT 1\n",
+            ),
+        )
+        .expect("typed select");
+        assert_eq!(out["schema"], json!(READONLY_SCHEMA));
+        assert_eq!(out["binding_format"], json!(READONLY_BINDING_FORMAT));
+        let row = out["rows"].as_array().unwrap().first().expect("row");
+        let equip = row.get("equip").expect("equip term");
+        assert_eq!(equip["type"], json!("uri"));
+        assert!(
+            equip["value"].as_str().unwrap_or("").starts_with("urn:"),
+            "equip IRI preserved: {equip}"
+        );
+        assert!(equip.get("datatype").is_none());
+        let eid = row.get("equipmentId").expect("equipmentId term");
+        assert_eq!(eid["type"], json!("literal"));
+        assert!(!eid["value"].as_str().unwrap_or("").is_empty());
+        // Plain xsd:string omits datatype (SPARQL JSON Results convention).
+        assert!(eid.get("datatype").is_none(), "plain string: {eid}");
+        let n = row.get("n").expect("count term");
+        assert_eq!(n["type"], json!("literal"));
+        assert_eq!(
+            n["datatype"],
+            json!("http://www.w3.org/2001/XMLSchema#integer")
+        );
+    }
+
+    #[test]
+    fn readonly_select_preserves_lang_tag() {
+        let snap =
+            haystack_central_dataset::materialize(&sample_meta(), Some(&sample_inventory()), None)
+                .expect("materialize");
+        let out = execute_readonly_on_snapshot(&snap, r#"SELECT ("Lab"@en AS ?lab) WHERE {}"#)
+            .expect("lang select");
+        let lab = out["rows"].as_array().unwrap()[0].get("lab").expect("lab");
+        assert_eq!(lab["type"], json!("literal"));
+        assert_eq!(lab["value"], json!("Lab"));
+        assert_eq!(lab["xml:lang"], json!("en"));
+        assert!(lab.get("datatype").is_none());
+    }
+
+    /// Lexical value from a typed SPARQL JSON Results term (or legacy string).
+    fn term_value(v: Option<&Value>) -> Option<String> {
+        let v = v?;
+        if let Some(s) = v.as_str() {
+            return Some(s.to_string());
+        }
+        v.get("value").and_then(|x| x.as_str()).map(str::to_string)
     }
 
     #[test]

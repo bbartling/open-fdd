@@ -309,7 +309,8 @@ def post_sparql(
     """POST /api/model/sparql — free-form ``query`` or template ``query_id``.
 
     Tip Soft-OPEN (C13) accepts read-only SELECT/ASK free-form with building_id.
-    Template path returns typed bindings; free-form returns ``rows`` / ASK boolean.
+    Template path returns typed bindings; free-form returns ``rows`` (v2 typed
+    SPARQL JSON Results terms) / ASK boolean.
     """
     if not building_id:
         raise SystemExit("building_id required for POST /api/model/sparql")
@@ -387,7 +388,18 @@ def _normalize_sparql_rows(payload: Any) -> list[dict[str, str]]:
 
 
 def _stringify_row(row: dict[str, Any]) -> dict[str, str]:
-    return {k: "" if v is None else str(v) for k, v in row.items()}
+    """Flatten free-form SPARQL rows.
+
+    Soft-OPEN ``ofdd_sparql_readonly_v2`` emits W3C SPARQL JSON Results terms
+    ``{type,value,datatype?,xml:lang?}``; older v1 rows were plain strings.
+    """
+    out: dict[str, str] = {}
+    for k, v in row.items():
+        if isinstance(v, dict) and "value" in v:
+            out[k] = "" if v.get("value") is None else str(v.get("value"))
+        else:
+            out[k] = "" if v is None else str(v)
+    return out
 
 
 def _from_sparql_json_binding(binding: Any) -> dict[str, str]:

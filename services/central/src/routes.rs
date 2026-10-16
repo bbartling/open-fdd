@@ -6223,7 +6223,11 @@ async fn run_central_readonly_sparql(
         Ok(v) => {
             // sparql-playground shape: { results, meta } when possible.
             let meta = json!({
-                "schema": v.get("schema").cloned().unwrap_or(json!("ofdd_sparql_readonly_v1")),
+                "schema": v.get("schema").cloned().unwrap_or_else(|| {
+                    json!(
+                        open_fdd_edge_prototype::csv_ingest::haystack_sparql_bindings::READONLY_SCHEMA
+                    )
+                }),
                 "query_engine": v.get("query_engine").cloned().unwrap_or(json!("central_package_sparql_readonly_v1")),
                 "building_id": v.get("building_id").cloned().unwrap_or(Value::Null),
                 "truncated": v.get("truncated").cloned().unwrap_or(json!(false)),

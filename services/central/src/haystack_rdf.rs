@@ -184,7 +184,7 @@ impl HaystackRdfCache {
             json!({
                 "ok": false,
                 "error": e,
-                "schema": "ofdd_sparql_readonly_v1",
+                "schema": haystack_sparql_bindings::READONLY_SCHEMA,
                 "soft_open_neq_fq": true,
             })
         })?;
@@ -198,7 +198,7 @@ impl HaystackRdfCache {
             json!({
                 "ok": false,
                 "error": e,
-                "schema": "ofdd_sparql_readonly_v1",
+                "schema": haystack_sparql_bindings::READONLY_SCHEMA,
             })
         })
     }
