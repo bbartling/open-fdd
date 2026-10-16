@@ -90,8 +90,7 @@ pub fn delta_f_to_delta_c(df: f64) -> f64 {
 }
 
 fn normalize_unit_token(unit: &str) -> String {
-    unit
-        .trim()
+    unit.trim()
         .to_ascii_lowercase()
         .chars()
         .filter(|c| c.is_ascii_alphanumeric())
@@ -117,10 +116,7 @@ pub fn unit_is_pa(unit: &str) -> bool {
 }
 
 pub fn unit_is_lps(unit: &str) -> bool {
-    matches!(
-        normalize_unit_token(unit).as_str(),
-        "lps" | "ls" | "lpers"
-    )
+    matches!(normalize_unit_token(unit).as_str(), "lps" | "ls" | "lpers")
 }
 
 /// Admit one sample into imperial-f-v1 pack units for a cookbook role.
