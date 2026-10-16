@@ -95,18 +95,6 @@ Per-rule equations, parameters, and shipped SQL / pandas live in the [DataFusion
 | Sensor sweeps | Per-column CASE examples | Catalog `sensor_sweep=True` |
 | Control hunting | Screening thresholds | Full TV / reversal / cycle metrics |
 
-### Quality layer vs warehouse SQL (#1253)
-
-Contract gap — **not** SAT_DEV_ERR / fan-gate / confirm equation drift:
-
-| Surface | Quality (`OUT_OF_RANGE` / sentinels) | Contractual for warehouse SQL? |
-| --- | --- | --- |
-| Timescale / warehouse SQL (`sql/fdd/**`) | **OFF** (raw historian values; SQL has no quality filter) | **Yes — product FDD** |
-| Pandas SQL-aligned oracle (equation + gate + confirm, `quality=False`) | **OFF** | **Yes — SQL parity oracle** |
-| Full `open_fdd.rules.run_rule` (`quality=True`) | **ON** | **No** — separate surface; hour deltas vs SQL are DIAG only |
-
-CI: `tests/rules/test_sql_quality_contract.py` (fail-closed). Live stress: `scripts/stress/08_sql_vs_pandas_sparql.py` (strict SQL ≈ quality-OFF; do not weaken). Longer-term option: port role-aware filtering into warehouse SQL or ingest — out of Soft-OPEN scope.
-
 ---
 
 ## Parity test procedure

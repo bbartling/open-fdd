@@ -20,6 +20,7 @@ Fail-closed: SQL must match quality-OFF. Do not treat quality-ON hours as the SQ
 pass criterion. `--allow-satdev-drift` is WARN-only lab emergency. Unit CI:
 `tests/rules/test_sql_quality_contract.py`. Cookbook DF columns are Haystack
 roles (`discharge-air-temp`, …) — not warehouse short aliases (`sat` / `sat_sp`).
+Full write-up: [`docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md`](../../docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md).
 
 ## What we prove (gate matrix)
 
@@ -82,5 +83,5 @@ this gate for regression.
 
 ## Related
 
-- BPS parity audit (ART): Soft-OPEN Track C / issue [#1253](https://github.com/bbartling/open-fdd/issues/1253)
+- Quality contract: [`docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md`](../../docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md) · [#1253](https://github.com/bbartling/open-fdd/issues/1253)
 - Haystack RDF: [#997](https://github.com/bbartling/open-fdd/issues/997), [#1123](https://github.com/bbartling/open-fdd/issues/1123)
