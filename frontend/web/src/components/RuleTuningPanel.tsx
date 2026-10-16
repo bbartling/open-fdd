@@ -122,13 +122,21 @@ function RuleExpander({
         ) : null}
         {entries.map(([key, def]) => {
           const stored = values[key] ?? def.default;
-          const val = displayScalar(stored, def.unit, unitSystem);
-          const min = displayScalar(def.min, def.unit, unitSystem);
-          const max = displayScalar(def.max, def.unit, unitSystem);
-          const step = isTempUnit(def.unit) && unitSystem === "metric"
-            ? Math.max(0.1, (def.step || 0.1) * (5 / 9))
-            : def.step || 0.1;
-          const unitLabel = displayUnitLabel(def.unit, unitSystem);
+          const val = displayScalar(stored, def.unit, unitSystem, null, key);
+          const min = displayScalar(def.min, def.unit, unitSystem, null, key);
+          const max = displayScalar(def.max, def.unit, unitSystem, null, key);
+          const step =
+            unitSystem === "metric" &&
+            (isTempUnit(def.unit) ||
+              key.includes("eps_") ||
+              key.includes("tol") ||
+              key.includes("deadband") ||
+              key.includes("err") ||
+              key.includes("flatline") ||
+              key.includes("margin"))
+              ? Math.max(0.01, (def.step || 0.1) * (5 / 9))
+              : def.step || 0.1;
+          const unitLabel = displayUnitLabel(def.unit, unitSystem, null, key);
           return (
             <label key={key} className="oracle-sidebar__field">
               <span className="oracle-sidebar__label">
@@ -146,7 +154,7 @@ function RuleExpander({
                   onChange(
                     rule.rule_id,
                     key,
-                    storeScalar(Number(e.target.value), def.unit, unitSystem),
+                    storeScalar(Number(e.target.value), def.unit, unitSystem, null, key),
                   )
                 }
                 title={def.label}

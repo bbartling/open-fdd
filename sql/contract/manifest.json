@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-sql-schema-fdd-v1",
-  "contract_version": "3.6.14-softopen",
+  "contract_version": "3.6.17",
   "engine": "timescale/postgresql",
   "product": "open-fdd",
   "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd + sql/analytics pack hash; twin layers must not fork equations",
@@ -12,8 +12,8 @@
   ],
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
-  "file_count": 104,
-  "pack_sha256": "35f11a10fcd49547491f68671124cb14f876fbce5363fd68cd6cb91eb24f39bb",
+  "file_count": 107,
+  "pack_sha256": "8858ccc9fcca7e34fdd33bca2560904888a526d1a22694175d17f871b76c2e18",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -42,8 +42,8 @@
     },
     {
       "path": "sql/fdd/postgres/rules/ahu_satdev.sql",
-      "sha256": "5696b7a6146e1171bc4e95952d42e6417fa9418ae147bae462b650a292d25b0d",
-      "bytes": 1839
+      "sha256": "1079ea60e1cf2702373d7a705c603014081559bb81fcdee947b96d3027df0a7c",
+      "bytes": 2024
     },
     {
       "path": "sql/fdd/postgres/rules/ahu_simul.sql",
@@ -527,13 +527,32 @@
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "3911cc64f4019d8dc9d6b8a0784d2da2dad11476c1ea7ac62dccc3462458beaa",
-      "bytes": 4112
+      "sha256": "f6de90d18f9dc7a287bf38dcbd06db2c677f9c3dfd664f154acd8e6c483cb832",
+      "bytes": 4157
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",
       "sha256": "0cbcc8356b92efd22c1bd40a488b73926c761ee90d8cb65f46a83363e0ceab6e",
       "bytes": 1293
+    },
+    {
+      "path": "sql/contract/metric_units.json",
+      "sha256": "4d46f591ba6985c30e70588337c994bd22f031458322abcc6d65c82d0498214c",
+      "bytes": 2831
+    },
+    {
+      "path": "sql/contract/goldens/unit_vectors.json",
+      "sha256": "07f8dca4ff0aea2e2839ad2641800af02dba13b087014fef08f36eb22fb50986",
+      "bytes": 1398
+    },
+    {
+      "path": "sql/contract/README.md",
+      "sha256": "dd09a7c0939e39e9ee71ae8a4733705b1a9129dedeb464a63e80b286bc7d1532",
+      "bytes": 1862
     }
-  ]
+  ],
+  "metric_units": "sql/contract/metric_units.json",
+  "metric_goldens": "sql/contract/goldens/unit_vectors.json",
+  "processing_abi_current": "imperial-f-v1",
+  "processing_abi_target": "metric-c-v2"
 }

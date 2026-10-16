@@ -1,4 +1,7 @@
-//! Canonical FDD physics are imperial (°F). Metric/SI CSVs convert at query time.
+//! Active SQL pack ABI is imperial-f-v1 (°F / in.w.c. / cfm).
+//! Target processing contract is metric-c-v2 (°C / Pa / L/s) — see
+//! `sql/contract/metric_units.json`. Admit known source units into the pack ABI
+//! before pivot/SQL. Display preference is independent of processing.
 
 /// Temperature cookbook roles stored as °C when `unit_system` is metric|si.
 /// `dry_bulb_f` is already Fahrenheit even if the session is metric — never convert.
@@ -76,6 +79,88 @@ pub fn celsius_to_fahrenheit(c: f64) -> f64 {
 
 pub fn fahrenheit_to_celsius(f: f64) -> f64 {
     (f - 32.0) * 5.0 / 9.0
+}
+
+pub fn delta_c_to_delta_f(dc: f64) -> f64 {
+    dc * 9.0 / 5.0
+}
+
+pub fn delta_f_to_delta_c(df: f64) -> f64 {
+    df * 5.0 / 9.0
+}
+
+fn normalize_unit_token(unit: &str) -> String {
+    unit
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect()
+}
+
+/// True when `unit` names Celsius (absolute).
+pub fn unit_is_celsius(unit: &str) -> bool {
+    matches!(
+        normalize_unit_token(unit).as_str(),
+        "c" | "degc" | "celsius"
+    )
+}
+
+/// True when `unit` names Fahrenheit (absolute), or is empty (legacy assume F).
+pub fn unit_is_fahrenheit_or_unset(unit: &str) -> bool {
+    let t = normalize_unit_token(unit);
+    t.is_empty() || matches!(t.as_str(), "f" | "degf" | "fahrenheit")
+}
+
+pub fn unit_is_pa(unit: &str) -> bool {
+    matches!(normalize_unit_token(unit).as_str(), "pa" | "pascal")
+}
+
+pub fn unit_is_lps(unit: &str) -> bool {
+    matches!(
+        normalize_unit_token(unit).as_str(),
+        "lps" | "ls" | "lpers"
+    )
+}
+
+/// Admit one sample into imperial-f-v1 pack units for a cookbook role.
+pub fn admit_value_to_pack_v1(role: &str, value: f64, source_unit: &str) -> f64 {
+    if is_temperature_role(role) {
+        if unit_is_celsius(source_unit) {
+            return celsius_to_fahrenheit(value);
+        }
+        return value;
+    }
+    if is_pressure_role(role) && unit_is_pa(source_unit) {
+        return pa_to_in_wc(value);
+    }
+    if is_flow_role(role) && unit_is_lps(source_unit) {
+        return lps_to_cfm(value);
+    }
+    value
+}
+
+/// SQL expression: convert `val` using the sample `unit` column into pack °F/in.w.c./cfm.
+pub fn sql_admit_val_expr(role: &str) -> String {
+    if is_temperature_role(role) {
+        return format!(
+            "CASE WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g')) \
+             IN ('c', 'degc', 'celsius') THEN (val * 9.0 / 5.0) + 32.0 ELSE val END"
+        );
+    }
+    if is_pressure_role(role) {
+        return format!(
+            "CASE WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g')) \
+             IN ('pa', 'pascal') THEN val / {PA_PER_IN_WC} ELSE val END"
+        );
+    }
+    if is_flow_role(role) {
+        return format!(
+            "CASE WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g')) \
+             IN ('lps', 'ls', 'lpers') THEN val / {LPS_PER_CFM} ELSE val END"
+        );
+    }
+    "val".into()
 }
 
 /// SQL expression: convert a history column from stored °C to °F, or pass through.
@@ -188,5 +273,20 @@ mod tests {
         assert!((lps_to_cfm(0.471947) - 1.0).abs() < 1e-6);
         assert!(is_pressure_role("duct_static"));
         assert!(is_flow_role("zone_flow"));
+    }
+
+    #[test]
+    fn admit_20c_equals_68f() {
+        assert!((admit_value_to_pack_v1("sat", 20.0, "°C") - 68.0).abs() < 1e-9);
+        assert!((admit_value_to_pack_v1("sat", 68.0, "°F") - 68.0).abs() < 1e-9);
+        assert!((delta_f_to_delta_c(5.0) - 2.777777777777778).abs() < 1e-12);
+    }
+
+    #[test]
+    fn sql_admit_temp_uses_unit_column() {
+        let expr = sql_admit_val_expr("sat");
+        assert!(expr.contains("celsius"));
+        assert!(expr.contains("9.0 / 5.0"));
+        assert_eq!(sql_admit_val_expr("fan_cmd"), "val");
     }
 }

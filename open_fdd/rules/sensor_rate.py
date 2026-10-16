@@ -37,9 +37,10 @@ DEADBAND_REFERENCE_HOURS = 5.0 / 60.0
 
 
 def _norm_cmd(s: pd.Series) -> pd.Series:
-    """Element-wise 0–100 → 0–1 (same convention as cookbook_catalog.norm_cmd)."""
-    x = pd.to_numeric(s, errors="coerce")
-    return x.where(x <= 1.0, x / 100.0)
+    """Element-wise declared percent 0–100 → fraction 0–1 (no magnitude guess)."""
+    from open_fdd.units.convert import norm_command
+
+    return norm_command(s, representation="percent")
 
 
 def _as_bool(s: pd.Series) -> pd.Series:
@@ -231,6 +232,7 @@ def evaluate_point(
     sensor_span: float | None = None,
     max_gap_hours: float = MAX_GAP_HOURS_DEFAULT,
     poll_seconds: float = 300.0,
+    source_unit: str | None = None,
 ) -> dict[str, Any]:
     idx = values.index
     empty_mask = _false(idx)
@@ -250,11 +252,35 @@ def evaluate_point(
         series = pd.to_numeric(values, errors="coerce") / float(scale)
     else:
         series = pd.to_numeric(values, errors="coerce")
-        # Demo packages store imperial engineering units; profiles use SI canonical rates.
+        # Profiles use SI canonical rates. Convert only when source is imperial.
+        # Already-Pa / already-kPa inputs must not be scaled again (#1284).
+        unit = (source_unit or "").strip().lower().replace("°", "").replace(".", "")
         if profile.quantity == "air_pressure":
-            series = series * IN_WC_TO_PA
+            if unit in {"", "inh2o", "inwc", "in wc", "in w c", "in_wc"}:
+                series = series * IN_WC_TO_PA
+            elif unit not in {"pa", "pascal"}:
+                return {
+                    "status_hint": "INSUFFICIENT_DATA",
+                    "fault_mask": empty_mask,
+                    "diagnostic_message": (
+                        f"Profile {profile.profile_id}: unsupported air_pressure unit {source_unit!r}"
+                    ),
+                    "confidence": "skipped_unknown_unit",
+                    "resolved_profile_id": profile.profile_id,
+                }
         elif profile.quantity == "hydronic_pressure":
-            series = series * PSI_TO_KPA
+            if unit in {"", "psi"}:
+                series = series * PSI_TO_KPA
+            elif unit not in {"kpa"}:
+                return {
+                    "status_hint": "INSUFFICIENT_DATA",
+                    "fault_mask": empty_mask,
+                    "diagnostic_message": (
+                        f"Profile {profile.profile_id}: unsupported hydronic unit {source_unit!r}"
+                    ),
+                    "confidence": "skipped_unknown_unit",
+                    "resolved_profile_id": profile.profile_id,
+                }
         if profile.normalize_by == "sensor_span" and sensor_span and float(sensor_span) > 0:
             series = series / float(sensor_span)
 

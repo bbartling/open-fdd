@@ -5,11 +5,20 @@ Versioned checksum ledger for **BPS ↔ OSS apples-to-apples** parity.
 - Consumers (public Rust open-fdd, private BPS Python) pin `contract_version` + `pack_sha256`.
 - Equations live in `sql/fdd/`, `sql/schema/`, and `sql/analytics/` — adapters bind/auth/serialize.
 - Digital twin / IoT layers sit **beside** the warehouse; they must not redefine FDD SQL, schema, or rule IDs.
-- Soft-OPEN ≠ FQ. Timescale ONLY — no dual-write / Parquet co-canonical.
-- Successor bundle Soft-OPEN scaffold: `sql/contract/successor_bundle/` (original warehouse hash preserved).
+- Timescale ONLY — no dual-write / Parquet co-canonical.
+- Successor bundle scaffold: `sql/contract/successor_bundle/` (original warehouse hash preserved).
 
-See `manifest.json` (contract_version `3.6.14-softopen`) and
-`.cursor/plans/post_wave_x_363_softopen_residuals_20261014.plan.md` § BPS↔OSS.
+## Metric / units (#1284)
+
+| File | Role |
+| --- | --- |
+| [`metric_units.json`](metric_units.json) | Quantity registry, pack ABI (current `imperial-f-v1`, target `metric-c-v2`), constants |
+| [`goldens/unit_vectors.json`](goldens/unit_vectors.json) | 20°C=68°F, Δ°F scale-only, percent/fraction, FCU deadband |
+
+Admit path converts known source units into the **active pack ABI** before SQL.
+Display preference must not use ±32 on deltas. Percent vs fraction is declared metadata.
+
+See `manifest.json` and issue [#1284](https://github.com/bbartling/open-fdd/issues/1284).
 
 ## C2 checksum compare (CI + Soft-OPEN vendor gate)
 
