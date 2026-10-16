@@ -97,6 +97,132 @@ paths:
           description: Overlay published or dry_run preview
         "409":
           description: Revision conflict
+  /api/model/equip:
+    post:
+      summary: Soft-OPEN upsert equipment into Turtle overlay (dry_run + CAS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [equipment_id]
+              properties:
+                building_id:
+                  type: string
+                site_id:
+                  type: string
+                equipment_id:
+                  type: string
+                dis:
+                  type: string
+                kind:
+                  type: string
+                markers:
+                  type: array
+                  items:
+                    type: string
+                expected_revision:
+                  type: integer
+                dry_run:
+                  type: boolean
+      responses:
+        "200":
+          description: Equip upserted or dry_run preview
+        "409":
+          description: Revision conflict
+    delete:
+      summary: Soft-OPEN delete/hide equipment (overlay tombstone; pack immutable)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [equipment_id]
+              properties:
+                building_id:
+                  type: string
+                site_id:
+                  type: string
+                equipment_id:
+                  type: string
+                expected_revision:
+                  type: integer
+                dry_run:
+                  type: boolean
+      responses:
+        "200":
+          description: Equip tombstoned or dry_run preview
+        "409":
+          description: Revision conflict
+  /api/model/point:
+    post:
+      summary: Soft-OPEN upsert point into Turtle overlay (dry_run + CAS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [equipment_id, point_id]
+              properties:
+                building_id:
+                  type: string
+                site_id:
+                  type: string
+                equipment_id:
+                  type: string
+                point_id:
+                  type: string
+                dis:
+                  type: string
+                openfdd_key:
+                  type: string
+                role:
+                  type: string
+                markers:
+                  type: array
+                  items:
+                    type: string
+                expected_revision:
+                  type: integer
+                dry_run:
+                  type: boolean
+      responses:
+        "200":
+          description: Point upserted or dry_run preview
+        "409":
+          description: Revision conflict
+    delete:
+      summary: Soft-OPEN delete/hide point (overlay tombstone; pack immutable)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [point_id]
+              properties:
+                building_id:
+                  type: string
+                site_id:
+                  type: string
+                point_id:
+                  type: string
+                also_exclude:
+                  type: array
+                  items:
+                    type: string
+                expected_revision:
+                  type: integer
+                dry_run:
+                  type: boolean
+      responses:
+        "200":
+          description: Point tombstoned or dry_run preview
+        "409":
+          description: Revision conflict
   /api/model/agent-context:
     get:
       summary: Soft-OPEN AI agent bundle (revision, lean model tree, mutate recipes)

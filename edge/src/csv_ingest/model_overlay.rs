@@ -15,9 +15,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use oxigraph::io::{RdfFormat, RdfSerializer};
-use oxigraph::model::{
-    GraphName, GraphNameRef, Literal, NamedNode, NamedOrBlankNode, Quad, Term,
-};
+use oxigraph::model::{GraphName, GraphNameRef, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use oxigraph::store::Store;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -286,7 +284,12 @@ fn has_quad(store: &Store, s: &NamedNode, p: &str, o: &Term) -> Result<bool, Str
 
 fn remove_subject(store: &Store, s: &NamedNode) -> Result<(), String> {
     let quads: Vec<Quad> = store
-        .quads_for_pattern(Some(NamedOrBlankNode::from(s.clone()).as_ref()), None, None, None)
+        .quads_for_pattern(
+            Some(NamedOrBlankNode::from(s.clone()).as_ref()),
+            None,
+            None,
+            None,
+        )
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("quads: {e}"))?;
     for q in quads {
@@ -387,11 +390,7 @@ fn add_point_tombstone(store: &Store, building_id: &str, point_id: &str) -> Resu
     Ok(())
 }
 
-fn add_equip_tombstone(
-    store: &Store,
-    building_id: &str,
-    equipment_id: &str,
-) -> Result<(), String> {
+fn add_equip_tombstone(store: &Store, building_id: &str, equipment_id: &str) -> Result<(), String> {
     let t = tombstone_uri(building_id, "equip", equipment_id)?;
     remove_subject(store, &t)?;
     insert_type(store, &t, &ofdd("Tombstone"))?;
@@ -807,7 +806,12 @@ pub fn delete_point(
     let mutate = (|| -> Result<(), String> {
         let mut point = point_uri(building_id, pid)?;
         let any = store
-            .quads_for_pattern(Some(NamedOrBlankNode::from(point.clone()).as_ref()), None, None, None)
+            .quads_for_pattern(
+                Some(NamedOrBlankNode::from(point.clone()).as_ref()),
+                None,
+                None,
+                None,
+            )
             .next()
             .is_some();
         if !any {
@@ -878,7 +882,12 @@ pub fn delete_equipment(
     let mutate = (|| -> Result<(), String> {
         let mut equip = equip_uri(building_id, eid)?;
         let any = store
-            .quads_for_pattern(Some(NamedOrBlankNode::from(equip.clone()).as_ref()), None, None, None)
+            .quads_for_pattern(
+                Some(NamedOrBlankNode::from(equip.clone()).as_ref()),
+                None,
+                None,
+                None,
+            )
             .next()
             .is_some();
         if !any {
@@ -950,9 +959,8 @@ pub fn get_overlay_payload(building_root: &Path, building_id: &str) -> Result<Va
     let revision = load_revision(building_root)?;
     let ttl = load_ttl(building_root)?;
     let present = ttl_path(building_root).is_file();
-    let tombs = list_tombstones(building_root).unwrap_or_else(|_| {
-        json!({"points": [], "equipment": []})
-    });
+    let tombs =
+        list_tombstones(building_root).unwrap_or_else(|_| json!({"points": [], "equipment": []}));
     Ok(json!({
         "ok": true,
         "building_id": building_id,
@@ -1082,7 +1090,10 @@ mod tests {
 
         let ttl = load_ttl(root).unwrap();
         assert!(ttl.contains("SAT"), "{ttl}");
-        assert!(ttl.contains("openfddKey") || ttl.contains("ofdd:openfddKey"), "{ttl}");
+        assert!(
+            ttl.contains("openfddKey") || ttl.contains("ofdd:openfddKey"),
+            "{ttl}"
+        );
     }
 
     #[test]
@@ -1149,7 +1160,10 @@ mod tests {
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
-        assert!(!points2.iter().any(|v| v.as_str() == Some("ZN_T")), "{tombs2}");
+        assert!(
+            !points2.iter().any(|v| v.as_str() == Some("ZN_T")),
+            "{tombs2}"
+        );
         assert!(
             !points2
                 .iter()
