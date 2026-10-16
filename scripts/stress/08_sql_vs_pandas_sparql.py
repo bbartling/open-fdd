@@ -152,6 +152,16 @@ def _guess_role(column: str, selection: str, needed: tuple[str, ...]) -> str | N
     sel = (selection or "").strip().lower().replace("_", "-")
     if sel in needed:
         return sel
+    exact = {
+        "sat": "discharge-air-temp",
+        "supply_air_temp": "discharge-air-temp",
+        "da_t": "discharge-air-temp",
+    }
+    for token in (column, selection):
+        key = (token or "").strip().lower().replace("-", "_")
+        role = exact.get(key)
+        if role and role in needed:
+            return role
     blob = f"{column} {selection}".lower().replace("-", "_")
     mapping = [
         ("discharge_air_temp_sp", "discharge-air-temp-sp"),
@@ -345,12 +355,18 @@ def main(argv: list[str] | None = None) -> int:
     with client(base) as http:
         wait_until_ready(http)
         headers = login(http, user=args.user, password=args.password)
-        equipment_id = (args.equipment_id or "").strip() or _first_ahu(http, headers, building_id)
-        if not equipment_id:
-            safe_print("FAIL: no AHU equipment in package RDF")
+        try:
+            equipment_id = (args.equipment_id or "").strip() or _first_ahu(
+                http, headers, building_id
+            )
+            if not equipment_id:
+                safe_print("FAIL: no AHU equipment in package RDF")
+                return 1
+            safe_print(f"  equipment_id={equipment_id}")
+            role_rows = _role_points(http, headers, building_id, equipment_id)
+        except RuntimeError as exc:
+            safe_print(f"FAIL: precondition: {exc}")
             return 1
-        safe_print(f"  equipment_id={equipment_id}")
-        role_rows = _role_points(http, headers, building_id, equipment_id)
         print_table("Role candidate points", role_rows, limit=30)
 
         failures = 0
@@ -367,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
                     needed=check["needed"],
                     role_rows=role_rows,
                 )
-            except SystemExit as exc:
+            except (SystemExit, RuntimeError) as exc:
                 msg = str(exc)
                 if rid == "AHU-DUCTHI" and "missed roles" in msg:
                     safe_print(f"SKIP {rid}: {msg}")

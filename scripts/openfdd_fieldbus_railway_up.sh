@@ -21,7 +21,21 @@ if [[ "${OPENFDD_RAILWAY_USE_ENV_IDENTITY:-0}" == "1" ]]; then
   : # keep sourced OPENFDD_* site/edge/tenant/building
 else
   export OPENFDD_MQTT_HOST=reseau.proxy.rlwy.net
-  export OPENFDD_MQTT_PORT=44763
+  # Do not hard-code a proxy port. Railway recreates move it (44763 is dead).
+  _live_port=""
+  if command -v railway >/dev/null 2>&1; then
+    _proxy_list="$(railway tcp-proxy list -s openfdd-mqtt 2>/dev/null || true)"
+    _live_port="$(printf '%s\n' "$_proxy_list" | grep -oE ':[0-9]+' | head -1 | tr -d ':')"
+  fi
+  if [[ -n "$_live_port" ]]; then
+    export OPENFDD_MQTT_PORT="$_live_port"
+  elif [[ -n "${OPENFDD_MQTT_PORT:-}" && "${OPENFDD_MQTT_PORT}" != "44763" ]]; then
+    echo "WARN: railway tcp-proxy list returned no port; using OPENFDD_MQTT_PORT=$OPENFDD_MQTT_PORT" >&2
+  else
+    echo "ERROR: set OPENFDD_MQTT_PORT to the live openfdd-mqtt TCP proxy port" >&2
+    echo "  railway tcp-proxy list -s openfdd-mqtt" >&2
+    exit 2
+  fi
   # Wave N+ Railway hub is multi_tenant=true — hard-set ACME tenant path
   # (do not keep local .env site/building/edge — those reject under MT ingest).
   # Live ACME OT edge is vim-1 (private); bensbench x86 uses pi-1 under ACME.

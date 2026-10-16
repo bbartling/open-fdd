@@ -37,9 +37,9 @@
 </p>
 
 
-Open-FDD is a free, open-source building-to-cloud pipeline for HVAC analytics and fault detection. The same stack runs on-premises or in the cloud: a **TimescaleDB / PostgreSQL** historian with versioned `.sql` FDD, a Rust central service, React operator UI, Mosquitto MQTTS ingest, and fieldbus edge agents for BACnet, Modbus, and Haystack — plus REST APIs and CSV/zip import when you are not on live OT.
+Open-FDD is a free, open-source building-to-cloud pipeline for HVAC analytics and fault detection. It is very friendly to AI agents. The same stack runs on-premises or in the cloud: a time-series database (Timescale on PostgreSQL) for faults, where analytics are produced, a Rust central service, React operator UI, Mosquitto MQTTS ingest, and fieldbus edge agents for BACnet, Modbus, and Haystack — plus REST APIs and CSV/zip import when you are not on live OT. The product services are written in Rust, with Python tooling for tests. Machine learning and clustering are on the roadmap for that same foundation.
 
-Deploy locally or as a cloud hub and pull building data over MQTTS, APIs, or files. Today’s product is SQL-based FDD and RCx on Timescale ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)); the roadmap includes ML and clustering on the same foundation. Soft-OPEN ≠ FQ.
+Python tooling is for tests. A PyPI package ships pandas FDD for notebooks and checks, plus report tools that write a PDF from mapped HVAC history. AI agents install that package, read the project skills, and run the CLI beside the live stack.
 
 ---
 
