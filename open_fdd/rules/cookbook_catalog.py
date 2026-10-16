@@ -25,18 +25,20 @@ import pandas as pd
 def norm_cmd(
     s: pd.Series | None,
     *,
-    representation: str = "percent",
+    representation: str = "auto",
 ) -> pd.Series:
     """Normalize a command/position to fraction 0–1.
 
-    Default ``representation='percent'`` treats values as 0–100 (1 → 0.01).
-    Use ``representation='fraction'`` when the point is already 0–1.
-    Magnitude heuristics (``value <= 1``) are forbidden — they map 1% to 100%.
+    Prefer ``representation='percent'|'fraction'`` when the point unit is known.
+    Default ``auto`` decides once per series (max > 1 → percent). The old
+    element-wise ``value <= 1`` passthrough is forbidden (1% → 100%).
     """
     from open_fdd.units.convert import norm_command
 
-    if representation not in {"percent", "fraction"}:
-        raise ValueError(f"norm_cmd representation must be percent|fraction, got {representation!r}")
+    if representation not in {"percent", "fraction", "auto"}:
+        raise ValueError(
+            f"norm_cmd representation must be percent|fraction|auto, got {representation!r}"
+        )
     return norm_command(s, representation=representation)  # type: ignore[arg-type]
 
 

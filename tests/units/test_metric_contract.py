@@ -50,6 +50,15 @@ def test_fraction_declared_passthrough():
     assert got == [0.0, 0.5, 1.0]
 
 
+def test_auto_is_series_level_not_element_wise():
+    # Mixed percent series: max > 1 → entire series /100 (1 → 0.01, not 1.0).
+    mixed = norm_command(pd.Series([0.5, 1.0, 50.0]), representation="auto").tolist()
+    assert [round(x, 6) for x in mixed] == [0.005, 0.01, 0.5]
+    # Pure fraction fixture (max ≤ 1) stays fraction.
+    frac = norm_command(pd.Series([0.0, 0.6, 1.0]), representation="auto").tolist()
+    assert frac == [0.0, 0.6, 1.0]
+
+
 def test_goldens_file_matches_helpers():
     cases = {c["id"]: c for c in json.loads(GOLDENS.read_text(encoding="utf-8"))["cases"]}
     c = cases["abs_20C_eq_68F"]

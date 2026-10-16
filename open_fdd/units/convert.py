@@ -53,22 +53,30 @@ def admit_temperature_to_pack_f(value: float, source_unit: str | None) -> float:
 def norm_command(
     s,
     *,
-    representation: Literal["percent", "fraction"] = "percent",
+    representation: Literal["percent", "fraction", "auto"] = "auto",
 ):
     """Normalize actuator/command values to fraction 0–1.
 
-    ``percent`` means the series is 0–100 (1 → 0.01). ``fraction`` means 0–1
-    already (1 → 1.0). Magnitude heuristics are forbidden.
+    - ``percent``: declared 0–100 (1 → 0.01).
+    - ``fraction``: declared 0–1 (1 → 1.0).
+    - ``auto``: series-level only — if any finite value is > 1, treat the
+      whole series as percent; otherwise leave as fraction. Never use the
+      old element-wise ``value <= 1`` passthrough (that mapped 1% → 100%).
     """
     import pandas as pd
 
     if s is None:
         return pd.Series(dtype=float)
-    num = pd.to_numeric(s, errors="coerce")
+    num = pd.to_numeric(s, errors="coerce").astype(float)
     if representation == "fraction":
-        return num.astype(float)
+        return num
     if representation == "percent":
-        return num.astype(float) / 100.0
+        return num / 100.0
+    if representation == "auto":
+        finite = num.dropna()
+        if not finite.empty and float(finite.max()) > 1.0:
+            return num / 100.0
+        return num
     raise ValueError(f"unknown command representation: {representation!r}")
 
 
