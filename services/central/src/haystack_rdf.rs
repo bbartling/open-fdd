@@ -114,10 +114,12 @@ impl HaystackRdfCache {
     ) -> Result<Value, Value> {
         let (snap, inventory) =
             self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
-        let set = haystack_sparql_bindings::execute_template_on_snapshot(
+        let overlay = Self::load_overlay_ttl(building_id);
+        let set = haystack_sparql_bindings::execute_template_on_snapshot_with_overlay(
             &snap,
             Some(&inventory),
             template_id,
+            &overlay,
         )
         .map_err(|e| {
             json!({
@@ -130,6 +132,7 @@ impl HaystackRdfCache {
         let mut body = set.to_json();
         if let Some(obj) = body.as_object_mut() {
             obj.insert("ok".into(), json!(true));
+            obj.insert("overlay_union".into(), json!(!overlay.trim().is_empty()));
         }
         Ok(body)
     }
@@ -144,10 +147,12 @@ impl HaystackRdfCache {
     ) -> Result<Value, Value> {
         let (snap, inventory) =
             self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
-        let set = haystack_sparql_bindings::execute_template_on_snapshot(
+        let overlay = Self::load_overlay_ttl(building_id);
+        let set = haystack_sparql_bindings::execute_template_on_snapshot_with_overlay(
             &snap,
             Some(&inventory),
             template_id,
+            &overlay,
         )
         .map_err(|e| {
             json!({
@@ -159,6 +164,7 @@ impl HaystackRdfCache {
         let mut bundle = haystack_binding_consumers::consumer_bundle(&set, Some(&inventory));
         if let Some(obj) = bundle.as_object_mut() {
             obj.insert("bindings".into(), set.to_json());
+            obj.insert("overlay_union".into(), json!(!overlay.trim().is_empty()));
         }
         Ok(bundle)
     }
@@ -184,7 +190,11 @@ impl HaystackRdfCache {
         })?;
         let (snap, _inventory) =
             self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
-        haystack_sparql_bindings::execute_readonly_on_snapshot(&snap, query_text).map_err(|e| {
+        let overlay = Self::load_overlay_ttl(building_id);
+        haystack_sparql_bindings::execute_readonly_on_snapshot_with_overlay(
+            &snap, query_text, &overlay,
+        )
+        .map_err(|e| {
             json!({
                 "ok": false,
                 "error": e,
@@ -197,6 +207,15 @@ impl HaystackRdfCache {
     pub fn invalidate_building(&self, building_id: &str) {
         let prefix = format!("{building_id}|");
         self.by_key.retain(|k, _| !k.starts_with(&prefix));
+    }
+
+    /// Soft-OPEN: load writable overlay TTL for SPARQL pack ∪ overlay (empty if absent).
+    fn load_overlay_ttl(building_id: &str) -> String {
+        let root = open_fdd_edge_prototype::historian::store::workspace_dir()
+            .join("data")
+            .join("csv_buildings")
+            .join(building_id);
+        open_fdd_edge_prototype::csv_ingest::model_overlay::load_ttl(&root).unwrap_or_default()
     }
 }
 

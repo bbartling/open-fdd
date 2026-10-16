@@ -14,8 +14,8 @@ in ``bps/semantic/model_crud.py``. Open-FDD Soft-OPEN tip exposes:
   - Read: ``POST /api/model/sparql``, point-resolve
   - Write-ish (bundle): commissioning-import / assignments/save
 
-Honest Soft-OPEN gap: overlay is **not** unioned into SPARQL pack graph yet.
-Soft-OPEN ≠ FQ. Track: #997 / #1123. Synthetic sites only.
+Soft-OPEN: SPARQL queries union **pack ∪ overlay** and strip tombstones.
+Remaining gap: C2–C6 Haystack FQ (#997 / #1123). Soft-OPEN ≠ FQ. Synthetic sites only.
 
   python scripts/stress/10_model_crud_helpers.py --building-id SYNTH_01
 """

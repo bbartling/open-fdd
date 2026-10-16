@@ -1,12 +1,14 @@
 //! Soft-OPEN revisioned Turtle overlay store (BPS `model_crud` shape).
 //!
 //! Writable sidecar under the CSV building root. Pack RDF / Haystack projection
-//! stay immutable. Soft-OPEN ≠ FQ: this store is **not** yet unioned into the
-//! SPARQL pack graph.
+//! stay immutable. Soft-OPEN SPARQL queries load **pack ∪ overlay** and strip
+//! tombstoned equip/point ids (see [`union_pack_overlay_for_sparql`]). Soft-OPEN ≠ FQ
+//! (C2–C6 Haystack binding FQ remains #997/#1123).
 //!
 //! Surfaces:
 //! - `PUT/GET /api/model/overlay` — whole-graph Turtle import
 //! - `POST/DELETE /api/model/equip|point` — equip/point upsert + tombstones
+//! - SPARQL query dataset — pack ∪ overlay (− tombstones)
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -978,7 +980,139 @@ pub fn delete_equipment(
 }
 
 pub fn soft_open_gaps() -> Vec<&'static str> {
-    vec!["overlay TTL not yet unioned into SPARQL pack graph"]
+    // Soft-OPEN SPARQL pack ∪ overlay (+ tombstones) is shipped.
+    // Remaining Soft-OPEN honesty: C2–C6 Haystack FQ (#997/#1123) is out of this layer.
+    Vec::new()
+}
+
+/// Soft-OPEN SPARQL dataset: load pack Turtle ∪ overlay Turtle, then remove
+/// subjects matching overlay tombstones (`excludesPointId` / `excludesEquipmentId`).
+///
+/// Pack RDF stays the immutable authority on disk; this only builds an ephemeral
+/// query store. Empty overlay is a pack-only store (prior Soft-OPEN behavior).
+pub fn union_pack_overlay_for_sparql(
+    pack_turtle: &str,
+    overlay_turtle: &str,
+) -> Result<Store, String> {
+    let store = Store::new().map_err(|e| format!("oxigraph store: {e}"))?;
+    if !pack_turtle.trim().is_empty() {
+        store
+            .load_from_reader(RdfFormat::Turtle, Cursor::new(pack_turtle.as_bytes()))
+            .map_err(|e| format!("load pack turtle: {e}"))?;
+    }
+    if !overlay_turtle.trim().is_empty() {
+        store
+            .load_from_reader(RdfFormat::Turtle, Cursor::new(overlay_turtle.as_bytes()))
+            .map_err(|e| format!("load overlay turtle: {e}"))?;
+    }
+    apply_tombstone_exclusions(&store)?;
+    Ok(store)
+}
+
+fn collect_tombstone_ids(store: &Store) -> Result<(BTreeSet<String>, BTreeSet<String>), String> {
+    let mut points = BTreeSet::new();
+    let mut equipment = BTreeSet::new();
+    let p_point = nn(&ofdd("excludesPointId"))?;
+    let p_equip = nn(&ofdd("excludesEquipmentId"))?;
+    for q in store.quads_for_pattern(None, Some((&p_point).into()), None, None) {
+        let q = q.map_err(|e| format!("quads: {e}"))?;
+        if let Term::Literal(lit) = q.object {
+            points.insert(lit.value().to_string());
+        }
+    }
+    for q in store.quads_for_pattern(None, Some((&p_equip).into()), None, None) {
+        let q = q.map_err(|e| format!("quads: {e}"))?;
+        if let Term::Literal(lit) = q.object {
+            equipment.insert(lit.value().to_string());
+        }
+    }
+    Ok((points, equipment))
+}
+
+fn subjects_with_id_literal(
+    store: &Store,
+    pred_local: &str,
+    id: &str,
+) -> Result<Vec<NamedNode>, String> {
+    let pred = nn(&ofdd(pred_local))?;
+    let lit = Term::from(Literal::new_simple_literal(id));
+    let mut out = Vec::new();
+    for q in store.quads_for_pattern(None, Some((&pred).into()), Some((&lit).into()), None) {
+        let q = q.map_err(|e| format!("quads: {e}"))?;
+        if let NamedOrBlankNode::NamedNode(n) = q.subject {
+            out.push(n);
+        }
+    }
+    Ok(out)
+}
+
+fn apply_tombstone_exclusions(store: &Store) -> Result<(), String> {
+    let (ex_points, ex_equips) = collect_tombstone_ids(store)?;
+    if ex_points.is_empty() && ex_equips.is_empty() {
+        return Ok(());
+    }
+
+    let mut doomed: BTreeSet<String> = BTreeSet::new();
+    let mut doomed_nodes: Vec<NamedNode> = Vec::new();
+
+    let push_node = |n: NamedNode, doomed: &mut BTreeSet<String>, nodes: &mut Vec<NamedNode>| {
+        if doomed.insert(n.as_str().to_string()) {
+            nodes.push(n);
+        }
+    };
+
+    for eid in &ex_equips {
+        for n in subjects_with_id_literal(store, "equipmentId", eid)? {
+            push_node(n, &mut doomed, &mut doomed_nodes);
+        }
+    }
+
+    // Hide points that reference a tombstoned equip (pack or overlay).
+    let equip_ref = nn(&phiot("equipRef"))?;
+    let equip_snapshot = doomed_nodes.clone();
+    for eq in &equip_snapshot {
+        let eq_term = Term::from(eq.clone());
+        for q in store.quads_for_pattern(
+            None,
+            Some((&equip_ref).into()),
+            Some((&eq_term).into()),
+            None,
+        ) {
+            let q = q.map_err(|e| format!("quads: {e}"))?;
+            if let NamedOrBlankNode::NamedNode(n) = q.subject {
+                push_node(n, &mut doomed, &mut doomed_nodes);
+            }
+        }
+    }
+
+    for pid in &ex_points {
+        for pred in ["pointId", "openfddKey"] {
+            for n in subjects_with_id_literal(store, pred, pid)? {
+                push_node(n, &mut doomed, &mut doomed_nodes);
+            }
+        }
+    }
+
+    // Drop tombstone marker nodes themselves from the query graph.
+    let rdf_type = nn(RDF_TYPE)?;
+    let tomb_class = nn(&ofdd("Tombstone"))?;
+    let tomb_term = Term::from(tomb_class);
+    for q in store.quads_for_pattern(
+        None,
+        Some((&rdf_type).into()),
+        Some((&tomb_term).into()),
+        None,
+    ) {
+        let q = q.map_err(|e| format!("quads: {e}"))?;
+        if let NamedOrBlankNode::NamedNode(n) = q.subject {
+            push_node(n, &mut doomed, &mut doomed_nodes);
+        }
+    }
+
+    for n in doomed_nodes {
+        remove_subject(store, &n)?;
+    }
+    Ok(())
 }
 
 pub fn get_overlay_payload(building_root: &Path, building_id: &str) -> Result<Value, String> {
@@ -997,9 +1131,10 @@ pub fn get_overlay_payload(building_root: &Path, building_id: &str) -> Result<Va
         "tombstones": tombs,
         "pack_immutable": true,
         "writable_layer": WRITABLE_LAYER,
+        "sparql_union": "pack_cup_overlay_minus_tombstones",
         "soft_open_neq_fq": true,
         "gaps": soft_open_gaps(),
-        "note": "Soft-OPEN overlay sidecar — not SPARQL pack authority (≠ FQ)",
+        "note": "Soft-OPEN overlay sidecar — SPARQL queries union pack ∪ overlay (− tombstones); ≠ C2–C6 FQ",
     }))
 }
 
@@ -1268,5 +1403,65 @@ mod tests {
             "{tombs}"
         );
         assert!(points.iter().any(|v| v.as_str() == Some("SAT")), "{tombs}");
+    }
+
+    #[test]
+    fn sparql_union_adds_overlay_and_hides_tombstoned_pack() {
+        let pack = r#"
+@prefix ofdd: <urn:openfdd:ns#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
+<urn:openfdd:site/U1/equip/AHU_PACK> a phIoT:equip ;
+  ofdd:equipmentId "AHU_PACK" .
+<urn:openfdd:site/U1/equip/AHU_PACK/point/SAT> a phIoT:point ;
+  ofdd:pointId "SAT" ;
+  phIoT:equipRef <urn:openfdd:site/U1/equip/AHU_PACK> .
+"#;
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let bid = "U1";
+
+        upsert_equipment(
+            root,
+            bid,
+            "AHU_OVERLAY",
+            EquipUpsertFields {
+                dis: Some("Overlay AHU"),
+                kind: Some("ahu"),
+                markers: &[],
+            },
+            OverlayCasOpts::default(),
+        )
+        .unwrap();
+        delete_equipment(root, bid, "AHU_PACK", Some(1), false).unwrap();
+
+        let overlay = load_ttl(root).unwrap();
+        let store = union_pack_overlay_for_sparql(pack, &overlay).expect("union");
+
+        let p_eid = nn(&ofdd("equipmentId")).unwrap();
+        let lit_pack = Term::from(Literal::new_simple_literal("AHU_PACK"));
+        let lit_ov = Term::from(Literal::new_simple_literal("AHU_OVERLAY"));
+        assert!(
+            store
+                .quads_for_pattern(None, Some((&p_eid).into()), Some((&lit_pack).into()), None)
+                .next()
+                .is_none(),
+            "tombstoned pack equip must be absent from SPARQL store"
+        );
+        assert!(
+            store
+                .quads_for_pattern(None, Some((&p_eid).into()), Some((&lit_ov).into()), None)
+                .next()
+                .is_some(),
+            "overlay equip must appear in SPARQL store"
+        );
+        let p_pid = nn(&ofdd("pointId")).unwrap();
+        let lit_sat = Term::from(Literal::new_simple_literal("SAT"));
+        assert!(
+            store
+                .quads_for_pattern(None, Some((&p_pid).into()), Some((&lit_sat).into()), None)
+                .next()
+                .is_none(),
+            "points under tombstoned equip must be stripped"
+        );
     }
 }

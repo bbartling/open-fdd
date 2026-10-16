@@ -235,7 +235,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/model/semantic-meta",
             get(csv_import_package_mapping_semantic_meta).put(model_semantic_meta_put),
         )
-        // Soft-OPEN: BPS-compatible Turtle overlay GET/PUT (dry_run + CAS; ≠ SPARQL union).
+        // Soft-OPEN: BPS-compatible Turtle overlay GET/PUT (dry_run + CAS; SPARQL unions pack ∪ overlay).
         .route(
             "/api/model/overlay",
             get(model_overlay_get).put(model_overlay_put),
@@ -5301,7 +5301,7 @@ fn resolve_building_or_site(building_id: Option<&str>, site_id: Option<&str>) ->
 
 /// Soft-OPEN: read writable Turtle overlay sidecar (#997/#1123).
 ///
-/// BPS-compatible shape. Soft-OPEN ≠ FQ — overlay is not unioned into SPARQL yet.
+/// BPS-compatible shape. Soft-OPEN ≠ FQ — SPARQL unions pack ∪ overlay (− tombstones).
 pub async fn model_overlay_get(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -5368,7 +5368,7 @@ pub struct ModelOverlayPutBody {
 /// Soft-OPEN: replace Turtle overlay with dry_run + expected_revision CAS (#997/#1123).
 ///
 /// Authority is the `model_overlay.ttl` sidecar (BPS overlay shape). Soft-OPEN ≠ FQ —
-/// does not union into SPARQL pack graph.
+/// SPARQL query path unions pack ∪ overlay (− tombstones).
 pub async fn model_overlay_put(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -5774,7 +5774,7 @@ pub async fn model_equip_delete(
 ///
 /// Read-only recipe + revision + lean model tree from native
 /// `openfdd_semantic_meta_v1` (primary) plus overlay / equip / point recipes.
-/// Soft-OPEN ≠ FQ — overlay not unioned into SPARQL pack graph.
+/// Soft-OPEN ≠ FQ — SPARQL unions pack ∪ overlay (− tombstones); C2–C6 FQ remains.
 pub async fn model_agent_context(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -5867,7 +5867,7 @@ pub async fn model_agent_context(
             "evidence_tier": "VERIFIED_SYNTHETIC",
             "soft_open_neq_fq": true,
             "gaps": open_fdd_edge_prototype::csv_ingest::model_overlay::soft_open_gaps(),
-            "note": "Soft-OPEN agent-context — semantic_meta primary + overlay equip/point CRUD (≠ SPARQL union FQ)",
+            "note": "Soft-OPEN agent-context — semantic_meta primary + overlay equip/point CRUD; SPARQL pack ∪ overlay (− tombstones); ≠ C2–C6 FQ",
         })
     })
     .await
