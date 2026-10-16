@@ -872,9 +872,8 @@ mod tests {
         }
         // Inventory stamp must not paper over the SPARQL classifier conflict.
         let inv = sample_inventory();
-        let set =
-            execute_template_from_meta(&meta, Some(&inv), None, "mech_system_summary")
-                .expect("mech_system_summary");
+        let set = execute_template_from_meta(&meta, Some(&inv), None, "mech_system_summary")
+            .expect("mech_system_summary");
         let ahu = set
             .equipment
             .iter()
