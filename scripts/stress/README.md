@@ -18,7 +18,7 @@ oracle CI) — never on the product request path.
 | B–E | `04`–`07` | Local Timescale / warehouse (may stay BPS-side) | Optional |
 | F | `08_sql_vs_pandas_sparql.py` | Synthetic pack SQL FDD ↔ pandas via SPARQL DF; fail-closed (#1253) | Landed (T14) |
 | G | `09_analytics_sql_vs_pandas.py` | Analytics SQL ↔ independent pandas | Landed (T15) |
-| H | `10_model_crud_helpers.py` | `PUT /api/model/semantic-meta` dry_run + CAS; `GET /api/model/agent-context`; `GET /api/model/ttl` | Soft-OPEN (≠ full BPS overlay) |
+| H | `10_model_crud_helpers.py` | `PUT /api/model/semantic-meta` dry_run + CAS; `PUT/GET /api/model/overlay` Turtle; `GET /api/model/agent-context`; `GET /api/model/ttl` | Soft-OPEN (≠ SPARQL union / equip tombstones) |
 | Runner | `run_gate.py` + `helpers.py` | `--host` / `--base-url` JWT | **This PR (T12)** |
 
 ## Open-FDD API map (vs BPS)

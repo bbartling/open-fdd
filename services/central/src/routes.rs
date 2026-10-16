@@ -235,7 +235,12 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/model/semantic-meta",
             get(csv_import_package_mapping_semantic_meta).put(model_semantic_meta_put),
         )
-        // Soft-OPEN: BPS-compatible agent recipe bundle (read-only; ≠ overlay equip CRUD).
+        // Soft-OPEN: BPS-compatible Turtle overlay GET/PUT (dry_run + CAS; ≠ SPARQL union).
+        .route(
+            "/api/model/overlay",
+            get(model_overlay_get).put(model_overlay_put),
+        )
+        // Soft-OPEN: BPS-compatible agent recipe bundle (≠ equip/point tombstone CRUD).
         .route("/api/model/agent-context", get(model_agent_context))
         // Soft-OPEN R8a: tip-safe read-only schema/contract probe (no migrator apply).
         .route(
@@ -5268,29 +5273,182 @@ fn agent_context_model_tree(
     })
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ModelOverlayQuery {
+    #[serde(default)]
+    building_id: Option<String>,
+    /// BPS alias for `building_id`.
+    #[serde(default)]
+    site_id: Option<String>,
+}
+
+fn resolve_building_or_site(building_id: Option<&str>, site_id: Option<&str>) -> Option<String> {
+    building_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| site_id.map(str::trim).filter(|s| !s.is_empty()))
+        .map(str::to_string)
+}
+
+/// Soft-OPEN: read writable Turtle overlay sidecar (#997/#1123).
+///
+/// BPS-compatible shape. Soft-OPEN ≠ FQ — overlay is not unioned into SPARQL yet.
+pub async fn model_overlay_get(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<ModelOverlayQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let Some(building_id) =
+        resolve_building_or_site(q.building_id.as_deref(), q.site_id.as_deref())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id (or site_id alias) query parameter required",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let result = tokio::task::spawn_blocking(move || {
+        let root = open_fdd_edge_prototype::historian::store::workspace_dir()
+            .join("data")
+            .join("csv_buildings")
+            .join(&building_id);
+        open_fdd_edge_prototype::csv_ingest::model_overlay::get_overlay_payload(&root, &building_id)
+            .unwrap_or_else(|e| {
+                json!({
+                    "ok": false,
+                    "error": e,
+                    "building_id": building_id,
+                    "soft_open_neq_fq": true,
+                })
+            })
+    })
+    .await
+    .unwrap_or_else(|e| {
+        json!({
+            "ok": false,
+            "error": format!("overlay get task: {e}"),
+            "soft_open_neq_fq": true,
+        })
+    });
+    if result.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        return Err((StatusCode::BAD_REQUEST, Json(result)));
+    }
+    Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModelOverlayPutBody {
+    #[serde(default)]
+    pub building_id: Option<String>,
+    /// BPS alias for `building_id`.
+    #[serde(default)]
+    pub site_id: Option<String>,
+    pub ttl: String,
+    #[serde(default)]
+    pub expected_revision: Option<u64>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+/// Soft-OPEN: replace Turtle overlay with dry_run + expected_revision CAS (#997/#1123).
+///
+/// Authority is the `model_overlay.ttl` sidecar (BPS overlay shape). Soft-OPEN ≠ FQ —
+/// does not union into SPARQL or ship equip/point tombstone CRUD.
+pub async fn model_overlay_put(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<ModelOverlayPutBody>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(&headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e, "soft_open_neq_fq": true})),
+        )
+    })?;
+    if matches!(user.role, auth::Role::Viewer) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "viewer role cannot mutate model overlay",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    }
+    let Some(building_id) =
+        resolve_building_or_site(body.building_id.as_deref(), body.site_id.as_deref())
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id (or site_id alias) required",
+                "soft_open_neq_fq": true,
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+
+    let ttl = body.ttl;
+    let expected = body.expected_revision;
+    let dry_run = body.dry_run;
+
+    let result = tokio::task::spawn_blocking(move || {
+        let root = open_fdd_edge_prototype::historian::store::workspace_dir()
+            .join("data")
+            .join("csv_buildings")
+            .join(&building_id);
+        open_fdd_edge_prototype::csv_ingest::model_overlay::put_overlay_ttl(
+            &root,
+            &building_id,
+            &ttl,
+            expected,
+            dry_run,
+        )
+    })
+    .await
+    .unwrap_or_else(|e| {
+        Err(json!({
+            "ok": false,
+            "error": format!("overlay put task: {e}"),
+            "soft_open_neq_fq": true,
+        }))
+    });
+
+    match result {
+        Ok(body) => Ok(Json(body)),
+        Err(err) => {
+            let status = if err.get("conflict") == Some(&json!(true)) {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((status, Json(err)))
+        }
+    }
+}
+
 /// Soft-OPEN: BPS-compatible agent context bundle (#997/#1123).
 ///
 /// Read-only recipe + revision + lean model tree from native
-/// `openfdd_semantic_meta_v1` (not BPS Turtle overlay). Soft-OPEN ≠ FQ —
-/// does not ship overlay PUT or equip/point tombstone CRUD.
+/// `openfdd_semantic_meta_v1` (primary) plus overlay GET/PUT recipes.
+/// Soft-OPEN ≠ FQ — does not ship equip/point tombstone CRUD or SPARQL union.
 pub async fn model_agent_context(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Query(q): Query<AgentContextQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let building_id = q
-        .building_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            q.site_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-        })
-        .map(str::to_string);
-    let Some(building_id) = building_id else {
+    let Some(building_id) =
+        resolve_building_or_site(q.building_id.as_deref(), q.site_id.as_deref())
+    else {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({
@@ -5334,12 +5492,22 @@ pub async fn model_agent_context(
                 preferred.as_deref(),
             );
         let model_tree = agent_context_model_tree(meta.as_ref(), &inventory);
+        let overlay_root = root.clone();
+        let overlay_rev =
+            open_fdd_edge_prototype::csv_ingest::model_overlay::load_revision(&overlay_root)
+                .unwrap_or(0);
+        let overlay_present = overlay_root
+            .join(open_fdd_edge_prototype::csv_ingest::model_overlay::OVERLAY_TTL_FILE)
+            .is_file();
         let recipes = json!([{
             "id": "mutate-then-verify",
             "steps": [
                 "GET /api/model/agent-context?building_id=…",
                 "PUT /api/model/semantic-meta with dry_run=true",
                 "PUT /api/model/semantic-meta with expected_revision (CAS)",
+                "PUT /api/model/overlay with dry_run=true (Turtle)",
+                "PUT /api/model/overlay with expected_revision (CAS)",
+                "GET /api/model/overlay?building_id=…",
                 "GET /api/model/ttl?building_id=…",
                 "POST /api/model/sparql SELECT roles/markers",
                 "GET /api/fdd/equipment?building_id=…",
@@ -5351,18 +5519,18 @@ pub async fn model_agent_context(
             "site_id": building_id,
             "revision": revision,
             "semantic_meta_present": meta.is_some(),
+            "overlay_revision": overlay_rev,
+            "overlay_present": overlay_present,
             "writable_layer": "openfdd_semantic_meta_v1",
+            "overlay_writable_layer": open_fdd_edge_prototype::csv_ingest::model_overlay::WRITABLE_LAYER,
             "pack_immutable": true,
             "model_tree": model_tree,
             "recipes": recipes,
             "openapi_tag": "model-crud",
             "evidence_tier": "VERIFIED_SYNTHETIC",
             "soft_open_neq_fq": true,
-            "gaps": [
-                "Turtle PUT /api/model/overlay not Soft-OPEN yet",
-                "POST/DELETE /api/model/equip|point tombstones not Soft-OPEN yet",
-            ],
-            "note": "Soft-OPEN agent-context — native semantic_meta authority (≠ BPS Turtle overlay FQ)",
+            "gaps": open_fdd_edge_prototype::csv_ingest::model_overlay::soft_open_gaps(),
+            "note": "Soft-OPEN agent-context — semantic_meta primary + overlay TTL sidecar (≠ SPARQL union / equip tombstone FQ)",
         })
     })
     .await
@@ -8471,6 +8639,169 @@ mod version_tests {
             alias_json.get("soft_open_neq_fq").and_then(|v| v.as_bool()),
             Some(true)
         );
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE while exercising overlay Turtle PUT CAS"
+    )]
+    async fn model_overlay_put_dry_run_conflict_and_viewer_deny() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        std::env::set_var("OPENFDD_WORKSPACE", workspace.path());
+
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("overlay-cas-test-secret".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let bid = "SYNTH_MODEL_OVERLAY";
+        let sample_ttl = r#"
+@prefix ph: <https://project-haystack.org/def/ph#> .
+<urn:openfdd:site/SYNTH_MODEL_OVERLAY#equip-AHU_1> a ph:equip ;
+  ph:dis "AHU 1" .
+"#;
+
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("viewer-overlay", crate::auth::Role::Viewer, 60, &[])
+            .unwrap();
+        let viewer_req = Request::builder()
+            .method("PUT")
+            .uri("/api/model/overlay")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {viewer}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "ttl": sample_ttl,
+                    "dry_run": true
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let viewer_resp = app.clone().oneshot(viewer_req).await.unwrap();
+        assert_eq!(viewer_resp.status(), StatusCode::FORBIDDEN);
+
+        let op = state
+            .auth
+            .issue_token_with_tenants("operator-overlay", crate::auth::Role::Operator, 60, &[])
+            .unwrap();
+
+        let dry_req = Request::builder()
+            .method("PUT")
+            .uri("/api/model/overlay")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "ttl": sample_ttl,
+                    "dry_run": true
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let dry_resp = app.clone().oneshot(dry_req).await.unwrap();
+        assert_eq!(dry_resp.status(), StatusCode::OK);
+        let dry_bytes = axum::body::to_bytes(dry_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let dry_json: serde_json::Value = serde_json::from_slice(&dry_bytes).unwrap();
+        assert_eq!(dry_json.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            dry_json.get("dry_run").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        let tip = workspace
+            .path()
+            .join("data/csv_buildings")
+            .join(bid)
+            .join("model_overlay.ttl");
+        assert!(!tip.is_file(), "dry_run must not write model_overlay.ttl");
+
+        let bad_req = Request::builder()
+            .method("PUT")
+            .uri("/api/model/overlay")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "site_id": bid,
+                    "ttl": "not turtle {{{"
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let bad_resp = app.clone().oneshot(bad_req).await.unwrap();
+        assert_eq!(bad_resp.status(), StatusCode::BAD_REQUEST);
+
+        let put1 = Request::builder()
+            .method("PUT")
+            .uri("/api/model/overlay")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "site_id": bid,
+                    "ttl": sample_ttl,
+                    "expected_revision": 0
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let put1_resp = app.clone().oneshot(put1).await.unwrap();
+        assert_eq!(put1_resp.status(), StatusCode::OK);
+        let put1_bytes = axum::body::to_bytes(put1_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let put1_json: serde_json::Value = serde_json::from_slice(&put1_bytes).unwrap();
+        assert_eq!(put1_json.get("revision").and_then(|v| v.as_u64()), Some(1));
+        assert!(tip.is_file());
+
+        let conflict = Request::builder()
+            .method("PUT")
+            .uri("/api/model/overlay")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::from(
+                serde_json::json!({
+                    "building_id": bid,
+                    "ttl": sample_ttl,
+                    "expected_revision": 0
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let conflict_resp = app.clone().oneshot(conflict).await.unwrap();
+        assert_eq!(conflict_resp.status(), StatusCode::CONFLICT);
+
+        let get_req = Request::builder()
+            .method("GET")
+            .uri(format!("/api/model/overlay?site_id={bid}"))
+            .header("authorization", format!("Bearer {op}"))
+            .body(Body::empty())
+            .unwrap();
+        let get_resp = app.oneshot(get_req).await.unwrap();
+        assert_eq!(get_resp.status(), StatusCode::OK);
+        let get_bytes = axum::body::to_bytes(get_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let get_json: serde_json::Value = serde_json::from_slice(&get_bytes).unwrap();
+        assert_eq!(get_json.get("revision").and_then(|v| v.as_u64()), Some(1));
+        assert!(get_json
+            .get("ttl")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .contains("AHU_1"));
 
         std::env::remove_var("OPENFDD_WORKSPACE");
     }

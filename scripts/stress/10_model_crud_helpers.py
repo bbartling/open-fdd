@@ -2,17 +2,19 @@
 """Gate H — RDF / model mutation helpers (dry_run + expected_revision CAS).
 
 BPS has revisioned overlay CRUD (``dry_run``, ``expected_revision``, tombstones)
-in ``bps/semantic/model_crud.py``. Open-FDD Soft-OPEN tip exposes the native
-authority surface:
+in ``bps/semantic/model_crud.py``. Open-FDD Soft-OPEN tip exposes:
 
   - ``PUT /api/model/semantic-meta`` — dry_run + expected_revision CAS (HR-07)
   - ``GET /api/model/semantic-meta`` — tip meta + revision
+  - ``PUT /api/model/overlay`` — Turtle whole-graph import (dry_run + CAS)
+  - ``GET /api/model/overlay`` — overlay TTL + revision
   - ``GET /api/model/agent-context`` — BPS-compatible recipe bundle (revision + tree)
   - ``GET /api/model/ttl`` — BPS-compatible alias → Haystack projection Turtle
   - Read: ``POST /api/model/sparql``, point-resolve
   - Write-ish (bundle): commissioning-import / assignments/save
 
-This is **not** full BPS Turtle overlay equip/point tombstone CRUD. Soft-OPEN ≠ FQ.
+Honest Soft-OPEN gaps: overlay is **not** unioned into SPARQL pack graph yet;
+equip/point upsert + tombstones are still out. Soft-OPEN ≠ FQ.
 Track: #997 / #1123. Synthetic sites only.
 
   python scripts/stress/10_model_crud_helpers.py --building-id SYNTH_01
@@ -149,6 +151,52 @@ def main(argv: list[str] | None = None) -> int:
                 f"(GET status={status_g} present={got.get('present') if isinstance(got, dict) else None})"
             )
 
+        # Turtle overlay dry_run (BPS PUT /api/model/overlay shape)
+        sample_ttl = (
+            "@prefix ph: <https://project-haystack.org/def/ph#> .\n"
+            f"<urn:openfdd:site/{building_id}#equip-AHU_1> a ph:equip ;\n"
+            '  ph:dis "AHU 1" .\n'
+        )
+        status_o, _, raw_o = http.request(
+            "PUT",
+            "/api/model/overlay",
+            headers=headers,
+            json_body={
+                "building_id": building_id,
+                "ttl": sample_ttl,
+                "dry_run": True,
+            },
+            timeout=30.0,
+        )
+        try:
+            overlay_body = json.loads(raw_o.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            overlay_body = {}
+        safe_print(f"PUT /api/model/overlay dry_run -> HTTP {status_o}")
+        if status_o == 404:
+            safe_print(
+                "GAP: /api/model/overlay missing on this tip — "
+                "need Soft-OPEN Turtle overlay PR (#997/#1123)"
+            )
+            return 1
+        if status_o == 403:
+            safe_print(
+                "WARN 10 — JWT lacks mutate permission for overlay "
+                "(viewer?). Soft-OPEN ≠ FQ"
+            )
+        elif status_o >= 500:
+            safe_print("FAIL: overlay dry_run returned 5xx")
+            return 1
+        elif (
+            not isinstance(overlay_body, dict)
+            or overlay_body.get("ok") is not True
+            or overlay_body.get("dry_run") is not True
+        ):
+            safe_print(f"FAIL: overlay dry_run contract missing ok/dry_run=true — {overlay_body!r}")
+            return 1
+        else:
+            safe_print("  overlay dry_run contract OK")
+
         # BPS-compatible agent-context bundle (read)
         status_a, _, raw_a = http.request(
             "GET",
@@ -194,8 +242,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     safe_print(
-        "PASS 10 — semantic-meta dry_run (+ optional CAS) + agent-context + "
-        "/api/model/ttl alias. Soft-OPEN ≠ FQ (no full BPS overlay tombstone CRUD)"
+        "PASS 10 — semantic-meta + overlay dry_run (+ optional CAS) + "
+        "agent-context + /api/model/ttl alias. Soft-OPEN ≠ FQ "
+        "(no SPARQL union / equip tombstone CRUD)"
     )
     return 0
 
