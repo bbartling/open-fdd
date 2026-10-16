@@ -9,6 +9,7 @@ pub mod haystack_defs;
 pub mod haystack_integration_kats;
 pub mod haystack_projection;
 pub mod haystack_sparql_bindings;
+pub mod model_overlay;
 pub mod package;
 pub mod parquet_bridge;
 pub mod parse;

@@ -6593,20 +6593,96 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: BPS-compatible agent recipe bundle (revision + lean model_tree + mutate recipes); native semantic_meta authority; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: BPS-compatible agent recipe bundle (revision + lean model_tree + mutate recipes); semantic_meta primary + overlay sidecar; Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "GET",
+      "path": "/api/model/overlay",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_model_overlay",
+        "y.authz.get_api_model_overlay"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_model_overlay",
+        "y.authz.get_api_model_overlay"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: BPS-compatible Turtle overlay read (sidecar; not SPARQL pack authority); Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/model/overlay",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.put_api_model_overlay",
+        "y.authz.put_api_model_overlay"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.put_api_model_overlay",
+        "y.authz.put_api_model_overlay"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "writes",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: Turtle overlay dry_run + expected_revision CAS; viewer deny; not SPARQL union / equip tombstones; Soft-OPEN \u2260 FQ"
     }
   ],
   "counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 114,
+    "PLANNED": 116,
     "BLOCKED_POLICY": 29,
     "implemented": 30,
-    "planned": 114,
+    "planned": 116,
     "blocked_policy": 29
   },
   "summary": {
     "IMPLEMENTED": 30,
-    "PLANNED": 114,
+    "PLANNED": 116,
     "BLOCKED_POLICY": 29
   }
 }

@@ -56,6 +56,47 @@ paths:
             text/turtle:
               schema:
                 type: string
+  /api/model/overlay:
+    get:
+      summary: Soft-OPEN writable Turtle overlay (BPS-compatible)
+      parameters:
+        - in: query
+          name: building_id
+          schema:
+            type: string
+        - in: query
+          name: site_id
+          schema:
+            type: string
+          description: BPS alias for building_id
+      responses:
+        "200":
+          description: Overlay TTL + revision (sidecar; not SPARQL pack authority; Soft-OPEN ≠ FQ)
+    put:
+      summary: Soft-OPEN replace Turtle overlay (dry_run + expected_revision CAS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ttl]
+              properties:
+                building_id:
+                  type: string
+                site_id:
+                  type: string
+                ttl:
+                  type: string
+                expected_revision:
+                  type: integer
+                dry_run:
+                  type: boolean
+      responses:
+        "200":
+          description: Overlay published or dry_run preview
+        "409":
+          description: Revision conflict
   /api/model/agent-context:
     get:
       summary: Soft-OPEN AI agent bundle (revision, lean model tree, mutate recipes)
@@ -71,7 +112,7 @@ paths:
           description: BPS alias for building_id
       responses:
         "200":
-          description: Agent context JSON (native semantic_meta authority; Soft-OPEN ≠ FQ)
+          description: Agent context JSON (semantic_meta primary + overlay sidecar; Soft-OPEN ≠ FQ)
   /api/model/sparql/predefined:
     get:
       summary: SPARQL query catalog
