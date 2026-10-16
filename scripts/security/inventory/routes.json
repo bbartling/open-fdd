@@ -6669,20 +6669,172 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: Turtle overlay dry_run + expected_revision CAS; viewer deny; not SPARQL union / equip tombstones; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: Turtle overlay dry_run + expected_revision CAS; viewer deny; not SPARQL union; Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "POST",
+      "path": "/api/model/equip",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_model_equip",
+        "y.authz.post_api_model_equip"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_model_equip",
+        "y.authz.post_api_model_equip"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "writes",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: BPS POST equip upsert into overlay TTL (dry_run + CAS); viewer deny; Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/model/equip",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.delete_api_model_equip",
+        "y.authz.delete_api_model_equip"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.delete_api_model_equip",
+        "y.authz.delete_api_model_equip"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "writes",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: BPS DELETE equip tombstone on overlay; pack immutable; Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "POST",
+      "path": "/api/model/point",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_model_point",
+        "y.authz.post_api_model_point"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_model_point",
+        "y.authz.post_api_model_point"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "writes",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: BPS POST point upsert into overlay TTL (dry_run + CAS); viewer deny; Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/model/point",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.delete_api_model_point",
+        "y.authz.delete_api_model_point"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.delete_api_model_point",
+        "y.authz.delete_api_model_point"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "writes",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Soft-OPEN: BPS DELETE point tombstone on overlay (+ also_exclude); Soft-OPEN \u2260 FQ"
     }
   ],
   "counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 116,
+    "PLANNED": 120,
     "BLOCKED_POLICY": 29,
     "implemented": 30,
-    "planned": 116,
+    "planned": 120,
     "blocked_policy": 29
   },
   "summary": {
     "IMPLEMENTED": 30,
-    "PLANNED": 116,
+    "PLANNED": 120,
     "BLOCKED_POLICY": 29
   }
 }

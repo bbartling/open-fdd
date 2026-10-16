@@ -7,15 +7,15 @@ in ``bps/semantic/model_crud.py``. Open-FDD Soft-OPEN tip exposes:
   - ``PUT /api/model/semantic-meta`` — dry_run + expected_revision CAS (HR-07)
   - ``GET /api/model/semantic-meta`` — tip meta + revision
   - ``PUT /api/model/overlay`` — Turtle whole-graph import (dry_run + CAS)
-  - ``GET /api/model/overlay`` — overlay TTL + revision
+  - ``GET /api/model/overlay`` — overlay TTL + revision (+ tombstone list)
+  - ``POST/DELETE /api/model/equip|point`` — overlay upsert + tombstones
   - ``GET /api/model/agent-context`` — BPS-compatible recipe bundle (revision + tree)
   - ``GET /api/model/ttl`` — BPS-compatible alias → Haystack projection Turtle
   - Read: ``POST /api/model/sparql``, point-resolve
   - Write-ish (bundle): commissioning-import / assignments/save
 
-Honest Soft-OPEN gaps: overlay is **not** unioned into SPARQL pack graph yet;
-equip/point upsert + tombstones are still out. Soft-OPEN ≠ FQ.
-Track: #997 / #1123. Synthetic sites only.
+Honest Soft-OPEN gap: overlay is **not** unioned into SPARQL pack graph yet.
+Soft-OPEN ≠ FQ. Track: #997 / #1123. Synthetic sites only.
 
   python scripts/stress/10_model_crud_helpers.py --building-id SYNTH_01
 """
@@ -197,6 +197,49 @@ def main(argv: list[str] | None = None) -> int:
         else:
             safe_print("  overlay dry_run contract OK")
 
+        # Equip upsert dry_run (BPS POST /api/model/equip)
+        status_e, _, raw_e = http.request(
+            "POST",
+            "/api/model/equip",
+            headers=headers,
+            json_body={
+                "building_id": building_id,
+                "equipment_id": "AHU_STRESS",
+                "kind": "ahu",
+                "dis": "AHU stress",
+                "dry_run": True,
+            },
+            timeout=30.0,
+        )
+        try:
+            equip_body = json.loads(raw_e.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            equip_body = {}
+        safe_print(f"POST /api/model/equip dry_run -> HTTP {status_e}")
+        if status_e == 404:
+            safe_print(
+                "GAP: /api/model/equip missing on this tip — "
+                "need Soft-OPEN equip/point CRUD PR (#997/#1123)"
+            )
+            return 1
+        if status_e == 403:
+            safe_print(
+                "WARN 10 — JWT lacks mutate permission for equip "
+                "(viewer?). Soft-OPEN ≠ FQ"
+            )
+        elif status_e >= 500:
+            safe_print("FAIL: equip dry_run returned 5xx")
+            return 1
+        elif (
+            not isinstance(equip_body, dict)
+            or equip_body.get("ok") is not True
+            or equip_body.get("dry_run") is not True
+        ):
+            safe_print(f"FAIL: equip dry_run contract missing ok/dry_run=true — {equip_body!r}")
+            return 1
+        else:
+            safe_print("  equip dry_run contract OK")
+
         # BPS-compatible agent-context bundle (read)
         status_a, _, raw_a = http.request(
             "GET",
@@ -242,9 +285,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     safe_print(
-        "PASS 10 — semantic-meta + overlay dry_run (+ optional CAS) + "
+        "PASS 10 — semantic-meta + overlay + equip dry_run (+ optional CAS) + "
         "agent-context + /api/model/ttl alias. Soft-OPEN ≠ FQ "
-        "(no SPARQL union / equip tombstone CRUD)"
+        "(no SPARQL union)"
     )
     return 0
 
