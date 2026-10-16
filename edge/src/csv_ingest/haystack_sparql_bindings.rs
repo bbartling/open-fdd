@@ -5,7 +5,7 @@
 //! from pinned Haystack defs already baked into the Turtle. Inventory supplies
 //! approved canonical role selections — SPARQL does not invent SQL roles.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use oxigraph::sparql::{QueryResults, SparqlEvaluator};
 use oxigraph::store::Store;
@@ -68,6 +68,14 @@ pub struct TypedEquipmentBinding {
     pub points: Vec<TypedPointBinding>,
 }
 
+/// Soft-OPEN hygiene: multiple `ph:hasTag` classifiers for one equip → no `equip_type`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ClassifierConflict {
+    pub equipment_id: String,
+    pub equip_types: Vec<String>,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TypedBindingSet {
     pub schema: String,
@@ -84,6 +92,9 @@ pub struct TypedBindingSet {
     pub query_engine: String,
     pub not_edge_prototype_graph: bool,
     pub equipment: Vec<TypedEquipmentBinding>,
+    /// Equipment whose SPARQL `equipType` rows disagreed (fail-closed; Soft-OPEN ≠ FQ).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub classifier_conflicts: Vec<ClassifierConflict>,
     pub sparql_row_count: usize,
     pub truncated: bool,
 }
@@ -529,30 +540,64 @@ fn inventory_equip_types(inventory: Option<&Value>) -> BTreeMap<String, String> 
     out
 }
 
-/// Prefer SPARQL-bound `equipType` (RDF hasTag / VALUES) over inventory stamp.
-fn resolve_equip_type(
-    row: &BTreeMap<String, String>,
-    eid: &str,
-    inventory_types: &BTreeMap<String, String>,
-) -> Option<String> {
-    if let Some(t) = row
-        .get("equipType")
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-    {
-        return Some(t.to_ascii_lowercase());
+/// Index SPARQL `equipType` rows: unambiguous type per equip, or conflict when
+/// multiple distinct classifiers bind the same `equipmentId` (order-dependent
+/// last-write-wins is rejected — Soft-OPEN CodeRabbit hygiene on #1273).
+fn sparql_equip_type_index(
+    rows: &[BTreeMap<String, String>],
+) -> (BTreeMap<String, String>, Vec<ClassifierConflict>) {
+    let mut seen: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for row in rows {
+        let Some(eid) = row
+            .get("equipmentId")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        let Some(t) = row
+            .get("equipType")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        seen.entry(eid.to_string())
+            .or_default()
+            .insert(t.to_ascii_lowercase());
     }
-    inventory_types.get(eid).cloned()
+    let mut unambiguous = BTreeMap::new();
+    let mut conflicts = Vec::new();
+    for (eid, types) in seen {
+        if types.len() > 1 {
+            let mut equip_types: Vec<String> = types.into_iter().collect();
+            equip_types.sort();
+            conflicts.push(ClassifierConflict {
+                equipment_id: eid,
+                equip_types,
+                reason: "multi_classifier_hasTag".into(),
+            });
+        } else if let Some(t) = types.into_iter().next() {
+            unambiguous.insert(eid, t);
+        }
+    }
+    (unambiguous, conflicts)
 }
 
-fn apply_sparql_equip_type(entry: &mut TypedEquipmentBinding, row: &BTreeMap<String, String>) {
-    if let Some(t) = row
-        .get("equipType")
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-    {
-        entry.equip_type = Some(t.to_ascii_lowercase());
+/// Prefer unambiguous SPARQL `equipType` over inventory; conflicts bind nothing.
+fn resolve_equip_type(
+    eid: &str,
+    sparql_types: &BTreeMap<String, String>,
+    conflict_ids: &BTreeSet<String>,
+    inventory_types: &BTreeMap<String, String>,
+) -> Option<String> {
+    if conflict_ids.contains(eid) {
+        return None;
     }
+    if let Some(t) = sparql_types.get(eid) {
+        return Some(t.clone());
+    }
+    inventory_types.get(eid).cloned()
 }
 
 fn build_typed_bindings(
@@ -564,6 +609,11 @@ fn build_typed_bindings(
 ) -> TypedBindingSet {
     let roles = inventory_role_map(inventory);
     let types = inventory_equip_types(inventory);
+    let (sparql_types, classifier_conflicts) = sparql_equip_type_index(&rows);
+    let conflict_ids: BTreeSet<String> = classifier_conflicts
+        .iter()
+        .map(|c| c.equipment_id.clone())
+        .collect();
     let mut by_equip: BTreeMap<String, TypedEquipmentBinding> = BTreeMap::new();
 
     for row in &rows {
@@ -574,11 +624,10 @@ fn build_typed_bindings(
             .entry(eid.clone())
             .or_insert_with(|| TypedEquipmentBinding {
                 equipment_id: eid.clone(),
-                equip_type: resolve_equip_type(row, &eid, &types),
+                equip_type: resolve_equip_type(&eid, &sparql_types, &conflict_ids, &types),
                 equip_iri: row.get("equip").cloned(),
                 points: vec![],
             });
-        apply_sparql_equip_type(entry, row);
         if entry.equip_iri.is_none() {
             entry.equip_iri = row.get("equip").cloned();
         }
@@ -637,11 +686,10 @@ fn build_typed_bindings(
             .entry(eid.clone())
             .or_insert_with(|| TypedEquipmentBinding {
                 equipment_id: eid.clone(),
-                equip_type: resolve_equip_type(row, &eid, &types),
+                equip_type: resolve_equip_type(&eid, &sparql_types, &conflict_ids, &types),
                 equip_iri: row.get("equip").cloned(),
                 points: vec![],
             });
-        apply_sparql_equip_type(entry, row);
         if entry.equip_iri.is_none() {
             entry.equip_iri = row.get("equip").cloned();
         }
@@ -660,6 +708,7 @@ fn build_typed_bindings(
         query_engine: QUERY_ENGINE.to_string(),
         not_edge_prototype_graph: true,
         equipment: by_equip.into_values().collect(),
+        classifier_conflicts,
         sparql_row_count: rows.len(),
         truncated,
     }
@@ -805,6 +854,75 @@ mod tests {
             .find(|e| e.equipment_id == "AHU_CASE_1")
             .expect("ahu");
         assert_eq!(ahu.equip_type.as_deref(), Some("ahu"));
+        assert!(
+            set.classifier_conflicts.is_empty(),
+            "unambiguous sample must not conflict: {:?}",
+            set.classifier_conflicts
+        );
+    }
+
+    #[test]
+    fn mech_system_summary_rejects_multi_classifier_has_tag() {
+        // ahu + fan both match mech_system_summary VALUES → conflict, not last-wins.
+        let mut meta = sample_meta();
+        for eq in &mut meta.equipment {
+            if eq.equipment_id == "AHU_CASE_1" {
+                eq.haystack_tags = vec!["ahu".into(), "fan".into(), "equip".into()];
+            }
+        }
+        // Inventory stamp must not paper over the SPARQL classifier conflict.
+        let inv = sample_inventory();
+        let set =
+            execute_template_from_meta(&meta, Some(&inv), None, "mech_system_summary")
+                .expect("mech_system_summary");
+        let ahu = set
+            .equipment
+            .iter()
+            .find(|e| e.equipment_id == "AHU_CASE_1")
+            .expect("ahu still listed");
+        assert!(
+            ahu.equip_type.is_none(),
+            "multi-classifier must clear equip_type (got {:?})",
+            ahu.equip_type
+        );
+        let conflict = set
+            .classifier_conflicts
+            .iter()
+            .find(|c| c.equipment_id == "AHU_CASE_1")
+            .expect("classifier_conflicts must list AHU_CASE_1");
+        assert_eq!(conflict.reason, "multi_classifier_hasTag");
+        assert_eq!(conflict.equip_types, vec!["ahu", "fan"]);
+        // Sibling equips with a single class tag remain typed.
+        let vav = set
+            .equipment
+            .iter()
+            .find(|e| e.equipment_id == "VAV_CASE_1")
+            .expect("vav");
+        assert_eq!(vav.equip_type.as_deref(), Some("vav"));
+    }
+
+    #[test]
+    fn sparql_equip_type_index_detects_conflict() {
+        let rows = vec![
+            BTreeMap::from([
+                ("equipmentId".into(), "X1".into()),
+                ("equipType".into(), "ahu".into()),
+            ]),
+            BTreeMap::from([
+                ("equipmentId".into(), "X1".into()),
+                ("equipType".into(), "fan".into()),
+            ]),
+            BTreeMap::from([
+                ("equipmentId".into(), "Y1".into()),
+                ("equipType".into(), "vav".into()),
+            ]),
+        ];
+        let (ok, conflicts) = sparql_equip_type_index(&rows);
+        assert_eq!(ok.get("Y1").map(String::as_str), Some("vav"));
+        assert!(!ok.contains_key("X1"));
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].equipment_id, "X1");
+        assert_eq!(conflicts[0].equip_types, vec!["ahu", "fan"]);
     }
 
     #[test]
