@@ -114,6 +114,35 @@ function redirectToAuth(): void {
   }
 }
 
+/** Merge auth + caller headers; set JSON Content-Type when body is a string. */
+export function buildApiHeaders(
+  init: RequestInit | undefined,
+  authHeader: Record<string, string>,
+  requestId: string,
+): Headers {
+  const headers = new Headers({
+    Accept: "application/json",
+    [REQUEST_ID_HEADER]: requestId,
+    ...authHeader,
+  });
+  if (init?.headers) {
+    new Headers(init.headers).forEach((value, key) => {
+      headers.set(key, value);
+    });
+  }
+  // Soft-OPEN P0-4: SPARQL and other POSTs send JSON.stringify bodies without
+  // Content-Type; central requires application/json (else 415).
+  const body = init?.body;
+  if (
+    typeof body === "string" &&
+    body.length > 0 &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set("Content-Type", "application/json");
+  }
+  return headers;
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
@@ -130,12 +159,7 @@ export async function apiFetch<T>(
   const timed = attachLivenessSignal(path, init);
   const res = await fetch(buildUrl(path), {
     ...timed,
-    headers: {
-      Accept: "application/json",
-      [REQUEST_ID_HEADER]: requestId,
-      ...authHeader,
-      ...(timed.headers ?? {}),
-    },
+    headers: buildApiHeaders(timed, authHeader, requestId),
   });
 
   const responseRequestId =

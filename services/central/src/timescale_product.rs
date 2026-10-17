@@ -1,7 +1,7 @@
 //! Wave-X Soft-OPEN product paths on Timescale (Inspect / RCx / FDD series / FDD run).
 //! No DataFusion / Parquet. Soft-OPEN ≠ FQ.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -136,6 +136,21 @@ async fn list_equipment(tsdb: &Tsdb, building_id: &str) -> Result<Vec<(String, O
                 r.try_get::<Option<String>, _>("equip_type").ok().flatten(),
             )
         })
+        .collect())
+}
+
+/// Soft-OPEN P0-2: equipment_id → equip_type for `/api/fdd/results` kind filters.
+pub async fn type_map_for_building(
+    building_id: Option<&str>,
+) -> Result<BTreeMap<String, String>> {
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(BTreeMap::new());
+    };
+    let tsdb = Tsdb::connect_from_env().await?;
+    let rows = list_equipment(&tsdb, bid).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|(id, typ)| typ.map(|t| (id, t)))
         .collect())
 }
 
@@ -953,9 +968,11 @@ LIMIT $2
         "rows": out_rows,
         "series": lean,
         "confirmed_fault": {"ts": fault_ts, "y": fault_y},
-        "fault_hours": Value::Null,
+        "fault_hours": load_result_fault_hours(building_id, equipment_id, &rule.rule_id)
+            .map(|h| json!(h))
+            .unwrap_or(Value::Null),
         "point_count": point_count,
-        "downsampled": true,
+        "downsampled": point_count >= max_pts,
         "max_points": max_pts,
         "lean_budget": {
             "max_roles": LEAN_PLOT_MAX_ROLES,
@@ -1207,6 +1224,7 @@ fn load_confirmed_fault_hint(
     let text = std::fs::read_to_string(path)?;
     let body: Value = serde_json::from_str(&text)?;
     let mut map = HashMap::new();
+    // Preferred: top-level per-sample series.
     if let Some(series) = body.get("fault_series").and_then(|v| v.as_array()) {
         for row in series {
             let eq = row
@@ -1230,6 +1248,24 @@ fn load_confirmed_fault_hint(
         }
     }
     Ok(map)
+}
+
+/// Soft-OPEN P0-3: fill plot `fault_hours` from the on-file rule result row.
+fn load_result_fault_hours(
+    building_id: &str,
+    equipment_id: &str,
+    rule_id: &str,
+) -> Option<f64> {
+    let path = results_dir(building_id).join(format!("{rule_id}.json"));
+    let text = std::fs::read_to_string(path).ok()?;
+    let body: Value = serde_json::from_str(&text).ok()?;
+    body.get("rows")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|row| {
+            row.get("equipment_id").and_then(Value::as_str) == Some(equipment_id)
+        })
+        .and_then(|row| row.get("fault_hours").and_then(Value::as_f64))
 }
 
 fn session_override_for_rule(

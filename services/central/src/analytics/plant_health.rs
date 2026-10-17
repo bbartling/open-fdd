@@ -571,8 +571,19 @@ fn interpret_status(status: &str, hours: f64) -> Flag {
 
 type FddIndex = HashMap<String, HashMap<String, (String, f64)>>;
 
-fn fdd_index(building_id: &str) -> (bool, FddIndex) {
-    let body = open_fdd_edge_prototype::fdd::registry_api::results_response(Some(building_id));
+async fn fdd_index(building_id: &str) -> (bool, FddIndex) {
+    let body = if crate::timescale_historian::historian_is_timescale() {
+        let types = crate::timescale_product::type_map_for_building(Some(building_id))
+            .await
+            .unwrap_or_default();
+        open_fdd_edge_prototype::fdd::registry_api::results_response_with_types(
+            Some(building_id),
+            &types,
+            "timescale_equipment",
+        )
+    } else {
+        open_fdd_edge_prototype::fdd::registry_api::results_response(Some(building_id))
+    };
     let rows = body
         .get("results")
         .and_then(Value::as_array)
@@ -738,11 +749,17 @@ async fn matrix_from_history_or_fdd(
         ..Default::default()
     };
     let mut env = envelope_with_engine(spec.query_version, &query, vec![], DF_ENGINE);
-    let (has_fdd, index) = fdd_index(bid);
-    let stamped_types = open_fdd_edge_prototype::equipment_types::load_type_map(
-        &super::historian::parquet_root(),
-        Some(bid),
-    );
+    let (has_fdd, index) = fdd_index(bid).await;
+    let stamped_types = if crate::timescale_historian::historian_is_timescale() {
+        crate::timescale_product::type_map_for_building(Some(bid))
+            .await
+            .unwrap_or_default()
+    } else {
+        open_fdd_edge_prototype::equipment_types::load_type_map(
+            &super::historian::parquet_root(),
+            Some(bid),
+        )
+    };
     let equipment_ids = equipment_ids_for_spec(bid, spec, &index).await?;
     let mut score_counts: BTreeMap<String, u32> = BTreeMap::new();
     let mut matched = 0usize;

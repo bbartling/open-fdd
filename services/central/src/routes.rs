@@ -3898,6 +3898,20 @@ pub async fn fdd_results(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
+    // Soft-OPEN P0-2: kind filter must use Timescale equipment stamps, not
+    // Parquet-era equipment_types.json (empty → every rule NOT_APPLICABLE).
+    if crate::timescale_historian::historian_is_timescale() {
+        let types = crate::timescale_product::type_map_for_building(q.scoped())
+            .await
+            .unwrap_or_default();
+        return Ok(Json(
+            open_fdd_edge_prototype::fdd::registry_api::results_response_with_types(
+                q.scoped(),
+                &types,
+                "timescale_equipment",
+            ),
+        ));
+    }
     Ok(Json(
         open_fdd_edge_prototype::fdd::registry_api::results_response(q.scoped()),
     ))

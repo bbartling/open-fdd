@@ -237,7 +237,7 @@ describe("ReportsPage FDD Plots", () => {
     renderPlots();
     await waitFor(() => {
       expect(screen.getByTestId("plots-no-fault").textContent).toMatch(
-        /timestamp join failed/,
+        /per-sample confirmed_fault|Soft-OPEN overlay gap/,
       );
     });
   });
