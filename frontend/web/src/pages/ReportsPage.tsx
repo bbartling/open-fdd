@@ -359,9 +359,14 @@ export function ReportsPage() {
           "Zone comfort gate removed all samples (unoccupied). Uncheck the gate or widen Overview schedule.",
         );
       } else if (!hasFaultOverlay && resultExists) {
+        // Soft-OPEN P0-3: tip writer stores confirm_aggregate only — not a
+        // per-sample series — so the join never matches. Distinguish that
+        // from a true join bug once per-sample fault_series lands.
         setNoFaultIsError(true);
         setNoFaultBanner(
-          "Fault overlay missing after a successful rule run — timestamp join failed. This is a bug, not “no fault lane yet.”",
+          resultsFault
+            ? "Fault hours are on file, but per-sample confirmed_fault is not written yet (confirm_aggregate only). Soft-OPEN overlay gap — not “no fault lane.”"
+            : "Fault overlay missing after a successful rule run — no per-sample confirmed_fault series to join. Soft-OPEN overlay gap.",
         );
       } else if (resultsFault && hasFaultOverlay && trueFaultCount === 0) {
         setNoFaultIsError(true);

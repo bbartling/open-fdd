@@ -1,35 +1,25 @@
-# Beginner lessons — SPARQL → pandas → SQL (Open-FDD Soft-OPEN)
+# Beginner lessons — SPARQL → pandas → open_fdd + RDF mutate
 
 Teaching twin of [`scripts/stress/`](../stress/). Same JWT `--host` / `--base-url`
-helpers. Soft-OPEN ≠ FQ. **Synthetic `building_id` only** — never hardcode private
-consumer campus names in scripts or docs.
-
-Vocabulary: **Project Haystack RDF** / package `ofdd:` Turtle via central
-`POST /api/model/sparql` and package TTL routes.
+helpers. Soft-OPEN ≠ FQ. **Synthetic `building_id` only**.
 
 ## Point at the API
 
-| Where you run | Command |
+| Where | Command |
 | --- | --- |
-| Lab box (localhost) | `python scripts/lessons/… --building-id SYNTH_01` |
-| Windows / LAN laptop | `python scripts/lessons/… --host <lab-ip> --building-id SYNTH_01` |
-| Full URL | `--base-url http://<lab-ip>:8080` |
+| Railway hub | `python scripts/lessons/… --base-url https://openfdd-web-production.up.railway.app --building-id SYNTH_03` |
+| Lab LAN | `python scripts/lessons/… --host <lab-ip> --building-id SYNTH_03` |
 
-Defaults: `http://127.0.0.1:8080`. Env: `OPENFDD_API_BASE`, `OPENFDD_AGENT_PASSWORD`,
-`OPENFDD_STRESS_BUILDING_ID`.
+Env: `OPENFDD_API_BASE`, `OPENFDD_AGENT_PASSWORD` (or admin), `OPENFDD_STRESS_BUILDING_ID`.
 
-## Lessons (land with Track C follow-ups)
+## Lessons
 
-| Lesson | Script | Topic |
+| # | Script | Proves |
 | --- | --- | --- |
-| 01 | `lesson_01_sites_and_equipment.py` | Health + SPARQL list equipment (T13+) |
-| 02 | `lesson_02_fc1_points.py` | SPARQL → FC1 / role point ids |
-| 03 | `lesson_03_fc1_dataframe.py` | Historian/timeseries → pandas DF |
-| 04 | `lesson_04_pandas_vs_sql.py` | Local pandas ≈ server SQL FDD hours |
+| 01 | `lesson_01_sites_and_equipment.py` | Health + SPARQL list equipment |
+| 03 | `lesson_03_fc1_dataframe.py` | SPARQL → point-resolve → **pandas DF** → **`open_fdd.rules` FC1** |
+| 05 | `lesson_05_rdf_semantic_meta_put.py` | **GET/PUT `/api/model/semantic-meta`** (dry_run + CAS write + restore) |
 
-Companion `.rq` files for Swagger / `POST /api/model/sparql` live in [`sparql/`](sparql/).
+Needs for 03: `pip install pandas open-fdd pyyaml`.
 
-## Windows notes
-
-- Consoles default to cp1252; helpers force UTF-8 / replace so arrows never crash.
-- Install: `pip install pandas` when DataFrame lessons land; helpers use stdlib only.
+Fixture: [`scripts/fixtures/softopen/SYNTH_03_timeseries_semantic_meta.zip`](../fixtures/softopen/).

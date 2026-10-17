@@ -1,7 +1,7 @@
 //! Wave-X Soft-OPEN product paths on Timescale (Inspect / RCx / FDD series / FDD run).
 //! No DataFusion / Parquet. Soft-OPEN ≠ FQ.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -136,6 +136,19 @@ async fn list_equipment(tsdb: &Tsdb, building_id: &str) -> Result<Vec<(String, O
                 r.try_get::<Option<String>, _>("equip_type").ok().flatten(),
             )
         })
+        .collect())
+}
+
+/// Soft-OPEN P0-2: equipment_id → equip_type for `/api/fdd/results` kind filters.
+pub async fn type_map_for_building(building_id: Option<&str>) -> Result<BTreeMap<String, String>> {
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(BTreeMap::new());
+    };
+    let tsdb = Tsdb::connect_from_env().await?;
+    let rows = list_equipment(&tsdb, bid).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|(id, typ)| typ.map(|t| (id, t)))
         .collect())
 }
 
@@ -953,9 +966,11 @@ LIMIT $2
         "rows": out_rows,
         "series": lean,
         "confirmed_fault": {"ts": fault_ts, "y": fault_y},
-        "fault_hours": Value::Null,
+        "fault_hours": load_result_fault_hours(building_id, equipment_id, &rule.rule_id)
+            .map(|h| json!(h))
+            .unwrap_or(Value::Null),
         "point_count": point_count,
-        "downsampled": true,
+        "downsampled": point_count >= max_pts,
         "max_points": max_pts,
         "lean_budget": {
             "max_roles": LEAN_PLOT_MAX_ROLES,
@@ -1001,8 +1016,94 @@ pub fn plots_by_rule_catalog() -> Result<Value> {
     }))
 }
 
-/// Soft-OPEN R5: bounded Timescale history for an opaque point (`openfdd_key` exact match).
-/// Does **not** invent identity via `split_part` — caller supplies the opaque key from IRI parse.
+/// Soft-OPEN #1278: package seed writes `equip.role`; SPARQL / opaque IRIs often
+/// carry the CSV **column** (`SAT`). Build candidate Timescale keys so history
+/// lookup does not return 0 when column ≠ role.
+pub fn candidate_openfdd_keys_for_point(
+    building_id: &str,
+    equipment_id: &str,
+    point_key: &str,
+) -> Vec<String> {
+    let eq = equipment_id.trim();
+    let pk = point_key.trim();
+    if eq.is_empty() || pk.is_empty() {
+        return Vec::new();
+    }
+    let mut keys = Vec::new();
+    let mut push = |suffix: &str| {
+        if suffix.is_empty() {
+            return;
+        }
+        let k = format!("{eq}.{suffix}");
+        if !keys.iter().any(|x| x == &k) {
+            keys.push(k);
+        }
+    };
+    push(pk);
+    let lower = pk.to_ascii_lowercase();
+    if lower != pk {
+        push(&lower);
+    }
+    let norm = fdd_core::normalize_role(pk);
+    push(&norm);
+    if let Some(role) = role_from_package_column(building_id, eq, pk) {
+        push(&role);
+        push(&fdd_core::normalize_role(&role));
+        push(&fdd_core::haystack_point_to_role(&role));
+    }
+    keys
+}
+
+/// Invert package mapping `column → role` (and haystack `role → column`) for one equip.
+fn role_from_package_column(
+    building_id: &str,
+    equipment_id: &str,
+    point_key: &str,
+) -> Option<String> {
+    let inv = open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler(
+        building_id,
+        Some(equipment_id),
+    );
+    let equips = inv.get("equipment")?.as_array()?;
+    for eq in equips {
+        if eq.get("equipment_id").and_then(Value::as_str) != Some(equipment_id) {
+            continue;
+        }
+        if let Some(cols) = eq.get("columns").and_then(Value::as_array) {
+            for row in cols {
+                let col = row.get("column").and_then(Value::as_str).unwrap_or("");
+                if col.eq_ignore_ascii_case(point_key) {
+                    let role = row.get("role").and_then(Value::as_str).unwrap_or("");
+                    if !role.is_empty() {
+                        return Some(role.to_string());
+                    }
+                }
+            }
+        }
+        if let Some(roles) = eq.get("roles").and_then(Value::as_object) {
+            for (col, role_v) in roles {
+                if col.eq_ignore_ascii_case(point_key) {
+                    if let Some(role) = role_v.as_str().filter(|s| !s.is_empty()) {
+                        return Some(role.to_string());
+                    }
+                }
+            }
+            // Haystack-style map: role/tag → CSV column.
+            for (hs_or_role, col_v) in roles {
+                if col_v
+                    .as_str()
+                    .is_some_and(|c| c.eq_ignore_ascii_case(point_key))
+                {
+                    return Some(hs_or_role.clone());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Soft-OPEN R5: bounded Timescale history for an opaque point.
+/// Tries column and role key candidates (#1278) — does not invent keys via `split_part`.
 pub async fn opaque_point_history_softopen(
     building_id: &str,
     openfdd_key: &str,
@@ -1017,23 +1118,38 @@ pub async fn opaque_point_history_softopen(
             "soft_open_neq_fq": true,
         }));
     }
+    let (equipment_id, point_key) = match key.split_once('.') {
+        Some((eq, pk)) => (eq, pk),
+        None => {
+            return Ok(json!({
+                "ok": false,
+                "error": "openfdd_key must be equipment_id.point_key",
+                "soft_open_neq_fq": true,
+            }));
+        }
+    };
+    let candidates = candidate_openfdd_keys_for_point(bid, equipment_id, point_key);
     let limit = max_points.clamp(1, 2000) as i64;
     let tsdb = Tsdb::connect_from_env().await?;
     let rows = sqlx::query(
         r#"
         SELECT ts, openfdd_key, val
         FROM sample
-        WHERE site_id = $1 AND openfdd_key = $2
+        WHERE site_id = $1 AND openfdd_key = ANY($2)
         ORDER BY ts DESC
         LIMIT $3
         "#,
     )
     .bind(bid)
-    .bind(key)
+    .bind(&candidates)
     .bind(limit)
     .fetch_all(tsdb.pool())
     .await
     .context("opaque_point_history_softopen")?;
+    let resolved_key = rows
+        .first()
+        .and_then(|r| r.try_get::<String, _>("openfdd_key").ok())
+        .unwrap_or_else(|| key.to_string());
     let mut samples = Vec::with_capacity(rows.len());
     for r in rows.into_iter().rev() {
         let ts: DateTime<Utc> = r.get("ts");
@@ -1046,14 +1162,16 @@ pub async fn opaque_point_history_softopen(
     Ok(json!({
         "ok": true,
         "building_id": bid,
-        "openfdd_key": key,
+        "openfdd_key": resolved_key,
+        "requested_openfdd_key": key,
+        "candidate_openfdd_keys": candidates,
         "point_count": samples.len(),
         "max_points": limit,
         "samples": samples,
         "engine": TS_ENGINE,
         "source": "timescale_sample",
         "soft_open_neq_fq": true,
-        "note": "Soft-OPEN opaque point history via exact openfdd_key — Soft-OPEN ≠ FQ",
+        "note": "Soft-OPEN opaque point history; column≠role candidates per #1278 — Soft-OPEN ≠ FQ",
     }))
 }
 
@@ -1207,6 +1325,7 @@ fn load_confirmed_fault_hint(
     let text = std::fs::read_to_string(path)?;
     let body: Value = serde_json::from_str(&text)?;
     let mut map = HashMap::new();
+    // Preferred: top-level per-sample series.
     if let Some(series) = body.get("fault_series").and_then(|v| v.as_array()) {
         for row in series {
             let eq = row
@@ -1230,6 +1349,18 @@ fn load_confirmed_fault_hint(
         }
     }
     Ok(map)
+}
+
+/// Soft-OPEN P0-3: fill plot `fault_hours` from the on-file rule result row.
+fn load_result_fault_hours(building_id: &str, equipment_id: &str, rule_id: &str) -> Option<f64> {
+    let path = results_dir(building_id).join(format!("{rule_id}.json"));
+    let text = std::fs::read_to_string(path).ok()?;
+    let body: Value = serde_json::from_str(&text).ok()?;
+    body.get("rows")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|row| row.get("equipment_id").and_then(Value::as_str) == Some(equipment_id))
+        .and_then(|row| row.get("fault_hours").and_then(Value::as_f64))
 }
 
 fn session_override_for_rule(
@@ -2043,5 +2174,19 @@ mod plot_role_tests {
         assert_eq!(clamp_max_points(None), 1500);
         assert_eq!(clamp_max_points(Some(10)), 50);
         assert_eq!(clamp_max_points(Some(99_999)), 5000);
+    }
+
+    #[test]
+    fn candidate_keys_include_role_when_column_is_sat() {
+        // Soft-OPEN #1278: SPARQL/opaque IRI uses CSV column SAT; seed stores AHU_1.sat.
+        let keys = candidate_openfdd_keys_for_point("SYNTH_01", "AHU_1", "SAT");
+        assert!(
+            keys.iter().any(|k| k == "AHU_1.SAT"),
+            "exact column key missing: {keys:?}"
+        );
+        assert!(
+            keys.iter().any(|k| k == "AHU_1.sat"),
+            "normalized role key missing: {keys:?}"
+        );
     }
 }

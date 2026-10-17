@@ -3898,6 +3898,20 @@ pub async fn fdd_results(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
+    // Soft-OPEN P0-2: kind filter must use Timescale equipment stamps, not
+    // Parquet-era equipment_types.json (empty → every rule NOT_APPLICABLE).
+    if crate::timescale_historian::historian_is_timescale() {
+        let types = crate::timescale_product::type_map_for_building(q.scoped())
+            .await
+            .unwrap_or_default();
+        return Ok(Json(
+            open_fdd_edge_prototype::fdd::registry_api::results_response_with_types(
+                q.scoped(),
+                &types,
+                "timescale_equipment",
+            ),
+        ));
+    }
     Ok(Json(
         open_fdd_edge_prototype::fdd::registry_api::results_response(q.scoped()),
     ))
@@ -4092,6 +4106,11 @@ pub async fn model_point_resolve(
         return Err(deny);
     }
     let openfdd_key = parsed.openfdd_key();
+    let candidate_keys = crate::timescale_product::candidate_openfdd_keys_for_point(
+        &parsed.building_id,
+        &parsed.equipment_id,
+        &parsed.point_key,
+    );
     let mut body = json!({
         "ok": true,
         "point_iri": iri,
@@ -4099,8 +4118,9 @@ pub async fn model_point_resolve(
         "equipment_id": parsed.equipment_id,
         "point_key": parsed.point_key,
         "openfdd_key": openfdd_key,
+        "candidate_openfdd_keys": candidate_keys,
         "soft_open_neq_fq": true,
-        "note": "Soft-OPEN opaque point resolve — Soft-OPEN ≠ FQ",
+        "note": "Soft-OPEN opaque point resolve (#1278 column≠role candidates) — Soft-OPEN ≠ FQ",
     });
     if q.include_history.unwrap_or(false) {
         let history = if !crate::timescale_historian::historian_is_timescale() {
@@ -4118,7 +4138,16 @@ pub async fn model_point_resolve(
             )
             .await
             {
-                Ok(hist) => hist,
+                Ok(hist) => {
+                    // Prefer the key that actually had samples (role key when column≠role).
+                    if let Some(resolved) = hist.get("openfdd_key").and_then(Value::as_str) {
+                        if let Some(obj) = body.as_object_mut() {
+                            obj.insert("openfdd_key".into(), json!(resolved));
+                            obj.insert("requested_openfdd_key".into(), json!(openfdd_key));
+                        }
+                    }
+                    hist
+                }
                 Err(e) => json!({
                     "ok": false,
                     "error": e.to_string(),

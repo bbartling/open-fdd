@@ -1,7 +1,7 @@
 //! Wave-X Timescale registry API — no DataFusion SessionContext.
 //! Registry-backed FDD API - loads `sql_rules/registry.yaml` via `fdd_rules`.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use fdd_rules::{load_registry, RuleRegistry, RuleSpec};
@@ -478,9 +478,23 @@ pub fn equipment_response_scoped(building_id: Option<&str>, tenant_id: Option<&s
 ///
 /// `building_id` reads from the site-scoped results dir so two buildings' runs
 /// do not clobber one another.
+///
+/// Soft-OPEN P0-2: prefer [`results_response_with_types`] with Timescale
+/// `equipment.equip_type` stamps. This Parquet-era fallback stays for
+/// non-Timescale lab paths only.
 pub fn results_response(building_id: Option<&str>) -> Value {
-    let dir = results_dir(building_id);
     let stamped_types = crate::equipment_types::load_type_map(&parquet_root(), building_id);
+    results_response_with_types(building_id, &stamped_types, "package_or_parquet")
+}
+
+/// Same as [`results_response`], but equipment kinds come from the caller's
+/// type map (Timescale `equipment` table on tip).
+pub fn results_response_with_types(
+    building_id: Option<&str>,
+    stamped_types: &BTreeMap<String, String>,
+    type_source_label: &str,
+) -> Value {
+    let dir = results_dir(building_id);
     let reg = load_reg().ok();
     let mut metadata = HashMap::new();
     let mut kinds_by_rule: HashMap<String, Vec<String>> = HashMap::new();
@@ -558,13 +572,18 @@ pub fn results_response(building_id: Option<&str>) -> Value {
                     .get("missing_roles")
                     .cloned()
                     .unwrap_or_else(|| json!([]));
+                let type_source = if stamped.is_some() {
+                    type_source_label
+                } else {
+                    "missing"
+                };
                 rows.push(json!({
                     "rule_id": rule_id,
                     "title": metadata.get(rule_id).cloned().unwrap_or_default(),
                     "equipment_id": equipment_id,
                     "equipment_type": crate::equipment_types::api_equipment_type_for(equipment_id, stamped),
                     "equipment_type_raw": stamped,
-                    "equipment_type_source": crate::equipment_types::equipment_type_source(stamped),
+                    "equipment_type_source": type_source,
                     "status": status,
                     "fault_hours": fault_hours,
                     "fault_pct": row.get("fault_pct").and_then(Value::as_f64),

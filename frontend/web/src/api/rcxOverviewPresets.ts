@@ -19,6 +19,7 @@ import { analyticsWindowFromSampling } from "../lib/overviewMetrics";
 import { getPackageMapping } from "./mappingApi";
 import type { PlotlyFigure } from "./plotDataset";
 import { rcxPresetTables, type RcxPresetTable } from "./rcxPresetTables";
+import { normalizeTipOverviewEnvelope } from "./tipAnalyticsNormalize";
 
 export const OVERVIEW_RCX_PRESET_IDS = [
   "ahu_motor_weekly",
@@ -79,7 +80,9 @@ export async function loadOverviewRcxPreset(
     ...(refresh ? { refresh: true } : {}),
   };
   if (presetId in PLANT_FOR) {
-    const env = await postRuntime(body);
+    const raw = await postRuntime(body);
+    // Soft-OPEN P0-5: tip SQL emits plant_group=ahu|motor; Overview bars need air|boiler|chiller.
+    const env = normalizeTipOverviewEnvelope("runtime", raw);
     const plants = weeklyPlantFigures(env.rows ?? []);
     const plant = plants.find((p) => p.plant_group === PLANT_FOR[presetId]);
     return {

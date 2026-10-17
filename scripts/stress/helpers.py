@@ -533,6 +533,66 @@ def fdd_run(
     return http.post_json("/api/fdd/run", headers=headers, json_body=body)
 
 
+def fdd_plot(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    building_id: str,
+    equipment_id: str,
+    rule_id: str,
+    max_points: int = 1500,
+) -> dict[str, Any]:
+    """GET /api/fdd/plot — Soft-OPEN plot bool gate (point_count, no screenshots)."""
+    return http.get_json(
+        "/api/fdd/plot",
+        headers=headers,
+        params={
+            "building_id": building_id,
+            "equipment_id": equipment_id,
+            "rule_id": rule_id,
+            "max_points": max_points,
+        },
+    )
+
+
+def fdd_results(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    building_id: str,
+) -> dict[str, Any]:
+    """GET /api/fdd/results — normalized last-run rows."""
+    return http.get_json(
+        "/api/fdd/results",
+        headers=headers,
+        params={"building_id": building_id},
+    )
+
+
+def fdd_equipment(
+    http: HttpClient,
+    headers: dict[str, str],
+    *,
+    building_id: str,
+) -> dict[str, Any]:
+    """GET /api/fdd/equipment — Timescale-stamped inventory."""
+    return http.get_json(
+        "/api/fdd/equipment",
+        headers=headers,
+        params={"building_id": building_id},
+    )
+
+
+def unique_softopen_building_id(*, shortsha: str | None = None) -> str:
+    """Unique Soft-OPEN site id for Railway lesson/stress runs (not a campus name)."""
+    import datetime as _dt
+
+    day = _dt.datetime.utcnow().strftime("%Y%m%d")
+    sha = (shortsha or os.environ.get("OPENFDD_SOFTOPEN_SHA") or "local").strip()
+    sha = sha.removeprefix("sha-")[:7] or "local"
+    return f"SOFTOPEN_{day}_{sha}"
+
+
 def analytics_post(
     http: HttpClient,
     headers: dict[str, str],

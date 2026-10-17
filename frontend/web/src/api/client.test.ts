@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attachLivenessSignal,
+  buildApiHeaders,
   isCentralUnavailable,
   livenessTimeoutMs,
   parseErrorEnvelope,
@@ -61,5 +62,29 @@ describe("parseErrorEnvelope", () => {
     expect(
       parseErrorEnvelope(JSON.stringify({ error: { code: "only_code" } })),
     ).toBeNull();
+  });
+
+  it("sets Content-Type application/json for string JSON bodies (SPARQL P0-4)", () => {
+    const headers = buildApiHeaders(
+      { method: "POST", body: JSON.stringify({ building_id: "SYNTH_01", query: "ASK {}" }) },
+      {},
+      "req-sparql",
+    );
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("Accept")).toBe("application/json");
+    expect(headers.get("x-request-id")).toBe("req-sparql");
+  });
+
+  it("does not override an explicit Content-Type", () => {
+    const headers = buildApiHeaders(
+      {
+        method: "POST",
+        body: "plain",
+        headers: { "Content-Type": "text/plain" },
+      },
+      {},
+      "req-2",
+    );
+    expect(headers.get("Content-Type")).toBe("text/plain");
   });
 });
