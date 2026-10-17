@@ -2,9 +2,15 @@
 """Lesson 03 — SPARQL → point-resolve history → pandas DataFrame → open_fdd.rules.
 
 Proves the teaching path:
-  1. POST /api/model/sparql finds AHU + SAT (or discharge-air) points
+  1. POST /api/model/sparql finds AHU + FC1 points
   2. GET /api/model/point-resolve?include_history=true builds a DF
   3. ``open_fdd.rules.run_rule("FC1", df, …)`` runs locally on that DF
+
+FC1 (GL36 A) required open_fdd columns:
+  duct-static-pressure, duct-static-pressure-sp, fan-cmd
+
+Package seed short keys (opaque IRI suffix) are usually:
+  duct_static, duct_static_sp, fan_cmd
 
   python scripts/lessons/lesson_03_fc1_dataframe.py \\
     --base-url https://openfdd-web-production.up.railway.app --building-id SYNTH_03
@@ -37,8 +43,22 @@ from lesson_helpers import (  # noqa: E402
     wait_until_ready,
 )
 
-# Roles FC1 needs (cookbook / SQL short names after seed).
-FC1_ROLES = ("sat", "mat", "oa_t", "rat", "oa_damper_pct", "fan_status")
+# open_fdd cookbook role → package history key candidates (first hit wins).
+FC1_OPENFDD_TO_KEYS: dict[str, tuple[str, ...]] = {
+    "duct-static-pressure": (
+        "duct_static",
+        "duct-static-pressure",
+        "duct_static_pressure",
+        "dsp",
+    ),
+    "duct-static-pressure-sp": (
+        "duct_static_sp",
+        "duct-static-pressure-sp",
+        "duct_static_pressure_sp",
+        "dsp_sp",
+    ),
+    "fan-cmd": ("fan_cmd", "fan-cmd", "sf_cmd", "supply_fan_cmd"),
+}
 
 POINTS_RQ = """\
 PREFIX phIoT: <https://project-haystack.org/def/phIoT/4.0.0#>
@@ -76,55 +96,50 @@ def _pick_ahu(rows: list[dict[str, str]]) -> str:
                 (r.get("pointId") or "").lower(),
             ]
         )
-        if "ahu" in blob or "sat" in blob or "mat" in blob:
+        if "ahu" in blob or "duct_static" in blob or "fan_cmd" in blob:
             counts[eid] = counts.get(eid, 0) + 1
     if not counts:
         raise SystemExit("FAIL: SPARQL returned no AHU-ish equipment for building_id")
     return max(counts, key=counts.get)
 
 
-def _role_for_column(col: str, sel: str) -> str | None:
-    blob = f"{col} {sel}".lower().replace("-", "_")
-    aliases = {
-        "sat": ("sat", "discharge_air", "da_t", "supply_air_temp"),
-        "mat": ("mat", "mixed_air"),
-        "oa_t": ("oa_t", "outside_air_temp", "oat"),
-        "rat": ("rat", "return_air"),
-        "oa_damper_pct": ("oa_damper", "oad", "outside_air_damper"),
-        "fan_status": ("fan_status", "fan_stat", "sf_s"),
-    }
-    for role, keys in aliases.items():
-        if any(k in blob for k in keys):
-            return role
-    # Exact cookbook column already used as openfdd_key suffix.
-    if col.lower() in aliases:
-        return col.lower()
-    return None
+def _norm(s: str) -> str:
+    return s.lower().replace("-", "_")
+
+
+def _resolve_package_key(
+    openfdd_role: str, equipment_id: str, role_rows: list[dict[str, str]]
+) -> str:
+    """Map open_fdd FC1 role → package column / pointId used in opaque IRI."""
+    candidates = FC1_OPENFDD_TO_KEYS[openfdd_role]
+    avail: list[str] = []
+    for r in role_rows:
+        if (r.get("equipmentId") or "").strip() != equipment_id:
+            continue
+        for field in ("column", "pointId", "fddSelection"):
+            v = (r.get(field) or "").strip()
+            if v:
+                avail.append(v)
+    # Exact / alias match against SPARQL columns first.
+    for cand in candidates:
+        cn = _norm(cand)
+        for a in avail:
+            if _norm(a) == cn or cn in _norm(a):
+                # Prefer package short key (underscore) when SPARQL has it.
+                return a if "_" in a or "-" not in a else cand
+    # Package seed defaults (SYNTH_03 / openfdd_package_v1).
+    return candidates[0]
 
 
 def _df_for_ahu(http, headers, building_id: str, equipment_id: str, role_rows: list[dict[str, str]]):
     import pandas as pd
 
     by_role: dict[str, str] = {}
-    for r in role_rows:
-        if (r.get("equipmentId") or "").strip() != equipment_id:
-            continue
-        col = (r.get("column") or r.get("pointId") or "").strip()
-        sel = (r.get("fddSelection") or "").strip()
-        role = _role_for_column(col, sel)
-        if role and role in FC1_ROLES and col and role not in by_role:
-            by_role[role] = col
-    # Prefer role-named keys when SPARQL is thin (package seed uses role suffixes).
-    for role in FC1_ROLES:
-        by_role.setdefault(role, role)
-
-    missing = [r for r in FC1_ROLES if r not in by_role]
-    if missing:
-        raise SystemExit(f"FAIL: could not map FC1 roles {missing}")
+    for openfdd_role in FC1_OPENFDD_TO_KEYS:
+        by_role[openfdd_role] = _resolve_package_key(openfdd_role, equipment_id, role_rows)
 
     series: dict[str, "pd.Series"] = {}
-    for role in FC1_ROLES:
-        key = by_role[role]
+    for openfdd_role, key in by_role.items():
         iri = mint_opaque_point_iri(building_id, equipment_id, key)
         body = point_resolve(
             http, headers, point_iri=iri, include_history=True, max_points=2000
@@ -138,7 +153,9 @@ def _df_for_ahu(http, headers, building_id: str, equipment_id: str, role_rows: l
                 f"FAIL: {iri} only {len(samples)} samples — need Timescale history"
             )
         idx = pd.to_datetime([s["ts"] for s in samples], utc=True)
-        series[role] = pd.Series([s.get("val") for s in samples], index=idx, name=role)
+        series[openfdd_role] = pd.Series(
+            [s.get("val") for s in samples], index=idx, name=openfdd_role
+        )
 
     df = pd.DataFrame(series).sort_index()
     df = df[~df.index.duplicated(keep="last")]
@@ -173,7 +190,7 @@ def main(argv: list[str] | None = None) -> int:
             f"  dataframe shape={df.shape} roles={list(df.columns)} "
             f"span={df.index.min()} → {df.index.max()}"
         )
-        safe_print(f"  column→role keys={by_role}")
+        safe_print(f"  openfdd_role→package_key={by_role}")
 
     from open_fdd.rules import run_rule
 
@@ -188,7 +205,12 @@ def main(argv: list[str] | None = None) -> int:
     hours = float(getattr(res, "fault_hours", 0) or 0)
     status = str(getattr(res, "status", "?"))
     safe_print(f"  open_fdd.rules FC1 status={status} fault_hours={hours:.4f}")
-    if status in {"ERROR", "SKIP"} and hours == 0.0 and df.isna().all().all():
+    if status in {"ERROR", "SKIP", "SKIPPED_MISSING_ROLES"} or (
+        status.startswith("SKIP") and "MISSING" in status
+    ):
+        safe_print("FAIL: FC1 did not evaluate (missing roles / skip)")
+        return 2
+    if df.isna().all().all():
         safe_print("FAIL: rule could not evaluate (empty/NaN frame)")
         return 2
     safe_print("\nPASS lesson 03 — SPARQL→pandas→open_fdd.rules")

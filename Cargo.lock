@@ -2507,7 +2507,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-central"
-version = "3.6.17"
+version = "3.6.18"
 dependencies = [
  "anyhow",
  "axum",
@@ -2551,7 +2551,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-fieldbus"
-version = "3.6.17"
+version = "3.6.18"
 dependencies = [
  "axum",
  "bacnet-client",
@@ -2597,7 +2597,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-mcp"
-version = "3.6.17"
+version = "3.6.18"
 dependencies = [
  "base64 0.22.1",
  "reqwest 0.12.28",
@@ -2607,7 +2607,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_connector_runtime"
-version = "3.6.17"
+version = "3.6.18"
 dependencies = [
  "axum",
  "chrono",
@@ -2626,7 +2626,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_contracts"
-version = "3.6.17"
+version = "3.6.18"
 dependencies = [
  "chrono",
  "serde",
@@ -2638,7 +2638,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_mqtt"
-version = "3.6.17"
+version = "3.6.18"
 dependencies = [
  "anyhow",
  "chrono",

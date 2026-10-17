@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-metric-units-v1",
-  "contract_version": "3.6.17",
+  "contract_version": "3.6.18",
   "processing_abi_current": "imperial-f-v1",
   "processing_abi_target": "metric-c-v2",
   "notes": [

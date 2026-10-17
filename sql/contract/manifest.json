@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-sql-schema-fdd-v1",
-  "contract_version": "3.6.17",
+  "contract_version": "3.6.18-softopen",
   "engine": "timescale/postgresql",
   "product": "open-fdd",
   "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd + sql/analytics pack hash; twin layers must not fork equations",
@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 107,
-  "pack_sha256": "c96290a8fd69ce8c2d2b2ca10d5cecdd12024bd0caa012b12937566aebb7b5c3",
+  "pack_sha256": "36465e3ea0e13291ecb622b035a3bbf60ca27d2599919575af5d246690759cd6",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -467,8 +467,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/motor_weekly_runtime.sql",
-      "sha256": "e53261c603ccdee41309b57f17333619b09a59285e7f08fb8508b33d8bd44475",
-      "bytes": 1166
+      "sha256": "9e58389e7b7b75fbde22dcb83aa4adcb374e4d107b545e4ae51b1558795b8f58",
+      "bytes": 1691
     },
     {
       "path": "sql/analytics/postgres/queries/mv_change_point_daily.sql",
@@ -527,22 +527,22 @@
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "bb86b64974e2a4d6e154ed08d8bbb16e0450227ac27bf6ad6a52f2f121ec7af7",
+      "sha256": "1acae3100f1a5e8801a5c78300745f9f491f35b9328622a5a4be84887e38e058",
       "bytes": 4166
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",
-      "sha256": "0cbcc8356b92efd22c1bd40a488b73926c761ee90d8cb65f46a83363e0ceab6e",
+      "sha256": "60be05fcf8e14ed02bafd166cf6f244339707a06ddb934efc6866984dd9cb0e0",
       "bytes": 1293
     },
     {
       "path": "sql/contract/metric_units.json",
-      "sha256": "4d46f591ba6985c30e70588337c994bd22f031458322abcc6d65c82d0498214c",
+      "sha256": "af562baad55f8882516ff987649f860d70a98948e20297163ff3c9cdf01c63c9",
       "bytes": 2831
     },
     {
       "path": "sql/contract/goldens/unit_vectors.json",
-      "sha256": "07f8dca4ff0aea2e2839ad2641800af02dba13b087014fef08f36eb22fb50986",
+      "sha256": "d8c8ac38e0b0269c6da21abca2b848ad37030cfa526b8f5638f0c02b6aa52429",
       "bytes": 1398
     },
     {
