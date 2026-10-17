@@ -4106,6 +4106,11 @@ pub async fn model_point_resolve(
         return Err(deny);
     }
     let openfdd_key = parsed.openfdd_key();
+    let candidate_keys = crate::timescale_product::candidate_openfdd_keys_for_point(
+        &parsed.building_id,
+        &parsed.equipment_id,
+        &parsed.point_key,
+    );
     let mut body = json!({
         "ok": true,
         "point_iri": iri,
@@ -4113,8 +4118,9 @@ pub async fn model_point_resolve(
         "equipment_id": parsed.equipment_id,
         "point_key": parsed.point_key,
         "openfdd_key": openfdd_key,
+        "candidate_openfdd_keys": candidate_keys,
         "soft_open_neq_fq": true,
-        "note": "Soft-OPEN opaque point resolve — Soft-OPEN ≠ FQ",
+        "note": "Soft-OPEN opaque point resolve (#1278 column≠role candidates) — Soft-OPEN ≠ FQ",
     });
     if q.include_history.unwrap_or(false) {
         let history = if !crate::timescale_historian::historian_is_timescale() {
@@ -4132,7 +4138,16 @@ pub async fn model_point_resolve(
             )
             .await
             {
-                Ok(hist) => hist,
+                Ok(hist) => {
+                    // Prefer the key that actually had samples (role key when column≠role).
+                    if let Some(resolved) = hist.get("openfdd_key").and_then(Value::as_str) {
+                        if let Some(obj) = body.as_object_mut() {
+                            obj.insert("openfdd_key".into(), json!(resolved));
+                            obj.insert("requested_openfdd_key".into(), json!(openfdd_key));
+                        }
+                    }
+                    hist
+                }
                 Err(e) => json!({
                     "ok": false,
                     "error": e.to_string(),
