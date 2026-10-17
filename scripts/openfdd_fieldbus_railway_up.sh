@@ -56,10 +56,22 @@ if [[ ! -f "$OPENFDD_EDGE_KIT_DIR/ca.pem" || ! -f "$OPENFDD_EDGE_KIT_DIR/edge.ce
   exit 2
 fi
 
-echo "== stop local react-ot hub (fieldbus-only on this host) =="
-docker compose -f "$ROOT/docker/compose.react.yml" \
-  -f "$ROOT/docker/compose.react.fieldbus.yml" \
-  down --remove-orphans 2>/dev/null || true
+# Soft-OPEN #1277 / P1-10: never `down --remove-orphans` the whole react-ot
+# project by default — that stops ACME full-stack central/web/Timescale.
+# Opt in with OPENFDD_STOP_LOCAL_HUB=1 only when this host is fieldbus-only.
+_react_fb=(
+  docker compose
+  -f "$ROOT/docker/compose.react.yml"
+  -f "$ROOT/docker/compose.react.fieldbus.yml"
+)
+if [[ "${OPENFDD_STOP_LOCAL_HUB:-0}" == "1" ]]; then
+  echo "== stop local react-ot hub (OPENFDD_STOP_LOCAL_HUB=1) =="
+  "${_react_fb[@]}" down --remove-orphans 2>/dev/null || true
+else
+  echo "== leave local hub running; stop stray react fieldbus service only =="
+  "${_react_fb[@]}" stop fieldbus 2>/dev/null || true
+  "${_react_fb[@]}" rm -f fieldbus 2>/dev/null || true
+fi
 
 echo "== pull fieldbus $OPENFDD_FIELDBUS_IMAGE =="
 docker pull "$OPENFDD_FIELDBUS_IMAGE"
