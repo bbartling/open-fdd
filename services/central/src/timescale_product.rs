@@ -140,9 +140,7 @@ async fn list_equipment(tsdb: &Tsdb, building_id: &str) -> Result<Vec<(String, O
 }
 
 /// Soft-OPEN P0-2: equipment_id → equip_type for `/api/fdd/results` kind filters.
-pub async fn type_map_for_building(
-    building_id: Option<&str>,
-) -> Result<BTreeMap<String, String>> {
+pub async fn type_map_for_building(building_id: Option<&str>) -> Result<BTreeMap<String, String>> {
     let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
         return Ok(BTreeMap::new());
     };
@@ -1251,20 +1249,14 @@ fn load_confirmed_fault_hint(
 }
 
 /// Soft-OPEN P0-3: fill plot `fault_hours` from the on-file rule result row.
-fn load_result_fault_hours(
-    building_id: &str,
-    equipment_id: &str,
-    rule_id: &str,
-) -> Option<f64> {
+fn load_result_fault_hours(building_id: &str, equipment_id: &str, rule_id: &str) -> Option<f64> {
     let path = results_dir(building_id).join(format!("{rule_id}.json"));
     let text = std::fs::read_to_string(path).ok()?;
     let body: Value = serde_json::from_str(&text).ok()?;
     body.get("rows")
         .and_then(Value::as_array)?
         .iter()
-        .find(|row| {
-            row.get("equipment_id").and_then(Value::as_str) == Some(equipment_id)
-        })
+        .find(|row| row.get("equipment_id").and_then(Value::as_str) == Some(equipment_id))
         .and_then(|row| row.get("fault_hours").and_then(Value::as_f64))
 }
 
