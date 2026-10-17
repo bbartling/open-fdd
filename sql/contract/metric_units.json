@@ -1,0 +1,97 @@
+{
+  "contract_id": "openfdd-metric-units-v1",
+  "contract_version": "3.6.17",
+  "processing_abi_current": "imperial-f-v1",
+  "processing_abi_target": "metric-c-v2",
+  "notes": [
+    "Canonical TARGET processing is metric (°C, Δ°C, Pa, kPa, L/s, kW, kWh).",
+    "Current SQL FDD pack (77 rules) remains imperial-f-v1 until metric-v2 equations ship.",
+    "Admit path converts known source units into the active pack ABI before pivot/SQL.",
+    "Display preference is independent of processing and must not use ±32 on deltas/rates.",
+    "Percent 0–100 vs fraction 0–1 is declared metadata — never inferred from magnitude.",
+    "FCU-DEADBAND uses DEADBAND_C (Celsius difference) even under imperial-f-v1 pack — see parameter kinds.",
+    "Pa per in.w.c. constant matches fdd_core::units::PA_PER_IN_WC (248.84)."
+  ],
+  "quantities": [
+    {
+      "id": "absolute_temperature",
+      "canonical_unit": "degC",
+      "pack_v1_unit": "degF",
+      "aliases": ["C", "°C", "degC", "celsius", "F", "°F", "degF", "fahrenheit"]
+    },
+    {
+      "id": "temperature_difference",
+      "canonical_unit": "delta_degC",
+      "pack_v1_unit": "delta_degF",
+      "conversion": "scale_only",
+      "aliases": ["deltaC", "Δ°C", "K_diff", "deltaF", "Δ°F"]
+    },
+    {
+      "id": "temperature_rate",
+      "canonical_unit": "delta_degC_per_h",
+      "pack_v1_unit": "delta_degF_per_h",
+      "conversion": "scale_only"
+    },
+    {
+      "id": "air_pressure",
+      "canonical_unit": "Pa",
+      "pack_v1_unit": "in_wc",
+      "aliases": ["Pa", "pascal", "inH2O", "in.w.c.", "in_wc"]
+    },
+    {
+      "id": "hydronic_pressure",
+      "canonical_unit": "kPa",
+      "pack_v1_unit": "psi",
+      "aliases": ["kPa", "psi"]
+    },
+    {
+      "id": "volumetric_flow",
+      "canonical_unit": "L_per_s",
+      "pack_v1_unit": "cfm",
+      "aliases": ["L/s", "lps", "cfm", "m3/s"]
+    },
+    {
+      "id": "power",
+      "canonical_unit": "kW",
+      "aliases": ["kW", "W"]
+    },
+    {
+      "id": "interval_energy",
+      "canonical_unit": "kWh",
+      "aliases": ["kWh", "Wh"]
+    },
+    {
+      "id": "percent",
+      "canonical_unit": "percent_0_100",
+      "fraction_unit": "fraction_0_1",
+      "notes": "Declared only; 1 means 1% when percent, 100% when fraction."
+    },
+    {
+      "id": "status",
+      "canonical_unit": "boolean"
+    },
+    {
+      "id": "occupancy_mode",
+      "canonical_unit": "enum_text"
+    }
+  ],
+  "parameter_kinds": [
+    "absolute_temperature",
+    "temperature_difference",
+    "temperature_rate",
+    "air_pressure",
+    "hydronic_pressure",
+    "volumetric_flow",
+    "percent",
+    "fraction",
+    "duration_seconds",
+    "duration_minutes",
+    "dimensionless",
+    "boolean"
+  ],
+  "constants": {
+    "PA_PER_IN_WC": 248.84,
+    "LPS_PER_CFM": 0.471947,
+    "KPA_PER_PSI": 6.894757
+  }
+}

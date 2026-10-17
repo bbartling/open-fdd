@@ -290,7 +290,7 @@ mod tests {
         let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
         let mut names = Vec::new();
         for i in 0..archive.len() {
-            names.push(archive.by_index(i).unwrap().name().to_string());
+            names.push(archive.by_index(i).unwrap().name().unwrap().to_string());
         }
         for required in EDGE_KIT_ZIP_MEMBERS {
             assert!(names.iter().any(|n| n == required), "missing {required}");

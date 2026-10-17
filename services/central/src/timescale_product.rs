@@ -1444,11 +1444,50 @@ async fn fill_history_for_equipment(
     if roles.is_empty() {
         return Ok(0);
     }
+    // Admit known source units into imperial-f-v1 pack ABI (°F / in.w.c. / cfm)
+    // before MAX/pivot so mixed °C/°F points do not false-fault (#1284).
     let mut max_cols = String::new();
     for role in roles {
-        max_cols.push_str(&format!(
-            ", MAX(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = '{role}') AS \"{role}\""
-        ));
+        let admitted = fdd_core::sql_admit_val_expr(role);
+        let local_key = format!("{equipment_id}.{role}");
+        if matches!(
+            role.as_str(),
+            "chw_supply_t" | "chw_return_t" | "chw_flow" | "chw_dp" | "chw_supply_sp"
+        ) {
+            // Prefer target equipment's own key; only then a stamped plant. Never
+            // MAX across unrelated plants (that invented 50/54 from 44/54 + 50/52).
+            max_cols.push_str(&format!(
+                ", COALESCE(\
+                   MAX({admitted}) FILTER (WHERE openfdd_key = '{local_key}'), \
+                   MAX({admitted}) FILTER (WHERE split_part(openfdd_key, '.', 2) = '{role}' \
+                     AND openfdd_key <> '{local_key}' \
+                     AND split_part(openfdd_key, '.', 1) IN ( \
+                       SELECT equipment_id FROM equipment \
+                       WHERE building_id = $1 \
+                         AND lower(coalesce(equip_type, '')) IN ( \
+                           'chiller', 'chw', 'chwplant', 'chw_plant' \
+                         ) \
+                     ))\
+                 ) AS \"{role}\""
+            ));
+        } else if is_weather_role(role) {
+            max_cols.push_str(&format!(
+                ", COALESCE(\
+                   MAX({admitted}) FILTER (WHERE openfdd_key = '{local_key}'), \
+                   MAX({admitted}) FILTER (WHERE split_part(openfdd_key, '.', 2) = '{role}' \
+                     AND openfdd_key <> '{local_key}' \
+                     AND split_part(openfdd_key, '.', 1) IN ( \
+                       SELECT equipment_id FROM equipment \
+                       WHERE building_id = $1 \
+                         AND lower(coalesce(equip_type, '')) IN ('weather') \
+                     ))\
+                 ) AS \"{role}\""
+            ));
+        } else {
+            max_cols.push_str(&format!(
+                ", MAX({admitted}) FILTER (WHERE openfdd_key = '{local_key}') AS \"{role}\""
+            ));
+        }
     }
     let mut filters = String::new();
     for (i, role) in roles.iter().enumerate() {

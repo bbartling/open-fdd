@@ -1,0 +1,57 @@
+{
+  "golden_id": "openfdd-unit-vectors-v1",
+  "contract_version": "3.6.17",
+  "cases": [
+    {
+      "id": "abs_20C_eq_68F",
+      "kind": "absolute_temperature",
+      "metric": 20.0,
+      "imperial": 68.0,
+      "expect_equal_after_admit_to_pack_v1": true
+    },
+    {
+      "id": "delta_5F_is_2p777C",
+      "kind": "temperature_difference",
+      "imperial": 5.0,
+      "metric": 2.777777777777778,
+      "note": "scale only — never ±32"
+    },
+    {
+      "id": "satdev_20C_vs_23C_exceeds_5F",
+      "kind": "scenario",
+      "sat_C": 20.0,
+      "sp_C": 23.0,
+      "tol_F": 5.0,
+      "expect_fault_when_admitted_to_F": true
+    },
+    {
+      "id": "satdev_20C_vs_68F_sp_no_fault",
+      "kind": "scenario",
+      "sat_C": 20.0,
+      "sp_F": 68.0,
+      "tol_F": 5.0,
+      "expect_fault_when_admitted_to_F": false
+    },
+    {
+      "id": "fcu_deadband_23_minus_21p5_C",
+      "kind": "fcu_deadband_C",
+      "clg_sp_C": 23.0,
+      "htg_sp_C": 21.5,
+      "deadband_C": 2.0,
+      "delta_C": 1.5,
+      "expect_fault": true
+    },
+    {
+      "id": "percent_declared",
+      "kind": "percent",
+      "values_percent": [0.0, 0.5, 1.0, 1.01, 50.0, 100.0],
+      "expect_fraction": [0.0, 0.005, 0.01, 0.0101, 0.5, 1.0]
+    },
+    {
+      "id": "fraction_declared",
+      "kind": "fraction",
+      "values_fraction": [0.0, 0.5, 1.0],
+      "expect_fraction": [0.0, 0.5, 1.0]
+    }
+  ]
+}

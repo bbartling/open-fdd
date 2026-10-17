@@ -119,9 +119,9 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "arbitrary"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
+checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
 dependencies = [
  "derive_arbitrary",
 ]
@@ -1105,13 +1105,13 @@ checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 
 [[package]]
 name = "derive_arbitrary"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e567bd82dcff979e4b03460c307b3cdc9e96fde3d73bed1496d2bc75d9dd62a"
+checksum = "1b034bd7d5f032402a2479444dcc6f74e36a03f31854d41680fb240ef682a1ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.119",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -1229,7 +1229,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "fdd_core"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1243,7 +1243,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_csv"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1256,7 +1256,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_resources"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "anyhow",
  "serde",
@@ -1268,7 +1268,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_rules"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_store"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "anyhow",
  "arrow",
@@ -1303,7 +1303,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_tsdb"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2313,6 +2313,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2453,7 +2465,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "open_fdd_edge_prototype"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "arrow",
  "base64 0.22.1",
@@ -2490,12 +2502,12 @@ dependencies = [
  "toml 1.1.6+spec-1.1.0",
  "tracing",
  "walkdir",
- "zip",
+ "zip 9.0.4",
 ]
 
 [[package]]
 name = "openfdd-central"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "anyhow",
  "axum",
@@ -2534,12 +2546,12 @@ dependencies = [
  "utoipa",
  "utoipa-swagger-ui",
  "uuid",
- "zip",
+ "zip 9.0.4",
 ]
 
 [[package]]
 name = "openfdd-fieldbus"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "axum",
  "bacnet-client",
@@ -2585,7 +2597,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-mcp"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "base64 0.22.1",
  "reqwest 0.12.28",
@@ -2595,7 +2607,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_connector_runtime"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "axum",
  "chrono",
@@ -2614,7 +2626,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_contracts"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "chrono",
  "serde",
@@ -2626,7 +2638,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_mqtt"
-version = "3.6.16"
+version = "3.6.17"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2642,7 +2654,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "zip",
+ "zip 9.0.4",
 ]
 
 [[package]]
@@ -3457,9 +3469,9 @@ dependencies = [
 
 [[package]]
 name = "rust-embed"
-version = "8.12.0"
+version = "8.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e7760e252aaba7b09f4be00e36476cf585bdb68a53552ac954cdf504ab4bc9"
+checksum = "19afa5b4b6a611de00bd1bdae6ae6f39084c9399f0679c3f52d8469cf335cc23"
 dependencies = [
  "rust-embed-impl",
  "rust-embed-utils",
@@ -3468,9 +3480,9 @@ dependencies = [
 
 [[package]]
 name = "rust-embed-impl"
-version = "8.12.0"
+version = "8.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bcfc4d6f53af43755f7a723e4b6b8794fcce052a178dd8c6c1dadc5f5343097"
+checksum = "e0d8afda6374eac59e066abee06d265247ebbaf3006cf878e2879e8356e34053"
 dependencies = [
  "mime_guess",
  "proc-macro2",
@@ -3482,11 +3494,11 @@ dependencies = [
 
 [[package]]
 name = "rust-embed-utils"
-version = "8.12.0"
+version = "8.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ffa149f6aa81b58a5b3011d01a857c4ed12c7a732d2c51947a4c7c692185f0"
+checksum = "0d84e8ba78bd384263e5922f084cbe1b081c3b7e69add59c8fb097b879ba968a"
 dependencies = [
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "walkdir",
 ]
 
@@ -3904,9 +3916,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4"
+checksum = "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.1",
@@ -4376,7 +4388,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -4809,6 +4821,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5283634e518fe9e82c7b20520bb4bc209009fd16c82077c802f8111ecbb0117a"
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4929,7 +4947,7 @@ dependencies = [
  "serde_json",
  "url",
  "utoipa",
- "zip",
+ "zip 3.0.0",
 ]
 
 [[package]]
@@ -5536,6 +5554,21 @@ dependencies = [
  "flate2",
  "indexmap",
  "memchr",
+ "zopfli",
+]
+
+[[package]]
+name = "zip"
+version = "9.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a954114b47a54df49f83d2722814e86b23d4bb1b54a1b90fb7d92b41619ddc22"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "nix",
+ "typed-path",
  "zopfli",
 ]
 

@@ -1,6 +1,6 @@
 [package]
 name = "open_fdd_edge_prototype"
-version = "3.6.16"
+version = "3.6.17"
 edition = "2021"
 
 [[bin]]
@@ -61,7 +61,7 @@ fdd_rules = { path = "../crates/fdd_rules" }
 fdd_resources = { path = "../crates/fdd_resources" }
 fdd_store = { path = "../crates/fdd_store" }
 walkdir = "2"
-zip = { version = "3", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 tracing = "0.1"
 
 [dev-dependencies]

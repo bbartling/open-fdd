@@ -1,9 +1,9 @@
 {
   "pack_id": "openfdd-analytics-sql-v1",
-  "pack_version": "3.6.14-softopen",
+  "pack_version": "3.6.17-softopen",
   "engine": "timescale/postgresql",
   "soft_open_neq_fq": true,
-  "bps_oss_parity": "same analytics pack hash — twin layers must not fork equations",
+  "bps_oss_parity": "same analytics pack hash \u2014 twin layers must not fork equations",
   "queries": [
     {
       "query_id": "runtime",
@@ -17,7 +17,9 @@
     },
     {
       "query_id": "economizer",
-      "aliases": ["rcx-ahu"],
+      "aliases": [
+        "rcx-ahu"
+      ],
       "sql_path": "sql/analytics/postgres/queries/economizer_deltas.sql",
       "status": "softopen"
     },
@@ -48,7 +50,11 @@
     },
     {
       "query_id": "role-timeseries",
-      "aliases": ["rcx-vav", "rcx-chiller", "rcx-boiler"],
+      "aliases": [
+        "rcx-vav",
+        "rcx-chiller",
+        "rcx-boiler"
+      ],
       "sql_path": "sql/analytics/postgres/queries/role_timeseries.sql",
       "status": "softopen"
     },
@@ -120,7 +126,7 @@
     }
   ],
   "remaining_routes": [
-    "GET rcx/presets (Rust catalog — Soft-OPEN already)",
+    "GET rcx/presets (Rust catalog \u2014 Soft-OPEN already)",
     "POST rcx/preset (Timescale product paths Soft-OPEN; full preset FQ later)"
   ]
 }

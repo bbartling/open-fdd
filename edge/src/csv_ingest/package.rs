@@ -196,7 +196,10 @@ fn read_zip_entries(bytes: &[u8]) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> 
         if entry.is_dir() {
             continue;
         }
-        let entry_name = entry.name().to_string();
+        let entry_name = entry
+            .name()
+            .map_err(|e| format!("bad zip entry name: {e}"))?
+            .to_string();
         if zip_entry_is_symlink(&entry) {
             return Err(format!("symlink entries are not allowed: {entry_name}"));
         }
@@ -1059,7 +1062,10 @@ fn read_package_manifest_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
         if entry.is_dir() {
             continue;
         }
-        let entry_name = entry.name().to_string();
+        let entry_name = entry
+            .name()
+            .map_err(|e| format!("bad zip entry name: {e}"))?
+            .to_string();
         if zip_entry_is_symlink(&entry) {
             return Err(format!("symlink entries are not allowed: {entry_name}"));
         }

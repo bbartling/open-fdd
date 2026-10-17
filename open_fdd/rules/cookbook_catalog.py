@@ -22,12 +22,24 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 
-def norm_cmd(s: pd.Series | None) -> pd.Series:
-    """Normalize a command/position 0–100 → 0–1. Passthrough if already 0–1."""
-    if s is None:
-        return pd.Series(dtype=float)
-    s = pd.to_numeric(s, errors="coerce")
-    return s.where(s <= 1.0, s / 100.0)
+def norm_cmd(
+    s: pd.Series | None,
+    *,
+    representation: str = "auto",
+) -> pd.Series:
+    """Normalize a command/position to fraction 0–1.
+
+    Prefer ``representation='percent'|'fraction'`` when the point unit is known.
+    Default ``auto`` decides once per series (max > 1 → percent). The old
+    element-wise ``value <= 1`` passthrough is forbidden (1% → 100%).
+    """
+    from open_fdd.units.convert import norm_command
+
+    if representation not in {"percent", "fraction", "auto"}:
+        raise ValueError(
+            f"norm_cmd representation must be percent|fraction|auto, got {representation!r}"
+        )
+    return norm_command(s, representation=representation)  # type: ignore[arg-type]
 
 
 def as_bool(s: pd.Series | None) -> pd.Series:

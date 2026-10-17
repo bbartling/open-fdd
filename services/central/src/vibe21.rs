@@ -94,7 +94,7 @@ fn extract_unity_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = entry.name().to_string();
+        let name = entry.name().map_err(|e| e.to_string())?.to_string();
         let enclosed = entry
             .enclosed_name()
             .ok_or_else(|| format!("zip-slip rejected: {name}"))?;
@@ -496,7 +496,7 @@ fn zip_member_names(bytes: &[u8]) -> Result<Vec<String>, String> {
     let mut names = Vec::with_capacity(archive.len());
     for i in 0..archive.len() {
         let entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        names.push(entry.name().to_string());
+        names.push(entry.name().map_err(|e| e.to_string())?.to_string());
     }
     Ok(names)
 }
@@ -610,7 +610,7 @@ fn extract_flat_zip(bytes: &[u8], dest: &Path) -> Result<(), String> {
     let mut uncompressed_total: u64 = 0;
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = entry.name().to_string();
+        let name = entry.name().map_err(|e| e.to_string())?.to_string();
         if !zip_entry_name_safe(&name) {
             let _ = std::fs::remove_dir_all(&staging);
             return Err(format!("zip-slip rejected: {name}"));

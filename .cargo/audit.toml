@@ -1,5 +1,15 @@
 # Transitive quick-xml 0.37.x via oxigraph 0.5.9 — upgrade in 3.2.8 (#437).
 # RUSTSEC-2023-0071 (rsa): pulled by sqlx-postgres SCRAM; no fixed upgrade.
 # Product JWT stays aws_lc_rs HS256 (no rsa). Timescale is LAN/VPN private.
+# zip 3.x extract CVEs (RUSTSEC-2026-0367/0368/0369): transitive via
+# utoipa-swagger-ui@9 unpacking trusted vendored Swagger UI assets only.
+# Product package / CSV zip ingest uses zip >= 9 (openfdd-central, edge, mqtt).
 [advisories]
-ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195", "RUSTSEC-2023-0071"]
+ignore = [
+  "RUSTSEC-2026-0194",
+  "RUSTSEC-2026-0195",
+  "RUSTSEC-2023-0071",
+  "RUSTSEC-2026-0367",
+  "RUSTSEC-2026-0368",
+  "RUSTSEC-2026-0369",
+]
