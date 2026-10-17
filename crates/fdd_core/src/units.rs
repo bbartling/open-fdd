@@ -139,10 +139,9 @@ pub fn admit_value_to_pack_v1(role: &str, value: f64, source_unit: &str) -> f64 
 /// SQL expression: convert `val` using the sample `unit` column into pack °F/in.w.c./cfm.
 pub fn sql_admit_val_expr(role: &str) -> String {
     if is_temperature_role(role) {
-        return format!(
-            "CASE WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g')) \
+        return "CASE WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g')) \
              IN ('c', 'degc', 'celsius') THEN (val * 9.0 / 5.0) + 32.0 ELSE val END"
-        );
+            .to_string();
     }
     if is_pressure_role(role) {
         return format!(

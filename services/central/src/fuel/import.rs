@@ -167,7 +167,10 @@ pub fn import_fuel_zip(bytes: &[u8]) -> Result<Value> {
     let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).context("zip entry")?;
-        let name = file.name().to_string();
+        let name = file
+            .name()
+            .map_err(|e| anyhow::anyhow!("bad zip entry name: {e}"))?
+            .to_string();
         if name.ends_with('/') || file.is_dir() {
             continue;
         }
