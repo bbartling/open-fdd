@@ -1,6 +1,6 @@
 {
   "golden_id": "openfdd-unit-vectors-v1",
-  "contract_version": "3.6.17",
+  "contract_version": "3.6.18",
   "cases": [
     {
       "id": "abs_20C_eq_68F",
