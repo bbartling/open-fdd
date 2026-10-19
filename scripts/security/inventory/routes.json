@@ -6910,15 +6910,15 @@
   ],
   "counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 120,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29,
     "implemented": 30,
-    "planned": 120,
+    "planned": 122,
     "blocked_policy": 29
   },
   "summary": {
     "IMPLEMENTED": 30,
-    "PLANNED": 120,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29
   }
 }

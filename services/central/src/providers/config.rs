@@ -10,13 +10,21 @@ use std::path::Path;
 
 use serde::Deserialize;
 
+use super::committed_model::{
+    model_from_sparql_rows, CommittedModel, CommittedModelStore, ModelScope,
+};
 use super::http_policy::{canonicalize_provider_endpoint, connection_id};
 use super::map::{PointMapEntry, RoleResolver};
 use super::types::ProviderKind;
+use open_fdd_edge_prototype::csv_ingest::portal_ingest_sparql::{
+    compile_bindings_from_snapshot, IngestSparqlScope,
+};
 
 #[derive(Clone, Deserialize)]
 pub struct SiteConfigRaw {
     pub building_id: String,
+    #[serde(default)]
+    pub tenant_id: Option<String>,
     pub provider: String,
     pub endpoint: String,
     #[serde(default)]
@@ -50,6 +58,8 @@ fn default_poll_secs() -> u64 {
 
 pub struct SiteConfig {
     pub building_id: String,
+    pub tenant_id: String,
+    /// Wave-A connection id (`kind:explicit` or `kind:building:digest`).
     pub provider_instance_id: String,
     pub kind: ProviderKind,
     pub endpoint: String,
@@ -58,13 +68,16 @@ pub struct SiteConfig {
     pub anonymous: bool,
     pub poll_secs: u64,
     pub resolver: RoleResolver,
+    pub model: CommittedModel,
 }
 
 impl fmt::Debug for SiteConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SiteConfig")
             .field("building_id", &self.building_id)
+            .field("tenant_id", &self.tenant_id)
             .field("provider_instance_id", &self.provider_instance_id)
+            .field("model_revision", &self.resolver.model_revision())
             .field("kind", &self.kind)
             .field("endpoint", &self.endpoint)
             .field("client_id", &redacted(self.client_id.as_deref()))
@@ -80,6 +93,7 @@ impl Clone for SiteConfig {
     fn clone(&self) -> Self {
         Self {
             building_id: self.building_id.clone(),
+            tenant_id: self.tenant_id.clone(),
             provider_instance_id: self.provider_instance_id.clone(),
             kind: self.kind,
             endpoint: self.endpoint.clone(),
@@ -88,6 +102,7 @@ impl Clone for SiteConfig {
             anonymous: self.anonymous,
             poll_secs: self.poll_secs,
             resolver: self.resolver.clone(),
+            model: self.model.clone(),
         }
     }
 }
@@ -267,16 +282,25 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         &endpoint,
         raw.provider_instance_id.as_deref(),
     )?;
-    let mut resolver = RoleResolver::from_point_map(&raw.point_map)?;
-    if let Some(path) = raw.binding_set_path.as_deref().filter(|s| !s.is_empty()) {
-        resolver.merge_binding_set_path(Path::new(path), &building_id)?;
-    }
-    if let Some(inline) = raw.binding_set_inline.as_deref().filter(|s| !s.is_empty()) {
-        resolver.merge_binding_set_json(inline, &building_id)?;
-    }
+    let tenant_id = raw
+        .tenant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| "tenant_required".to_string())?
+        .to_string();
+    let model_instance =
+        model_instance_id(raw.provider_instance_id.as_deref(), &provider_instance_id)?;
+    let scope = ModelScope {
+        tenant_id: tenant_id.clone(),
+        site_id: building_id.clone(),
+        provider_instance_id: model_instance,
+    };
+    let (resolver, model) = compile_site_model(&raw, &scope)?;
     let poll_secs = raw.poll_secs.clamp(15, 3600);
     Ok(SiteConfig {
         building_id,
+        tenant_id,
         provider_instance_id,
         kind,
         endpoint,
@@ -285,7 +309,86 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         anonymous,
         poll_secs,
         resolver,
+        model,
     })
+}
+
+fn model_instance_id(explicit: Option<&str>, connection_id: &str) -> Result<String, String> {
+    let raw = explicit
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(connection_id);
+    let slug = raw.replace(':', "-");
+    if slug.is_empty()
+        || !slug
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err("provider_instance_id".into());
+    }
+    Ok(slug)
+}
+
+fn compile_site_model(
+    raw: &SiteConfigRaw,
+    scope: &ModelScope,
+) -> Result<(RoleResolver, CommittedModel), String> {
+    let has_map = !raw.point_map.is_empty();
+    let binding_path = raw.binding_set_path.as_deref().filter(|s| !s.is_empty());
+    let binding_inline = raw.binding_set_inline.as_deref().filter(|s| !s.is_empty());
+    if has_map && (binding_path.is_some() || binding_inline.is_some()) {
+        return Err("one_committed_model".into());
+    }
+    if binding_path.is_some() && binding_inline.is_some() {
+        return Err("one_committed_model".into());
+    }
+    if let Some(path) = binding_path {
+        let text = std::fs::read_to_string(Path::new(path))
+            .map_err(|_| "binding_set_unreadable".to_string())?;
+        return load_committed_binding(&text, scope);
+    }
+    if let Some(inline) = binding_inline {
+        return load_committed_binding(inline, scope);
+    }
+    RoleResolver::compile_point_map(scope, &raw.point_map)
+}
+
+fn load_committed_binding(
+    raw: &str,
+    scope: &ModelScope,
+) -> Result<(RoleResolver, CommittedModel), String> {
+    let trimmed = raw.trim_start();
+    if trimmed.starts_with('{') {
+        return RoleResolver::from_committed_json(raw, scope).map_err(model_error_code);
+    }
+    let graph = format!(
+        "urn:openfdd:ingest:v1:graph/{}/{}",
+        scope.tenant_id, scope.site_id
+    );
+    let sparql_scope = IngestSparqlScope::new(
+        scope.tenant_id.clone(),
+        scope.site_id.clone(),
+        graph,
+        scope.provider_instance_id.clone(),
+    );
+    let rows = compile_bindings_from_snapshot(raw, &sparql_scope).map_err(model_error_code)?;
+    let model = model_from_sparql_rows(scope, &rows).map_err(model_error_code)?;
+    let mut store = CommittedModelStore::default();
+    store.try_activate(None, &model).map_err(model_error_code)?;
+    let plan = store
+        .active_plan(&scope.tenant_id, &scope.site_id)
+        .ok_or_else(|| "model_not_activated".to_string())?;
+    Ok((RoleResolver::from_plan(plan), model))
+}
+
+fn model_error_code(err: String) -> String {
+    if err.contains("truncated") {
+        "truncated_model".into()
+    } else if err.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && err.len() <= 64 {
+        err
+    } else {
+        "model_invalid".into()
+    }
 }
 
 #[cfg(test)]
@@ -294,7 +397,7 @@ mod tests {
 
     fn anon_site(endpoint: &str) -> String {
         format!(
-            r#"{{"building_id":"SITE","provider":"nf","endpoint":"{endpoint}","auth_mode":"anonymous"}}"#
+            r#"{{"building_id":"SITE","tenant_id":"tenant-a","provider":"nf","endpoint":"{endpoint}","auth_mode":"anonymous"}}"#
         )
     }
 
@@ -336,7 +439,7 @@ mod tests {
         assert_eq!(missing.failures[0].code, "auth_not_configured");
 
         let one_sided = load_sites_json_owned(
-            r#"{"building_id":"SITE","provider":"nf","endpoint":"https://portal.example","client_id":"id-only"}"#,
+            r#"{"building_id":"SITE","tenant_id":"tenant-a","provider":"nf","endpoint":"https://portal.example","client_id":"id-only"}"#,
         )
         .unwrap();
         assert!(one_sided.sites.is_empty());
@@ -360,7 +463,7 @@ mod tests {
         std::env::set_var("OPENFDD_TEST_WAVEA_ID", "client-id");
         std::env::set_var("OPENFDD_TEST_WAVEA_SECRET", "CANARY-SECRET-VALUE");
         let loaded = load_sites_json_owned(
-            r#"{"building_id":"SITE","provider":"nf","endpoint":"https://portal.example","client_id":"env:OPENFDD_TEST_WAVEA_ID","client_secret":"env:OPENFDD_TEST_WAVEA_SECRET"}"#,
+            r#"{"building_id":"SITE","tenant_id":"tenant-a","provider":"nf","endpoint":"https://portal.example","client_id":"env:OPENFDD_TEST_WAVEA_ID","client_secret":"env:OPENFDD_TEST_WAVEA_SECRET"}"#,
         )
         .unwrap();
         let debug = format!("{:?}", loaded.sites[0]);
@@ -368,5 +471,53 @@ mod tests {
         assert!(debug.contains("<set>"));
         std::env::remove_var("OPENFDD_TEST_WAVEA_ID");
         std::env::remove_var("OPENFDD_TEST_WAVEA_SECRET");
+    }
+
+    #[test]
+    fn missing_tenant_fails_closed() {
+        let loaded = load_sites_json_owned(
+            r#"{"building_id":"SITE","provider":"nf","endpoint":"https://portal.example","auth_mode":"anonymous"}"#,
+        )
+        .unwrap();
+        assert!(loaded.sites.is_empty());
+        assert_eq!(loaded.failures[0].code, "tenant_required");
+    }
+
+    #[test]
+    fn point_map_and_binding_set_are_not_two_truths() {
+        let raw = r#"{
+            "building_id": "site-a",
+            "tenant_id": "tenant-a",
+            "provider_instance_id": "nf-conn-a",
+            "provider": "nf",
+            "endpoint": "https://portal.example",
+            "auth_mode": "anonymous",
+            "point_map": [{
+                "provider_point_id": "uuid-sat",
+                "equipment_id": "AHU_1",
+                "role": "sat",
+                "equip_type": "ahu"
+            }],
+            "binding_set_inline": "{\"schema\":\"ofdd_portal_committed_model_v1\"}"
+        }"#;
+        let loaded = load_sites_json_owned(raw).unwrap();
+        assert!(loaded.sites.is_empty());
+        assert_eq!(loaded.failures[0].code, "one_committed_model");
+    }
+
+    #[test]
+    fn binding_set_rejects_truncated_export() {
+        let raw = r#"{
+            "building_id": "site-a",
+            "tenant_id": "tenant-a",
+            "provider_instance_id": "nf-conn-a",
+            "provider": "nf",
+            "endpoint": "https://portal.example",
+            "auth_mode": "anonymous",
+            "binding_set_inline": "{\"schema\":\"ofdd_portal_committed_model_v1\",\"tenant_id\":\"tenant-a\",\"site_id\":\"site-a\",\"provider_instance_id\":\"nf-conn-a\",\"truncated\":true,\"equipment\":[]}"
+        }"#;
+        let loaded = load_sites_json_owned(raw).unwrap();
+        assert!(loaded.sites.is_empty());
+        assert_eq!(loaded.failures[0].code, "truncated_model");
     }
 }

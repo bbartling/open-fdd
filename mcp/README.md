@@ -120,10 +120,6 @@ docker run -i --rm --network host \
 | `openfdd_health` | Central liveness |
 | `openfdd_driver_status` | Driver status bundle |
 | `openfdd_bench_topology` | Bench layout file or doc pointer |
-| `openfdd_haystack_status` | Haystack gateway status |
-| `openfdd_haystack_test` | Connection test |
-| `openfdd_haystack_read` | Haystack read by filter or ids |
-| `openfdd_bacnet_read` | Commission BACnet point read |
 | `openfdd_model_sparql_catalog` | Predefined SPARQL queries |
 | `openfdd_model_sparql` | Execute SPARQL SELECT on Haystack RDF |
 | `openfdd_model_sites` | Site list |

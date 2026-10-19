@@ -1,16 +1,22 @@
 //! Pluggable HTTPS data providers (Wave-NF): NF portal first, Ace IoT stub.
 
 pub mod ace_stub;
+pub mod committed_model;
 pub mod config;
 pub mod error;
+pub mod hourly;
+pub mod hourly_exec;
 pub mod http_policy;
 pub mod map;
 pub mod nf;
+pub mod pg_store;
 pub mod poller;
+pub mod store;
 pub mod types;
 pub mod writer;
 
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 
 use axum::extract::State;
 use axum::Extension;
@@ -20,8 +26,10 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
+use committed_model::CommittedModelStore;
 use config::{load_sites_from_env, SiteConfig, SiteConfigFailure};
 use error::safe_operator_code;
+use map::RoleResolver;
 use types::{
     ProviderHealth, ProviderHealthStatus, ProviderKind, ProvidersHealthBody, SiteProviderHealth,
 };
@@ -30,30 +38,9 @@ use crate::state::AppState;
 
 /// Vendor HTTPS ingest driver (NF portal, future Ace IoT).
 pub trait DataProvider: Send + Sync {
-    /// Production poller calls the concrete driver. Tests exercise this trait.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "production poller uses concrete drivers; unit tests call the trait"
-        )
-    )]
+    /// Production poller logs this identity. Tests exercise the same trait.
     fn provider_id(&self) -> &str;
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "production poller uses concrete drivers; unit tests call the trait"
-        )
-    )]
     fn kind(&self) -> ProviderKind;
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "production poller uses concrete drivers; unit tests call the trait"
-        )
-    )]
     fn health(&self) -> ProviderHealth;
     /// Concrete pollers call driver history directly. These stay on the trait
     /// so the next adapter does not grow a second scheduler.
@@ -121,7 +108,9 @@ impl DataProvider for ace_stub::AceIotStubDriver {
 
 pub struct Runtime {
     pub sites: Vec<SiteConfig>,
+    pub(crate) models: StdMutex<CommittedModelStore>,
     pub(crate) health: Mutex<ProvidersHealthBody>,
+    hourly: Mutex<Option<store::HourlyStore>>,
 }
 
 impl Runtime {
@@ -159,15 +148,83 @@ impl Runtime {
                 Some("provider_config_invalid".into())
             }
         });
+        let mut models = CommittedModelStore::default();
+        for site in &loaded.sites {
+            match models.try_activate(None, &site.model) {
+                Ok(report) => {
+                    tracing::debug!(
+                        building_id = %site.building_id,
+                        revision = %report.revision_id,
+                        scheduled = report.scheduled_points,
+                        withheld = report.withheld_points,
+                        "committed model active"
+                    );
+                }
+                Err(err) => {
+                    warn!(
+                        code = %safe_operator_code(&err),
+                        building_id = %site.building_id,
+                        "committed model did not activate"
+                    );
+                }
+            }
+        }
+        let compiled = models.compile_count();
+        if compiled > 0 {
+            tracing::info!(compiled, "committed ingest plans compiled");
+        }
+        for site in &loaded.sites {
+            if let Some(rev) = models.active_revision(&site.tenant_id, &site.building_id) {
+                tracing::debug!(building_id = %site.building_id, %rev, "active ingest revision");
+            }
+        }
         Arc::new(Self {
             sites: loaded.sites,
+            models: StdMutex::new(models),
             health: Mutex::new(ProvidersHealthBody {
                 ok: config_error.is_none(),
                 poll_enabled,
                 sites: site_health,
                 config_error,
             }),
+            hourly: Mutex::new(None),
         })
+    }
+
+    /// Live plan for this tick. A failed activation leaves the last valid plan.
+    pub fn resolver_for(&self, tenant_id: &str, site_id: &str) -> RoleResolver {
+        let guard = self.models.lock().unwrap_or_else(|err| err.into_inner());
+        guard
+            .active_plan(tenant_id, site_id)
+            .map(RoleResolver::from_plan)
+            .unwrap_or_default()
+    }
+
+    /// Postgres when `OPENFDD_DATABASE_URL` is set. Memory is explicit and not
+    /// durable. A configured URL that cannot be opened is unavailable — the
+    /// poller must not fall back to a rolling lookback.
+    pub async fn hourly_store(&self) -> store::StoreOpen {
+        let mut slot = self.hourly.lock().await;
+        if let Some(existing) = slot.clone() {
+            return if existing.is_durable() {
+                store::StoreOpen::Durable(existing)
+            } else {
+                store::StoreOpen::MemoryOnly(existing)
+            };
+        }
+        match store::HourlyStore::open_from_env().await {
+            store::StoreOpen::Unavailable => store::StoreOpen::Unavailable,
+            opened => {
+                let store = match &opened {
+                    store::StoreOpen::Durable(store) | store::StoreOpen::MemoryOnly(store) => {
+                        store.clone()
+                    }
+                    store::StoreOpen::Unavailable => return store::StoreOpen::Unavailable,
+                };
+                *slot = Some(store);
+                opened
+            }
+        }
     }
 
     pub async fn health_snapshot(&self) -> ProvidersHealthBody {
@@ -179,7 +236,9 @@ impl Runtime {
             .iter()
             .map(|s| SiteConfigSummary {
                 building_id: s.building_id.clone(),
+                tenant_id: s.tenant_id.clone(),
                 provider_instance_id: s.provider_instance_id.clone(),
+                model_revision: s.resolver.model_revision().map(str::to_string),
                 provider: s.kind,
                 endpoint: s.endpoint.clone(),
                 poll_secs: s.poll_secs,
@@ -193,7 +252,9 @@ impl Runtime {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SiteConfigSummary {
     pub building_id: String,
+    pub tenant_id: String,
     pub provider_instance_id: String,
+    pub model_revision: Option<String>,
     pub provider: ProviderKind,
     pub endpoint: String,
     pub poll_secs: u64,
@@ -267,6 +328,7 @@ fn health_row(
         last_poll_at: None,
         last_ingested_points: 0,
         consecutive_errors: 0,
+        hourly_coverage: None,
     }
 }
 
@@ -289,6 +351,7 @@ fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
         last_poll_at: None,
         last_ingested_points: 0,
         consecutive_errors: 0,
+        hourly_coverage: None,
     }
 }
 
@@ -339,6 +402,17 @@ fn visible_endpoint(endpoint: &str, ctx: &crate::tenant::TenantContext) -> Strin
     } else {
         endpoint.to_string()
     }
+}
+
+/// Reads the driver through `DataProvider` so poll health uses the same id the driver owns.
+pub fn driver_identity(driver: &impl DataProvider) -> String {
+    let health = driver.health();
+    format!(
+        "{} {:?} {:?}",
+        driver.provider_id(),
+        driver.kind(),
+        health.status
+    )
 }
 
 pub fn spawn_poller_with_shutdown(
@@ -397,6 +471,7 @@ mod tests {
             last_poll_at: None,
             last_ingested_points: 0,
             consecutive_errors: 1,
+            hourly_coverage: None,
         }
     }
 

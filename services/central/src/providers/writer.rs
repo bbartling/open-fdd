@@ -105,6 +105,22 @@ pub async fn ingest_samples(
                 serde_json::Value::String(unit.to_string()),
             );
         }
+        for key in [
+            "semantic_point_id",
+            "model_revision",
+            "kind",
+            "quantity",
+            "canonical_unit",
+        ] {
+            if tags.contains_key(key) {
+                continue;
+            }
+            if let Some(value) = sample.attrs.get(key).and_then(|v| v.as_str()) {
+                if !value.is_empty() {
+                    tags.insert(key.into(), serde_json::Value::String(value.to_string()));
+                }
+            }
+        }
         let quality = match sample.source_quality.as_deref() {
             Some("uncertain") => {
                 tags.insert(

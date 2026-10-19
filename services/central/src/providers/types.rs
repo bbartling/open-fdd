@@ -73,6 +73,22 @@ pub struct SiteProviderHealth {
     pub last_ingested_points: u64,
     #[serde(default)]
     pub consecutive_errors: u32,
+    /// Honest hourly coverage. Absent until the hourly scheduler has run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hourly_coverage: Option<HourlyCoverageHealth>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct HourlyCoverageHealth {
+    pub durable: bool,
+    pub committed: u32,
+    pub no_source_data: u32,
+    pub failed: u32,
+    pub partial: u32,
+    pub unrecoverable_gaps: u32,
+    pub samples_handed_off: u64,
+    pub update_log_status: String,
+    pub detail: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

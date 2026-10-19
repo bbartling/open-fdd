@@ -14,6 +14,7 @@ pub mod package;
 pub mod parquet_bridge;
 pub mod parse;
 pub mod plan;
+pub mod portal_ingest_sparql;
 pub mod semantic_meta;
 pub mod session;
 pub mod timestamp;

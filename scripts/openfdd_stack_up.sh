@@ -9,28 +9,29 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/openfdd_stack_lib.sh
 source "$ROOT/scripts/openfdd_stack_lib.sh"
 
-RECIPE="standalone"
+RECIPE="portal"
 DO_BUILD=0
 DO_PULL=1
 EXTRA=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    standalone|central|edge|csv|react|react-ot) RECIPE="$1"; shift ;;
+    portal|standalone|central|edge|csv|react|react-ot) RECIPE="$1"; shift ;;
     --build) DO_BUILD=1; DO_PULL=0; shift ;;
     --no-pull) DO_PULL=0; shift ;;
     --pull) DO_PULL=1; shift ;;
     -h|--help)
       cat <<'EOF'
-Usage: openfdd_stack_up.sh [standalone|central|edge|csv|react|react-ot] [--build|--no-pull] [--caddy]
+Usage: openfdd_stack_up.sh [portal|standalone|central|edge|csv|react|react-ot] [--build|--no-pull] [--caddy]
 
 Recipes:
-  standalone  mqtt + central + fieldbus (API; use react-ot for product UI)
-  central     mqtt + central (API; use react for product UI)
-  edge        fieldbus only (needs OPENFDD_MQTT_HOST)
+  portal      4.0 default: central + React web + Timescale (no MQTT, no fieldbus)
+  standalone  archived OT: mqtt + central + fieldbus
+  central     archived OT: mqtt + central
+  edge        archived OT: fieldbus only (needs OPENFDD_MQTT_HOST)
   csv         central + React web (openfdd-web)
-  react       mqtt + central + React web (no fieldbus)
-  react-ot    mqtt + central + React web + fieldbus (OT bench)
+  react       archived OT: mqtt + central + React web (no fieldbus)
+  react-ot    archived OT: mqtt + central + React web + fieldbus
 
 Options:
   --caddy     Start Caddy on :80 → web (/api* → central). Default ON for react/react-ot;
@@ -50,7 +51,7 @@ EOF
 done
 
 # React product recipes: Caddy :80 is the default LAN ingress (blank-/login class bugs).
-if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
   if [[ -z "${OPENFDD_CADDY+x}" ]]; then
     export OPENFDD_CADDY=1
   fi
@@ -67,7 +68,7 @@ fi
 mapfile -t ARGS < <(openfdd_stack_compose_args "$RECIPE")
 [[ ${#ARGS[@]} -ge 2 ]] || { echo "ERROR: no compose files for recipe=$RECIPE" >&2; exit 1; }
 openfdd_stack_export_image_env
-if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
   openfdd_stack_guard_ghcr_web
 fi
 cd "$ROOT"
@@ -77,10 +78,10 @@ if [[ "$DO_PULL" -eq 1 ]]; then
 fi
 
 if [[ "${OPENFDD_CADDY:-0}" == "1" || "${OPENFDD_CADDY:-}" == "true" ]]; then
-  if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" || "$RECIPE" == "csv" ]]; then
+  if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" || "$RECIPE" == "csv" ]]; then
     ARGS+=(-f "$ROOT/docker/compose.caddy.react.yml")
   else
-    echo "WARN: --caddy requires react, react-ot, or csv (web service); ignored for recipe=$RECIPE" >&2
+    echo "WARN: --caddy requires portal, react, react-ot, or csv (web service); ignored for recipe=$RECIPE" >&2
   fi
 fi
 if [[ "${OPENFDD_WATTLAB:-0}" == "1" || "${OPENFDD_WATTLAB:-}" == "true" ]]; then
@@ -93,14 +94,14 @@ fi
 
 # React SPA image is often compose-build until GHCR publishes openfdd-web.
 # Never `--build` the whole stack (would rebuild Rust from local Dockerfiles).
-if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
   if [[ "$DO_BUILD" -eq 1 ]] || ! docker image inspect "$OPENFDD_WEB_IMAGE" >/dev/null 2>&1; then
     echo "NOTE: building openfdd-web locally (image not present or --build): $OPENFDD_WEB_IMAGE"
     docker compose "${ARGS[@]}" build web
   fi
 fi
 
-if [[ "$DO_BUILD" -eq 1 && "$RECIPE" != "react" && "$RECIPE" != "react-ot" ]]; then
+if [[ "$DO_BUILD" -eq 1 && "$RECIPE" != "portal" && "$RECIPE" != "react" && "$RECIPE" != "react-ot" ]]; then
   docker compose "${ARGS[@]}" up -d --build --remove-orphans "${EXTRA[@]+"${EXTRA[@]}"}"
 else
   docker compose "${ARGS[@]}" up -d --remove-orphans "${EXTRA[@]+"${EXTRA[@]}"}"

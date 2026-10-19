@@ -1,6 +1,6 @@
-# After Publish Open-FDD stack completes (success or failure), assert tip hub
-# tags exist. Catches the partial-tip failure mode: central/web published but
-# mqtt still missing because fieldbus blocked a serial publish job.
+# After Publish Open-FDD stack completes (success or failure), assert the 4.0
+# product tip exists: central + web. MQTT and fieldbus are archive images
+# (`check_ghcr_tip_stack.sh --with-ot`), not a portal publish dependency.
 name: GHCR tip completeness
 
 on:
@@ -16,7 +16,7 @@ on:
         required: false
         type: string
       hub_only:
-        description: Only require central/web/mqtt (skip fieldbus)
+        description: Portal tip (central/web). OT images are not required.
         required: false
         default: false
         type: boolean
@@ -67,7 +67,7 @@ jobs:
           elif [[ "${PUBLISH_CONCLUSION:-}" == "failure" ]]; then
             # Failed Publish may still leave a partial tip — enforce hub-only.
             hub_only=1
-            echo "Publish was failure; enforcing hub-only completeness (central/web/mqtt)."
+            echo "Publish was failure; enforcing portal completeness (central/web)."
           fi
           echo "hub_only=${hub_only}" >> "$GITHUB_OUTPUT"
           echo "skip=${skip}" >> "$GITHUB_OUTPUT"

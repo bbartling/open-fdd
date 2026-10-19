@@ -1,0 +1,64 @@
+{
+  "schema_version": "openfdd.ot-edge-archive.v1",
+  "archive_id": "unqualified-cdaa4f15",
+  "qualification": "unqualified-snapshot",
+  "archive_date": "2026-10-19",
+  "source_commit": "cdaa4f15c662b8be242c5b0a9ebaed73fbbbc811",
+  "source_tree_sha256": "4097989596c2a88b9bdee6f8a7a42bd7d7416d65d488edbcf3b08432480e85bb",
+  "product_version_on_source_commit": "4.0.0",
+  "claimed_freeze_tag": null,
+  "components": [
+    "openfdd-fieldbus",
+    "openfdd-bacnet-modbus",
+    "openfdd-haystack",
+    "openfdd-mqtt"
+  ],
+  "docker_targets": [
+    "bacnet-modbus",
+    "haystack",
+    "compatibility"
+  ],
+  "dockerfiles": {
+    "fieldbus_closure": "source/services/fieldbus/Dockerfile.closure",
+    "fieldbus_closure_context": "source/",
+    "fieldbus_monorepo_context": "source/services/fieldbus/Dockerfile.monorepo-context",
+    "mqtt": "source/services/mqtt/Dockerfile",
+    "mqtt_context": "source/services/mqtt"
+  },
+  "rust_image": "rust:1.95-bookworm",
+  "runtime_image": "debian:bookworm-slim",
+  "mqtt_base_image": "eclipse-mosquitto:2",
+  "timescale_image": "unpinned \u2014 not part of this closure",
+  "cargo_packages": [
+    "fdd_core",
+    "openfdd-fieldbus",
+    "openfdd_connector_runtime",
+    "openfdd_contracts",
+    "openfdd_mqtt"
+  ],
+  "protocol_tree": "source/edge/src/drivers",
+  "semantic_extraction": "edge ot-transport feature; central default-features=false",
+  "env_names": [
+    "OPENFDD_FIELDBUS_API_KEY",
+    "OPENFDD_FIELDBUS_HTTP_HOST",
+    "OPENFDD_FIELDBUS_HTTP_PORT",
+    "OPENFDD_FIELDBUS_CONFIG_DIR",
+    "OPENFDD_MQTT_ENABLED",
+    "OPENFDD_OT_ARCHIVE_RESTORE",
+    "OPENFDD_MQTT_HOST",
+    "OPENFDD_MQTT_PORT",
+    "HAYSTACK_BASE_URL",
+    "HAYSTACK_USER",
+    "HAYSTACK_PASS",
+    "HAYSTACK_AUTH_MODE",
+    "HAYSTACK_TLS_VERIFY"
+  ],
+  "missing_evidence": [
+    "No git tag ot-mqtt-fieldbus-last-good-* or other verified OT freeze tag was present.",
+    "No per-platform OCI image digest was resolved for a qualified freeze.",
+    "Isolated boot of old central/web/mqtt/fieldbus/DB was not run.",
+    "Read\u2192ingest\u2192persist\u2192replay was not executed.",
+    "4.0 Timescale schema compatibility with archived binaries was not proven.",
+    "Security support for archived images is not claimed."
+  ]
+}

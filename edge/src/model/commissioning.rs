@@ -2,6 +2,7 @@
 
 use super::persist;
 use super::query;
+#[cfg(feature = "ot-transport")]
 use crate::drivers::bacnet;
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -176,33 +177,40 @@ pub fn import_commissioning(body: &Value) -> Value {
 }
 
 fn bacnet_point_ids_from_driver() -> HashSet<String> {
-    let tree: Value = serde_json::from_str(&bacnet::driver_tree_json()).unwrap_or(json!({}));
-    let mut ids = HashSet::new();
-    for dev in tree
-        .get("devices")
-        .and_then(|v| v.as_array())
-        .into_iter()
-        .flatten()
+    #[cfg(not(feature = "ot-transport"))]
     {
-        if dev.get("local_server").and_then(|v| v.as_bool()) == Some(true) {
-            continue;
-        }
-        for pt in dev
-            .get("points")
+        HashSet::new()
+    }
+    #[cfg(feature = "ot-transport")]
+    {
+        let tree: Value = serde_json::from_str(&bacnet::driver_tree_json()).unwrap_or(json!({}));
+        let mut ids = HashSet::new();
+        for dev in tree
+            .get("devices")
             .and_then(|v| v.as_array())
             .into_iter()
             .flatten()
         {
-            if let Some(id) = pt
-                .get("point_id")
-                .or_else(|| pt.get("object_identifier"))
-                .and_then(|v| v.as_str())
+            if dev.get("local_server").and_then(|v| v.as_bool()) == Some(true) {
+                continue;
+            }
+            for pt in dev
+                .get("points")
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
             {
-                ids.insert(id.to_string());
+                if let Some(id) = pt
+                    .get("point_id")
+                    .or_else(|| pt.get("object_identifier"))
+                    .and_then(|v| v.as_str())
+                {
+                    ids.insert(id.to_string());
+                }
             }
         }
+        ids
     }
-    ids
 }
 
 fn bacnet_refs_from_model() -> HashSet<String> {
@@ -245,16 +253,27 @@ pub fn bacnet_sync_status_json() -> Value {
 }
 
 pub fn bacnet_sync_apply_json() -> Value {
-    let sync = bacnet::sync_discovery_value(&json!({}));
-    let status = bacnet_sync_status_json();
-    json!({
-        "ok": sync.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
-        "points_added": sync.get("points").and_then(|v| v.as_u64()).unwrap_or(0),
-        "points_updated": 0,
-        "points_removed": 0,
-        "discovery": sync,
-        "sync_status": status
-    })
+    #[cfg(not(feature = "ot-transport"))]
+    {
+        json!({
+            "ok": false,
+            "error": "ot_transport_archived",
+            "note": "BACnet discovery sync is on the OT archive lane"
+        })
+    }
+    #[cfg(feature = "ot-transport")]
+    {
+        let sync = bacnet::sync_discovery_value(&json!({}));
+        let status = bacnet_sync_status_json();
+        json!({
+            "ok": sync.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+            "points_added": sync.get("points").and_then(|v| v.as_u64()).unwrap_or(0),
+            "points_updated": 0,
+            "points_removed": 0,
+            "discovery": sync,
+            "sync_status": status
+        })
+    }
 }
 
 /// Remove Haystack model rows bound to BACnet refs (used when clearing BACnet registry).
