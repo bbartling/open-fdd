@@ -257,18 +257,6 @@ impl Server {
         let canonical = match name {
             "site_health" => "openfdd_health",
             "stack_status" => "openfdd_stack_status",
-            "haystack_test"
-            | "openfdd_haystack_status"
-            | "openfdd_haystack_test"
-            | "openfdd_haystack_read"
-            | "bacnet_whois"
-            | "openfdd_bacnet_whois"
-            | "openfdd_bacnet_read" => {
-                return Err(
-                    "retired: BACnet/Haystack wire tools are on the OT archive lane (archive/ot-edge). Semantic SPARQL tools remain."
-                        .into(),
-                );
-            }
             "driver_poll_status" => "openfdd_driver_status",
             "validation_run_status" => "openfdd_validation_run_status",
             "report_list" => "openfdd_reports_list",
@@ -280,7 +268,7 @@ impl Server {
                 "retired": true,
                 "code": "ot_transport_retired",
                 "surface": "normal-4.0",
-                "message": "BACnet, Modbus, remote Haystack transport, and fieldbus driver tools are retired on the normal 4.0 portal surface. Semantic SPARQL remains. The archive lane sets OPENFDD_OT_TOOLS=1."
+                "message": "BACnet, Modbus, remote Haystack transport, and fieldbus driver tools are retired on the normal 4.0 portal surface (archive/ot-edge). Semantic SPARQL remains. The archive lane sets OPENFDD_OT_TOOLS=1."
             }));
         }
         match canonical {
@@ -632,11 +620,15 @@ mod tests {
     #[test]
     fn ot_wire_tools_are_retired() {
         let server = Server::new(BridgeClient::from_env());
-        let err = server
+        let retired = server
             .dispatch_tool("openfdd_bacnet_whois", &json!({}))
-            .expect_err("retired");
-        assert!(err.contains("retired"));
-        assert!(err.contains("archive/ot-edge"));
+            .expect("retired payload");
+        assert_eq!(retired["ok"], false);
+        assert_eq!(retired["code"], "ot_transport_retired");
+        assert!(retired["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("archive/ot-edge"));
     }
 
     #[test]
