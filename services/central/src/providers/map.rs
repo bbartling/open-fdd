@@ -308,6 +308,25 @@ impl RoleResolver {
             .map(|(device_id, points)| DevicePoints { device_id, points })
             .collect()
     }
+
+    /// Exact equipment ids from the committed map. Empty when nothing is mapped.
+    pub fn equipment_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self
+            .by_provider_point_id
+            .values()
+            .map(|resolved| resolved.equipment_id.clone())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    pub fn point_count_for_equipment(&self, equipment_id: &str) -> usize {
+        self.by_provider_point_id
+            .values()
+            .filter(|resolved| resolved.equipment_id == equipment_id)
+            .count()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

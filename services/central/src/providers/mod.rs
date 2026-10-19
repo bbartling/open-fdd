@@ -419,8 +419,9 @@ pub fn spawn_poller_with_shutdown(
     state: Arc<AppState>,
     shutdown: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
-    let runtime = Arc::clone(&state.providers);
-    poller::spawn_with_shutdown(state, runtime, shutdown)
+    // N8 owns the process: one scheduler lease, then N5 hourly ticks.
+    // Independent site loops stay behind the explicit unsafe legacy gate.
+    crate::ingest_queue::spawn_with_shutdown(state, shutdown)
 }
 
 #[cfg(test)]
