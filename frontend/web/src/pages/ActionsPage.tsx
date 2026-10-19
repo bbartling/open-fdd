@@ -244,6 +244,11 @@ export function ActionsPage() {
       activeSectionId="actions"
     >
       <div className="page-stack" data-testid="actions-page">
+        <p className="muted" data-testid="actions-provider-note">
+          Provider poll, backfill, and model activation are not separate action kinds on this API
+          yet. Receipts stay empty until those jobs are published. This log remains FDD, import,
+          and analytics history.
+        </p>
         <style>{`
           .actions-status { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; }
           .actions-status--running { color: #b45309; animation: actions-pulse 1.4s ease-in-out infinite; }

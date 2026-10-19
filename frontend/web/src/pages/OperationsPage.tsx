@@ -5,6 +5,7 @@ import { apiFetch, apiFetchBlob } from "../api/client";
 import { getStoredActiveTenant } from "../api/tenantApi";
 import { AppShell } from "../components/AppShell";
 import { ProtocolWorkspace } from "../components/ProtocolWorkspace";
+import { ProvidersPanel } from "../components/ProvidersPanel";
 import { SitesPanel } from "../components/SitesPanel";
 import { Button } from "../components/widgets";
 import {
@@ -20,20 +21,6 @@ import {
 
 type OperationsView = "afdd" | "mqtt" | "sites" | "providers";
 
-interface ProviderSiteHealth {
-  building_id?: string;
-  provider?: string;
-  last_poll_at?: string | null;
-  last_ingested_points?: number;
-  consecutive_errors?: number;
-  health?: { status?: string; message?: string | null };
-}
-
-interface ProvidersHealthBody {
-  ok?: boolean;
-  poll_enabled?: boolean;
-  sites?: ProviderSiteHealth[];
-}
 type AfddMode = "bulk" | "continuous";
 
 interface AfddConfig {
@@ -1181,74 +1168,6 @@ function TelemetrySuspendPanel() {
   );
 }
 
-function ProvidersPanel() {
-  const [body, setBody] = useState<ProvidersHealthBody | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const next = await apiFetch<ProvidersHealthBody>("/api/providers/health");
-      setBody(next);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-    const id = window.setInterval(() => void refresh(), 15_000);
-    return () => window.clearInterval(id);
-  }, [refresh]);
-
-  const sites = body?.sites ?? [];
-
-  return (
-    <section aria-labelledby="providers-heading" data-testid="providers-health-panel">
-      <div className="panel-header">
-        <h2 id="providers-heading">Provider ingest</h2>
-        <Button id="providers-refresh" label="Refresh" variant="secondary" onClick={() => void refresh()} />
-      </div>
-      <p className="muted">
-        Wave-NF HTTPS portals (Normal Framework first). Poll health only — MQTT / fieldbus OT
-        chrome is archived.
-      </p>
-      {error ? <p className="error">{error}</p> : null}
-      <p data-testid="providers-poll-enabled">
-        Poll enabled: {body?.poll_enabled ? "yes" : "no"}
-      </p>
-      {sites.length === 0 ? (
-        <p className="muted">No provider sites configured (`OPENFDD_PROVIDER_SITES`).</p>
-      ) : (
-        <table data-testid="providers-health-table">
-          <thead>
-            <tr>
-              <th>Building</th>
-              <th>Provider</th>
-              <th>Status</th>
-              <th>Last poll</th>
-              <th>Ingested</th>
-              <th>Errors</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sites.map((site) => (
-              <tr key={`${site.building_id}-${site.provider}`}>
-                <td>{site.building_id ?? "—"}</td>
-                <td>{site.provider ?? "—"}</td>
-                <td>{site.health?.status ?? "—"}</td>
-                <td>{site.last_poll_at ?? "—"}</td>
-                <td>{site.last_ingested_points ?? 0}</td>
-                <td>{site.consecutive_errors ?? 0}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
-  );
-}
-
 export function OperationsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawView = searchParams.get("view");
@@ -1282,7 +1201,7 @@ export function OperationsPage() {
       title="Operations"
       activeSectionId="operations"
     >
-      <OtStatusStrip />
+      {view === "mqtt" ? <OtStatusStrip /> : null}
       <fieldset className="section-tabs" aria-label="Operations configuration">
         <legend className="sr-only">Operations configuration</legend>
         <label>

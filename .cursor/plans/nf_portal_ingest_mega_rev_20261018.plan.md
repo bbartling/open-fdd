@@ -6,7 +6,7 @@ todos:
     content: "Wave-A PR1 — N2 security + N6 storage correctness (tenant filter, fail-closed secrets, no OAuth redirects, bounds, typed errors; per-equip routing, source ts/units/quality, truthful persist counts)"
     status: completed
   - id: wave-b-n1-archive
-    content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Required Actions green on 17ef0233 (PR 1294)."
+    content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Merged #1294 e0df8bc7."
     status: completed
   - id: wave-b-n5-hourly
     content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (GET history only; fixture-tested)"
@@ -16,7 +16,7 @@ todos:
     status: completed
   - id: wave-b-n11-spa
     content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics"
-    status: in_progress
+    status: completed
   - id: wave-c-n8-leases
     content: "Wave-C — N8 shared Postgres queue/leases before replicas"
     status: in_progress
@@ -45,14 +45,14 @@ todos:
     content: M5 Roles from explicit provider_point_id or the committed ingest plan (display-name grep rejected)
     status: completed
   - id: m6-fe-blast
-    content: M6 SPA Providers default; MQTT chrome archived (N11 full Ops ledger → Wave-B)
-    status: in_progress
+    content: M6 SPA Providers default; MQTT chrome archived (ledger hooks in wave-b-n11)
+    status: completed
   - id: m7-fe-haystack
     content: SoftOPEN defer — M7 Model/SPARQL SPA for provider-mapped buildings (N11); server ingest-plan compiler landed with N3
     status: pending
   - id: m8-ops-ui
-    content: M8 Ops panel shows provider poll health (basic); window/gap ledger pending N5 Wave-B
-    status: in_progress
+    content: M8 Ops panel shows provider poll health and window/gap ledger hooks (rows wait on N5)
+    status: completed
   - id: m9-stub-ace
     content: M9 Ace IoT driver stub (visibly NotImplemented)
     status: completed
@@ -75,7 +75,7 @@ todos:
     content: N0 Define 4.0 product boundary + requirements-to-test matrix labels
     status: pending
   - id: n1-archive-real
-    content: "N1 snapshot landed as unqualified-cdaa4f15. Required Actions green on 17ef0233."
+    content: "N1 snapshot landed as unqualified-cdaa4f15. Merged #1294 e0df8bc7."
     status: completed
   - id: n1-restore-boot
     content: "SoftOPEN defer — isolated old-stack restore boot/replay and verified OCI digest pin"
@@ -114,8 +114,8 @@ todos:
     content: SoftOPEN defer — N10 Scoped REST/MCP (Wave-C)
     status: in_progress
   - id: n11-frontend
-    content: SoftOPEN defer — N11 Full Providers/Sites/Model/ledger UI (Wave-B)
-    status: in_progress
+    content: SoftOPEN defer — N11 live window rows, backfill submit, and server-issued binding preview wait on N5/N3 (SPA hooks landed)
+    status: pending
   - id: n12-evidence
     content: SoftOPEN defer — N12 Full acceptance matrix (fixtures then bounded NF SoftOPEN pilot); no portal flooding
     status: pending
@@ -179,7 +179,7 @@ Do not mark M3/M4/M5/M11 complete merely because a trait/stub exists or five poi
 - MCP tools `openfdd_provider_health` / `openfdd_provider_sites`.
 - ADR-011. Lab files: `scripts/nf/provider_sites.bosspi.json`, `bosspi_gateway.json`, `bosspi_semantic_meta.json`.
 - Five mapped points on `NF_EDGE` (`equipType: ahu`): `oa_t`, `oa_h`, `sat` (duct), `zone_t`, `mat` (**plate sensor — provisional lab stamp only; not proof of AHU mixed-air semantics**).
-- Ops SPA default view → **Providers** (MQTT retained behind archived tab).
+- Ops SPA default view → **Providers**. MQTT / fieldbus chrome stays on the archived tab only. Sites list portal registry ids with read-only source labels. Window/gap ledger, typed bindings, and request preview render when the API publishes them and stay empty otherwise. October 18 UI findings were rechecked against this branch's code; this is not a published-SPA browser audit.
 - Worktree tip bump toward **4.0.0** on branch `wave-nf/4.0.0-portal-ingest`.
 
 Roles come from UUID map or Haystack SPARQL binding set. Display names must not invent roles. No RDF text-grep as ingest capability.
@@ -274,13 +274,13 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
 
 ### Wave-B — parallel after Wave-A merges
-- [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Required Actions green on `17ef0233` (PR 1294).
+- [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Merged #1294 `e0df8bc7`.
 - [ ] SoftOPEN defer — **n1-restore-boot** isolated old-stack boot/replay and verified OCI digest pin
 - [ ] SoftOPEN defer — **n1-workspace-remove** delete live `services/fieldbus` from the default Cargo workspace (split gate still compiles it)
 - [x] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested)
 - [x] **wave-b-n3-model** / **n3-model** — committed model + scoped SPARQL plans (resolver each tick)
 - [ ] SoftOPEN defer — **n3-replica-store** cross-replica invalidation, durable multi-process store, in-flight SPARQL cancel
-- [ ] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA
+- [x] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA hooks (live rows, backfill submit, and server preview stay deferred)
 
 ### Wave-C — after Wave-B
 - [ ] **wave-c-n8-leases** — N8 Postgres queue/leases before replicas
@@ -293,6 +293,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
 - [ ] SoftOPEN defer — **n7-gaps** full coverage ledger UI (N5 already states update-log 403 and bounded reconciliation)
 - [ ] SoftOPEN defer — N5 historian sample upsert and job receipt are separate writes (one transaction stays with N6)
+- [ ] SoftOPEN defer — **n11-frontend** live window rows, backfill submit, and server-issued binding preview
 - [ ] SoftOPEN defer — **n9-meteo** Open-Meteo + contractor fixture
 - [ ] SoftOPEN defer — **n12-evidence** full acceptance matrix (no portal flood)
 - [ ] SoftOPEN defer — **n13-release** phased gates + truthful remaining status
@@ -300,10 +301,10 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
 
 ### Already done (do not reopen)
-- [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m9-stub-ace
+- [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m5-map, m6-fe-blast, m8-ops-ui, m9-stub-ace
 
 ### Prototype still open (do not claim complete)
-- [~] m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
+- [~] m4-nf-driver, m11-prove
 
 ### Cloud agents launched 2026-10-19 (Grok Bot)
 - Wave-A N2+N6: bc-8669bd28 — merged #1290 `608ee177`

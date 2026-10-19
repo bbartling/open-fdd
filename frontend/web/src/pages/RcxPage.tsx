@@ -424,7 +424,7 @@ export function RcxPage() {
   return (
     <AppShell
       title="RCx Plots"
-      caption="Retro-commissioning presets via central DataFusion historian (vibe19 chart kinds)."
+      caption="Retro-commissioning presets from the canonical historian. CSV and portal samples use the same charts."
       activeSectionId="rcx-plots"
     >
       <div className="page-stack" data-testid="rcx-page">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSessionQuery } from "../session";
 import { listPackageBuildings } from "../api/mappingApi";
+import { listProviderBuildingIds } from "../api/providersApi";
 import { uploadPackage } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
 import { RuleTuningPanel } from "./RuleTuningPanel";
@@ -73,12 +74,15 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
   }, []);
 
   const refreshSites = useCallback(async () => {
+    let packages: string[] = [];
     try {
-      const list = await listPackageBuildings();
-      setSites(list);
+      packages = await listPackageBuildings();
     } catch {
-      setSites(activeSite ? [activeSite] : []);
+      packages = activeSite ? [activeSite] : [];
     }
+    const portals = await listProviderBuildingIds();
+    const merged = new Set<string>([...packages, ...portals]);
+    setSites([...merged].sort((a, b) => a.localeCompare(b)));
   }, [activeSite]);
 
   useEffect(() => {
