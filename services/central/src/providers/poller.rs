@@ -1,7 +1,8 @@
 //! Background poll loop for configured provider sites.
 //!
-//! NF sites enqueue durable completed-hour jobs. They do not sleep `poll_secs`
-//! and then fetch `now − 65 minutes`. History errors stay failed.
+//! NF and Open-Meteo sites enqueue durable completed-hour jobs. They do not
+//! sleep `poll_secs` and then fetch `now − 65 minutes`. History errors stay
+//! failed. Ace stays a NotImplemented stub.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,6 +18,7 @@ use super::config::SiteConfig;
 use super::hourly::HourlyPolicy;
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
 use super::map::HistorySeries;
+use super::meteo::OpenMeteoDriver;
 use super::nf::NfPortalDriver;
 use super::store::StoreOpen;
 use super::types::{HourlyCoverageHealth, ProviderHealthStatus};
@@ -81,6 +83,72 @@ pub fn spawn_with_shutdown(
     })
 }
 
+/// Await the hourly site loops. The shared queue calls this only in explicit
+/// legacy mode (`OPENFDD_PROVIDER_POLL_MODE=legacy` and
+/// `OPENFDD_ALLOW_UNSAFE_POLLER=1`).
+pub async fn run_legacy_site_loops(state: Arc<AppState>, shutdown: &mut watch::Receiver<bool>) {
+    let runtime = Arc::clone(&state.providers);
+    let handle = spawn_with_shutdown(Arc::clone(&state), runtime, shutdown.clone());
+    let _ = shutdown.wait_for(|v| *v).await;
+    let _ = handle.await;
+}
+
+/// One N5 hourly tick for a queue-claimed site. History stays GET point/data.
+pub async fn execute_site(state: &Arc<AppState>, site: &SiteConfig) -> Result<usize, String> {
+    if !matches!(site.kind, super::types::ProviderKind::Nf) {
+        return Err("not_implemented".into());
+    }
+    let runtime = Arc::clone(&state.providers);
+    let mut driver = NfPortalDriver::new(
+        site.provider_instance_id.clone(),
+        site.endpoint.clone(),
+        site.client_id.clone(),
+        site.client_secret.clone(),
+        site.anonymous,
+        super::http_policy::HttpLimits::default(),
+    )
+    .map_err(|_| "config_invalid".to_string())?;
+    driver
+        .authenticate()
+        .await
+        .map_err(|_| "auth_failed".to_string())?;
+    let store = match runtime.hourly_store().await {
+        StoreOpen::Durable(store) | StoreOpen::MemoryOnly(store) => store,
+        StoreOpen::Unavailable => return Err("job_store_unavailable".into()),
+    };
+    let resolver = runtime.resolver_for(&site.tenant_id, &site.building_id);
+    let devices = if resolver.mapped_count() == 0 && site.resolver.mapped_count() > 0 {
+        site.resolver.devices()
+    } else {
+        resolver.devices()
+    };
+    let policy = HourlyPolicy::from_env();
+    let owner = std::env::var("OPENFDD_HOURLY_WORKER_ID").unwrap_or_else(|_| "central".into());
+    let provider_instance = driver.provider_id().to_string();
+    let tick = TickInput {
+        now: Utc::now(),
+        tenant: &site.tenant_id,
+        canonical_site: &site.building_id,
+        provider_instance: &provider_instance,
+        devices: &devices,
+        policy: &policy,
+        owner: &owner,
+    };
+    let mut source = NfHistory {
+        driver: &mut driver,
+    };
+    let mut sink = HistorianSink {
+        state,
+        building_id: &site.building_id,
+        provider_instance_id: &site.provider_instance_id,
+    };
+    let report = run_hourly_tick(&store, &tick, &mut source, &mut sink).await?;
+    if report.failed > 0 && report.committed == 0 && report.no_source_data == 0 {
+        return Err(report.health_code());
+    }
+    Ok(report.samples_handed_off)
+}
+
 async fn site_poll_loop(
     state: Arc<AppState>,
     runtime: Arc<Runtime>,
@@ -88,11 +156,17 @@ async fn site_poll_loop(
     sem: Arc<Semaphore>,
     shutdown: &mut watch::Receiver<bool>,
 ) {
-    if matches!(site.kind, super::types::ProviderKind::Nf) {
-        nf_hourly_loop(state, runtime, site, sem, shutdown).await;
-        return;
+    match site.kind {
+        super::types::ProviderKind::Nf => {
+            nf_hourly_loop(state, runtime, site, sem, shutdown).await;
+        }
+        super::types::ProviderKind::OpenMeteo => {
+            meteo_hourly_loop(state, runtime, site, sem, shutdown).await;
+        }
+        super::types::ProviderKind::AceIot => {
+            ace_poll_loop(runtime, site, sem, shutdown).await;
+        }
     }
-    ace_poll_loop(runtime, site, sem, shutdown).await;
 }
 
 async fn nf_hourly_loop(
@@ -258,6 +332,154 @@ async fn nf_hourly_loop(
     }
 }
 
+async fn meteo_hourly_loop(
+    state: Arc<AppState>,
+    runtime: Arc<Runtime>,
+    site: SiteConfig,
+    sem: Arc<Semaphore>,
+    shutdown: &mut watch::Receiver<bool>,
+) {
+    let building_id = site.building_id.clone();
+    let provider_instance_id = site.provider_instance_id.clone();
+    let (Some(latitude), Some(longitude)) = (site.latitude, site.longitude) else {
+        runtime
+            .record_error(
+                &building_id,
+                ProviderHealthStatus::Error,
+                Some("meteo_coordinates".into()),
+            )
+            .await;
+        return;
+    };
+    let mut driver = match OpenMeteoDriver::new(
+        provider_instance_id.clone(),
+        site.endpoint.clone(),
+        latitude,
+        longitude,
+        super::http_policy::HttpLimits::default(),
+    ) {
+        Ok(driver) => driver,
+        Err(_) => {
+            runtime
+                .record_error(
+                    &building_id,
+                    ProviderHealthStatus::Error,
+                    Some("config_invalid".into()),
+                )
+                .await;
+            return;
+        }
+    };
+    let policy = HourlyPolicy::from_env();
+    let owner = std::env::var("OPENFDD_HOURLY_WORKER_ID").unwrap_or_else(|_| "central".into());
+    let mut first = true;
+    loop {
+        let wait = if first { 0 } else { tick_secs() };
+        first = false;
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(wait)) => {}
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() {
+                    return;
+                }
+                continue;
+            }
+        }
+        let _permit = match sem.acquire().await {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        if driver.authenticate().is_err() {
+            warn!(%building_id, "Open-Meteo origin rejected");
+            runtime
+                .record_error(
+                    &building_id,
+                    ProviderHealthStatus::Error,
+                    Some("config_invalid".into()),
+                )
+                .await;
+            continue;
+        }
+        let opened = runtime.hourly_store().await;
+        let store = match opened {
+            StoreOpen::Durable(store) | StoreOpen::MemoryOnly(store) => store,
+            StoreOpen::Unavailable => {
+                warn!(%building_id, "hourly job store unavailable");
+                runtime
+                    .record_error(
+                        &building_id,
+                        ProviderHealthStatus::Error,
+                        Some("job_store_unavailable".into()),
+                    )
+                    .await;
+                continue;
+            }
+        };
+        let devices = site.resolver.devices();
+        let now = Utc::now();
+        let provider_instance = driver.provider_id().to_string();
+        let tick = TickInput {
+            now,
+            tenant: "default",
+            canonical_site: &building_id,
+            provider_instance: &provider_instance,
+            devices: &devices,
+            policy: &policy,
+            owner: &owner,
+        };
+        let mut source = MeteoHistory {
+            driver: &mut driver,
+        };
+        let mut sink = HistorianSink {
+            state: &state,
+            building_id: &building_id,
+            provider_instance_id: &provider_instance_id,
+        };
+        match run_hourly_tick(&store, &tick, &mut source, &mut sink).await {
+            Ok(report) => {
+                let coverage = HourlyCoverageHealth {
+                    durable: report.durable,
+                    committed: report.committed,
+                    no_source_data: report.no_source_data,
+                    failed: report.failed,
+                    partial: report.partial,
+                    unrecoverable_gaps: report.unrecoverable_gaps,
+                    samples_handed_off: u64::try_from(report.samples_handed_off)
+                        .unwrap_or(u64::MAX),
+                    update_log_status: report.update_log_status.to_string(),
+                    detail: report.health_code(),
+                };
+                let (status, as_error) = if report.blocks_green() {
+                    if report.failed > 0 && report.committed == 0 && report.no_source_data == 0 {
+                        (ProviderHealthStatus::Error, true)
+                    } else {
+                        (ProviderHealthStatus::Degraded, false)
+                    }
+                } else {
+                    (ProviderHealthStatus::Ok, false)
+                };
+                runtime
+                    .record_hourly(
+                        &building_id,
+                        status,
+                        report.samples_handed_off as u64,
+                        Some(report.health_code()),
+                        coverage,
+                        as_error,
+                    )
+                    .await;
+                debug!(%building_id, status = ?status, "hourly tick finished");
+            }
+            Err(code) => {
+                warn!(%building_id, %code, "hourly tick failed");
+                runtime
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(code))
+                    .await;
+            }
+        }
+    }
+}
+
 struct NfHistory<'a> {
     driver: &'a mut NfPortalDriver,
 }
@@ -274,6 +496,30 @@ impl HistorySource for NfHistory<'_> {
                 window_start = %req.window_start,
                 points = req.point_ids.len(),
                 "NF history GET"
+            );
+            self.driver
+                .read_history_page(&req.point_ids, req.from, req.to)
+                .await
+        })
+    }
+}
+
+struct MeteoHistory<'a> {
+    driver: &'a mut OpenMeteoDriver,
+}
+
+impl HistorySource for MeteoHistory<'_> {
+    fn fetch<'a>(
+        &'a mut self,
+        req: &'a FetchRequest,
+    ) -> BoxFuture<'a, Result<Vec<HistorySeries>, super::hourly::FetchError>> {
+        Box::pin(async move {
+            debug!(
+                purpose = %req.purpose,
+                device_id = %req.device_id,
+                window_start = %req.window_start,
+                points = req.point_ids.len(),
+                "Open-Meteo history GET"
             );
             self.driver
                 .read_history_page(&req.point_ids, req.from, req.to)

@@ -37,6 +37,7 @@ use crate::auth;
 use crate::engineering_bundle;
 use crate::eplus_runner;
 use crate::fuel::{self, FuelRequest};
+use crate::ingest_queue;
 use crate::jobs;
 use crate::models::{
     AgentTool, AgentToolsResponse, AuthAgentTokenRequest, AuthLoginRequest, AuthLoginResponse,
@@ -173,6 +174,30 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health/stack", get(health_stack))
         .route("/api/providers/health", get(providers::providers_health))
         .route("/api/providers/sites", get(providers::providers_sites))
+        .route("/api/ingest/jobs", get(ingest_queue::http::list_jobs))
+        .route(
+            "/api/ingest/jobs/{job_id}",
+            get(ingest_queue::http::get_job),
+        )
+        .route(
+            "/api/ingest/jobs/{job_id}/retry",
+            post(ingest_queue::http::retry_job),
+        )
+        .route(
+            "/api/ingest/receipts",
+            get(ingest_queue::http::list_receipts),
+        )
+        .route(
+            "/api/ingest/receipts/{receipt_id}",
+            get(ingest_queue::http::get_receipt),
+        )
+        .route("/api/ingest/gaps", get(ingest_queue::http::list_gaps))
+        .route("/api/ingest/queue", get(ingest_queue::http::queue_metrics))
+        .route(
+            "/api/ingest/queue/scale-preview",
+            get(ingest_queue::http::scale_preview),
+        )
+        .route("/api/ingest/backfill", post(ingest_queue::http::backfill))
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary))
         .route("/api/tenants", get(list_tenants))
@@ -3401,80 +3426,20 @@ pub async fn get_ack(
     responses((status = 200, description = "Agent tool catalog", body = AgentToolsResponse))
 )]
 pub async fn agent_tools() -> Json<AgentToolsResponse> {
+    let ot = ingest_queue::http::ot_discovery_enabled();
+    let tools = ingest_queue::http::discovery_tools(ot)
+        .into_iter()
+        .map(|(name, method, path)| AgentTool {
+            name: name.into(),
+            method: method.into(),
+            path: path.into(),
+        })
+        .collect();
     Json(AgentToolsResponse {
         ok: true,
-        tools: vec![
-            AgentTool {
-                name: "health".into(),
-                method: "GET".into(),
-                path: "/api/health".into(),
-            },
-            AgentTool {
-                name: "edges.list".into(),
-                method: "GET".into(),
-                path: "/api/edges".into(),
-            },
-            AgentTool {
-                name: "edges.get".into(),
-                method: "GET".into(),
-                path: "/api/edges/{edge_id}".into(),
-            },
-            AgentTool {
-                name: "providers.health".into(),
-                method: "GET".into(),
-                path: "/api/providers/health".into(),
-            },
-            AgentTool {
-                name: "providers.sites".into(),
-                method: "GET".into(),
-                path: "/api/providers/sites".into(),
-            },
-            AgentTool {
-                name: "edges.metadata".into(),
-                method: "GET".into(),
-                path: "/api/edges/{edge_id}/metadata".into(),
-            },
-            AgentTool {
-                name: "commands.issue".into(),
-                method: "POST".into(),
-                path: "/api/commands".into(),
-            },
-            AgentTool {
-                name: "commands.ack".into(),
-                method: "GET".into(),
-                path: "/api/commands/{command_id}/ack".into(),
-            },
-            AgentTool {
-                name: "ingest.stats".into(),
-                method: "GET".into(),
-                path: "/api/ingest/stats".into(),
-            },
-            AgentTool {
-                name: "fdd.run".into(),
-                method: "POST".into(),
-                path: "/api/fdd/run".into(),
-            },
-            AgentTool {
-                name: "fdd.status".into(),
-                method: "GET".into(),
-                path: "/api/fdd/status".into(),
-            },
-            AgentTool {
-                name: "csv.import.preview".into(),
-                method: "POST".into(),
-                path: "/api/csv/import/preview".into(),
-            },
-            AgentTool {
-                name: "csv.import.package.append".into(),
-                method: "POST".into(),
-                path: "/api/csv/import/package/append".into(),
-            },
-            AgentTool {
-                name: "datasets.list".into(),
-                method: "GET".into(),
-                path: "/api/datasets".into(),
-            },
-        ],
+        product_surface: Some("portal-4.0".into()),
+        ot_discovery: Some(if ot { "archive-lane" } else { "retired" }.into()),
+        tools,
     })
 }
 

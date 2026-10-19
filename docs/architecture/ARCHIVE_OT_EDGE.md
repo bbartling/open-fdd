@@ -68,4 +68,5 @@ is not security support. See `archive/ot-edge/unqualified-cdaa4f15/evidence/MISS
 
 - [ADR-011: Pluggable DataProvider](adr-011-pluggable-data-provider.md)
 - [ADR-010: Timescale hard cutover](adr-010-timescale-hard-cutover.md)
+- [4.0 product boundary](wave-nf-4.0-product-boundary.md)
 - Restore render: `archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh`

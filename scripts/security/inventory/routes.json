@@ -4,10 +4,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
-  "route_count": 181,
+  "route_count": 190,
   "disposition_counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 122,
+    "PLANNED": 131,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -6906,6 +6906,348 @@
         "identity"
       ],
       "notes": "Soft-OPEN: BPS DELETE point tombstone on overlay (+ also_exclude); Soft-OPEN \u2260 FQ"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/jobs",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_ingest_jobs",
+        "y.authz.get_api_ingest_jobs"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_ingest_jobs",
+        "y.authz.get_api_ingest_jobs"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Scoped ingest jobs. Coverage is not assessed."
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/jobs/{job_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_ingest_jobs_job_id",
+        "y.authz.get_api_ingest_jobs_job_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_ingest_jobs_job_id",
+        "y.authz.get_api_ingest_jobs_job_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "One ingest job. A foreign site is not found."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ingest/jobs/{job_id}/retry",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_ingest_jobs_job_id_retry",
+        "y.authz.post_api_ingest_jobs_job_id_retry"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_ingest_jobs_job_id_retry",
+        "y.authz.post_api_ingest_jobs_job_id_retry"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "queue_retry",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Operator retry of an eligible ingest job. Requires confirm on MCP."
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/receipts",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_ingest_receipts",
+        "y.authz.get_api_ingest_receipts"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_ingest_receipts",
+        "y.authz.get_api_ingest_receipts"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Scoped ingest receipts."
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/receipts/{receipt_id}",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_ingest_receipts_receipt_id",
+        "y.authz.get_api_ingest_receipts_receipt_id"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_ingest_receipts_receipt_id",
+        "y.authz.get_api_ingest_receipts_receipt_id"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "One ingest receipt."
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/gaps",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_ingest_gaps",
+        "y.authz.get_api_ingest_gaps"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_ingest_gaps",
+        "y.authz.get_api_ingest_gaps"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Partial, failed, and retry windows. Not a gapless ledger."
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/queue",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_ingest_queue",
+        "y.authz.get_api_ingest_queue"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_ingest_queue",
+        "y.authz.get_api_ingest_queue"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Queue backlog and portal in-flight. No live autoscaler."
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/queue/scale-preview",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_ingest_queue_scale_preview",
+        "y.authz.get_api_ingest_queue_scale_preview"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_ingest_queue_scale_preview",
+        "y.authz.get_api_ingest_queue_scale_preview"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Dry-run scale preview. live_control stays false."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ingest/backfill",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_ingest_backfill",
+        "y.authz.post_api_ingest_backfill"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_ingest_backfill",
+        "y.authz.post_api_ingest_backfill"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "queue_enqueue",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Enqueue at most 48 exact UTC hours."
     }
   ],
   "counts": {

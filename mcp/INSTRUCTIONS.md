@@ -149,6 +149,19 @@ Use `openfdd_model_sparql_catalog` then `openfdd_model_sparql` with a SELECT que
 - `openfdd_fdd_rule_test_sql` — dry-run `{rule_id, sql, params}`
 - `openfdd_fdd_run` — execute ad-hoc SQL (write gate)
 
+## Portal ingest queue (4.0)
+
+Normal 4.0 acquisition is the portal ingest queue, not fieldbus MQTT.
+
+- Read `openfdd_ingest_jobs`, `openfdd_ingest_receipts`, `openfdd_ingest_gaps`, and `openfdd_ingest_queue`.
+- Retry and backfill are writes (`confirm: true` and `OPENFDD_MCP_ALLOW_WRITES=1`). Backfill is at most 48 exact UTC hours.
+- Gap rows do not prove source coverage. The API reports `coverage: not_assessed` until a coverage ledger exists.
+- `openfdd_bacnet_whois`, `openfdd_bacnet_read`, remote Haystack wire tools, and `openfdd_driver_status` are **retired** on this surface. Calls return `ot_transport_retired` and do not reach the wire. Semantic `openfdd_model_sparql` stays.
+- Archive-lane OT discovery requires `OPENFDD_OT_TOOLS=1` on the MCP process. Do not set that on a normal portal hub.
+- Do not treat `GET /api/ingest/queue/scale-preview` as a live autoscaler. It does not change replicas.
+
+Contract: [`docs/operations/INGEST_QUEUE.md`](../docs/operations/INGEST_QUEUE.md).
+
 ## Safety
 
 Never log tokens or Haystack passwords. Do not delete `workspace/data` without operator approval.

@@ -18,11 +18,11 @@ todos:
     content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics"
     status: completed
   - id: wave-c-n8-leases
-    content: "Wave-C — N8 shared Postgres queue/leases before replicas"
-    status: in_progress
+    content: "Wave-C — N8 shared Postgres queue/leases before replicas (stages 1–2; stage 3 live controller deferred)"
+    status: completed
   - id: wave-c-n10-mcp
-    content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps (provider health/sites stay; OT discovery retired in M14)"
-    status: in_progress
+    content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps; OT discovery retired from normal 4.0; provider health/sites stay"
+    status: completed
   - id: wave-d-m10-ghcr
     content: "Wave-D — M10 VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus image"
     status: pending
@@ -73,7 +73,7 @@ todos:
     status: completed
   - id: n0-boundary
     content: N0 Define 4.0 product boundary + requirements-to-test matrix labels
-    status: pending
+    status: completed
   - id: n1-archive-real
     content: "N1 snapshot landed as unqualified-cdaa4f15. Merged #1294 e0df8bc7."
     status: completed
@@ -105,14 +105,14 @@ todos:
     content: "SoftOPEN defer — full coverage ledger UI; N5 states NF update-log 403 and bounded reconciliation (not gapless)"
     status: pending
   - id: n8-scale
-    content: SoftOPEN defer — N8 Shared Postgres queue/leases (Wave-C)
-    status: in_progress
-  - id: n9-meteo
-    content: SoftOPEN defer — N9 Open-Meteo weather adapter + contractor conformance fixture
+    content: "SoftOPEN defer — N8 stage 3 live replica controller (stages 1–2 queue/leases landed in Wave-C; simulator is dry-run only)"
     status: pending
+  - id: n9-meteo
+    content: N9 Open-Meteo weather adapter + contractor conformance fixture
+    status: completed
   - id: n10-api-mcp
-    content: SoftOPEN defer — N10 Scoped REST/MCP (Wave-C)
-    status: in_progress
+    content: "N10 scoped REST/MCP jobs/receipts/gaps; OT discovery retired from normal 4.0"
+    status: completed
   - id: n11-frontend
     content: SoftOPEN defer — N11 live window rows, backfill submit, and server-issued binding preview wait on N5/N3 (SPA hooks landed)
     status: pending
@@ -283,19 +283,23 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA hooks (live rows, backfill submit, and server preview stay deferred)
 
 ### Wave-C — after Wave-B
-- [ ] **wave-c-n8-leases** — N8 Postgres queue/leases before replicas
-- [ ] **wave-c-n10-mcp** — N10 scoped REST/MCP jobs/receipts/gaps (provider health/sites stay)
+- [x] **wave-c-n8-leases** — N8 Postgres queue/leases/fencing (stages 1–2). API role does not start pollers
+- [x] **wave-c-n10-mcp** — scoped REST/MCP jobs/receipts/gaps; OT discovery retired unless `OPENFDD_OT_TOOLS=1`; provider health/sites stay
 - [x] **m14-grok-tools** — legacy OT Grok tips flagged retired; MCP OT wire/driver discovery is not in default `tools/list`
 
 ### Wave-D — publish
 - [ ] **wave-d-m10-ghcr** — VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus
 
+### This round
+- [x] **n0-boundary** — 4.0 boundary and requirements matrix in `docs/architecture/wave-nf-4.0-product-boundary.md` (no row qualified)
+- [x] **n9-meteo** — Open-Meteo read-only adapter + offline contractor fixture. Ace stays NotImplemented
+
 ### SoftOPEN defer / later
+- [ ] SoftOPEN defer — **n8-scale** stage 3 live replica controller (dry-run preview only; no Kubernetes)
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
 - [ ] SoftOPEN defer — **n7-gaps** full coverage ledger UI (N5 already states update-log 403 and bounded reconciliation)
 - [ ] SoftOPEN defer — N5 historian sample upsert and job receipt are separate writes (one transaction stays with N6)
 - [ ] SoftOPEN defer — **n11-frontend** live window rows, backfill submit, and server-issued binding preview
-- [ ] SoftOPEN defer — **n9-meteo** Open-Meteo + contractor fixture
 - [ ] SoftOPEN defer — **n12-evidence** full acceptance matrix (no portal flood)
 - [ ] SoftOPEN defer — **n13-release** phased gates + truthful remaining status
 - [ ] SoftOPEN defer — **n2-dns-pin** DNS-at-connect rebinding pin (literal public-mode checks only)
