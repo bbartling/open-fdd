@@ -214,7 +214,7 @@ describe("Operations protocol navigation", () => {
 
   it("keeps the existing MQTT panels and AFDD view available", async () => {
     const mqtt = render(
-      <MemoryRouter initialEntries={["/operations"]}>
+      <MemoryRouter initialEntries={["/operations?view=mqtt"]}>
         <OperationsPage />
       </MemoryRouter>,
     );
