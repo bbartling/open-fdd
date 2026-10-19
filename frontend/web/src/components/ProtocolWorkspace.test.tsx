@@ -212,9 +212,20 @@ describe("Operations protocol navigation", () => {
     ));
   });
 
+  it("defaults Operations to provider ingest", async () => {
+    render(
+      <MemoryRouter initialEntries={["/operations"]}>
+        <OperationsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("providers-health-panel")).toBeTruthy();
+    expect((screen.getByTestId("operations-view-providers") as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByTestId("mqtt-config-panel")).toBeNull();
+  });
+
   it("keeps the existing MQTT panels and AFDD view available", async () => {
     const mqtt = render(
-      <MemoryRouter initialEntries={["/operations"]}>
+      <MemoryRouter initialEntries={["/operations?view=mqtt"]}>
         <OperationsPage />
       </MemoryRouter>,
     );

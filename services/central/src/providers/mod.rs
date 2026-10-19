@@ -2,6 +2,8 @@
 
 pub mod ace_stub;
 pub mod config;
+pub mod error;
+pub mod http_policy;
 pub mod map;
 pub mod nf;
 pub mod poller;
@@ -13,12 +15,13 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::Extension;
 use axum::Json;
-use tokio::sync::Mutex;
 use tokio::sync::watch;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
-use config::{load_sites_from_env, SiteConfig};
+use config::{load_sites_from_env, SiteConfig, SiteConfigFailure};
+use error::safe_operator_code;
 use types::{
     ProviderHealth, ProviderHealthStatus, ProviderKind, ProvidersHealthBody, SiteProviderHealth,
 };
@@ -27,10 +30,42 @@ use crate::state::AppState;
 
 /// Vendor HTTPS ingest driver (NF portal, future Ace IoT).
 pub trait DataProvider: Send + Sync {
+    /// Production poller calls the concrete driver. Tests exercise this trait.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "production poller uses concrete drivers; unit tests call the trait"
+        )
+    )]
     fn provider_id(&self) -> &str;
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "production poller uses concrete drivers; unit tests call the trait"
+        )
+    )]
     fn kind(&self) -> ProviderKind;
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "production poller uses concrete drivers; unit tests call the trait"
+        )
+    )]
     fn health(&self) -> ProviderHealth;
+    /// Concrete pollers call driver history directly. These stay on the trait
+    /// so the next adapter does not grow a second scheduler.
+    #[expect(
+        dead_code,
+        reason = "NF poller uses fetch_history; trait method is the adapter contract"
+    )]
     fn authenticate(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
+    #[expect(
+        dead_code,
+        reason = "NF poller uses fetch_history; trait method is the adapter contract"
+    )]
     fn fetch_latest(
         &mut self,
     ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
@@ -50,11 +85,15 @@ impl DataProvider for nf::NfPortalDriver {
     }
 
     async fn authenticate(&mut self) -> Result<(), String> {
-        nf::NfPortalDriver::authenticate(self).await
+        nf::NfPortalDriver::authenticate(self)
+            .await
+            .map_err(|err| err.to_string())
     }
 
     async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
-        nf::NfPortalDriver::query_points(self, 200).await
+        nf::NfPortalDriver::query_points(self, 200)
+            .await
+            .map_err(|err| err.to_string())
     }
 }
 
@@ -87,52 +126,46 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn from_env() -> Arc<Self> {
-        let sites = match load_sites_from_env() {
-            Ok(s) => s,
-            Err(err) => {
-                warn!(%err, "OPENFDD_PROVIDER_SITES invalid; no provider sites loaded");
-                Vec::new()
+        let loaded = match load_sites_from_env() {
+            Ok(loaded) => loaded,
+            Err(code) => {
+                warn!(code = %code, "OPENFDD_PROVIDER_SITES invalid; no provider sites loaded");
+                config::ProviderConfigLoad {
+                    sites: Vec::new(),
+                    failures: Vec::new(),
+                    fatal: Some(safe_operator_code(&code)),
+                }
             }
         };
+        if !loaded.failures.is_empty() {
+            warn!(
+                failed = loaded.failures.len(),
+                "provider sites failed closed and will not poll"
+            );
+        }
         let poll_enabled = std::env::var("OPENFDD_PROVIDER_POLL")
             .ok()
             .is_some_and(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"));
-        let site_health: Vec<SiteProviderHealth> = sites
+        let mut site_health: Vec<SiteProviderHealth> = loaded
+            .sites
             .iter()
-            .map(|site| {
-                let status = if matches!(site.kind, ProviderKind::AceIot) {
-                    ProviderHealthStatus::NotImplemented
-                } else if site.client_id.is_none() && site.endpoint.contains("normal-online.net") {
-                    ProviderHealthStatus::NotConfigured
-                } else {
-                    ProviderHealthStatus::NotConfigured
-                };
-                SiteProviderHealth {
-                    building_id: site.building_id.clone(),
-                    provider: site.kind,
-                    endpoint: site.endpoint.clone(),
-                    poll_secs: site.poll_secs,
-                    mapped_points: site.resolver.mapped_count(),
-                    health: ProviderHealth {
-                        provider_id: provider_id_for_site(site),
-                        kind: site.kind,
-                        status,
-                        message: None,
-                        last_success_at: None,
-                        last_error_at: None,
-                    },
-                    last_poll_at: None,
-                    last_ingested_points: 0,
-                    consecutive_errors: 0,
-                }
-            })
+            .map(|site| health_row(site, initial_status(site), None))
             .collect();
+        site_health.extend(loaded.failures.iter().map(failure_row));
+        let config_error = loaded.fatal.clone().or_else(|| {
+            if loaded.failures.is_empty() {
+                None
+            } else {
+                Some("provider_config_invalid".into())
+            }
+        });
         Arc::new(Self {
-            sites,
+            sites: loaded.sites,
             health: Mutex::new(ProvidersHealthBody {
-                ok: true,
+                ok: config_error.is_none(),
                 poll_enabled,
                 sites: site_health,
+                config_error,
             }),
         })
     }
@@ -146,6 +179,7 @@ impl Runtime {
             .iter()
             .map(|s| SiteConfigSummary {
                 building_id: s.building_id.clone(),
+                provider_instance_id: s.provider_instance_id.clone(),
                 provider: s.kind,
                 endpoint: s.endpoint.clone(),
                 poll_secs: s.poll_secs,
@@ -159,6 +193,7 @@ impl Runtime {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SiteConfigSummary {
     pub building_id: String,
+    pub provider_instance_id: String,
     pub provider: ProviderKind,
     pub endpoint: String,
     pub poll_secs: u64,
@@ -170,63 +205,139 @@ pub async fn providers_health(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::auth::AuthUser>,
 ) -> Json<ProvidersHealthBody> {
-    let ctx = crate::tenant::TenantContext::resolve_fail_closed(
-        &user,
-        &state.control_plane.read().await.clone(),
-    );
-    let mut body = state.providers.health_snapshot().await;
-    body.sites.retain(|s| ctx.allow_building(&s.building_id));
-    // Do not leak foreign-site endpoints/errors; strip messages for non-hub when MT on.
-    if ctx.multi_tenant && !ctx.hub_admin {
-        for site in &mut body.sites {
-            if let Some(msg) = site.health.message.as_mut() {
-                *msg = truncate_safe(msg, 120);
-            }
-        }
-    }
-    Json(body)
+    let ctx = tenant_context_for(&user);
+    Json(visible_health(
+        state.providers.health_snapshot().await,
+        &ctx,
+    ))
 }
 
 pub async fn providers_sites(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::auth::AuthUser>,
 ) -> Json<serde_json::Value> {
-    let ctx = crate::tenant::TenantContext::resolve_fail_closed(
-        &user,
-        &state.control_plane.read().await.clone(),
-    );
+    let ctx = tenant_context_for(&user);
+    let health = visible_health(state.providers.health_snapshot().await, &ctx);
     let sites: Vec<_> = state
         .providers
         .sites_config()
         .into_iter()
         .filter(|s| ctx.allow_building(&s.building_id))
+        .map(|mut site| {
+            site.endpoint = visible_endpoint(&site.endpoint, &ctx);
+            site
+        })
         .collect();
-    let mut health = state.providers.health_snapshot().await;
-    health.sites.retain(|s| ctx.allow_building(&s.building_id));
     Json(serde_json::json!({
-        "ok": true,
+        "ok": health.ok,
         "poll_enabled": health.poll_enabled,
         "sites": sites,
         "health": health.sites,
     }))
 }
 
-fn truncate_safe(s: &str, max: usize) -> String {
-    let mut out = String::new();
-    for (i, ch) in s.chars().enumerate() {
-        if i >= max {
-            out.push('…');
-            break;
-        }
-        out.push(ch);
+fn initial_status(site: &SiteConfig) -> ProviderHealthStatus {
+    if matches!(site.kind, ProviderKind::AceIot) {
+        ProviderHealthStatus::NotImplemented
+    } else {
+        ProviderHealthStatus::NotConfigured
     }
-    out
 }
 
-fn provider_id_for_site(site: &SiteConfig) -> String {
-    match site.kind {
-        ProviderKind::Nf => format!("nf:{}", site.building_id),
-        ProviderKind::AceIot => format!("ace_iot:{}", site.building_id),
+fn health_row(
+    site: &SiteConfig,
+    status: ProviderHealthStatus,
+    message: Option<String>,
+) -> SiteProviderHealth {
+    SiteProviderHealth {
+        building_id: site.building_id.clone(),
+        provider_instance_id: site.provider_instance_id.clone(),
+        provider: site.kind,
+        endpoint: site.endpoint.clone(),
+        poll_secs: site.poll_secs,
+        mapped_points: site.resolver.mapped_count(),
+        health: ProviderHealth {
+            provider_id: site.provider_instance_id.clone(),
+            kind: site.kind,
+            status,
+            message,
+            last_success_at: None,
+            last_error_at: None,
+        },
+        last_poll_at: None,
+        last_ingested_points: 0,
+        consecutive_errors: 0,
+    }
+}
+
+fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
+    SiteProviderHealth {
+        building_id: failure.building_id.clone(),
+        provider_instance_id: String::new(),
+        provider: ProviderKind::Nf,
+        endpoint: "invalid".into(),
+        poll_secs: 0,
+        mapped_points: 0,
+        health: ProviderHealth {
+            provider_id: String::new(),
+            kind: ProviderKind::Nf,
+            status: ProviderHealthStatus::Error,
+            message: Some(safe_operator_code(&failure.code)),
+            last_success_at: None,
+            last_error_at: None,
+        },
+        last_poll_at: None,
+        last_ingested_points: 0,
+        consecutive_errors: 0,
+    }
+}
+
+fn status_is_clear(status: ProviderHealthStatus) -> bool {
+    matches!(
+        status,
+        ProviderHealthStatus::Ok
+            | ProviderHealthStatus::NotConfigured
+            | ProviderHealthStatus::NotImplemented
+    )
+}
+
+/// Fail closed: only buildings in the tenant context. Non-hub callers do not
+/// receive origins or raw messages. MCP uses these same REST handlers.
+pub fn visible_health(
+    mut body: ProvidersHealthBody,
+    ctx: &crate::tenant::TenantContext,
+) -> ProvidersHealthBody {
+    body.sites
+        .retain(|site| ctx.allow_building(&site.building_id));
+    let hub_view = !ctx.multi_tenant || ctx.hub_admin;
+    for site in &mut body.sites {
+        site.endpoint = visible_endpoint(&site.endpoint, ctx);
+        site.health.message = site.health.message.as_deref().map(safe_operator_code);
+    }
+    if !hub_view {
+        body.config_error = None;
+    } else if let Some(code) = body.config_error.as_deref() {
+        body.config_error = Some(safe_operator_code(code));
+    }
+    body.ok = body.config_error.is_none()
+        && body
+            .sites
+            .iter()
+            .all(|site| status_is_clear(site.health.status));
+    body
+}
+
+fn tenant_context_for(user: &crate::auth::AuthUser) -> crate::tenant::TenantContext {
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    crate::tenant::TenantContext::resolve_fail_closed(user, &plane)
+}
+
+fn visible_endpoint(endpoint: &str, ctx: &crate::tenant::TenantContext) -> String {
+    if ctx.multi_tenant && !ctx.hub_admin {
+        "redacted".into()
+    } else {
+        endpoint.to_string()
     }
 }
 
@@ -236,4 +347,111 @@ pub fn spawn_poller_with_shutdown(
 ) -> JoinHandle<()> {
     let runtime = Arc::clone(&state.providers);
     poller::spawn_with_shutdown(state, runtime, shutdown)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::http_policy::HttpLimits;
+    use crate::tenant::TenantContext;
+
+    fn check_provider(provider: &impl DataProvider) {
+        assert!(!provider.provider_id().is_empty());
+        let _ = provider.kind();
+        let _ = provider.health();
+    }
+
+    #[test]
+    fn data_provider_identity_is_used() {
+        let nf = nf::NfPortalDriver::new(
+            "nf:explicit",
+            "https://portal.example",
+            None,
+            None,
+            true,
+            HttpLimits::default(),
+        )
+        .unwrap();
+        let ace = ace_stub::AceIotStubDriver::new("ace_iot:explicit");
+        check_provider(&nf);
+        check_provider(&ace);
+        assert_eq!(ace.provider_id(), "ace_iot:explicit");
+    }
+
+    fn site(building: &str, endpoint: &str, message: &str) -> SiteProviderHealth {
+        SiteProviderHealth {
+            building_id: building.into(),
+            provider_instance_id: format!("nf:{building}:abc"),
+            provider: ProviderKind::Nf,
+            endpoint: endpoint.into(),
+            poll_secs: 300,
+            mapped_points: 1,
+            health: ProviderHealth {
+                provider_id: format!("nf:{building}:abc"),
+                kind: ProviderKind::Nf,
+                status: ProviderHealthStatus::Error,
+                message: Some(message.into()),
+                last_success_at: None,
+                last_error_at: None,
+            },
+            last_poll_at: None,
+            last_ingested_points: 0,
+            consecutive_errors: 1,
+        }
+    }
+
+    fn ctx(buildings: &[&str], hub: bool) -> TenantContext {
+        TenantContext {
+            tenant_id: if hub { None } else { Some("tenant".into()) },
+            building_ids: buildings.iter().map(|s| (*s).to_string()).collect(),
+            hub_admin: hub,
+            multi_tenant: true,
+        }
+    }
+
+    #[test]
+    fn tenant_filter_hides_foreign_sites_and_raw_errors() {
+        let body = ProvidersHealthBody {
+            ok: true,
+            poll_enabled: true,
+            config_error: Some("provider_config_invalid building=SECRET".into()),
+            sites: vec![
+                site("SITE_A", "https://a.example", "auth_failed request_id=1"),
+                site(
+                    "SITE_B",
+                    "https://user:CANARY@b.example/secret",
+                    "CANARY-SECRET-VALUE leaked",
+                ),
+            ],
+        };
+        let a = visible_health(body.clone(), &ctx(&["SITE_A"], false));
+        assert_eq!(a.sites.len(), 1);
+        assert_eq!(a.sites[0].building_id, "SITE_A");
+        assert_eq!(a.sites[0].endpoint, "redacted");
+        assert_eq!(a.sites[0].health.message.as_deref(), Some("auth_failed"));
+        assert!(a.config_error.is_none());
+        let rendered = serde_json::to_string(&a).unwrap();
+        assert!(!rendered.contains("SITE_B"));
+        assert!(!rendered.contains("CANARY"));
+        assert!(!rendered.contains("b.example"));
+
+        let empty = visible_health(body.clone(), &ctx(&[], false));
+        assert!(empty.sites.is_empty());
+        assert!(empty.ok);
+
+        let hub = visible_health(body, &ctx(&[], true));
+        assert_eq!(hub.sites.len(), 2);
+        assert!(hub.sites.iter().any(|s| s.endpoint.contains("b.example")));
+        assert_eq!(
+            hub.sites
+                .iter()
+                .find(|s| s.building_id == "SITE_B")
+                .unwrap()
+                .health
+                .message
+                .as_deref(),
+            Some("provider_error")
+        );
+        assert!(!hub.ok);
+    }
 }

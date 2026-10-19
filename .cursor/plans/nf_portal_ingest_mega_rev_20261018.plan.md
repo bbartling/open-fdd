@@ -4,7 +4,7 @@ overview: "Wave-NF 4.0 portal ingest. Order: Wave-A N2+N6 → Wave-B parallel N1
 todos:
   - id: wave-a-n2-n6
     content: "Wave-A PR1 — N2 security + N6 storage correctness (tenant filter, fail-closed secrets, no OAuth redirects, bounds, typed errors; per-equip routing, source ts/units/quality, truthful persist counts)"
-    status: in_progress
+    status: completed
   - id: wave-b-n1-archive
     content: "Wave-B parallel — N1 real archive/ot-edge freeze + digest prune protection + isolated restore"
     status: in_progress
@@ -79,7 +79,7 @@ todos:
     status: in_progress
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
-    status: in_progress
+    status: completed
   - id: n3-model
     content: SoftOPEN defer — N3 Source-neutral committed model (owned by Wave-B parallel PR)
     status: in_progress
@@ -91,7 +91,7 @@ todos:
     status: in_progress
   - id: n6-storage
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
-    status: in_progress
+    status: completed
   - id: n7-gaps
     content: SoftOPEN defer — N7 Coverage ledger; bounded reconciliation; NF update-log 403 limitation stated
     status: pending
@@ -112,6 +112,12 @@ todos:
     status: pending
   - id: n13-release
     content: SoftOPEN defer — N13 Phased delivery gates; truthful implemented/tested/deployed/remaining status
+    status: pending
+  - id: n2-dns-pin
+    content: SoftOPEN defer — DNS-at-connect rebinding pin for provider endpoints (Wave-A left public-mode literal IP checks only)
+    status: pending
+  - id: n2-hot-secrets
+    content: SoftOPEN defer — hot credential reload without process restart
     status: pending
 isProject: true
 ---
@@ -250,12 +256,13 @@ Legacy OT Grok tips are **stale** for this wave (M14).
 Update this section **and** the YAML frontmatter after every merge. Prefix unfinished leftovers with `SoftOPEN defer —`.
 
 ### Wave-A — now (one PR)
-- [ ] **wave-a-n2-n6** — N2 security + N6 storage correctness
+- [x] **wave-a-n2-n6** — N2 security + N6 storage correctness
   - Tenant-filter `/api/providers/health|sites` (+ MCP parity)
   - Fail-closed missing secrets; no OAuth redirects; connect/read/total deadlines + byte bounds
   - Typed safe errors; no raw vendor/token bodies in health/logs
   - Per-equipment type routing (not first-in-envelope); source ts/units/quality; truthful persist counts; DB reconnect
-- [ ] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
+  - Base-branch blockers included: `nf.rs` delimiter, `scripts/nf` display-name audit, security inventory for the two provider GETs
+- [x] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
 
 ### Wave-B — parallel after Wave-A merges
 - [ ] **wave-b-n1-archive** — N1 real `archive/ot-edge/<freeze>/` + prune protection + isolated restore
@@ -276,6 +283,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n9-meteo** Open-Meteo + contractor fixture
 - [ ] SoftOPEN defer — **n12-evidence** full acceptance matrix (no portal flood)
 - [ ] SoftOPEN defer — **n13-release** phased gates + truthful remaining status
+- [ ] SoftOPEN defer — **n2-dns-pin** DNS-at-connect rebinding pin (literal public-mode checks only)
+- [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
 
 ### Already done (do not reopen)
 - [x] m0-milestones, m2-adr, m3-trait (prototype), m9-stub-ace

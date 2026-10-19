@@ -478,6 +478,8 @@ mod tests {
             .filter_map(|tool| tool.get("name").and_then(Value::as_str))
             .collect();
         for expected in [
+            "openfdd_provider_health",
+            "openfdd_provider_sites",
             "openfdd_capabilities",
             "openfdd_fdd_registry",
             "openfdd_fdd_equipment",

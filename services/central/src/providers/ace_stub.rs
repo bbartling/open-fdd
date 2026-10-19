@@ -9,9 +9,9 @@ pub struct AceIotStubDriver {
 }
 
 impl AceIotStubDriver {
-    pub fn new(building_id: &str) -> Self {
+    pub fn new(provider_instance_id: &str) -> Self {
         Self {
-            provider_id: format!("ace_iot:{building_id}"),
+            provider_id: provider_instance_id.to_string(),
         }
     }
 

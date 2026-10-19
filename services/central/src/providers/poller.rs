@@ -10,6 +10,8 @@ use tracing::{debug, info, warn};
 
 use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
+use super::error::safe_operator_code;
+use super::http_policy::HttpLimits;
 use super::map::{normalize_mapped, RoleResolver};
 use super::nf::NfPortalDriver;
 use super::types::ProviderHealthStatus;
@@ -29,6 +31,7 @@ fn max_concurrent() -> usize {
         .and_then(|v| v.parse().ok())
         .filter(|n| *n > 0)
         .unwrap_or(2)
+        .clamp(1, 16)
 }
 
 fn page_size() -> u32 {
@@ -37,6 +40,7 @@ fn page_size() -> u32 {
         .and_then(|v| v.parse().ok())
         .filter(|n| *n > 0)
         .unwrap_or(200)
+        .clamp(1, 500)
 }
 
 pub fn spawn_with_shutdown(
@@ -61,9 +65,9 @@ pub fn spawn_with_shutdown(
             let state = Arc::clone(&state);
             let runtime = Arc::clone(&runtime);
             let sem = Arc::clone(&sem);
-            let mut shutdown_site = shutdown.clone();
+            let shutdown_site = shutdown.clone();
             handles.push(tokio::spawn(async move {
-                site_poll_loop(state, runtime, site, sem, &mut shutdown_site).await;
+                supervise_site(state, runtime, site, sem, shutdown_site).await;
             }));
         }
         let _ = shutdown.wait_for(|v| *v).await;
@@ -72,6 +76,52 @@ pub fn spawn_with_shutdown(
         }
         info!("provider poller stopped");
     })
+}
+
+async fn supervise_site(
+    state: Arc<AppState>,
+    runtime: Arc<Runtime>,
+    site: SiteConfig,
+    sem: Arc<Semaphore>,
+    shutdown: watch::Receiver<bool>,
+) {
+    let building_id = site.building_id.clone();
+    let mut restarts = 0u32;
+    loop {
+        let state = Arc::clone(&state);
+        let runtime_task = Arc::clone(&runtime);
+        let site = site.clone();
+        let sem = Arc::clone(&sem);
+        let mut shutdown_task = shutdown.clone();
+        let joined = tokio::spawn(async move {
+            site_poll_loop(state, runtime_task, site, sem, &mut shutdown_task).await;
+        })
+        .await;
+        match joined {
+            Ok(()) => return,
+            Err(err) if err.is_panic() => {
+                restarts = restarts.saturating_add(1);
+                runtime
+                    .record_error(
+                        &building_id,
+                        ProviderHealthStatus::Error,
+                        Some("site_task_exited".into()),
+                    )
+                    .await;
+                if restarts >= 5 {
+                    warn!(%building_id, "provider site task stopped after repeated exits");
+                    return;
+                }
+                let pause = Duration::from_secs(5u64.saturating_mul(u64::from(restarts)).min(60));
+                let mut shutdown_wait = shutdown.clone();
+                tokio::select! {
+                    _ = tokio::time::sleep(pause) => {}
+                    _ = shutdown_wait.wait_for(|v| *v) => return,
+                }
+            }
+            Err(_) => return,
+        }
+    }
 }
 
 async fn site_poll_loop(
@@ -90,17 +140,34 @@ async fn site_poll_loop(
     let client_id = site.client_id.clone();
     let client_secret = site.client_secret.clone();
     let resolver = site.resolver;
+    let anonymous = site.anonymous;
+    let provider_instance_id = site.provider_instance_id.clone();
     let mut nf = if matches!(kind, super::types::ProviderKind::Nf) {
-        Some(NfPortalDriver::new(
-            &building_id,
+        match NfPortalDriver::new(
+            provider_instance_id.clone(),
             endpoint,
             client_id,
             client_secret,
-        ))
+            anonymous,
+            HttpLimits::default(),
+        ) {
+            Ok(driver) => Some(driver),
+            Err(err) => {
+                runtime
+                    .record_error(
+                        &building_id,
+                        ProviderHealthStatus::Error,
+                        Some(safe_operator_code(&err.to_string())),
+                    )
+                    .await;
+                let _ = shutdown.wait_for(|v| *v).await;
+                return;
+            }
+        }
     } else {
         None
     };
-    let mut ace = AceIotStubDriver::new(&building_id);
+    let mut ace = AceIotStubDriver::new(&provider_instance_id);
 
     loop {
         tokio::select! {
@@ -121,20 +188,36 @@ async fn site_poll_loop(
         let result = match kind {
             super::types::ProviderKind::Nf => {
                 let driver = nf.as_mut().expect("nf driver");
-                poll_nf_site(&state, &building_id, driver, &resolver, page_size()).await
+                poll_nf_site(
+                    &state,
+                    &building_id,
+                    &provider_instance_id,
+                    driver,
+                    &resolver,
+                    page_size(),
+                )
+                .await
             }
-            super::types::ProviderKind::AceIot => {
-                poll_ace_site(&building_id, &mut ace).await
-            }
+            super::types::ProviderKind::AceIot => poll_ace_site(&building_id, &mut ace).await,
         };
 
         match result {
-            Ok(ingested) => {
+            Ok(outcome) => {
                 backoff_secs = poll_secs;
                 runtime
-                    .record_success(&building_id, ingested as u64, ProviderHealthStatus::Ok, None)
+                    .record_success(
+                        &building_id,
+                        outcome.persisted_rows,
+                        outcome.status,
+                        outcome.message,
+                    )
                     .await;
-                debug!(%building_id, ingested, "provider poll ok");
+                debug!(
+                    %building_id,
+                    persisted = outcome.persisted_rows,
+                    status = ?outcome.status,
+                    "provider poll finished"
+                );
             }
             Err(err) => {
                 backoff_secs = if backoff_secs == 0 {
@@ -142,42 +225,96 @@ async fn site_poll_loop(
                 } else {
                     (backoff_secs.saturating_mul(2)).min(900)
                 };
-                warn!(%building_id, %err, next_backoff_secs = backoff_secs, "provider poll failed");
-                runtime
-                    .record_error(
-                        &building_id,
-                        ProviderHealthStatus::Error,
-                        Some(err),
-                    )
-                    .await;
+                let code = safe_operator_code(&err.to_string());
+                warn!(%building_id, code = %code, next_backoff_secs = backoff_secs, "provider poll failed");
+                let status = if code == "auth_failed" || code == "auth_not_configured" {
+                    ProviderHealthStatus::AuthFailed
+                } else {
+                    ProviderHealthStatus::Error
+                };
+                runtime.record_error(&building_id, status, Some(code)).await;
             }
         }
     }
 }
 
+struct PollOutcome {
+    persisted_rows: u64,
+    status: ProviderHealthStatus,
+    message: Option<String>,
+}
+
 async fn poll_nf_site(
     state: &Arc<AppState>,
     building_id: &str,
+    provider_instance_id: &str,
     driver: &mut NfPortalDriver,
     resolver: &RoleResolver,
     page_size: u32,
-) -> Result<usize, String> {
+) -> Result<PollOutcome, super::error::ProviderError> {
     driver.authenticate().await?;
     let latest = driver.query_points(page_size).await?;
     let now = Utc::now();
-    // One hour of history plus five minutes of overlap. Timescale upsert on
-    // (site, key, ts) drops the overlap instead of inserting a second row.
+    // Prototype window until N5 durable hourly jobs. History stays a GET.
     let from = now - chrono::Duration::minutes(65);
-    let history = match driver
+    let (history, history_code) = match driver
         .fetch_history(&resolver.provider_point_ids(), from, now)
         .await
     {
-        Ok(rows) => rows,
+        Ok(rows) => (rows, None),
         Err(err) => {
-            warn!(%building_id, %err, "NF GetData failed; keeping latest-value scrape only");
-            Vec::new()
+            let code = safe_operator_code(&err.to_string());
+            let incomplete = super::error::ProviderError::new(
+                super::error::ProviderErrorCode::HistoryIncomplete,
+            );
+            warn!(%building_id, code = %code, marker = %incomplete, "NF history incomplete");
+            (Vec::new(), Some(incomplete.code.as_str().to_string()))
         }
     };
+    let receipt = ingest_mapped(
+        state,
+        building_id,
+        provider_instance_id,
+        resolver,
+        latest,
+        history,
+    )
+    .await?;
+    let (status, message) = if history_code.is_some() {
+        (
+            ProviderHealthStatus::Degraded,
+            Some("history_incomplete".into()),
+        )
+    } else if receipt.submitted > 0 && receipt.persisted_rows == 0 {
+        (
+            ProviderHealthStatus::Degraded,
+            Some("nothing_persisted".into()),
+        )
+    } else {
+        (ProviderHealthStatus::Ok, None)
+    };
+    let snapshot = driver.health(status, message);
+    if snapshot.provider_id != provider_instance_id || driver.provider_id() != provider_instance_id
+    {
+        return Err(super::error::ProviderError::new(
+            super::error::ProviderErrorCode::Config,
+        ));
+    }
+    Ok(PollOutcome {
+        persisted_rows: receipt.persisted_rows as u64,
+        status: snapshot.status,
+        message: snapshot.message,
+    })
+}
+
+async fn ingest_mapped(
+    state: &Arc<AppState>,
+    building_id: &str,
+    provider_instance_id: &str,
+    resolver: &RoleResolver,
+    latest: Vec<super::map::RawProviderPoint>,
+    history: Vec<super::map::RawProviderPoint>,
+) -> Result<writer::ProviderIngestReceipt, super::error::ProviderError> {
     let mut raw = history;
     raw.extend(latest);
     let mut samples = Vec::new();
@@ -186,21 +323,42 @@ async fn poll_nf_site(
         let Some(resolved) = resolver.resolve(&point.provider_point_id) else {
             continue;
         };
-        let key = (point.provider_point_id.clone(), point.ts.timestamp());
+        let key = (point.provider_point_id.clone(), point.ts.timestamp_micros());
         if !seen.insert(key) {
             continue;
         }
-        samples.push(normalize_mapped(building_id, point, resolved));
+        samples.push(normalize_mapped(
+            building_id,
+            provider_instance_id,
+            point,
+            resolved,
+        ));
     }
-    writer::ingest_samples(state, building_id, &samples)
-        .await
-        .map_err(|e| e.to_string())
+    writer::ingest_samples(state, building_id, provider_instance_id, &samples).await
 }
 
-async fn poll_ace_site(building_id: &str, ace: &mut AceIotStubDriver) -> Result<usize, String> {
+async fn poll_ace_site(
+    building_id: &str,
+    ace: &mut AceIotStubDriver,
+) -> Result<PollOutcome, super::error::ProviderError> {
     let _ = building_id;
-    ace.authenticate().await?;
-    ace.query_points().await.map(|_| 0)
+    let health = ace.health();
+    if health.provider_id != ace.provider_id() {
+        return Err(super::error::ProviderError::new(
+            super::error::ProviderErrorCode::Config,
+        ));
+    }
+    ace.authenticate().await.map_err(|_| {
+        super::error::ProviderError::new(super::error::ProviderErrorCode::NotImplemented)
+    })?;
+    let _ = ace.query_points().await.map_err(|_| {
+        super::error::ProviderError::new(super::error::ProviderErrorCode::NotImplemented)
+    })?;
+    Ok(PollOutcome {
+        persisted_rows: 0,
+        status: ProviderHealthStatus::NotImplemented,
+        message: Some("not_implemented".into()),
+    })
 }
 
 impl Runtime {
@@ -221,7 +379,7 @@ impl Runtime {
             site.last_ingested_points = ingested;
             site.consecutive_errors = 0;
             site.health.status = status;
-            site.health.message = message;
+            site.health.message = message.as_deref().map(safe_operator_code);
             site.health.last_success_at = Some(Utc::now());
         }
     }
@@ -241,7 +399,7 @@ impl Runtime {
             site.last_poll_at = Some(Utc::now());
             site.consecutive_errors = site.consecutive_errors.saturating_add(1);
             site.health.status = status;
-            site.health.message = message;
+            site.health.message = message.as_deref().map(safe_operator_code);
             site.health.last_error_at = Some(Utc::now());
         }
     }
