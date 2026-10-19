@@ -7,22 +7,22 @@ todos:
     status: in_progress
   - id: wave-b-n1-archive
     content: "Wave-B parallel — N1 real archive/ot-edge freeze + digest prune protection + isolated restore"
-    status: pending
+    status: in_progress
   - id: wave-b-n5-hourly
     content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (un-cancel; GET history only)"
-    status: pending
+    status: in_progress
   - id: wave-b-n3-model
     content: "Wave-B parallel — N3 source-neutral committed model + scoped SPARQL ingest plans"
-    status: pending
+    status: in_progress
   - id: wave-b-n11-spa
     content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics"
-    status: pending
+    status: in_progress
   - id: wave-c-n8-leases
     content: "Wave-C — N8 shared Postgres queue/leases before replicas"
-    status: pending
+    status: in_progress
   - id: wave-c-n10-mcp
     content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps; retire OT tool discovery from normal 4.0"
-    status: pending
+    status: in_progress
   - id: wave-d-m10-ghcr
     content: "Wave-D — M10 VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus image"
     status: pending
@@ -76,19 +76,19 @@ todos:
     status: pending
   - id: n1-archive-real
     content: SoftOPEN defer — N1 Real archive/ot-edge freeze (owned by Wave-B parallel PR)
-    status: pending
+    status: in_progress
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
     status: in_progress
   - id: n3-model
     content: SoftOPEN defer — N3 Source-neutral committed model (owned by Wave-B parallel PR)
-    status: pending
+    status: in_progress
   - id: n4-contract
     content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
     status: pending
   - id: n5-durable
     content: SoftOPEN defer — N5 Durable per-device hourly jobs (owned by Wave-B; was wrongly cancelled)
-    status: pending
+    status: in_progress
   - id: n6-storage
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
     status: in_progress
@@ -97,16 +97,16 @@ todos:
     status: pending
   - id: n8-scale
     content: SoftOPEN defer — N8 Shared Postgres queue/leases (Wave-C)
-    status: pending
+    status: in_progress
   - id: n9-meteo
     content: SoftOPEN defer — N9 Open-Meteo weather adapter + contractor conformance fixture
     status: pending
   - id: n10-api-mcp
     content: SoftOPEN defer — N10 Scoped REST/MCP (Wave-C)
-    status: pending
+    status: in_progress
   - id: n11-frontend
     content: SoftOPEN defer — N11 Full Providers/Sites/Model/ledger UI (Wave-B)
-    status: pending
+    status: in_progress
   - id: n12-evidence
     content: SoftOPEN defer — N12 Full acceptance matrix (fixtures then bounded NF SoftOPEN pilot); no portal flooding
     status: pending
@@ -282,3 +282,13 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### Prototype still open (do not claim complete)
 - [~] m1-freeze-ot, m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
+
+### Cloud agents launched 2026-10-19 (Grok Bot)
+- Wave-A N2+N6: bc-8669bd28
+- Wave-B N1 archive: bc-09497442
+- Wave-B N5 hourly: bc-81ff01ac
+- Wave-B N3 model: bc-9c23a08d
+- Wave-B N11 SPA: bc-7fe03caf
+- Wave-C N8+N10: bc-d24c1c2e
+- Wave-D GHCR: waiting on merges
+
