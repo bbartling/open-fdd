@@ -9,6 +9,12 @@ description: >-
 
 # BACnet OT debug (Open-FDD)
 
+Normal 4.0 MCP discovery does **not** list `openfdd_bacnet_whois` or
+`openfdd_bacnet_read`. Those calls return `ot_transport_retired`. Portal jobs
+use `openfdd_ingest_jobs`, `openfdd_ingest_receipts`, `openfdd_ingest_gaps`,
+and `openfdd_ingest_queue`. Set `OPENFDD_OT_TOOLS=1` only on an explicit
+archive lane. This skill is that lane, not the portal ingest path.
+
 `openfdd-mcp` is **Central REST** (FDD/historian). It does **not** replace
 wire-level BACnet. **Product OT = `openfdd-fieldbus` + rusty-bacnet (Rust).**
 BACpypes3/Python is **troubleshoot-only** — never a production driver.

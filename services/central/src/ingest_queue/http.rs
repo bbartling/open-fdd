@@ -1,0 +1,662 @@
+//! Scoped ingest queue HTTP. Tenant filtering happens before rows are returned.
+
+use std::sync::Arc;
+
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::Extension;
+use axum::Json;
+use chrono::{DateTime, Utc};
+use serde::Deserialize;
+use serde_json::{json, Value};
+use uuid::Uuid;
+
+use crate::auth::{AuthUser, Role};
+use crate::contract::{self, json_error};
+use crate::state::AppState;
+use crate::tenant::TenantContext;
+
+use super::client::QueueClient;
+use super::model::*;
+use super::scale::{self, ScalePolicy, ScaleSample};
+
+#[derive(Debug, Deserialize)]
+pub struct ListQuery {
+    pub site_id: Option<String>,
+    pub state: Option<String>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RetryBody {
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WindowBody {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BackfillBody {
+    pub idempotency_key: String,
+    pub tenant_id: Option<String>,
+    pub canonical_site: String,
+    pub provider_instance_id: String,
+    pub device_id: String,
+    pub model_revision: Option<String>,
+    pub windows: Vec<WindowBody>,
+}
+
+pub async fn list_jobs(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Query(query): Query<ListQuery>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    let Some(filter) = scoped_filter(&ctx, &query, &request_id) else {
+        return empty_list(&request_id, &ctx);
+    };
+    match state.ingest_queue.list_jobs(&filter).await {
+        Ok(jobs) => Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "coverage": COVERAGE_NOT_ASSESSED,
+            "jobs": jobs,
+        }))
+        .into_response(),
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn get_job(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Path(job_id): Path<Uuid>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    match state.ingest_queue.get_job(job_id).await {
+        Ok(Some(job)) if ctx.allow_building(&job.canonical_site) => Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "job": job,
+        }))
+        .into_response(),
+        Ok(_) => json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "job not found",
+            &request_id,
+            false,
+        ),
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn list_receipts(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Query(query): Query<ListQuery>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    let Some(filter) = scoped_filter(&ctx, &query, &request_id) else {
+        return empty_named(&request_id, &ctx, "receipts");
+    };
+    match state.ingest_queue.list_receipts(&filter).await {
+        Ok(receipts) => Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "receipts": receipts,
+        }))
+        .into_response(),
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn get_receipt(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Path(receipt_id): Path<Uuid>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    match state.ingest_queue.get_receipt(receipt_id).await {
+        Ok(Some(receipt)) if ctx.allow_building(&receipt.canonical_site) => Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "receipt": receipt,
+        }))
+        .into_response(),
+        Ok(_) => json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "receipt not found",
+            &request_id,
+            false,
+        ),
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn list_gaps(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Query(query): Query<ListQuery>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    let Some(filter) = scoped_filter(&ctx, &query, &request_id) else {
+        return empty_named(&request_id, &ctx, "gaps");
+    };
+    match state.ingest_queue.list_gaps(&filter).await {
+        Ok(gaps) => {
+            let rows: Vec<Value> = gaps
+                .into_iter()
+                .map(|job| {
+                    let recoverable = gap_recoverable(job.safe_error_code.as_deref());
+                    json!({
+                        "job": job,
+                        "recoverable": recoverable,
+                    })
+                })
+                .collect();
+            Json(json!({
+                "ok": true,
+                "request_id": request_id,
+                "scope": scope_json(&ctx),
+                "guarantee": "bounded_windows_only",
+                "update_log": "not_claimed",
+                "coverage": COVERAGE_NOT_ASSESSED,
+                "gaps": rows,
+            }))
+            .into_response()
+        }
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn queue_metrics(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    if ctx.multi_tenant && !ctx.hub_admin && ctx.building_ids.is_empty() {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "no site scope",
+            &request_id,
+            false,
+        );
+    }
+    match state.ingest_queue.metrics(Utc::now()).await {
+        Ok(mut metrics) => {
+            if ctx.multi_tenant && !ctx.hub_admin {
+                metrics.portal_in_flight.clear();
+            }
+            Json(json!({
+                "ok": true,
+                "request_id": request_id,
+                "scope": scope_json(&ctx),
+                "coordination": coordination_name(),
+                "kubernetes_required": false,
+                "live_autoscaler": false,
+                "stage3": scale::stage3_status(),
+                "metrics": metrics,
+            }))
+            .into_response()
+        }
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn scale_preview(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    let metrics = match state.ingest_queue.metrics(Utc::now()).await {
+        Ok(metrics) => metrics,
+        Err(err) => return queue_err(&err, &request_id),
+    };
+    let now = Utc::now();
+    let sample = ScaleSample {
+        now,
+        current_replicas: 1,
+        ready_backlog: metrics.ready_backlog,
+        oldest_ready_age: metrics
+            .oldest_ready_age_secs
+            .map(std::time::Duration::from_secs),
+        mean_job_secs: Some(2.0),
+        new_jobs_per_sec: 0.0,
+        source_saturated: false,
+        db_saturated: false,
+        metrics_ok: true,
+        breach_since: metrics
+            .oldest_ready_age_secs
+            .filter(|age| *age >= 15 * 60)
+            .map(|_| now - chrono::Duration::minutes(6)),
+        quiet_since: (metrics.ready_backlog == 0).then_some(now - chrono::Duration::minutes(31)),
+    };
+    let decision = scale::decide(&ScalePolicy::default(), &sample);
+    Json(json!({
+        "ok": true,
+        "request_id": request_id,
+        "scope": scope_json(&ctx),
+        "live_control": false,
+        "stage3": scale::stage3_status(),
+        "decision": decision,
+        "note": "dry-run only; this process does not change replica counts",
+    }))
+    .into_response()
+}
+
+pub async fn retry_job(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Path(job_id): Path<Uuid>,
+    Json(body): Json<RetryBody>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    if viewer_cannot_mutate(user.role) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "operator role required",
+            &request_id,
+            false,
+        );
+    }
+    if !valid_idempotency(&body.idempotency_key) {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_idempotency_key",
+            "idempotency_key must be 8 to 128 visible characters",
+            &request_id,
+            false,
+        );
+    }
+    let ctx = tenant_ctx(&state, &user).await;
+    let existing = match state.ingest_queue.get_job(job_id).await {
+        Ok(Some(job)) if ctx.allow_building(&job.canonical_site) => job,
+        Ok(_) => {
+            return json_error(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "job not found",
+                &request_id,
+                false,
+            )
+        }
+        Err(err) => return queue_err(&err, &request_id),
+    };
+    match state
+        .ingest_queue
+        .retry_job(
+            existing.job_id,
+            Utc::now(),
+            &user.sub,
+            &body.idempotency_key,
+        )
+        .await
+    {
+        Ok(job) => Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "idempotency_key": body.idempotency_key,
+            "job": job,
+        }))
+        .into_response(),
+        Err(QueueError::Invalid(msg)) => json_error(
+            StatusCode::CONFLICT,
+            "not_retryable",
+            &msg,
+            &request_id,
+            false,
+        ),
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn backfill(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Json(body): Json<BackfillBody>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    if viewer_cannot_mutate(user.role) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "operator role required",
+            &request_id,
+            false,
+        );
+    }
+    if !valid_idempotency(&body.idempotency_key) {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_idempotency_key",
+            "idempotency_key must be 8 to 128 visible characters",
+            &request_id,
+            false,
+        );
+    }
+    let ctx = tenant_ctx(&state, &user).await;
+    if !ctx.allow_building(&body.canonical_site) {
+        return json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "site not found",
+            &request_id,
+            false,
+        );
+    }
+    if body.windows.is_empty() || body.windows.len() > MAX_CATCHUP_HOURS as usize {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "bound_exceeded",
+            "backfill accepts 1 to 48 hourly windows",
+            &request_id,
+            false,
+        );
+    }
+    let tenant_id = body
+        .tenant_id
+        .clone()
+        .or_else(|| ctx.tenant_id.clone())
+        .unwrap_or_else(|| "legacy".into());
+    let mut jobs = Vec::new();
+    for window in &body.windows {
+        if !is_hour_window(window.start, window.end) {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_window",
+                "each window must be one exact UTC hour",
+                &request_id,
+                false,
+            );
+        }
+        jobs.push(super::model::NewJob {
+            tenant_id: tenant_id.clone(),
+            canonical_site: body.canonical_site.clone(),
+            provider_instance_id: body.provider_instance_id.clone(),
+            device_id: body.device_id.clone(),
+            model_revision: body
+                .model_revision
+                .clone()
+                .unwrap_or_else(|| MODEL_REVISION_BOOTSTRAP.into()),
+            logical_window_start: window.start,
+            logical_window_end: window.end,
+            shard: String::new(),
+            not_before: Utc::now(),
+            estimated_cost: 1,
+            requested_points_digest: None,
+        });
+    }
+    match state
+        .ingest_queue
+        .backfill(jobs, Utc::now(), &user.sub, &body.idempotency_key)
+        .await
+    {
+        Ok(created) => (
+            StatusCode::ACCEPTED,
+            Json(json!({
+                "ok": true,
+                "request_id": request_id,
+                "scope": scope_json(&ctx),
+                "idempotency_key": body.idempotency_key,
+                "jobs": created,
+            })),
+        )
+            .into_response(),
+        Err(QueueError::Invalid(msg)) => json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_job",
+            &msg,
+            &request_id,
+            false,
+        ),
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub fn discovery_tools(ot_enabled: bool) -> Vec<(&'static str, &'static str, &'static str)> {
+    let mut tools = vec![
+        ("health", "GET", "/api/health"),
+        ("providers.health", "GET", "/api/providers/health"),
+        ("providers.sites", "GET", "/api/providers/sites"),
+        ("ingest.jobs", "GET", "/api/ingest/jobs"),
+        ("ingest.receipts", "GET", "/api/ingest/receipts"),
+        ("ingest.gaps", "GET", "/api/ingest/gaps"),
+        ("ingest.queue", "GET", "/api/ingest/queue"),
+        ("ingest.stats", "GET", "/api/ingest/stats"),
+        ("fdd.run", "POST", "/api/fdd/run"),
+        ("fdd.status", "GET", "/api/fdd/status"),
+        ("csv.import.preview", "POST", "/api/csv/import/preview"),
+        (
+            "csv.import.package.append",
+            "POST",
+            "/api/csv/import/package/append",
+        ),
+        ("datasets.list", "GET", "/api/datasets"),
+    ];
+    if ot_enabled {
+        tools.extend([
+            ("edges.list", "GET", "/api/edges"),
+            ("edges.get", "GET", "/api/edges/{edge_id}"),
+            ("commands.issue", "POST", "/api/commands"),
+            ("commands.ack", "GET", "/api/commands/{command_id}/ack"),
+        ]);
+    }
+    tools
+}
+
+pub fn ot_discovery_enabled() -> bool {
+    std::env::var("OPENFDD_OT_TOOLS")
+        .ok()
+        .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+}
+
+async fn tenant_ctx(state: &AppState, user: &AuthUser) -> TenantContext {
+    TenantContext::resolve_fail_closed(user, &state.control_plane.read().await.clone())
+}
+
+fn scoped_filter(ctx: &TenantContext, query: &ListQuery, request_id: &str) -> Option<ListFilter> {
+    let _ = request_id;
+    if ctx.multi_tenant && !ctx.hub_admin && ctx.building_ids.is_empty() {
+        return None;
+    }
+    let sites = if ctx.multi_tenant && !ctx.hub_admin {
+        let mut allowed = ctx.building_ids.clone();
+        if let Some(site) = query.site_id.as_deref() {
+            if !ctx.allow_building(site) {
+                allowed.clear();
+            } else {
+                allowed = vec![site.to_string()];
+            }
+        }
+        if allowed.is_empty() {
+            return None;
+        }
+        Some(allowed)
+    } else {
+        query.site_id.clone().map(|site| vec![site])
+    };
+    let state = query
+        .state
+        .clone()
+        .filter(|value| JobState::parse(value).is_some());
+    Some(ListFilter {
+        sites,
+        state,
+        limit: query.limit.unwrap_or(50).clamp(1, MAX_LIST),
+    })
+}
+
+fn empty_list(request_id: &str, ctx: &TenantContext) -> Response {
+    empty_named(request_id, ctx, "jobs")
+}
+
+fn empty_named(request_id: &str, ctx: &TenantContext, field: &str) -> Response {
+    Json(json!({
+        "ok": true,
+        "request_id": request_id,
+        "scope": scope_json(ctx),
+        field: [],
+    }))
+    .into_response()
+}
+
+fn scope_json(ctx: &TenantContext) -> Value {
+    json!({
+        "tenant_id": ctx.tenant_id,
+        "hub_admin": ctx.hub_admin,
+        "multi_tenant": ctx.multi_tenant,
+    })
+}
+
+fn coordination_name() -> &'static str {
+    match QueueClient::coordination() {
+        super::client::Coordination::Postgres => "postgres",
+        super::client::Coordination::ExplicitMemory => "memory",
+        super::client::Coordination::Unavailable => "unavailable",
+    }
+}
+
+fn queue_err(err: &super::model::QueueError, request_id: &str) -> Response {
+    match err {
+        QueueError::NotFound => json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "not found",
+            request_id,
+            false,
+        ),
+        QueueError::StaleFence => json_error(
+            StatusCode::CONFLICT,
+            "stale_fence",
+            "lease fence rejected the write",
+            request_id,
+            true,
+        ),
+        QueueError::Invalid(msg) => json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_job",
+            msg,
+            request_id,
+            false,
+        ),
+        QueueError::Db(detail) => {
+            tracing::debug!(
+                error = %super::model::redact_db_text(detail),
+                "ingest queue database error"
+            );
+            json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "queue_unavailable",
+                "shared ingest queue is unavailable",
+                request_id,
+                true,
+            )
+        }
+    }
+}
+
+fn valid_idempotency(value: &str) -> bool {
+    let n = value.chars().count();
+    (8..=128).contains(&n) && value.chars().all(|ch| !ch.is_control() && ch != ' ')
+}
+
+pub fn viewer_cannot_mutate(role: Role) -> bool {
+    !role.can_issue_commands()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::Role;
+
+    fn scoped_user_ctx(buildings: &[&str]) -> TenantContext {
+        TenantContext {
+            tenant_id: Some("tenant-a".into()),
+            building_ids: buildings.iter().map(|id| (*id).to_string()).collect(),
+            hub_admin: false,
+            multi_tenant: true,
+        }
+    }
+
+    #[test]
+    fn tenant_scope_hides_foreign_sites_and_empty_membership() {
+        let ctx = scoped_user_ctx(&["site-a"]);
+        let query = ListQuery {
+            site_id: Some("site-b".into()),
+            state: None,
+            limit: None,
+        };
+        assert!(scoped_filter(&ctx, &query, "req").is_none());
+        let own = ListQuery {
+            site_id: Some("site-a".into()),
+            state: Some("queued".into()),
+            limit: Some(10),
+        };
+        let filter = scoped_filter(&ctx, &own, "req").unwrap();
+        assert_eq!(filter.sites.unwrap(), vec!["site-a".to_string()]);
+        assert_eq!(filter.state.as_deref(), Some("queued"));
+
+        let empty = scoped_user_ctx(&[]);
+        assert!(scoped_filter(
+            &empty,
+            &ListQuery {
+                site_id: None,
+                state: None,
+                limit: None
+            },
+            "req"
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn viewers_cannot_retry_or_backfill() {
+        assert!(viewer_cannot_mutate(Role::Viewer));
+        assert!(!viewer_cannot_mutate(Role::Operator));
+        assert!(!viewer_cannot_mutate(Role::Admin));
+    }
+
+    #[test]
+    fn normal_discovery_omits_ot_commands() {
+        let names: Vec<_> = discovery_tools(false)
+            .into_iter()
+            .map(|tool| tool.0)
+            .collect();
+        assert!(names.contains(&"ingest.jobs"));
+        assert!(names.contains(&"ingest.gaps"));
+        assert!(!names.contains(&"commands.issue"));
+        assert!(!names.contains(&"edges.list"));
+        assert!(discovery_tools(true)
+            .iter()
+            .any(|tool| tool.0 == "edges.list"));
+    }
+}

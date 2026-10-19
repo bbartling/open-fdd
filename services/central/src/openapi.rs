@@ -387,6 +387,42 @@ mod live_routes {
         responses((status = 200, description = "Get a report by id", body = serde_json::Value))
     )]
     pub fn reports_get() {}
+
+    #[utoipa::path(
+        get, path = "/api/ingest/jobs", tag = "ingest",
+        params(
+            ("site_id" = Option<String>, Query, description = "Canonical site id"),
+            ("state" = Option<String>, Query, description = "queued|leased|retry_wait|committed|partial|permanent_failure|cancelled"),
+            ("limit" = Option<u32>, Query, description = "Page size, max 200")
+        ),
+        responses((status = 200, description = "Scoped ingest jobs", body = serde_json::Value))
+    )]
+    pub fn ingest_jobs() {}
+
+    #[utoipa::path(
+        get, path = "/api/ingest/receipts", tag = "ingest",
+        responses((status = 200, description = "Scoped ingest receipts", body = serde_json::Value))
+    )]
+    pub fn ingest_receipts() {}
+
+    #[utoipa::path(
+        get, path = "/api/ingest/gaps", tag = "ingest",
+        responses((status = 200, description = "Scoped gap windows; coverage is not assessed", body = serde_json::Value))
+    )]
+    pub fn ingest_gaps() {}
+
+    #[utoipa::path(
+        get, path = "/api/ingest/queue", tag = "ingest",
+        responses((status = 200, description = "Queue pressure. Live autoscaler is off.", body = serde_json::Value))
+    )]
+    pub fn ingest_queue_metrics() {}
+
+    #[utoipa::path(
+        post, path = "/api/ingest/backfill", tag = "ingest",
+        request_body = serde_json::Value,
+        responses((status = 202, description = "Enqueue at most 48 hourly windows", body = serde_json::Value))
+    )]
+    pub fn ingest_backfill() {}
 }
 
 #[derive(OpenApi)]
@@ -404,6 +440,11 @@ mod live_routes {
         crate::routes::issue_command,
         crate::routes::get_ack,
         crate::routes::agent_tools,
+        live_routes::ingest_jobs,
+        live_routes::ingest_receipts,
+        live_routes::ingest_gaps,
+        live_routes::ingest_queue_metrics,
+        live_routes::ingest_backfill,
         crate::routes::fdd_run,
         crate::routes::fdd_status,
         crate::routes::auth_status,
