@@ -148,6 +148,12 @@ decide_action() {
   action="keep"
   reason="default"
 
+  # Digest protection wins over age, including untagged platform manifests.
+  if is_protected_digest "$digest"; then
+    echo "keep|archive-digest"
+    return
+  fi
+
   local tag_count
   tag_count="$(echo "$tags_json" | jq 'length')"
 
@@ -157,11 +163,6 @@ decide_action() {
     else
       echo "keep|untagged-recent"
     fi
-    return
-  fi
-
-  if is_protected_digest "$digest"; then
-    echo "keep|archive-digest"
     return
   fi
 

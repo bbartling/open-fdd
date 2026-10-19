@@ -21,7 +21,7 @@ todos:
     content: "Wave-C — N8 shared Postgres queue/leases before replicas"
     status: in_progress
   - id: wave-c-n10-mcp
-    content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps; retire OT tool discovery from normal 4.0"
+    content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps (provider health/sites stay; OT discovery retired in M14)"
     status: in_progress
   - id: wave-d-m10-ghcr
     content: "Wave-D — M10 VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus image"
@@ -69,8 +69,8 @@ todos:
     content: SoftOPEN defer — M13 ACME NF retrofit only after bounded bosspi SoftOPEN pilot is stable
     status: pending
   - id: m14-grok-tools
-    content: M14 Flag or replace legacy OT Grok tips for slimmer hub (with Wave-C/D)
-    status: pending
+    content: "M14 Legacy OT Grok tips flagged retired. MCP OT wire/driver discovery is not in default tools/list. Provider health/sites stay."
+    status: completed
   - id: n0-boundary
     content: N0 Define 4.0 product boundary + requirements-to-test matrix labels
     status: pending
@@ -78,11 +78,11 @@ todos:
     content: "N1 snapshot landed as unqualified-cdaa4f15. Merged #1294 e0df8bc7."
     status: completed
   - id: n1-restore-boot
-    content: "SoftOPEN defer — isolated old-stack restore boot/replay and verified OCI digest pin"
-    status: pending
+    content: "Isolated restore --replay renders the GHCR digest pin and prune-protects those digests. --boot stays refused (no live deploy)."
+    status: completed
   - id: n1-workspace-remove
-    content: "SoftOPEN defer — delete live services/fieldbus from the default Cargo workspace (protocol split gate still compiles it)"
-    status: pending
+    content: "Live services/fieldbus is excluded from the default Cargo workspace, 4.0 publish, and fieldbus recipes. The archive workspace is the compile lane."
+    status: completed
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
     status: completed
@@ -275,8 +275,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### Wave-B — parallel after Wave-A merges
 - [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Merged #1294 `e0df8bc7`.
-- [ ] SoftOPEN defer — **n1-restore-boot** isolated old-stack boot/replay and verified OCI digest pin
-- [ ] SoftOPEN defer — **n1-workspace-remove** delete live `services/fieldbus` from the default Cargo workspace (split gate still compiles it)
+- [x] **n1-restore-boot** — `--replay` renders `evidence/oci-pin.json` digests; prune file lists them; `--boot` exits 2 (no containers)
+- [x] **n1-workspace-remove** — `services/fieldbus` excluded from the default workspace, publish workflows, and fieldbus recipes. Split gate compiles `archive/ot-edge/unqualified-cdaa4f15/source`
 - [x] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested)
 - [x] **wave-b-n3-model** / **n3-model** — committed model + scoped SPARQL plans (resolver each tick)
 - [ ] SoftOPEN defer — **n3-replica-store** cross-replica invalidation, durable multi-process store, in-flight SPARQL cancel
@@ -284,7 +284,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### Wave-C — after Wave-B
 - [ ] **wave-c-n8-leases** — N8 Postgres queue/leases before replicas
-- [ ] **wave-c-n10-mcp** — N10 scoped REST/MCP; retire OT discovery from normal 4.0
+- [ ] **wave-c-n10-mcp** — N10 scoped REST/MCP jobs/receipts/gaps (provider health/sites stay)
+- [x] **m14-grok-tools** — legacy OT Grok tips flagged retired; MCP OT wire/driver discovery is not in default `tools/list`
 
 ### Wave-D — publish
 - [ ] **wave-d-m10-ghcr** — VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus

@@ -1,3 +1,17 @@
+# Retired for Wave-NF 4.0
+
+This file is a **legacy OT / ACME fieldbus tip**. Normal 4.0 does not publish or
+start `openfdd-fieldbus`, and MCP does not advertise BACnet, Haystack wire, or
+driver-discovery tools. Portal ingest is central + web + Timescale. Provider
+tools `openfdd_provider_health` and `openfdd_provider_sites` stay. The OT archive
+render (no containers) is:
+
+```bash
+OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay
+```
+
+Do not re-pin or recreate fieldbus from the procedure below.
+
 # Candidate tip (start) — Soft-OPEN suite (API / endpoint Soft-OPEN)
 
 - **LIVE TIP:** VERSION **3.6.18** / GHCR **sha-6846568** / merge `68465681` (newest hub after #1287). Fieldbus publish may still finish — re-check `openfdd-fieldbus:sha-6846568` before ACME fieldbus recreate if missing.

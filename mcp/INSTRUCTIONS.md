@@ -1,6 +1,8 @@
 # Open-FDD MCP server instructions
 
-Read-first MCP sidecar for the Rust edge bridge. Requires JWT via `OPENFDD_MCP_TOKEN` or unauthenticated `/api/health` only.
+Read-first MCP sidecar for central. Requires JWT via `OPENFDD_MCP_TOKEN` or unauthenticated `/api/health` only.
+
+**Wave-NF 4.0:** default `tools/list` does not advertise BACnet, Haystack wire, bench topology, or driver-status discovery. Calling those names returns a retired error and points at `archive/ot-edge`. Scoped portal tools `openfdd_provider_health` and `openfdd_provider_sites` stay. Semantic SPARQL stays.
 
 ## Twin / ECM / EnergyPlus?
 

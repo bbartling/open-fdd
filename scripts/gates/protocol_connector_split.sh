@@ -56,11 +56,15 @@ write_split_evidence() {
       stage:$stage, observed_at:$observed_at, max_age_seconds:86400, checks:$checks}' \
     >"$SPLIT_EVIDENCE_DIR/image_recipe.json"
 }
-cargo test -p openfdd-fieldbus --lib split::tests
-
 SPLIT_TMP_DIR="${TMPDIR:-/tmp}/openfdd-protocol-split-$$"
 SPLIT_CONFIG_DIR="$SPLIT_TMP_DIR/config"
 mkdir -p "$SPLIT_CONFIG_DIR" "$SPLIT_TMP_DIR/kit" "$SPLIT_TMP_DIR/state"
+
+# Compile the unqualified archive workspace, not the product workspace.
+# Live services/fieldbus is excluded from the 4.0 Cargo workspace.
+ARCHIVE_SRC="$ROOT/archive/ot-edge/unqualified-cdaa4f15/source"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$SPLIT_TMP_DIR/target}"
+cargo test --locked --manifest-path "$ARCHIVE_SRC/Cargo.toml" -p openfdd-fieldbus --lib split::tests
 
 # Use a synthetic, empty field-device catalog. The gate must not read the
 # repository's demo/bench inventory or trigger discovery against an OT host.
@@ -121,13 +125,13 @@ for recipe in docker/compose.central.yml docker/compose.csv.yml; do
 done
 
 for binary in openfdd-bacnet-modbus openfdd-haystack; do
-  test -f "services/fieldbus/src/bin/$binary.rs"
+  test -f "$ARCHIVE_SRC/services/fieldbus/src/bin/$binary.rs"
   echo "OK entrypoint source: $binary"
 done
 
-# Build debug binaries for the local live management-plane checks.
-cargo build -p openfdd-fieldbus --bin openfdd-bacnet-modbus --bin openfdd-haystack
-TARGET_DIR="${CARGO_TARGET_DIR:-target}/debug"
+# Build debug binaries for the local management-plane checks from the archive.
+cargo build --locked --manifest-path "$ARCHIVE_SRC/Cargo.toml" -p openfdd-fieldbus --bin openfdd-bacnet-modbus --bin openfdd-haystack
+TARGET_DIR="${CARGO_TARGET_DIR}/debug"
 SPLIT_PIDS=()
 
 owned_socket_count() {
@@ -295,7 +299,8 @@ SPLIT_PIDS=()
 # intended product executable, entrypoint, defaults, ports, and healthcheck.
 for target in bacnet-modbus haystack compatibility; do
   image="openfdd-protocol-split-gate:${target}-$$"
-  docker build --quiet --target "$target" -t "$image" -f services/fieldbus/Dockerfile . >/dev/null
+  docker build --quiet --target "$target" -t "$image" \
+    -f "$ARCHIVE_SRC/services/fieldbus/Dockerfile.closure" "$ARCHIVE_SRC" >/dev/null
   SPLIT_IMAGES+=("$image")
   SPLIT_IMAGE_IDS+=("$(docker image inspect -f '{{.Id}}' "$image")")
   case "$target" in

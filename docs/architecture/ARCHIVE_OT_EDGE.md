@@ -23,14 +23,17 @@ Central starts MQTT ingest only when `OPENFDD_MQTT_ENABLED=1` **and**
 `OPENFDD_OT_ARCHIVE_RESTORE=1`. A stale broker variable on its own does not start
 the worker.
 
-The default GHCR publish path builds central and web. MQTT and multi-arch fieldbus
-publish only when the workflow is dispatched with `publish_archived_ot`. Tip
-completeness for 4.0 is central + web. `./scripts/check_ghcr_tip_stack.sh --with-ot`
-is the archive image check.
+The default GHCR publish path builds central and web. It does not build or push
+`openfdd-fieldbus`. Archived MQTT still publishes only when the workflow is
+dispatched with `publish_archived_ot`. Tip completeness for 4.0 is central + web.
+`./scripts/check_ghcr_tip_stack.sh --with-ot` is the archive image check.
 
 GHCR prune keeps a whole package version when any tag matches `ot-archive-*` or
 `ot-mqtt-fieldbus-last-good-*`, or when the version digest is listed in
-`scripts/ghcr-archive-protected-digests.txt`. No digest is listed yet.
+`scripts/ghcr-archive-protected-digests.txt`. The listed digests are the GHCR
+index and linux platform digests resolved for the published fieldbus and mqtt
+tag recorded in `archive/ot-edge/unqualified-cdaa4f15/evidence/oci-pin.json`.
+That resolve is not a git freeze and is not the snapshot commit.
 
 ## What the snapshot contains
 
@@ -42,9 +45,20 @@ the whole `edge/` tree, secrets, certificate kits, or a database volume.
 Live semantic code stays in `edge/` behind the `ot-transport` feature. Central
 depends on that crate with `default-features = false`.
 
+## Restore lane
+
+`archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay`
+renders the digest-pinned compose file and stops. It does not pull images,
+start containers, or attach a database. `--boot` exits 2.
+
+The archive workspace (`source/Cargo.toml`) is the compile lane. The protocol
+split gate builds that workspace. Live `services/fieldbus` is excluded from the
+default Cargo workspace and from 4.0 publish.
+
 ## Not claimed
 
-Isolated boot, health, and read→ingest→persist→replay were not run. Archived
+Container boot, health, and read→ingest→persist against a database were not run.
+The published image revision is not this snapshot's source commit. Archived
 binaries are not assumed to accept a 4.0 Timescale schema. Archival availability
 is not security support. See `archive/ot-edge/unqualified-cdaa4f15/evidence/MISSING.md`.
 

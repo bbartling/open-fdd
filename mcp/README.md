@@ -118,8 +118,8 @@ docker run -i --rm --network host \
 | Tool | Description |
 |------|-------------|
 | `openfdd_health` | Central liveness |
-| `openfdd_driver_status` | Driver status bundle |
-| `openfdd_bench_topology` | Bench layout file or doc pointer |
+| `openfdd_provider_health` | Portal driver health (`GET /api/providers/health`) |
+| `openfdd_provider_sites` | Configured provider sites |
 | `openfdd_model_sparql_catalog` | Predefined SPARQL queries |
 | `openfdd_model_sparql` | Execute SPARQL SELECT on Haystack RDF |
 | `openfdd_model_sites` | Site list |

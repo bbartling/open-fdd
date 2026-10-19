@@ -16,15 +16,15 @@ Read-first sidecar. JWT via `OPENFDD_MCP_TOKEN`. Bind `127.0.0.1` or site VLAN o
 2. **JWT inherit** — operator supplies bearer token; no embedded secrets.
 3. **Human approval** — writes, rule activation, restore, and field-bus tools require explicit operator ACK (phase 2).
 
-BACnet and Haystack wire tools are not in default 4.0 discovery. Calling `openfdd_haystack_status`, `openfdd_haystack_test`, `openfdd_haystack_read`, `openfdd_bacnet_whois`, or `openfdd_bacnet_read` returns a retired error and points at `archive/ot-edge`. Semantic SPARQL tools stay.
+BACnet, Haystack wire, bench topology, and driver-status discovery are not in default 4.0 `tools/list`. Calling `openfdd_haystack_status`, `openfdd_haystack_test`, `openfdd_haystack_read`, `openfdd_bacnet_whois`, `openfdd_bacnet_read`, `openfdd_driver_status`, `openfdd_bench_topology`, or `driver_poll_status` returns a retired error and points at `archive/ot-edge`. Semantic SPARQL tools stay. Scoped portal tools `openfdd_provider_health` and `openfdd_provider_sites` stay.
 
 ## Implemented tools (stdio)
 
 | Tool | REST | Auth |
 |------|------|------|
 | `openfdd_health` | `GET /api/health` | none |
-| `openfdd_driver_status` | Bundle: health and remaining driver status | JWT |
-| `openfdd_bench_topology` | Env `OPENFDD_BENCH_TOPOLOGY_FILE` or doc pointer | — |
+| `openfdd_provider_health` | `GET /api/providers/health` | JWT |
+| `openfdd_provider_sites` | `GET /api/providers/sites` | JWT |
 | `openfdd_model_sparql_catalog` | `GET /api/model/sparql/predefined` | JWT |
 | `openfdd_model_sparql` | `POST /api/model/sparql` | JWT |
 | `openfdd_model_sites` | `GET /api/model/sites` | JWT |
@@ -73,7 +73,7 @@ Use the same JWT against the bridge directly — see [AI_AGENT_API.md](../AI_AGE
 | Haystack grid | GET | `/api/model/haystack` |
 | SPARQL | POST | `/api/model/sparql` |
 | Assignments | GET | `/api/model/assignments` |
-| BACnet tree | GET | `/api/bacnet/driver/tree` |
+| BACnet tree | retired | `archive/ot-edge` (not default 4.0 discovery) |
 | Test SQL rule | POST | `/api/fdd-rules/{id}/test-sql` |
 | Stack health | GET | `/api/health/stack` |
 

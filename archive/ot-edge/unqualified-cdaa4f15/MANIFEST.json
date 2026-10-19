@@ -54,11 +54,11 @@
     "HAYSTACK_TLS_VERIFY"
   ],
   "missing_evidence": [
-    "No git tag ot-mqtt-fieldbus-last-good-* or other verified OT freeze tag was present.",
-    "No per-platform OCI image digest was resolved for a qualified freeze.",
-    "Isolated boot of old central/web/mqtt/fieldbus/DB was not run.",
-    "Read\u2192ingest\u2192persist\u2192replay was not executed.",
-    "4.0 Timescale schema compatibility with archived binaries was not proven.",
+    "No git freeze tag was present. The OCI pin is a registry resolve, not a freeze of this source tree.",
+    "Published image digests are pinned in evidence/oci-pin.json. They are not this snapshot commit.",
+    "Isolated container boot was not run. restore-isolated.sh --boot exits 2.",
+    "The replay lane renders the pinned compose file only. It does not execute read, ingest, persist, or database replay.",
+    "Timescale schema compatibility with archived binaries was not proven.",
     "Security support for archived images is not claimed."
   ]
 }

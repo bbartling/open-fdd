@@ -6,23 +6,22 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/openfdd_stack_lib.sh"
 
 RECIPE="${1:-portal}"
+case "$RECIPE" in
+  standalone|edge|react-ot)
+    echo "4.0 does not pull openfdd-fieldbus (recipe=$RECIPE)." >&2
+    echo "The archive restore lane pins digests and does not pull or start containers." >&2
+    echo "  OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay" >&2
+    exit 2
+    ;;
+esac
 openfdd_stack_export_image_env
 
 echo "==> Pulling stack images (tag=${OPENFDD_IMAGE_TAG:-nightly}) for recipe=${RECIPE}"
 case "$RECIPE" in
-  standalone)
-    docker pull "$OPENFDD_CENTRAL_IMAGE"
-    docker pull "$OPENFDD_WEB_IMAGE"
-    docker pull "$OPENFDD_FIELDBUS_IMAGE"
-    docker pull "$OPENFDD_MQTT_IMAGE"
-    ;;
   central)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
     docker pull "$OPENFDD_WEB_IMAGE"
     docker pull "$OPENFDD_MQTT_IMAGE"
-    ;;
-  edge)
-    docker pull "$OPENFDD_FIELDBUS_IMAGE"
     ;;
   csv|portal)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
@@ -31,14 +30,6 @@ case "$RECIPE" in
   react)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
     docker pull "$OPENFDD_MQTT_IMAGE"
-    if ! docker pull "$OPENFDD_WEB_IMAGE" 2>/dev/null; then
-      echo "WARN: $OPENFDD_WEB_IMAGE not in registry — build web locally on up" >&2
-    fi
-    ;;
-  react-ot)
-    docker pull "$OPENFDD_CENTRAL_IMAGE"
-    docker pull "$OPENFDD_MQTT_IMAGE"
-    docker pull "$OPENFDD_FIELDBUS_IMAGE"
     if ! docker pull "$OPENFDD_WEB_IMAGE" 2>/dev/null; then
       echo "WARN: $OPENFDD_WEB_IMAGE not in registry — build web locally on up" >&2
     fi
@@ -52,7 +43,7 @@ case "$RECIPE" in
     done
     ;;
   *)
-    echo "Usage: $0 [portal|standalone|central|edge|csv|react|react-ot|mcp|all]" >&2
+    echo "Usage: $0 [portal|central|csv|react|mcp|all]" >&2
     exit 2
     ;;
 esac

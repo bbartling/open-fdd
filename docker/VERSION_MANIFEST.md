@@ -8,7 +8,7 @@ All container images in the MQTT / CSV stack share a **coordinated release** tie
 |-------|------------|------|
 | `ghcr.io/bbartling/openfdd-central` | `services/central/Dockerfile` | MQTTS ingest, Feather, FDD, REST + OpenAPI |
 | `ghcr.io/bbartling/openfdd-web` | `frontend/web/Dockerfile` | React SPA product UI (nginx → central `/api`) |
-| `ghcr.io/bbartling/openfdd-fieldbus` | `services/fieldbus/Dockerfile` | BACnet/Modbus/Haystack edge + local Swagger |
+| `ghcr.io/bbartling/openfdd-fieldbus` | not in the 4.0 publish set | Archived. Compile `archive/ot-edge/unqualified-cdaa4f15/source` (`Dockerfile.closure`). Digest pin: `evidence/oci-pin.json`. |
 | `ghcr.io/bbartling/openfdd-mqtt` | `services/mqtt/Dockerfile` | Mosquitto MQTTS broker |
 | `ghcr.io/bbartling/openfdd-mcp` | `Dockerfile.mcp` | Optional MCP stdio sidecar → central |
 
@@ -32,7 +32,6 @@ Only advance `nightly` after recipe file smoke (`scripts/release/smoke_standalon
 ```bash
 export OPENFDD_CENTRAL_IMAGE=ghcr.io/bbartling/openfdd-central:sha-abc1234
 export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web:sha-abc1234
-export OPENFDD_FIELDBUS_IMAGE=ghcr.io/bbartling/openfdd-fieldbus:sha-abc1234
 export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-abc1234
 export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-abc1234
 ```

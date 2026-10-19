@@ -1,13 +1,12 @@
 # Missing qualification evidence
 
-This snapshot is unqualified. The following were not produced:
+This snapshot is unqualified. The following are still true:
 
-1. A git tag or other immutable freeze ref (`git tag -l 'ot-mqtt-fieldbus-last-good-*'` was empty).
-2. Per-platform OCI digests for `openfdd-central`, `openfdd-web`, `openfdd-mqtt`, and `openfdd-fieldbus` at a qualified OT revision.
-3. An isolated disposable boot (central, web, mqtt, fieldbus, database) under `/tmp/openfdd-softopen/`.
-4. Rendered-compose proof from a pinned old image set (the restore script only renders this snapshot's compose file).
-5. Synthetic read → ingest → persist → replay against archived binaries.
-6. A statement that the 4.0 Timescale schema accepts archived writers. It must not be assumed.
-7. Ongoing security support. Known defects in the archived tree are whatever the source commit contained; they are not re-triaged here.
+1. There is no git freeze tag. The OCI pin in `evidence/oci-pin.json` is a GHCR resolve of a published fieldbus/mqtt tag, not a freeze of commit `cdaa4f15`.
+2. Per-platform linux digests for that published tag are recorded and prune-protected. They were not produced by building this snapshot.
+3. An isolated disposable boot (central, web, mqtt, fieldbus, database) was not run. `--boot` exits 2.
+4. `--replay` renders the pinned compose file and checks the pin. It does not pull, start containers, or replay samples into a database.
+5. Timescale schema compatibility with archived binaries was not proven.
+6. Ongoing security support is not claimed. Known defects in the archived tree are whatever the source commit contained.
 
-SoftOPEN defer — isolated restore boot and digest pin stay open.
+The 4.0 product workspace does not compile live `services/fieldbus`. The archive workspace remains the isolated compile lane.

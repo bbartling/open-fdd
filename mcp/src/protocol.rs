@@ -60,8 +60,6 @@ impl Server {
 
     fn tools_list(&self) -> Vec<Value> {
         let mut tools = vec![
-            tool("openfdd_bench_topology", "Bench NIC, API bases, driver endpoints (from OPENFDD_BENCH_TOPOLOGY_FILE or doc pointer)", json!({})),
-            tool("openfdd_driver_status", "Poll bridge driver status endpoints", json!({})),
             tool("openfdd_health", "GET /api/health (public liveness)", json!({})),
             tool("openfdd_provider_health", "GET /api/providers/health — Wave-NF portal driver health", json!({})),
             tool("openfdd_provider_sites", "GET /api/providers/sites — configured provider sites + health", json!({})),
@@ -208,7 +206,6 @@ impl Server {
         for (alias, target) in [
             ("site_health", "openfdd_health"),
             ("stack_status", "openfdd_stack_status"),
-            ("driver_poll_status", "openfdd_driver_status"),
             ("validation_run_status", "openfdd_validation_run_status"),
             ("report_list", "openfdd_reports_list"),
         ] {
@@ -227,20 +224,20 @@ impl Server {
             | "openfdd_haystack_read"
             | "bacnet_whois"
             | "openfdd_bacnet_whois"
-            | "openfdd_bacnet_read" => {
+            | "openfdd_bacnet_read"
+            | "driver_poll_status"
+            | "openfdd_driver_status"
+            | "openfdd_bench_topology" => {
                 return Err(
-                    "retired: BACnet/Haystack wire tools are on the OT archive lane (archive/ot-edge). Semantic SPARQL tools remain."
+                    "retired: OT wire and driver discovery tools are on the OT archive lane (archive/ot-edge). Portal provider tools and semantic SPARQL tools remain."
                         .into(),
                 );
             }
-            "driver_poll_status" => "openfdd_driver_status",
             "validation_run_status" => "openfdd_validation_run_status",
             "report_list" => "openfdd_reports_list",
             other => other,
         };
         match canonical {
-            "openfdd_bench_topology" => Ok(self.bridge.bench_topology()),
-            "openfdd_driver_status" => Ok(self.bridge.driver_status()),
             "openfdd_health" => self.bridge.get("/api/health"),
             "openfdd_provider_health" => self.bridge.get("/api/providers/health"),
             "openfdd_provider_sites" => self.bridge.get("/api/providers/sites"),
@@ -497,6 +494,9 @@ mod tests {
             "openfdd_bacnet_read",
             "haystack_test",
             "bacnet_whois",
+            "openfdd_driver_status",
+            "openfdd_bench_topology",
+            "driver_poll_status",
         ] {
             assert!(
                 !names.contains(&retired),
