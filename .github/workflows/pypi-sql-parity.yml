@@ -4,12 +4,18 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 8 * * 1"
+  # PRs that edit this harness run the same check as the weekly schedule.
+  pull_request:
+    paths:
+      - ".github/workflows/pypi-sql-parity.yml"
+      - "scripts/sql_pandas_oracle_check.py"
 
 permissions:
   contents: read
 
 concurrency:
-  group: published-pandas-current-sql-oracle-checks
+  # Per ref so a PR run does not cancel the weekly master schedule, or another branch.
+  group: published-pandas-current-sql-oracle-checks-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,25 +32,43 @@ jobs:
 
       - name: Create isolated PyPI environment
         run: |
-          python -m venv .venv-pypi
-          .venv-pypi/bin/python -m pip install --upgrade pip
-          .venv-pypi/bin/python -m pip install "open-fdd[oracle]" pyyaml
+          # The oracle guard requires open_fdd.rules to resolve from
+          # site-packages outside this checkout. A venv created in the
+          # working tree puts that install under $GITHUB_WORKSPACE, so the
+          # guard rejects a real PyPI wheel as local source.
+          if [[ -z "${RUNNER_TEMP}" ]]; then
+            echo "RUNNER_TEMP is required so the PyPI venv is created outside the checkout" >&2
+            exit 1
+          fi
+          venv="${RUNNER_TEMP}/venv-pypi"
+          workspace="$(realpath -m "${GITHUB_WORKSPACE}")"
+          venv_real="$(realpath -m "${venv}")"
+          case "${venv_real}" in
+            "${workspace}" | "${workspace}"/*)
+              echo "PyPI venv must be created outside the checkout (got ${venv_real})" >&2
+              exit 1
+              ;;
+          esac
+          python -m venv "${venv}"
+          "${venv}/bin/python" -m pip install --upgrade pip
+          "${venv}/bin/python" -m pip install "open-fdd[oracle]" pyyaml
+          echo "PYPI_VENV=${venv}" >> "${GITHUB_ENV}"
 
       - name: Record published oracle version
         run: |
-          version="$(.venv-pypi/bin/python -c 'import importlib.metadata as m; print(m.version("open-fdd"))')"
+          version="$("${PYPI_VENV}/bin/python" -c 'import importlib.metadata as m; print(m.version("open-fdd"))')"
           echo "Installed PyPI open-fdd: ${version}"
           {
             echo "## Published pandas oracle"
             echo
             echo "- PyPI package: \`open-fdd ${version}\`"
-            echo "- Source: isolated virtualenv site-packages"
+            echo "- Source: isolated virtualenv site-packages outside the checkout (\`${PYPI_VENV}\`)"
             echo "- Contract: committed oracle seed expectations"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run committed oracle seeds against PyPI package
         run: |
-          .venv-pypi/bin/python scripts/sql_pandas_oracle_check.py --require-external-oracle
+          "${PYPI_VENV}/bin/python" scripts/sql_pandas_oracle_check.py --require-external-oracle
 
   current-sql-registry:
     name: current SQL/fdd registry (Timescale pack)
