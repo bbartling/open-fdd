@@ -213,8 +213,16 @@ describe("Operations protocol navigation", () => {
   });
 
   it("keeps the existing MQTT panels and AFDD view available", async () => {
-    const mqtt = render(
+    const providers = render(
       <MemoryRouter initialEntries={["/operations"]}>
+        <OperationsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("providers-health-panel")).toBeTruthy();
+    providers.unmount();
+
+    const mqtt = render(
+      <MemoryRouter initialEntries={["/operations?view=mqtt"]}>
         <OperationsPage />
       </MemoryRouter>,
     );
