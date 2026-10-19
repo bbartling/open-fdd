@@ -1,0 +1,11 @@
+Name,PointType,Units,Commandable,Default,Instance,Description
+outside-air-temperature,AV,degreesFahrenheit,N,70.0,9101,Open-Meteo outdoor air temperature (degrees F)
+outside-air-humidity,AV,percent,N,50.0,9102,Open-Meteo outdoor relative humidity (percent)
+outside-air-dewpoint,AV,degreesFahrenheit,N,55.0,9103,Open-Meteo outdoor dewpoint (degrees F)
+outside-air-wind-speed,AV,milesPerHour,N,0.0,9104,Open-Meteo outdoor wind speed (mph)
+weather-location,CSV,,N,Madison Wisconsin,9105,Open-Meteo geocoded weather location label
+weather-last-updated,CSV,,N,Pending first fetch,9107,Human-readable timestamp of last weather mirror (Open-Meteo)
+app-fault,BV,,N,inactive,9106,Active when weather data is from fallback (not live Open-Meteo)
+openfdd-active-fault-count,AV,noUnits,N,0.0,9003,Active FDD fault count (server-owned diagnostic)
+openfdd-faults-present,BV,,N,inactive,9004,True when one or more FDD faults are active
+openfdd-optimization-enabled,BV,,Y,inactive,9010,Commandable optimization enable (BACnet-writable; REST API read-only)

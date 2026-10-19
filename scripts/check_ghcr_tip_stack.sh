@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Fail-closed GHCR tip completeness for Open-FDD stack.
-# Hub (central/web/mqtt) must all exist for the same sha-<7>.
-# Fieldbus is required by default for full tip; use --hub-only for Railway hub
-# re-pin before multi-arch fieldbus finishes.
+# Fail-closed GHCR tip completeness for Open-FDD 4.0.
+# Default required images are central + web (portal). MQTT and fieldbus are the
+# archive lane: pass --with-ot. --hub-only remains an alias of the default.
 #
 # Usage:
 #   ./scripts/check_ghcr_tip_stack.sh sha-a40787b
-#   ./scripts/check_ghcr_tip_stack.sh sha-a40787b --hub-only
+#   ./scripts/check_ghcr_tip_stack.sh sha-a40787b --with-ot
 #   ./scripts/check_ghcr_tip_stack.sh   # resolves tip from origin/master
 set -euo pipefail
 
@@ -14,10 +13,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 HUB_ONLY=0
+WITH_OT=0
 TAG=""
 for arg in "$@"; do
   case "$arg" in
     --hub-only) HUB_ONLY=1 ;;
+    --with-ot) WITH_OT=1 ;;
     sha-*) TAG="$arg" ;;
     -h|--help)
       sed -n '2,12p' "$0"
@@ -44,8 +45,8 @@ if [[ ! "$TAG" =~ ^sha-[0-9a-f]{7}$ ]]; then
 fi
 
 REGISTRY="${OPENFDD_GHCR_REGISTRY:-ghcr.io/bbartling}"
-HUB=(openfdd-central openfdd-web openfdd-mqtt)
-EDGE=(openfdd-fieldbus)
+HUB=(openfdd-central openfdd-web)
+EDGE=(openfdd-mqtt openfdd-fieldbus)
 
 present=()
 missing=()
@@ -62,9 +63,9 @@ check_one() {
   fi
 }
 
-echo "=== GHCR tip completeness: ${TAG} (hub_only=${HUB_ONLY}) ==="
+echo "=== GHCR tip completeness: ${TAG} (with_ot=${WITH_OT} hub_only=${HUB_ONLY}) ==="
 for n in "${HUB[@]}"; do check_one "$n"; done
-if [[ "$HUB_ONLY" -eq 0 ]]; then
+if [[ "$WITH_OT" -eq 1 ]]; then
   for n in "${EDGE[@]}"; do check_one "$n"; done
 fi
 

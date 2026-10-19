@@ -1,13 +1,33 @@
 //! Ace IoT driver placeholder (Wave-NF stub).
 
 use super::map::RawProviderPoint;
+use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
 
 #[derive(Debug, Clone)]
-pub struct AceIotStubDriver;
+pub struct AceIotStubDriver {
+    provider_id: String,
+}
 
 impl AceIotStubDriver {
-    pub fn new(_building_id: &str) -> Self {
-        Self
+    pub fn new(provider_instance_id: &str) -> Self {
+        Self {
+            provider_id: provider_instance_id.to_string(),
+        }
+    }
+
+    pub fn provider_id(&self) -> &str {
+        &self.provider_id
+    }
+
+    pub fn health(&self) -> ProviderHealth {
+        ProviderHealth {
+            provider_id: self.provider_id.clone(),
+            kind: ProviderKind::AceIot,
+            status: ProviderHealthStatus::NotImplemented,
+            message: Some("Ace IoT driver stub — configure NF or wait for Ace driver".into()),
+            last_success_at: None,
+            last_error_at: None,
+        }
     }
 
     pub async fn authenticate(&mut self) -> Result<(), String> {

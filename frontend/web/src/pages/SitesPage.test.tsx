@@ -20,8 +20,19 @@ vi.mock("../api/client", () => ({
   apiFetch: vi.fn(async () => ({ ok: true, edges: [] })),
 }));
 
+vi.mock("../api/providersApi", async () => {
+  const actual = await vi.importActual<typeof import("../api/providersApi")>(
+    "../api/providersApi",
+  );
+  return {
+    ...actual,
+    fetchProviderSites: vi.fn(async () => ({ ok: true, sites: [] })),
+  };
+});
+
 import { listPackageBuildings } from "../api/mappingApi";
 import { deleteDataset } from "../api/datasetsApi";
+import { fetchProviderSites } from "../api/providersApi";
 
 function renderSites(entry = "/operations?view=sites&site=ZIP_BUILDING_1") {
   return render(
@@ -40,6 +51,7 @@ describe("Operations Sites panel", () => {
       "BUILDING_50",
     ]);
     vi.mocked(deleteDataset).mockResolvedValue({ ok: true });
+    vi.mocked(fetchProviderSites).mockResolvedValue({ ok: true, sites: [] });
   });
 
   it("lists loaded sites and marks active", async () => {
@@ -138,5 +150,33 @@ describe("Operations Sites panel", () => {
     });
     expect(screen.queryByTestId("sites-error")).toBeNull();
     expect(screen.queryByText(/building_id required/i)).toBeNull();
+  });
+
+  it("discovers a portal site with no CSV package and no ingest control", async () => {
+    vi.mocked(listPackageBuildings).mockResolvedValue([]);
+    vi.mocked(fetchProviderSites).mockResolvedValue({
+      ok: true,
+      sites: [
+        {
+          building_id: "NF_EDGE",
+          provider: "nf",
+          endpoint: "https://user:secret@portal.example/api?token=abc",
+          mapped_points: 5,
+          client_id_configured: true,
+        },
+      ],
+    });
+    renderSites("/operations?view=sites");
+    await waitFor(() => {
+      expect(screen.getByTestId("sites-row-NF_EDGE")).toBeTruthy();
+    });
+    expect(screen.getByTestId("sites-sources-NF_EDGE").textContent).toMatch(/NF/);
+    expect(screen.getByTestId("sites-sources-NF_EDGE").textContent).not.toMatch(/secret/);
+    expect(screen.queryByLabelText(/Ingest mode/i)).toBeNull();
+    expect(screen.getByTestId("sites-active-hint").textContent).toMatch(/NF_EDGE/);
+    const del = screen.getByTestId("sites-delete-NF_EDGE").querySelector("button");
+    expect(del?.hasAttribute("disabled") || del?.getAttribute("aria-disabled") === "true").toBe(
+      true,
+    );
   });
 });

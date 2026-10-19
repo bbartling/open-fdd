@@ -124,9 +124,6 @@ docker run -i --rm --network host \
 | `openfdd_ingest_receipts` | Scoped commit receipts |
 | `openfdd_ingest_gaps` | Partial / failed / retry windows (`coverage` is not assessed) |
 | `openfdd_ingest_queue` | Backlog age and portal in-flight; no live autoscaler |
-| `openfdd_model_sparql` | Read-only SPARQL over the semantic model (Haystack semantics stay) |
-| `openfdd_haystack_status` / `openfdd_haystack_test` / `openfdd_haystack_read` | Retired on normal 4.0 (`ot_transport_retired`). Archive lane: `OPENFDD_OT_TOOLS=1` |
-| `openfdd_bacnet_read` / `openfdd_bacnet_whois` | Retired on normal 4.0. Not a portal history read |
 | `openfdd_model_sparql_catalog` | Predefined SPARQL queries |
 | `openfdd_model_sparql` | Execute SPARQL SELECT on Haystack RDF |
 | `openfdd_model_sites` | Site list |

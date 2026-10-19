@@ -65,6 +65,10 @@ export type HistorianCompactionResponse = {
     small_files?: number;
     rows?: number;
   };
+  engine?: string;
+  parquet_compaction?: string;
+  note?: string;
+  soft_open_neq_fq?: boolean;
 };
 
 export async function getHostStats(): Promise<HostStatsResponse> {

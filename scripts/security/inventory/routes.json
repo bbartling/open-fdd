@@ -1158,6 +1158,90 @@
       "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
     },
     {
+      "method": "GET",
+      "path": "/api/providers/health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_scoped_provider_health",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        401,
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_providers_health_401",
+        "y.authz.get_api_providers_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_providers_health_401",
+        "y.authz.get_api_providers_health"
+      ],
+      "request_schema": {
+        "type": "openfdd.providers.health.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.providers.health.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave-NF JWT provider health. Fail closed on tenant membership. Hub admin sees origins; other callers get redacted endpoints and safe error codes. PLANNED until the security suite emits these check ids."
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers/sites",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_scoped_provider_health",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        401,
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_providers_sites_401",
+        "y.authz.get_api_providers_sites"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_providers_sites_401",
+        "y.authz.get_api_providers_sites"
+      ],
+      "request_schema": {
+        "type": "openfdd.providers.sites.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.providers.sites.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave-NF JWT provider site list. Same tenant filter and redaction as provider health. PLANNED until the security suite emits these check ids."
+    },
+    {
       "method": "POST",
       "path": "/api/connectors/{edge_id}/read",
       "section": "protected",
@@ -6825,82 +6909,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/providers/health",
-      "section": "protected",
-      "auth": "jwt_required",
-      "policy": "authenticated",
-      "disposition": "PLANNED",
-      "deny_statuses": [
-        403
-      ],
-      "anon_expected": [
-        401
-      ],
-      "source": "services/central/src/routes.rs",
-      "planned_check_ids": [
-        "x.preauth.anon401.get_api_providers_health",
-        "y.authz.get_api_providers_health"
-      ],
-      "implemented_check_ids": [],
-      "check_ids": [
-        "x.preauth.anon401.get_api_providers_health",
-        "y.authz.get_api_providers_health"
-      ],
-      "request_schema": {
-        "type": "unknown",
-        "status": "TODO"
-      },
-      "response_schema": {
-        "type": "unknown",
-        "status": "TODO"
-      },
-      "selectors": [],
-      "side_effects": "none",
-      "fixture_needs": [
-        "identity"
-      ],
-      "notes": "Portal driver health. Tenant-filtered before rows are returned."
-    },
-    {
-      "method": "GET",
-      "path": "/api/providers/sites",
-      "section": "protected",
-      "auth": "jwt_required",
-      "policy": "authenticated",
-      "disposition": "PLANNED",
-      "deny_statuses": [
-        403
-      ],
-      "anon_expected": [
-        401
-      ],
-      "source": "services/central/src/routes.rs",
-      "planned_check_ids": [
-        "x.preauth.anon401.get_api_providers_sites",
-        "y.authz.get_api_providers_sites"
-      ],
-      "implemented_check_ids": [],
-      "check_ids": [
-        "x.preauth.anon401.get_api_providers_sites",
-        "y.authz.get_api_providers_sites"
-      ],
-      "request_schema": {
-        "type": "unknown",
-        "status": "TODO"
-      },
-      "response_schema": {
-        "type": "unknown",
-        "status": "TODO"
-      },
-      "selectors": [],
-      "side_effects": "none",
-      "fixture_needs": [
-        "identity"
-      ],
-      "notes": "Configured provider sites plus health. Tenant-filtered."
-    },
-    {
-      "method": "GET",
       "path": "/api/ingest/jobs",
       "section": "protected",
       "auth": "jwt_required",
@@ -7244,15 +7252,15 @@
   ],
   "counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 131,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29,
     "implemented": 30,
-    "planned": 131,
+    "planned": 122,
     "blocked_policy": 29
   },
   "summary": {
     "IMPLEMENTED": 30,
-    "PLANNED": 131,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29
   }
 }

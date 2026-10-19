@@ -30,14 +30,17 @@ do not hand out `http://192.168.204.55/auth` and blame the user.
 
 ## Open-FDD stack (nightly → immutable)
 
-Product UI: **React** (`compose.react.yml` → host `:3000`). Central image is
-**Rust on debian-slim** (no Python). Wave-X **3.6.0+**: analytics and FDD are
-**Timescale + `sql/fdd/*.sql`** (no DataFusion/Parquet product path; no dual-write).
+Product UI: **React**. 4.0 default recipe is **`portal`** (`compose.portal.yml` +
+Timescale → host `:3000`): central + web, no MQTT broker and no fieldbus. Central
+image is **Rust on debian-slim** (no Python). Wave-X **3.6.0+**: analytics and FDD
+are **Timescale + `sql/fdd/*.sql`** (no DataFusion/Parquet product path; no dual-write).
 Bring-up: [`docs/operations/TIMESCALE_WAVE_X.md`](../docs/operations/TIMESCALE_WAVE_X.md)
 · ADR-010 · ART REBOOT_SAFE under `/tmp/openfdd-softopen/3.6.0/`.
 
-OT LAN benches need fieldbus — recipe **`react-ot`**
-(`compose.react.yml` + `compose.react.fieldbus.yml`). Full stress suite:
+OT LAN benches are the explicit archive lane — recipe **`react-ot`**
+(`compose.react.yml` + `compose.react.fieldbus.yml`), not the 4.0 default.
+Snapshot: `archive/ot-edge/unqualified-cdaa4f15/` (no verified 3.6.18 freeze).
+Full stress suite:
 [`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md) · agent handbook
 [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md).
 

@@ -233,17 +233,18 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> FinishOutcome {
 
 fn portal_throttled(err: &str) -> bool {
     let lower = err.to_ascii_lowercase();
-    lower.contains("429") || lower.contains("too many")
+    lower.contains("429") || lower.contains("too many") || lower.contains("throttled")
 }
 
 fn devices_from_state(state: &AppState) -> Vec<ScheduleDevice> {
-    let tenant_id = std::env::var("OPENFDD_INGEST_TENANT_ID").unwrap_or_else(|_| "legacy".into());
     let mut devices = Vec::new();
     for site in &state.providers.sites {
-        let provider_instance_id = match site.kind {
-            ProviderKind::Nf => format!("nf:{}", site.building_id),
-            ProviderKind::AceIot => format!("ace_iot:{}", site.building_id),
+        let tenant_id = if site.tenant_id.is_empty() {
+            std::env::var("OPENFDD_INGEST_TENANT_ID").unwrap_or_else(|_| "legacy".into())
+        } else {
+            site.tenant_id.clone()
         };
+        let provider_instance_id = site.provider_instance_id.clone();
         let mut equipment = site.resolver.equipment_ids();
         if equipment.is_empty() {
             equipment.push(site.building_id.clone());

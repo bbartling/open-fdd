@@ -23,6 +23,9 @@ jobs:
         run: |
           bash -n scripts/check_version_sync.sh
           ./scripts/check_version_sync.sh
+          bash -n scripts/test_ghcr_prune_archive_keep.sh
+          ./scripts/test_ghcr_prune_archive_keep.sh
+          python3 scripts/archive/verify_ot_edge_snapshot.py
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -134,7 +137,7 @@ jobs:
           test -x scripts/audit_no_private_bench_hardcoding.sh
           ./scripts/audit_no_private_bench_hardcoding.sh
           test -f VERSION
-          grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' VERSION
+          grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' VERSION
 
   react-web:
     name: React web (frontend/web)
@@ -188,7 +191,7 @@ jobs:
         run: |
           mkdir -p deploy/mqtt/kits/local__fieldbus-1
           export OPENFDD_EDGE_KIT_DIR="$PWD/deploy/mqtt/kits/local__fieldbus-1"
-          for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml docker/compose.react.yml docker/compose.react.fieldbus.yml; do
+          for f in docker/compose.portal.yml docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml docker/compose.react.yml docker/compose.react.fieldbus.yml; do
             test -f "$f"
             docker compose -f "$f" config >/dev/null
             echo "OK config: $f"

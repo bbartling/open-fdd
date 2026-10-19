@@ -241,7 +241,7 @@ describe("fetchCentralOverview", () => {
     expect(out.motor_weekly.plants[0]?.figure?.data?.length).toBeGreaterThan(0);
     expect(out.mech_cooling.figure?.data?.length).toBeGreaterThan(0);
     expect(out.economizer_free_cooling.delta_scatter?.meta?.provenance).toMatch(
-      /DataFusion/,
+      /canonical historian/,
     );
     expect(out.economizer_free_cooling.delta_scatter?.layout?.title).toMatch(
       /delta scatter/i,

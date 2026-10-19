@@ -1,0 +1,30 @@
+# Railway / low-RAM stress catalog — hosted weather AVs loopback (no Pi / OT LAN).
+# Used by scripts/nightly-ot-bench when RAILWAY_ONLY=1.
+#
+# Publish Open-Meteo AVs (Wave U Soft-OPEN acme-oa-t-dup-reject fix):
+# - bldg2-zone-loopback: zone_t (9101) + zone_rh (9102) only — do NOT also map oa_t here
+# - hosted-weather: web_oa_t (9101) is the sole outdoor-air publisher
+# Device name for loopback must NOT contain "weather" (id heuristics).
+
+[[devices]]
+name = "bldg2-zone-loopback"
+enabled = true
+device_instance = 599999
+host = "127.0.0.1"
+port = 47808
+points = [
+  { object_type = "analog-value", object_instance = 9101, point_name = "zone-air-temp", units = "°F" },
+  { object_type = "analog-value", object_instance = 9102, point_name = "zone-air-humidity", units = "%" },
+]
+
+[[devices]]
+name = "hosted-weather"
+enabled = true
+device_instance = 599998
+host = "127.0.0.1"
+port = 47808
+# Durable stamp: must stay weather under OPENFDD_EQUIPMENT_TYPE=zone_other (Soft-OPEN 371 #1229).
+equipment_type = "weather"
+points = [
+  { object_type = "analog-value", object_instance = 9101, point_name = "web-outside-air-temp", units = "°F" },
+]

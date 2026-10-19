@@ -212,17 +212,19 @@ describe("Operations protocol navigation", () => {
     ));
   });
 
-  it("keeps the existing MQTT panels and AFDD view available", async () => {
-    const providers = render(
+  it("defaults Operations to provider ingest", async () => {
+    render(
       <MemoryRouter initialEntries={["/operations"]}>
         <OperationsPage />
       </MemoryRouter>,
     );
     expect(await screen.findByTestId("providers-health-panel")).toBeTruthy();
+    expect((screen.getByTestId("operations-view-providers") as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByTestId("mqtt-config-panel")).toBeNull();
-    providers.unmount();
+  });
 
-    const mqtt = render(
+  it("keeps the existing MQTT panels and AFDD view available", async () => {
+    const archived = render(
       <MemoryRouter initialEntries={["/operations?view=mqtt"]}>
         <OperationsPage />
       </MemoryRouter>,
@@ -230,7 +232,8 @@ describe("Operations protocol navigation", () => {
     expect(await screen.findByTestId("mqtt-config-panel")).toBeTruthy();
     expect(screen.getByTestId("edge-kit-panel")).toBeTruthy();
     expect(screen.getByTestId("telemetry-suspend-panel")).toBeTruthy();
-    mqtt.unmount();
+    expect(screen.getByTestId("mqtt-archived-note")).toBeTruthy();
+    archived.unmount();
 
     render(
       <MemoryRouter initialEntries={["/operations?view=afdd"]}>
