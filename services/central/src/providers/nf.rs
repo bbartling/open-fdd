@@ -45,10 +45,6 @@ impl NfPortalDriver {
         }
     }
 
-    pub fn provider_id(&self) -> &str {
-        &self.provider_id
-    }
-
     pub fn health(&self, status: ProviderHealthStatus, message: Option<String>) -> ProviderHealth {
         ProviderHealth {
             provider_id: self.provider_id.clone(),
@@ -107,12 +103,12 @@ impl NfPortalDriver {
         if let Some(token) = self.token.as_deref().filter(|t| !t.is_empty()) {
             req = req.bearer_auth(token);
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| format!("point/query: {e}"))?;
+        let resp = req.send().await.map_err(|e| format!("point/query: {e}"))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| format!("point/query body: {e}"))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("point/query body: {e}"))?;
         if !status.is_success() {
             return Err(format!(
                 "point/query HTTP {status}: {}",
@@ -149,12 +145,12 @@ impl NfPortalDriver {
         if let Some(token) = self.token.as_deref().filter(|t| !t.is_empty()) {
             req = req.bearer_auth(token);
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| format!("point/data: {e}"))?;
+        let resp = req.send().await.map_err(|e| format!("point/data: {e}"))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| format!("point/data body: {e}"))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("point/data body: {e}"))?;
         if !status.is_success() {
             return Err(format!(
                 "point/data HTTP {status}: {}",
@@ -175,9 +171,6 @@ fn truncate(s: &str, max: usize) -> String {
         out.push(ch);
     }
     out
-} else {
-        format!("{}…", &s[..max])
-    }
 }
 
 pub fn parse_token_json(text: &str) -> Result<String, String> {
@@ -359,7 +352,10 @@ mod tests {
     fn parses_point_query_fixture() {
         let pts = parse_point_query_json(POINTS_FIXTURE).unwrap();
         assert_eq!(pts.len(), 1);
-        assert_eq!(pts[0].provider_point_id, "11111111-2222-3333-4444-555555555555");
+        assert_eq!(
+            pts[0].provider_point_id,
+            "11111111-2222-3333-4444-555555555555"
+        );
         assert!((pts[0].val - 72.5).abs() < f64::EPSILON);
         assert_eq!(pts[0].display_name.as_deref(), Some("OA-T"));
     }

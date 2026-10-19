@@ -4,10 +4,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
-  "route_count": 173,
+  "route_count": 175,
   "disposition_counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 114,
+    "PLANNED": 116,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -1118,6 +1118,80 @@
         "identity"
       ],
       "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers/health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        401,
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "n.providers.health.get"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "n.providers.health.get"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave-NF portal poll health. JWT required. PLANNED until a suite emits n.providers.health.get."
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers/sites",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        401,
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "n.providers.sites.get"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "n.providers.sites.get"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave-NF portal site registry. JWT required. PLANNED until a suite emits n.providers.sites.get."
     },
     {
       "method": "GET",

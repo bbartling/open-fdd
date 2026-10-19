@@ -14,7 +14,7 @@ use super::map::{normalize_mapped, RoleResolver};
 use super::nf::NfPortalDriver;
 use super::types::ProviderHealthStatus;
 use super::writer;
-use super::Runtime;
+use super::{DataProvider, Runtime};
 use crate::state::AppState;
 
 fn poll_enabled() -> bool {
@@ -123,16 +123,19 @@ async fn site_poll_loop(
                 let driver = nf.as_mut().expect("nf driver");
                 poll_nf_site(&state, &building_id, driver, &resolver, page_size()).await
             }
-            super::types::ProviderKind::AceIot => {
-                poll_ace_site(&building_id, &mut ace).await
-            }
+            super::types::ProviderKind::AceIot => poll_ace_site(&mut ace).await,
         };
 
         match result {
             Ok(ingested) => {
                 backoff_secs = poll_secs;
                 runtime
-                    .record_success(&building_id, ingested as u64, ProviderHealthStatus::Ok, None)
+                    .record_success(
+                        &building_id,
+                        ingested as u64,
+                        ProviderHealthStatus::Ok,
+                        None,
+                    )
                     .await;
                 debug!(%building_id, ingested, "provider poll ok");
             }
@@ -144,11 +147,7 @@ async fn site_poll_loop(
                 };
                 warn!(%building_id, %err, next_backoff_secs = backoff_secs, "provider poll failed");
                 runtime
-                    .record_error(
-                        &building_id,
-                        ProviderHealthStatus::Error,
-                        Some(err),
-                    )
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(err))
                     .await;
             }
         }
@@ -162,7 +161,7 @@ async fn poll_nf_site(
     resolver: &RoleResolver,
     page_size: u32,
 ) -> Result<usize, String> {
-    driver.authenticate().await?;
+    authenticate_provider(driver).await?;
     let latest = driver.query_points(page_size).await?;
     let now = Utc::now();
     // One hour of history plus five minutes of overlap. Timescale upsert on
@@ -197,9 +196,18 @@ async fn poll_nf_site(
         .map_err(|e| e.to_string())
 }
 
-async fn poll_ace_site(building_id: &str, ace: &mut AceIotStubDriver) -> Result<usize, String> {
-    let _ = building_id;
-    ace.authenticate().await?;
+async fn authenticate_provider<D: DataProvider>(driver: &mut D) -> Result<(), String> {
+    let health = driver.health();
+    debug!(
+        provider_id = %health.provider_id,
+        status = ?health.status,
+        "provider authenticate"
+    );
+    driver.authenticate().await
+}
+
+async fn poll_ace_site(ace: &mut AceIotStubDriver) -> Result<usize, String> {
+    authenticate_provider(ace).await?;
     ace.query_points().await.map(|_| 0)
 }
 

@@ -15,10 +15,6 @@ impl AceIotStubDriver {
         }
     }
 
-    pub fn provider_id(&self) -> &str {
-        &self.provider_id
-    }
-
     pub fn health(&self) -> ProviderHealth {
         ProviderHealth {
             provider_id: self.provider_id.clone(),

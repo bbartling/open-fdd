@@ -29,8 +29,9 @@ pub struct PointMapEntry {
 
 #[derive(Debug, Clone, Deserialize)]
 struct BindingSetFile {
-    #[serde(default)]
-    building_id: Option<String>,
+    /// Site stamp on the file. Not a membership or role selector.
+    #[serde(default, rename = "building_id")]
+    _building_id: Option<String>,
     #[serde(default)]
     equipment: Vec<BindingEquipment>,
 }
@@ -78,7 +79,9 @@ impl RoleResolver {
                 },
             );
         }
-        Self { by_provider_point_id }
+        Self {
+            by_provider_point_id,
+        }
     }
 
     pub fn merge_binding_set_json(&mut self, json: &str) -> Result<(), String> {

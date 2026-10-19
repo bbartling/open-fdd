@@ -18,8 +18,10 @@ from pathlib import Path
 
 import requests
 
-# Bench policy: temp / humidity AI names on device 5007 (JCI FEC).
-SENSORS = ("OA-T", "OA-H", "DUCT-T", "SSPLATE-T", "STAT ZN-T")
+# Select by opaque series id (`NF_POINT_IDS`), never by display name.
+def wanted_point_ids() -> set[str]:
+    raw = os.environ.get("NF_POINT_IDS", "")
+    return {part.strip() for part in raw.split(",") if part.strip()}
 UA = {"User-Agent": "bldgts-part02-nf-sensors/1.0"}
 
 
@@ -94,11 +96,17 @@ def main() -> int:
         )
         return 1
 
-    want = set(SENSORS)
+    want = wanted_point_ids()
+    if not want:
+        print(
+            "Set NF_POINT_IDS to comma-separated opaque point ids.",
+            file=sys.stderr,
+        )
+        return 1
     found = 0
     for point in query_points(base, token):
-        name = point.get("name") or ""
-        if name not in want:
+        ident = str(point.get("uuid") or point.get("id") or "").strip()
+        if ident not in want:
             continue
         attrs = point.get("attrs") or {}
         # Prefer physical AI sensors; still print if type missing after import quirks.
@@ -107,7 +115,7 @@ def main() -> int:
             continue
         latest = point.get("latestValue") or {}
         units = point.get("units") or attrs.get("prop_units") or ""
-        print(f"{name:10} {latest.get('double')} {units} @ {latest.get('ts')}")
+        print(f"{ident} {latest.get('double')} {units} @ {latest.get('ts')}")
         found += 1
 
     if not found:
