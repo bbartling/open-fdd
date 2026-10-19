@@ -600,35 +600,6 @@ impl BridgeClient {
         }
         json!({"ok": true, "drivers": out})
     }
-
-    pub fn haystack_read(&self, args: &Value) -> Result<Value, String> {
-        let body = if args.get("filter").is_some() {
-            json!({ "filter": args["filter"] })
-        } else if args.get("ids").is_some() {
-            json!({ "ids": args["ids"] })
-        } else {
-            json!({ "filter": "point and cur" })
-        };
-        self.post("/api/haystack/read", &body)
-    }
-
-    pub fn bacnet_read(&self, args: &Value) -> Result<Value, String> {
-        let commission =
-            env::var("OPENFDD_COMMISSION_BASE").unwrap_or_else(|_| "http://127.0.0.1:9091".into());
-        let point_id = args
-            .get("point_id")
-            .and_then(|v| v.as_str())
-            .ok_or("point_id required")?;
-        let url = format!("{}/api/bacnet/read", commission.trim_end_matches('/'));
-        let mut req = self.http.post(&url).json(&json!({ "point_id": point_id }));
-        if let Some(t) = &self.token {
-            req = req.header("Authorization", format!("Bearer {t}"));
-        }
-        req.send()
-            .map_err(|e| e.to_string())?
-            .json()
-            .map_err(|e| e.to_string())
-    }
 }
 
 fn smoke_step(name: &str, ok: bool, detail: Value) -> Value {
