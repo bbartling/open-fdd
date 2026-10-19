@@ -218,10 +218,20 @@ describe("Operations protocol navigation", () => {
         <OperationsPage />
       </MemoryRouter>,
     );
+    expect(await screen.findByTestId("providers-health-panel")).toBeTruthy();
+    expect(screen.queryByTestId("mqtt-config-panel")).toBeNull();
+    mqtt.unmount();
+
+    const archived = render(
+      <MemoryRouter initialEntries={["/operations?view=mqtt"]}>
+        <OperationsPage />
+      </MemoryRouter>,
+    );
     expect(await screen.findByTestId("mqtt-config-panel")).toBeTruthy();
     expect(screen.getByTestId("edge-kit-panel")).toBeTruthy();
     expect(screen.getByTestId("telemetry-suspend-panel")).toBeTruthy();
-    mqtt.unmount();
+    expect(screen.getByTestId("mqtt-archived-note")).toBeTruthy();
+    archived.unmount();
 
     render(
       <MemoryRouter initialEntries={["/operations?view=afdd"]}>

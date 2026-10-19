@@ -75,7 +75,7 @@ export function seriesRowsToFigure(
       downsampled: opts.downsampled ?? false,
       max_points: opts.maxPoints,
       point_count: rows.length,
-      provenance: "GET /api/fdd/series (DataFusion parquet)",
+      provenance: "GET /api/fdd/series (canonical historian)",
     },
   };
 }

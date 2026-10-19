@@ -4,6 +4,7 @@ import {
   getHistorianCompactionStatus,
   getHostStats,
   runHistorianCompaction,
+  type HistorianCompactionResponse,
   type HostStatsResponse,
 } from "../api/hostStatsApi";
 import { getHistorianLimits } from "../api/adminApi";
@@ -15,11 +16,14 @@ function pctLabel(value: number | null | undefined): string {
 }
 
 /**
- * Hub-admin capacity strip — cgroup memory + workspace df + Parquet historian footprint.
+ * Hub-admin capacity strip — cgroup memory, workspace disk, and an honest
+ * historian/cache split. Timescale figures appear only when the API reports them.
  */
 export function AdminCapacityStrip({ sizeGib }: { sizeGib: number | null }) {
   const [stats, setStats] = useState<HostStatsResponse | null>(null);
+  const [engine, setEngine] = useState<HistorianCompactionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [engineNote, setEngineNote] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [compacting, setCompacting] = useState(false);
 
@@ -30,6 +34,14 @@ export function AdminCapacityStrip({ sizeGib }: { sizeGib: number | null }) {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+    }
+    try {
+      const status = await getHistorianCompactionStatus();
+      setEngine(status);
+      setEngineNote(null);
+    } catch (err) {
+      setEngine(null);
+      setEngineNote(err instanceof Error ? err.message : String(err));
     }
   }, []);
 
@@ -72,13 +84,17 @@ export function AdminCapacityStrip({ sizeGib }: { sizeGib: number | null }) {
   const coord = stats?.compaction_coordinator;
   const sizeCapBytes =
     sizeGib != null && Number.isFinite(sizeGib) ? sizeGib * 1024 ** 3 : null;
-  const histBytes = parquet?.estimated_bytes;
-  const histPct =
-    sizeCapBytes != null && histBytes != null && sizeCapBytes > 0
-      ? (histBytes / sizeCapBytes) * 100
+  const cacheBytes = parquet?.estimated_bytes;
+  const cachePct =
+    sizeCapBytes != null && cacheBytes != null && sizeCapBytes > 0
+      ? (cacheBytes / sizeCapBytes) * 100
       : null;
-  const compactionLabel =
-    coord?.mode ?? parquet?.compaction_status ?? "Not reported";
+  const timescale =
+    engine?.engine === "timescale-sql" || engine?.parquet_compaction === "not_applicable";
+  const showCacheControls = engine != null && !timescale;
+  const compactionLabel = timescale
+    ? "not applicable"
+    : coord?.mode ?? parquet?.compaction_status ?? "not reported";
 
   return (
     <section
@@ -87,9 +103,11 @@ export function AdminCapacityStrip({ sizeGib }: { sizeGib: number | null }) {
       style={{ marginTop: "2rem" }}
     >
       <h2 id="admin-capacity-heading">Capacity</h2>
-      <p className="muted" style={{ maxWidth: 560 }}>
-        Container cgroup memory and workspace disk — not shared-host RAM totals.
-        Small-file compaction serializes against DataFusion scans (fail closed or wait).
+      <p className="muted" style={{ maxWidth: 640 }}>
+        Memory and workspace disk come from the host. The product historian is Timescale.
+        Parquet figures here are an optional analytics-result cache, not telemetry. Database
+        size, chunks, WAL, pool pressure, and ingest-queue age appear only when an API
+        reports them. A missing figure is not a healthy database.
       </p>
       <div className="ops-capacity-strip" role="status" aria-live="polite">
         <div className="ops-capacity-strip__item">
@@ -108,56 +126,84 @@ export function AdminCapacityStrip({ sizeGib }: { sizeGib: number | null }) {
             {storage?.percent_used != null ? ` (${pctLabel(storage.percent_used)})` : ""}
           </span>
         </div>
-        <div className="ops-capacity-strip__item">
-          <span className="ops-capacity-strip__label">Historian Parquet</span>
+        <div className="ops-capacity-strip__item" data-testid="admin-timescale-capacity">
+          <span className="ops-capacity-strip__label">Timescale historian</span>
           <span className="ops-capacity-strip__value">
-            {formatBytes(histBytes)}
+            {timescale
+              ? "Engine reported. Size, chunks, WAL, and pool pressure are not in this payload."
+              : engine
+                ? "Engine did not report Timescale. Do not treat the cache footprint as the historian."
+                : "Not reported"}
+          </span>
+        </div>
+        <div className="ops-capacity-strip__item" data-testid="admin-ingest-queue">
+          <span className="ops-capacity-strip__label">Ingest queue</span>
+          <span className="ops-capacity-strip__value">Not reported</span>
+        </div>
+        <div className="ops-capacity-strip__item">
+          <span className="ops-capacity-strip__label">Analytics cache (Parquet)</span>
+          <span className="ops-capacity-strip__value">
+            {cacheBytes == null ? "not reported" : formatBytes(cacheBytes)}
             {sizeGib != null ? ` / ${sizeGib} GiB cap` : ""}
-            {histPct != null ? ` (${pctLabel(histPct)})` : ""}
+            {cachePct != null ? ` (${pctLabel(cachePct)})` : ""}
           </span>
         </div>
         <div className="ops-capacity-strip__item">
-          <span className="ops-capacity-strip__label">Small Parquet files</span>
+          <span className="ops-capacity-strip__label">Small cache files</span>
           <span className="ops-capacity-strip__value">
-            {parquet?.small_file_count != null ? String(parquet.small_file_count) : "—"}
+            {parquet?.small_file_count != null ? String(parquet.small_file_count) : "not reported"}
             {parquet?.file_count != null ? ` / ${parquet.file_count} total` : ""}
           </span>
         </div>
         <div className="ops-capacity-strip__item" data-testid="admin-compaction-status">
-          <span className="ops-capacity-strip__label">Compaction</span>
+          <span className="ops-capacity-strip__label">Cache compaction</span>
           <span className="ops-capacity-strip__value">
             {compactionLabel}
-            {coord?.scanners != null ? ` · scans ${coord.scanners}` : ""}
+            {!timescale && coord?.scanners != null ? ` · scans ${coord.scanners}` : ""}
+            {engine?.note ? ` · ${engine.note}` : ""}
           </span>
         </div>
         {error ? (
           <div className="ops-capacity-strip__item">
-            <span className="ops-capacity-strip__label">Capacity</span>
+            <span className="ops-capacity-strip__label">Host stats</span>
             <span className="ops-capacity-strip__value ops-capacity-strip__value--bad">{error}</span>
+          </div>
+        ) : null}
+        {engineNote ? (
+          <div className="ops-capacity-strip__item" data-testid="admin-engine-unknown">
+            <span className="ops-capacity-strip__label">Historian engine</span>
+            <span className="ops-capacity-strip__value">{engineNote}</span>
           </div>
         ) : null}
         {notice ? (
           <div className="ops-capacity-strip__item">
-            <span className="ops-capacity-strip__label">Last compact</span>
+            <span className="ops-capacity-strip__label">Last cache compact</span>
             <span className="ops-capacity-strip__value">{notice}</span>
           </div>
         ) : null}
       </div>
-      <div className="button-row" style={{ marginTop: "0.75rem" }}>
-        <Button
-          id="admin-compact-fail-closed"
-          label={compacting ? "Compacting…" : "Compact now"}
-          loading={compacting}
-          onClick={() => void runCompact(false)}
-        />
-        <Button
-          id="admin-compact-wait"
-          label="Compact (wait for scans)"
-          variant="secondary"
-          loading={compacting}
-          onClick={() => void runCompact(true)}
-        />
-      </div>
+      {showCacheControls ? (
+        <div className="button-row" style={{ marginTop: "0.75rem" }}>
+          <Button
+            id="admin-compact-fail-closed"
+            label={compacting ? "Compacting…" : "Compact analytics cache"}
+            loading={compacting}
+            onClick={() => void runCompact(false)}
+          />
+          <Button
+            id="admin-compact-wait"
+            label="Compact cache (wait for scans)"
+            variant="secondary"
+            loading={compacting}
+            onClick={() => void runCompact(true)}
+          />
+        </div>
+      ) : (
+        <p className="muted" data-testid="admin-compact-disabled">
+          Cache compaction controls stay off until the historian engine is reported, and they
+          stay off when the engine is Timescale.
+        </p>
+      )}
     </section>
   );
 }

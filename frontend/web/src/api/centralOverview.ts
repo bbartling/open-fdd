@@ -1,7 +1,6 @@
 /**
- * Assemble Overview dashboard payload from central Rust `/api/analytics/*`
- * (DataFusion) + client-side Plotly figures — vibe19 Overview chart parity,
- * no Python/pandas.
+ * Assemble Overview dashboard payload from central Rust `/api/analytics/*`.
+ * Chart parity uses the canonical historian. No Python/pandas.
  */
 import {
   postBasVsWebOat,
@@ -67,7 +66,7 @@ function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null 
     sortBy: "run_hours",
     sortDesc: true,
     maxBars: 40,
-    provenance: "POST /api/analytics/runtime (DataFusion)",
+    provenance: "POST /api/analytics/runtime (canonical historian)",
   });
 }
 
@@ -217,7 +216,7 @@ export function weeklyPlantFigures(
       return {
         plant_group,
         title: titles[plant_group] ?? plant_group,
-        caption: "Central weekly plant bins (DataFusion)",
+        caption: "Central weekly plant bins (canonical historian)",
         figure,
         empty: !sorted.length,
       };
@@ -454,7 +453,7 @@ export function econDeltaScatter(
     },
     meta: {
       point_count: usable.length,
-      provenance: "POST /api/analytics/economizer (DataFusion points)",
+      provenance: "POST /api/analytics/economizer (canonical historian)",
     },
   };
 }
@@ -501,7 +500,7 @@ export function econMatResidual(
     },
     meta: {
       point_count: usable.length,
-      provenance: "POST /api/analytics/economizer (DataFusion points)",
+      provenance: "POST /api/analytics/economizer (canonical historian)",
     },
   };
 }
@@ -591,7 +590,7 @@ export function econTempsOverlay(
       meta: {
         equipment_id: eq,
         point_count: rows.length,
-        provenance: "POST /api/analytics/economizer (DataFusion points)",
+        provenance: "POST /api/analytics/economizer (canonical historian)",
       },
     },
   };
@@ -839,7 +838,7 @@ export async function fetchCentralOverview(opts: {
         mechBins.length
           ? "Chiller / DX / VRF compressor hours by site OAT (5°F bins). VAV boxes and CHW valves are not cooling proof."
           : mechFig
-            ? "Mechanical cooling evidence from DataFusion"
+            ? "Mechanical cooling evidence from the historian"
             : "No compressor×OAT intervals. Need a chiller/DX status (or CH-1 / CHILLER_* id) plus site web OAT on the historian.",
       ),
       figure: mechFig,
@@ -860,14 +859,14 @@ export async function fetchCentralOverview(opts: {
     },
     economizer_weather: {
       caption:
-        "Economizer weather-opportunity (dewpoint hours) needs web dewpoint on historian — not yet wired in central DataFusion.",
+        "Economizer weather-opportunity (dewpoint hours) needs web dewpoint on the historian — not yet wired.",
       table: [],
     },
     economizer_free_cooling: {
       caption: warnCaption(
         econ,
         deltaScatter
-          ? "Economizer free-cooling plots from DataFusion historian points"
+          ? "Economizer free-cooling plots from the canonical historian"
           : econPoints.length
             ? "Economizer points present but fewer than 5 identifiable |OAT−RAT| samples for scatter"
             : "Economizer plot points unavailable (need fan-on + OAT/RAT/MAT)",
@@ -885,7 +884,7 @@ export async function fetchCentralOverview(opts: {
       caption: warnCaption(
         bas,
         basOverlayFig
-          ? "BAS vs web OAT from DataFusion historian (site-broadcast join)"
+          ? "BAS vs web OAT from the canonical historian (site-broadcast join)"
           : "BAS vs web OAT unavailable (need both oa_t and web OAT columns)",
       ),
       overlay: basOverlayFig,

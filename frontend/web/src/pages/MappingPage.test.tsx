@@ -30,6 +30,13 @@ vi.mock("../api/fddApi", () => ({
   ]),
 }));
 
+vi.mock("../api/providersApi", () => ({
+  listProviderBuildingIds: vi.fn(async () => []),
+  fetchOptionalJson: vi.fn(async () => ({ http: "missing" })),
+  providerBindingsPath: (buildingId: string) =>
+    `/api/providers/bindings?building_id=${encodeURIComponent(buildingId)}`,
+}));
+
 import {
   getPackageMapping,
   getSessionConfig,
