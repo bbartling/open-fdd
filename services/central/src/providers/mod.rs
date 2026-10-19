@@ -2,11 +2,14 @@
 
 pub mod ace_stub;
 pub mod config;
+#[cfg(test)]
+pub mod conformance;
 pub mod error;
 pub mod hourly;
 pub mod hourly_exec;
 pub mod http_policy;
 pub mod map;
+pub mod meteo;
 pub mod nf;
 pub mod pg_store;
 pub mod poller;
@@ -96,6 +99,32 @@ impl DataProvider for nf::NfPortalDriver {
 
     async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
         nf::NfPortalDriver::query_points(self, 200)
+            .await
+            .map_err(|err| err.to_string())
+    }
+}
+
+impl DataProvider for meteo::OpenMeteoDriver {
+    fn provider_id(&self) -> &str {
+        meteo::OpenMeteoDriver::provider_id(self)
+    }
+
+    fn kind(&self) -> ProviderKind {
+        ProviderKind::OpenMeteo
+    }
+
+    fn health(&self) -> ProviderHealth {
+        self.health(ProviderHealthStatus::Ok, None)
+    }
+
+    async fn authenticate(&mut self) -> Result<(), String> {
+        std::future::ready(meteo::OpenMeteoDriver::authenticate(self))
+            .await
+            .map_err(|err| err.to_string())
+    }
+
+    async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
+        std::future::ready(meteo::OpenMeteoDriver::fetch_latest(self))
             .await
             .map_err(|err| err.to_string())
     }
@@ -408,9 +437,19 @@ mod tests {
         )
         .unwrap();
         let ace = ace_stub::AceIotStubDriver::new("ace_iot:explicit");
+        let meteo = meteo::OpenMeteoDriver::new(
+            "open_meteo:explicit",
+            "https://api.open-meteo.com",
+            43.07,
+            -89.4,
+            HttpLimits::default(),
+        )
+        .unwrap();
         check_provider(&nf);
         check_provider(&ace);
+        check_provider(&meteo);
         assert_eq!(ace.provider_id(), "ace_iot:explicit");
+        assert_eq!(meteo.kind(), ProviderKind::OpenMeteo);
     }
 
     fn site(building: &str, endpoint: &str, message: &str) -> SiteProviderHealth {

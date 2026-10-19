@@ -12,6 +12,7 @@ use serde::Deserialize;
 
 use super::http_policy::{canonicalize_provider_endpoint, connection_id};
 use super::map::{PointMapEntry, RoleResolver};
+use super::meteo::{self, MAX_METEO_SERIES};
 use super::types::ProviderKind;
 
 #[derive(Clone, Deserialize)]
@@ -42,6 +43,12 @@ pub struct SiteConfigRaw {
     pub binding_set_path: Option<String>,
     #[serde(default)]
     pub binding_set_inline: Option<String>,
+    /// Decimal degrees. Required for `open_meteo`.
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    /// Decimal degrees. Required for `open_meteo`.
+    #[serde(default)]
+    pub longitude: Option<f64>,
 }
 
 fn default_poll_secs() -> u64 {
@@ -57,6 +64,8 @@ pub struct SiteConfig {
     pub client_secret: Option<String>,
     pub anonymous: bool,
     pub poll_secs: u64,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
     pub resolver: RoleResolver,
 }
 
@@ -71,6 +80,8 @@ impl fmt::Debug for SiteConfig {
             .field("client_secret", &redacted(self.client_secret.as_deref()))
             .field("anonymous", &self.anonymous)
             .field("poll_secs", &self.poll_secs)
+            .field("latitude", &self.latitude)
+            .field("longitude", &self.longitude)
             .field("mapped_points", &self.resolver.mapped_count())
             .finish()
     }
@@ -87,6 +98,8 @@ impl Clone for SiteConfig {
             client_secret: self.client_secret.clone(),
             anonymous: self.anonymous,
             poll_secs: self.poll_secs,
+            latitude: self.latitude,
+            longitude: self.longitude,
             resolver: self.resolver.clone(),
         }
     }
@@ -104,6 +117,7 @@ fn parse_provider_kind(raw: &str) -> Result<ProviderKind, String> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "nf" | "normal" | "normal_framework" => Ok(ProviderKind::Nf),
         "ace_iot" | "ace" | "ace-iot" => Ok(ProviderKind::AceIot),
+        "open_meteo" | "open-meteo" | "meteo" => Ok(ProviderKind::OpenMeteo),
         _ => Err("unknown_provider".into()),
     }
 }
@@ -234,6 +248,11 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
     let secret_present = secret_field.map(|s| !s.trim().is_empty()).unwrap_or(false);
     let (client_id, client_secret, anonymous) = if matches!(kind, ProviderKind::AceIot) {
         (None, None, false)
+    } else if matches!(kind, ProviderKind::OpenMeteo) {
+        if id_present || secret_present {
+            return Err("meteo_credentials_rejected".into());
+        }
+        (None, None, true)
     } else if wants_anonymous && !id_present && !secret_present {
         (None, None, true)
     } else if !id_present || !secret_present || auth_mode == "anonymous" {
@@ -244,6 +263,9 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         let secret = resolve_secret_ref(secret_field.unwrap_or(""))?;
         (Some(id), Some(secret), false)
     };
+    if matches!(kind, ProviderKind::OpenMeteo) && raw.allow_insecure_http {
+        return Err("meteo_https_required".into());
+    }
     if raw.allow_insecure_http && !anonymous {
         return Err("insecure_http_with_credentials".into());
     }
@@ -260,6 +282,7 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
     let kind_slug = match kind {
         ProviderKind::Nf => "nf",
         ProviderKind::AceIot => "ace_iot",
+        ProviderKind::OpenMeteo => "open_meteo",
     };
     let provider_instance_id = connection_id(
         kind_slug,
@@ -274,6 +297,26 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
     if let Some(inline) = raw.binding_set_inline.as_deref().filter(|s| !s.is_empty()) {
         resolver.merge_binding_set_json(inline, &building_id)?;
     }
+    let (latitude, longitude) = if matches!(kind, ProviderKind::OpenMeteo) {
+        if !meteo::public_origin(&endpoint) {
+            return Err("meteo_host".into());
+        }
+        let latitude = raw.latitude.ok_or("meteo_coordinates")?;
+        let longitude = raw.longitude.ok_or("meteo_coordinates")?;
+        if !meteo::valid_coords(latitude, longitude) {
+            return Err("meteo_coordinates".into());
+        }
+        let ids = resolver.provider_point_ids();
+        if ids.is_empty() || ids.len() > MAX_METEO_SERIES {
+            return Err("meteo_series".into());
+        }
+        if ids.iter().any(|id| !meteo::series_allowed(id)) {
+            return Err("meteo_series".into());
+        }
+        (Some(latitude), Some(longitude))
+    } else {
+        (None, None)
+    };
     let poll_secs = raw.poll_secs.clamp(15, 3600);
     Ok(SiteConfig {
         building_id,
@@ -284,6 +327,8 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         client_secret,
         anonymous,
         poll_secs,
+        latitude,
+        longitude,
         resolver,
     })
 }
@@ -368,5 +413,64 @@ mod tests {
         assert!(debug.contains("<set>"));
         std::env::remove_var("OPENFDD_TEST_WAVEA_ID");
         std::env::remove_var("OPENFDD_TEST_WAVEA_SECRET");
+    }
+
+    #[test]
+    fn open_meteo_site_is_anonymous_and_explicitly_mapped() {
+        let loaded = load_sites_json_owned(
+            r#"{
+                "building_id":"SITE",
+                "provider":"open_meteo",
+                "endpoint":"https://api.open-meteo.com",
+                "latitude":43.07,
+                "longitude":-89.4,
+                "point_map":[{
+                    "provider_point_id":"temperature_2m",
+                    "equipment_id":"WEATHER",
+                    "role":"web-outside-air-temp",
+                    "equip_type":"weather"
+                }]
+            }"#,
+        )
+        .unwrap();
+        assert!(loaded.failures.is_empty());
+        assert_eq!(loaded.sites.len(), 1);
+        let site = &loaded.sites[0];
+        assert_eq!(site.kind, ProviderKind::OpenMeteo);
+        assert!(site.anonymous);
+        assert!(site.client_id.is_none());
+        assert!(site.client_secret.is_none());
+        assert!((site.latitude.unwrap() - 43.07).abs() < 1e-9);
+        assert!((site.longitude.unwrap() + 89.4).abs() < 1e-9);
+        assert_eq!(site.resolver.mapped_count(), 1);
+        assert!(site.provider_instance_id.starts_with("open_meteo:"));
+    }
+
+    #[test]
+    fn open_meteo_rejects_secrets_foreign_hosts_and_display_names() {
+        let secret = load_sites_json_owned(
+            r#"{"building_id":"SITE","provider":"open_meteo","endpoint":"https://api.open-meteo.com","latitude":1.0,"longitude":2.0,"client_id":"id","client_secret":"sek","point_map":[{"provider_point_id":"temperature_2m","equipment_id":"WEATHER","role":"web-outside-air-temp"}]}"#,
+        )
+        .unwrap();
+        assert!(secret.sites.is_empty());
+        assert_eq!(secret.failures[0].code, "meteo_credentials_rejected");
+
+        let host = load_sites_json_owned(
+            r#"{"building_id":"SITE","provider":"open_meteo","endpoint":"https://example.com","latitude":1.0,"longitude":2.0,"point_map":[{"provider_point_id":"temperature_2m","equipment_id":"WEATHER","role":"web-outside-air-temp"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(host.failures[0].code, "meteo_host");
+
+        let named = load_sites_json_owned(
+            r#"{"building_id":"SITE","provider":"open_meteo","endpoint":"https://api.open-meteo.com","latitude":1.0,"longitude":2.0,"point_map":[{"provider_point_id":"Outside Air Temp","equipment_id":"WEATHER","role":"web-outside-air-temp"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(named.failures[0].code, "meteo_series");
+
+        let coords = load_sites_json_owned(
+            r#"{"building_id":"SITE","provider":"open_meteo","endpoint":"https://api.open-meteo.com","point_map":[{"provider_point_id":"temperature_2m","equipment_id":"WEATHER","role":"web-outside-air-temp"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(coords.failures[0].code, "meteo_coordinates");
     }
 }

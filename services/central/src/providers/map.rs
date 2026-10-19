@@ -187,10 +187,6 @@ impl RoleResolver {
         self.by_provider_point_id.len()
     }
 
-    #[expect(
-        dead_code,
-        reason = "hourly jobs group with devices(); adapters can still list source ids"
-    )]
     pub fn provider_point_ids(&self) -> Vec<String> {
         self.by_provider_point_id.keys().cloned().collect()
     }
@@ -272,6 +268,39 @@ pub fn normalize_mapped(
         source_quality: raw.source_quality.clone(),
         attrs: raw.attrs.clone(),
     }
+}
+
+/// Map raw points in history-then-latest order. The first sample for a
+/// `(provider_point_id, microsecond)` pair wins. Unmapped ids are dropped.
+///
+/// The hourly job calls [`normalize_mapped`] per accepted sample. This batch
+/// helper is the offline contractor gate.
+#[cfg(test)]
+pub fn map_provider_samples(
+    building_id: &str,
+    provider_instance_id: &str,
+    resolver: &RoleResolver,
+    history: &[RawProviderPoint],
+    latest: &[RawProviderPoint],
+) -> Vec<NormalizedSample> {
+    let mut samples = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for point in history.iter().chain(latest.iter()) {
+        let Some(resolved) = resolver.resolve(&point.provider_point_id) else {
+            continue;
+        };
+        let key = (point.provider_point_id.clone(), point.ts.timestamp_micros());
+        if !seen.insert(key) {
+            continue;
+        }
+        samples.push(normalize_mapped(
+            building_id,
+            provider_instance_id,
+            point,
+            resolved,
+        ));
+    }
+    samples
 }
 
 #[cfg(test)]
