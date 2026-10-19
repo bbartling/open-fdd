@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: wave-b-n3-model
     content: "Wave-B parallel — N3 source-neutral committed model + scoped SPARQL ingest plans"
-    status: in_progress
+    status: completed
   - id: wave-b-n11-spa
     content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics"
     status: in_progress
@@ -42,13 +42,13 @@ todos:
     content: M4 NF OAuth + point/query latest + GET point/data hour window (connectivity prototype; harden in Wave-A/B)
     status: in_progress
   - id: m5-map
-    content: M5 Roles from explicit provider_point_id or SPARQL bindings only (N3 typed committed model → Wave-B)
-    status: in_progress
+    content: M5 Roles from explicit provider_point_id or the committed ingest plan (display-name grep rejected)
+    status: completed
   - id: m6-fe-blast
     content: M6 SPA Providers default; MQTT chrome archived (N11 full Ops ledger → Wave-B)
     status: in_progress
   - id: m7-fe-haystack
-    content: M7 Model/SPARQL for provider-mapped buildings (N3/N11 → Wave-B)
+    content: SoftOPEN defer — M7 Model/SPARQL SPA for provider-mapped buildings (N11); server ingest-plan compiler landed with N3
     status: pending
   - id: m8-ops-ui
     content: M8 Ops panel shows provider poll health (basic); window/gap ledger pending N5 Wave-B
@@ -87,8 +87,11 @@ todos:
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
     status: completed
   - id: n3-model
-    content: SoftOPEN defer — N3 Source-neutral committed model (owned by Wave-B parallel PR)
-    status: in_progress
+    content: N3 source-neutral committed model + scoped SPARQL ingest plans (Wave-B)
+    status: completed
+  - id: n3-replica-store
+    content: SoftOPEN defer — N3 cross-replica derived-plan invalidation, durable multi-process model store, and in-flight SPARQL cancel (with N8)
+    status: pending
   - id: n4-contract
     content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
     status: pending
@@ -275,7 +278,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n1-restore-boot** isolated old-stack boot/replay and verified OCI digest pin
 - [ ] SoftOPEN defer — **n1-workspace-remove** delete live `services/fieldbus` from the default Cargo workspace (split gate still compiles it)
 - [x] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested)
-- [ ] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans
+- [x] **wave-b-n3-model** / **n3-model** — committed model + scoped SPARQL plans (resolver each tick)
+- [ ] SoftOPEN defer — **n3-replica-store** cross-replica invalidation, durable multi-process store, in-flight SPARQL cancel
 - [ ] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA
 
 ### Wave-C — after Wave-B

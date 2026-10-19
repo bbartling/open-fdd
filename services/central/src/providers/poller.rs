@@ -103,6 +103,7 @@ async fn nf_hourly_loop(
     shutdown: &mut watch::Receiver<bool>,
 ) {
     let building_id = site.building_id.clone();
+    let tenant_id = site.tenant_id.clone();
     let provider_instance_id = site.provider_instance_id.clone();
     let mut driver = match NfPortalDriver::new(
         provider_instance_id.clone(),
@@ -124,6 +125,11 @@ async fn nf_hourly_loop(
             return;
         }
     };
+    debug!(
+        identity = %super::driver_identity(&driver),
+        %building_id,
+        "nf driver"
+    );
     let policy = HourlyPolicy::from_env();
     let owner = std::env::var("OPENFDD_HOURLY_WORKER_ID").unwrap_or_else(|_| "central".into());
     let mut first = true;
@@ -169,12 +175,17 @@ async fn nf_hourly_loop(
                 continue;
             }
         };
-        let devices = site.resolver.devices();
+        let resolver = runtime.resolver_for(&tenant_id, &building_id);
+        let devices = if resolver.mapped_count() == 0 && site.resolver.mapped_count() > 0 {
+            site.resolver.devices()
+        } else {
+            resolver.devices()
+        };
         let now = Utc::now();
         let provider_instance = driver.provider_id().to_string();
         let tick = TickInput {
             now,
-            tenant: "default",
+            tenant: &tenant_id,
             canonical_site: &building_id,
             provider_instance: &provider_instance,
             devices: &devices,
@@ -306,6 +317,7 @@ async fn ace_poll_loop(
     let poll_secs = site.poll_secs;
     let mut backoff_secs = 0u64;
     let mut ace = AceIotStubDriver::new(&site.provider_instance_id);
+    debug!(identity = %super::driver_identity(&ace), %building_id, "ace driver");
     loop {
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(backoff_secs)) => {}

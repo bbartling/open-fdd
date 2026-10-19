@@ -489,12 +489,12 @@ fn normalize_device(
             site,
             provider_instance_id,
             raw,
-            &ResolvedRole {
-                equipment_id: device_id.to_string(),
-                role: point.role.clone(),
-                equip_type: point.equip_type.clone(),
-                unit: None,
-            },
+            &ResolvedRole::binding(
+                device_id,
+                point.role.clone(),
+                point.equip_type.clone(),
+                None,
+            ),
         ));
     }
     (out, unmapped)
