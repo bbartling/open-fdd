@@ -56,6 +56,18 @@ pub async fn ingest_samples(
             "provider_point_id".into(),
             serde_json::Value::String(sample.provider_point_id.clone()),
         );
+        for key in [
+            "semantic_point_id",
+            "provider_instance_id",
+            "model_revision",
+            "kind",
+            "quantity",
+            "canonical_unit",
+        ] {
+            if let Some(value) = sample.attrs.get(key).and_then(|v| v.as_str()) {
+                tags.insert(key.into(), serde_json::Value::String(value.to_string()));
+            }
+        }
         points.push(TelemetryPoint {
             id: sample.provider_point_id.clone(),
             display_name: None,
@@ -67,18 +79,8 @@ pub async fn ingest_samples(
             tags,
         });
     }
-    let observed_at = samples
-        .iter()
-        .map(|s| s.ts)
-        .max()
-        .unwrap_or_else(Utc::now);
-    let mut envelope = TelemetryEnvelope::new(
-        building_id,
-        edge_id,
-        Protocol::Rest,
-        seq,
-        points,
-    );
+    let observed_at = samples.iter().map(|s| s.ts).max().unwrap_or_else(Utc::now);
+    let mut envelope = TelemetryEnvelope::new(building_id, edge_id, Protocol::Rest, seq, points);
     envelope.observed_at = observed_at;
     envelope.message_id = Uuid::new_v4();
     envelope

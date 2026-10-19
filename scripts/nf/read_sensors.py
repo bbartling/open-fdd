@@ -18,9 +18,13 @@ from pathlib import Path
 
 import requests
 
-# Bench policy: temp / humidity AI names on device 5007 (JCI FEC).
-SENSORS = ("OA-T", "OA-H", "DUCT-T", "SSPLATE-T", "STAT ZN-T")
-UA = {"User-Agent": "bldgts-part02-nf-sensors/1.0"}
+UA = {"User-Agent": "openfdd-nf-sensor-smoke/1.0"}
+
+
+def sensor_names() -> set[str]:
+    """Comma-separated portal display names from the caller. Never a built-in bench list."""
+    raw = os.environ.get("OPENFDD_NF_SENSOR_NAMES", "")
+    return {part.strip() for part in raw.split(",") if part.strip()}
 
 
 def load_dotenv(directory: Path) -> None:
@@ -94,7 +98,13 @@ def main() -> int:
         )
         return 1
 
-    want = set(SENSORS)
+    want = sensor_names()
+    if not want:
+        print(
+            "Set OPENFDD_NF_SENSOR_NAMES to the portal point display names to print.",
+            file=sys.stderr,
+        )
+        return 1
     found = 0
     for point in query_points(base, token):
         name = point.get("name") or ""

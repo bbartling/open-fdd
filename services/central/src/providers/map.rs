@@ -4,49 +4,36 @@
 //!
 //! Equipment id and Haystack SQL **role** MUST come from either:
 //!
-//! 1. **Haystack RDF + inventory-approved bindings** — a `TypedBindingSet` (or
-//!    equivalent) keyed by stable **`point_id`** → `{ equipment_id, canonical_role }`, or
+//! 1. **Committed model / SPARQL bindings** — typed rows with a semantic
+//!    `point_id` distinct from the provider source id, or
 //! 2. **Explicit config** — `provider_point_id` → `{ equipment_id, role }` in
-//!    `OPENFDD_PROVIDER_SITES` `point_map`.
+//!    `OPENFDD_PROVIDER_SITES` `point_map`, compiled into that same model.
 //!
 //! **Forbidden:** substring, prefix, `contains`, `LIKE`, or grepping NF **display
 //! names** (`name`, human labels) to invent roles. Display names are smoke / UX only.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use super::committed_model::{BootstrapPoint, CommittedModel, IngestPlan, ModelScope};
 use super::types::NormalizedSample;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PointMapEntry {
     pub provider_point_id: String,
+    #[serde(default)]
+    pub semantic_point_id: Option<String>,
     pub equipment_id: String,
     pub role: String,
     #[serde(default)]
     pub equip_type: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct BindingSetFile {
     #[serde(default)]
-    building_id: Option<String>,
+    pub unit: Option<String>,
     #[serde(default)]
-    equipment: Vec<BindingEquipment>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct BindingEquipment {
-    equipment_id: String,
+    pub kind: Option<String>,
     #[serde(default)]
-    points: Vec<BindingPoint>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct BindingPoint {
-    point_id: String,
-    #[serde(default)]
-    canonical_role: Option<String>,
+    pub provisional: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,67 +41,86 @@ pub struct ResolvedRole {
     pub equipment_id: String,
     pub role: String,
     pub equip_type: Option<String>,
+    pub semantic_point_id: String,
+    pub unit: Option<String>,
+    pub canonical_unit: Option<String>,
+    pub kind: Option<String>,
+    pub quantity: Option<String>,
+    pub provider_instance_id: String,
+    pub model_revision: String,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct RoleResolver {
-    by_provider_point_id: HashMap<String, ResolvedRole>,
+    by_provider_point_id: BTreeMap<String, ResolvedRole>,
+    model_revision: Option<String>,
 }
 
 impl RoleResolver {
-    pub fn from_point_map(entries: &[PointMapEntry]) -> Self {
-        let mut by_provider_point_id = HashMap::new();
-        for entry in entries {
-            let key = entry.provider_point_id.trim();
-            if key.is_empty() {
-                continue;
-            }
-            by_provider_point_id.insert(
-                key.to_string(),
-                ResolvedRole {
-                    equipment_id: entry.equipment_id.clone(),
-                    role: entry.role.clone(),
-                    equip_type: entry.equip_type.clone(),
-                },
-            );
+    pub fn from_plan(plan: &IngestPlan) -> Self {
+        if plan.schema != super::committed_model::PLAN_SCHEMA {
+            return Self::default();
         }
-        Self { by_provider_point_id }
-    }
-
-    pub fn merge_binding_set_json(&mut self, json: &str) -> Result<(), String> {
-        let set: BindingSetFile =
-            serde_json::from_str(json).map_err(|e| format!("binding set JSON: {e}"))?;
-        for equip in set.equipment {
-            for pt in equip.points {
-                let Some(role) = pt
-                    .canonical_role
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                else {
-                    continue;
-                };
-                let pid = pt.point_id.trim();
-                if pid.is_empty() {
-                    continue;
-                }
-                self.by_provider_point_id.insert(
-                    pid.to_string(),
+        let mut by_provider_point_id = BTreeMap::new();
+        for group in &plan.groups {
+            for point in &group.points {
+                by_provider_point_id.insert(
+                    point.source_point_id.clone(),
                     ResolvedRole {
-                        equipment_id: equip.equipment_id.clone(),
-                        role: role.to_string(),
-                        equip_type: None,
+                        equipment_id: group.equipment_id.clone(),
+                        role: point.canonical_role.clone(),
+                        equip_type: Some(group.equip_type.clone()),
+                        semantic_point_id: point.semantic_point_id.clone(),
+                        unit: point.source_unit.clone(),
+                        canonical_unit: point.canonical_unit.clone(),
+                        kind: point.kind.clone(),
+                        quantity: point.quantity.clone(),
+                        provider_instance_id: group.provider_instance_id.clone(),
+                        model_revision: plan.revision_id.clone(),
                     },
                 );
             }
         }
-        Ok(())
+        Self {
+            by_provider_point_id,
+            model_revision: Some(plan.revision_id.clone()),
+        }
     }
 
-    pub fn merge_binding_set_path(&mut self, path: &std::path::Path) -> Result<(), String> {
+    pub fn model_revision(&self) -> Option<&str> {
+        self.model_revision.as_deref()
+    }
+
+    pub fn from_point_map(scope: &ModelScope, entries: &[PointMapEntry]) -> Result<Self, String> {
+        let model = super::committed_model::model_from_point_map(scope, &bootstrap(entries))?;
+        let mut store = super::committed_model::CommittedModelStore::default();
+        store.try_activate(None, &model)?;
+        let plan = store
+            .active_plan(&scope.tenant_id, &scope.site_id)
+            .ok_or_else(|| "committed model did not activate".to_string())?;
+        Ok(Self::from_plan(plan))
+    }
+
+    pub fn from_committed_json(
+        json: &str,
+        scope: &ModelScope,
+    ) -> Result<(Self, CommittedModel), String> {
+        let model = super::committed_model::model_from_json(json, scope)?;
+        let mut store = super::committed_model::CommittedModelStore::default();
+        store.try_activate(None, &model)?;
+        let plan = store
+            .active_plan(&scope.tenant_id, &scope.site_id)
+            .ok_or_else(|| "committed model did not activate".to_string())?;
+        Ok((Self::from_plan(plan), model))
+    }
+
+    pub fn from_committed_path(
+        path: &std::path::Path,
+        scope: &ModelScope,
+    ) -> Result<(Self, CommittedModel), String> {
         let raw = std::fs::read_to_string(path)
-            .map_err(|e| format!("read binding set {}: {e}", path.display()))?;
-        self.merge_binding_set_json(&raw)
+            .map_err(|e| format!("read committed model {}: {e}", path.display()))?;
+        Self::from_committed_json(&raw, scope)
     }
 
     /// Resolve by stable `provider_point_id` only — never by display name.
@@ -131,10 +137,25 @@ impl RoleResolver {
     }
 }
 
+fn bootstrap(entries: &[PointMapEntry]) -> Vec<BootstrapPoint> {
+    entries
+        .iter()
+        .map(|entry| BootstrapPoint {
+            provider_point_id: entry.provider_point_id.clone(),
+            semantic_point_id: entry.semantic_point_id.clone(),
+            equipment_id: entry.equipment_id.clone(),
+            role: entry.role.clone(),
+            equip_type: entry.equip_type.clone(),
+            unit: entry.unit.clone(),
+            kind: entry.kind.clone(),
+            provisional: entry.provisional,
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone)]
 pub struct RawProviderPoint {
     pub provider_point_id: String,
-    #[allow(dead_code)]
     pub display_name: Option<String>,
     pub ts: chrono::DateTime<chrono::Utc>,
     pub val: f64,
@@ -147,6 +168,27 @@ pub fn normalize_mapped(
     raw: &RawProviderPoint,
     resolved: &ResolvedRole,
 ) -> NormalizedSample {
+    let mut attrs = raw.attrs.clone();
+    if let Some(label) = raw.display_name.as_deref() {
+        // Label only. Role resolution already happened by provider_point_id.
+        insert_attr(&mut attrs, "display_name", label);
+    }
+    insert_attr(&mut attrs, "semantic_point_id", &resolved.semantic_point_id);
+    insert_attr(
+        &mut attrs,
+        "provider_instance_id",
+        &resolved.provider_instance_id,
+    );
+    insert_attr(&mut attrs, "model_revision", &resolved.model_revision);
+    if let Some(kind) = resolved.kind.as_deref() {
+        insert_attr(&mut attrs, "kind", kind);
+    }
+    if let Some(quantity) = resolved.quantity.as_deref() {
+        insert_attr(&mut attrs, "quantity", quantity);
+    }
+    if let Some(unit) = resolved.canonical_unit.as_deref() {
+        insert_attr(&mut attrs, "canonical_unit", unit);
+    }
     NormalizedSample {
         building_id: building_id.to_string(),
         equipment_id: resolved.equipment_id.clone(),
@@ -155,36 +197,82 @@ pub fn normalize_mapped(
         equip_type: resolved.equip_type.clone(),
         ts: raw.ts,
         val: raw.val,
-        unit: raw.unit.clone(),
-        attrs: raw.attrs.clone(),
+        unit: raw.unit.clone().or_else(|| resolved.unit.clone()),
+        attrs,
     }
+}
+
+fn insert_attr(attrs: &mut serde_json::Map<String, serde_json::Value>, key: &str, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+    attrs.insert(
+        key.to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn id_map_hits_explicit_config() {
-        let resolver = RoleResolver::from_point_map(&[PointMapEntry {
-            provider_point_id: "6639-uuid-oa-t".into(),
+    fn scope() -> ModelScope {
+        ModelScope {
+            tenant_id: "tenant-a".into(),
+            site_id: "site-a".into(),
+            provider_instance_id: "nf-conn-a".into(),
+        }
+    }
+
+    fn entry(id: &str, role: &str) -> PointMapEntry {
+        PointMapEntry {
+            provider_point_id: id.into(),
+            semantic_point_id: None,
             equipment_id: "AHU_1".into(),
-            role: "outside-air-temp".into(),
-            equip_type: None,
-        }]);
-        let hit = resolver.resolve("6639-uuid-oa-t").unwrap();
-        assert_eq!(hit.equipment_id, "AHU_1");
-        assert_eq!(hit.role, "outside-air-temp");
+            role: role.into(),
+            equip_type: Some("ahu".into()),
+            unit: None,
+            kind: None,
+            provisional: false,
+        }
     }
 
     #[test]
-    fn name_only_must_not_resolve() {
-        let resolver = RoleResolver::from_point_map(&[PointMapEntry {
-            provider_point_id: "6639-uuid-oa-t".into(),
-            equipment_id: "AHU_1".into(),
-            role: "outside-air-temp".into(),
-            equip_type: None,
-        }]);
+    fn id_map_hits_explicit_config() {
+        let resolver =
+            RoleResolver::from_point_map(&scope(), &[entry("uuid-oa-t", "outside-air-temp")])
+                .unwrap();
+        let hit = resolver.resolve("uuid-oa-t").unwrap();
+        assert_eq!(hit.equipment_id, "AHU_1");
+        assert_eq!(hit.role, "outside-air-temp");
+        assert_ne!(hit.semantic_point_id, hit.role);
         assert!(resolver.resolve("OA-T").is_none());
+    }
+
+    #[test]
+    fn excluded_binding_is_not_scheduled() {
+        let json = r#"{
+            "schema": "ofdd_portal_committed_model_v1",
+            "tenant_id": "tenant-a",
+            "site_id": "site-a",
+            "provider_instance_id": "nf-conn-a",
+            "truncated": false,
+            "equipment": [{
+                "equipment_id": "AHU_1",
+                "equip_type": "ahu",
+                "points": [{
+                    "point_id": "urn:openfdd:point:site-a:AHU_1:sat",
+                    "provider_point_id": "uuid-sat",
+                    "canonical_role": "sat",
+                    "selection_status": "excluded",
+                    "fdd_ready": false,
+                    "display_name": "SAT"
+                }]
+            }]
+        }"#;
+        let (resolver, _) = RoleResolver::from_committed_json(json, &scope()).unwrap();
+        assert!(resolver.resolve("uuid-sat").is_none());
+        assert!(resolver.resolve("SAT").is_none());
+        assert_eq!(resolver.mapped_count(), 0);
     }
 }

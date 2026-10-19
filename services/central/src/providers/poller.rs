@@ -89,7 +89,7 @@ async fn site_poll_loop(
     let endpoint = site.endpoint.clone();
     let client_id = site.client_id.clone();
     let client_secret = site.client_secret.clone();
-    let resolver = site.resolver;
+    let tenant_id = site.tenant_id.clone();
     let mut nf = if matches!(kind, super::types::ProviderKind::Nf) {
         Some(NfPortalDriver::new(
             &building_id,
@@ -101,6 +101,10 @@ async fn site_poll_loop(
         None
     };
     let mut ace = AceIotStubDriver::new(&building_id);
+    if let Some(driver) = nf.as_ref() {
+        debug!(identity = %super::driver_identity(driver), %building_id, "nf driver");
+    }
+    debug!(identity = %super::driver_identity(&ace), %building_id, "ace driver");
 
     loop {
         tokio::select! {
@@ -118,21 +122,25 @@ async fn site_poll_loop(
             Err(_) => return,
         };
 
+        let resolver = runtime.resolver_for(&tenant_id, &building_id);
         let result = match kind {
             super::types::ProviderKind::Nf => {
                 let driver = nf.as_mut().expect("nf driver");
                 poll_nf_site(&state, &building_id, driver, &resolver, page_size()).await
             }
-            super::types::ProviderKind::AceIot => {
-                poll_ace_site(&building_id, &mut ace).await
-            }
+            super::types::ProviderKind::AceIot => poll_ace_site(&building_id, &mut ace).await,
         };
 
         match result {
             Ok(ingested) => {
                 backoff_secs = poll_secs;
                 runtime
-                    .record_success(&building_id, ingested as u64, ProviderHealthStatus::Ok, None)
+                    .record_success(
+                        &building_id,
+                        ingested as u64,
+                        ProviderHealthStatus::Ok,
+                        None,
+                    )
                     .await;
                 debug!(%building_id, ingested, "provider poll ok");
             }
@@ -144,11 +152,7 @@ async fn site_poll_loop(
                 };
                 warn!(%building_id, %err, next_backoff_secs = backoff_secs, "provider poll failed");
                 runtime
-                    .record_error(
-                        &building_id,
-                        ProviderHealthStatus::Error,
-                        Some(err),
-                    )
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(err))
                     .await;
             }
         }

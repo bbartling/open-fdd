@@ -13,7 +13,7 @@ todos:
     status: pending
   - id: wave-b-n3-model
     content: "Wave-B parallel — N3 source-neutral committed model + scoped SPARQL ingest plans"
-    status: pending
+    status: completed
   - id: wave-b-n11-spa
     content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics"
     status: pending
@@ -42,13 +42,13 @@ todos:
     content: M4 NF OAuth + point/query latest + GET point/data hour window (connectivity prototype; harden in Wave-A/B)
     status: in_progress
   - id: m5-map
-    content: M5 Roles from explicit provider_point_id or SPARQL bindings only (N3 typed committed model → Wave-B)
-    status: in_progress
+    content: M5 Roles from explicit provider_point_id or typed SPARQL bindings only (display-name grep rejected)
+    status: completed
   - id: m6-fe-blast
     content: M6 SPA Providers default; MQTT chrome archived (N11 full Ops ledger → Wave-B)
     status: in_progress
   - id: m7-fe-haystack
-    content: M7 Model/SPARQL for provider-mapped buildings (N3/N11 → Wave-B)
+    content: SoftOPEN defer — M7 Model/SPARQL SPA for provider-mapped buildings (N11); server ingest-plan compiler landed with N3
     status: pending
   - id: m8-ops-ui
     content: M8 Ops panel shows provider poll health (basic); window/gap ledger pending N5 Wave-B
@@ -81,7 +81,10 @@ todos:
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
     status: in_progress
   - id: n3-model
-    content: SoftOPEN defer — N3 Source-neutral committed model (owned by Wave-B parallel PR)
+    content: N3 source-neutral committed model + scoped SPARQL ingest plans (Wave-B)
+    status: completed
+  - id: n3-replica-store
+    content: SoftOPEN defer — N3 cross-replica derived-plan invalidation, durable multi-process model store, and in-flight SPARQL cancel (with N8)
     status: pending
   - id: n4-contract
     content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
@@ -260,7 +263,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 ### Wave-B — parallel after Wave-A merges
 - [ ] **wave-b-n1-archive** — N1 real `archive/ot-edge/<freeze>/` + prune protection + isolated restore
 - [ ] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**)
-- [ ] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans
+- [x] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans (typed contract, one revision, server template, reject wrong-site/duplicates/conflicts/truncation)
+- [ ] SoftOPEN defer — **n3-replica-store** cross-replica plan cache, durable multi-process model store, SPARQL wall-clock cancel (with N8)
 - [ ] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA
 
 ### Wave-C — after Wave-B
@@ -281,4 +285,5 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] m0-milestones, m2-adr, m3-trait (prototype), m9-stub-ace
 
 ### Prototype still open (do not claim complete)
-- [~] m1-freeze-ot, m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
+- [~] m1-freeze-ot, m4-nf-driver, m6-fe-blast, m8-ops-ui, m11-prove
+- [x] m5-map — explicit provider_point_id or typed SPARQL bindings only
