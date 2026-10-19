@@ -6,7 +6,7 @@ todos:
     content: "Wave-A PR1 — N2 security + N6 storage correctness (tenant filter, fail-closed secrets, no OAuth redirects, bounds, typed errors; per-equip routing, source ts/units/quality, truthful persist counts)"
     status: in_progress
   - id: wave-b-n1-archive
-    content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Isolated boot/digest pin deferred."
+    content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Required Actions green on 17ef0233 (PR 1294)."
     status: completed
   - id: wave-b-n5-hourly
     content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (un-cancel; GET history only)"
@@ -30,7 +30,7 @@ todos:
     content: M0 MILESTONES Wave-NF; defer the 3620 ART sweep
     status: completed
   - id: m1-freeze-ot
-    content: "M1 unqualified OT snapshot + portal compose. No 3.6.18 tag. Isolated restore boot still open."
+    content: "M1 unqualified OT snapshot + portal compose. No 3.6.18 tag. Restore boot is n1-restore-boot."
     status: completed
   - id: m2-adr
     content: M2 ADR-011 DataProvider + Timescale + RDF
@@ -75,8 +75,14 @@ todos:
     content: N0 Define 4.0 product boundary + requirements-to-test matrix labels
     status: pending
   - id: n1-archive-real
-    content: "N1 snapshot landed as unqualified-cdaa4f15. SoftOPEN defer — isolated boot, OCI digest pin, and deleting live fieldbus from the workspace."
+    content: "N1 snapshot landed as unqualified-cdaa4f15. Required Actions green on 17ef0233."
     status: completed
+  - id: n1-restore-boot
+    content: "SoftOPEN defer — isolated old-stack restore boot/replay and verified OCI digest pin"
+    status: pending
+  - id: n1-workspace-remove
+    content: "SoftOPEN defer — delete live services/fieldbus from the default Cargo workspace (protocol split gate still compiles it)"
+    status: pending
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
     status: in_progress
@@ -258,7 +264,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
 
 ### Wave-B — parallel after Wave-A merges
-- [x] **wave-b-n1-archive** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag.
+- [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Required Actions green on `17ef0233` (PR 1294).
 - [ ] SoftOPEN defer — **n1-restore-boot** isolated old-stack boot/replay and verified OCI digest pin
 - [ ] SoftOPEN defer — **n1-workspace-remove** delete live `services/fieldbus` from the default Cargo workspace (split gate still compiles it)
 - [ ] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**)
@@ -280,7 +286,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n13-release** phased gates + truthful remaining status
 
 ### Already done (do not reopen)
-- [x] m0-milestones, m2-adr, m3-trait (prototype), m9-stub-ace
+- [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m9-stub-ace
 
 ### Prototype still open (do not claim complete)
-- [~] m1-freeze-ot, m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
+- [~] m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
