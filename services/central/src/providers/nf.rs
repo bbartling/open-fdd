@@ -193,25 +193,9 @@ impl NfPortalDriver {
         to: DateTime<Utc>,
     ) -> Result<Vec<HistorySeries>, FetchError> {
         debug_assert_eq!(history_http_method(), "GET");
-        let points = self
-            .fetch_history(uuids, from, to)
+        super::DataProvider::fetch_history(self, uuids, from, to)
             .await
-            .map_err(fetch_error_from_provider)?;
-        let mut grouped: std::collections::BTreeMap<String, Vec<RawProviderPoint>> =
-            std::collections::BTreeMap::new();
-        for point in points {
-            grouped
-                .entry(point.provider_point_id.clone())
-                .or_default()
-                .push(point);
-        }
-        Ok(grouped
-            .into_iter()
-            .map(|(provider_point_id, samples)| HistorySeries {
-                provider_point_id,
-                samples,
-            })
-            .collect())
+            .map_err(fetch_error_from_provider)
     }
 
     async fn fetch_history_chunk(
@@ -362,8 +346,30 @@ fn fetch_error_from_provider(err: ProviderError) -> FetchError {
         | ProviderErrorCode::BodyTooLarge
         | ProviderErrorCode::RedirectRejected => FetchError::Contract,
         ProviderErrorCode::Persistence => FetchError::Persistence,
-        _ => FetchError::Transport,
+        ProviderErrorCode::NotImplemented => FetchError::NotImplemented,
+        ProviderErrorCode::HistoryIncomplete => FetchError::PartialSeries,
+        ProviderErrorCode::Transport
+        | ProviderErrorCode::DeadlineExceeded
+        | ProviderErrorCode::Config => FetchError::Transport,
     }
+}
+
+pub(crate) fn group_history(points: Vec<RawProviderPoint>) -> Vec<HistorySeries> {
+    let mut grouped: std::collections::BTreeMap<String, Vec<RawProviderPoint>> =
+        std::collections::BTreeMap::new();
+    for point in points {
+        grouped
+            .entry(point.provider_point_id.clone())
+            .or_default()
+            .push(point);
+    }
+    grouped
+        .into_iter()
+        .map(|(provider_point_id, samples)| HistorySeries {
+            provider_point_id,
+            samples,
+        })
+        .collect()
 }
 
 pub fn parse_token_json(text: &str) -> Result<(String, Option<i64>), ProviderError> {

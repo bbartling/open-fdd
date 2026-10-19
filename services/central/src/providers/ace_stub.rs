@@ -31,10 +31,10 @@ impl AceIotStubDriver {
     }
 
     pub async fn authenticate(&mut self) -> Result<(), String> {
-        Err("ace_iot driver not implemented".into())
+        Err("not_implemented".into())
     }
 
     pub async fn query_points(&self) -> Result<Vec<RawProviderPoint>, String> {
-        Ok(Vec::new())
+        Err("not_implemented".into())
     }
 }

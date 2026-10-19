@@ -38,6 +38,14 @@ not a Soft-OPEN driver, and not a new GitHub repo. Haystack semantics stay.
    receipts, and catch-up live in Postgres. The NF update log returned HTTP 403
    on the lab key, so health states a bounded reconcile sweep and does not claim
    gapless replication.
+8. **Provider registry** — each driver advertises explicit capabilities
+   (`authenticate`, `latest`, `fetch_history`, `bounded_windows`, `update_log`).
+   `latest` does not imply history. NF `fetch_history` is GET inside
+   `MAX_HISTORY_WINDOW`. Ace advertises every capability as `NotImplemented`.
+9. **Coverage ledger** — health separates transport probe, requested-window
+   completeness, durable commit, source freshness, late reconciliation, and
+   unrecoverable retention expiry. The ledger is derived from hourly jobs,
+   receipts, checkpoints, and gaps. One latest sample cannot advance it.
 
 ## Consequences
 
