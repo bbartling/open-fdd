@@ -221,6 +221,9 @@ describe("Operations protocol navigation", () => {
     expect(await screen.findByTestId("providers-health-panel")).toBeTruthy();
     expect((screen.getByTestId("operations-view-providers") as HTMLInputElement).checked).toBe(true);
     expect(screen.queryByTestId("mqtt-config-panel")).toBeNull();
+    expect(screen.getByTestId("providers-gap-guarantee").textContent).toContain("403");
+    expect(screen.getByTestId("providers-gap-guarantee").textContent).toContain("not gapless");
+    expect(screen.getByTestId("providers-gap-ledger")).toBeTruthy();
   });
 
   it("keeps the existing MQTT panels and AFDD view available", async () => {

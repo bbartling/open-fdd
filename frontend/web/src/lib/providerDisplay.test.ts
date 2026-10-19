@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   credentialRefLabel,
+  historyCapabilityLabel,
   illustratedNfHistoryRead,
   interpretBindings,
+  interpretCoverageLedger,
   interpretWindowLedger,
   mergeProviderRows,
   providerStatusView,
@@ -68,6 +70,64 @@ describe("provider display", () => {
     expect(
       siteSourceLabels({ hasPackage: true, provider: "nf", hasMqttTelemetry: true }),
     ).toEqual(["CSV package", "NF", "Archived MQTT telemetry"]);
+  });
+
+  it("names a bounded GET history contract and leaves Ace unimplemented", () => {
+    expect(
+      historyCapabilityLabel({
+        latest: "supported",
+        fetch_history: {
+          support: "supported",
+          method: "GET",
+          path: "/api/v1/point/data",
+          max_window_secs: 21600,
+        },
+      }),
+    ).toBe("GET /api/v1/point/data, max 21600s");
+    expect(historyCapabilityLabel({ fetch_history: { support: "unsupported", reason: "not_implemented" } })).toBe(
+      "not_implemented",
+    );
+  });
+
+  it("keeps device-hour coverage on the gaps payload and refuses a gapless flag", () => {
+    const empty = interpretCoverageLedger({});
+    expect(empty.gapless).toBe(false);
+    expect(empty.hours).toHaveLength(0);
+    expect(empty.guarantee).toContain("403");
+    expect(empty.guarantee).toContain("not gapless");
+    const present = interpretCoverageLedger({
+      gapless: true,
+      guarantee: "bounded windows; not gapless",
+      reconcile_hours: 6,
+      update_log: { method_path: "GET /api/v1/point/updates/data", http_status: 403, gapless: true },
+      sites: [
+        {
+          building_id: "NF_EDGE",
+          ledger: {
+            hours: [
+              {
+                device_id: "AHU_1",
+                window_start: "2026-10-19T09:00:00Z",
+                status: "committed",
+                covered: true,
+                durable: true,
+              },
+            ],
+            devices: [
+              {
+                device_id: "AHU_1",
+                covered_through: "2026-10-19T10:00:00Z",
+                advanced_from: "durable_committed_history_window",
+              },
+            ],
+          },
+        },
+      ],
+    });
+    expect(present.gapless).toBe(false);
+    expect(present.hours[0]?.covered).toBe(true);
+    expect(present.devices[0]?.advancedFrom).toBe("durable_committed_history_window");
+    expect(present.updateLogHttp).toBe(403);
   });
 
   it("treats a missing or shapeless ledger as unavailable", () => {

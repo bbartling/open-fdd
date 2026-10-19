@@ -35,6 +35,49 @@ pub struct NormalizedSample {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum CapabilitySupport {
+    Supported,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HistoryCapability {
+    pub support: CapabilitySupport,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_window_secs: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderCapabilities {
+    pub latest: CapabilitySupport,
+    pub fetch_history: HistoryCapability,
+    pub catalog: CapabilitySupport,
+}
+
+impl Default for ProviderCapabilities {
+    fn default() -> Self {
+        Self {
+            latest: CapabilitySupport::Unsupported,
+            catalog: CapabilitySupport::Unsupported,
+            fetch_history: HistoryCapability {
+                support: CapabilitySupport::Unsupported,
+                method: None,
+                path: None,
+                max_window_secs: None,
+                reason: Some("not_implemented".into()),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ProviderHealthStatus {
     Ok,
     Degraded,
@@ -73,6 +116,8 @@ pub struct SiteProviderHealth {
     pub last_ingested_points: u64,
     #[serde(default)]
     pub consecutive_errors: u32,
+    #[serde(default)]
+    pub capabilities: ProviderCapabilities,
     /// Honest hourly coverage. Absent until the hourly scheduler has run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hourly_coverage: Option<HourlyCoverageHealth>,

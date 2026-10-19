@@ -18,7 +18,12 @@ use super::map::HistorySeries;
 pub const UPDATE_LOG_STATUS: &str =
     "nf_update_log_http_403; history=GET /api/v1/point/data; bounded_reconcile; not_gapless";
 
+pub const UPDATE_LOG_PATH: &str = "GET /api/v1/point/updates/data";
+pub const UPDATE_LOG_OBSERVED_ON: &str = "2026-10-18";
 pub const UPDATE_LOG_HTTP: u16 = 403;
+/// Operator guarantee. Range polling is not a gapless update-log cursor.
+pub const COVERAGE_GUARANTEE: &str =
+    "bounded GET /api/v1/point/data windows plus recent reconciliation; NF update-log GET /api/v1/point/updates/data returned HTTP 403; range polling is not gapless";
 const _: () = assert!(UPDATE_LOG_HTTP == 403);
 
 #[derive(Debug, Clone)]
@@ -298,6 +303,7 @@ pub enum FetchError {
     Persistence,
     Unmapped,
     PartialSeries,
+    Unsupported,
 }
 
 impl FetchError {
@@ -310,11 +316,12 @@ impl FetchError {
             Self::Persistence => "persistence",
             Self::Unmapped => "unmapped",
             Self::PartialSeries => "partial_series",
+            Self::Unsupported => "not_implemented",
         }
     }
 
     pub fn immediate_permanent(&self) -> bool {
-        matches!(self, Self::Auth)
+        matches!(self, Self::Auth | Self::Unsupported)
     }
 
     pub fn retry_after_secs(&self) -> Option<u64> {

@@ -36,11 +36,11 @@ todos:
     content: M2 ADR-011 DataProvider + Timescale + RDF
     status: completed
   - id: m3-trait
-    content: M3 DataProvider trait and Timescale writer (prototype; N4 capability/history contract still open)
+    content: M3 DataProvider trait, capability registry, fetch_history contract, Timescale writer
     status: completed
   - id: m4-nf-driver
-    content: M4 NF OAuth + point/query latest + GET point/data hour window (connectivity prototype; harden in Wave-A/B)
-    status: in_progress
+    content: M4 NF OAuth + latest + bounded GET /api/v1/point/data on the DataProvider contract (live pilot stays n12)
+    status: completed
   - id: m5-map
     content: M5 Roles from explicit provider_point_id or the committed ingest plan (display-name grep rejected)
     status: completed
@@ -93,8 +93,8 @@ todos:
     content: SoftOPEN defer — N3 cross-replica derived-plan invalidation, durable multi-process model store, and in-flight SPARQL cancel (with N8)
     status: pending
   - id: n4-contract
-    content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
-    status: pending
+    content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented; Open-Meteo declares when #1296 links
+    status: completed
   - id: n5-durable
     content: "N5 durable per-device completed-hour jobs, receipts, checkpoints, catch-up, bounded reconciliation (fixture-tested; live NF pilot stays n12)"
     status: completed
@@ -102,8 +102,8 @@ todos:
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
     status: completed
   - id: n7-gaps
-    content: "SoftOPEN defer — full coverage ledger UI; N5 states NF update-log 403 and bounded reconciliation (not gapless)"
-    status: pending
+    content: N7 device-hour ledger from durable N5 commits; update-log 403; not gapless; Ops + GET /api/providers/gaps
+    status: completed
   - id: n8-scale
     content: SoftOPEN defer — N8 Shared Postgres queue/leases (Wave-C)
     status: in_progress
@@ -207,7 +207,7 @@ Source: [Points](https://docs.normal.dev/concepts/points/), [GetData](https://do
 
 Lab proof 2026-10-18: GetData returned ~60 samples/UUID over last hour for five mapped points.
 
-**N5 poller (this branch):** per-device completed-hour jobs in Postgres (`sql/schema/04_provider_hourly_jobs.sql`), receipts, checkpoints, catch-up, and a bounded reconcile sweep. History is `GET /api/v1/point/data` only. A history error stays a failed job. The fixed `now−65min` lookback is gone. NF update-log HTTP 403 is stated on provider health; that path is not called and permissions are not expanded. Full ledger UI remains N7. Single-transaction sample+receipt across the historian writer remains N6. N8 replica control is not in this PR; claim SQL is `SKIP LOCKED` plus a fencing token so a later lease PR can build on it.
+**N5 poller (this branch):** per-device completed-hour jobs in Postgres (`sql/schema/04_provider_hourly_jobs.sql`), receipts, checkpoints, catch-up, and a bounded reconcile sweep. History is `GET /api/v1/point/data` only. A history error stays a failed job. The fixed `now−65min` lookback is gone. NF update-log HTTP 403 is stated on provider health; that path is not called and permissions are not expanded. N7 reads those jobs, receipts, and gaps as a device-hour ledger (`GET /api/providers/gaps` and the Ops Providers panel). A hour is covered only after a durable committed history window. Single-transaction sample+receipt across the historian writer remains N6. N8 replica control is not in this PR; claim SQL is `SKIP LOCKED` plus a fencing token so a later lease PR can build on it.
 
 ## Highest priority (from evaluation — P1)
 
@@ -291,7 +291,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### SoftOPEN defer / later
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
-- [ ] SoftOPEN defer — **n7-gaps** full coverage ledger UI (N5 already states update-log 403 and bounded reconciliation)
+- [x] **n4-contract** — provider registry (`latest`, bounded `fetch_history`, `catalog`); NF GET `/api/v1/point/data`; Ace `not_implemented`. Open-Meteo capability arm is the exhaustive `ProviderKind` match and stays unlinked until #1296 merges.
+- [x] **n7-gaps** — device-hour ledger over N5 jobs/receipts/gaps. Coverage advances only from durable committed history windows. `GET /api/providers/gaps` and the Ops Providers panel state update-log HTTP 403 and `gapless: false`.
 - [ ] SoftOPEN defer — N5 historian sample upsert and job receipt are separate writes (one transaction stays with N6)
 - [ ] SoftOPEN defer — **n11-frontend** live window rows, backfill submit, and server-issued binding preview
 - [ ] SoftOPEN defer — **n9-meteo** Open-Meteo + contractor fixture
@@ -301,10 +302,10 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
 
 ### Already done (do not reopen)
-- [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m5-map, m6-fe-blast, m8-ops-ui, m9-stub-ace
+- [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait, m4-nf-driver (contract; live pilot stays **n12**), m5-map, m6-fe-blast, m8-ops-ui, m9-stub-ace
 
 ### Prototype still open (do not claim complete)
-- [~] m4-nf-driver, m11-prove
+- [~] m11-prove
 
 ### Cloud agents launched 2026-10-19 (Grok Bot)
 - Wave-A N2+N6: bc-8669bd28 — merged #1290 `608ee177`

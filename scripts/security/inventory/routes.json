@@ -1242,6 +1242,48 @@
       "notes": "Wave-NF JWT provider site list. Same tenant filter and redaction as provider health. PLANNED until the security suite emits these check ids."
     },
     {
+      "method": "GET",
+      "path": "/api/providers/gaps",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_scoped_provider_health",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        401,
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_providers_gaps_401",
+        "y.authz.get_api_providers_gaps"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_providers_gaps_401",
+        "y.authz.get_api_providers_gaps"
+      ],
+      "request_schema": {
+        "type": "openfdd.providers.gaps.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.providers.gaps.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave-NF device-hour coverage ledger. Same tenant filter as provider health. Coverage comes from durable committed history windows. States NF update-log HTTP 403 and gapless false. PLANNED until the security suite emits these check ids."
+    },
+    {
       "method": "POST",
       "path": "/api/connectors/{edge_id}/read",
       "section": "protected",

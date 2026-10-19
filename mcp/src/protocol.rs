@@ -65,6 +65,7 @@ impl Server {
             tool("openfdd_health", "GET /api/health (public liveness)", json!({})),
             tool("openfdd_provider_health", "GET /api/providers/health — Wave-NF portal driver health", json!({})),
             tool("openfdd_provider_sites", "GET /api/providers/sites — configured provider sites + health", json!({})),
+            tool("openfdd_provider_gaps", "GET /api/providers/gaps — device-hour coverage ledger; NF update-log 403 so range polling is not gapless", json!({})),
             tool("openfdd_capabilities", "GET /api/capabilities — central feature contract", json!({})),
             tool("openfdd_stack_status", "GET /api/health/stack — data plane strip (public)", json!({})),
             tool("openfdd_faults_status", "GET /api/faults/status — live fault subsystem status", json!({})),
@@ -244,6 +245,7 @@ impl Server {
             "openfdd_health" => self.bridge.get("/api/health"),
             "openfdd_provider_health" => self.bridge.get("/api/providers/health"),
             "openfdd_provider_sites" => self.bridge.get("/api/providers/sites"),
+            "openfdd_provider_gaps" => self.bridge.get("/api/providers/gaps"),
             "openfdd_capabilities" => self.bridge.get("/api/capabilities"),
             "openfdd_stack_status" => self.bridge.get("/api/health/stack"),
             "openfdd_faults_status" => self.bridge.get("/api/faults/status"),
@@ -478,6 +480,7 @@ mod tests {
         for expected in [
             "openfdd_provider_health",
             "openfdd_provider_sites",
+            "openfdd_provider_gaps",
             "openfdd_capabilities",
             "openfdd_fdd_registry",
             "openfdd_fdd_equipment",

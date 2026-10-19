@@ -10,6 +10,7 @@ import {
 } from "../api/providersApi";
 import {
   credentialRefLabel,
+  interpretCoverageLedger,
   interpretWindowLedger,
   mergeProviderRows,
   providerLabel,
@@ -18,6 +19,7 @@ import {
   staticDriverNotes,
   windowStateLabel,
   windowTone,
+  type CoverageLedgerView,
   type ProviderRow,
   type ProviderWindowRow,
   type WindowLedgerView,
@@ -58,14 +60,16 @@ export function ProvidersPanel() {
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
+  const [coverage, setCoverage] = useState<CoverageLedgerView>(() => interpretCoverageLedger(null));
 
   const refresh = useCallback(async () => {
     const ticket = ++requestGen.current;
     setLoading(true);
     try {
-      const [health, sites] = await Promise.all([
+      const [health, sites, gaps] = await Promise.all([
         fetchProvidersHealth(),
         fetchProviderSites().catch(() => null),
+        fetchOptionalJson("/api/providers/gaps"),
       ]);
       if (ticket !== requestGen.current) return;
       const healthSites: ProviderSiteHealth[] = health.sites ?? sites?.health ?? [];
@@ -78,10 +82,12 @@ export function ProvidersPanel() {
             : null,
       );
       setRows(mergeProviderRows(healthSites, configs));
+      setCoverage(interpretCoverageLedger(gaps.http === "ok" ? gaps.body : null));
       setError(null);
     } catch (err) {
       if (ticket !== requestGen.current) return;
       setRows([]);
+      setCoverage(interpretCoverageLedger(null));
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       if (ticket === requestGen.current) setLoading(false);
@@ -165,6 +171,9 @@ export function ProvidersPanel() {
         Portal connections for this account. Green means the last poll reported success with no
         consecutive errors. It does not mean a completed hour was committed without gaps.
       </p>
+      <p className="muted" data-testid="providers-gap-guarantee">
+        {coverage.guarantee} Coverage advances only from durable committed history windows.
+      </p>
       <p data-testid="providers-poll-enabled">
         Poll loop:{" "}
         {pollEnabled == null ? "not reported" : pollEnabled ? "enabled" : "disabled"}
@@ -194,6 +203,7 @@ export function ProvidersPanel() {
               <tr>
                 <th>Site</th>
                 <th>Provider</th>
+                <th>History</th>
                 <th>Status</th>
                 <th>Origin</th>
                 <th>Poll</th>
@@ -231,6 +241,7 @@ export function ProvidersPanel() {
                       </button>
                     </td>
                     <td>{providerLabel(row.provider)}</td>
+                    <td data-testid={`provider-history-${row.buildingId}`}>{row.historyLabel ?? "—"}</td>
                     <td>
                       <span
                         className={`provider-status provider-status--${status.tone}`}
@@ -254,6 +265,56 @@ export function ProvidersPanel() {
             </tbody>
           </table>
         </div>
+      ) : null}
+
+      <h3 id="providers-ledger-heading">Device-hour coverage</h3>
+      <p className="muted" data-testid="providers-gap-statement">
+        Update log {coverage.updateLogPath} returned HTTP {coverage.updateLogHttp}. Reconcile bound:{" "}
+        {coverage.reconcileHours ?? "—"} hour(s). Gapless: no.
+      </p>
+      {coverage.hours.length === 0 ? (
+        <p className="muted" data-testid="providers-gap-ledger">
+          No device-hour ledger rows. A latest sample does not advance coverage.
+        </p>
+      ) : (
+        <div className="widget-table-wrap">
+          <table data-testid="providers-gap-ledger">
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Device</th>
+                <th>Window start</th>
+                <th>Status</th>
+                <th>Covered</th>
+                <th>Durable</th>
+                <th>Reconcile</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coverage.hours.map((hour) => (
+                <tr key={hour.key}>
+                  <td>{hour.buildingId || "—"}</td>
+                  <td>{hour.deviceId || "—"}</td>
+                  <td>{hour.windowStart || "—"}</td>
+                  <td>{hour.status}</td>
+                  <td>{hour.covered ? "yes" : "no"}</td>
+                  <td>{hour.durable ? "yes" : "no"}</td>
+                  <td>{hour.reconcile}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {coverage.devices.length > 0 ? (
+        <p className="muted" data-testid="providers-covered-through">
+          {coverage.devices.map((device) => (
+            <span key={device.key}>
+              {device.buildingId} {device.deviceId}: covered through {device.coveredThrough} (
+              {device.advancedFrom}).{" "}
+            </span>
+          ))}
+        </p>
       ) : null}
 
       {selected ? (

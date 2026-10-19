@@ -14,14 +14,16 @@ use tracing::{debug, info, warn};
 
 use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
+use super::error::ProviderErrorCode;
 use super::hourly::HourlyPolicy;
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
 use super::map::HistorySeries;
 use super::nf::NfPortalDriver;
+use super::registry::{history_supported, HistoryRequest};
 use super::store::StoreOpen;
 use super::types::{HourlyCoverageHealth, ProviderHealthStatus};
 use super::writer;
-use super::Runtime;
+use super::{DataProvider, Runtime};
 use crate::state::AppState;
 
 fn poll_enabled() -> bool {
@@ -125,10 +127,16 @@ async fn nf_hourly_loop(
             return;
         }
     };
+    if !history_supported(&DataProvider::capabilities(&driver)) {
+        runtime.note_unimplemented(&building_id).await;
+        let _ = shutdown.changed().await;
+        return;
+    }
     debug!(
         identity = %super::driver_identity(&driver),
+        history = DataProvider::capabilities(&driver).fetch_history.path.as_deref().unwrap_or(""),
         %building_id,
-        "nf driver"
+        "nf history contract"
     );
     let policy = HourlyPolicy::from_env();
     let owner = std::env::var("OPENFDD_HOURLY_WORKER_ID").unwrap_or_else(|_| "central".into());
@@ -149,7 +157,7 @@ async fn nf_hourly_loop(
             Ok(p) => p,
             Err(_) => return,
         };
-        if driver.authenticate().await.is_err() {
+        if DataProvider::authenticate(&mut driver).await.is_err() {
             warn!(%building_id, "NF authenticate failed");
             runtime
                 .record_error(
@@ -275,9 +283,16 @@ impl HistorySource for NfHistory<'_> {
                 points = req.point_ids.len(),
                 "NF history GET"
             );
-            self.driver
-                .read_history_page(&req.point_ids, req.from, req.to)
-                .await
+            DataProvider::fetch_history(
+                self.driver,
+                &HistoryRequest {
+                    point_ids: req.point_ids.clone(),
+                    from: req.from,
+                    to: req.to,
+                },
+            )
+            .await
+            .map_err(super::nf::fetch_error_from_provider)
         })
     }
 }
@@ -313,75 +328,48 @@ async fn ace_poll_loop(
     sem: Arc<Semaphore>,
     shutdown: &mut watch::Receiver<bool>,
 ) {
+    let _permit = match sem.acquire().await {
+        Ok(permit) => permit,
+        Err(_) => return,
+    };
     let building_id = site.building_id.clone();
-    let poll_secs = site.poll_secs;
-    let mut backoff_secs = 0u64;
     let mut ace = AceIotStubDriver::new(&site.provider_instance_id);
     debug!(identity = %super::driver_identity(&ace), %building_id, "ace driver");
-    loop {
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(backoff_secs)) => {}
-            changed = shutdown.changed() => {
-                if changed.is_err() || *shutdown.borrow() {
-                    return;
-                }
-                continue;
-            }
-        }
-        let _permit = match sem.acquire().await {
-            Ok(p) => p,
-            Err(_) => return,
-        };
-        match poll_ace_site(&building_id, &mut ace).await {
-            Ok(ingested) => {
-                backoff_secs = poll_secs;
-                runtime
-                    .record_success(
-                        &building_id,
-                        ingested as u64,
-                        ProviderHealthStatus::Ok,
-                        None,
-                    )
-                    .await;
-            }
-            Err(err) => {
-                backoff_secs = if backoff_secs == 0 {
-                    poll_secs.max(30)
-                } else {
-                    backoff_secs.saturating_mul(2).min(900)
-                };
-                warn!(%building_id, %err, next_backoff_secs = backoff_secs, "provider poll failed");
-                runtime
-                    .record_error(&building_id, ProviderHealthStatus::Error, Some(err))
-                    .await;
-            }
-        }
+    let now = chrono::Utc::now();
+    let history = DataProvider::fetch_history(
+        &mut ace,
+        &HistoryRequest {
+            point_ids: Vec::new(),
+            from: now,
+            to: now,
+        },
+    )
+    .await;
+    if !history_supported(&DataProvider::capabilities(&ace))
+        && matches!(
+            history,
+            Err(ref err) if err.code == ProviderErrorCode::NotImplemented
+        )
+    {
+        info!(%building_id, "Ace IoT history is not implemented");
     }
-}
-
-async fn poll_ace_site(building_id: &str, ace: &mut AceIotStubDriver) -> Result<usize, String> {
-    let _ = building_id;
-    ace.authenticate().await?;
-    ace.query_points().await.map(|_| 0)
+    runtime.note_unimplemented(&building_id).await;
+    drop(_permit);
+    let _ = shutdown.wait_for(|stopped| *stopped).await;
 }
 
 impl Runtime {
-    pub async fn record_success(
-        &self,
-        building_id: &str,
-        ingested: u64,
-        status: ProviderHealthStatus,
-        message: Option<String>,
-    ) {
-        self.record_hourly(
-            building_id,
-            status,
-            ingested,
-            message,
-            HourlyCoverageHealth::default(),
-            false,
-        )
-        .await;
+    pub async fn note_unimplemented(&self, building_id: &str) {
+        let mut guard = self.health.lock().await;
+        if let Some(site) = guard
+            .sites
+            .iter_mut()
+            .find(|site| site.building_id == building_id)
+        {
+            site.health.status = ProviderHealthStatus::NotImplemented;
+            site.health.message = Some("not_implemented".into());
+            site.hourly_coverage = None;
+        }
     }
 
     pub async fn record_hourly(

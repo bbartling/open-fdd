@@ -1,5 +1,6 @@
 import type {
   ProviderBinding,
+  ProviderCapabilities,
   ProviderRequestPreview,
   ProviderSiteConfig,
   ProviderSiteHealth,
@@ -26,6 +27,7 @@ export interface ProviderRow {
   consecutiveErrors?: number;
   status?: string;
   message?: string | null;
+  historyLabel?: string;
 }
 
 export interface ProviderWindowRow {
@@ -68,8 +70,49 @@ export type BindingsView =
     }
   | { available: false; reason: string };
 
+export const COVERAGE_GUARANTEE_FALLBACK =
+  "bounded GET /api/v1/point/data windows plus recent reconciliation; NF update-log GET /api/v1/point/updates/data returned HTTP 403; range polling is not gapless";
+
+export interface CoverageHourView {
+  key: string;
+  buildingId: string;
+  deviceId: string;
+  windowStart: string;
+  status: string;
+  covered: boolean;
+  durable: boolean;
+  reconcile: string;
+}
+
+export interface CoverageDeviceView {
+  key: string;
+  buildingId: string;
+  deviceId: string;
+  coveredThrough: string;
+  advancedFrom: string;
+}
+
+export interface CoverageLedgerView {
+  guarantee: string;
+  updateLogPath: string;
+  updateLogHttp: number;
+  reconcileHours: number | null;
+  gapless: false;
+  hours: CoverageHourView[];
+  devices: CoverageDeviceView[];
+}
+
 const SECRET_TEXT = /client_secret|authorization|bearer\s|access_token|refresh_token|token=/i;
 const SECRET_QUERY_KEY = /secret|token|authorization|password/i;
+
+export function historyCapabilityLabel(capabilities: ProviderCapabilities | null | undefined): string {
+  const history = capabilities?.fetch_history;
+  if (history?.support === "supported" && history.method && history.path) {
+    const bound = history.max_window_secs ? `, max ${history.max_window_secs}s` : "";
+    return `${history.method} ${history.path}${bound}`;
+  }
+  return history?.reason?.trim() || "not_implemented";
+}
 
 export function providerLabel(kind: string | null | undefined): string {
   const k = (kind ?? "").trim().toLowerCase();
@@ -222,6 +265,7 @@ export function mergeProviderRows(
     row.consecutiveErrors = site.consecutive_errors ?? row.consecutiveErrors;
     row.status = site.health?.status ?? row.status;
     row.message = site.health?.message ?? row.message;
+    row.historyLabel = historyCapabilityLabel(site.capabilities);
   }
   return [...map.values()].sort((a, b) =>
     a.buildingId.localeCompare(b.buildingId) || a.provider.localeCompare(b.provider),
@@ -277,7 +321,7 @@ function windowFromRaw(raw: unknown, index: number): ProviderWindowRow | null {
 }
 
 const LEDGER_ABSENT =
-  "Window and gap ledger is not on this API yet. Durable per-device hourly jobs (N5) have not landed. Last poll and ingested counts above are connectivity snapshots, not coverage. A successful poll does not mean the completed hour is gap-free. NF update-log replication is not claimed.";
+  "Per-site window list is not on this API yet. Device-hour coverage is the durable committed-history ledger. A successful poll is not coverage. NF update-log GET /api/v1/point/updates/data returned HTTP 403, so range polling is not gapless.";
 
 export function interpretWindowLedger(body: unknown, httpMissing: boolean): WindowLedgerView {
   if (httpMissing) return { available: false, reason: LEDGER_ABSENT };
@@ -316,6 +360,73 @@ export function interpretWindowLedger(body: unknown, httpMissing: boolean): Wind
         ? "Showing the first 500 windows returned for this site."
         : "";
   return { available: true, windows, note };
+}
+
+function coverageText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function interpretCoverageLedger(body: unknown): CoverageLedgerView {
+  const record = asRecord(body);
+  const guarantee = coverageText(record?.guarantee) || COVERAGE_GUARANTEE_FALLBACK;
+  const update = asRecord(record?.update_log);
+  const reconcile = num(record?.reconcile_hours);
+  const sites = Array.isArray(record?.sites) ? record.sites : [];
+  const hours: CoverageHourView[] = [];
+  const devices: CoverageDeviceView[] = [];
+  for (const siteRaw of sites) {
+    const site = asRecord(siteRaw);
+    if (!site) continue;
+    const buildingId = coverageText(site.building_id);
+    const ledger = asRecord(site.ledger);
+    if (!ledger) continue;
+    const siteHours = Array.isArray(ledger.hours) ? ledger.hours : [];
+    for (const hourRaw of siteHours) {
+      const hour = asRecord(hourRaw);
+      if (!hour) continue;
+      const deviceId = coverageText(hour.device_id);
+      const windowStart = coverageText(hour.window_start);
+      const gap = coverageText(hour.gap_reason);
+      const status = coverageText(hour.status) || "—";
+      const reconcileState = coverageText(hour.reconcile_state);
+      hours.push({
+        key: `${buildingId}\u0000${deviceId}\u0000${coverageText(hour.model_revision)}\u0000${windowStart}`,
+        buildingId,
+        deviceId,
+        windowStart,
+        status: gap ? `${status} (${gap})` : status,
+        covered: hour.covered === true,
+        durable: hour.durable === true,
+        reconcile: reconcileState
+          ? `${reconcileState}${hour.within_reconcile_bound === true ? " (in bound)" : ""}`
+          : hour.within_reconcile_bound === true
+            ? "in bound"
+            : "—",
+      });
+    }
+    const siteDevices = Array.isArray(ledger.devices) ? ledger.devices : [];
+    for (const deviceRaw of siteDevices) {
+      const device = asRecord(deviceRaw);
+      if (!device) continue;
+      const deviceId = coverageText(device.device_id);
+      devices.push({
+        key: `${buildingId}\u0000${deviceId}\u0000${coverageText(device.model_revision)}`,
+        buildingId,
+        deviceId,
+        coveredThrough: coverageText(device.covered_through) || "not advanced",
+        advancedFrom: coverageText(device.advanced_from) || "not_advanced",
+      });
+    }
+  }
+  return {
+    guarantee,
+    updateLogPath: coverageText(update?.method_path) || "GET /api/v1/point/updates/data",
+    updateLogHttp: num(update?.http_status) ?? 403,
+    reconcileHours: reconcile,
+    gapless: false,
+    hours,
+    devices,
+  };
 }
 
 export function windowStateLabel(row: ProviderWindowRow): string {

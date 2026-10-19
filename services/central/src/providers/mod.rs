@@ -7,10 +7,12 @@ pub mod error;
 pub mod hourly;
 pub mod hourly_exec;
 pub mod http_policy;
+pub mod ledger;
 pub mod map;
 pub mod nf;
 pub mod pg_store;
 pub mod poller;
+pub mod registry;
 pub mod store;
 pub mod types;
 pub mod writer;
@@ -28,34 +30,36 @@ use tracing::warn;
 
 use committed_model::CommittedModelStore;
 use config::{load_sites_from_env, SiteConfig, SiteConfigFailure};
-use error::safe_operator_code;
+use error::{safe_operator_code, ProviderError};
 use map::RoleResolver;
+use registry::{capabilities_for, HistoryRequest};
 use types::{
     ProviderHealth, ProviderHealthStatus, ProviderKind, ProvidersHealthBody, SiteProviderHealth,
 };
 
 use crate::state::AppState;
 
-/// Vendor HTTPS ingest driver (NF portal, future Ace IoT).
+/// Vendor HTTPS ingest driver (NF portal, Ace IoT stub, future Open-Meteo).
 pub trait DataProvider: Send + Sync {
     /// Production poller logs this identity. Tests exercise the same trait.
     fn provider_id(&self) -> &str;
     fn kind(&self) -> ProviderKind;
     fn health(&self) -> ProviderHealth;
-    /// Concrete pollers call driver history directly. These stay on the trait
-    /// so the next adapter does not grow a second scheduler.
-    #[expect(
-        dead_code,
-        reason = "NF poller uses fetch_history; trait method is the adapter contract"
-    )]
+    fn capabilities(&self) -> types::ProviderCapabilities;
+    /// Concrete pollers call history through [`Self::fetch_history`].
     fn authenticate(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
     #[expect(
         dead_code,
-        reason = "NF poller uses fetch_history; trait method is the adapter contract"
+        reason = "hourly history is the production path; latest stays on the trait for the next adapter"
     )]
     fn fetch_latest(
         &mut self,
     ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
+    /// Bounded history read, or `NotImplemented` when the registry says unsupported.
+    fn fetch_history(
+        &mut self,
+        request: &HistoryRequest,
+    ) -> impl std::future::Future<Output = Result<Vec<map::HistorySeries>, ProviderError>> + Send;
 }
 
 impl DataProvider for nf::NfPortalDriver {
@@ -71,6 +75,10 @@ impl DataProvider for nf::NfPortalDriver {
         self.health(ProviderHealthStatus::Ok, None)
     }
 
+    fn capabilities(&self) -> types::ProviderCapabilities {
+        capabilities_for(ProviderKind::Nf)
+    }
+
     async fn authenticate(&mut self) -> Result<(), String> {
         nf::NfPortalDriver::authenticate(self)
             .await
@@ -81,6 +89,14 @@ impl DataProvider for nf::NfPortalDriver {
         nf::NfPortalDriver::query_points(self, 200)
             .await
             .map_err(|err| err.to_string())
+    }
+
+    async fn fetch_history(
+        &mut self,
+        request: &HistoryRequest,
+    ) -> Result<Vec<map::HistorySeries>, ProviderError> {
+        nf::NfPortalDriver::fetch_history_series(self, &request.point_ids, request.from, request.to)
+            .await
     }
 }
 
@@ -97,12 +113,33 @@ impl DataProvider for ace_stub::AceIotStubDriver {
         ace_stub::AceIotStubDriver::health(self)
     }
 
+    fn capabilities(&self) -> types::ProviderCapabilities {
+        capabilities_for(ProviderKind::AceIot)
+    }
+
     async fn authenticate(&mut self) -> Result<(), String> {
-        ace_stub::AceIotStubDriver::authenticate(self).await
+        ace_stub::AceIotStubDriver::authenticate(self)
+            .await
+            .map_err(|err| err.to_string())
     }
 
     async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
-        ace_stub::AceIotStubDriver::query_points(self).await
+        ace_stub::AceIotStubDriver::query_points(self)
+            .await
+            .map_err(|err| err.to_string())
+    }
+
+    async fn fetch_history(
+        &mut self,
+        request: &HistoryRequest,
+    ) -> Result<Vec<map::HistorySeries>, ProviderError> {
+        ace_stub::AceIotStubDriver::fetch_history(
+            self,
+            &request.point_ids,
+            request.from,
+            request.to,
+        )
+        .await
     }
 }
 
@@ -273,6 +310,79 @@ pub async fn providers_health(
     ))
 }
 
+pub async fn providers_gaps(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<crate::auth::AuthUser>,
+) -> Json<serde_json::Value> {
+    let ctx = tenant_context_for(&user);
+    let policy = hourly::HourlyPolicy::from_env();
+    let since = chrono::Utc::now() - policy.retention;
+    let opened = state.providers.hourly_store().await;
+    let (store, durable) = match opened {
+        store::StoreOpen::Durable(store) => (Some(store), true),
+        store::StoreOpen::MemoryOnly(store) => (Some(store), false),
+        store::StoreOpen::Unavailable => (None, false),
+    };
+    let mut sites = Vec::new();
+    for site in state.providers.sites.iter() {
+        if !ctx.allow_building(&site.building_id) {
+            continue;
+        }
+        let ledger = match &store {
+            Some(store) => match store.ledger_snapshot(&site.building_id, since, 2_000).await {
+                Ok(snapshot) => ledger::project_ledger(
+                    &snapshot.jobs,
+                    &snapshot.gaps,
+                    &snapshot.receipts,
+                    &ledger::LedgerQuery {
+                        durable,
+                        reconcile_hours: policy.reconcile_hours,
+                        truncated: snapshot.truncated,
+                    },
+                ),
+                Err(_) => empty_ledger(durable, policy.reconcile_hours, true),
+            },
+            None => empty_ledger(durable, policy.reconcile_hours, false),
+        };
+        sites.push(serde_json::json!({
+            "building_id": site.building_id,
+            "provider": site.kind,
+            "provider_instance_id": site.provider_instance_id,
+            "ledger": ledger,
+        }));
+    }
+    Json(serde_json::json!({
+        "ok": true,
+        "gapless": false,
+        "guarantee": hourly::COVERAGE_GUARANTEE,
+        "update_log": ledger::update_log_statement(),
+        "reconcile_hours": policy.reconcile_hours,
+        "registry": registry::descriptors()
+            .into_iter()
+            .map(|row| {
+                serde_json::json!({
+                    "kind": row.kind,
+                    "capabilities": row.capabilities,
+                })
+            })
+            .collect::<Vec<_>>(),
+        "sites": sites,
+    }))
+}
+
+fn empty_ledger(durable: bool, reconcile_hours: i64, truncated: bool) -> ledger::CoverageLedger {
+    ledger::project_ledger(
+        &[],
+        &[],
+        &[],
+        &ledger::LedgerQuery {
+            durable,
+            reconcile_hours,
+            truncated,
+        },
+    )
+}
+
 pub async fn providers_sites(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::auth::AuthUser>,
@@ -310,6 +420,13 @@ fn health_row(
     status: ProviderHealthStatus,
     message: Option<String>,
 ) -> SiteProviderHealth {
+    let message = message.or_else(|| {
+        if matches!(status, ProviderHealthStatus::NotImplemented) {
+            Some("not_implemented".into())
+        } else {
+            None
+        }
+    });
     SiteProviderHealth {
         building_id: site.building_id.clone(),
         provider_instance_id: site.provider_instance_id.clone(),
@@ -328,6 +445,7 @@ fn health_row(
         last_poll_at: None,
         last_ingested_points: 0,
         consecutive_errors: 0,
+        capabilities: capabilities_for(site.kind),
         hourly_coverage: None,
     }
 }
@@ -351,6 +469,7 @@ fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
         last_poll_at: None,
         last_ingested_points: 0,
         consecutive_errors: 0,
+        capabilities: capabilities_for(ProviderKind::Nf),
         hourly_coverage: None,
     }
 }
@@ -433,6 +552,31 @@ mod tests {
         assert!(!provider.provider_id().is_empty());
         let _ = provider.kind();
         let _ = provider.health();
+        let _ = provider.capabilities();
+    }
+
+    #[tokio::test]
+    async fn ace_fetch_history_stays_not_implemented() {
+        let mut ace = ace_stub::AceIotStubDriver::new("ace_iot:explicit");
+        let now = chrono::Utc::now();
+        let err = DataProvider::fetch_history(
+            &mut ace,
+            &HistoryRequest {
+                point_ids: vec!["point-1".into()],
+                from: now,
+                to: now,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code, error::ProviderErrorCode::NotImplemented);
+        assert_eq!(
+            ace.capabilities().fetch_history.reason.as_deref(),
+            Some("not_implemented")
+        );
+        let latest = ace.query_points().await.unwrap_err();
+        assert_eq!(latest.code, error::ProviderErrorCode::NotImplemented);
+        let _ = DataProvider::authenticate(&mut ace).await.unwrap_err();
     }
 
     #[test]
@@ -471,6 +615,7 @@ mod tests {
             last_poll_at: None,
             last_ingested_points: 0,
             consecutive_errors: 1,
+            capabilities: capabilities_for(ProviderKind::Nf),
             hourly_coverage: None,
         }
     }

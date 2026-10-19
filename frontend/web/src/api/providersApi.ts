@@ -18,6 +18,21 @@ export interface ProviderSiteHealth {
     last_success_at?: string | null;
     last_error_at?: string | null;
   };
+  capabilities?: ProviderCapabilities;
+}
+
+export interface HistoryCapability {
+  support?: string;
+  method?: string | null;
+  path?: string | null;
+  max_window_secs?: number | null;
+  reason?: string | null;
+}
+
+export interface ProviderCapabilities {
+  latest?: string;
+  catalog?: string;
+  fetch_history?: HistoryCapability;
 }
 
 export interface ProvidersHealthBody {

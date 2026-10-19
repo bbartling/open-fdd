@@ -365,6 +365,26 @@ impl HourlyStore {
         }
     }
 
+    pub async fn ledger_snapshot(
+        &self,
+        canonical_site: &str,
+        since: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<LedgerSnapshot, String> {
+        let limit = limit.clamp(1, 2_000);
+        match self {
+            Self::Memory(inner) => {
+                Ok(inner
+                    .lock()
+                    .await
+                    .ledger_snapshot(canonical_site, since, limit))
+            }
+            Self::Postgres(pool) => {
+                super::pg_store::ledger_snapshot(pool, canonical_site, since, limit).await
+            }
+        }
+    }
+
     pub async fn gap_count(&self, canonical_site: &str) -> Result<u32, String> {
         match self {
             Self::Memory(inner) => Ok(inner.lock().await.gap_count(canonical_site)),
@@ -398,6 +418,14 @@ impl HourlyStore {
             Self::Postgres(pool) => super::pg_store::list_jobs(pool, canonical_site).await,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct LedgerSnapshot {
+    pub jobs: Vec<JobRecord>,
+    pub gaps: Vec<GapDraft>,
+    pub receipts: Vec<ReceiptDraft>,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Default)]
@@ -574,6 +602,51 @@ impl MemoryInner {
 
     fn insert_gap(&mut self, gap: &GapDraft) {
         self.gaps.entry(gap.gap_id()).or_insert_with(|| gap.clone());
+    }
+
+    fn ledger_snapshot(
+        &self,
+        canonical_site: &str,
+        since: DateTime<Utc>,
+        limit: i64,
+    ) -> LedgerSnapshot {
+        let limit = usize::try_from(limit).unwrap_or(2_000);
+        let mut jobs: Vec<JobRecord> = self
+            .jobs
+            .values()
+            .filter(|job| job.canonical_site == canonical_site && job.window_start >= since)
+            .cloned()
+            .collect();
+        jobs.sort_by(|a, b| {
+            b.window_start
+                .cmp(&a.window_start)
+                .then(a.job_id.cmp(&b.job_id))
+        });
+        let jobs_truncated = jobs.len() > limit;
+        jobs.truncate(limit);
+        let ids: std::collections::HashSet<&str> =
+            jobs.iter().map(|job| job.job_id.as_str()).collect();
+        let receipts = self
+            .receipts
+            .values()
+            .filter(|receipt| ids.contains(receipt.job_id.as_str()))
+            .cloned()
+            .collect();
+        let mut gaps: Vec<GapDraft> = self
+            .gaps
+            .values()
+            .filter(|gap| gap.canonical_site == canonical_site && gap.window_start >= since)
+            .cloned()
+            .collect();
+        gaps.sort_by_key(|gap| std::cmp::Reverse(gap.window_start));
+        let gaps_truncated = gaps.len() > limit;
+        gaps.truncate(limit);
+        LedgerSnapshot {
+            jobs,
+            gaps,
+            receipts,
+            truncated: jobs_truncated || gaps_truncated,
+        }
     }
 
     fn gap_count(&self, canonical_site: &str) -> u32 {
@@ -827,5 +900,30 @@ mod tests {
             .unwrap());
         let jobs = store.list_jobs("site-a").await.unwrap();
         assert_eq!(jobs[0].state, JobState::Leased);
+    }
+
+    #[tokio::test]
+    async fn ledger_snapshot_is_bounded_to_the_site_window() {
+        let store = HourlyStore::memory();
+        store
+            .insert_job_if_absent(&new_job(ts(8), "dev-1"))
+            .await
+            .unwrap();
+        store
+            .insert_job_if_absent(&new_job(ts(12), "dev-1"))
+            .await
+            .unwrap();
+        let other = NewJob {
+            canonical_site: "site-b".into(),
+            ..new_job(ts(12), "dev-1")
+        };
+        store.insert_job_if_absent(&other).await.unwrap();
+        let snap = store.ledger_snapshot("site-a", ts(10), 10).await.unwrap();
+        assert!(!snap.truncated);
+        assert_eq!(snap.jobs.len(), 1);
+        assert_eq!(snap.jobs[0].window_start, ts(12));
+        let tight = store.ledger_snapshot("site-a", ts(1), 1).await.unwrap();
+        assert!(tight.truncated);
+        assert_eq!(tight.jobs.len(), 1);
     }
 }

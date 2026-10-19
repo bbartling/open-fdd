@@ -38,6 +38,16 @@ not a Soft-OPEN driver, and not a new GitHub repo. Haystack semantics stay.
    receipts, and catch-up live in Postgres. The NF update log returned HTTP 403
    on the lab key, so health states a bounded reconcile sweep and does not claim
    gapless replication.
+8. **Provider registry** — each compiled driver publishes capabilities
+   (`latest`, bounded `fetch_history`, `catalog`). `fetch_history` is on
+   `DataProvider`. NF implements it as bounded `GET /api/v1/point/data`. Ace
+   returns `not_implemented` for latest and history. Open-Meteo declares the
+   same contract when its driver module is linked.
+9. **Device-hour ledger** — `GET /api/providers/gaps` (and the Ops Providers
+   panel) project N5 jobs, receipts, and gaps. A device-hour is covered only
+   when that history window is durably committed. A latest sample does not
+   advance the cursor. Memory-store commits stay `not_durable`. The response
+   states update-log HTTP 403 and `gapless: false`.
 
 ## Consequences
 

@@ -184,34 +184,17 @@ impl NfPortalDriver {
         Ok(out)
     }
 
-    /// One history page for the hourly scheduler. Transport stays the bounded
-    /// GET used by `fetch_history`. `POST /api/v1/point/data` is a write.
-    pub async fn read_history_page(
+    /// Grouped history page. Transport stays the bounded GET used by
+    /// [`Self::fetch_history`]. `POST /api/v1/point/data` is a write.
+    pub async fn fetch_history_series(
         &mut self,
         uuids: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<HistorySeries>, FetchError> {
+    ) -> Result<Vec<HistorySeries>, ProviderError> {
         debug_assert_eq!(history_http_method(), "GET");
-        let points = self
-            .fetch_history(uuids, from, to)
-            .await
-            .map_err(fetch_error_from_provider)?;
-        let mut grouped: std::collections::BTreeMap<String, Vec<RawProviderPoint>> =
-            std::collections::BTreeMap::new();
-        for point in points {
-            grouped
-                .entry(point.provider_point_id.clone())
-                .or_default()
-                .push(point);
-        }
-        Ok(grouped
-            .into_iter()
-            .map(|(provider_point_id, samples)| HistorySeries {
-                provider_point_id,
-                samples,
-            })
-            .collect())
+        let points = NfPortalDriver::fetch_history(self, uuids, from, to).await?;
+        Ok(group_history_points(points))
     }
 
     async fn fetch_history_chunk(
@@ -322,6 +305,24 @@ fn valid_point_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
+fn group_history_points(points: Vec<RawProviderPoint>) -> Vec<HistorySeries> {
+    let mut grouped: std::collections::BTreeMap<String, Vec<RawProviderPoint>> =
+        std::collections::BTreeMap::new();
+    for point in points {
+        grouped
+            .entry(point.provider_point_id.clone())
+            .or_default()
+            .push(point);
+    }
+    grouped
+        .into_iter()
+        .map(|(provider_point_id, samples)| HistorySeries {
+            provider_point_id,
+            samples,
+        })
+        .collect()
+}
+
 /// History polling is a GET. POST on `/api/v1/point/data` writes upstream.
 pub fn history_http_method() -> &'static str {
     "GET"
@@ -346,7 +347,7 @@ pub fn build_history_read_url(
     url
 }
 
-fn fetch_error_from_provider(err: ProviderError) -> FetchError {
+pub(crate) fn fetch_error_from_provider(err: ProviderError) -> FetchError {
     if let Some(status) = err.http_status {
         return classify_history_status(status, err.retry_after_secs);
     }
@@ -362,6 +363,7 @@ fn fetch_error_from_provider(err: ProviderError) -> FetchError {
         | ProviderErrorCode::BodyTooLarge
         | ProviderErrorCode::RedirectRejected => FetchError::Contract,
         ProviderErrorCode::Persistence => FetchError::Persistence,
+        ProviderErrorCode::NotImplemented => FetchError::Unsupported,
         _ => FetchError::Transport,
     }
 }
@@ -774,6 +776,31 @@ mod tests {
         let mut driver = lab_driver(port, "secret", limits);
         let err = driver.authenticate().await.unwrap_err();
         assert!(err.to_string().contains("body_too_large"));
+    }
+
+    #[tokio::test]
+    async fn history_window_above_the_bound_is_a_contract_error() {
+        let mut driver = NfPortalDriver::new(
+            "nf:bound",
+            "https://portal.example",
+            None,
+            None,
+            true,
+            HttpLimits::default(),
+        )
+        .unwrap();
+        let from = Utc::now();
+        let to = from + MAX_HISTORY_WINDOW + chrono::Duration::seconds(1);
+        let err = driver
+            .fetch_history(&["point-1".into()], from, to)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ProviderErrorCode::Contract);
+        let series = driver
+            .fetch_history_series(&[], from, from + chrono::Duration::hours(1))
+            .await
+            .unwrap();
+        assert!(series.is_empty());
     }
 
     #[tokio::test]

@@ -173,6 +173,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health/stack", get(health_stack))
         .route("/api/providers/health", get(providers::providers_health))
         .route("/api/providers/sites", get(providers::providers_sites))
+        .route("/api/providers/gaps", get(providers::providers_gaps))
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary))
         .route("/api/tenants", get(list_tenants))

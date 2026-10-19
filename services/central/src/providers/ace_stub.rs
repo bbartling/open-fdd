@@ -1,6 +1,12 @@
 //! Ace IoT driver placeholder (Wave-NF stub).
+//!
+//! Latest and history stay `NotImplemented`. The stub does not return an empty
+//! success page.
 
-use super::map::RawProviderPoint;
+use chrono::{DateTime, Utc};
+
+use super::error::{ProviderError, ProviderErrorCode};
+use super::map::{HistorySeries, RawProviderPoint};
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
 
 #[derive(Debug, Clone)]
@@ -24,17 +30,26 @@ impl AceIotStubDriver {
             provider_id: self.provider_id.clone(),
             kind: ProviderKind::AceIot,
             status: ProviderHealthStatus::NotImplemented,
-            message: Some("Ace IoT driver stub — configure NF or wait for Ace driver".into()),
+            message: Some("not_implemented".into()),
             last_success_at: None,
             last_error_at: None,
         }
     }
 
-    pub async fn authenticate(&mut self) -> Result<(), String> {
-        Err("ace_iot driver not implemented".into())
+    pub async fn authenticate(&mut self) -> Result<(), ProviderError> {
+        Err(ProviderError::not_implemented())
     }
 
-    pub async fn query_points(&self) -> Result<Vec<RawProviderPoint>, String> {
-        Ok(Vec::new())
+    pub async fn query_points(&self) -> Result<Vec<RawProviderPoint>, ProviderError> {
+        Err(ProviderError::not_implemented())
+    }
+
+    pub async fn fetch_history(
+        &mut self,
+        _uuids: &[String],
+        _from: DateTime<Utc>,
+        _to: DateTime<Utc>,
+    ) -> Result<Vec<HistorySeries>, ProviderError> {
+        Err(ProviderError::new(ProviderErrorCode::NotImplemented))
     }
 }

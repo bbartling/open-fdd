@@ -7,7 +7,7 @@ use sqlx::Row;
 use super::hourly::LogicalWindow;
 use super::store::{
     claim_ready_sql, plan_claim_ids, CheckpointKey, CommitPatch, FailPatch, GapDraft, JobRecord,
-    JobState, NewJob, ReceiptDraft,
+    JobState, LedgerSnapshot, NewJob, ReceiptDraft,
 };
 
 pub async fn ensure_schema(pool: &sqlx::PgPool) -> Result<(), String> {
@@ -354,6 +354,99 @@ pub async fn insert_gap(pool: &sqlx::PgPool, gap: &GapDraft) -> Result<(), Strin
     Ok(())
 }
 
+pub async fn ledger_snapshot(
+    pool: &sqlx::PgPool,
+    canonical_site: &str,
+    since: DateTime<Utc>,
+    limit: i64,
+) -> Result<LedgerSnapshot, String> {
+    let limit = limit.clamp(1, 2_000);
+    let job_rows = sqlx::query(&format!("{JOB_SQL_BODY} WHERE canonical_site = $1 AND window_start >= $2 ORDER BY window_start DESC, job_id ASC LIMIT $3"))
+        .bind(canonical_site)
+        .bind(since)
+        .bind(limit + 1)
+        .fetch_all(pool)
+        .await
+        .map_err(db_err)?;
+    let jobs_truncated = job_rows.len() > usize::try_from(limit).unwrap_or(2_000);
+    let jobs = job_rows
+        .into_iter()
+        .take(usize::try_from(limit).unwrap_or(2_000))
+        .map(|row| row_to_job(&row))
+        .collect::<Result<Vec<_>, _>>()?;
+    let job_ids: Vec<String> = jobs.iter().map(|job| job.job_id.clone()).collect();
+    let receipt_rows = if job_ids.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query(
+            r#"
+            SELECT receipt_id, job_id, outcome, fetched_count, accepted_count, rejected_count,
+                   overlap_count, writer_acknowledged, safe_code
+            FROM provider_hourly_receipt
+            WHERE job_id = ANY($1)
+            "#,
+        )
+        .bind(&job_ids)
+        .fetch_all(pool)
+        .await
+        .map_err(db_err)?
+    };
+    let mut receipts = Vec::new();
+    for row in receipt_rows {
+        receipts.push(ReceiptDraft {
+            receipt_id: row.try_get("receipt_id").map_err(db_err)?,
+            job_id: row.try_get("job_id").map_err(db_err)?,
+            outcome: row.try_get("outcome").map_err(db_err)?,
+            fetched_count: row.try_get("fetched_count").map_err(db_err)?,
+            accepted_count: row.try_get("accepted_count").map_err(db_err)?,
+            rejected_count: row.try_get("rejected_count").map_err(db_err)?,
+            overlap_count: row.try_get("overlap_count").map_err(db_err)?,
+            writer_acknowledged: row.try_get("writer_acknowledged").map_err(db_err)?,
+            safe_code: row.try_get("safe_code").map_err(db_err)?,
+        });
+    }
+    let gap_rows = sqlx::query(
+        r#"
+        SELECT tenant, canonical_site, provider_instance, device_id, model_revision,
+               window_start, window_end, reason, recoverability
+        FROM provider_hourly_gap
+        WHERE canonical_site = $1 AND window_start >= $2
+        ORDER BY window_start DESC
+        LIMIT $3
+        "#,
+    )
+    .bind(canonical_site)
+    .bind(since)
+    .bind(limit + 1)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    let gaps_truncated = gap_rows.len() > usize::try_from(limit).unwrap_or(2_000);
+    let mut gaps = Vec::new();
+    for row in gap_rows
+        .into_iter()
+        .take(usize::try_from(limit).unwrap_or(2_000))
+    {
+        gaps.push(GapDraft {
+            tenant: row.try_get("tenant").map_err(db_err)?,
+            canonical_site: row.try_get("canonical_site").map_err(db_err)?,
+            provider_instance: row.try_get("provider_instance").map_err(db_err)?,
+            device_id: row.try_get("device_id").map_err(db_err)?,
+            model_revision: row.try_get("model_revision").map_err(db_err)?,
+            window_start: row.try_get("window_start").map_err(db_err)?,
+            window_end: row.try_get("window_end").map_err(db_err)?,
+            reason: row.try_get("reason").map_err(db_err)?,
+            recoverability: row.try_get("recoverability").map_err(db_err)?,
+        });
+    }
+    Ok(LedgerSnapshot {
+        jobs,
+        gaps,
+        receipts,
+        truncated: jobs_truncated || gaps_truncated,
+    })
+}
+
 pub async fn gap_count(pool: &sqlx::PgPool, canonical_site: &str) -> Result<u32, String> {
     let row = sqlx::query(
         r#"SELECT COUNT(*)::int AS n FROM provider_hourly_gap WHERE canonical_site = $1"#,
@@ -530,14 +623,16 @@ async fn load_job_pool(pool: &sqlx::PgPool, job_id: &str) -> Result<Option<JobRe
     row.map(|row| row_to_job(&row)).transpose()
 }
 
-const JOB_SQL: &str = r#"
+const JOB_SQL_BODY: &str = r#"
 SELECT job_id, tenant, canonical_site, provider_instance, device_id, model_revision,
        window_start, window_end, shard, shard_count, purpose, generation, state, attempt,
        not_before, lease_owner, lease_expiry, fencing_token, point_ids,
        fetched_count, accepted_count, rejected_count, overlap_count, writer_acknowledged,
        received_at, committed_at, safe_error_code, receipt_id
-FROM provider_hourly_job WHERE job_id = $1
+FROM provider_hourly_job
 "#;
+
+const JOB_SQL: &str = "SELECT job_id, tenant, canonical_site, provider_instance, device_id, model_revision, window_start, window_end, shard, shard_count, purpose, generation, state, attempt, not_before, lease_owner, lease_expiry, fencing_token, point_ids, fetched_count, accepted_count, rejected_count, overlap_count, writer_acknowledged, received_at, committed_at, safe_error_code, receipt_id FROM provider_hourly_job WHERE job_id = $1";
 
 fn row_to_job(row: &sqlx::postgres::PgRow) -> Result<JobRecord, String> {
     let state_raw: String = row.try_get("state").map_err(db_err)?;

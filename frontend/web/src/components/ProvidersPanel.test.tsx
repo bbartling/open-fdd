@@ -82,6 +82,86 @@ describe("ProvidersPanel", () => {
     });
     expect(screen.getByTestId("provider-driver-notes").textContent).toMatch(/GET \/api\/v1\/point\/data/);
     expect(screen.getByTestId("provider-driver-notes").textContent).toMatch(/not a poll/);
+    expect(screen.getByTestId("providers-gap-guarantee").textContent).toContain("403");
+    expect(screen.getByTestId("providers-gap-guarantee").textContent).toContain("not gapless");
+    expect(screen.getByTestId("providers-gap-statement").textContent).toContain("Gapless: no");
+    expect(screen.getByTestId("providers-gap-ledger").textContent).toMatch(/does not advance coverage/);
+  });
+
+  it("renders history capability and device-hours from the gaps ledger", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/providers/health") {
+        return {
+          ok: true,
+          poll_enabled: true,
+          sites: [
+            {
+              building_id: "NF_EDGE",
+              provider: "nf",
+              last_poll_at: "2026-10-19T10:05:00Z",
+              consecutive_errors: 0,
+              health: { status: "ok" },
+              capabilities: {
+                latest: "supported",
+                fetch_history: {
+                  support: "supported",
+                  method: "GET",
+                  path: "/api/v1/point/data",
+                  max_window_secs: 21600,
+                },
+              },
+            },
+          ],
+        };
+      }
+      if (path === "/api/providers/sites") return { sites: [] };
+      if (path === "/api/providers/gaps") {
+        return {
+          gapless: true,
+          guarantee: "bounded GET history; range polling is not gapless",
+          reconcile_hours: 6,
+          update_log: { method_path: "GET /api/v1/point/updates/data", http_status: 403 },
+          sites: [
+            {
+              building_id: "NF_EDGE",
+              ledger: {
+                hours: [
+                  {
+                    device_id: "AHU_1",
+                    model_revision: "rev-1",
+                    window_start: "2026-10-19T09:00:00Z",
+                    status: "committed",
+                    covered: true,
+                    durable: true,
+                    within_reconcile_bound: true,
+                  },
+                ],
+                devices: [
+                  {
+                    device_id: "AHU_1",
+                    covered_through: "2026-10-19T10:00:00Z",
+                    advanced_from: "durable_committed_history_window",
+                  },
+                ],
+              },
+            },
+          ],
+        };
+      }
+      throw new ApiClientError("missing", 404);
+    });
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-history-NF_EDGE").textContent).toBe(
+        "GET /api/v1/point/data, max 21600s",
+      );
+    });
+    expect(screen.getByTestId("providers-gap-ledger").textContent).toMatch(/AHU_1/);
+    expect(screen.getByTestId("providers-gap-ledger").textContent).toMatch(/yes/);
+    expect(screen.getByTestId("providers-gap-statement").textContent).toContain("Gapless: no");
+    expect(screen.getByTestId("providers-covered-through").textContent).toMatch(
+      /durable_committed_history_window/,
+    );
   });
 
   it("renders a server ledger and keeps unrecoverable windows out of a success tone", async () => {
