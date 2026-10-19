@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum ProviderKind {
     Nf,
     AceIot,
+    OpenMeteo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

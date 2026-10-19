@@ -277,10 +277,6 @@ impl RoleResolver {
         self.by_provider_point_id.len()
     }
 
-    #[expect(
-        dead_code,
-        reason = "hourly jobs group with devices(); adapters can still list source ids"
-    )]
     pub fn provider_point_ids(&self) -> Vec<String> {
         self.by_provider_point_id.keys().cloned().collect()
     }
@@ -307,6 +303,25 @@ impl RoleResolver {
             .into_iter()
             .map(|(device_id, points)| DevicePoints { device_id, points })
             .collect()
+    }
+
+    /// Exact equipment ids from the committed map. Empty when nothing is mapped.
+    pub fn equipment_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self
+            .by_provider_point_id
+            .values()
+            .map(|resolved| resolved.equipment_id.clone())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    pub fn point_count_for_equipment(&self, equipment_id: &str) -> usize {
+        self.by_provider_point_id
+            .values()
+            .filter(|resolved| resolved.equipment_id == equipment_id)
+            .count()
     }
 }
 
@@ -409,6 +424,39 @@ fn bootstrap(entries: &[PointMapEntry]) -> Vec<super::committed_model::Bootstrap
             provisional: entry.provisional,
         })
         .collect()
+}
+
+/// Map raw points in history-then-latest order. The first sample for a
+/// `(provider_point_id, microsecond)` pair wins. Unmapped ids are dropped.
+///
+/// The hourly job calls [`normalize_mapped`] per accepted sample. This batch
+/// helper is the offline contractor gate.
+#[cfg(test)]
+pub fn map_provider_samples(
+    building_id: &str,
+    provider_instance_id: &str,
+    resolver: &RoleResolver,
+    history: &[RawProviderPoint],
+    latest: &[RawProviderPoint],
+) -> Vec<NormalizedSample> {
+    let mut samples = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for point in history.iter().chain(latest.iter()) {
+        let Some(resolved) = resolver.resolve(&point.provider_point_id) else {
+            continue;
+        };
+        let key = (point.provider_point_id.clone(), point.ts.timestamp_micros());
+        if !seen.insert(key) {
+            continue;
+        }
+        samples.push(normalize_mapped(
+            building_id,
+            provider_instance_id,
+            point,
+            resolved,
+        ));
+    }
+    samples
 }
 
 #[cfg(test)]

@@ -172,6 +172,10 @@ pub struct AgentTool {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AgentToolsResponse {
     pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub product_surface: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ot_discovery: Option<String>,
     pub tools: Vec<AgentTool>,
 }
 

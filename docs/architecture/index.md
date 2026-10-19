@@ -20,6 +20,8 @@ Container stack for telemetry, modeling, and HVAC FDD. Soft-OPEN ≠ FQ.
 
 Product FDD / analytics = **Timescale SQL** ([ADR-010](adr-010-timescale-hard-cutover.md)). PyPI `open-fdd` = third-party oracle.
 
+Wave-NF 4.0 normal ingest is **central + web + Timescale**, plus optional MCP and a future worker. fieldbus and mqtt stay in this repo and are archived for that path. See the [4.0 product boundary](wave-nf-4.0-product-boundary.md). Nothing in that matrix is qualified.
+
 ## Guides
 
 | Topic | Document |
