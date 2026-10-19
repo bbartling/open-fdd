@@ -6,8 +6,8 @@ todos:
     content: "Wave-A PR1 — N2 security + N6 storage correctness (tenant filter, fail-closed secrets, no OAuth redirects, bounds, typed errors; per-equip routing, source ts/units/quality, truthful persist counts)"
     status: completed
   - id: wave-b-n1-archive
-    content: "Wave-B parallel — N1 real archive/ot-edge freeze + digest prune protection + isolated restore"
-    status: in_progress
+    content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Required Actions green on 17ef0233 (PR 1294)."
+    status: completed
   - id: wave-b-n5-hourly
     content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (un-cancel; GET history only)"
     status: in_progress
@@ -30,8 +30,8 @@ todos:
     content: M0 MILESTONES Wave-NF; defer the 3620 ART sweep
     status: completed
   - id: m1-freeze-ot
-    content: M1 OT archive tag + ARCHIVE_OT_EDGE; product compose central+web+Timescale (N1 full archive/restore still open → Wave-B)
-    status: in_progress
+    content: "M1 unqualified OT snapshot + portal compose. No 3.6.18 tag. Restore boot is n1-restore-boot."
+    status: completed
   - id: m2-adr
     content: M2 ADR-011 DataProvider + Timescale + RDF
     status: completed
@@ -75,8 +75,14 @@ todos:
     content: N0 Define 4.0 product boundary + requirements-to-test matrix labels
     status: pending
   - id: n1-archive-real
-    content: SoftOPEN defer — N1 Real archive/ot-edge freeze (owned by Wave-B parallel PR)
-    status: in_progress
+    content: "N1 snapshot landed as unqualified-cdaa4f15. Required Actions green on 17ef0233."
+    status: completed
+  - id: n1-restore-boot
+    content: "SoftOPEN defer — isolated old-stack restore boot/replay and verified OCI digest pin"
+    status: pending
+  - id: n1-workspace-remove
+    content: "SoftOPEN defer — delete live services/fieldbus from the default Cargo workspace (protocol split gate still compiles it)"
+    status: pending
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
     status: completed
@@ -265,7 +271,9 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
 
 ### Wave-B — parallel after Wave-A merges
-- [ ] **wave-b-n1-archive** — N1 real `archive/ot-edge/<freeze>/` + prune protection + isolated restore
+- [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Required Actions green on `17ef0233` (PR 1294).
+- [ ] SoftOPEN defer — **n1-restore-boot** isolated old-stack boot/replay and verified OCI digest pin
+- [ ] SoftOPEN defer — **n1-workspace-remove** delete live `services/fieldbus` from the default Cargo workspace (split gate still compiles it)
 - [ ] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**)
 - [ ] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans
 - [ ] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA
@@ -287,17 +295,16 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
 
 ### Already done (do not reopen)
-- [x] m0-milestones, m2-adr, m3-trait (prototype), m9-stub-ace
+- [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m9-stub-ace
 
 ### Prototype still open (do not claim complete)
-- [~] m1-freeze-ot, m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
+- [~] m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
 
 ### Cloud agents launched 2026-10-19 (Grok Bot)
-- Wave-A N2+N6: bc-8669bd28
+- Wave-A N2+N6: bc-8669bd28 — merged #1290 `608ee177`
 - Wave-B N1 archive: bc-09497442
 - Wave-B N5 hourly: bc-81ff01ac
 - Wave-B N3 model: bc-9c23a08d
 - Wave-B N11 SPA: bc-7fe03caf
 - Wave-C N8+N10: bc-d24c1c2e
 - Wave-D GHCR: waiting on merges
-

@@ -1041,7 +1041,7 @@ fn declared_recipe() -> Option<String> {
 pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
     const DURABLE_FRESHNESS: Duration = Duration::from_secs(5 * 60);
     const SOURCE_FRESHNESS: Duration = Duration::from_secs(5 * 60);
-    let mqtt_enabled = central_bool("OPENFDD_MQTT_ENABLED");
+    let mqtt_enabled = crate::ingest::mqtt_ot_archive_restore_enabled();
     let mqtt_configured = std::env::var("OPENFDD_MQTT_HOST")
         .ok()
         .is_some_and(|host| !host.trim().is_empty());

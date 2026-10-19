@@ -3,7 +3,7 @@ name = "openfdd-central"
 version = "4.0.0"
 edition = "2021"
 license = "MIT"
-description = "Open-FDD Central — MQTTS ingest, Timescale historian, SQL FDD, JWT REST + OpenAPI"
+description = "Open-FDD Central — portal ingest, Timescale historian, SQL FDD, JWT REST + OpenAPI"
 
 [[bin]]
 name = "openfdd-central"
@@ -22,6 +22,7 @@ unexpected_cfgs = { level = "allow", check-cfg = [
 [dependencies]
 openfdd_contracts = { path = "../../crates/openfdd_contracts", features = ["openapi"] }
 openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
+# Semantic/package/RDF only. ot-transport (Haystack HTTP client + Modbus) stays off.
 open_fdd_edge_prototype = { path = "../../edge", default-features = false }
 fdd_core = { path = "../../crates/fdd_core" }
 fdd_rules = { path = "../../crates/fdd_rules" }

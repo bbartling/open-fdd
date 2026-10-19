@@ -1,5 +1,6 @@
 //! Live FDD validation smoke helpers (BACnet wire capture retired → fieldbus MQTTS).
 
+#[cfg(feature = "ot-transport")]
 use crate::drivers::{json_api, modbus};
 use crate::fdd::execution;
 use crate::historian::store;
@@ -98,53 +99,78 @@ fn effective_points(p: &SiteConfig) -> Vec<profile::BacnetPointRole> {
 }
 
 fn modbus_probe(p: &SiteConfig) -> Value {
-    if !profile::is_modbus_configured(p) {
-        return json!({
+    #[cfg(not(feature = "ot-transport"))]
+    {
+        let _ = p;
+        json!({
             "configured": false,
-            "status": "skipped",
-            "message": "Modbus not configured",
+            "status": "archived",
+            "message": "Modbus transport archived",
             "available": false,
             "degraded": false
-        });
+        })
     }
-    let body = json!({
-        "register": p.modbus_register,
-        "function": "input_register",
-        "scale": 0.1,
-        "unit": "degF"
-    });
-    let read = modbus::read_value(&body);
-    let parsed: Value = serde_json::from_str(&read).unwrap_or(json!({"ok": false}));
-    json!({
-        "configured_host": p.modbus_host,
-        "configured_port": p.modbus_port,
-        "mode": modbus::modbus_config_value().get("mode"),
-        "registers_tested": [p.modbus_register],
-        "last_read": parsed,
-        "available": parsed.get("ok").and_then(|v| v.as_bool()).unwrap_or(parsed.get("value").is_some()),
-        "degraded": parsed.get("ok").and_then(|v| v.as_bool()) != Some(true)
-    })
+    #[cfg(feature = "ot-transport")]
+    {
+        if !profile::is_modbus_configured(p) {
+            return json!({
+                "configured": false,
+                "status": "skipped",
+                "message": "Modbus not configured",
+                "available": false,
+                "degraded": false
+            });
+        }
+        let body = json!({
+            "register": p.modbus_register,
+            "function": "input_register",
+            "scale": 0.1,
+            "unit": "degF"
+        });
+        let read = modbus::read_value(&body);
+        let parsed: Value = serde_json::from_str(&read).unwrap_or(json!({"ok": false}));
+        json!({
+            "configured_host": p.modbus_host,
+            "configured_port": p.modbus_port,
+            "mode": modbus::modbus_config_value().get("mode"),
+            "registers_tested": [p.modbus_register],
+            "last_read": parsed,
+            "available": parsed.get("ok").and_then(|v| v.as_bool()).unwrap_or(parsed.get("value").is_some()),
+            "degraded": parsed.get("ok").and_then(|v| v.as_bool()) != Some(true)
+        })
+    }
 }
 
 fn json_api_probe(p: &SiteConfig) -> Value {
-    let poll = if let Some(url) = &p.json_api_url {
-        json_api::poll_url(url)
-    } else {
-        json_api::poll_once_value(&json!({}))
-    };
-    json!({
-        "source_id": poll.get("source_id"),
-        "url": poll.get("url"),
-        "http_status": poll.get("http_status"),
-        "response_time_ms": poll.get("response_time_ms"),
-        "parsed_points_count": poll
-            .get("parsed_points_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0),
-        "ok": poll.get("ok"),
-        "available": poll.get("ok").and_then(|v| v.as_bool()) == Some(true),
-        "error": poll.get("error")
-    })
+    #[cfg(not(feature = "ot-transport"))]
+    {
+        let _ = p;
+        json!({
+            "status": "archived",
+            "message": "JSON API driver archived with OT transport"
+        })
+    }
+    #[cfg(feature = "ot-transport")]
+    {
+        let poll = if let Some(url) = &p.json_api_url {
+            json_api::poll_url(url)
+        } else {
+            json_api::poll_once_value(&json!({}))
+        };
+        json!({
+            "source_id": poll.get("source_id"),
+            "url": poll.get("url"),
+            "http_status": poll.get("http_status"),
+            "response_time_ms": poll.get("response_time_ms"),
+            "parsed_points_count": poll
+                .get("parsed_points_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            "ok": poll.get("ok"),
+            "available": poll.get("ok").and_then(|v| v.as_bool()) == Some(true),
+            "error": poll.get("error")
+        })
+    }
 }
 
 fn haystack_fixture_status(p: &SiteConfig) -> Value {

@@ -224,6 +224,16 @@ describe("Operations protocol navigation", () => {
   });
 
   it("keeps the existing MQTT panels and AFDD view available", async () => {
+    const home = render(
+      <MemoryRouter initialEntries={["/operations"]}>
+        <OperationsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByTestId("providers-health-panel")).toBeTruthy();
+    expect(screen.getByTestId("ops-ot-strip")).toBeTruthy();
+    expect(screen.queryByTestId("mqtt-config-panel")).toBeNull();
+    home.unmount();
+
     const mqtt = render(
       <MemoryRouter initialEntries={["/operations?view=mqtt"]}>
         <OperationsPage />
@@ -232,6 +242,7 @@ describe("Operations protocol navigation", () => {
     expect(await screen.findByTestId("mqtt-config-panel")).toBeTruthy();
     expect(screen.getByTestId("edge-kit-panel")).toBeTruthy();
     expect(screen.getByTestId("telemetry-suspend-panel")).toBeTruthy();
+    expect(screen.getByTestId("mqtt-archived-note")).toBeTruthy();
     mqtt.unmount();
 
     render(

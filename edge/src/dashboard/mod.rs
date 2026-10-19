@@ -3,6 +3,7 @@
 mod building_insight;
 
 use crate::data_management;
+#[cfg(feature = "ot-transport")]
 use crate::drivers::bacnet;
 use crate::export;
 use crate::faults;
@@ -364,6 +365,19 @@ pub fn analytics() -> Value {
     })
 }
 
+#[cfg(not(feature = "ot-transport"))]
+fn bacnet_override_counts() -> Value {
+    json!({
+        "ok": true,
+        "available": false,
+        "priority8_count": 0,
+        "other_priority_count": 0,
+        "total": 0,
+        "note": "BACnet transport archived"
+    })
+}
+
+#[cfg(feature = "ot-transport")]
 fn bacnet_override_counts() -> Value {
     if !protocol_enabled("OPENFDD_BACNET_ENABLED") {
         return json!({

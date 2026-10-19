@@ -3271,7 +3271,10 @@ pub async fn issue_command(
             hint = Some("MQTT publisher not connected yet; command stored as pending".into());
         }
     } else {
-        hint = Some("Set OPENFDD_MQTT_ENABLED=1 for live publish from the control plane".into());
+        hint = Some(
+            "Set OPENFDD_MQTT_ENABLED=1 and OPENFDD_OT_ARCHIVE_RESTORE=1 for the OT archive publish lane"
+                .into(),
+        );
     }
 
     open_fdd_edge_prototype::auth::audit::log_event(
@@ -4380,13 +4383,7 @@ pub async fn fdd_status() -> Json<FddStatusResponse> {
 }
 
 fn mqtt_enabled() -> bool {
-    matches!(
-        std::env::var("OPENFDD_MQTT_ENABLED")
-            .unwrap_or_default()
-            .to_ascii_lowercase()
-            .as_str(),
-        "1" | "true" | "yes" | "on"
-    )
+    crate::ingest::mqtt_ot_archive_restore_enabled()
 }
 
 // --- CSV import (UT3) — same handlers as edge lib; execute also fills parquet cache ---
