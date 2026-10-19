@@ -4,10 +4,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
-  "route_count": 173,
+  "route_count": 181,
   "disposition_counts": {
     "IMPLEMENTED": 30,
-    "PLANNED": 114,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -1156,6 +1156,90 @@
         "identity"
       ],
       "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers/health",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_scoped_provider_health",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        401,
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_providers_health_401",
+        "y.authz.get_api_providers_health"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_providers_health_401",
+        "y.authz.get_api_providers_health"
+      ],
+      "request_schema": {
+        "type": "openfdd.providers.health.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.providers.health.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave-NF JWT provider health. Fail closed on tenant membership. Hub admin sees origins; other callers get redacted endpoints and safe error codes. PLANNED until the security suite emits these check ids."
+    },
+    {
+      "method": "GET",
+      "path": "/api/providers/sites",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_scoped_provider_health",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        401,
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon_providers_sites_401",
+        "y.authz.get_api_providers_sites"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon_providers_sites_401",
+        "y.authz.get_api_providers_sites"
+      ],
+      "request_schema": {
+        "type": "openfdd.providers.sites.v1",
+        "status": "defined"
+      },
+      "response_schema": {
+        "type": "openfdd.providers.sites.v1",
+        "status": "defined"
+      },
+      "selectors": [
+        "tenant_id",
+        "building_id"
+      ],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Wave-NF JWT provider site list. Same tenant filter and redaction as provider health. PLANNED until the security suite emits these check ids."
     },
     {
       "method": "POST",
