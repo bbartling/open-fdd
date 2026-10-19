@@ -137,6 +137,10 @@ impl DataProvider for meteo::OpenMeteoDriver {
         self.health(ProviderHealthStatus::Ok, None)
     }
 
+    fn capabilities(&self) -> Vec<types::ProviderCapability> {
+        registry::capabilities_for(ProviderKind::OpenMeteo)
+    }
+
     async fn authenticate(&mut self) -> Result<(), String> {
         std::future::ready(meteo::OpenMeteoDriver::authenticate(self))
             .await
@@ -147,6 +151,30 @@ impl DataProvider for meteo::OpenMeteoDriver {
         std::future::ready(meteo::OpenMeteoDriver::fetch_latest(self))
             .await
             .map_err(|err| err.to_string())
+    }
+
+    async fn fetch_history(
+        &mut self,
+        point_ids: &[String],
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<map::HistorySeries>, error::ProviderError> {
+        let points = meteo::OpenMeteoDriver::fetch_history(self, point_ids, from, to).await?;
+        let mut grouped: std::collections::BTreeMap<String, Vec<map::RawProviderPoint>> =
+            std::collections::BTreeMap::new();
+        for point in points {
+            grouped
+                .entry(point.provider_point_id.clone())
+                .or_default()
+                .push(point);
+        }
+        Ok(grouped
+            .into_iter()
+            .map(|(provider_point_id, samples)| map::HistorySeries {
+                provider_point_id,
+                samples,
+            })
+            .collect())
     }
 }
 

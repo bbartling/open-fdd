@@ -21,6 +21,10 @@ pub fn registrations() -> Vec<ProviderRegistration> {
             kind: ProviderKind::AceIot,
             capabilities: capabilities_for(ProviderKind::AceIot),
         },
+        ProviderRegistration {
+            kind: ProviderKind::OpenMeteo,
+            capabilities: capabilities_for(ProviderKind::OpenMeteo),
+        },
     ]
 }
 
@@ -28,6 +32,7 @@ pub fn capabilities_for(kind: ProviderKind) -> Vec<ProviderCapability> {
     match kind {
         ProviderKind::Nf => nf_capabilities(),
         ProviderKind::AceIot => ace_capabilities(),
+        ProviderKind::OpenMeteo => meteo_capabilities(),
     }
 }
 
@@ -84,6 +89,52 @@ fn nf_capabilities() -> Vec<ProviderCapability> {
     ]
 }
 
+fn meteo_capabilities() -> Vec<ProviderCapability> {
+    let max_window = super::meteo::MAX_METEO_WINDOW.num_seconds();
+    vec![
+        ProviderCapability {
+            name: CapabilityName::Authenticate,
+            support: CapabilitySupport::Implemented,
+            http_method: None,
+            path: None,
+            max_window_secs: None,
+            note: Some("public API; no token exchange".into()),
+        },
+        ProviderCapability {
+            name: CapabilityName::Latest,
+            support: CapabilitySupport::Implemented,
+            http_method: Some("GET".into()),
+            path: Some("/v1/forecast".into()),
+            max_window_secs: None,
+            note: Some("empty without mapped series; history is the ingest path".into()),
+        },
+        ProviderCapability {
+            name: CapabilityName::FetchHistory,
+            support: CapabilitySupport::Implemented,
+            http_method: Some("GET".into()),
+            path: Some("/v1/forecast".into()),
+            max_window_secs: Some(max_window),
+            note: Some("allowlisted Open-Meteo series ids only".into()),
+        },
+        ProviderCapability {
+            name: CapabilityName::BoundedWindows,
+            support: CapabilitySupport::Implemented,
+            http_method: Some("GET".into()),
+            path: Some("/v1/forecast".into()),
+            max_window_secs: Some(max_window),
+            note: Some("windows longer than 48 hours are rejected before the request".into()),
+        },
+        ProviderCapability {
+            name: CapabilityName::UpdateLog,
+            support: CapabilitySupport::NotImplemented,
+            http_method: None,
+            path: None,
+            max_window_secs: None,
+            note: Some("Open-Meteo has no update log".into()),
+        },
+    ]
+}
+
 fn ace_capabilities() -> Vec<ProviderCapability> {
     [
         CapabilityName::Authenticate,
@@ -131,7 +182,18 @@ mod tests {
     #[test]
     fn registry_lists_nf_history_as_get_and_ace_as_not_implemented() {
         let regs = registrations();
-        assert_eq!(regs.len(), 2);
+        assert_eq!(regs.len(), 3);
+        let meteo = capabilities_for(ProviderKind::OpenMeteo);
+        let meteo_history = capability(&meteo, CapabilityName::FetchHistory).unwrap();
+        assert_eq!(meteo_history.support, CapabilitySupport::Implemented);
+        assert_eq!(meteo_history.http_method.as_deref(), Some("GET"));
+        assert_eq!(meteo_history.path.as_deref(), Some("/v1/forecast"));
+        assert_eq!(
+            capability(&meteo, CapabilityName::UpdateLog)
+                .unwrap()
+                .support,
+            CapabilitySupport::NotImplemented
+        );
         let nf = capabilities_for(ProviderKind::Nf);
         let history = capability(&nf, CapabilityName::FetchHistory).unwrap();
         assert_eq!(history.support, CapabilitySupport::Implemented);
