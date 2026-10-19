@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""NF portal smoke: any internet host → Cloudflare tunnel → bosspi sensors.
+"""NF portal smoke: list latest values for explicit point UUIDs.
 
-Wave-NF lab probe (Open-FDD ``scripts/nf/``). OAuth API key against ``NFURL``
-(bosspi ``*.normal-online.net``). Portal tunnel must be **Allow unauthenticated**;
-NF still requires the API key for ``point/query``.
+Wave-NF lab probe (Open-FDD ``scripts/nf/``). OAuth API key against ``NFURL``.
+Selection is ``NF_POINT_UUIDS`` (comma-separated provider point ids). Display
+names are not a selector.
 
 Secrets from environment or ``.env`` next to this file (never commit).
 Docs: https://docs.normal.dev/howto/auth/
-Product path: Rust ``DataProvider`` NF driver (Wave-NF mega plan) — this is smoke only.
+Product path: Rust ``DataProvider`` NF driver — this script is smoke only.
 """
 
 from __future__ import annotations
@@ -18,11 +18,7 @@ from pathlib import Path
 
 import requests
 
-# Select by opaque series id (`NF_POINT_IDS`), never by display name.
-def wanted_point_ids() -> set[str]:
-    raw = os.environ.get("NF_POINT_IDS", "")
-    return {part.strip() for part in raw.split(",") if part.strip()}
-UA = {"User-Agent": "bldgts-part02-nf-sensors/1.0"}
+UA = {"User-Agent": "openfdd-nf-point-smoke/1.0"}
 
 
 def load_dotenv(directory: Path) -> None:
@@ -50,11 +46,11 @@ def bearer_token(base: str, client_id: str, client_secret: str) -> str:
         timeout=30,
     )
     if not resp.ok:
-        raise SystemExit(f"token failed HTTP {resp.status_code}: {resp.text[:400]}")
+        raise SystemExit(f"token failed HTTP {resp.status_code}")
     body = resp.json()
     token = body.get("accessToken") or body.get("access_token")
     if not token:
-        raise SystemExit(f"no accessToken in response: {body!r}")
+        raise SystemExit("no accessToken in token response")
     return token
 
 
@@ -69,8 +65,21 @@ def query_points(base: str, token: str = "") -> list[dict]:
         timeout=60,
     )
     if not resp.ok:
-        raise SystemExit(f"point/query failed HTTP {resp.status_code}: {resp.text[:400]}")
+        raise SystemExit(f"point/query failed HTTP {resp.status_code}")
     return list(resp.json().get("points") or [])
+
+
+def selected_uuids() -> list[str]:
+    raw = os.environ.get("NF_POINT_UUIDS", "")
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for part in raw.split(","):
+        uuid = part.strip()
+        if not uuid or uuid in seen:
+            continue
+        seen.add(uuid)
+        ordered.append(uuid)
+    return ordered
 
 
 def main() -> int:
@@ -81,45 +90,47 @@ def main() -> int:
     client_id = os.environ.get("NF_CLIENT_ID", "")
     client_secret = os.environ.get("NF_CLIENT_SECRET", "")
     if not base:
-        print("Set NFURL (env or checkpoint/.env).", file=sys.stderr)
+        print("Set NFURL (env or scripts/nf/.env).", file=sys.stderr)
         return 1
 
-    # Tunnel / production: API key required. Lab LAN to bosspi often allows open query.
+    want = selected_uuids()
+    if not want:
+        print(
+            "Set NF_POINT_UUIDS to a comma-separated list of provider point UUIDs.",
+            file=sys.stderr,
+        )
+        return 1
+
     token = ""
     if client_id and client_secret:
         token = bearer_token(base, client_id, client_secret)
     elif "normal-online.net" in base:
         print(
-            "Cloudflare tunnel needs NF_CLIENT_ID + NF_CLIENT_SECRET "
-            "(create on that NF site’s Settings → Authorization → API keys).",
+            "Cloudflare tunnel needs NF_CLIENT_ID + NF_CLIENT_SECRET.",
             file=sys.stderr,
         )
         return 1
 
-    want = wanted_point_ids()
-    if not want:
-        print(
-            "Set NF_POINT_IDS to comma-separated opaque point ids.",
-            file=sys.stderr,
-        )
-        return 1
-    found = 0
+    by_uuid: dict[str, dict] = {}
     for point in query_points(base, token):
-        ident = str(point.get("uuid") or point.get("id") or "").strip()
-        if ident not in want:
+        uuid = str(point.get("uuid") or point.get("id") or "").strip()
+        if uuid:
+            by_uuid[uuid] = point
+
+    found = 0
+    for uuid in want:
+        point = by_uuid.get(uuid)
+        if point is None:
+            print(f"{uuid} missing", file=sys.stderr)
             continue
         attrs = point.get("attrs") or {}
-        # Prefer physical AI sensors; still print if type missing after import quirks.
-        ptype = attrs.get("type") or ""
-        if ptype and ptype != "OBJECT_ANALOG_INPUT":
-            continue
         latest = point.get("latestValue") or {}
         units = point.get("units") or attrs.get("prop_units") or ""
-        print(f"{ident} {latest.get('double')} {units} @ {latest.get('ts')}")
+        print(f"{uuid} {latest.get('double')} {units} @ {latest.get('ts')}")
         found += 1
 
-    if not found:
-        print("no matching sensors — is NF polling those AIs?", file=sys.stderr)
+    if found != len(want):
+        print(f"matched {found} of {len(want)} point UUIDs", file=sys.stderr)
         return 1
     return 0
 
