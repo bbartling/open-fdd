@@ -81,24 +81,33 @@ pub fn weather_point_map() -> Vec<PointMapEntry> {
     vec![
         PointMapEntry {
             provider_point_id: "temperature_2m".into(),
+            semantic_point_id: None,
             equipment_id: "WEATHER".into(),
             role: "web-outside-air-temp".into(),
             equip_type: Some("weather".into()),
             unit: None,
+            kind: None,
+            provisional: false,
         },
         PointMapEntry {
             provider_point_id: "relative_humidity_2m".into(),
+            semantic_point_id: None,
             equipment_id: "WEATHER".into(),
             role: "web-outside-air-humidity".into(),
             equip_type: Some("weather".into()),
             unit: None,
+            kind: None,
+            provisional: false,
         },
         PointMapEntry {
             provider_point_id: "dew_point_2m".into(),
+            semantic_point_id: None,
             equipment_id: "WEATHER".into(),
             role: "web-outside-air-dewpoint".into(),
             equip_type: Some("weather".into()),
             unit: None,
+            kind: None,
+            provisional: false,
         },
     ]
 }
@@ -229,10 +238,13 @@ mod tests {
         }];
         let resolver = RoleResolver::from_point_map(&[PointMapEntry {
             provider_point_id: "series-1".into(),
+            semantic_point_id: None,
             equipment_id: "AHU_1".into(),
             role: "sat".into(),
             equip_type: Some("ahu".into()),
             unit: None,
+            kind: None,
+            provisional: false,
         }])
         .unwrap();
         let expected = [ExpectedSample {

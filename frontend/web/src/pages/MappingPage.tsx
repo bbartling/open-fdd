@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 import { AppShell } from "../components/AppShell";
 import {
   Button,
@@ -8,6 +8,7 @@ import {
   Select,
   Toggle,
 } from "../components/widgets";
+import { ProviderBindingsPanel } from "../components/ProviderBindingsPanel";
 import { ResultsByCategoryPanel } from "../components/ResultsByCategoryPanel";
 import { useDirtyFormWarning, useSessionQuery } from "../session";
 import {
@@ -27,6 +28,7 @@ import {
   type SparqlCatalogQuery,
   type SparqlQueryResult,
 } from "../api/mappingApi";
+import { listProviderBuildingIds } from "../api/providersApi";
 import { buildDataModelTurtle } from "../api/dataModelTurtle";
 import { listFddRules, type FddRuleSummary } from "../api/fddApi";
 
@@ -247,6 +249,7 @@ export function MappingPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showUnmappedOnly, setShowUnmappedOnly] = useState(false);
+  const [providerOnlySite, setProviderOnlySite] = useState(false);
   const [cookbookRoles, setCookbookRoles] = useState<string[]>([]);
   const [fddRules, setFddRules] = useState<FddRuleSummary[]>([]);
 
@@ -262,18 +265,25 @@ export function MappingPage() {
   }, [inventory, equipmentId]);
 
   const refreshBuildings = useCallback(async () => {
+    let packages: string[] = [];
     try {
-      const ids = await listPackageBuildings();
-      setBuildings(ids);
+      packages = await listPackageBuildings();
     } catch (err) {
       setError(formatErr(err));
     }
+    const portals = await listProviderBuildingIds();
+    const merged = new Set<string>([...packages, ...portals]);
+    setBuildings([...merged].sort((a, b) => a.localeCompare(b)));
   }, []);
 
+  const inventoryGen = useRef(0);
+
   const refreshInventory = useCallback(async () => {
+    const ticket = ++inventoryGen.current;
     if (!buildingId) {
       setInventory(null);
       setSiteInventory(null);
+      setProviderOnlySite(false);
       return;
     }
     setLoading(true);
@@ -284,6 +294,8 @@ export function MappingPage() {
         getPackageMapping(buildingId),
         getSessionConfig(buildingId),
       ]);
+      if (ticket !== inventoryGen.current) return;
+      setProviderOnlySite(false);
       setSiteInventory(invAll);
       const ids = invAll.equipment_ids ?? [];
       let inv = invAll;
@@ -296,6 +308,7 @@ export function MappingPage() {
         );
       } else if (eqId) {
         inv = await getPackageMapping(buildingId, eqId);
+        if (ticket !== inventoryGen.current) return;
       }
       setInventory(inv);
       setSessionConfig(sess.config ?? null);
@@ -309,11 +322,20 @@ export function MappingPage() {
         setQuery({ equipment: eq.equipment_id }, true);
       }
     } catch (err) {
+      if (ticket !== inventoryGen.current) return;
       setInventory(null);
       setSiteInventory(null);
-      setError(formatErr(err));
+      const portals = await listProviderBuildingIds();
+      if (ticket !== inventoryGen.current) return;
+      if (portals.includes(buildingId)) {
+        setProviderOnlySite(true);
+        setError(null);
+      } else {
+        setProviderOnlySite(false);
+        setError(formatErr(err));
+      }
     } finally {
-      setLoading(false);
+      if (ticket === inventoryGen.current) setLoading(false);
     }
   }, [buildingId, equipmentId, setQuery]);
 
@@ -664,8 +686,22 @@ export function MappingPage() {
             variant="info"
             testId="mapping-empty-building"
           >
-            Select a building from an uploaded package, or{" "}
-            <Link to="/upload">upload a package</Link> first.
+            Select a site. Portal sites appear from provider configuration. CSV sites
+            appear after a package upload.
+          </InlineAlert>
+        ) : null}
+
+        {buildingId ? <ProviderBindingsPanel buildingId={buildingId} /> : null}
+
+        {providerOnlySite ? (
+          <InlineAlert
+            id="mapping-provider-only"
+            variant="info"
+            testId="mapping-provider-only"
+          >
+            This site is in the provider registry and has no CSV package inventory.
+            Role editors stay empty until a package or a committed model is present.
+            Bindings above stay separate from CSV column roles.
           </InlineAlert>
         ) : null}
 
@@ -704,26 +740,30 @@ export function MappingPage() {
                   : ""}
               </p>
             ) : null}
-            {(selectedEq.blockers ?? []).map((b, i) => (
+            {(selectedEq.blockers ?? []).length > 0 ? (
               <InlineAlert
-                key={`b-${i}`}
-                id={`mapping-blocker-${i}`}
+                id="mapping-blocker"
                 variant="danger"
                 testId="mapping-blocker"
               >
-                Blocker: {b}
+                {(selectedEq.blockers ?? []).slice(0, 3).join(" ")}
+                {(selectedEq.blockers ?? []).length > 3
+                  ? ` (+${(selectedEq.blockers ?? []).length - 3} more)`
+                  : ""}
               </InlineAlert>
-            ))}
-            {(selectedEq.warnings ?? []).map((w, i) => (
+            ) : null}
+            {(selectedEq.warnings ?? []).length > 0 ? (
               <InlineAlert
-                key={`w-${i}`}
-                id={`mapping-warning-${i}`}
+                id="mapping-warning"
                 variant="warning"
                 testId="mapping-warning"
               >
-                Warning: {w}
+                {(selectedEq.warnings ?? []).slice(0, 3).join(" ")}
+                {(selectedEq.warnings ?? []).length > 3
+                  ? ` (+${(selectedEq.warnings ?? []).length - 3} more)`
+                  : ""}
               </InlineAlert>
-            ))}
+            ) : null}
 
             <DataTable
               id="map-columns"
@@ -814,7 +854,7 @@ export function MappingPage() {
             </div>
             {dirty ? (
               <p className="alert alert--warning" data-testid="map-dirty-banner">
-                Unsaved mapping edits — save to persist via Rust.
+                Draft only. Save mapping writes this equipment. Other equipment stays as last saved.
               </p>
             ) : null}
           </div>

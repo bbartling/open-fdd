@@ -652,7 +652,7 @@ export function ReportsPage() {
 
           <Expander
             id="sensor-health"
-            label="Sensor health — coverage / flatline (DataFusion)"
+            label="Sensor health — coverage / flatline"
             expanded={sensorOpen}
             onChange={setSensorOpen}
             testId="sensor-health-expander"
