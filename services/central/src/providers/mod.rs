@@ -15,6 +15,9 @@ pub mod store;
 pub mod types;
 pub mod writer;
 
+#[cfg(test)]
+mod fixture_acceptance;
+
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 
