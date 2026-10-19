@@ -1,0 +1,44 @@
+[
+  {
+    "package": "openfdd-fieldbus",
+    "id": "keep-release",
+    "updated_at": "2026-10-01T00:00:00Z",
+    "digest": "sha256:current",
+    "tags": ["4.0.0", "sha-current"]
+  },
+  {
+    "package": "openfdd-fieldbus",
+    "id": "keep-prev",
+    "updated_at": "2026-09-01T00:00:00Z",
+    "digest": "sha256:prev",
+    "tags": ["3.9.9"]
+  },
+  {
+    "package": "openfdd-fieldbus",
+    "id": "archive-mix",
+    "updated_at": "2020-01-01T00:00:00Z",
+    "digest": "sha256:unlisted-archive-sibling",
+    "tags": ["sha-old", "3.6.16", "ot-archive-unqualified-cdaa4f15"]
+  },
+  {
+    "package": "openfdd-fieldbus",
+    "id": "digest-keep",
+    "updated_at": "2020-01-01T00:00:00Z",
+    "digest": "sha256:archivedfixturekeep0000000000000000000000000000000000000000000000000000",
+    "tags": ["sha-old", "3.6.14"]
+  },
+  {
+    "package": "openfdd-fieldbus",
+    "id": "old-delete",
+    "updated_at": "2020-01-01T00:00:00Z",
+    "digest": "sha256:delete-me",
+    "tags": ["sha-old", "3.6.15"]
+  },
+  {
+    "package": "openfdd-fieldbus",
+    "id": "sha-only",
+    "updated_at": "2020-01-01T00:00:00Z",
+    "digest": "sha256:sha-only",
+    "tags": ["sha-olddead"]
+  }
+]

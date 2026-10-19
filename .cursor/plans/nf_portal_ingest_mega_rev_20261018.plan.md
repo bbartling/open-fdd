@@ -4,25 +4,25 @@ overview: "Wave-NF 4.0 portal ingest. Order: Wave-A N2+N6 → Wave-B parallel N1
 todos:
   - id: wave-a-n2-n6
     content: "Wave-A PR1 — N2 security + N6 storage correctness (tenant filter, fail-closed secrets, no OAuth redirects, bounds, typed errors; per-equip routing, source ts/units/quality, truthful persist counts)"
-    status: in_progress
+    status: completed
   - id: wave-b-n1-archive
-    content: "Wave-B parallel — N1 real archive/ot-edge freeze + digest prune protection + isolated restore"
-    status: pending
+    content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Required Actions green on 17ef0233 (PR 1294)."
+    status: completed
   - id: wave-b-n5-hourly
-    content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (un-cancel; GET history only)"
-    status: pending
+    content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (GET history only; fixture-tested)"
+    status: completed
   - id: wave-b-n3-model
     content: "Wave-B parallel — N3 source-neutral committed model + scoped SPARQL ingest plans"
     status: completed
   - id: wave-b-n11-spa
     content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics"
-    status: pending
+    status: in_progress
   - id: wave-c-n8-leases
     content: "Wave-C — N8 shared Postgres queue/leases before replicas"
-    status: pending
+    status: in_progress
   - id: wave-c-n10-mcp
     content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps; retire OT tool discovery from normal 4.0"
-    status: pending
+    status: in_progress
   - id: wave-d-m10-ghcr
     content: "Wave-D — M10 VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus image"
     status: pending
@@ -30,8 +30,8 @@ todos:
     content: M0 MILESTONES Wave-NF; defer the 3620 ART sweep
     status: completed
   - id: m1-freeze-ot
-    content: M1 OT archive tag + ARCHIVE_OT_EDGE; product compose central+web+Timescale (N1 full archive/restore still open → Wave-B)
-    status: in_progress
+    content: "M1 unqualified OT snapshot + portal compose. No 3.6.18 tag. Restore boot is n1-restore-boot."
+    status: completed
   - id: m2-adr
     content: M2 ADR-011 DataProvider + Timescale + RDF
     status: completed
@@ -42,7 +42,7 @@ todos:
     content: M4 NF OAuth + point/query latest + GET point/data hour window (connectivity prototype; harden in Wave-A/B)
     status: in_progress
   - id: m5-map
-    content: M5 Roles from explicit provider_point_id or typed SPARQL bindings only (display-name grep rejected)
+    content: M5 Roles from explicit provider_point_id or the committed ingest plan (display-name grep rejected)
     status: completed
   - id: m6-fe-blast
     content: M6 SPA Providers default; MQTT chrome archived (N11 full Ops ledger → Wave-B)
@@ -75,11 +75,17 @@ todos:
     content: N0 Define 4.0 product boundary + requirements-to-test matrix labels
     status: pending
   - id: n1-archive-real
-    content: SoftOPEN defer — N1 Real archive/ot-edge freeze (owned by Wave-B parallel PR)
+    content: "N1 snapshot landed as unqualified-cdaa4f15. Required Actions green on 17ef0233."
+    status: completed
+  - id: n1-restore-boot
+    content: "SoftOPEN defer — isolated old-stack restore boot/replay and verified OCI digest pin"
+    status: pending
+  - id: n1-workspace-remove
+    content: "SoftOPEN defer — delete live services/fieldbus from the default Cargo workspace (protocol split gate still compiles it)"
     status: pending
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
-    status: in_progress
+    status: completed
   - id: n3-model
     content: N3 source-neutral committed model + scoped SPARQL ingest plans (Wave-B)
     status: completed
@@ -90,31 +96,37 @@ todos:
     content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
     status: pending
   - id: n5-durable
-    content: SoftOPEN defer — N5 Durable per-device hourly jobs (owned by Wave-B; was wrongly cancelled)
-    status: pending
+    content: "N5 durable per-device completed-hour jobs, receipts, checkpoints, catch-up, bounded reconciliation (fixture-tested; live NF pilot stays n12)"
+    status: completed
   - id: n6-storage
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
-    status: in_progress
+    status: completed
   - id: n7-gaps
-    content: SoftOPEN defer — N7 Coverage ledger; bounded reconciliation; NF update-log 403 limitation stated
+    content: "SoftOPEN defer — full coverage ledger UI; N5 states NF update-log 403 and bounded reconciliation (not gapless)"
     status: pending
   - id: n8-scale
     content: SoftOPEN defer — N8 Shared Postgres queue/leases (Wave-C)
-    status: pending
+    status: in_progress
   - id: n9-meteo
     content: SoftOPEN defer — N9 Open-Meteo weather adapter + contractor conformance fixture
     status: pending
   - id: n10-api-mcp
     content: SoftOPEN defer — N10 Scoped REST/MCP (Wave-C)
-    status: pending
+    status: in_progress
   - id: n11-frontend
     content: SoftOPEN defer — N11 Full Providers/Sites/Model/ledger UI (Wave-B)
-    status: pending
+    status: in_progress
   - id: n12-evidence
     content: SoftOPEN defer — N12 Full acceptance matrix (fixtures then bounded NF SoftOPEN pilot); no portal flooding
     status: pending
   - id: n13-release
     content: SoftOPEN defer — N13 Phased delivery gates; truthful implemented/tested/deployed/remaining status
+    status: pending
+  - id: n2-dns-pin
+    content: SoftOPEN defer — DNS-at-connect rebinding pin for provider endpoints (Wave-A left public-mode literal IP checks only)
+    status: pending
+  - id: n2-hot-secrets
+    content: SoftOPEN defer — hot credential reload without process restart
     status: pending
 isProject: true
 ---
@@ -195,7 +207,7 @@ Source: [Points](https://docs.normal.dev/concepts/points/), [GetData](https://do
 
 Lab proof 2026-10-18: GetData returned ~60 samples/UUID over last hour for five mapped points.
 
-**Current poller (known insufficient for N5):** `poll_secs: 3600`, fixed `now−65min` lookback, history errors can become empty success (false green). Replace with durable per-device completed-hour jobs + receipts before broad rollout.
+**N5 poller (this branch):** per-device completed-hour jobs in Postgres (`sql/schema/04_provider_hourly_jobs.sql`), receipts, checkpoints, catch-up, and a bounded reconcile sweep. History is `GET /api/v1/point/data` only. A history error stays a failed job. The fixed `now−65min` lookback is gone. NF update-log HTTP 403 is stated on provider health; that path is not called and permissions are not expanded. Full ledger UI remains N7. Single-transaction sample+receipt across the historian writer remains N6. N8 replica control is not in this PR; claim SQL is `SKIP LOCKED` plus a fencing token so a later lease PR can build on it.
 
 ## Highest priority (from evaluation — P1)
 
@@ -253,18 +265,21 @@ Legacy OT Grok tips are **stale** for this wave (M14).
 Update this section **and** the YAML frontmatter after every merge. Prefix unfinished leftovers with `SoftOPEN defer —`.
 
 ### Wave-A — now (one PR)
-- [ ] **wave-a-n2-n6** — N2 security + N6 storage correctness
+- [x] **wave-a-n2-n6** — N2 security + N6 storage correctness
   - Tenant-filter `/api/providers/health|sites` (+ MCP parity)
   - Fail-closed missing secrets; no OAuth redirects; connect/read/total deadlines + byte bounds
   - Typed safe errors; no raw vendor/token bodies in health/logs
   - Per-equipment type routing (not first-in-envelope); source ts/units/quality; truthful persist counts; DB reconnect
-- [ ] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
+  - Base-branch blockers included: `nf.rs` delimiter, `scripts/nf` display-name audit, security inventory for the two provider GETs
+- [x] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
 
 ### Wave-B — parallel after Wave-A merges
-- [ ] **wave-b-n1-archive** — N1 real `archive/ot-edge/<freeze>/` + prune protection + isolated restore
-- [ ] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**)
-- [x] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans (typed contract, one revision, server template, reject wrong-site/duplicates/conflicts/truncation). PR Actions green, including React web.
-- [ ] SoftOPEN defer — **n3-replica-store** cross-replica plan cache, durable multi-process model store, SPARQL wall-clock cancel (with N8)
+- [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Required Actions green on `17ef0233` (PR 1294).
+- [ ] SoftOPEN defer — **n1-restore-boot** isolated old-stack boot/replay and verified OCI digest pin
+- [ ] SoftOPEN defer — **n1-workspace-remove** delete live `services/fieldbus` from the default Cargo workspace (split gate still compiles it)
+- [x] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested)
+- [x] **wave-b-n3-model** / **n3-model** — committed model + scoped SPARQL plans (resolver each tick)
+- [ ] SoftOPEN defer — **n3-replica-store** cross-replica invalidation, durable multi-process store, in-flight SPARQL cancel
 - [ ] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA
 
 ### Wave-C — after Wave-B
@@ -276,14 +291,25 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### SoftOPEN defer / later
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
-- [ ] SoftOPEN defer — **n7-gaps** coverage ledger / update-log 403 stated
+- [ ] SoftOPEN defer — **n7-gaps** full coverage ledger UI (N5 already states update-log 403 and bounded reconciliation)
+- [ ] SoftOPEN defer — N5 historian sample upsert and job receipt are separate writes (one transaction stays with N6)
 - [ ] SoftOPEN defer — **n9-meteo** Open-Meteo + contractor fixture
 - [ ] SoftOPEN defer — **n12-evidence** full acceptance matrix (no portal flood)
 - [ ] SoftOPEN defer — **n13-release** phased gates + truthful remaining status
+- [ ] SoftOPEN defer — **n2-dns-pin** DNS-at-connect rebinding pin (literal public-mode checks only)
+- [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
 
 ### Already done (do not reopen)
-- [x] m0-milestones, m2-adr, m3-trait (prototype), m9-stub-ace
+- [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m9-stub-ace
 
 ### Prototype still open (do not claim complete)
-- [~] m1-freeze-ot, m4-nf-driver, m6-fe-blast, m8-ops-ui, m11-prove
-- [x] m5-map — explicit provider_point_id or typed SPARQL bindings only
+- [~] m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
+
+### Cloud agents launched 2026-10-19 (Grok Bot)
+- Wave-A N2+N6: bc-8669bd28 — merged #1290 `608ee177`
+- Wave-B N1 archive: bc-09497442
+- Wave-B N5 hourly: bc-81ff01ac
+- Wave-B N3 model: bc-9c23a08d
+- Wave-B N11 SPA: bc-7fe03caf
+- Wave-C N8+N10: bc-d24c1c2e
+- Wave-D GHCR: waiting on merges

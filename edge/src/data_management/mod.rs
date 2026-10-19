@@ -212,9 +212,23 @@ pub fn storage_summary() -> Value {
         "historian_root": store::historian_root().display().to_string(),
         "by_subdir": by_subdir,
         "by_source": by_source,
-        "bacnet_override_log": crate::drivers::bacnet::override_storage_meta(),
+        "bacnet_override_log": bacnet_override_log_meta(),
         "warnings": ["Purge operations are irreversible. Export before purge when in doubt."]
     })
+}
+
+fn bacnet_override_log_meta() -> Value {
+    #[cfg(feature = "ot-transport")]
+    {
+        crate::drivers::bacnet::override_storage_meta()
+    }
+    #[cfg(not(feature = "ot-transport"))]
+    {
+        json!({
+            "available": false,
+            "note": "ot_transport_archived"
+        })
+    }
 }
 
 pub fn preview_purge(body: &Value) -> Value {

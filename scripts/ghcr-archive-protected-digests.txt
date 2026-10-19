@@ -1,0 +1,7 @@
+# Archived OT image digests (sha256:...) that must survive ghcr_prune_packages.sh.
+# A matching digest keeps the whole GHCR package version, even when that version
+# also carries an old sha-* tag or an old semver tag.
+#
+# No verified per-platform OCI digest is pinned for the unqualified snapshot
+# archive/ot-edge/unqualified-cdaa4f15. Do not invent one.
+# Tags ot-archive-* and ot-mqtt-fieldbus-last-good-* are protected without a line here.

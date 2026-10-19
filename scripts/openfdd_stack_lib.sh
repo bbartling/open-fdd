@@ -17,8 +17,9 @@ openfdd_stack_recipe_file() {
     edge) echo "$root/docker/compose.edge.yml" ;;
     csv) echo "$root/docker/compose.csv.yml" ;;
     react|react-ot) echo "$root/docker/compose.react.yml" ;;
+    portal) echo "$root/docker/compose.portal.yml" ;;
     *)
-      echo "ERROR: unknown recipe '$recipe' (standalone|central|edge|csv|react|react-ot)" >&2
+      echo "ERROR: unknown recipe '$recipe' (portal|standalone|central|edge|csv|react|react-ot)" >&2
       return 2
       ;;
   esac
@@ -49,6 +50,10 @@ openfdd_stack_compose_args() {
       ;;
     react)
       printf '%s\n' -f "$root/docker/compose.react.yml"
+      printf '%s\n' -f "$root/docker/compose.timescale.yml"
+      ;;
+    portal)
+      printf '%s\n' -f "$root/docker/compose.portal.yml"
       printf '%s\n' -f "$root/docker/compose.timescale.yml"
       ;;
     react-ot)

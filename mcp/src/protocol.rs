@@ -69,11 +69,6 @@ impl Server {
             tool("openfdd_stack_status", "GET /api/health/stack — data plane strip (public)", json!({})),
             tool("openfdd_faults_status", "GET /api/faults/status — live fault subsystem status", json!({})),
             tool("openfdd_export_meta", "GET /api/export/meta — available export contract", json!({})),
-            tool("openfdd_haystack_status", "GET /api/haystack/status", json!({})),
-            tool("openfdd_haystack_test", "POST /api/haystack/test", json!({})),
-            tool("openfdd_haystack_read", "POST /api/haystack/read", json!({"filter": {"type": "string"}})),
-            tool("openfdd_bacnet_whois", "POST /api/bacnet/whois — BACnet discovery", json!({})),
-            tool("openfdd_bacnet_read", "BACnet read via commission API", json!({"point_id": {"type": "string"}})),
             tool("openfdd_validation_run_status", "GET /api/historian/validation/status", json!({})),
             tool("openfdd_reports_list", "GET /api/reports — generated report index", json!({})),
             tool("openfdd_site_update_dry_run", "Site update checklist (no writes) — run scripts/openfdd_rust_site_update.sh with DRY_RUN on bench", json!({})),
@@ -213,9 +208,7 @@ impl Server {
         for (alias, target) in [
             ("site_health", "openfdd_health"),
             ("stack_status", "openfdd_stack_status"),
-            ("haystack_test", "openfdd_haystack_test"),
             ("driver_poll_status", "openfdd_driver_status"),
-            ("bacnet_whois", "openfdd_bacnet_whois"),
             ("validation_run_status", "openfdd_validation_run_status"),
             ("report_list", "openfdd_reports_list"),
         ] {
@@ -228,9 +221,19 @@ impl Server {
         let canonical = match name {
             "site_health" => "openfdd_health",
             "stack_status" => "openfdd_stack_status",
-            "haystack_test" => "openfdd_haystack_test",
+            "haystack_test"
+            | "openfdd_haystack_status"
+            | "openfdd_haystack_test"
+            | "openfdd_haystack_read"
+            | "bacnet_whois"
+            | "openfdd_bacnet_whois"
+            | "openfdd_bacnet_read" => {
+                return Err(
+                    "retired: BACnet/Haystack wire tools are on the OT archive lane (archive/ot-edge). Semantic SPARQL tools remain."
+                        .into(),
+                );
+            }
             "driver_poll_status" => "openfdd_driver_status",
-            "bacnet_whois" => "openfdd_bacnet_whois",
             "validation_run_status" => "openfdd_validation_run_status",
             "report_list" => "openfdd_reports_list",
             other => other,
@@ -245,11 +248,6 @@ impl Server {
             "openfdd_stack_status" => self.bridge.get("/api/health/stack"),
             "openfdd_faults_status" => self.bridge.get("/api/faults/status"),
             "openfdd_export_meta" => self.bridge.get("/api/export/meta"),
-            "openfdd_haystack_status" => self.bridge.get("/api/haystack/status"),
-            "openfdd_haystack_test" => self.bridge.post("/api/haystack/test", &json!({})),
-            "openfdd_haystack_read" => self.bridge.haystack_read(args),
-            "openfdd_bacnet_whois" => self.bridge.post("/api/bacnet/whois", &json!({})),
-            "openfdd_bacnet_read" => self.bridge.bacnet_read(args),
             "openfdd_validation_run_status" => self.bridge.get("/api/historian/validation/status"),
             "openfdd_reports_list" => self.bridge.get("/api/reports"),
             "openfdd_site_update_dry_run" => Ok(self.bridge.site_update_dry_run()),
@@ -478,6 +476,8 @@ mod tests {
             .filter_map(|tool| tool.get("name").and_then(Value::as_str))
             .collect();
         for expected in [
+            "openfdd_provider_health",
+            "openfdd_provider_sites",
             "openfdd_capabilities",
             "openfdd_fdd_registry",
             "openfdd_fdd_equipment",
@@ -489,6 +489,31 @@ mod tests {
         ] {
             assert!(names.contains(&expected), "missing MCP tool {expected}");
         }
+        for retired in [
+            "openfdd_haystack_status",
+            "openfdd_haystack_test",
+            "openfdd_haystack_read",
+            "openfdd_bacnet_whois",
+            "openfdd_bacnet_read",
+            "haystack_test",
+            "bacnet_whois",
+        ] {
+            assert!(
+                !names.contains(&retired),
+                "OT wire tool {retired} must not be in default discovery"
+            );
+        }
+        assert!(names.iter().any(|name| name.contains("sparql")));
+    }
+
+    #[test]
+    fn ot_wire_tools_are_retired() {
+        let server = Server::new(BridgeClient::from_env());
+        let err = server
+            .dispatch_tool("openfdd_bacnet_whois", &json!({}))
+            .expect_err("retired");
+        assert!(err.contains("retired"));
+        assert!(err.contains("archive/ot-edge"));
     }
 
     #[test]

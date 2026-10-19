@@ -1,0 +1,47 @@
+# Open-FDD 4.0 product recipe: central + React web + Timescale overlay.
+# No MQTT broker, no fieldbus, no certificate kit, no OT listener.
+# Timescale is added by scripts/openfdd_stack_lib.sh (compose.timescale.yml).
+# Provider secrets stay in host env / secret refs. This file only forwards names.
+
+name: openfdd-portal
+
+services:
+  central:
+    image: ${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
+    build:
+      context: ..
+      dockerfile: services/central/Dockerfile
+    environment:
+      OPENFDD_MQTT_ENABLED: "0"
+      OPENFDD_WORKSPACE: /workspace
+      OPENFDD_STORAGE_URL: file:///workspace/openfdd
+      OPENFDD_JWT_SECRET: ${OPENFDD_JWT_SECRET:-}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
+      OPENFDD_AGENT_PASSWORD: ${OPENFDD_AGENT_PASSWORD:-}
+      OPENFDD_ALLOW_OPEN_BIND: ${OPENFDD_ALLOW_OPEN_BIND:-}
+      OPENFDD_REACT_UI: "1"
+      OPENFDD_UI_GENERATION_DEFAULT: react
+      OPENFDD_PROVIDER_SITES: ${OPENFDD_PROVIDER_SITES:-}
+      OPENFDD_PROVIDER_POLL: ${OPENFDD_PROVIDER_POLL:-}
+      OPENFDD_PROVIDER_MAX_CONCURRENT: ${OPENFDD_PROVIDER_MAX_CONCURRENT:-}
+      OPENFDD_PROVIDER_PAGE_SIZE: ${OPENFDD_PROVIDER_PAGE_SIZE:-}
+      OPENFDD_LOG_FORMAT: ${OPENFDD_LOG_FORMAT:-json}
+    ports:
+      - "${OPENFDD_CENTRAL_BIND:-127.0.0.1}:8080:8080"
+    volumes:
+      - ../workspace:/workspace
+    restart: unless-stopped
+
+  web:
+    image: ${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web:nightly}
+    build:
+      context: ../frontend/web
+      dockerfile: Dockerfile
+      args:
+        OPENFDD_GIT_SHA: ${OPENFDD_GIT_SHA:-unknown}
+        OPENFDD_WEB_VERSION: ${OPENFDD_WEB_VERSION:-0.1.0}
+    ports:
+      - "${OPENFDD_WEB_BIND:-0.0.0.0}:3000:8080"
+    depends_on:
+      - central
+    restart: unless-stopped

@@ -90,6 +90,10 @@ pub struct LiveHistorianIngest {
     pub skipped_points: usize,
     pub flushes: usize,
     pub persisted_rows: usize,
+    /// Rows inserted by the Timescale upsert. Zero on paths that do not report it.
+    pub inserted_rows: usize,
+    /// Rows that already existed and were updated (overlap). Not the input length.
+    pub updated_rows: usize,
     pub latest_persisted_timestamp_utc: Option<DateTime<Utc>>,
     /// Later points with a canonical role already present in the same equipment
     /// envelope. The first point wins deterministically; unique points remain valid.
@@ -951,61 +955,100 @@ impl Drop for LiveWriter {
     }
 }
 
+fn reply_timescale_unavailable(command: WriterCommand) {
+    let err = anyhow!("timescale_unavailable");
+    match command {
+        WriterCommand::Shutdown => {}
+        WriterCommand::Ingest {
+            queued_bytes,
+            reply,
+            ..
+        } => {
+            release_queue_bytes(queued_bytes);
+            let _ = reply.send(Err(err));
+        }
+        WriterCommand::Flush { reply, .. } | WriterCommand::PublishPending { reply, .. } => {
+            let _ = reply.send(Err(err));
+        }
+        #[cfg(test)]
+        WriterCommand::Probe { reply } => {
+            let _ = reply.send(true);
+        }
+    }
+}
+
 fn timescale_writer_loop(rx: std::sync::mpsc::Receiver<WriterCommand>) {
-    let mut historian = match crate::timescale_historian::TimescaleLiveHistorian::connect() {
-        Ok(h) => h,
-        Err(error) => {
-            warn!(%error, "Timescale live historian failed to connect; ingest will error");
-            // Drain commands with errors so callers do not hang forever.
-            while let Ok(command) = rx.recv() {
+    let mut gate = crate::timescale_historian::TimescaleConnectGate::new();
+    while let Ok(command) = rx.recv() {
+        if matches!(command, WriterCommand::Shutdown) {
+            break;
+        }
+        #[cfg(test)]
+        if matches!(command, WriterCommand::Probe { .. }) {
+            if let WriterCommand::Probe { reply } = command {
+                let _ = reply.send(tokio::runtime::Handle::try_current().is_err());
+            }
+            continue;
+        }
+        if !gate.is_connected() {
+            match crate::timescale_historian::TimescaleLiveHistorian::connect() {
+                Ok(historian) => gate.insert(historian),
+                Err(_) => {
+                    warn!(
+                        "Timescale live historian connect failed; will retry on the next command"
+                    );
+                    reply_timescale_unavailable(command);
+                    continue;
+                }
+            }
+        }
+        let drop_conn =
+            {
+                let Some(historian) = gate.get_mut() else {
+                    reply_timescale_unavailable(command);
+                    continue;
+                };
                 match command {
                     WriterCommand::Shutdown => break,
                     WriterCommand::Ingest {
+                        scope,
+                        envelope,
                         queued_bytes,
                         reply,
-                        ..
                     } => {
+                        let result = historian.ingest_envelope(&scope, &envelope);
+                        let drop_conn = result.as_ref().err().is_some_and(
+                            crate::timescale_historian::historian_error_drops_connection,
+                        );
                         release_queue_bytes(queued_bytes);
-                        let _ =
-                            reply.send(Err(anyhow!("timescale historian unavailable: {error}")));
+                        let _ = reply.send(result);
+                        drop_conn
                     }
-                    WriterCommand::Flush { reply, .. }
-                    | WriterCommand::PublishPending { reply, .. } => {
-                        let _ =
-                            reply.send(Err(anyhow!("timescale historian unavailable: {error}")));
+                    WriterCommand::Flush { graceful, reply } => {
+                        let result = historian.flush_all(graceful);
+                        let drop_conn = result.as_ref().err().is_some_and(
+                            crate::timescale_historian::historian_error_drops_connection,
+                        );
+                        let _ = reply.send(result);
+                        drop_conn
+                    }
+                    WriterCommand::PublishPending { scope, reply } => {
+                        let result = historian.publish_pending(&scope);
+                        let drop_conn = result.as_ref().err().is_some_and(
+                            crate::timescale_historian::historian_error_drops_connection,
+                        );
+                        let _ = reply.send(result);
+                        drop_conn
                     }
                     #[cfg(test)]
                     WriterCommand::Probe { reply } => {
-                        let _ = reply.send(true);
+                        let _ = reply.send(tokio::runtime::Handle::try_current().is_err());
+                        false
                     }
                 }
-            }
-            return;
-        }
-    };
-    while let Ok(command) = rx.recv() {
-        match command {
-            WriterCommand::Shutdown => break,
-            WriterCommand::Ingest {
-                scope,
-                envelope,
-                queued_bytes,
-                reply,
-            } => {
-                let result = historian.ingest_envelope(&scope, &envelope);
-                release_queue_bytes(queued_bytes);
-                let _ = reply.send(result);
-            }
-            WriterCommand::Flush { graceful, reply } => {
-                let _ = reply.send(historian.flush_all(graceful));
-            }
-            WriterCommand::PublishPending { scope, reply } => {
-                let _ = reply.send(historian.publish_pending(&scope));
-            }
-            #[cfg(test)]
-            WriterCommand::Probe { reply } => {
-                let _ = reply.send(tokio::runtime::Handle::try_current().is_err());
-            }
+            };
+        if drop_conn {
+            gate.disconnect();
         }
     }
 }
