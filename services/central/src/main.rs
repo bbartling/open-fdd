@@ -24,6 +24,7 @@ mod logging;
 mod models;
 mod mqtt_monitor;
 mod openapi;
+mod providers;
 mod routes;
 mod sql_anomaly;
 mod state;
@@ -77,6 +78,9 @@ async fn main() -> anyhow::Result<()> {
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let historian_flush_task =
         ingest::spawn_live_historian_flush_with_shutdown(Arc::clone(&state), shutdown_rx.clone());
+    let provider_shutdown = shutdown_tx.subscribe();
+    let provider_task =
+        providers::spawn_poller_with_shutdown(Arc::clone(&state), provider_shutdown);
     let ingest_task = ingest::spawn_mqtt_ingest_with_shutdown(Arc::clone(&state), shutdown_rx);
     let session_evictor = tokio::spawn(async {
         loop {
@@ -138,6 +142,9 @@ async fn main() -> anyhow::Result<()> {
     }
     if let Err(error) = historian_flush_task.await {
         warn!(%error, "historian flush task ended unexpectedly during shutdown");
+    }
+    if let Err(error) = provider_task.await {
+        warn!(%error, "provider poller task ended unexpectedly during shutdown");
     }
     server_result?;
     Ok(())

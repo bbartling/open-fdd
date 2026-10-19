@@ -1,0 +1,9 @@
+{
+  "schema": "openfdd_nf_gateway_v1",
+  "building_id": "BOSSPI",
+  "provider": "nf",
+  "endpoint": "https://6639ffc3-4264-45d3-ba48-e81f451b33d1.normal-online.net",
+  "portal_site_id": "6639ffc3-4264-45d3-ba48-e81f451b33d1",
+  "poll_secs": 300,
+  "note": "External NF portal ref. Device poll stays on the gateway. Open-FDD polls this HTTPS address."
+}

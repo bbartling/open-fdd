@@ -22,6 +22,7 @@ use crate::auth::AuthConfig;
 use crate::capabilities::CapabilitiesAggregator;
 use crate::haystack_rdf::HaystackRdfCache;
 use crate::live_historian::{LiveHistorianIngest, LiveWriter, PersistedMessageGroup};
+use crate::providers;
 use crate::tenant_budget::TenantBudgetTracker;
 
 const MQTT_MONITOR_CAPACITY: usize = 100;
@@ -312,6 +313,8 @@ pub struct AppState {
     pub ingest_receipts_path: PathBuf,
     /// C4 H8: scoped package RDF derived from semantic_meta + pinned defs.
     pub haystack_rdf: HaystackRdfCache,
+    /// Wave-NF HTTPS portal drivers (NF first; Ace stub).
+    pub providers: Arc<providers::Runtime>,
     recovery_started: AtomicBool,
     last_backpressure_warn: Mutex<Option<Instant>>,
 }
@@ -343,6 +346,7 @@ impl AppState {
             ingest_receipts: AsyncMutex::new(load_receipts()),
             ingest_receipts_path: receipts_path(),
             haystack_rdf: HaystackRdfCache::new(),
+            providers: providers::Runtime::from_env(),
             recovery_started: AtomicBool::new(false),
             last_backpressure_warn: Mutex::new(None),
         }

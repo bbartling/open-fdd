@@ -1,0 +1,17 @@
+[
+  {
+    "building_id": "BOSSPI",
+    "provider": "nf",
+    "endpoint": "https://6639ffc3-4264-45d3-ba48-e81f451b33d1.normal-online.net",
+    "client_id": "env:NF_CLIENT_ID",
+    "client_secret": "env:NF_CLIENT_SECRET",
+    "poll_secs": 3600,
+    "point_map": [
+      {"provider_point_id": "f93888d3-e498-3a30-a881-eb5cbd4c40a8", "equipment_id": "NF_EDGE", "role": "outside-air-temp", "equip_type": "ahu"},
+      {"provider_point_id": "b33cafbc-cd55-3f82-8aa2-3c166815554e", "equipment_id": "NF_EDGE", "role": "outside-air-humidity", "equip_type": "ahu"},
+      {"provider_point_id": "7a7a4693-ca35-3a82-b615-527e863e4856", "equipment_id": "NF_EDGE", "role": "duct_t", "equip_type": "ahu"},
+      {"provider_point_id": "47e21db7-e91c-31ab-9d39-462fc7ac07e1", "equipment_id": "NF_EDGE", "role": "zone-air-temp", "equip_type": "ahu"},
+      {"provider_point_id": "64afb06f-6e35-359d-be02-1cb0815bd326", "equipment_id": "NF_EDGE", "role": "mixed-air-temp", "equip_type": "ahu"}
+    ]
+  }
+]

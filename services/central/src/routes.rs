@@ -38,6 +38,7 @@ use crate::engineering_bundle;
 use crate::eplus_runner;
 use crate::fuel::{self, FuelRequest};
 use crate::jobs;
+use crate::providers;
 use crate::models::{
     AgentTool, AgentToolsResponse, AuthAgentTokenRequest, AuthLoginRequest, AuthLoginResponse,
     AuthMeResponse, AuthStatusResponse, CommandAckResponse, EdgeDetailResponse,
@@ -170,6 +171,8 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(connector_priority_history_trigger),
         )
         .route("/api/health/stack", get(health_stack))
+        .route("/api/providers/health", get(providers::providers_health))
+        .route("/api/providers/sites", get(providers::providers_sites))
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary))
         .route("/api/tenants", get(list_tenants))

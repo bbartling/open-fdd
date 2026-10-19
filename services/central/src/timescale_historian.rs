@@ -9,7 +9,7 @@ use std::env;
 
 use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
-use fdd_core::columns::normalize_role;
+use fdd_core::columns::haystack_point_to_role;
 use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch};
 use openfdd_contracts::{TelemetryEnvelope, TelemetryPoint};
 use tracing::{info, warn};
@@ -239,7 +239,7 @@ fn point_to_sample(env: &TelemetryEnvelope, point: &TelemetryPoint) -> Result<Op
     let equipment_id =
         tag_str(point, TAG_EQUIPMENT_ID).ok_or_else(|| anyhow!("missing equipment_id"))?;
     let role_raw = tag_str(point, TAG_ROLE).ok_or_else(|| anyhow!("missing role"))?;
-    let role = normalize_role(&role_raw);
+    let role = haystack_point_to_role(&role_raw);
     if role.is_empty() {
         bail!("empty role");
     }
