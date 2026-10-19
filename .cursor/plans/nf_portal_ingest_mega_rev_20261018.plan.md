@@ -263,7 +263,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 ### Wave-B — parallel after Wave-A merges
 - [ ] **wave-b-n1-archive** — N1 real `archive/ot-edge/<freeze>/` + prune protection + isolated restore
 - [ ] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**)
-- [x] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans (typed contract, one revision, server template, reject wrong-site/duplicates/conflicts/truncation)
+- [x] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans (typed contract, one revision, server template, reject wrong-site/duplicates/conflicts/truncation). PR Actions green, including React web.
 - [ ] SoftOPEN defer — **n3-replica-store** cross-replica plan cache, durable multi-process model store, SPARQL wall-clock cancel (with N8)
 - [ ] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA
 
