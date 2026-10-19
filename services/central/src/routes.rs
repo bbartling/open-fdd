@@ -38,7 +38,6 @@ use crate::engineering_bundle;
 use crate::eplus_runner;
 use crate::fuel::{self, FuelRequest};
 use crate::jobs;
-use crate::providers;
 use crate::models::{
     AgentTool, AgentToolsResponse, AuthAgentTokenRequest, AuthLoginRequest, AuthLoginResponse,
     AuthMeResponse, AuthStatusResponse, CommandAckResponse, EdgeDetailResponse,
@@ -46,6 +45,7 @@ use crate::models::{
     IssueCommandRequest, IssueCommandResponse, OkHealthResponse, TenantSelectRequest,
     TenantSelectResponse,
 };
+use crate::providers;
 use crate::state::{AppState, PendingCommand};
 use crate::wattlab_dump;
 
