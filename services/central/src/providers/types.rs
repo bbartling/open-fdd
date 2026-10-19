@@ -13,6 +13,8 @@ pub enum ProviderKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NormalizedSample {
     pub building_id: String,
+    /// Stable connection id (`kind:explicit` or `kind:building:digest`).
+    pub provider_instance_id: String,
     pub equipment_id: String,
     /// Stable vendor id (NF uuid / portal id) — never a display name.
     pub provider_point_id: String,
@@ -23,6 +25,10 @@ pub struct NormalizedSample {
     pub val: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unit: Option<String>,
+    /// Canonical source quality (`good|uncertain|bad|stale`). Absent means the
+    /// source did not state quality; it is not invented as good in SQL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_quality: Option<String>,
     #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub attrs: serde_json::Map<String, serde_json::Value>,
 }
@@ -54,6 +60,8 @@ pub struct ProviderHealth {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SiteProviderHealth {
     pub building_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub provider_instance_id: String,
     pub provider: ProviderKind,
     pub endpoint: String,
     pub poll_secs: u64,
@@ -88,4 +96,7 @@ pub struct ProvidersHealthBody {
     pub ok: bool,
     pub poll_enabled: bool,
     pub sites: Vec<SiteProviderHealth>,
+    /// Safe configuration code when ingest config failed closed. No secrets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_error: Option<String>,
 }

@@ -95,18 +95,30 @@ pub fn spawn_live_historian_flush_with_shutdown(
     })
 }
 
-fn spawn_mqtt_ingest_inner(
-    state: Arc<AppState>,
-    mut shutdown: Option<watch::Receiver<bool>>,
-) -> JoinHandle<()> {
-    if !matches!(
-        std::env::var("OPENFDD_MQTT_ENABLED")
+fn env_flag_on(name: &str) -> bool {
+    matches!(
+        std::env::var(name)
             .unwrap_or_default()
             .to_ascii_lowercase()
             .as_str(),
         "1" | "true" | "yes" | "on"
-    ) {
-        info!("central MQTT ingest disabled (OPENFDD_MQTT_ENABLED!=1)");
+    )
+}
+
+/// 4.0 product ingest does not start MQTT because a stale broker env is present.
+/// Both flags are required. The second flag is the explicit OT archive restore lane.
+pub fn mqtt_ot_archive_restore_enabled() -> bool {
+    env_flag_on("OPENFDD_MQTT_ENABLED") && env_flag_on("OPENFDD_OT_ARCHIVE_RESTORE")
+}
+
+fn spawn_mqtt_ingest_inner(
+    state: Arc<AppState>,
+    mut shutdown: Option<watch::Receiver<bool>>,
+) -> JoinHandle<()> {
+    if !mqtt_ot_archive_restore_enabled() {
+        info!(
+            "central MQTT ingest disabled (need OPENFDD_MQTT_ENABLED=1 and OPENFDD_OT_ARCHIVE_RESTORE=1)"
+        );
         return tokio::spawn(async {});
     }
 

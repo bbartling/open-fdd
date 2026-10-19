@@ -1,0 +1,27 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/fdd_core",
+    "crates/openfdd_contracts",
+    "crates/openfdd_connector_runtime",
+    "crates/openfdd_mqtt",
+    "services/fieldbus",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/bbartling/open-fdd"
+version = "4.0.0"
+rust-version = "1.80"
+
+[workspace.dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+url = "2"
+walkdir = "2"

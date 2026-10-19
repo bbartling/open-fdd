@@ -359,6 +359,7 @@ mod tests {
             ts: at,
             val,
             unit: Some("degF".into()),
+            source_quality: None,
             attrs: serde_json::Map::new(),
         }
     }

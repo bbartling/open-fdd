@@ -15,6 +15,18 @@ pub enum TsdbError {
     Sqlx(#[from] sqlx::Error),
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SampleUpsertStats {
+    pub inserted: u64,
+    pub updated: u64,
+}
+
+impl SampleUpsertStats {
+    pub fn persisted(self) -> u64 {
+        self.inserted.saturating_add(self.updated)
+    }
+}
+
 #[derive(Clone)]
 pub struct Tsdb {
     pool: PgPool,
@@ -119,13 +131,24 @@ impl Tsdb {
     }
 
     pub async fn upsert_samples(&self, batch: &UpsertBatch) -> Result<u64, TsdbError> {
+        let stats = self.upsert_samples_stats(batch).await?;
+        Ok(stats.persisted())
+    }
+
+    /// Inserted rows are new observations. Updated rows already existed at the
+    /// same `(site_id, openfdd_key, ts)` and were overwritten (overlap).
+    pub async fn upsert_samples_stats(
+        &self,
+        batch: &UpsertBatch,
+    ) -> Result<SampleUpsertStats, TsdbError> {
         if batch.rows.is_empty() {
-            return Ok(0);
+            return Ok(SampleUpsertStats::default());
         }
         let mut tx = self.pool.begin().await?;
-        let mut n = 0u64;
+        let mut stats = SampleUpsertStats::default();
         for row in &batch.rows {
-            let r = sqlx::query(
+            // xmax = 0 on the returned tuple means this command inserted the row.
+            let inserted: i32 = sqlx::query_scalar(
                 r#"
                 INSERT INTO sample(ts, site_id, openfdd_key, haystack_id, val, unit, quality)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -134,6 +157,7 @@ impl Tsdb {
                   unit = COALESCE(EXCLUDED.unit, sample.unit),
                   quality = COALESCE(EXCLUDED.quality, sample.quality),
                   haystack_id = COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
+                RETURNING (CASE WHEN xmax = 0 THEN 1 ELSE 0 END)
                 "#,
             )
             .bind(row.ts)
@@ -143,9 +167,13 @@ impl Tsdb {
             .bind(row.val)
             .bind(&row.unit)
             .bind(&row.quality)
-            .execute(&mut *tx)
+            .fetch_one(&mut *tx)
             .await?;
-            n += r.rows_affected();
+            if inserted == 1 {
+                stats.inserted += 1;
+            } else {
+                stats.updated += 1;
+            }
             if let (Some(equip), Some(role)) = (&row.equipment_id, &row.role) {
                 sqlx::query(
                     r#"
@@ -185,7 +213,7 @@ impl Tsdb {
             }
         }
         tx.commit().await?;
-        Ok(n)
+        Ok(stats)
     }
 
     pub async fn sample_count(&self, site_id: &str) -> Result<i64, TsdbError> {

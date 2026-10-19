@@ -1207,7 +1207,7 @@ function ProvidersPanel() {
     <section aria-labelledby="providers-heading" data-testid="providers-health-panel">
       <div className="panel-header">
         <h2 id="providers-heading">Provider ingest</h2>
-        <Button id="providers-health-refresh" label="Refresh" variant="secondary" onClick={() => void refresh()} />
+        <Button id="providers-refresh" label="Refresh" variant="secondary" onClick={() => void refresh()} />
       </div>
       <p className="muted">
         Wave-NF HTTPS portals (Normal Framework first). Poll health only — MQTT / fieldbus OT

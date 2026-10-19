@@ -16,17 +16,15 @@ Read-first sidecar. JWT via `OPENFDD_MCP_TOKEN`. Bind `127.0.0.1` or site VLAN o
 2. **JWT inherit** — operator supplies bearer token; no embedded secrets.
 3. **Human approval** — writes, rule activation, restore, and field-bus tools require explicit operator ACK (phase 2).
 
+BACnet and Haystack wire tools are not in default 4.0 discovery. Calling `openfdd_haystack_status`, `openfdd_haystack_test`, `openfdd_haystack_read`, `openfdd_bacnet_whois`, or `openfdd_bacnet_read` returns a retired error and points at `archive/ot-edge`. Semantic SPARQL tools stay.
+
 ## Implemented tools (stdio)
 
 | Tool | REST | Auth |
 |------|------|------|
 | `openfdd_health` | `GET /api/health` | none |
-| `openfdd_driver_status` | Bundle: health, haystack/modbus/bacnet/json status | JWT |
+| `openfdd_driver_status` | Bundle: health and remaining driver status | JWT |
 | `openfdd_bench_topology` | Env `OPENFDD_BENCH_TOPOLOGY_FILE` or doc pointer | — |
-| `openfdd_haystack_status` | `GET /api/haystack/status` | JWT |
-| `openfdd_haystack_test` | `POST /api/haystack/test` | JWT |
-| `openfdd_haystack_read` | `POST /api/haystack/read` | JWT |
-| `openfdd_bacnet_read` | Commission `POST /api/bacnet/read` | JWT |
 | `openfdd_model_sparql_catalog` | `GET /api/model/sparql/predefined` | JWT |
 | `openfdd_model_sparql` | `POST /api/model/sparql` | JWT |
 | `openfdd_model_sites` | `GET /api/model/sites` | JWT |

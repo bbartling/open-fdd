@@ -388,6 +388,7 @@ async fn execute_job(
     let (normalized, unmapped) = match device {
         Some(device) => normalize_device(
             input.canonical_site,
+            input.provider_instance,
             &device.device_id,
             &device.points,
             &assessed.accepted,
@@ -469,6 +470,7 @@ async fn execute_job(
 
 fn normalize_device(
     site: &str,
+    provider_instance_id: &str,
     device_id: &str,
     points: &[super::map::MappedPoint],
     raws: &[super::map::RawProviderPoint],
@@ -485,11 +487,13 @@ fn normalize_device(
         };
         out.push(normalize_mapped(
             site,
+            provider_instance_id,
             raw,
             &ResolvedRole {
                 equipment_id: device_id.to_string(),
                 role: point.role.clone(),
                 equip_type: point.equip_type.clone(),
+                unit: None,
             },
         ));
     }
@@ -655,6 +659,7 @@ mod tests {
             ts: ts(hour, min),
             val,
             unit: None,
+            source_quality: None,
             attrs: serde_json::Map::new(),
         }
     }
