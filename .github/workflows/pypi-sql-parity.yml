@@ -4,12 +4,18 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 8 * * 1"
+  # PRs that edit this harness run the same check as the weekly schedule.
+  pull_request:
+    paths:
+      - ".github/workflows/pypi-sql-parity.yml"
+      - "scripts/sql_pandas_oracle_check.py"
 
 permissions:
   contents: read
 
 concurrency:
-  group: published-pandas-current-sql-oracle-checks
+  # Per ref so a PR run does not cancel the weekly master schedule, or another branch.
+  group: published-pandas-current-sql-oracle-checks-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
