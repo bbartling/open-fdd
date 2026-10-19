@@ -11,12 +11,13 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::error::{ProviderError, ProviderErrorCode};
+use super::hourly::{classify_history_status, FetchError};
 use super::http_policy::{
     acceptable_unit, build_provider_client, floor_timestamp_micros, quality_from_json,
     read_body_bounded, retry_after_secs, status_error, HttpLimits, MAX_HISTORY_WINDOW, MAX_ID_LEN,
     MAX_SAMPLES_PER_RESPONSE, MAX_UUIDS_PER_REQUEST, MAX_UUIDS_TOTAL,
 };
-use super::map::RawProviderPoint;
+use super::map::{HistorySeries, RawProviderPoint};
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
 
 #[derive(Clone)]
@@ -183,25 +184,49 @@ impl NfPortalDriver {
         Ok(out)
     }
 
+    /// One history page for the hourly scheduler. Transport stays the bounded
+    /// GET used by `fetch_history`. `POST /api/v1/point/data` is a write.
+    pub async fn read_history_page(
+        &mut self,
+        uuids: &[String],
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<HistorySeries>, FetchError> {
+        debug_assert_eq!(history_http_method(), "GET");
+        let points = self
+            .fetch_history(uuids, from, to)
+            .await
+            .map_err(fetch_error_from_provider)?;
+        let mut grouped: std::collections::BTreeMap<String, Vec<RawProviderPoint>> =
+            std::collections::BTreeMap::new();
+        for point in points {
+            grouped
+                .entry(point.provider_point_id.clone())
+                .or_default()
+                .push(point);
+        }
+        Ok(grouped
+            .into_iter()
+            .map(|(provider_point_id, samples)| HistorySeries {
+                provider_point_id,
+                samples,
+            })
+            .collect())
+    }
+
     async fn fetch_history_chunk(
         &mut self,
         uuids: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
     ) -> Result<Vec<RawProviderPoint>, ProviderError> {
-        let mut url = format!(
-            "{}/api/v1/point/data?from.seconds={}&to.seconds={}",
-            self.endpoint,
-            from.timestamp(),
-            to.timestamp()
-        );
         for uuid in uuids {
             if !valid_point_id(uuid) {
                 return Err(ProviderError::new(ProviderErrorCode::InvalidSample));
             }
-            url.push_str("&uuids=");
-            url.push_str(uuid);
         }
+        debug_assert_eq!(history_http_method(), "GET");
+        let url = build_history_read_url(&self.endpoint, uuids, from, to);
         let (status, bytes, retry_after) = self.send(&url, None, true, true).await?;
         self.ensure_success(status, retry_after)?;
         let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
@@ -295,6 +320,50 @@ fn valid_point_id(id: &str) -> bool {
         && id
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+/// History polling is a GET. POST on `/api/v1/point/data` writes upstream.
+pub fn history_http_method() -> &'static str {
+    "GET"
+}
+
+pub fn build_history_read_url(
+    endpoint: &str,
+    uuids: &[String],
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> String {
+    let mut url = format!(
+        "{}/api/v1/point/data?from.seconds={}&to.seconds={}",
+        endpoint.trim_end_matches('/'),
+        from.timestamp(),
+        to.timestamp()
+    );
+    for uuid in uuids {
+        url.push_str("&uuids=");
+        url.push_str(uuid);
+    }
+    url
+}
+
+fn fetch_error_from_provider(err: ProviderError) -> FetchError {
+    if let Some(status) = err.http_status {
+        return classify_history_status(status, err.retry_after_secs);
+    }
+    match err.code {
+        ProviderErrorCode::AuthFailed
+        | ProviderErrorCode::AuthNotConfigured
+        | ProviderErrorCode::Forbidden => FetchError::Auth,
+        ProviderErrorCode::Throttled => FetchError::Throttled {
+            retry_after_secs: err.retry_after_secs,
+        },
+        ProviderErrorCode::Contract
+        | ProviderErrorCode::InvalidSample
+        | ProviderErrorCode::BodyTooLarge
+        | ProviderErrorCode::RedirectRejected => FetchError::Contract,
+        ProviderErrorCode::Persistence => FetchError::Persistence,
+        _ => FetchError::Transport,
+    }
 }
 
 pub fn parse_token_json(text: &str) -> Result<(String, Option<i64>), ProviderError> {

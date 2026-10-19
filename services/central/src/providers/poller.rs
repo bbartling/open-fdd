@@ -1,20 +1,25 @@
 //! Background poll loop for configured provider sites.
+//!
+//! NF sites enqueue durable completed-hour jobs. They do not sleep `poll_secs`
+//! and then fetch `now − 65 minutes`. History errors stay failed.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
+use futures_util::future::BoxFuture;
 use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
-use super::error::safe_operator_code;
-use super::http_policy::HttpLimits;
-use super::map::{normalize_mapped, RoleResolver};
+use super::hourly::HourlyPolicy;
+use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
+use super::map::HistorySeries;
 use super::nf::NfPortalDriver;
-use super::types::ProviderHealthStatus;
+use super::store::StoreOpen;
+use super::types::{HourlyCoverageHealth, ProviderHealthStatus};
 use super::writer;
 use super::Runtime;
 use crate::state::AppState;
@@ -31,16 +36,14 @@ fn max_concurrent() -> usize {
         .and_then(|v| v.parse().ok())
         .filter(|n| *n > 0)
         .unwrap_or(2)
-        .clamp(1, 16)
 }
 
-fn page_size() -> u32 {
-    std::env::var("OPENFDD_PROVIDER_PAGE_SIZE")
+fn tick_secs() -> u64 {
+    std::env::var("OPENFDD_PROVIDER_TICK_SECS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .filter(|n| *n > 0)
-        .unwrap_or(200)
-        .clamp(1, 500)
+        .filter(|n| *n >= 5)
+        .unwrap_or(30)
 }
 
 pub fn spawn_with_shutdown(
@@ -65,9 +68,9 @@ pub fn spawn_with_shutdown(
             let state = Arc::clone(&state);
             let runtime = Arc::clone(&runtime);
             let sem = Arc::clone(&sem);
-            let shutdown_site = shutdown.clone();
+            let mut shutdown_site = shutdown.clone();
             handles.push(tokio::spawn(async move {
-                supervise_site(state, runtime, site, sem, shutdown_site).await;
+                site_poll_loop(state, runtime, site, sem, &mut shutdown_site).await;
             }));
         }
         let _ = shutdown.wait_for(|v| *v).await;
@@ -78,52 +81,6 @@ pub fn spawn_with_shutdown(
     })
 }
 
-async fn supervise_site(
-    state: Arc<AppState>,
-    runtime: Arc<Runtime>,
-    site: SiteConfig,
-    sem: Arc<Semaphore>,
-    shutdown: watch::Receiver<bool>,
-) {
-    let building_id = site.building_id.clone();
-    let mut restarts = 0u32;
-    loop {
-        let state = Arc::clone(&state);
-        let runtime_task = Arc::clone(&runtime);
-        let site = site.clone();
-        let sem = Arc::clone(&sem);
-        let mut shutdown_task = shutdown.clone();
-        let joined = tokio::spawn(async move {
-            site_poll_loop(state, runtime_task, site, sem, &mut shutdown_task).await;
-        })
-        .await;
-        match joined {
-            Ok(()) => return,
-            Err(err) if err.is_panic() => {
-                restarts = restarts.saturating_add(1);
-                runtime
-                    .record_error(
-                        &building_id,
-                        ProviderHealthStatus::Error,
-                        Some("site_task_exited".into()),
-                    )
-                    .await;
-                if restarts >= 5 {
-                    warn!(%building_id, "provider site task stopped after repeated exits");
-                    return;
-                }
-                let pause = Duration::from_secs(5u64.saturating_mul(u64::from(restarts)).min(60));
-                let mut shutdown_wait = shutdown.clone();
-                tokio::select! {
-                    _ = tokio::time::sleep(pause) => {}
-                    _ = shutdown_wait.wait_for(|v| *v) => return,
-                }
-            }
-            Err(_) => return,
-        }
-    }
-}
-
 async fn site_poll_loop(
     state: Arc<AppState>,
     runtime: Arc<Runtime>,
@@ -131,44 +88,224 @@ async fn site_poll_loop(
     sem: Arc<Semaphore>,
     shutdown: &mut watch::Receiver<bool>,
 ) {
+    if matches!(site.kind, super::types::ProviderKind::Nf) {
+        nf_hourly_loop(state, runtime, site, sem, shutdown).await;
+        return;
+    }
+    ace_poll_loop(runtime, site, sem, shutdown).await;
+}
+
+async fn nf_hourly_loop(
+    state: Arc<AppState>,
+    runtime: Arc<Runtime>,
+    site: SiteConfig,
+    sem: Arc<Semaphore>,
+    shutdown: &mut watch::Receiver<bool>,
+) {
     let building_id = site.building_id.clone();
-    let poll_secs = site.poll_secs;
-    // First tick is immediate; later ticks use poll_secs (lab default 300).
-    let mut backoff_secs = 0u64;
-    let kind = site.kind;
-    let endpoint = site.endpoint.clone();
-    let client_id = site.client_id.clone();
-    let client_secret = site.client_secret.clone();
-    let resolver = site.resolver;
-    let anonymous = site.anonymous;
     let provider_instance_id = site.provider_instance_id.clone();
-    let mut nf = if matches!(kind, super::types::ProviderKind::Nf) {
-        match NfPortalDriver::new(
-            provider_instance_id.clone(),
-            endpoint,
-            client_id,
-            client_secret,
-            anonymous,
-            HttpLimits::default(),
-        ) {
-            Ok(driver) => Some(driver),
-            Err(err) => {
+    let mut driver = match NfPortalDriver::new(
+        provider_instance_id.clone(),
+        site.endpoint.clone(),
+        site.client_id.clone(),
+        site.client_secret.clone(),
+        site.anonymous,
+        super::http_policy::HttpLimits::default(),
+    ) {
+        Ok(driver) => driver,
+        Err(_) => {
+            runtime
+                .record_error(
+                    &building_id,
+                    ProviderHealthStatus::Error,
+                    Some("config_invalid".into()),
+                )
+                .await;
+            return;
+        }
+    };
+    let policy = HourlyPolicy::from_env();
+    let owner = std::env::var("OPENFDD_HOURLY_WORKER_ID").unwrap_or_else(|_| "central".into());
+    let mut first = true;
+    loop {
+        let wait = if first { 0 } else { tick_secs() };
+        first = false;
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(wait)) => {}
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() {
+                    return;
+                }
+                continue;
+            }
+        }
+        let _permit = match sem.acquire().await {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        if driver.authenticate().await.is_err() {
+            warn!(%building_id, "NF authenticate failed");
+            runtime
+                .record_error(
+                    &building_id,
+                    ProviderHealthStatus::AuthFailed,
+                    Some("auth_failed".into()),
+                )
+                .await;
+            continue;
+        }
+        let opened = runtime.hourly_store().await;
+        let store = match opened {
+            StoreOpen::Durable(store) | StoreOpen::MemoryOnly(store) => store,
+            StoreOpen::Unavailable => {
+                warn!(%building_id, "hourly job store unavailable");
                 runtime
                     .record_error(
                         &building_id,
                         ProviderHealthStatus::Error,
-                        Some(safe_operator_code(&err.to_string())),
+                        Some("job_store_unavailable".into()),
                     )
                     .await;
-                let _ = shutdown.wait_for(|v| *v).await;
-                return;
+                continue;
+            }
+        };
+        let devices = site.resolver.devices();
+        let now = Utc::now();
+        let provider_instance = driver.provider_id().to_string();
+        let tick = TickInput {
+            now,
+            tenant: "default",
+            canonical_site: &building_id,
+            provider_instance: &provider_instance,
+            devices: &devices,
+            policy: &policy,
+            owner: &owner,
+        };
+        let mut source = NfHistory {
+            driver: &mut driver,
+        };
+        let mut sink = HistorianSink {
+            state: &state,
+            building_id: &building_id,
+            provider_instance_id: &provider_instance_id,
+        };
+        match run_hourly_tick(&store, &tick, &mut source, &mut sink).await {
+            Ok(report) => {
+                let coverage = HourlyCoverageHealth {
+                    durable: report.durable,
+                    committed: report.committed,
+                    no_source_data: report.no_source_data,
+                    failed: report.failed,
+                    partial: report.partial,
+                    unrecoverable_gaps: report.unrecoverable_gaps,
+                    samples_handed_off: u64::try_from(report.samples_handed_off)
+                        .unwrap_or(u64::MAX),
+                    update_log_status: report.update_log_status.to_string(),
+                    detail: report.health_code(),
+                };
+                let (status, as_error) = if report.blocks_green() {
+                    if report.failed > 0 && report.committed == 0 && report.no_source_data == 0 {
+                        (ProviderHealthStatus::Error, true)
+                    } else {
+                        (ProviderHealthStatus::Degraded, false)
+                    }
+                } else {
+                    (ProviderHealthStatus::Ok, false)
+                };
+                if as_error {
+                    runtime
+                        .record_hourly(
+                            &building_id,
+                            status,
+                            report.samples_handed_off as u64,
+                            Some(report.health_code()),
+                            coverage,
+                            true,
+                        )
+                        .await;
+                } else {
+                    runtime
+                        .record_hourly(
+                            &building_id,
+                            status,
+                            report.samples_handed_off as u64,
+                            Some(report.health_code()),
+                            coverage,
+                            false,
+                        )
+                        .await;
+                }
+                debug!(%building_id, status = ?status, "hourly tick finished");
+            }
+            Err(code) => {
+                warn!(%building_id, %code, "hourly tick failed");
+                runtime
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(code))
+                    .await;
             }
         }
-    } else {
-        None
-    };
-    let mut ace = AceIotStubDriver::new(&provider_instance_id);
+    }
+}
 
+struct NfHistory<'a> {
+    driver: &'a mut NfPortalDriver,
+}
+
+impl HistorySource for NfHistory<'_> {
+    fn fetch<'a>(
+        &'a mut self,
+        req: &'a FetchRequest,
+    ) -> BoxFuture<'a, Result<Vec<HistorySeries>, super::hourly::FetchError>> {
+        Box::pin(async move {
+            debug!(
+                purpose = %req.purpose,
+                device_id = %req.device_id,
+                window_start = %req.window_start,
+                points = req.point_ids.len(),
+                "NF history GET"
+            );
+            self.driver
+                .read_history_page(&req.point_ids, req.from, req.to)
+                .await
+        })
+    }
+}
+
+struct HistorianSink<'a> {
+    state: &'a Arc<AppState>,
+    building_id: &'a str,
+    provider_instance_id: &'a str,
+}
+
+impl SampleWriter for HistorianSink<'_> {
+    fn write<'a>(
+        &'a mut self,
+        samples: &'a [super::types::NormalizedSample],
+    ) -> BoxFuture<'a, Result<usize, String>> {
+        Box::pin(async move {
+            let receipt = writer::ingest_samples(
+                self.state,
+                self.building_id,
+                self.provider_instance_id,
+                samples,
+            )
+            .await
+            .map_err(|_| "persistence".to_string())?;
+            Ok(receipt.persisted_rows)
+        })
+    }
+}
+
+async fn ace_poll_loop(
+    runtime: Arc<Runtime>,
+    site: SiteConfig,
+    sem: Arc<Semaphore>,
+    shutdown: &mut watch::Receiver<bool>,
+) {
+    let building_id = site.building_id.clone();
+    let poll_secs = site.poll_secs;
+    let mut backoff_secs = 0u64;
+    let mut ace = AceIotStubDriver::new(&site.provider_instance_id);
     loop {
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(backoff_secs)) => {}
@@ -179,186 +316,41 @@ async fn site_poll_loop(
                 continue;
             }
         }
-
         let _permit = match sem.acquire().await {
             Ok(p) => p,
             Err(_) => return,
         };
-
-        let result = match kind {
-            super::types::ProviderKind::Nf => {
-                let driver = nf.as_mut().expect("nf driver");
-                poll_nf_site(
-                    &state,
-                    &building_id,
-                    &provider_instance_id,
-                    driver,
-                    &resolver,
-                    page_size(),
-                )
-                .await
-            }
-            super::types::ProviderKind::AceIot => poll_ace_site(&building_id, &mut ace).await,
-        };
-
-        match result {
-            Ok(outcome) => {
+        match poll_ace_site(&building_id, &mut ace).await {
+            Ok(ingested) => {
                 backoff_secs = poll_secs;
                 runtime
                     .record_success(
                         &building_id,
-                        outcome.persisted_rows,
-                        outcome.status,
-                        outcome.message,
+                        ingested as u64,
+                        ProviderHealthStatus::Ok,
+                        None,
                     )
                     .await;
-                debug!(
-                    %building_id,
-                    persisted = outcome.persisted_rows,
-                    status = ?outcome.status,
-                    "provider poll finished"
-                );
             }
             Err(err) => {
                 backoff_secs = if backoff_secs == 0 {
                     poll_secs.max(30)
                 } else {
-                    (backoff_secs.saturating_mul(2)).min(900)
+                    backoff_secs.saturating_mul(2).min(900)
                 };
-                let code = safe_operator_code(&err.to_string());
-                warn!(%building_id, code = %code, next_backoff_secs = backoff_secs, "provider poll failed");
-                let status = if code == "auth_failed" || code == "auth_not_configured" {
-                    ProviderHealthStatus::AuthFailed
-                } else {
-                    ProviderHealthStatus::Error
-                };
-                runtime.record_error(&building_id, status, Some(code)).await;
+                warn!(%building_id, %err, next_backoff_secs = backoff_secs, "provider poll failed");
+                runtime
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(err))
+                    .await;
             }
         }
     }
 }
 
-struct PollOutcome {
-    persisted_rows: u64,
-    status: ProviderHealthStatus,
-    message: Option<String>,
-}
-
-async fn poll_nf_site(
-    state: &Arc<AppState>,
-    building_id: &str,
-    provider_instance_id: &str,
-    driver: &mut NfPortalDriver,
-    resolver: &RoleResolver,
-    page_size: u32,
-) -> Result<PollOutcome, super::error::ProviderError> {
-    driver.authenticate().await?;
-    let latest = driver.query_points(page_size).await?;
-    let now = Utc::now();
-    // Prototype window until N5 durable hourly jobs. History stays a GET.
-    let from = now - chrono::Duration::minutes(65);
-    let (history, history_code) = match driver
-        .fetch_history(&resolver.provider_point_ids(), from, now)
-        .await
-    {
-        Ok(rows) => (rows, None),
-        Err(err) => {
-            let code = safe_operator_code(&err.to_string());
-            let incomplete = super::error::ProviderError::new(
-                super::error::ProviderErrorCode::HistoryIncomplete,
-            );
-            warn!(%building_id, code = %code, marker = %incomplete, "NF history incomplete");
-            (Vec::new(), Some(incomplete.code.as_str().to_string()))
-        }
-    };
-    let receipt = ingest_mapped(
-        state,
-        building_id,
-        provider_instance_id,
-        resolver,
-        latest,
-        history,
-    )
-    .await?;
-    let (status, message) = if history_code.is_some() {
-        (
-            ProviderHealthStatus::Degraded,
-            Some("history_incomplete".into()),
-        )
-    } else if receipt.submitted > 0 && receipt.persisted_rows == 0 {
-        (
-            ProviderHealthStatus::Degraded,
-            Some("nothing_persisted".into()),
-        )
-    } else {
-        (ProviderHealthStatus::Ok, None)
-    };
-    let snapshot = driver.health(status, message);
-    if snapshot.provider_id != provider_instance_id || driver.provider_id() != provider_instance_id
-    {
-        return Err(super::error::ProviderError::new(
-            super::error::ProviderErrorCode::Config,
-        ));
-    }
-    Ok(PollOutcome {
-        persisted_rows: receipt.persisted_rows as u64,
-        status: snapshot.status,
-        message: snapshot.message,
-    })
-}
-
-async fn ingest_mapped(
-    state: &Arc<AppState>,
-    building_id: &str,
-    provider_instance_id: &str,
-    resolver: &RoleResolver,
-    latest: Vec<super::map::RawProviderPoint>,
-    history: Vec<super::map::RawProviderPoint>,
-) -> Result<writer::ProviderIngestReceipt, super::error::ProviderError> {
-    let mut raw = history;
-    raw.extend(latest);
-    let mut samples = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for point in &raw {
-        let Some(resolved) = resolver.resolve(&point.provider_point_id) else {
-            continue;
-        };
-        let key = (point.provider_point_id.clone(), point.ts.timestamp_micros());
-        if !seen.insert(key) {
-            continue;
-        }
-        samples.push(normalize_mapped(
-            building_id,
-            provider_instance_id,
-            point,
-            resolved,
-        ));
-    }
-    writer::ingest_samples(state, building_id, provider_instance_id, &samples).await
-}
-
-async fn poll_ace_site(
-    building_id: &str,
-    ace: &mut AceIotStubDriver,
-) -> Result<PollOutcome, super::error::ProviderError> {
+async fn poll_ace_site(building_id: &str, ace: &mut AceIotStubDriver) -> Result<usize, String> {
     let _ = building_id;
-    let health = ace.health();
-    if health.provider_id != ace.provider_id() {
-        return Err(super::error::ProviderError::new(
-            super::error::ProviderErrorCode::Config,
-        ));
-    }
-    ace.authenticate().await.map_err(|_| {
-        super::error::ProviderError::new(super::error::ProviderErrorCode::NotImplemented)
-    })?;
-    let _ = ace.query_points().await.map_err(|_| {
-        super::error::ProviderError::new(super::error::ProviderErrorCode::NotImplemented)
-    })?;
-    Ok(PollOutcome {
-        persisted_rows: 0,
-        status: ProviderHealthStatus::NotImplemented,
-        message: Some("not_implemented".into()),
-    })
+    ace.authenticate().await?;
+    ace.query_points().await.map(|_| 0)
 }
 
 impl Runtime {
@@ -369,6 +361,26 @@ impl Runtime {
         status: ProviderHealthStatus,
         message: Option<String>,
     ) {
+        self.record_hourly(
+            building_id,
+            status,
+            ingested,
+            message,
+            HourlyCoverageHealth::default(),
+            false,
+        )
+        .await;
+    }
+
+    pub async fn record_hourly(
+        &self,
+        building_id: &str,
+        status: ProviderHealthStatus,
+        ingested: u64,
+        message: Option<String>,
+        coverage: HourlyCoverageHealth,
+        is_error: bool,
+    ) {
         let mut guard = self.health.lock().await;
         if let Some(site) = guard
             .sites
@@ -377,10 +389,20 @@ impl Runtime {
         {
             site.last_poll_at = Some(Utc::now());
             site.last_ingested_points = ingested;
-            site.consecutive_errors = 0;
             site.health.status = status;
-            site.health.message = message.as_deref().map(safe_operator_code);
-            site.health.last_success_at = Some(Utc::now());
+            site.health.message = message.as_deref().map(super::error::safe_operator_code);
+            if coverage.update_log_status.is_empty() {
+                site.hourly_coverage = None;
+            } else {
+                site.hourly_coverage = Some(coverage);
+            }
+            if is_error {
+                site.consecutive_errors = site.consecutive_errors.saturating_add(1);
+                site.health.last_error_at = Some(Utc::now());
+            } else {
+                site.consecutive_errors = 0;
+                site.health.last_success_at = Some(Utc::now());
+            }
         }
     }
 
@@ -399,7 +421,7 @@ impl Runtime {
             site.last_poll_at = Some(Utc::now());
             site.consecutive_errors = site.consecutive_errors.saturating_add(1);
             site.health.status = status;
-            site.health.message = message.as_deref().map(safe_operator_code);
+            site.health.message = message.as_deref().map(super::error::safe_operator_code);
             site.health.last_error_at = Some(Utc::now());
         }
     }

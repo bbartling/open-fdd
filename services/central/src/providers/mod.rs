@@ -3,10 +3,14 @@
 pub mod ace_stub;
 pub mod config;
 pub mod error;
+pub mod hourly;
+pub mod hourly_exec;
 pub mod http_policy;
 pub mod map;
 pub mod nf;
+pub mod pg_store;
 pub mod poller;
+pub mod store;
 pub mod types;
 pub mod writer;
 
@@ -122,6 +126,7 @@ impl DataProvider for ace_stub::AceIotStubDriver {
 pub struct Runtime {
     pub sites: Vec<SiteConfig>,
     pub(crate) health: Mutex<ProvidersHealthBody>,
+    hourly: Mutex<Option<store::HourlyStore>>,
 }
 
 impl Runtime {
@@ -167,7 +172,35 @@ impl Runtime {
                 sites: site_health,
                 config_error,
             }),
+            hourly: Mutex::new(None),
         })
+    }
+
+    /// Postgres when `OPENFDD_DATABASE_URL` is set. Memory is explicit and not
+    /// durable. A configured URL that cannot be opened is unavailable — the
+    /// poller must not fall back to a rolling lookback.
+    pub async fn hourly_store(&self) -> store::StoreOpen {
+        let mut slot = self.hourly.lock().await;
+        if let Some(existing) = slot.clone() {
+            return if existing.is_durable() {
+                store::StoreOpen::Durable(existing)
+            } else {
+                store::StoreOpen::MemoryOnly(existing)
+            };
+        }
+        match store::HourlyStore::open_from_env().await {
+            store::StoreOpen::Unavailable => store::StoreOpen::Unavailable,
+            opened => {
+                let store = match &opened {
+                    store::StoreOpen::Durable(store) | store::StoreOpen::MemoryOnly(store) => {
+                        store.clone()
+                    }
+                    store::StoreOpen::Unavailable => return store::StoreOpen::Unavailable,
+                };
+                *slot = Some(store);
+                opened
+            }
+        }
     }
 
     pub async fn health_snapshot(&self) -> ProvidersHealthBody {
@@ -267,6 +300,7 @@ fn health_row(
         last_poll_at: None,
         last_ingested_points: 0,
         consecutive_errors: 0,
+        hourly_coverage: None,
     }
 }
 
@@ -289,6 +323,7 @@ fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
         last_poll_at: None,
         last_ingested_points: 0,
         consecutive_errors: 0,
+        hourly_coverage: None,
     }
 }
 
@@ -397,6 +432,7 @@ mod tests {
             last_poll_at: None,
             last_ingested_points: 0,
             consecutive_errors: 1,
+            hourly_coverage: None,
         }
     }
 
