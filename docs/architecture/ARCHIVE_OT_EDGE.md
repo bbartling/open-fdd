@@ -52,8 +52,10 @@ renders the digest-pinned compose file and stops. It does not pull images,
 start containers, or attach a database. `--boot` exits 2.
 
 The archive workspace (`source/Cargo.toml`) is the compile lane. The protocol
-split gate builds that workspace. Live `services/fieldbus` is excluded from the
-default Cargo workspace and from 4.0 publish.
+split gate copies that tree and regenerates its lock in a temp directory,
+because the captured `Cargo.lock` still lists parent-workspace crates.
+Live `services/fieldbus` is excluded from the default Cargo workspace and from
+4.0 publish.
 
 ## Not claimed
 

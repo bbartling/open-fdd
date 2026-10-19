@@ -29,7 +29,10 @@ Tested dependency closure for the fieldbus crate and the MQTT broker image:
   Shared semantic, package, RDF, and FDD code stays in the live `edge/` crate.
 
 `cargo metadata --no-deps` on `source/Cargo.toml` resolves that closure. The
-protocol split gate compiles this workspace. A container boot was **not** run.
+captured `source/Cargo.lock` still lists parent-workspace crates, so
+`cargo --locked` on that file fails. The protocol split gate copies this tree
+and regenerates the lock in a temp directory before compiling. The checksummed
+lock is not rewritten. A container boot was **not** run.
 
 ## Semantic boundary
 

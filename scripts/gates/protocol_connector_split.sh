@@ -64,7 +64,14 @@ mkdir -p "$SPLIT_CONFIG_DIR" "$SPLIT_TMP_DIR/kit" "$SPLIT_TMP_DIR/state"
 # Live services/fieldbus is excluded from the 4.0 Cargo workspace.
 ARCHIVE_SRC="$ROOT/archive/ot-edge/unqualified-cdaa4f15/source"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$SPLIT_TMP_DIR/target}"
-cargo test --locked --manifest-path "$ARCHIVE_SRC/Cargo.toml" -p openfdd-fieldbus --lib split::tests
+# The captured Cargo.lock still lists parent-workspace crates that are not
+# part of this snapshot. Cargo --locked rejects that isolated resolve.
+# Rewrite the lock only in a temp copy so CHECKSUMS.sha256 stays valid.
+ARCHIVE_BUILD="$SPLIT_TMP_DIR/source"
+rm -rf "$ARCHIVE_BUILD"
+cp -a "$ARCHIVE_SRC" "$ARCHIVE_BUILD"
+cargo generate-lockfile --manifest-path "$ARCHIVE_BUILD/Cargo.toml"
+cargo test --locked --manifest-path "$ARCHIVE_BUILD/Cargo.toml" -p openfdd-fieldbus --lib split::tests
 
 # Use a synthetic, empty field-device catalog. The gate must not read the
 # repository's demo/bench inventory or trigger discovery against an OT host.
@@ -130,7 +137,7 @@ for binary in openfdd-bacnet-modbus openfdd-haystack; do
 done
 
 # Build debug binaries for the local management-plane checks from the archive.
-cargo build --locked --manifest-path "$ARCHIVE_SRC/Cargo.toml" -p openfdd-fieldbus --bin openfdd-bacnet-modbus --bin openfdd-haystack
+cargo build --locked --manifest-path "$ARCHIVE_BUILD/Cargo.toml" -p openfdd-fieldbus --bin openfdd-bacnet-modbus --bin openfdd-haystack
 TARGET_DIR="${CARGO_TARGET_DIR}/debug"
 SPLIT_PIDS=()
 
