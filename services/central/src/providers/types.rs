@@ -121,4 +121,7 @@ pub struct ProvidersHealthBody {
     /// Safe configuration code when ingest config failed closed. No secrets.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_error: Option<String>,
+    /// N4 registry. Same contracts for every tenant; no endpoints or secrets.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub contracts: Vec<super::capabilities::ProviderContract>,
 }

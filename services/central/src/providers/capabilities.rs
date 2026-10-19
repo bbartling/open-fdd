@@ -111,11 +111,7 @@ pub fn require_history(
     if contract.gapless {
         return Err(ProviderError::contract());
     }
-    if !contract.implemented
-        || !contract
-            .capabilities
-            .contains(&ProviderCapability::FetchHistory)
-    {
+    if !supports(contract, ProviderCapability::FetchHistory) {
         return Err(ProviderError::not_implemented());
     }
     let Some(limits) = &contract.history else {

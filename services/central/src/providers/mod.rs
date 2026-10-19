@@ -232,6 +232,7 @@ impl Runtime {
                 poll_enabled,
                 sites: site_health,
                 config_error,
+                contracts: capabilities::registry(),
             }),
             hourly: Mutex::new(None),
         })
@@ -595,6 +596,7 @@ mod tests {
             ok: true,
             poll_enabled: true,
             config_error: Some("provider_config_invalid building=SECRET".into()),
+            contracts: Vec::new(),
             sites: vec![
                 site("SITE_A", "https://a.example", "auth_failed request_id=1"),
                 site(
