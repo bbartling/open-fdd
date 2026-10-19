@@ -221,7 +221,7 @@ fn rule_for_row(row: &Value) -> Value {
 
 pub fn list_records() -> Vec<Value> {
     let cleared_ids = load_cleared_ids();
-    let mut records: Vec<Value> = eval_rows()
+    let records: Vec<Value> = eval_rows()
         .iter()
         .enumerate()
         .filter(|(_, r)| {
@@ -237,6 +237,9 @@ pub fn list_records() -> Vec<Value> {
                 .unwrap_or(true)
         })
         .collect();
+    #[cfg(feature = "ot-transport")]
+    let mut records = records;
+    #[cfg(feature = "ot-transport")]
     for alert in crate::drivers::bacnet::override_fault_alerts() {
         let fault_id = alert
             .get("id")

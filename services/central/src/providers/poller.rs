@@ -123,16 +123,19 @@ async fn site_poll_loop(
                 let driver = nf.as_mut().expect("nf driver");
                 poll_nf_site(&state, &building_id, driver, &resolver, page_size()).await
             }
-            super::types::ProviderKind::AceIot => {
-                poll_ace_site(&building_id, &mut ace).await
-            }
+            super::types::ProviderKind::AceIot => poll_ace_site(&building_id, &mut ace).await,
         };
 
         match result {
             Ok(ingested) => {
                 backoff_secs = poll_secs;
                 runtime
-                    .record_success(&building_id, ingested as u64, ProviderHealthStatus::Ok, None)
+                    .record_success(
+                        &building_id,
+                        ingested as u64,
+                        ProviderHealthStatus::Ok,
+                        None,
+                    )
                     .await;
                 debug!(%building_id, ingested, "provider poll ok");
             }
@@ -144,11 +147,7 @@ async fn site_poll_loop(
                 };
                 warn!(%building_id, %err, next_backoff_secs = backoff_secs, "provider poll failed");
                 runtime
-                    .record_error(
-                        &building_id,
-                        ProviderHealthStatus::Error,
-                        Some(err),
-                    )
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(err))
                     .await;
             }
         }

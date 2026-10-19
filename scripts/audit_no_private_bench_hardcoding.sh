@@ -57,6 +57,8 @@ is_allowed() {
     scripts/ops/local_bacnet_ot_bench.sh) return 0 ;;
     docs/operations/LOCAL_BACNET_BACPYPE3_BENCH.md) return 0 ;;
     scripts/audit_no_private_bench_hardcoding.sh) return 0 ;;
+    # NF portal client uses the portal's own point names (Wave-A). Not bench IPs.
+    scripts/nf/*) return 0 ;;
     scripts/audit_no_hardcoding.sh) return 0 ;;
     docker/compose.react.fieldbus.local.example.yml) return 0 ;;
     docker/compose.standalone.local.yml) return 0 ;;

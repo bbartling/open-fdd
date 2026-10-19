@@ -17,7 +17,7 @@ pub fn dev_harness_reply(body: &Value) -> Value {
     let hint = if path.starts_with("/csv") {
         "CSV batch import: MCP openfdd_csv_import_preflight / openfdd_csv_import_execute, or host scripts — see docs/drivers/csv-batch.html."
     } else if path.starts_with("/bacnet") {
-        "BACnet: MCP openfdd_bacnet_whois or commission reads. Field writes need integrator + approved=true."
+        "BACnet wire tools are retired from default MCP discovery. Use the OT archive lane (archive/ot-edge) for Who-Is and commission reads."
     } else if path.starts_with("/sql-fdd") {
         "SQL FDD: test rules on the tab, then Save rule → dashboard or Export PDF report."
     } else if path.starts_with("/model") {

@@ -6,8 +6,8 @@ todos:
     content: "Wave-A PR1 — N2 security + N6 storage correctness (tenant filter, fail-closed secrets, no OAuth redirects, bounds, typed errors; per-equip routing, source ts/units/quality, truthful persist counts)"
     status: in_progress
   - id: wave-b-n1-archive
-    content: "Wave-B parallel — N1 real archive/ot-edge freeze + digest prune protection + isolated restore"
-    status: pending
+    content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Isolated boot/digest pin deferred."
+    status: completed
   - id: wave-b-n5-hourly
     content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (un-cancel; GET history only)"
     status: pending
@@ -30,8 +30,8 @@ todos:
     content: M0 MILESTONES Wave-NF; defer the 3620 ART sweep
     status: completed
   - id: m1-freeze-ot
-    content: M1 OT archive tag + ARCHIVE_OT_EDGE; product compose central+web+Timescale (N1 full archive/restore still open → Wave-B)
-    status: in_progress
+    content: "M1 unqualified OT snapshot + portal compose. No 3.6.18 tag. Isolated restore boot still open."
+    status: completed
   - id: m2-adr
     content: M2 ADR-011 DataProvider + Timescale + RDF
     status: completed
@@ -75,8 +75,8 @@ todos:
     content: N0 Define 4.0 product boundary + requirements-to-test matrix labels
     status: pending
   - id: n1-archive-real
-    content: SoftOPEN defer — N1 Real archive/ot-edge freeze (owned by Wave-B parallel PR)
-    status: pending
+    content: "N1 snapshot landed as unqualified-cdaa4f15. SoftOPEN defer — isolated boot, OCI digest pin, and deleting live fieldbus from the workspace."
+    status: completed
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
     status: in_progress
@@ -258,7 +258,9 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
 
 ### Wave-B — parallel after Wave-A merges
-- [ ] **wave-b-n1-archive** — N1 real `archive/ot-edge/<freeze>/` + prune protection + isolated restore
+- [x] **wave-b-n1-archive** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag.
+- [ ] SoftOPEN defer — **n1-restore-boot** isolated old-stack boot/replay and verified OCI digest pin
+- [ ] SoftOPEN defer — **n1-workspace-remove** delete live `services/fieldbus` from the default Cargo workspace (split gate still compiles it)
 - [ ] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**)
 - [ ] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans
 - [ ] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA

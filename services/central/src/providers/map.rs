@@ -78,12 +78,20 @@ impl RoleResolver {
                 },
             );
         }
-        Self { by_provider_point_id }
+        Self {
+            by_provider_point_id,
+        }
     }
 
     pub fn merge_binding_set_json(&mut self, json: &str) -> Result<(), String> {
         let set: BindingSetFile =
             serde_json::from_str(json).map_err(|e| format!("binding set JSON: {e}"))?;
+        // Optional file-level building id is metadata. Role rows stay explicit.
+        let _building_meta = set
+            .building_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty());
         for equip in set.equipment {
             for pt in equip.points {
                 let Some(role) = pt

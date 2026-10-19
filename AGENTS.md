@@ -1,19 +1,21 @@
 # Agent Guide (container stack + external agents)
 
-Open-FDD ships as a **container stack**: `openfdd-central`, `openfdd-web` (React),
-`openfdd-fieldbus`, `openfdd-mqtt`, plus optional `openfdd-mcp`. It does **not**
-ship an embedded AI chatbot. External orchestrators — Codex CLI, Cursor,
-OpenClaw, Claude Desktop, or any MCP host — connect via **JWT REST** and optional
-**`openfdd-mcp` stdio**.
+Open-FDD 4.0 ships as a **portal container stack**: `openfdd-central`, `openfdd-web`
+(React), Timescale, plus optional `openfdd-mcp`. BACnet/Modbus/Haystack wire and the
+MQTTS broker are an **unqualified archive**
+([`archive/ot-edge/unqualified-cdaa4f15/`](archive/ot-edge/unqualified-cdaa4f15/README.md)),
+not the default compose or publish path. It does **not** ship an embedded AI chatbot.
+External orchestrators — Codex CLI, Cursor, OpenClaw, Claude Desktop, or any MCP host —
+connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 
 | Layer | Responsibility |
 | --- | --- |
-| **central** | MQTTS ingest, **Timescale** historian, `.sql` FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python). Wave-X 3.6.0: no DataFusion/Parquet/Arrow product path ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)) |
+| **central** | Portal HTTPS ingest, **Timescale** historian, `.sql` FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python). MQTT ingest requires `OPENFDD_OT_ARCHIVE_RESTORE=1`. Wave-X 3.6.0: no DataFusion/Parquet/Arrow product path ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)) |
 | **web** | React product UI (`frontend/web`) — sole product UI ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
-| **fieldbus** | BACnet / Modbus OT drivers (unchanged); optional Haystack |
-| **mqtt** | Mosquitto MQTTS broker |
+| **fieldbus** | Archived OT drivers (BACnet / Modbus / Haystack wire). Not in the `portal` recipe. |
+| **mqtt** | Archived Mosquitto MQTTS broker. Not in the `portal` recipe. |
 | **timescale** | Sole product historian + SQL FDD store (`openfdd-timescale`) |
-| **mcp** | Optional read-first stdio tools → central (`OPENFDD_API_BASE`) |
+| **mcp** | Optional read-first stdio tools → central (`OPENFDD_API_BASE`). OT wire tools are retired. |
 
 **Docs:** [Build recipes](docs/operations/build-recipes.md) · [Local deploy (HTTP / firewall)](docs/operations/LOCAL_DEPLOYMENT.md) · [Railway CLI hub](docs/operations/RAILWAY_DEPLOYMENT.md) · [Stress closeout](docs/operations/STRESS_CLOSEOUT.md) · [Grok Bot Soft-OPEN handoff](docs/operations/GROK_BOT_SOFTOPEN_HANDOFF.md) (mega prompt → `python3 scripts/ops/kickoff_grok_bot.py <prompt.md>`) · [External agents](docs/examples/external-agents.md) · [MCP README](mcp/README.md) · [ECM engineering (PyPI)](docs/ecm/README.md) · [Package authoring](docs/agent/PACKAGE_AUTHORING.md) · [Security](SECURITY.md)
 
@@ -37,8 +39,9 @@ URL until `./scripts/openfdd_demo_gate.sh` exits 0. See
 [`CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md).
 
 ```bash
-./scripts/openfdd_stack_up.sh react-ot     # React SPA + mqtt + central + fieldbus
-# or: react (no fieldbus) / csv
+./scripts/openfdd_stack_up.sh portal       # 4.0: React SPA + central + Timescale
+# archived OT lane (explicit): ./scripts/openfdd_stack_up.sh react-ot
+# csv is central + web without the portal provider env forwarder
 # Admin (UI) — or use username "agent" + OPENFDD_AGENT_PASSWORD for operator JWT (Railway / MCP)
 TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
   -H 'Content-Type: application/json' \

@@ -13,8 +13,8 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::Extension;
 use axum::Json;
-use tokio::sync::Mutex;
 use tokio::sync::watch;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
@@ -30,7 +30,11 @@ pub trait DataProvider: Send + Sync {
     fn provider_id(&self) -> &str;
     fn kind(&self) -> ProviderKind;
     fn health(&self) -> ProviderHealth;
+    // Poller calls these once N5 hourly ingest is wired. Until then the methods
+    // stay on the trait so drivers cannot drop auth/fetch.
+    #[expect(dead_code)]
     fn authenticate(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
+    #[expect(dead_code)]
     fn fetch_latest(
         &mut self,
     ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
@@ -102,8 +106,6 @@ impl Runtime {
             .map(|site| {
                 let status = if matches!(site.kind, ProviderKind::AceIot) {
                     ProviderHealthStatus::NotImplemented
-                } else if site.client_id.is_none() && site.endpoint.contains("normal-online.net") {
-                    ProviderHealthStatus::NotConfigured
                 } else {
                     ProviderHealthStatus::NotConfigured
                 };
@@ -166,14 +168,17 @@ pub struct SiteConfigSummary {
     pub client_id_configured: bool,
 }
 
+fn tenant_ctx(user: &crate::auth::AuthUser) -> crate::tenant::TenantContext {
+    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
+    let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
+    crate::tenant::TenantContext::resolve_fail_closed(user, &plane)
+}
+
 pub async fn providers_health(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::auth::AuthUser>,
 ) -> Json<ProvidersHealthBody> {
-    let ctx = crate::tenant::TenantContext::resolve_fail_closed(
-        &user,
-        &state.control_plane.read().await.clone(),
-    );
+    let ctx = tenant_ctx(&user);
     let mut body = state.providers.health_snapshot().await;
     body.sites.retain(|s| ctx.allow_building(&s.building_id));
     // Do not leak foreign-site endpoints/errors; strip messages for non-hub when MT on.
@@ -191,10 +196,7 @@ pub async fn providers_sites(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::auth::AuthUser>,
 ) -> Json<serde_json::Value> {
-    let ctx = crate::tenant::TenantContext::resolve_fail_closed(
-        &user,
-        &state.control_plane.read().await.clone(),
-    );
+    let ctx = tenant_ctx(&user);
     let sites: Vec<_> = state
         .providers
         .sites_config()
@@ -225,8 +227,23 @@ fn truncate_safe(s: &str, max: usize) -> String {
 
 fn provider_id_for_site(site: &SiteConfig) -> String {
     match site.kind {
-        ProviderKind::Nf => format!("nf:{}", site.building_id),
-        ProviderKind::AceIot => format!("ace_iot:{}", site.building_id),
+        ProviderKind::Nf => {
+            let driver = nf::NfPortalDriver::new(
+                &site.building_id,
+                site.endpoint.clone(),
+                site.client_id.clone(),
+                site.client_secret.clone(),
+            );
+            let _ = DataProvider::kind(&driver);
+            let _ = DataProvider::provider_id(&driver);
+            DataProvider::health(&driver).provider_id
+        }
+        ProviderKind::AceIot => {
+            let driver = ace_stub::AceIotStubDriver::new(&site.building_id);
+            let _ = DataProvider::kind(&driver);
+            let _ = DataProvider::provider_id(&driver);
+            DataProvider::health(&driver).provider_id
+        }
     }
 }
 

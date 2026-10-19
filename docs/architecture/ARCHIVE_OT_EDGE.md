@@ -1,25 +1,55 @@
 # OT edge archive (fieldbus / MQTTS)
 
-**Status:** Frozen in-repo (Soft-OPEN ≠ FQ).  
-**Pin:** `ot-mqtt-fieldbus-last-good-3.6.18`
+**Status:** Unqualified source snapshot. Not a verified freeze. Soft-OPEN ≠ FQ.
 
-## Scope
+**Snapshot:** `archive/ot-edge/unqualified-cdaa4f15/`
 
-Open-FDD **continues to ship** `openfdd-fieldbus`, `openfdd-mqtt`, and related
-Compose profiles in this repository. Wave-NF Soft-OPEN money path is **HTTPS
-vendor portals → central `DataProvider` → Timescale**, not a new GitHub repo and
-not deletion of OT trees.
+**Source commit:** `cdaa4f15c662b8be242c5b0a9ebaed73fbbbc811`
+
+**Claimed freeze tag:** none. `ot-mqtt-fieldbus-last-good-3.6.18` was not found as a git tag and is not a pin.
 
 ## Policy
 
-- No new Soft-OPEN product features on BACnet/MQTTS fieldbus without explicit
-  re-qualification.
-- Railway slimmer hub: **central + web + Timescale**; fieldbus stays on-prem when
-  OT is needed.
-- Last known-good OT stack images: tag **`ot-mqtt-fieldbus-last-good-3.6.18`**.
+4.0 product ingest is HTTPS vendor portals into central, then Timescale. Haystack
+**semantics**, RDF, SPARQL, roles, CSV import, and SQL FDD stay in the product.
+BACnet, Modbus, the Haystack **wire** client, and the MQTTS broker are archive-only.
+
+Normal 4.0 does **not** keep publishing or launching those services as the default
+stack. `./scripts/openfdd_stack_up.sh` defaults to `portal` (central + web +
+Timescale). Legacy recipes (`react`, `react-ot`, `standalone`, `central`, `edge`)
+are the explicit OT lane and set `OPENFDD_OT_ARCHIVE_RESTORE=1`.
+
+Central starts MQTT ingest only when `OPENFDD_MQTT_ENABLED=1` **and**
+`OPENFDD_OT_ARCHIVE_RESTORE=1`. A stale broker variable on its own does not start
+the worker.
+
+The default GHCR publish path builds central and web. MQTT and multi-arch fieldbus
+publish only when the workflow is dispatched with `publish_archived_ot`. Tip
+completeness for 4.0 is central + web. `./scripts/check_ghcr_tip_stack.sh --with-ot`
+is the archive image check.
+
+GHCR prune keeps a whole package version when any tag matches `ot-archive-*` or
+`ot-mqtt-fieldbus-last-good-*`, or when the version digest is listed in
+`scripts/ghcr-archive-protected-digests.txt`. No digest is listed yet.
+
+## What the snapshot contains
+
+A dependency closure that `cargo metadata --no-deps` resolves: fieldbus (three
+Docker targets and both Dockerfiles), MQTT image context, the fieldbus path crates,
+safe fieldbus config examples, and a copy of `edge/src/drivers`. It does not contain
+the whole `edge/` tree, secrets, certificate kits, or a database volume.
+
+Live semantic code stays in `edge/` behind the `ot-transport` feature. Central
+depends on that crate with `default-features = false`.
+
+## Not claimed
+
+Isolated boot, health, and read→ingest→persist→replay were not run. Archived
+binaries are not assumed to accept a 4.0 Timescale schema. Archival availability
+is not security support. See `archive/ot-edge/unqualified-cdaa4f15/evidence/MISSING.md`.
 
 ## Links
 
 - [ADR-011: Pluggable DataProvider](adr-011-pluggable-data-provider.md)
 - [ADR-010: Timescale hard cutover](adr-010-timescale-hard-cutover.md)
-- Checkpoint NF smoke: `scripts/nf/read_sensors.py`
+- Restore render: `archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh`

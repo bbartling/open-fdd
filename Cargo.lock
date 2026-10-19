@@ -1229,7 +1229,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "fdd_core"
-version = "3.6.17"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1243,7 +1243,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_csv"
-version = "3.6.17"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1256,7 +1256,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_resources"
-version = "3.6.17"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -1268,7 +1268,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_rules"
-version = "3.6.17"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_store"
-version = "3.6.17"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -1303,7 +1303,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_tsdb"
-version = "3.6.17"
+version = "4.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2465,7 +2465,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "open_fdd_edge_prototype"
-version = "3.6.17"
+version = "4.0.0"
 dependencies = [
  "arrow",
  "base64 0.22.1",
