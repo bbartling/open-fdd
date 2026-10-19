@@ -157,7 +157,7 @@
       "tested": false,
       "deployed": false,
       "qualified": false,
-      "remaining": "SoftOPEN defer — full Providers/Sites/Model/ledger SPA. Operations defaults to the Providers panel"
+      "remaining": "SoftOPEN defer — live window rows, backfill submit, and server-issued binding preview. Providers, Sites, and ledger SPA hooks are on this branch and unit-tested"
     },
     {
       "id": "n12-evidence",
@@ -234,11 +234,11 @@
     {
       "id": "m6-fe-blast",
       "phase": "9-spa",
-      "implemented": false,
-      "tested": false,
+      "implemented": true,
+      "tested": true,
       "deployed": false,
       "qualified": false,
-      "remaining": "SoftOPEN defer — Operations defaults to Providers. Full MQTT-archive SPA migration is N11"
+      "remaining": "Operations defaults to Providers. MQTT chrome stays archived and still renders for old deep links"
     },
     {
       "id": "m7-fe-haystack",
@@ -252,11 +252,11 @@
     {
       "id": "m8-ops-ui",
       "phase": "9-spa",
-      "implemented": false,
-      "tested": false,
+      "implemented": true,
+      "tested": true,
       "deployed": false,
       "qualified": false,
-      "remaining": "SoftOPEN defer — basic provider poll health is on the Ops panel. The window/gap ledger is N7"
+      "remaining": "Poll health and window/gap ledger hooks are on the Ops panel. Live ledger rows stay with N11"
     },
     {
       "id": "m9-stub-ace",

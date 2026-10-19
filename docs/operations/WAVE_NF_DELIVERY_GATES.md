@@ -76,7 +76,7 @@ Now: MCP exposes provider health and sites. Jobs, receipts, gaps, and tip retire
 
 Entry: Operations opens on Providers.
 Exit: Sites, Model, and the window ledger match the committed model. Analytics stay source-neutral.
-Now: the Providers panel is the default. The rest of N11 stays **SoftOPEN defer —**.
+Now: Operations defaults to Providers. Sites and ledger hooks are unit-tested. **SoftOPEN defer —** live window rows, backfill submit, and server-issued binding preview.
 
 ## Phase 10 — Evidence
 
