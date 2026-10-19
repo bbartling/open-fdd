@@ -431,6 +431,7 @@ fn bootstrap(entries: &[PointMapEntry]) -> Vec<super::committed_model::Bootstrap
 ///
 /// The hourly job calls [`normalize_mapped`] per accepted sample. This batch
 /// helper is the offline contractor gate.
+#[cfg(test)]
 pub fn map_provider_samples(
     building_id: &str,
     provider_instance_id: &str,
