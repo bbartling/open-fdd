@@ -67,18 +67,8 @@ pub async fn ingest_samples(
             tags,
         });
     }
-    let observed_at = samples
-        .iter()
-        .map(|s| s.ts)
-        .max()
-        .unwrap_or_else(Utc::now);
-    let mut envelope = TelemetryEnvelope::new(
-        building_id,
-        edge_id,
-        Protocol::Rest,
-        seq,
-        points,
-    );
+    let observed_at = samples.iter().map(|s| s.ts).max().unwrap_or_else(Utc::now);
+    let mut envelope = TelemetryEnvelope::new(building_id, edge_id, Protocol::Rest, seq, points);
     envelope.observed_at = observed_at;
     envelope.message_id = Uuid::new_v4();
     envelope

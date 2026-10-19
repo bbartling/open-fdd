@@ -103,14 +103,8 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         ));
     }
     let kind = parse_provider_kind(&raw.provider)?;
-    let client_id = raw
-        .client_id
-        .as_deref()
-        .and_then(resolve_env_ref);
-    let client_secret = raw
-        .client_secret
-        .as_deref()
-        .and_then(resolve_env_ref);
+    let client_id = raw.client_id.as_deref().and_then(resolve_env_ref);
+    let client_secret = raw.client_secret.as_deref().and_then(resolve_env_ref);
     let mut resolver = RoleResolver::from_point_map(&raw.point_map);
     if let Some(path) = raw.binding_set_path.as_deref().filter(|s| !s.is_empty()) {
         resolver.merge_binding_set_path(Path::new(path))?;

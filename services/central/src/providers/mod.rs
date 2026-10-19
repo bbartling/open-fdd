@@ -13,8 +13,8 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::Extension;
 use axum::Json;
-use tokio::sync::Mutex;
 use tokio::sync::watch;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
@@ -24,61 +24,6 @@ use types::{
 };
 
 use crate::state::AppState;
-
-/// Vendor HTTPS ingest driver (NF portal, future Ace IoT).
-pub trait DataProvider: Send + Sync {
-    fn provider_id(&self) -> &str;
-    fn kind(&self) -> ProviderKind;
-    fn health(&self) -> ProviderHealth;
-    fn authenticate(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
-    fn fetch_latest(
-        &mut self,
-    ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
-}
-
-impl DataProvider for nf::NfPortalDriver {
-    fn provider_id(&self) -> &str {
-        nf::NfPortalDriver::provider_id(self)
-    }
-
-    fn kind(&self) -> ProviderKind {
-        ProviderKind::Nf
-    }
-
-    fn health(&self) -> ProviderHealth {
-        self.health(ProviderHealthStatus::Ok, None)
-    }
-
-    async fn authenticate(&mut self) -> Result<(), String> {
-        nf::NfPortalDriver::authenticate(self).await
-    }
-
-    async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
-        nf::NfPortalDriver::query_points(self, 200).await
-    }
-}
-
-impl DataProvider for ace_stub::AceIotStubDriver {
-    fn provider_id(&self) -> &str {
-        ace_stub::AceIotStubDriver::provider_id(self)
-    }
-
-    fn kind(&self) -> ProviderKind {
-        ProviderKind::AceIot
-    }
-
-    fn health(&self) -> ProviderHealth {
-        ace_stub::AceIotStubDriver::health(self)
-    }
-
-    async fn authenticate(&mut self) -> Result<(), String> {
-        ace_stub::AceIotStubDriver::authenticate(self).await
-    }
-
-    async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
-        ace_stub::AceIotStubDriver::query_points(self).await
-    }
-}
 
 pub struct Runtime {
     pub sites: Vec<SiteConfig>,
@@ -102,8 +47,6 @@ impl Runtime {
             .map(|site| {
                 let status = if matches!(site.kind, ProviderKind::AceIot) {
                     ProviderHealthStatus::NotImplemented
-                } else if site.client_id.is_none() && site.endpoint.contains("normal-online.net") {
-                    ProviderHealthStatus::NotConfigured
                 } else {
                     ProviderHealthStatus::NotConfigured
                 };
@@ -234,6 +177,5 @@ pub fn spawn_poller_with_shutdown(
     state: Arc<AppState>,
     shutdown: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
-    let runtime = Arc::clone(&state.providers);
-    poller::spawn_with_shutdown(state, runtime, shutdown)
+    crate::ingest_queue::spawn_with_shutdown(state, shutdown)
 }

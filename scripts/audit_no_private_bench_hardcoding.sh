@@ -52,6 +52,9 @@ is_allowed() {
     edge/src/main.rs) return 0 ;;
     scripts/bench_5007_long_smoke.sh) return 0 ;;
     scripts/nightly-ot-bench/*) return 0 ;;
+    # Wave-NF portal lab probe. These display names are the sensors that smoke
+    # queries; product code does not select equipment by them.
+    scripts/nf/*) return 0 ;;
     # BACpypes3 diagnose-only (not product OT) — private bench bind examples OK here.
     scripts/ops/bacpypes3_whois_smoke.py) return 0 ;;
     scripts/ops/local_bacnet_ot_bench.sh) return 0 ;;

@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use chrono::Utc;
 use tokio::sync::{watch, Semaphore};
-use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use super::ace_stub::AceIotStubDriver;
@@ -16,12 +15,6 @@ use super::types::ProviderHealthStatus;
 use super::writer;
 use super::Runtime;
 use crate::state::AppState;
-
-fn poll_enabled() -> bool {
-    std::env::var("OPENFDD_PROVIDER_POLL")
-        .ok()
-        .is_some_and(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
-}
 
 fn max_concurrent() -> usize {
     std::env::var("OPENFDD_PROVIDER_MAX_CONCURRENT")
@@ -39,22 +32,18 @@ fn page_size() -> u32 {
         .unwrap_or(200)
 }
 
-pub fn spawn_with_shutdown(
+pub(crate) async fn run_legacy_site_loops(
     state: Arc<AppState>,
-    runtime: Arc<Runtime>,
-    mut shutdown: watch::Receiver<bool>,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        if !poll_enabled() {
-            info!("OPENFDD_PROVIDER_POLL not enabled; provider poller idle");
-            return;
-        }
+    shutdown: &mut watch::Receiver<bool>,
+) {
+    let runtime = Arc::clone(&state.providers);
+    {
         let sites = runtime.sites.clone();
         if sites.is_empty() {
             info!("no OPENFDD_PROVIDER_SITES configured; provider poller idle");
             return;
         }
-        info!(sites = sites.len(), "provider poller starting");
+        info!(sites = sites.len(), "legacy provider poller starting");
         let sem = Arc::new(Semaphore::new(max_concurrent()));
         let mut handles = Vec::new();
         for site in sites {
@@ -70,8 +59,36 @@ pub fn spawn_with_shutdown(
         for handle in handles {
             let _ = handle.await;
         }
-        info!("provider poller stopped");
-    })
+        info!("legacy provider poller stopped");
+    }
+}
+
+pub(crate) async fn execute_site(
+    state: &Arc<AppState>,
+    site: &SiteConfig,
+) -> Result<usize, String> {
+    match site.kind {
+        super::types::ProviderKind::Nf => {
+            let mut driver = NfPortalDriver::new(
+                &site.building_id,
+                site.endpoint.clone(),
+                site.client_id.clone(),
+                site.client_secret.clone(),
+            );
+            poll_nf_site(
+                state,
+                &site.building_id,
+                &mut driver,
+                &site.resolver,
+                page_size(),
+            )
+            .await
+        }
+        super::types::ProviderKind::AceIot => {
+            let mut ace = AceIotStubDriver::new(&site.building_id);
+            poll_ace_site(&site.building_id, &mut ace).await
+        }
+    }
 }
 
 async fn site_poll_loop(
@@ -123,16 +140,19 @@ async fn site_poll_loop(
                 let driver = nf.as_mut().expect("nf driver");
                 poll_nf_site(&state, &building_id, driver, &resolver, page_size()).await
             }
-            super::types::ProviderKind::AceIot => {
-                poll_ace_site(&building_id, &mut ace).await
-            }
+            super::types::ProviderKind::AceIot => poll_ace_site(&building_id, &mut ace).await,
         };
 
         match result {
             Ok(ingested) => {
                 backoff_secs = poll_secs;
                 runtime
-                    .record_success(&building_id, ingested as u64, ProviderHealthStatus::Ok, None)
+                    .record_success(
+                        &building_id,
+                        ingested as u64,
+                        ProviderHealthStatus::Ok,
+                        None,
+                    )
                     .await;
                 debug!(%building_id, ingested, "provider poll ok");
             }
@@ -144,11 +164,7 @@ async fn site_poll_loop(
                 };
                 warn!(%building_id, %err, next_backoff_secs = backoff_secs, "provider poll failed");
                 runtime
-                    .record_error(
-                        &building_id,
-                        ProviderHealthStatus::Error,
-                        Some(err),
-                    )
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(err))
                     .await;
             }
         }

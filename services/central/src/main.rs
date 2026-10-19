@@ -18,6 +18,7 @@ mod fuel;
 mod haystack_rdf;
 mod historian_limits;
 mod ingest;
+mod ingest_queue;
 mod jobs;
 mod live_historian;
 mod logging;
