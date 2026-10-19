@@ -9,8 +9,8 @@ todos:
     content: "Wave-B parallel — N1 real archive/ot-edge freeze + digest prune protection + isolated restore"
     status: pending
   - id: wave-b-n5-hourly
-    content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (un-cancel; GET history only)"
-    status: pending
+    content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (GET history only; fixture-tested)"
+    status: completed
   - id: wave-b-n3-model
     content: "Wave-B parallel — N3 source-neutral committed model + scoped SPARQL ingest plans"
     status: pending
@@ -87,13 +87,13 @@ todos:
     content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
     status: pending
   - id: n5-durable
-    content: SoftOPEN defer — N5 Durable per-device hourly jobs (owned by Wave-B; was wrongly cancelled)
-    status: pending
+    content: "N5 durable per-device completed-hour jobs, receipts, checkpoints, catch-up, bounded reconciliation (fixture-tested; live NF pilot stays n12)"
+    status: completed
   - id: n6-storage
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
     status: in_progress
   - id: n7-gaps
-    content: SoftOPEN defer — N7 Coverage ledger; bounded reconciliation; NF update-log 403 limitation stated
+    content: "SoftOPEN defer — full coverage ledger UI; N5 states NF update-log 403 and bounded reconciliation (not gapless)"
     status: pending
   - id: n8-scale
     content: SoftOPEN defer — N8 Shared Postgres queue/leases (Wave-C)
@@ -192,7 +192,7 @@ Source: [Points](https://docs.normal.dev/concepts/points/), [GetData](https://do
 
 Lab proof 2026-10-18: GetData returned ~60 samples/UUID over last hour for five mapped points.
 
-**Current poller (known insufficient for N5):** `poll_secs: 3600`, fixed `now−65min` lookback, history errors can become empty success (false green). Replace with durable per-device completed-hour jobs + receipts before broad rollout.
+**N5 poller (this branch):** per-device completed-hour jobs in Postgres (`sql/schema/04_provider_hourly_jobs.sql`), receipts, checkpoints, catch-up, and a bounded reconcile sweep. History is `GET /api/v1/point/data` only. A history error stays a failed job. The fixed `now−65min` lookback is gone. NF update-log HTTP 403 is stated on provider health; that path is not called and permissions are not expanded. Full ledger UI remains N7. Single-transaction sample+receipt across the historian writer remains N6. N8 replica control is not in this PR; claim SQL is `SKIP LOCKED` plus a fencing token so a later lease PR can build on it.
 
 ## Highest priority (from evaluation — P1)
 
@@ -259,7 +259,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### Wave-B — parallel after Wave-A merges
 - [ ] **wave-b-n1-archive** — N1 real `archive/ot-edge/<freeze>/` + prune protection + isolated restore
-- [ ] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**)
+- [x] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested)
 - [ ] **wave-b-n3-model** — N3 committed model + scoped SPARQL plans
 - [ ] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA
 
@@ -272,7 +272,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### SoftOPEN defer / later
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
-- [ ] SoftOPEN defer — **n7-gaps** coverage ledger / update-log 403 stated
+- [ ] SoftOPEN defer — **n7-gaps** full coverage ledger UI (N5 already states update-log 403 and bounded reconciliation)
 - [ ] SoftOPEN defer — **n9-meteo** Open-Meteo + contractor fixture
 - [ ] SoftOPEN defer — **n12-evidence** full acceptance matrix (no portal flood)
 - [ ] SoftOPEN defer — **n13-release** phased gates + truthful remaining status

@@ -2,9 +2,13 @@
 
 pub mod ace_stub;
 pub mod config;
+pub mod hourly;
+pub mod hourly_exec;
 pub mod map;
 pub mod nf;
+pub mod pg_store;
 pub mod poller;
+pub mod store;
 pub mod types;
 pub mod writer;
 
@@ -13,8 +17,8 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::Extension;
 use axum::Json;
-use tokio::sync::Mutex;
 use tokio::sync::watch;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
@@ -25,64 +29,10 @@ use types::{
 
 use crate::state::AppState;
 
-/// Vendor HTTPS ingest driver (NF portal, future Ace IoT).
-pub trait DataProvider: Send + Sync {
-    fn provider_id(&self) -> &str;
-    fn kind(&self) -> ProviderKind;
-    fn health(&self) -> ProviderHealth;
-    fn authenticate(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
-    fn fetch_latest(
-        &mut self,
-    ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
-}
-
-impl DataProvider for nf::NfPortalDriver {
-    fn provider_id(&self) -> &str {
-        nf::NfPortalDriver::provider_id(self)
-    }
-
-    fn kind(&self) -> ProviderKind {
-        ProviderKind::Nf
-    }
-
-    fn health(&self) -> ProviderHealth {
-        self.health(ProviderHealthStatus::Ok, None)
-    }
-
-    async fn authenticate(&mut self) -> Result<(), String> {
-        nf::NfPortalDriver::authenticate(self).await
-    }
-
-    async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
-        nf::NfPortalDriver::query_points(self, 200).await
-    }
-}
-
-impl DataProvider for ace_stub::AceIotStubDriver {
-    fn provider_id(&self) -> &str {
-        ace_stub::AceIotStubDriver::provider_id(self)
-    }
-
-    fn kind(&self) -> ProviderKind {
-        ProviderKind::AceIot
-    }
-
-    fn health(&self) -> ProviderHealth {
-        ace_stub::AceIotStubDriver::health(self)
-    }
-
-    async fn authenticate(&mut self) -> Result<(), String> {
-        ace_stub::AceIotStubDriver::authenticate(self).await
-    }
-
-    async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
-        ace_stub::AceIotStubDriver::query_points(self).await
-    }
-}
-
 pub struct Runtime {
     pub sites: Vec<SiteConfig>,
     pub(crate) health: Mutex<ProvidersHealthBody>,
+    hourly: Mutex<Option<store::HourlyStore>>,
 }
 
 impl Runtime {
@@ -102,8 +52,6 @@ impl Runtime {
             .map(|site| {
                 let status = if matches!(site.kind, ProviderKind::AceIot) {
                     ProviderHealthStatus::NotImplemented
-                } else if site.client_id.is_none() && site.endpoint.contains("normal-online.net") {
-                    ProviderHealthStatus::NotConfigured
                 } else {
                     ProviderHealthStatus::NotConfigured
                 };
@@ -124,6 +72,7 @@ impl Runtime {
                     last_poll_at: None,
                     last_ingested_points: 0,
                     consecutive_errors: 0,
+                    hourly_coverage: None,
                 }
             })
             .collect();
@@ -134,7 +83,35 @@ impl Runtime {
                 poll_enabled,
                 sites: site_health,
             }),
+            hourly: Mutex::new(None),
         })
+    }
+
+    /// Postgres when `OPENFDD_DATABASE_URL` is set. Memory is explicit and not
+    /// durable. A configured URL that cannot be opened is unavailable — the
+    /// poller must not fall back to a rolling lookback.
+    pub async fn hourly_store(&self) -> store::StoreOpen {
+        let mut slot = self.hourly.lock().await;
+        if let Some(existing) = slot.clone() {
+            return if existing.is_durable() {
+                store::StoreOpen::Durable(existing)
+            } else {
+                store::StoreOpen::MemoryOnly(existing)
+            };
+        }
+        match store::HourlyStore::open_from_env().await {
+            store::StoreOpen::Unavailable => store::StoreOpen::Unavailable,
+            opened => {
+                let store = match &opened {
+                    store::StoreOpen::Durable(store) | store::StoreOpen::MemoryOnly(store) => {
+                        store.clone()
+                    }
+                    store::StoreOpen::Unavailable => return store::StoreOpen::Unavailable,
+                };
+                *slot = Some(store);
+                opened
+            }
+        }
     }
 
     pub async fn health_snapshot(&self) -> ProvidersHealthBody {
@@ -166,14 +143,19 @@ pub struct SiteConfigSummary {
     pub client_id_configured: bool,
 }
 
+fn provider_tenant_ctx(user: &crate::auth::AuthUser) -> crate::tenant::TenantContext {
+    let workspace = std::path::PathBuf::from(
+        std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
+    );
+    let plane = crate::tenant::ControlPlane::load_or_legacy(&workspace);
+    crate::tenant::TenantContext::resolve_fail_closed(user, &plane)
+}
+
 pub async fn providers_health(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::auth::AuthUser>,
 ) -> Json<ProvidersHealthBody> {
-    let ctx = crate::tenant::TenantContext::resolve_fail_closed(
-        &user,
-        &state.control_plane.read().await.clone(),
-    );
+    let ctx = provider_tenant_ctx(&user);
     let mut body = state.providers.health_snapshot().await;
     body.sites.retain(|s| ctx.allow_building(&s.building_id));
     // Do not leak foreign-site endpoints/errors; strip messages for non-hub when MT on.
@@ -191,10 +173,7 @@ pub async fn providers_sites(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::auth::AuthUser>,
 ) -> Json<serde_json::Value> {
-    let ctx = crate::tenant::TenantContext::resolve_fail_closed(
-        &user,
-        &state.control_plane.read().await.clone(),
-    );
+    let ctx = provider_tenant_ctx(&user);
     let sites: Vec<_> = state
         .providers
         .sites_config()

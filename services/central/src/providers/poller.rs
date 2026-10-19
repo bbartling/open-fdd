@@ -1,18 +1,25 @@
 //! Background poll loop for configured provider sites.
+//!
+//! NF sites enqueue durable completed-hour jobs. They do not sleep `poll_secs`
+//! and then fetch `now − 65 minutes`. History errors stay failed.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
+use futures_util::future::BoxFuture;
 use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
-use super::map::{normalize_mapped, RoleResolver};
+use super::hourly::HourlyPolicy;
+use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
+use super::map::HistorySeries;
 use super::nf::NfPortalDriver;
-use super::types::ProviderHealthStatus;
+use super::store::StoreOpen;
+use super::types::{HourlyCoverageHealth, ProviderHealthStatus};
 use super::writer;
 use super::Runtime;
 use crate::state::AppState;
@@ -31,12 +38,12 @@ fn max_concurrent() -> usize {
         .unwrap_or(2)
 }
 
-fn page_size() -> u32 {
-    std::env::var("OPENFDD_PROVIDER_PAGE_SIZE")
+fn tick_secs() -> u64 {
+    std::env::var("OPENFDD_PROVIDER_TICK_SECS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .filter(|n| *n > 0)
-        .unwrap_or(200)
+        .filter(|n| *n >= 5)
+        .unwrap_or(30)
 }
 
 pub fn spawn_with_shutdown(
@@ -81,27 +88,198 @@ async fn site_poll_loop(
     sem: Arc<Semaphore>,
     shutdown: &mut watch::Receiver<bool>,
 ) {
+    if matches!(site.kind, super::types::ProviderKind::Nf) {
+        nf_hourly_loop(state, runtime, site, sem, shutdown).await;
+        return;
+    }
+    ace_poll_loop(runtime, site, sem, shutdown).await;
+}
+
+async fn nf_hourly_loop(
+    state: Arc<AppState>,
+    runtime: Arc<Runtime>,
+    site: SiteConfig,
+    sem: Arc<Semaphore>,
+    shutdown: &mut watch::Receiver<bool>,
+) {
+    let building_id = site.building_id.clone();
+    let mut driver = NfPortalDriver::new(
+        &building_id,
+        site.endpoint.clone(),
+        site.client_id.clone(),
+        site.client_secret.clone(),
+    );
+    let policy = HourlyPolicy::from_env();
+    let owner = std::env::var("OPENFDD_HOURLY_WORKER_ID").unwrap_or_else(|_| "central".into());
+    let mut first = true;
+    loop {
+        let wait = if first { 0 } else { tick_secs() };
+        first = false;
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(wait)) => {}
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() {
+                    return;
+                }
+                continue;
+            }
+        }
+        let _permit = match sem.acquire().await {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        if driver.authenticate().await.is_err() {
+            warn!(%building_id, "NF authenticate failed");
+            runtime
+                .record_error(
+                    &building_id,
+                    ProviderHealthStatus::AuthFailed,
+                    Some("auth".into()),
+                )
+                .await;
+            continue;
+        }
+        let opened = runtime.hourly_store().await;
+        let store = match opened {
+            StoreOpen::Durable(store) | StoreOpen::MemoryOnly(store) => store,
+            StoreOpen::Unavailable => {
+                warn!(%building_id, "hourly job store unavailable");
+                runtime
+                    .record_error(
+                        &building_id,
+                        ProviderHealthStatus::Error,
+                        Some("job_store_unavailable".into()),
+                    )
+                    .await;
+                continue;
+            }
+        };
+        let devices = site.resolver.devices();
+        let now = Utc::now();
+        let tick = TickInput {
+            now,
+            tenant: "default",
+            canonical_site: &building_id,
+            provider_instance: driver.provider_id(),
+            devices: &devices,
+            policy: &policy,
+            owner: &owner,
+        };
+        let mut source = NfHistory { driver: &driver };
+        let mut sink = HistorianSink {
+            state: &state,
+            building_id: &building_id,
+        };
+        match run_hourly_tick(&store, &tick, &mut source, &mut sink).await {
+            Ok(report) => {
+                let coverage = HourlyCoverageHealth {
+                    durable: report.durable,
+                    committed: report.committed,
+                    no_source_data: report.no_source_data,
+                    failed: report.failed,
+                    partial: report.partial,
+                    unrecoverable_gaps: report.unrecoverable_gaps,
+                    samples_handed_off: u64::try_from(report.samples_handed_off)
+                        .unwrap_or(u64::MAX),
+                    update_log_status: report.update_log_status.to_string(),
+                    detail: report.health_code(),
+                };
+                let (status, as_error) = if report.blocks_green() {
+                    if report.failed > 0 && report.committed == 0 && report.no_source_data == 0 {
+                        (ProviderHealthStatus::Error, true)
+                    } else {
+                        (ProviderHealthStatus::Degraded, false)
+                    }
+                } else {
+                    (ProviderHealthStatus::Ok, false)
+                };
+                if as_error {
+                    runtime
+                        .record_hourly(
+                            &building_id,
+                            status,
+                            report.samples_handed_off as u64,
+                            Some(report.health_code()),
+                            coverage,
+                            true,
+                        )
+                        .await;
+                } else {
+                    runtime
+                        .record_hourly(
+                            &building_id,
+                            status,
+                            report.samples_handed_off as u64,
+                            Some(report.health_code()),
+                            coverage,
+                            false,
+                        )
+                        .await;
+                }
+                debug!(%building_id, status = ?status, "hourly tick finished");
+            }
+            Err(code) => {
+                warn!(%building_id, %code, "hourly tick failed");
+                runtime
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(code))
+                    .await;
+            }
+        }
+    }
+}
+
+struct NfHistory<'a> {
+    driver: &'a NfPortalDriver,
+}
+
+impl HistorySource for NfHistory<'_> {
+    fn fetch<'a>(
+        &'a mut self,
+        req: &'a FetchRequest,
+    ) -> BoxFuture<'a, Result<Vec<HistorySeries>, super::hourly::FetchError>> {
+        Box::pin(async move {
+            debug!(
+                purpose = %req.purpose,
+                device_id = %req.device_id,
+                window_start = %req.window_start,
+                points = req.point_ids.len(),
+                "NF history GET"
+            );
+            self.driver
+                .read_history_page(&req.point_ids, req.from, req.to)
+                .await
+        })
+    }
+}
+
+struct HistorianSink<'a> {
+    state: &'a Arc<AppState>,
+    building_id: &'a str,
+}
+
+impl SampleWriter for HistorianSink<'_> {
+    fn write<'a>(
+        &'a mut self,
+        samples: &'a [super::types::NormalizedSample],
+    ) -> BoxFuture<'a, Result<usize, String>> {
+        Box::pin(async move {
+            writer::ingest_samples(self.state, self.building_id, samples)
+                .await
+                .map_err(|_| "persistence".to_string())
+        })
+    }
+}
+
+async fn ace_poll_loop(
+    runtime: Arc<Runtime>,
+    site: SiteConfig,
+    sem: Arc<Semaphore>,
+    shutdown: &mut watch::Receiver<bool>,
+) {
     let building_id = site.building_id.clone();
     let poll_secs = site.poll_secs;
-    // First tick is immediate; later ticks use poll_secs (lab default 300).
     let mut backoff_secs = 0u64;
-    let kind = site.kind;
-    let endpoint = site.endpoint.clone();
-    let client_id = site.client_id.clone();
-    let client_secret = site.client_secret.clone();
-    let resolver = site.resolver;
-    let mut nf = if matches!(kind, super::types::ProviderKind::Nf) {
-        Some(NfPortalDriver::new(
-            &building_id,
-            endpoint,
-            client_id,
-            client_secret,
-        ))
-    } else {
-        None
-    };
     let mut ace = AceIotStubDriver::new(&building_id);
-
     loop {
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(backoff_secs)) => {}
@@ -112,89 +290,35 @@ async fn site_poll_loop(
                 continue;
             }
         }
-
         let _permit = match sem.acquire().await {
             Ok(p) => p,
             Err(_) => return,
         };
-
-        let result = match kind {
-            super::types::ProviderKind::Nf => {
-                let driver = nf.as_mut().expect("nf driver");
-                poll_nf_site(&state, &building_id, driver, &resolver, page_size()).await
-            }
-            super::types::ProviderKind::AceIot => {
-                poll_ace_site(&building_id, &mut ace).await
-            }
-        };
-
-        match result {
+        match poll_ace_site(&building_id, &mut ace).await {
             Ok(ingested) => {
                 backoff_secs = poll_secs;
                 runtime
-                    .record_success(&building_id, ingested as u64, ProviderHealthStatus::Ok, None)
+                    .record_success(
+                        &building_id,
+                        ingested as u64,
+                        ProviderHealthStatus::Ok,
+                        None,
+                    )
                     .await;
-                debug!(%building_id, ingested, "provider poll ok");
             }
             Err(err) => {
                 backoff_secs = if backoff_secs == 0 {
                     poll_secs.max(30)
                 } else {
-                    (backoff_secs.saturating_mul(2)).min(900)
+                    backoff_secs.saturating_mul(2).min(900)
                 };
                 warn!(%building_id, %err, next_backoff_secs = backoff_secs, "provider poll failed");
                 runtime
-                    .record_error(
-                        &building_id,
-                        ProviderHealthStatus::Error,
-                        Some(err),
-                    )
+                    .record_error(&building_id, ProviderHealthStatus::Error, Some(err))
                     .await;
             }
         }
     }
-}
-
-async fn poll_nf_site(
-    state: &Arc<AppState>,
-    building_id: &str,
-    driver: &mut NfPortalDriver,
-    resolver: &RoleResolver,
-    page_size: u32,
-) -> Result<usize, String> {
-    driver.authenticate().await?;
-    let latest = driver.query_points(page_size).await?;
-    let now = Utc::now();
-    // One hour of history plus five minutes of overlap. Timescale upsert on
-    // (site, key, ts) drops the overlap instead of inserting a second row.
-    let from = now - chrono::Duration::minutes(65);
-    let history = match driver
-        .fetch_history(&resolver.provider_point_ids(), from, now)
-        .await
-    {
-        Ok(rows) => rows,
-        Err(err) => {
-            warn!(%building_id, %err, "NF GetData failed; keeping latest-value scrape only");
-            Vec::new()
-        }
-    };
-    let mut raw = history;
-    raw.extend(latest);
-    let mut samples = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for point in &raw {
-        let Some(resolved) = resolver.resolve(&point.provider_point_id) else {
-            continue;
-        };
-        let key = (point.provider_point_id.clone(), point.ts.timestamp());
-        if !seen.insert(key) {
-            continue;
-        }
-        samples.push(normalize_mapped(building_id, point, resolved));
-    }
-    writer::ingest_samples(state, building_id, &samples)
-        .await
-        .map_err(|e| e.to_string())
 }
 
 async fn poll_ace_site(building_id: &str, ace: &mut AceIotStubDriver) -> Result<usize, String> {
@@ -211,6 +335,26 @@ impl Runtime {
         status: ProviderHealthStatus,
         message: Option<String>,
     ) {
+        self.record_hourly(
+            building_id,
+            status,
+            ingested,
+            message,
+            HourlyCoverageHealth::default(),
+            false,
+        )
+        .await;
+    }
+
+    pub async fn record_hourly(
+        &self,
+        building_id: &str,
+        status: ProviderHealthStatus,
+        ingested: u64,
+        message: Option<String>,
+        coverage: HourlyCoverageHealth,
+        is_error: bool,
+    ) {
         let mut guard = self.health.lock().await;
         if let Some(site) = guard
             .sites
@@ -219,10 +363,20 @@ impl Runtime {
         {
             site.last_poll_at = Some(Utc::now());
             site.last_ingested_points = ingested;
-            site.consecutive_errors = 0;
             site.health.status = status;
             site.health.message = message;
-            site.health.last_success_at = Some(Utc::now());
+            if coverage.update_log_status.is_empty() {
+                site.hourly_coverage = None;
+            } else {
+                site.hourly_coverage = Some(coverage);
+            }
+            if is_error {
+                site.consecutive_errors = site.consecutive_errors.saturating_add(1);
+                site.health.last_error_at = Some(Utc::now());
+            } else {
+                site.consecutive_errors = 0;
+                site.health.last_success_at = Some(Utc::now());
+            }
         }
     }
 

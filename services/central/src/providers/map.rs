@@ -30,8 +30,6 @@ pub struct PointMapEntry {
 #[derive(Debug, Clone, Deserialize)]
 struct BindingSetFile {
     #[serde(default)]
-    building_id: Option<String>,
-    #[serde(default)]
     equipment: Vec<BindingEquipment>,
 }
 
@@ -78,7 +76,9 @@ impl RoleResolver {
                 },
             );
         }
-        Self { by_provider_point_id }
+        Self {
+            by_provider_point_id,
+        }
     }
 
     pub fn merge_binding_set_json(&mut self, json: &str) -> Result<(), String> {
@@ -126,15 +126,56 @@ impl RoleResolver {
         self.by_provider_point_id.len()
     }
 
-    pub fn provider_point_ids(&self) -> Vec<String> {
-        self.by_provider_point_id.keys().cloned().collect()
+    /// Group mapped points by equipment id. Hourly jobs run per device.
+    pub fn devices(&self) -> Vec<DevicePoints> {
+        let mut ids: Vec<String> = self.by_provider_point_id.keys().cloned().collect();
+        ids.sort();
+        let mut grouped: std::collections::BTreeMap<String, Vec<MappedPoint>> =
+            std::collections::BTreeMap::new();
+        for point_id in ids {
+            let Some(resolved) = self.resolve(&point_id) else {
+                continue;
+            };
+            let equipment_id = resolved.equipment_id.clone();
+            let point = MappedPoint {
+                provider_point_id: point_id,
+                role: resolved.role.clone(),
+                equip_type: resolved.equip_type.clone(),
+            };
+            grouped.entry(equipment_id).or_default().push(point);
+        }
+        grouped
+            .into_iter()
+            .map(|(device_id, points)| DevicePoints { device_id, points })
+            .collect()
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MappedPoint {
+    pub provider_point_id: String,
+    pub role: String,
+    pub equip_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DevicePoints {
+    pub device_id: String,
+    pub points: Vec<MappedPoint>,
+}
+
+/// One source series from a history read. An empty `samples` list means the
+/// source returned that series with no values. A missing series is different.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HistorySeries {
+    pub provider_point_id: String,
+    pub samples: Vec<RawProviderPoint>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct RawProviderPoint {
     pub provider_point_id: String,
-    #[allow(dead_code)]
+    /// Carried for UX. Role resolution must not read this field.
     pub display_name: Option<String>,
     pub ts: chrono::DateTime<chrono::Utc>,
     pub val: f64,

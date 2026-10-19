@@ -7,8 +7,8 @@ use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::map::RawProviderPoint;
-use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
+use super::hourly::FetchError;
+use super::map::{HistorySeries, RawProviderPoint};
 
 const USER_AGENT: &str = "openfdd-central-nf/1.0";
 
@@ -49,17 +49,6 @@ impl NfPortalDriver {
         &self.provider_id
     }
 
-    pub fn health(&self, status: ProviderHealthStatus, message: Option<String>) -> ProviderHealth {
-        ProviderHealth {
-            provider_id: self.provider_id.clone(),
-            kind: ProviderKind::Nf,
-            status,
-            message,
-            last_success_at: None,
-            last_error_at: None,
-        }
-    }
-
     pub async fn authenticate(&mut self) -> Result<(), String> {
         let (Some(id), Some(secret)) = (&self.client_id, &self.client_secret) else {
             // Fail closed: missing OAuth pair is a configuration error for HTTPS portals.
@@ -97,6 +86,14 @@ impl NfPortalDriver {
         Ok(())
     }
 
+    /// Catalog read (`POST /api/v1/point/query`).
+    ///
+    /// Hourly jobs do not call this. Point discovery stays a separate POST from
+    /// history, which is GET-only.
+    #[expect(
+        dead_code,
+        reason = "catalog POST is not part of the hourly GET worker"
+    )]
     pub async fn query_points(&self, page_size: u32) -> Result<Vec<RawProviderPoint>, String> {
         let url = format!("{}/api/v1/point/query", self.endpoint);
         let mut req = self
@@ -107,12 +104,12 @@ impl NfPortalDriver {
         if let Some(token) = self.token.as_deref().filter(|t| !t.is_empty()) {
             req = req.bearer_auth(token);
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| format!("point/query: {e}"))?;
+        let resp = req.send().await.map_err(|e| format!("point/query: {e}"))?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| format!("point/query body: {e}"))?;
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| format!("point/query body: {e}"))?;
         if !status.is_success() {
             return Err(format!(
                 "point/query HTTP {status}: {}",
@@ -122,47 +119,83 @@ impl NfPortalDriver {
         parse_point_query_json(&text)
     }
 
-    /// Read history via GetData (`GET /api/v1/point/data`).
+    /// Read one history page via GetData (`GET /api/v1/point/data`).
     ///
-    /// `POST /api/v1/point/data` is AddPointsData (a write) and a read-only API
-    /// key returns 401. Docs: https://docs.normal.dev/concepts/points/
-    pub async fn fetch_history(
+    /// `POST /api/v1/point/data` is AddPointsData (a write). This method never
+    /// uses POST. Docs: https://docs.normal.dev/concepts/points/
+    pub async fn read_history_page(
         &self,
         uuids: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<RawProviderPoint>, String> {
+    ) -> Result<Vec<HistorySeries>, FetchError> {
         if uuids.is_empty() {
             return Ok(Vec::new());
         }
-        let mut qs = format!(
-            "from.seconds={}&to.seconds={}",
-            from.timestamp(),
-            to.timestamp()
-        );
-        for uuid in uuids {
-            qs.push_str("&uuids=");
-            qs.push_str(uuid);
-        }
-        let url = format!("{}/api/v1/point/data?{qs}", self.endpoint);
-        let mut req = self.client.get(&url);
+        debug_assert_eq!(history_http_method(), "GET");
+        let url = build_history_read_url(&self.endpoint, uuids, from, to);
+        let mut req = match history_http_method() {
+            "GET" => self.client.get(&url),
+            _ => return Err(FetchError::Contract),
+        };
         if let Some(token) = self.token.as_deref().filter(|t| !t.is_empty()) {
             req = req.bearer_auth(token);
         }
-        let resp = req
-            .send()
-            .await
-            .map_err(|e| format!("point/data: {e}"))?;
+        let resp = req.send().await.map_err(|_| FetchError::Transport)?;
         let status = resp.status();
-        let text = resp.text().await.map_err(|e| format!("point/data body: {e}"))?;
+        let retry_after = retry_after_secs(resp.headers());
+        let text = resp.text().await.map_err(|_| FetchError::Transport)?;
         if !status.is_success() {
-            return Err(format!(
-                "point/data HTTP {status}: {}",
-                truncate(&text, 400)
+            tracing::warn!(status = status.as_u16(), "NF history read failed");
+            return Err(super::hourly::classify_history_status(
+                status.as_u16(),
+                retry_after,
             ));
         }
-        parse_get_data_json(&text)
+        parse_get_data_page(&text).map_err(|_| FetchError::Contract)
     }
+}
+
+/// History polling is a GET. POST on `/api/v1/point/data` writes upstream.
+pub fn history_http_method() -> &'static str {
+    "GET"
+}
+
+pub fn build_history_read_url(
+    endpoint: &str,
+    uuids: &[String],
+    from: DateTime<Utc>,
+    to: DateTime<Utc>,
+) -> String {
+    let mut url = format!(
+        "{}/api/v1/point/data?from.seconds={}&to.seconds={}",
+        endpoint.trim_end_matches('/'),
+        from.timestamp(),
+        to.timestamp()
+    );
+    for uuid in uuids {
+        url.push_str("&uuids=");
+        url.push_str(&percent_encode(uuid));
+    }
+    url
+}
+
+fn percent_encode(raw: &str) -> String {
+    let mut out = String::new();
+    for b in raw.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+fn retry_after_secs(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    let value = headers.get(reqwest::header::RETRY_AFTER)?.to_str().ok()?;
+    value.trim().parse().ok()
 }
 
 fn truncate(s: &str, max: usize) -> String {
@@ -175,9 +208,6 @@ fn truncate(s: &str, max: usize) -> String {
         out.push(ch);
     }
     out
-} else {
-        format!("{}…", &s[..max])
-    }
 }
 
 pub fn parse_token_json(text: &str) -> Result<String, String> {
@@ -293,7 +323,7 @@ struct NfHistoryValue {
     real: Option<f64>,
 }
 
-pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, String> {
+pub fn parse_get_data_page(text: &str) -> Result<Vec<HistorySeries>, String> {
     let parsed: GetDataResponse =
         serde_json::from_str(text).map_err(|e| format!("point/data JSON: {e}"))?;
     let mut out = Vec::new();
@@ -301,6 +331,7 @@ pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, String> 
         let Some(provider_point_id) = series.uuid.filter(|s| !s.trim().is_empty()) else {
             continue;
         };
+        let mut samples = Vec::new();
         for value in series.values {
             let Some(val) = value.double.or(value.real) else {
                 continue;
@@ -308,7 +339,7 @@ pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, String> 
             let Some(ts) = value.ts.as_deref().and_then(parse_ts) else {
                 continue;
             };
-            out.push(RawProviderPoint {
+            samples.push(RawProviderPoint {
                 provider_point_id: provider_point_id.clone(),
                 display_name: None,
                 ts,
@@ -317,13 +348,26 @@ pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, String> 
                 attrs: serde_json::Map::new(),
             });
         }
+        out.push(HistorySeries {
+            provider_point_id,
+            samples,
+        });
     }
     Ok(out)
 }
 
 #[cfg(test)]
+pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, String> {
+    Ok(parse_get_data_page(text)?
+        .into_iter()
+        .flat_map(|series| series.samples)
+        .collect())
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
 
     const TOKEN_FIXTURE: &str = r#"{"accessToken":"tok-abc","expiresIn":3600}"#;
 
@@ -359,7 +403,10 @@ mod tests {
     fn parses_point_query_fixture() {
         let pts = parse_point_query_json(POINTS_FIXTURE).unwrap();
         assert_eq!(pts.len(), 1);
-        assert_eq!(pts[0].provider_point_id, "11111111-2222-3333-4444-555555555555");
+        assert_eq!(
+            pts[0].provider_point_id,
+            "11111111-2222-3333-4444-555555555555"
+        );
         assert!((pts[0].val - 72.5).abs() < f64::EPSILON);
         assert_eq!(pts[0].display_name.as_deref(), Some("OA-T"));
     }
@@ -379,5 +426,30 @@ mod tests {
         assert_eq!(pts.len(), 2);
         assert_eq!(pts[0].ts.timestamp_subsec_nanos(), 0);
         assert!((pts[1].val - 76.2).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn history_read_is_get_and_keeps_explicit_empty_series() {
+        assert_eq!(history_http_method(), "GET");
+        let from = Utc.with_ymd_and_hms(2026, 10, 19, 9, 0, 0).unwrap();
+        let to = Utc.with_ymd_and_hms(2026, 10, 19, 10, 0, 0).unwrap();
+        let url = build_history_read_url(
+            "https://portal.example",
+            &["uuid-a".into(), "uuid b".into()],
+            from,
+            to,
+        );
+        assert!(url.starts_with("https://portal.example/api/v1/point/data?"));
+        assert!(url.contains("from.seconds="));
+        assert!(url.contains("uuids=uuid-a"));
+        assert!(url.contains("uuids=uuid%20b"));
+        assert!(!url.contains("POST"));
+        let page = parse_get_data_page(
+            r#"{"data":[{"uuid":"present","values":[]},{"uuid":"has","values":[{"ts":"2026-10-19T09:01:00Z","double":1.0}]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(page.len(), 2);
+        assert!(page[0].samples.is_empty());
+        assert_eq!(page[1].samples.len(), 1);
     }
 }

@@ -14,8 +14,9 @@ driver and not a new GitHub repo.
 
 ## Decision
 
-1. **Generic `DataProvider` trait** inside `openfdd-central` — authenticate,
-   list/query points, fetch latest/history, health. Drivers are pluggable.
+1. **Pluggable HTTPS drivers** inside `openfdd-central` — authenticate,
+   catalog query, and history. NF and Ace are separate drivers. The hourly
+   worker calls the NF driver directly.
 2. **Normalized samples** → existing Timescale writer (`SampleRow` /
    `TelemetryEnvelope` tags: `building_id`, `equipment_id`, `role`).
 3. **NF first robust driver** — OAuth client-credentials +
@@ -28,6 +29,12 @@ driver and not a new GitHub repo.
 5. **Slimmer Soft-OPEN stack** — central + web + Timescale. fieldbus/mqtt
    containers are archived (see [`ARCHIVE_OT_EDGE.md`](ARCHIVE_OT_EDGE.md)).
 6. **MCP** — read-first provider health / sites tools; writes stay gated.
+7. **Hourly history jobs** — each modeled device is due for the last completed
+   hour. The job copies every source sample in the hour. NF history is
+   `GET /api/v1/point/data` only (`POST` on that path writes). Checkpoints,
+   receipts, and catch-up live in Postgres. The NF update log returned HTTP 403
+   on the lab key, so health states a bounded reconcile sweep and does not claim
+   gapless replication.
 
 ## Consequences
 
