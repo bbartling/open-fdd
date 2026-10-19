@@ -6,15 +6,16 @@
 use chrono::{DateTime, Duration, Utc};
 use futures_util::future::BoxFuture;
 
+use super::coverage::{build_coverage_ledger, CoverageLedger, LedgerInput};
 use super::hourly::{
     assess_page, catch_up_windows, completed_hour_end, model_revision, reconciliation_windows,
     retry_delay_secs, shard_ids, stagger_secs, CoverageOutcome, FetchError, HourlyPolicy,
     LogicalWindow, UPDATE_LOG_STATUS,
 };
-use super::map::{normalize_mapped, DevicePoints, HistorySeries, ResolvedRole};
+use super::map::{normalize_mapped, DevicePoints, HistorySeries, RawProviderPoint, ResolvedRole};
 use super::store::{
     CheckpointKey, CommitPatch, FailPatch, GapDraft, HourlyStore, JobRecord, JobState, NewJob,
-    ReceiptDraft,
+    ReceiptDraft, SeriesFact,
 };
 use super::types::NormalizedSample;
 
@@ -64,6 +65,7 @@ pub struct TickReport {
     pub last_safe_code: Option<String>,
     pub fetches: u32,
     pub update_log_status: &'static str,
+    pub ledger: CoverageLedger,
 }
 
 impl TickReport {
@@ -115,6 +117,7 @@ pub async fn run_hourly_tick(
         last_safe_code: None,
         fetches: 0,
         update_log_status: UPDATE_LOG_STATUS,
+        ledger: CoverageLedger::pending(),
     };
     let mut active = Vec::new();
     for device in input.devices {
@@ -163,6 +166,18 @@ pub async fn run_hourly_tick(
         }
     }
     report.unrecoverable_gaps = store.gap_count(input.canonical_site).await?;
+    let jobs = store.list_jobs(input.canonical_site).await?;
+    let receipts = store.list_receipts(input.canonical_site).await?;
+    let gaps = store.list_gaps(input.canonical_site).await?;
+    report.ledger = build_coverage_ledger(&LedgerInput {
+        jobs: &jobs,
+        receipts: &receipts,
+        gaps: &gaps,
+        now: input.now,
+        policy: input.policy,
+        durable_store: store.is_durable(),
+        latest_samples: &[],
+    });
     Ok(report)
 }
 
@@ -443,6 +458,12 @@ async fn execute_job(
         overlap_count: i32::try_from(assessed.overlap_count).unwrap_or(i32::MAX),
         writer_acknowledged,
         safe_code: outcome.into(),
+        series_facts: series_facts(
+            &job.point_ids,
+            &assessed.missing,
+            &assessed.accepted,
+            logical,
+        ),
     };
     let ok = store
         .commit(
@@ -466,6 +487,40 @@ async fn execute_job(
         report.committed = report.committed.saturating_add(1);
     }
     Ok(())
+}
+
+fn series_facts(
+    requested: &[String],
+    missing: &[String],
+    accepted: &[RawProviderPoint],
+    window: LogicalWindow,
+) -> Vec<SeriesFact> {
+    requested
+        .iter()
+        .map(|id| {
+            let missing_series = missing.iter().any(|item| item == id);
+            let mut count = 0u32;
+            let mut newest: Option<chrono::DateTime<chrono::Utc>> = None;
+            if !missing_series {
+                for sample in accepted {
+                    if &sample.provider_point_id != id
+                        || sample.ts < window.start
+                        || sample.ts >= window.end
+                    {
+                        continue;
+                    }
+                    count = count.saturating_add(1);
+                    newest = Some(newest.map(|ts| ts.max(sample.ts)).unwrap_or(sample.ts));
+                }
+            }
+            SeriesFact {
+                provider_point_id: id.clone(),
+                in_window_samples: count,
+                newest_ts: newest,
+                missing: missing_series,
+            }
+        })
+        .collect()
 }
 
 fn normalize_device(
@@ -926,5 +981,77 @@ mod tests {
         for call in fetch.calls.lock().unwrap().iter() {
             assert!(call.window_start >= ts(11, 0));
         }
+        assert!(report.ledger.rows.iter().any(|row| {
+            row.retention == crate::providers::coverage::RetentionState::UnrecoverableExpiry
+        }));
+        assert!(!report.ledger.gapless);
+        assert_eq!(report.ledger.update_log_http, 403);
+        assert!(report.ledger.rows.iter().all(|row| !row.gapless));
+        assert!(report.ledger.rows.iter().all(|row| !row.from_latest_sample));
+    }
+
+    #[tokio::test]
+    async fn ledger_reads_receipts_and_does_not_claim_gapless() {
+        let store = HourlyStore::memory();
+        let mut policy = policy();
+        policy.bootstrap = Duration::seconds(3600);
+        policy.reconcile_hours = 2;
+        let devices = vec![device(&["p1"])];
+        let mut samples = Vec::new();
+        for minute in 0..60 {
+            let mut sample = point("p1", 9, 0, f64::from(minute));
+            sample.ts = ts(9, 0) + Duration::seconds(i64::from(minute) * 60);
+            samples.push(sample);
+        }
+        let mut fetch = ScriptFetch {
+            results: StdMutex::new(vec![Ok(vec![series("p1", samples)])]),
+            calls: StdMutex::new(Vec::new()),
+        };
+        let mut writer = MemWrite {
+            batches: StdMutex::new(Vec::new()),
+            fail: false,
+        };
+        let report = run_hourly_tick(
+            &store,
+            &input(ts(10, 5), &devices, &policy),
+            &mut fetch,
+            &mut writer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(report.committed, 1);
+        assert!(!report.ledger.gapless);
+        assert!(report.ledger.update_log_status.contains("not_gapless"));
+        assert_eq!(report.ledger.update_log_http, 403);
+        assert_eq!(report.ledger.ignored_latest_samples, 0);
+        let row = report
+            .ledger
+            .rows
+            .iter()
+            .find(|row| row.provider_point_id == "p1")
+            .unwrap();
+        assert_eq!(
+            row.transport_probe,
+            crate::providers::coverage::TransportProbe::Ok
+        );
+        assert_eq!(
+            row.requested_window,
+            crate::providers::coverage::WindowCompleteness::Complete
+        );
+        assert_eq!(
+            row.durable_commit,
+            crate::providers::coverage::DurableCommit::MemoryReceipt
+        );
+        assert_eq!(
+            row.source_freshness,
+            crate::providers::coverage::SourceFreshness::WithinCadence
+        );
+        assert_eq!(
+            row.late_reconciliation,
+            crate::providers::coverage::LateReconciliation::Pending
+        );
+        assert!(report.ledger.durable_frontier.is_none());
+        assert_eq!(report.ledger.frontier, Some(ts(10, 0)));
+        assert!(report.health_code().contains("not_gapless"));
     }
 }

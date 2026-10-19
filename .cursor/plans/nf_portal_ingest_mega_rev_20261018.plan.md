@@ -36,7 +36,7 @@ todos:
     content: M2 ADR-011 DataProvider + Timescale + RDF
     status: completed
   - id: m3-trait
-    content: M3 DataProvider trait and Timescale writer (prototype; N4 capability/history contract still open)
+    content: M3 DataProvider trait and Timescale writer (prototype; N4 capability registry landed with N7 ledger)
     status: completed
   - id: m4-nf-driver
     content: M4 NF OAuth + point/query latest + GET point/data hour window (connectivity prototype; harden in Wave-A/B)
@@ -93,8 +93,8 @@ todos:
     content: SoftOPEN defer — N3 cross-replica derived-plan invalidation, durable multi-process model store, and in-flight SPARQL cancel (with N8)
     status: pending
   - id: n4-contract
-    content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
-    status: pending
+    content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented; Open-Meteo declares capabilities when its kind merges
+    status: completed
   - id: n5-durable
     content: "N5 durable per-device completed-hour jobs, receipts, checkpoints, catch-up, bounded reconciliation (fixture-tested; live NF pilot stays n12)"
     status: completed
@@ -102,7 +102,10 @@ todos:
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
     status: completed
   - id: n7-gaps
-    content: "SoftOPEN defer — full coverage ledger UI; N5 states NF update-log 403 and bounded reconciliation (not gapless)"
+    content: "N7 per-series coverage ledger (transport, window completeness, durable commit, freshness, bounded reconcile, retention expiry). NF update-log 403; not gapless. Latest sample does not advance."
+    status: completed
+  - id: n7-ledger-ui
+    content: "SoftOPEN defer — full coverage ledger UI on the Providers panel (health JSON already carries the ledger)"
     status: pending
   - id: n8-scale
     content: "SoftOPEN defer — N8 stage 3 live replica controller (stages 1–2 queue/leases landed in Wave-C; simulator is dry-run only)"
@@ -281,6 +284,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] **wave-b-n3-model** / **n3-model** — committed model + scoped SPARQL plans (resolver each tick)
 - [ ] SoftOPEN defer — **n3-replica-store** cross-replica invalidation, durable multi-process store, in-flight SPARQL cancel
 - [x] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA hooks (live rows, backfill submit, and server preview stay deferred)
+- [x] **n4-contract** — provider registry: NF `latest` + `fetch_history` (`GET /api/v1/point/data`, window limits); Ace `NotImplemented`; Open-Meteo waits on its `ProviderKind`
+- [x] **n7-gaps** — per-series/window ledger on hourly receipts (transport, completeness, durable commit, freshness, bounded reconcile, retention expiry). Update-log 403, not gapless. A latest sample does not advance the frontier
 
 ### Wave-C — after Wave-B
 - [x] **wave-c-n8-leases** — N8 Postgres queue/leases/fencing (stages 1–2). API role does not start pollers
@@ -293,7 +298,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n8-scale** stage 3 live replica controller (dry-run preview only; no Kubernetes)
 - [ ] SoftOPEN defer — **m14-grok-tools** historical Grok stress prompts; MCP/agent discovery already retired
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
-- [ ] SoftOPEN defer — **n7-gaps** full coverage ledger UI (N5 already states update-log 403 and bounded reconciliation)
+- [ ] SoftOPEN defer — **n7-ledger-ui** full coverage ledger UI (health JSON carries the rows)
 - [ ] SoftOPEN defer — N5 historian sample upsert and job receipt are separate writes (one transaction stays with N6)
 - [ ] SoftOPEN defer — **n11-frontend** live window rows, backfill submit, and server-issued binding preview
 - [ ] SoftOPEN defer — **n9-meteo** Open-Meteo + contractor fixture

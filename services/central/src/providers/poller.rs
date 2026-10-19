@@ -13,14 +13,16 @@ use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 use super::ace_stub::AceIotStubDriver;
+use super::capabilities::require_history;
 use super::config::SiteConfig;
-use super::hourly::HourlyPolicy;
+use super::hourly::{FetchError, HourlyPolicy};
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
 use super::map::HistorySeries;
 use super::nf::NfPortalDriver;
 use super::store::StoreOpen;
 use super::types::{HourlyCoverageHealth, ProviderHealthStatus};
 use super::writer;
+use super::DataProvider;
 use super::Runtime;
 use crate::state::AppState;
 
@@ -268,6 +270,9 @@ async fn nf_hourly_loop(
         };
         match run_hourly_tick(&store, &tick, &mut source, &mut sink).await {
             Ok(report) => {
+                let blocks = report.blocks_green();
+                let detail = report.health_code();
+                let samples = u64::try_from(report.samples_handed_off).unwrap_or(u64::MAX);
                 let coverage = HourlyCoverageHealth {
                     durable: report.durable,
                     committed: report.committed,
@@ -275,12 +280,16 @@ async fn nf_hourly_loop(
                     failed: report.failed,
                     partial: report.partial,
                     unrecoverable_gaps: report.unrecoverable_gaps,
-                    samples_handed_off: u64::try_from(report.samples_handed_off)
-                        .unwrap_or(u64::MAX),
+                    samples_handed_off: samples,
                     update_log_status: report.update_log_status.to_string(),
-                    detail: report.health_code(),
+                    detail: detail.clone(),
+                    gapless: report.ledger.gapless,
+                    update_log_http: report.ledger.update_log_http,
+                    ledger_frontier: report.ledger.frontier,
+                    durable_frontier: report.ledger.durable_frontier,
+                    ledger: report.ledger.rows,
                 };
-                let (status, as_error) = if report.blocks_green() {
+                let (status, as_error) = if blocks {
                     if report.failed > 0 && report.committed == 0 && report.no_source_data == 0 {
                         (ProviderHealthStatus::Error, true)
                     } else {
@@ -294,22 +303,15 @@ async fn nf_hourly_loop(
                         .record_hourly(
                             &building_id,
                             status,
-                            report.samples_handed_off as u64,
-                            Some(report.health_code()),
+                            samples,
+                            Some(detail.clone()),
                             coverage,
                             true,
                         )
                         .await;
                 } else {
                     runtime
-                        .record_hourly(
-                            &building_id,
-                            status,
-                            report.samples_handed_off as u64,
-                            Some(report.health_code()),
-                            coverage,
-                            false,
-                        )
+                        .record_hourly(&building_id, status, samples, Some(detail), coverage, false)
                         .await;
                 }
                 debug!(%building_id, status = ?status, "hourly tick finished");
@@ -332,7 +334,11 @@ impl HistorySource for NfHistory<'_> {
     fn fetch<'a>(
         &'a mut self,
         req: &'a FetchRequest,
-    ) -> BoxFuture<'a, Result<Vec<HistorySeries>, super::hourly::FetchError>> {
+    ) -> BoxFuture<'a, Result<Vec<HistorySeries>, FetchError>> {
+        let contract = DataProvider::contract(self.driver);
+        if require_history(&contract, req.point_ids.len(), req.from, req.to).is_err() {
+            return Box::pin(async { Err(FetchError::Contract) });
+        }
         Box::pin(async move {
             debug!(
                 purpose = %req.purpose,
@@ -341,6 +347,7 @@ impl HistorySource for NfHistory<'_> {
                 points = req.point_ids.len(),
                 "NF history GET"
             );
+            debug_assert_eq!(super::nf::history_http_method(), "GET");
             self.driver
                 .read_history_page(&req.point_ids, req.from, req.to)
                 .await
@@ -410,6 +417,19 @@ async fn ace_poll_loop(
                     )
                     .await;
             }
+            Err(err) if err == "not_implemented" => {
+                backoff_secs = poll_secs;
+                runtime
+                    .record_hourly(
+                        &building_id,
+                        ProviderHealthStatus::NotImplemented,
+                        0,
+                        Some("not_implemented".into()),
+                        HourlyCoverageHealth::default(),
+                        false,
+                    )
+                    .await;
+            }
             Err(err) => {
                 backoff_secs = if backoff_secs == 0 {
                     poll_secs.max(30)
@@ -427,6 +447,9 @@ async fn ace_poll_loop(
 
 async fn poll_ace_site(building_id: &str, ace: &mut AceIotStubDriver) -> Result<usize, String> {
     let _ = building_id;
+    if !ace.contract().implemented {
+        return Err("not_implemented".into());
+    }
     ace.authenticate().await?;
     ace.query_points().await.map(|_| 0)
 }

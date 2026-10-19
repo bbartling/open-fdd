@@ -34,7 +34,12 @@ impl AceIotStubDriver {
         Err("ace_iot driver not implemented".into())
     }
 
+    pub fn contract(&self) -> super::capabilities::ProviderContract {
+        super::capabilities::ace_contract()
+    }
+
     pub async fn query_points(&self) -> Result<Vec<RawProviderPoint>, String> {
-        Ok(Vec::new())
+        let _ = self;
+        Err(super::error::ProviderError::not_implemented().to_string())
     }
 }

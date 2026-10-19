@@ -1,8 +1,10 @@
 //! Pluggable HTTPS data providers (Wave-NF): NF portal first, Ace IoT stub.
 
 pub mod ace_stub;
+pub mod capabilities;
 pub mod committed_model;
 pub mod config;
+pub mod coverage;
 pub mod error;
 pub mod hourly;
 pub mod hourly_exec;
@@ -56,6 +58,22 @@ pub trait DataProvider: Send + Sync {
     fn fetch_latest(
         &mut self,
     ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
+    fn contract(&self) -> capabilities::ProviderContract;
+    /// History read allowed by [`capabilities::require_history`]. Ace returns
+    /// `not_implemented`. NF reads `GET /api/v1/point/data` only.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "hourly worker uses read_history_page after the same capability gate; tests call the trait"
+        )
+    )]
+    fn fetch_history(
+        &mut self,
+        ids: &[String],
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
 }
 
 impl DataProvider for nf::NfPortalDriver {
@@ -82,6 +100,21 @@ impl DataProvider for nf::NfPortalDriver {
             .await
             .map_err(|err| err.to_string())
     }
+
+    fn contract(&self) -> capabilities::ProviderContract {
+        capabilities::nf_contract()
+    }
+
+    async fn fetch_history(
+        &mut self,
+        ids: &[String],
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<map::RawProviderPoint>, String> {
+        nf::NfPortalDriver::fetch_history(self, ids, from, to)
+            .await
+            .map_err(|err| err.to_string())
+    }
 }
 
 impl DataProvider for ace_stub::AceIotStubDriver {
@@ -103,6 +136,19 @@ impl DataProvider for ace_stub::AceIotStubDriver {
 
     async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
         ace_stub::AceIotStubDriver::query_points(self).await
+    }
+
+    fn contract(&self) -> capabilities::ProviderContract {
+        capabilities::ace_contract()
+    }
+
+    async fn fetch_history(
+        &mut self,
+        _ids: &[String],
+        _from: chrono::DateTime<chrono::Utc>,
+        _to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<map::RawProviderPoint>, String> {
+        Err(error::ProviderError::not_implemented().to_string())
     }
 }
 
@@ -310,6 +356,8 @@ fn health_row(
     status: ProviderHealthStatus,
     message: Option<String>,
 ) -> SiteProviderHealth {
+    let contract = capabilities::contract_for(site.kind);
+    let history = contract.history.as_ref();
     SiteProviderHealth {
         building_id: site.building_id.clone(),
         provider_instance_id: site.provider_instance_id.clone(),
@@ -329,6 +377,15 @@ fn health_row(
         last_ingested_points: 0,
         consecutive_errors: 0,
         hourly_coverage: None,
+        capabilities: contract
+            .capabilities
+            .iter()
+            .map(|cap| cap.as_str().to_string())
+            .collect(),
+        provider_implemented: contract.implemented,
+        history_http_method: history.map(|limits| limits.http_method.clone()),
+        history_path: history.map(|limits| limits.path.clone()),
+        history_max_window_secs: history.map(|limits| limits.max_window_secs),
     }
 }
 
@@ -352,6 +409,11 @@ fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
         last_ingested_points: 0,
         consecutive_errors: 0,
         hourly_coverage: None,
+        capabilities: Vec::new(),
+        provider_implemented: false,
+        history_http_method: None,
+        history_path: None,
+        history_max_window_secs: None,
     }
 }
 
@@ -451,6 +513,43 @@ mod tests {
         check_provider(&nf);
         check_provider(&ace);
         assert_eq!(ace.provider_id(), "ace_iot:explicit");
+        assert!(ace.contract().capabilities.is_empty());
+        assert!(!ace.contract().implemented);
+        assert_eq!(nf.contract().history.unwrap().http_method, "GET");
+        assert!(!nf.contract().gapless);
+    }
+
+    #[tokio::test]
+    async fn trait_history_follows_the_registry() {
+        let mut nf = nf::NfPortalDriver::new(
+            "nf:explicit",
+            "https://portal.example",
+            None,
+            None,
+            true,
+            HttpLimits::default(),
+        )
+        .unwrap();
+        let wide = DataProvider::fetch_history(
+            &mut nf,
+            &["point-1".into()],
+            chrono::Utc::now() - chrono::Duration::hours(24),
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap_err();
+        assert!(wide.contains("contract"), "{wide}");
+        let mut ace = ace_stub::AceIotStubDriver::new("ace_iot:explicit");
+        let err = DataProvider::fetch_history(
+            &mut ace,
+            &["point-1".into()],
+            chrono::Utc::now() - chrono::Duration::hours(1),
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("not_implemented"), "{err}");
+        assert_eq!(ace.health().status, ProviderHealthStatus::NotImplemented);
     }
 
     fn site(building: &str, endpoint: &str, message: &str) -> SiteProviderHealth {
@@ -473,6 +572,11 @@ mod tests {
             last_ingested_points: 0,
             consecutive_errors: 1,
             hourly_coverage: None,
+            capabilities: Vec::new(),
+            provider_implemented: false,
+            history_http_method: None,
+            history_path: None,
+            history_max_window_secs: None,
         }
     }
 

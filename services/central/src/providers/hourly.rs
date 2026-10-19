@@ -34,6 +34,8 @@ pub struct HourlyPolicy {
     pub max_attempts: i32,
     pub points_per_shard: usize,
     pub retry_jitter_secs: i64,
+    /// Expected source spacing. One sample in an hour is not within cadence.
+    pub source_cadence: Duration,
 }
 
 impl Default for HourlyPolicy {
@@ -50,6 +52,7 @@ impl Default for HourlyPolicy {
             max_attempts: 8,
             points_per_shard: 50,
             retry_jitter_secs: 30,
+            source_cadence: Duration::seconds(60),
         }
     }
 }
@@ -80,6 +83,9 @@ impl HourlyPolicy {
         }
         if let Some(v) = env_i64("OPENFDD_HOURLY_POINTS_PER_SHARD") {
             policy.points_per_shard = usize::try_from(v.clamp(1, 500)).unwrap_or(50);
+        }
+        if let Some(v) = env_i64("OPENFDD_HOURLY_CADENCE_SECS") {
+            policy.source_cadence = Duration::seconds(v.clamp(1, 3600));
         }
         policy
     }

@@ -38,6 +38,19 @@ not a Soft-OPEN driver, and not a new GitHub repo. Haystack semantics stay.
    receipts, and catch-up live in Postgres. The NF update log returned HTTP 403
    on the lab key, so health states a bounded reconcile sweep and does not claim
    gapless replication.
+8. **Provider registry (N4)** — each driver declares capabilities (`latest`,
+   `fetch_history`) and history window limits. The hourly worker calls
+   `require_history` before a read. NF's history capability is
+   `GET /api/v1/point/data` only. Ace's contract is `implemented: false` and
+   stays `NotImplemented`. A new `ProviderKind` (Open-Meteo, when merged) must
+   add a match arm in `contract_for`.
+9. **Coverage ledger (N7)** — one row per series and window, with separate
+   fields for transport probe, requested-window completeness, durable commit,
+   source freshness, late reconciliation, and unrecoverable retention expiry.
+   A latest-value sample does not create a row and does not move the frontier.
+   Reconciliation covers only `reconcile_hours`. `gapless` is false while
+   `GET /api/v1/point/updates/data` is HTTP 403. The Providers panel ledger UI
+   remains deferred.
 
 ## Consequences
 

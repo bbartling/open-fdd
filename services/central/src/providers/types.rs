@@ -76,6 +76,17 @@ pub struct SiteProviderHealth {
     /// Honest hourly coverage. Absent until the hourly scheduler has run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hourly_coverage: Option<HourlyCoverageHealth>,
+    /// N4 capability names (`latest`, `fetch_history`). Empty means unimplemented.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
+    #[serde(default)]
+    pub provider_implemented: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_http_method: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_max_window_secs: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -89,6 +100,17 @@ pub struct HourlyCoverageHealth {
     pub samples_handed_off: u64,
     pub update_log_status: String,
     pub detail: String,
+    /// Always false for NF: update-log HTTP 403, so the ledger is not gapless.
+    #[serde(default)]
+    pub gapless: bool,
+    #[serde(default)]
+    pub update_log_http: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ledger_frontier: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub durable_frontier: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ledger: Vec<super::coverage::SeriesWindowLedger>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

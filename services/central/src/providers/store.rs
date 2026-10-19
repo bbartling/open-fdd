@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
@@ -144,6 +145,17 @@ impl JobRecord {
     }
 }
 
+/// Per-series facts stored on the hourly receipt. The coverage ledger reads
+/// these; it does not infer them from a latest-value scrape.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SeriesFact {
+    pub provider_point_id: String,
+    pub in_window_samples: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub newest_ts: Option<DateTime<Utc>>,
+    pub missing: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct ReceiptDraft {
     pub receipt_id: String,
@@ -155,6 +167,7 @@ pub struct ReceiptDraft {
     pub overlap_count: i32,
     pub writer_acknowledged: i32,
     pub safe_code: String,
+    pub series_facts: Vec<SeriesFact>,
 }
 
 #[derive(Debug, Clone)]
@@ -391,11 +404,24 @@ impl HourlyStore {
         }
     }
 
-    #[cfg(test)]
     pub async fn list_jobs(&self, canonical_site: &str) -> Result<Vec<JobRecord>, String> {
         match self {
             Self::Memory(inner) => Ok(inner.lock().await.list_jobs(canonical_site)),
             Self::Postgres(pool) => super::pg_store::list_jobs(pool, canonical_site).await,
+        }
+    }
+
+    pub async fn list_receipts(&self, canonical_site: &str) -> Result<Vec<ReceiptDraft>, String> {
+        match self {
+            Self::Memory(inner) => Ok(inner.lock().await.list_receipts(canonical_site)),
+            Self::Postgres(pool) => super::pg_store::list_receipts(pool, canonical_site).await,
+        }
+    }
+
+    pub async fn list_gaps(&self, canonical_site: &str) -> Result<Vec<GapDraft>, String> {
+        match self {
+            Self::Memory(inner) => Ok(inner.lock().await.list_gaps(canonical_site)),
+            Self::Postgres(pool) => super::pg_store::list_gaps(pool, canonical_site).await,
         }
     }
 }
@@ -615,7 +641,6 @@ impl MemoryInner {
         n
     }
 
-    #[cfg(test)]
     fn list_jobs(&self, canonical_site: &str) -> Vec<JobRecord> {
         let mut jobs: Vec<_> = self
             .jobs
@@ -632,6 +657,40 @@ impl MemoryInner {
             )
         });
         jobs
+    }
+
+    fn list_receipts(&self, canonical_site: &str) -> Vec<ReceiptDraft> {
+        let ids: std::collections::HashSet<_> = self
+            .jobs
+            .values()
+            .filter(|job| job.canonical_site == canonical_site)
+            .map(|job| job.job_id.clone())
+            .collect();
+        let mut rows: Vec<_> = self
+            .receipts
+            .values()
+            .filter(|receipt| ids.contains(&receipt.job_id))
+            .cloned()
+            .collect();
+        rows.sort_by(|a, b| a.receipt_id.cmp(&b.receipt_id));
+        rows
+    }
+
+    fn list_gaps(&self, canonical_site: &str) -> Vec<GapDraft> {
+        let mut rows: Vec<_> = self
+            .gaps
+            .values()
+            .filter(|gap| gap.canonical_site == canonical_site)
+            .cloned()
+            .collect();
+        rows.sort_by(|a, b| {
+            (&a.window_start, &a.device_id, &a.reason).cmp(&(
+                &b.window_start,
+                &b.device_id,
+                &b.reason,
+            ))
+        });
+        rows
     }
 }
 
@@ -765,6 +824,7 @@ mod tests {
                 overlap_count: 0,
                 writer_acknowledged: 1,
                 safe_code: "samples".into(),
+                series_facts: Vec::new(),
             },
         };
         assert!(!store
@@ -814,6 +874,7 @@ mod tests {
                 overlap_count: 0,
                 writer_acknowledged: 1,
                 safe_code: "samples".into(),
+                series_facts: Vec::new(),
             },
         };
         assert!(!store

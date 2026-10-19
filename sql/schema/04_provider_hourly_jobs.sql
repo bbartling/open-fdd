@@ -64,8 +64,12 @@ CREATE TABLE IF NOT EXISTS provider_hourly_receipt (
   overlap_count integer NOT NULL,
   writer_acknowledged integer NOT NULL,
   safe_code text NOT NULL,
+  series_facts jsonb NOT NULL DEFAULT '[]'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE provider_hourly_receipt
+  ADD COLUMN IF NOT EXISTS series_facts jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS provider_hourly_gap (
   gap_id text PRIMARY KEY,

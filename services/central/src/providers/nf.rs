@@ -14,8 +14,8 @@ use super::error::{ProviderError, ProviderErrorCode};
 use super::hourly::{classify_history_status, FetchError};
 use super::http_policy::{
     acceptable_unit, build_provider_client, floor_timestamp_micros, quality_from_json,
-    read_body_bounded, retry_after_secs, status_error, HttpLimits, MAX_HISTORY_WINDOW, MAX_ID_LEN,
-    MAX_SAMPLES_PER_RESPONSE, MAX_UUIDS_PER_REQUEST, MAX_UUIDS_TOTAL,
+    read_body_bounded, retry_after_secs, status_error, HttpLimits, MAX_ID_LEN,
+    MAX_SAMPLES_PER_RESPONSE, MAX_UUIDS_PER_REQUEST,
 };
 use super::map::{HistorySeries, RawProviderPoint};
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
@@ -167,12 +167,13 @@ impl NfPortalDriver {
         if uuids.is_empty() {
             return Ok(Vec::new());
         }
-        if uuids.len() > MAX_UUIDS_TOTAL {
-            return Err(ProviderError::new(ProviderErrorCode::Contract));
-        }
-        if to < from || to - from > MAX_HISTORY_WINDOW {
-            return Err(ProviderError::new(ProviderErrorCode::Contract));
-        }
+        super::capabilities::require_history(
+            &super::capabilities::nf_contract(),
+            uuids.len(),
+            from,
+            to,
+        )?;
+        debug_assert_eq!(history_http_method(), "GET");
         let mut out = Vec::new();
         for chunk in uuids.chunks(MAX_UUIDS_PER_REQUEST) {
             let page = self.fetch_history_chunk(chunk, from, to).await?;

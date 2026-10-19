@@ -19,10 +19,6 @@ pub enum ProviderErrorCode {
     InvalidSample,
     Persistence,
     Config,
-    #[expect(
-        dead_code,
-        reason = "Ace stays NotImplemented on the provider error contract"
-    )]
     NotImplemented,
     #[expect(
         dead_code,
@@ -105,6 +101,10 @@ impl ProviderError {
 
     pub fn config() -> Self {
         Self::new(ProviderErrorCode::Config)
+    }
+
+    pub fn not_implemented() -> Self {
+        Self::new(ProviderErrorCode::NotImplemented)
     }
 }
 

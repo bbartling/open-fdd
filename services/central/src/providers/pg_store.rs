@@ -7,7 +7,7 @@ use sqlx::Row;
 use super::hourly::LogicalWindow;
 use super::store::{
     claim_ready_sql, plan_claim_ids, CheckpointKey, CommitPatch, FailPatch, GapDraft, JobRecord,
-    JobState, NewJob, ReceiptDraft,
+    JobState, NewJob, ReceiptDraft, SeriesFact,
 };
 
 pub async fn ensure_schema(pool: &sqlx::PgPool) -> Result<(), String> {
@@ -409,7 +409,6 @@ pub async fn cancel_stale(
     Ok(n)
 }
 
-#[cfg(test)]
 pub async fn list_jobs(
     pool: &sqlx::PgPool,
     canonical_site: &str,
@@ -435,6 +434,81 @@ pub async fn list_jobs(
     Ok(jobs)
 }
 
+pub async fn list_receipts(
+    pool: &sqlx::PgPool,
+    canonical_site: &str,
+) -> Result<Vec<ReceiptDraft>, String> {
+    let rows = sqlx::query(
+        r#"
+        SELECT r.receipt_id, r.job_id, r.outcome, r.fetched_count, r.accepted_count,
+               r.rejected_count, r.overlap_count, r.writer_acknowledged, r.safe_code,
+               r.series_facts
+        FROM provider_hourly_receipt r
+        JOIN provider_hourly_job j ON j.job_id = r.job_id
+        WHERE j.canonical_site = $1
+        ORDER BY r.receipt_id
+        "#,
+    )
+    .bind(canonical_site)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    let mut receipts = Vec::new();
+    for row in rows {
+        let facts: serde_json::Value = row.try_get("series_facts").map_err(db_err)?;
+        let series_facts: Vec<SeriesFact> =
+            serde_json::from_value(facts).map_err(|_| "job_store_error".to_string())?;
+        receipts.push(ReceiptDraft {
+            receipt_id: row.try_get("receipt_id").map_err(db_err)?,
+            job_id: row.try_get("job_id").map_err(db_err)?,
+            outcome: row.try_get("outcome").map_err(db_err)?,
+            fetched_count: row.try_get("fetched_count").map_err(db_err)?,
+            accepted_count: row.try_get("accepted_count").map_err(db_err)?,
+            rejected_count: row.try_get("rejected_count").map_err(db_err)?,
+            overlap_count: row.try_get("overlap_count").map_err(db_err)?,
+            writer_acknowledged: row.try_get("writer_acknowledged").map_err(db_err)?,
+            safe_code: row.try_get("safe_code").map_err(db_err)?,
+            series_facts,
+        });
+    }
+    Ok(receipts)
+}
+
+pub async fn list_gaps(pool: &sqlx::PgPool, canonical_site: &str) -> Result<Vec<GapDraft>, String> {
+    let rows = sqlx::query(
+        r#"
+        SELECT tenant, canonical_site, provider_instance, device_id, model_revision,
+               window_start, window_end, reason, recoverability
+        FROM provider_hourly_gap
+        WHERE canonical_site = $1
+        ORDER BY window_start, device_id, reason
+        "#,
+    )
+    .bind(canonical_site)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    let mut gaps = Vec::new();
+    for row in rows {
+        gaps.push(GapDraft {
+            tenant: row.try_get("tenant").map_err(db_err)?,
+            canonical_site: row.try_get("canonical_site").map_err(db_err)?,
+            provider_instance: row.try_get("provider_instance").map_err(db_err)?,
+            device_id: row.try_get("device_id").map_err(db_err)?,
+            model_revision: row.try_get("model_revision").map_err(db_err)?,
+            window_start: row.try_get("window_start").map_err(db_err)?,
+            window_end: row.try_get("window_end").map_err(db_err)?,
+            reason: row.try_get("reason").map_err(db_err)?,
+            recoverability: row.try_get("recoverability").map_err(db_err)?,
+        });
+    }
+    Ok(gaps)
+}
+
+fn series_facts_json(facts: &[SeriesFact]) -> Result<serde_json::Value, String> {
+    serde_json::to_value(facts).map_err(|_| "job_store_error".to_string())
+}
+
 async fn insert_receipt(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     receipt: &ReceiptDraft,
@@ -443,8 +517,8 @@ async fn insert_receipt(
         r#"
         INSERT INTO provider_hourly_receipt (
             receipt_id, job_id, outcome, fetched_count, accepted_count, rejected_count,
-            overlap_count, writer_acknowledged, safe_code
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            overlap_count, writer_acknowledged, safe_code, series_facts
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (receipt_id) DO NOTHING
         "#,
     )
@@ -457,6 +531,7 @@ async fn insert_receipt(
     .bind(receipt.overlap_count)
     .bind(receipt.writer_acknowledged)
     .bind(&receipt.safe_code)
+    .bind(series_facts_json(&receipt.series_facts)?)
     .execute(&mut **tx)
     .await
     .map_err(db_err)?;
@@ -520,7 +595,6 @@ async fn load_job(
     row.map(|row| row_to_job(&row)).transpose()
 }
 
-#[cfg(test)]
 async fn load_job_pool(pool: &sqlx::PgPool, job_id: &str) -> Result<Option<JobRecord>, String> {
     let row = sqlx::query(JOB_SQL)
         .bind(job_id)
