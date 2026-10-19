@@ -25,6 +25,8 @@ pub struct PointMapEntry {
     pub role: String,
     #[serde(default)]
     pub equip_type: Option<String>,
+    #[serde(default)]
+    pub unit: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -54,6 +56,7 @@ pub struct ResolvedRole {
     pub equipment_id: String,
     pub role: String,
     pub equip_type: Option<String>,
+    pub unit: Option<String>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -62,36 +65,75 @@ pub struct RoleResolver {
 }
 
 impl RoleResolver {
-    pub fn from_point_map(entries: &[PointMapEntry]) -> Self {
-        let mut by_provider_point_id = HashMap::new();
+    pub fn from_point_map(entries: &[PointMapEntry]) -> Result<Self, String> {
+        let mut resolver = Self::default();
         for entry in entries {
             let key = entry.provider_point_id.trim();
             if key.is_empty() {
                 continue;
             }
-            by_provider_point_id.insert(
-                key.to_string(),
+            resolver.insert_role(
+                key,
                 ResolvedRole {
-                    equipment_id: entry.equipment_id.clone(),
-                    role: entry.role.clone(),
-                    equip_type: entry.equip_type.clone(),
+                    equipment_id: entry.equipment_id.trim().to_string(),
+                    role: entry.role.trim().to_string(),
+                    equip_type: entry
+                        .equip_type
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string),
+                    unit: entry
+                        .unit
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string),
                 },
-            );
+            )?;
         }
-        Self {
-            by_provider_point_id,
-        }
+        Ok(resolver)
     }
 
-    pub fn merge_binding_set_json(&mut self, json: &str) -> Result<(), String> {
+    fn insert_role(&mut self, provider_point_id: &str, role: ResolvedRole) -> Result<(), String> {
+        if role.equipment_id.is_empty() || role.role.is_empty() {
+            return Err("invalid_binding".into());
+        }
+        if let Some(existing) = self.by_provider_point_id.get(provider_point_id) {
+            if existing.equipment_id != role.equipment_id || existing.role != role.role {
+                return Err("duplicate_provider_point".into());
+            }
+            return Ok(());
+        }
+        let collision = self.by_provider_point_id.values().any(|existing| {
+            existing.equipment_id == role.equipment_id && existing.role == role.role
+        });
+        if collision {
+            return Err("duplicate_equipment_role".into());
+        }
+        self.by_provider_point_id
+            .insert(provider_point_id.to_string(), role);
+        Ok(())
+    }
+
+    pub fn merge_binding_set_json(
+        &mut self,
+        json: &str,
+        expected_building: &str,
+    ) -> Result<(), String> {
         let set: BindingSetFile =
-            serde_json::from_str(json).map_err(|e| format!("binding set JSON: {e}"))?;
-        // Optional file-level building id is metadata. Role rows stay explicit.
-        let _building_meta = set
+            serde_json::from_str(json).map_err(|_| "binding_set_json".to_string())?;
+        let Some(building) = set
             .building_id
             .as_deref()
             .map(str::trim)
-            .filter(|id| !id.is_empty());
+            .filter(|s| !s.is_empty())
+        else {
+            return Err("binding_scope_required".into());
+        };
+        if building != expected_building.trim() {
+            return Err("binding_building_mismatch".into());
+        }
         for equip in set.equipment {
             for pt in equip.points {
                 let Some(role) = pt
@@ -106,23 +148,34 @@ impl RoleResolver {
                 if pid.is_empty() {
                     continue;
                 }
-                self.by_provider_point_id.insert(
-                    pid.to_string(),
-                    ResolvedRole {
-                        equipment_id: equip.equipment_id.clone(),
-                        role: role.to_string(),
-                        equip_type: None,
-                    },
-                );
+                let incoming = ResolvedRole {
+                    equipment_id: equip.equipment_id.trim().to_string(),
+                    role: role.to_string(),
+                    equip_type: None,
+                    unit: None,
+                };
+                if let Some(existing) = self.by_provider_point_id.get(pid) {
+                    if existing.equipment_id != incoming.equipment_id
+                        || existing.role != incoming.role
+                    {
+                        return Err("duplicate_provider_point".into());
+                    }
+                    continue;
+                }
+                self.insert_role(pid, incoming)?;
             }
         }
         Ok(())
     }
 
-    pub fn merge_binding_set_path(&mut self, path: &std::path::Path) -> Result<(), String> {
-        let raw = std::fs::read_to_string(path)
-            .map_err(|e| format!("read binding set {}: {e}", path.display()))?;
-        self.merge_binding_set_json(&raw)
+    pub fn merge_binding_set_path(
+        &mut self,
+        path: &std::path::Path,
+        expected_building: &str,
+    ) -> Result<(), String> {
+        let raw =
+            std::fs::read_to_string(path).map_err(|_| "binding_set_unreadable".to_string())?;
+        self.merge_binding_set_json(&raw, expected_building)
     }
 
     /// Resolve by stable `provider_point_id` only — never by display name.
@@ -142,28 +195,35 @@ impl RoleResolver {
 #[derive(Debug, Clone)]
 pub struct RawProviderPoint {
     pub provider_point_id: String,
-    #[allow(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "kept on the raw point for adapter parity; poll path maps by provider_point_id"
+    )]
     pub display_name: Option<String>,
     pub ts: chrono::DateTime<chrono::Utc>,
     pub val: f64,
     pub unit: Option<String>,
+    pub source_quality: Option<String>,
     pub attrs: serde_json::Map<String, serde_json::Value>,
 }
 
 pub fn normalize_mapped(
     building_id: &str,
+    provider_instance_id: &str,
     raw: &RawProviderPoint,
     resolved: &ResolvedRole,
 ) -> NormalizedSample {
     NormalizedSample {
         building_id: building_id.to_string(),
+        provider_instance_id: provider_instance_id.to_string(),
         equipment_id: resolved.equipment_id.clone(),
         provider_point_id: raw.provider_point_id.clone(),
         role: resolved.role.clone(),
         equip_type: resolved.equip_type.clone(),
         ts: raw.ts,
         val: raw.val,
-        unit: raw.unit.clone(),
+        unit: raw.unit.clone().or_else(|| resolved.unit.clone()),
+        source_quality: raw.source_quality.clone(),
         attrs: raw.attrs.clone(),
     }
 }
@@ -179,7 +239,9 @@ mod tests {
             equipment_id: "AHU_1".into(),
             role: "outside-air-temp".into(),
             equip_type: None,
-        }]);
+            unit: None,
+        }])
+        .unwrap();
         let hit = resolver.resolve("6639-uuid-oa-t").unwrap();
         assert_eq!(hit.equipment_id, "AHU_1");
         assert_eq!(hit.role, "outside-air-temp");
@@ -192,7 +254,38 @@ mod tests {
             equipment_id: "AHU_1".into(),
             role: "outside-air-temp".into(),
             equip_type: None,
-        }]);
+            unit: None,
+        }])
+        .unwrap();
         assert!(resolver.resolve("OA-T").is_none());
+    }
+
+    #[test]
+    fn duplicate_role_and_wrong_building_fail() {
+        let err = RoleResolver::from_point_map(&[
+            PointMapEntry {
+                provider_point_id: "a".into(),
+                equipment_id: "AHU_1".into(),
+                role: "sat".into(),
+                equip_type: Some("ahu".into()),
+                unit: None,
+            },
+            PointMapEntry {
+                provider_point_id: "b".into(),
+                equipment_id: "AHU_1".into(),
+                role: "sat".into(),
+                equip_type: None,
+                unit: None,
+            },
+        ])
+        .unwrap_err();
+        assert_eq!(err, "duplicate_equipment_role");
+
+        let mut resolver = RoleResolver::default();
+        let mismatch = resolver.merge_binding_set_json(
+            r#"{"building_id":"OTHER","equipment":[{"equipment_id":"AHU_1","points":[{"point_id":"u","canonical_role":"sat"}]}]}"#,
+            "SITE",
+        );
+        assert_eq!(mismatch.unwrap_err(), "binding_building_mismatch");
     }
 }

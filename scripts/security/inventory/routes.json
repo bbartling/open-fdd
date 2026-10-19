@@ -1162,9 +1162,10 @@
       "path": "/api/providers/health",
       "section": "protected",
       "auth": "jwt_required",
-      "policy": "tenant_building_acl",
+      "policy": "tenant_scoped_provider_health",
       "disposition": "PLANNED",
       "deny_statuses": [
+        401,
         403
       ],
       "anon_expected": [
@@ -1181,12 +1182,12 @@
         "y.authz.get_api_providers_health"
       ],
       "request_schema": {
-        "type": "none",
+        "type": "openfdd.providers.health.v1",
         "status": "defined"
       },
       "response_schema": {
         "type": "openfdd.providers.health.v1",
-        "status": "TODO"
+        "status": "defined"
       },
       "selectors": [
         "tenant_id",
@@ -1196,16 +1197,17 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "JWT portal driver health. Response is tenant-filtered by building_id. No vendor tokens or raw OAuth bodies."
+      "notes": "Wave-NF JWT provider health. Fail closed on tenant membership. Hub admin sees origins; other callers get redacted endpoints and safe error codes. PLANNED until the security suite emits these check ids."
     },
     {
       "method": "GET",
       "path": "/api/providers/sites",
       "section": "protected",
       "auth": "jwt_required",
-      "policy": "tenant_building_acl",
+      "policy": "tenant_scoped_provider_health",
       "disposition": "PLANNED",
       "deny_statuses": [
+        401,
         403
       ],
       "anon_expected": [
@@ -1222,12 +1224,12 @@
         "y.authz.get_api_providers_sites"
       ],
       "request_schema": {
-        "type": "none",
+        "type": "openfdd.providers.sites.v1",
         "status": "defined"
       },
       "response_schema": {
         "type": "openfdd.providers.sites.v1",
-        "status": "TODO"
+        "status": "defined"
       },
       "selectors": [
         "tenant_id",
@@ -1237,7 +1239,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "JWT portal site list plus health. Tenant-filtered by building_id. No secrets."
+      "notes": "Wave-NF JWT provider site list. Same tenant filter and redaction as provider health. PLANNED until the security suite emits these check ids."
     },
     {
       "method": "POST",

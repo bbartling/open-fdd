@@ -1,48 +1,74 @@
-//! Normal Framework portal HTTPS driver (OAuth + point/query).
+//! Normal Framework portal HTTPS driver.
+//!
+//! History reads are `GET /api/v1/point/data`. `POST` on that path is a write
+//! and is never used here. OAuth token calls are `POST /api/v1/auth/token`.
 
-use std::time::Duration;
+use std::fmt;
 
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
 
+use super::error::{ProviderError, ProviderErrorCode};
+use super::http_policy::{
+    acceptable_unit, build_provider_client, floor_timestamp_micros, quality_from_json,
+    read_body_bounded, retry_after_secs, status_error, HttpLimits, MAX_HISTORY_WINDOW, MAX_ID_LEN,
+    MAX_SAMPLES_PER_RESPONSE, MAX_UUIDS_PER_REQUEST, MAX_UUIDS_TOTAL,
+};
 use super::map::RawProviderPoint;
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
 
-const USER_AGENT: &str = "openfdd-central-nf/1.0";
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NfPortalDriver {
-    pub endpoint: String,
-    pub client_id: Option<String>,
-    pub client_secret: Option<String>,
+    endpoint: String,
+    client_id: Option<String>,
+    client_secret: Option<String>,
+    anonymous: bool,
     client: Client,
+    limits: HttpLimits,
     token: Option<String>,
+    token_expires_at: Option<DateTime<Utc>>,
     provider_id: String,
+}
+
+impl fmt::Debug for NfPortalDriver {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NfPortalDriver")
+            .field("endpoint", &self.endpoint)
+            .field("anonymous", &self.anonymous)
+            .field("client_id", &self.client_id.as_ref().map(|_| "<set>"))
+            .field(
+                "client_secret",
+                &self.client_secret.as_ref().map(|_| "<set>"),
+            )
+            .field("token", &self.token.as_ref().map(|_| "<set>"))
+            .field("provider_id", &self.provider_id)
+            .finish()
+    }
 }
 
 impl NfPortalDriver {
     pub fn new(
-        building_id: &str,
+        provider_instance_id: impl Into<String>,
         endpoint: impl Into<String>,
         client_id: Option<String>,
         client_secret: Option<String>,
-    ) -> Self {
-        let client = Client::builder()
-            .user_agent(USER_AGENT)
-            .timeout(Duration::from_secs(60))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .expect("nf reqwest client");
-        Self {
+        anonymous: bool,
+        limits: HttpLimits,
+    ) -> Result<Self, ProviderError> {
+        let client = build_provider_client(limits)?;
+        Ok(Self {
             endpoint: endpoint.into(),
             client_id,
             client_secret,
+            anonymous,
             client,
+            limits,
             token: None,
-            provider_id: format!("nf:{building_id}"),
-        }
+            token_expires_at: None,
+            provider_id: provider_instance_id.into(),
+        })
     }
 
     pub fn provider_id(&self) -> &str {
@@ -60,20 +86,28 @@ impl NfPortalDriver {
         }
     }
 
-    pub async fn authenticate(&mut self) -> Result<(), String> {
-        let (Some(id), Some(secret)) = (&self.client_id, &self.client_secret) else {
-            // Fail closed: missing OAuth pair is a configuration error for HTTPS portals.
-            // Explicit lab anonymous mode requires OPENFDD_NF_ALLOW_ANONYMOUS=1.
-            let allow_anon = std::env::var("OPENFDD_NF_ALLOW_ANONYMOUS")
-                .ok()
-                .is_some_and(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"));
-            if allow_anon {
-                return Ok(());
+    fn token_fresh(&self) -> bool {
+        match (&self.token, self.token_expires_at) {
+            (Some(token), Some(exp)) if !token.is_empty() => {
+                Utc::now() + chrono::Duration::seconds(60) < exp
             }
-            return Err(
-                "nf oauth not configured (set client_id/client_secret or OPENFDD_NF_ALLOW_ANONYMOUS=1)"
-                    .into(),
-            );
+            _ => false,
+        }
+    }
+
+    pub async fn authenticate(&mut self) -> Result<(), ProviderError> {
+        if self.anonymous {
+            return Ok(());
+        }
+        if self.token_fresh() {
+            return Ok(());
+        }
+        self.authenticate_force().await
+    }
+
+    async fn authenticate_force(&mut self) -> Result<(), ProviderError> {
+        let (Some(id), Some(secret)) = (&self.client_id, &self.client_secret) else {
+            return Err(ProviderError::auth_not_configured());
         };
         let url = format!("{}/api/v1/auth/token", self.endpoint);
         let body = serde_json::json!({
@@ -81,109 +115,202 @@ impl NfPortalDriver {
             "client_secret": secret,
             "grant_type": "client_credentials",
         });
-        let resp = self
-            .client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("token request: {e}"))?;
-        let status = resp.status();
-        let text = resp.text().await.map_err(|e| format!("token body: {e}"))?;
-        if !status.is_success() {
-            return Err(format!("token HTTP {status}: {}", truncate(&text, 400)));
+        let deadline = tokio::time::Instant::now() + self.limits.total;
+        let response = self.dispatch(&url, Some(body), false).await?;
+        let status = response.status();
+        if status.is_redirection() {
+            return Err(status_error(status, None));
         }
-        self.token = Some(parse_token_json(&text)?);
+        let bytes = read_body_bounded(response, self.limits.max_body_bytes, deadline).await?;
+        if !status.is_success() {
+            return Err(status_error(status, None));
+        }
+        let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
+        let (token, expires_in) = parse_token_json(text)?;
+        let ttl = expires_in.unwrap_or(300).max(0);
+        self.token = Some(token);
+        self.token_expires_at = if ttl == 0 {
+            Some(Utc::now())
+        } else {
+            Some(Utc::now() + chrono::Duration::seconds(ttl))
+        };
         Ok(())
     }
 
-    pub async fn query_points(&self, page_size: u32) -> Result<Vec<RawProviderPoint>, String> {
+    pub async fn query_points(
+        &mut self,
+        page_size: u32,
+    ) -> Result<Vec<RawProviderPoint>, ProviderError> {
+        let page_size = page_size.clamp(1, 500);
         let url = format!("{}/api/v1/point/query", self.endpoint);
-        let mut req = self
-            .client
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .json(&serde_json::json!({ "pageSize": page_size }));
-        if let Some(token) = self.token.as_deref().filter(|t| !t.is_empty()) {
-            req = req.bearer_auth(token);
-        }
-        let resp = req.send().await.map_err(|e| format!("point/query: {e}"))?;
-        let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("point/query body: {e}"))?;
-        if !status.is_success() {
-            return Err(format!(
-                "point/query HTTP {status}: {}",
-                truncate(&text, 400)
-            ));
-        }
-        parse_point_query_json(&text)
+        let (status, bytes, retry_after) = self
+            .send(
+                &url,
+                Some(serde_json::json!({ "pageSize": page_size })),
+                true,
+                true,
+            )
+            .await?;
+        self.ensure_success(status, retry_after)?;
+        let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
+        parse_point_query_json(text)
     }
 
     /// Read history via GetData (`GET /api/v1/point/data`).
-    ///
-    /// `POST /api/v1/point/data` is AddPointsData (a write) and a read-only API
-    /// key returns 401. Docs: https://docs.normal.dev/concepts/points/
     pub async fn fetch_history(
-        &self,
+        &mut self,
         uuids: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<RawProviderPoint>, String> {
+    ) -> Result<Vec<RawProviderPoint>, ProviderError> {
         if uuids.is_empty() {
             return Ok(Vec::new());
         }
-        let mut qs = format!(
-            "from.seconds={}&to.seconds={}",
+        if uuids.len() > MAX_UUIDS_TOTAL {
+            return Err(ProviderError::new(ProviderErrorCode::Contract));
+        }
+        if to < from || to - from > MAX_HISTORY_WINDOW {
+            return Err(ProviderError::new(ProviderErrorCode::Contract));
+        }
+        let mut out = Vec::new();
+        for chunk in uuids.chunks(MAX_UUIDS_PER_REQUEST) {
+            let page = self.fetch_history_chunk(chunk, from, to).await?;
+            if out.len().saturating_add(page.len()) > MAX_SAMPLES_PER_RESPONSE {
+                return Err(ProviderError::new(ProviderErrorCode::BodyTooLarge));
+            }
+            out.extend(page);
+        }
+        Ok(out)
+    }
+
+    async fn fetch_history_chunk(
+        &mut self,
+        uuids: &[String],
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<RawProviderPoint>, ProviderError> {
+        let mut url = format!(
+            "{}/api/v1/point/data?from.seconds={}&to.seconds={}",
+            self.endpoint,
             from.timestamp(),
             to.timestamp()
         );
         for uuid in uuids {
-            qs.push_str("&uuids=");
-            qs.push_str(uuid);
+            if !valid_point_id(uuid) {
+                return Err(ProviderError::new(ProviderErrorCode::InvalidSample));
+            }
+            url.push_str("&uuids=");
+            url.push_str(uuid);
         }
-        let url = format!("{}/api/v1/point/data?{qs}", self.endpoint);
-        let mut req = self.client.get(&url);
-        if let Some(token) = self.token.as_deref().filter(|t| !t.is_empty()) {
-            req = req.bearer_auth(token);
+        let (status, bytes, retry_after) = self.send(&url, None, true, true).await?;
+        self.ensure_success(status, retry_after)?;
+        let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
+        parse_get_data_json(text)
+    }
+
+    fn ensure_success(
+        &self,
+        status: reqwest::StatusCode,
+        retry_after: Option<u64>,
+    ) -> Result<(), ProviderError> {
+        if status.is_success() {
+            Ok(())
+        } else {
+            Err(status_error(status, retry_after))
         }
-        let resp = req.send().await.map_err(|e| format!("point/data: {e}"))?;
-        let status = resp.status();
-        let text = resp
-            .text()
-            .await
-            .map_err(|e| format!("point/data body: {e}"))?;
-        if !status.is_success() {
-            return Err(format!(
-                "point/data HTTP {status}: {}",
-                truncate(&text, 400)
-            ));
+    }
+
+    /// `json_body` selects POST. History passes `None` and stays a GET.
+    /// `allow_auth_retry` refreshes a cached token once on HTTP 401.
+    async fn send(
+        &mut self,
+        url: &str,
+        json_body: Option<Value>,
+        bearer: bool,
+        allow_auth_retry: bool,
+    ) -> Result<(reqwest::StatusCode, Vec<u8>, Option<u64>), ProviderError> {
+        let attempts = if allow_auth_retry { 2 } else { 1 };
+        for attempt in 0..attempts {
+            if bearer && !self.anonymous && !self.token_fresh() {
+                self.authenticate_force().await?;
+            }
+            let deadline = tokio::time::Instant::now() + self.limits.total;
+            let response = self.dispatch(url, json_body.clone(), bearer).await?;
+            let status = response.status();
+            let retry_after = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(retry_after_secs);
+            if status.as_u16() == 401
+                && allow_auth_retry
+                && attempt + 1 < attempts
+                && !self.anonymous
+            {
+                self.token = None;
+                self.token_expires_at = None;
+                continue;
+            }
+            if status.is_redirection() {
+                return Err(status_error(status, None));
+            }
+            let bytes = read_body_bounded(response, self.limits.max_body_bytes, deadline).await?;
+            if !status.is_success() {
+                return Err(status_error(status, retry_after));
+            }
+            return Ok((status, bytes, retry_after));
         }
-        parse_get_data_json(&text)
+        Err(ProviderError::new(ProviderErrorCode::AuthFailed).with_status(401))
+    }
+
+    async fn dispatch(
+        &self,
+        url: &str,
+        json_body: Option<Value>,
+        bearer: bool,
+    ) -> Result<reqwest::Response, ProviderError> {
+        let mut req = if let Some(body) = json_body {
+            self.client.post(url).json(&body)
+        } else {
+            self.client.get(url)
+        };
+        if bearer {
+            if let Some(token) = self.token.as_deref().filter(|t| !t.is_empty()) {
+                req = req.bearer_auth(token);
+            }
+        }
+        req.send().await.map_err(|err| {
+            if err.is_timeout() {
+                ProviderError::new(ProviderErrorCode::DeadlineExceeded)
+            } else {
+                ProviderError::transport()
+            }
+        })
     }
 }
 
-fn truncate(s: &str, max: usize) -> String {
-    let mut out = String::new();
-    for (i, ch) in s.chars().enumerate() {
-        if i >= max {
-            out.push('…');
-            break;
-        }
-        out.push(ch);
-    }
-    out
+fn valid_point_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_ID_LEN
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
-pub fn parse_token_json(text: &str) -> Result<String, String> {
-    let body: Value = serde_json::from_str(text).map_err(|e| format!("token JSON: {e}"))?;
-    body.get("accessToken")
+pub fn parse_token_json(text: &str) -> Result<(String, Option<i64>), ProviderError> {
+    let body: Value = serde_json::from_str(text).map_err(|_| ProviderError::contract())?;
+    let token = body
+        .get("accessToken")
         .or_else(|| body.get("access_token"))
         .and_then(|v| v.as_str())
-        .map(str::to_string)
-        .ok_or_else(|| format!("no accessToken in response: {body:?}"))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(ProviderError::contract)?;
+    let expires = body
+        .get("expiresIn")
+        .or_else(|| body.get("expires_in"))
+        .and_then(|v| v.as_i64());
+    Ok((token.to_string(), expires))
 }
 
 #[derive(Debug, Deserialize)]
@@ -215,44 +342,55 @@ struct NfLatestValue {
     double: Option<f64>,
     #[serde(default)]
     ts: Option<String>,
+    #[serde(default)]
+    quality: Option<Value>,
 }
 
-pub fn parse_point_query_json(text: &str) -> Result<Vec<RawProviderPoint>, String> {
+pub fn parse_point_query_json(text: &str) -> Result<Vec<RawProviderPoint>, ProviderError> {
     let parsed: PointQueryResponse =
-        serde_json::from_str(text).map_err(|e| format!("point/query JSON: {e}"))?;
+        serde_json::from_str(text).map_err(|_| ProviderError::contract())?;
     let mut out = Vec::new();
     for pt in parsed.points {
-        let provider_point_id = pt
-            .uuid
-            .or(pt.id)
-            .filter(|s| !s.trim().is_empty())
-            .ok_or_else(|| "point missing uuid/id".to_string())?;
-        let latest = pt.latest_value.unwrap_or(NfLatestValue {
-            double: None,
-            ts: None,
-        });
+        let Some(provider_point_id) = pt.uuid.or(pt.id).filter(|s| valid_point_id(s.trim())) else {
+            continue;
+        };
+        let Some(latest) = pt.latest_value else {
+            continue;
+        };
         let Some(val) = latest.double else {
             continue;
         };
-        let ts = latest
-            .ts
-            .as_deref()
-            .and_then(parse_ts)
-            .unwrap_or_else(Utc::now);
-        let unit = pt.units.filter(|u| !u.is_empty());
+        let Some(ts) = latest.ts.as_deref().and_then(parse_source_ts) else {
+            continue;
+        };
+        let unit = match pt.units.as_deref() {
+            Some(raw) => match acceptable_unit(raw) {
+                Some(unit) => Some(unit),
+                None => continue,
+            },
+            None => None,
+        };
+        let source_quality = match quality_from_json(latest.quality.as_ref()) {
+            Ok(q) => q,
+            Err(()) => continue,
+        };
         out.push(RawProviderPoint {
             provider_point_id,
             display_name: pt.name,
             ts,
             val,
             unit,
+            source_quality,
             attrs: pt.attrs.unwrap_or_default(),
         });
+        if out.len() > MAX_SAMPLES_PER_RESPONSE {
+            return Err(ProviderError::new(ProviderErrorCode::BodyTooLarge));
+        }
     }
     Ok(out)
 }
 
-fn parse_ts(raw: &str) -> Option<DateTime<Utc>> {
+fn parse_source_ts(raw: &str) -> Option<DateTime<Utc>> {
     let dt = DateTime::parse_from_rfc3339(raw)
         .ok()
         .map(|dt| dt.with_timezone(&Utc))
@@ -261,9 +399,14 @@ fn parse_ts(raw: &str) -> Option<DateTime<Utc>> {
                 .ok()
                 .map(|ndt| ndt.and_utc())
         })?;
-    // NF history stamps carry leftover nanos. Store whole seconds so an
-    // overlapping hourly pull upserts the same row instead of a twin.
-    Some(dt.with_nanosecond(0).unwrap_or(dt))
+    let dt = floor_timestamp_micros(dt);
+    if dt.year() < 1990 {
+        return None;
+    }
+    if dt > Utc::now() + chrono::Duration::minutes(15) {
+        return None;
+    }
+    Some(dt)
 }
 
 #[derive(Debug, Deserialize)]
@@ -277,6 +420,8 @@ struct GetDataSeries {
     #[serde(default)]
     uuid: Option<String>,
     #[serde(default)]
+    units: Option<String>,
+    #[serde(default)]
     values: Vec<NfHistoryValue>,
 }
 
@@ -288,31 +433,48 @@ struct NfHistoryValue {
     double: Option<f64>,
     #[serde(default)]
     real: Option<f64>,
+    #[serde(default)]
+    quality: Option<Value>,
 }
 
-pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, String> {
+pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, ProviderError> {
     let parsed: GetDataResponse =
-        serde_json::from_str(text).map_err(|e| format!("point/data JSON: {e}"))?;
+        serde_json::from_str(text).map_err(|_| ProviderError::contract())?;
     let mut out = Vec::new();
     for series in parsed.data {
-        let Some(provider_point_id) = series.uuid.filter(|s| !s.trim().is_empty()) else {
+        let Some(provider_point_id) = series.uuid.filter(|s| valid_point_id(s.trim())) else {
             continue;
+        };
+        let unit = match series.units.as_deref() {
+            Some(raw) => match acceptable_unit(raw) {
+                Some(unit) => Some(unit),
+                None => continue,
+            },
+            None => None,
         };
         for value in series.values {
             let Some(val) = value.double.or(value.real) else {
                 continue;
             };
-            let Some(ts) = value.ts.as_deref().and_then(parse_ts) else {
+            let Some(ts) = value.ts.as_deref().and_then(parse_source_ts) else {
                 continue;
+            };
+            let source_quality = match quality_from_json(value.quality.as_ref()) {
+                Ok(q) => q,
+                Err(()) => continue,
             };
             out.push(RawProviderPoint {
                 provider_point_id: provider_point_id.clone(),
                 display_name: None,
                 ts,
                 val,
-                unit: None,
+                unit: unit.clone(),
+                source_quality,
                 attrs: serde_json::Map::new(),
             });
+            if out.len() > MAX_SAMPLES_PER_RESPONSE {
+                return Err(ProviderError::new(ProviderErrorCode::BodyTooLarge));
+            }
         }
     }
     Ok(out)
@@ -320,7 +482,12 @@ pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, String> 
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use super::super::http_policy::HttpLimits;
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
 
     const TOKEN_FIXTURE: &str = r#"{"accessToken":"tok-abc","expiresIn":3600}"#;
 
@@ -330,8 +497,13 @@ mod tests {
           "name": "OA-T",
           "uuid": "11111111-2222-3333-4444-555555555555",
           "units": "°F",
-          "latestValue": { "double": 72.5, "ts": "2026-10-18T12:00:00Z" },
+          "latestValue": { "double": 72.5, "ts": "2026-10-18T12:00:00.123456789Z", "quality": "good" },
           "attrs": { "type": "OBJECT_ANALOG_INPUT" }
+        },
+        {
+          "name": "missing-ts",
+          "uuid": "22222222-2222-3333-4444-555555555555",
+          "latestValue": { "double": 1.0 }
         },
         {
           "name": "no-value",
@@ -341,43 +513,239 @@ mod tests {
       ]
     }"#;
 
-    #[test]
-    fn parses_token_access_token_snake() {
-        let tok = parse_token_json(r#"{"access_token":"snake-tok"}"#).unwrap();
-        assert_eq!(tok, "snake-tok");
+    fn lab_driver(port: u16, secret: &str, limits: HttpLimits) -> NfPortalDriver {
+        NfPortalDriver::new(
+            "nf:test",
+            format!("http://127.0.0.1:{port}"),
+            Some("lab-id".into()),
+            Some(secret.into()),
+            false,
+            limits,
+        )
+        .unwrap()
+    }
+
+    async fn read_http_request(sock: &mut tokio::net::TcpStream) -> String {
+        let mut buf = vec![0u8; 8192];
+        let mut got = Vec::new();
+        loop {
+            let n = tokio::time::timeout(Duration::from_secs(2), sock.read(&mut buf))
+                .await
+                .expect("read timeout")
+                .expect("read");
+            if n == 0 {
+                break;
+            }
+            got.extend_from_slice(&buf[..n]);
+            if got.windows(4).any(|w| w == b"\r\n\r\n") {
+                break;
+            }
+        }
+        String::from_utf8_lossy(&got).to_string()
     }
 
     #[test]
-    fn parses_token_camel_case() {
-        assert_eq!(parse_token_json(TOKEN_FIXTURE).unwrap(), "tok-abc");
+    fn parses_token_without_echoing_body() {
+        assert_eq!(parse_token_json(TOKEN_FIXTURE).unwrap().0, "tok-abc");
+        assert_eq!(
+            parse_token_json(r#"{"access_token":"snake-tok"}"#)
+                .unwrap()
+                .0,
+            "snake-tok"
+        );
+        let err = parse_token_json(r#"{"echo":"CANARY-SECRET-VALUE"}"#).unwrap_err();
+        assert!(!err.to_string().contains("CANARY"));
+        let debug = format!(
+            "{:?}",
+            NfPortalDriver::new(
+                "nf:test",
+                "https://portal.example",
+                Some("id".into()),
+                Some("CANARY-SECRET-VALUE".into()),
+                false,
+                HttpLimits::default(),
+            )
+            .unwrap()
+        );
+        assert!(!debug.contains("CANARY-SECRET-VALUE"));
     }
 
     #[test]
-    fn parses_point_query_fixture() {
+    fn parses_point_query_keeps_micros_and_skips_missing_time() {
         let pts = parse_point_query_json(POINTS_FIXTURE).unwrap();
         assert_eq!(pts.len(), 1);
         assert_eq!(
             pts[0].provider_point_id,
             "11111111-2222-3333-4444-555555555555"
         );
-        assert!((pts[0].val - 72.5).abs() < f64::EPSILON);
-        assert_eq!(pts[0].display_name.as_deref(), Some("OA-T"));
+        assert_eq!(pts[0].ts.timestamp_subsec_micros(), 123_456);
+        assert_eq!(pts[0].unit.as_deref(), Some("°F"));
+        assert_eq!(pts[0].source_quality.as_deref(), Some("good"));
+        assert_ne!(pts[0].ts, Utc::now());
     }
 
     #[test]
-    fn parses_get_data_and_truncates_nanos() {
+    fn history_keeps_subsecond_unit_and_quality() {
         let raw = r#"{
           "data": [{
             "uuid": "f93888d3-e498-3a30-a881-eb5cbd4c40a8",
+            "units": "°F",
             "values": [
-              {"ts": "2026-10-18T22:51:00.000000321Z", "double": 76.1},
-              {"ts": "2026-10-18T22:52:00Z", "real": 76.2}
+              {"ts": "2026-10-18T22:51:00.123456789Z", "double": 76.1, "quality": "uncertain"},
+              {"ts": "2026-10-18T22:52:00Z", "real": 76.2},
+              {"ts": "2099-01-01T00:00:00Z", "double": 1.0},
+              {"double": 9.0},
+              {"ts": "2026-10-18T22:53:00Z", "double": 1.0, "quality": "CANARY"}
             ]
           }]
         }"#;
         let pts = parse_get_data_json(raw).unwrap();
         assert_eq!(pts.len(), 2);
-        assert_eq!(pts[0].ts.timestamp_subsec_nanos(), 0);
+        assert_eq!(pts[0].ts.timestamp_subsec_micros(), 123_456);
         assert!((pts[1].val - 76.2).abs() < f64::EPSILON);
+        assert_eq!(pts[0].unit.as_deref(), Some("°F"));
+        assert_eq!(pts[0].source_quality.as_deref(), Some("uncertain"));
+        assert!(pts[1].source_quality.is_none());
+    }
+
+    #[tokio::test]
+    async fn oauth_redirect_does_not_forward_secret_body() {
+        let token_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let token_port = token_listener.local_addr().unwrap().port();
+        let sink_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let sink_port = sink_listener.local_addr().unwrap().port();
+        let secret = "CANARY-SECRET-VALUE";
+        let sink_hit = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let sink_flag = std::sync::Arc::clone(&sink_hit);
+        let sink = tokio::spawn(async move {
+            if let Ok(Ok((mut sock, _))) =
+                tokio::time::timeout(Duration::from_millis(800), sink_listener.accept()).await
+            {
+                sink_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                let _ = read_http_request(&mut sock).await;
+            }
+        });
+        let redirect = format!(
+            "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{sink_port}/stolen\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        );
+        let token_task = tokio::spawn(async move {
+            let (mut sock, _) = token_listener.accept().await.unwrap();
+            let req = read_http_request(&mut sock).await;
+            let _ = sock.write_all(redirect.as_bytes()).await;
+            req
+        });
+        let mut driver = lab_driver(token_port, secret, HttpLimits::default());
+        let err = driver.authenticate().await.unwrap_err();
+        let seen = token_task.await.unwrap();
+        sink.await.unwrap();
+        assert!(seen.starts_with("POST /api/v1/auth/token"));
+        assert!(
+            seen.contains(secret),
+            "local token endpoint still receives the JSON body"
+        );
+        assert!(
+            !sink_hit.load(std::sync::atomic::Ordering::SeqCst),
+            "redirect target must not receive the OAuth body"
+        );
+        let rendered = err.to_string();
+        assert!(rendered.contains("redirect_rejected"));
+        assert!(!rendered.contains(secret));
+        assert!(!rendered.contains("stolen"));
+    }
+
+    #[tokio::test]
+    async fn error_bodies_and_unicode_do_not_leak_or_panic() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let body = format!("{}€ CANARY-SECRET-VALUE", "A".repeat(399));
+        let payload = format!(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut sock).await;
+            let _ = sock.write_all(payload.as_bytes()).await;
+        });
+        let mut driver = lab_driver(port, "CANARY-SECRET-VALUE", HttpLimits::default());
+        let err = driver.authenticate().await.unwrap_err();
+        let rendered = format!("{err}");
+        assert!(rendered.contains("auth_failed"));
+        assert!(!rendered.contains("CANARY"));
+        assert!(!rendered.contains('€'));
+    }
+
+    #[tokio::test]
+    async fn oversized_chunked_body_is_rejected() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut sock).await;
+            let _ = sock
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+                )
+                .await;
+            let chunk = vec![b'x'; 1024];
+            for _ in 0..8 {
+                let _ = sock
+                    .write_all(format!("{:X}\r\n", chunk.len()).as_bytes())
+                    .await;
+                let _ = sock.write_all(&chunk).await;
+                let _ = sock.write_all(b"\r\n").await;
+            }
+            let _ = sock.write_all(b"0\r\n\r\n").await;
+        });
+        let limits = HttpLimits {
+            max_body_bytes: 1500,
+            ..HttpLimits::default()
+        };
+        let mut driver = lab_driver(port, "secret", limits);
+        let err = driver.authenticate().await.unwrap_err();
+        assert!(err.to_string().contains("body_too_large"));
+    }
+
+    #[tokio::test]
+    async fn stalled_body_hits_deadline_and_history_is_get() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+        let seen_task = std::sync::Arc::clone(&seen);
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let req = read_http_request(&mut sock).await;
+            *seen_task.lock().await = req;
+            let _ = sock
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n")
+                .await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        });
+        let limits = HttpLimits {
+            connect: Duration::from_millis(200),
+            total: Duration::from_millis(400),
+            max_body_bytes: 1024,
+        };
+        let mut driver = lab_driver(port, "secret", limits);
+        driver.anonymous = true;
+        driver.client_id = None;
+        driver.client_secret = None;
+        let from = Utc::now() - chrono::Duration::minutes(30);
+        let err = driver
+            .fetch_history(
+                &["11111111-2222-3333-4444-555555555555".into()],
+                from,
+                Utc::now(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("deadline_exceeded") || err.to_string().contains("transport"),
+            "{err}"
+        );
+        let req = seen.lock().await.clone();
+        assert!(req.starts_with("GET /api/v1/point/data?"), "{req}");
+        assert!(!req.starts_with("POST"));
     }
 }

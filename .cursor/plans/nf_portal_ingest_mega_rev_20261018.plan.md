@@ -4,25 +4,25 @@ overview: "Wave-NF 4.0 portal ingest. Order: Wave-A N2+N6 → Wave-B parallel N1
 todos:
   - id: wave-a-n2-n6
     content: "Wave-A PR1 — N2 security + N6 storage correctness (tenant filter, fail-closed secrets, no OAuth redirects, bounds, typed errors; per-equip routing, source ts/units/quality, truthful persist counts)"
-    status: in_progress
+    status: completed
   - id: wave-b-n1-archive
     content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Required Actions green on 17ef0233 (PR 1294)."
     status: completed
   - id: wave-b-n5-hourly
     content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (un-cancel; GET history only)"
-    status: pending
+    status: in_progress
   - id: wave-b-n3-model
     content: "Wave-B parallel — N3 source-neutral committed model + scoped SPARQL ingest plans"
-    status: pending
+    status: in_progress
   - id: wave-b-n11-spa
     content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics"
-    status: pending
+    status: in_progress
   - id: wave-c-n8-leases
     content: "Wave-C — N8 shared Postgres queue/leases before replicas"
-    status: pending
+    status: in_progress
   - id: wave-c-n10-mcp
     content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps; retire OT tool discovery from normal 4.0"
-    status: pending
+    status: in_progress
   - id: wave-d-m10-ghcr
     content: "Wave-D — M10 VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus image"
     status: pending
@@ -85,39 +85,45 @@ todos:
     status: pending
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
-    status: in_progress
+    status: completed
   - id: n3-model
     content: SoftOPEN defer — N3 Source-neutral committed model (owned by Wave-B parallel PR)
-    status: pending
+    status: in_progress
   - id: n4-contract
     content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
     status: pending
   - id: n5-durable
     content: SoftOPEN defer — N5 Durable per-device hourly jobs (owned by Wave-B; was wrongly cancelled)
-    status: pending
+    status: in_progress
   - id: n6-storage
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
-    status: in_progress
+    status: completed
   - id: n7-gaps
     content: SoftOPEN defer — N7 Coverage ledger; bounded reconciliation; NF update-log 403 limitation stated
     status: pending
   - id: n8-scale
     content: SoftOPEN defer — N8 Shared Postgres queue/leases (Wave-C)
-    status: pending
+    status: in_progress
   - id: n9-meteo
     content: SoftOPEN defer — N9 Open-Meteo weather adapter + contractor conformance fixture
     status: pending
   - id: n10-api-mcp
     content: SoftOPEN defer — N10 Scoped REST/MCP (Wave-C)
-    status: pending
+    status: in_progress
   - id: n11-frontend
     content: SoftOPEN defer — N11 Full Providers/Sites/Model/ledger UI (Wave-B)
-    status: pending
+    status: in_progress
   - id: n12-evidence
     content: SoftOPEN defer — N12 Full acceptance matrix (fixtures then bounded NF SoftOPEN pilot); no portal flooding
     status: pending
   - id: n13-release
     content: SoftOPEN defer — N13 Phased delivery gates; truthful implemented/tested/deployed/remaining status
+    status: pending
+  - id: n2-dns-pin
+    content: SoftOPEN defer — DNS-at-connect rebinding pin for provider endpoints (Wave-A left public-mode literal IP checks only)
+    status: pending
+  - id: n2-hot-secrets
+    content: SoftOPEN defer — hot credential reload without process restart
     status: pending
 isProject: true
 ---
@@ -256,12 +262,13 @@ Legacy OT Grok tips are **stale** for this wave (M14).
 Update this section **and** the YAML frontmatter after every merge. Prefix unfinished leftovers with `SoftOPEN defer —`.
 
 ### Wave-A — now (one PR)
-- [ ] **wave-a-n2-n6** — N2 security + N6 storage correctness
+- [x] **wave-a-n2-n6** — N2 security + N6 storage correctness
   - Tenant-filter `/api/providers/health|sites` (+ MCP parity)
   - Fail-closed missing secrets; no OAuth redirects; connect/read/total deadlines + byte bounds
   - Typed safe errors; no raw vendor/token bodies in health/logs
   - Per-equipment type routing (not first-in-envelope); source ts/units/quality; truthful persist counts; DB reconnect
-- [ ] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
+  - Base-branch blockers included: `nf.rs` delimiter, `scripts/nf` display-name audit, security inventory for the two provider GETs
+- [x] **n2-security** / **n6-storage** — same Wave-A PR (keep in sync)
 
 ### Wave-B — parallel after Wave-A merges
 - [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Required Actions green on `17ef0233` (PR 1294).
@@ -284,9 +291,20 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n9-meteo** Open-Meteo + contractor fixture
 - [ ] SoftOPEN defer — **n12-evidence** full acceptance matrix (no portal flood)
 - [ ] SoftOPEN defer — **n13-release** phased gates + truthful remaining status
+- [ ] SoftOPEN defer — **n2-dns-pin** DNS-at-connect rebinding pin (literal public-mode checks only)
+- [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
 
 ### Already done (do not reopen)
 - [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m9-stub-ace
 
 ### Prototype still open (do not claim complete)
 - [~] m4-nf-driver, m5-map, m6-fe-blast, m8-ops-ui, m11-prove
+
+### Cloud agents launched 2026-10-19 (Grok Bot)
+- Wave-A N2+N6: bc-8669bd28 — merged #1290 `608ee177`
+- Wave-B N1 archive: bc-09497442
+- Wave-B N5 hourly: bc-81ff01ac
+- Wave-B N3 model: bc-9c23a08d
+- Wave-B N11 SPA: bc-7fe03caf
+- Wave-C N8+N10: bc-d24c1c2e
+- Wave-D GHCR: waiting on merges
