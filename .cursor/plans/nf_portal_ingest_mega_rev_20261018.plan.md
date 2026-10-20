@@ -24,8 +24,8 @@ todos:
     content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps; OT discovery retired from normal 4.0; provider health/sites stay. Merged #1291 698f8c52."
     status: completed
   - id: wave-d-m10-ghcr
-    content: "Wave-D — M10 VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus image"
-    status: pending
+    content: "Wave-D — VERSION 4.0.0. Master fe7e06b6 published ghcr.io/bbartling/openfdd-central:sha-fe7e06b (sha256:3ae2c2baaf49d9a8bc0c3c4a7f9dfc799d6e2c0c48ebf9b1d8c773b8c1a82b61) and ghcr.io/bbartling/openfdd-web:sha-fe7e06b (sha256:5cf2b0f5bf261480ea4443a6faebaba2edae41275be4e32f540473c14b7ccc61). No fieldbus image. No PyPI publish."
+    status: completed
   - id: m0-milestones
     content: M0 MILESTONES Wave-NF; defer the 3620 ART sweep
     status: completed
@@ -57,8 +57,14 @@ todos:
     content: M9 Ace IoT driver stub (visibly NotImplemented)
     status: completed
   - id: m10-ghcr
-    content: M10 VERSION 4.0.0, GHCR central+web, Railway re-pin, no fieldbus image (Wave-D)
+    content: "M10 VERSION 4.0.0. GHCR central sha-fe7e06b sha256:3ae2c2baaf49d9a8bc0c3c4a7f9dfc799d6e2c0c48ebf9b1d8c773b8c1a82b61 and web sha-fe7e06b sha256:5cf2b0f5bf261480ea4443a6faebaba2edae41275be4e32f540473c14b7ccc61. No fieldbus image. No PyPI publish. Merged #1302 fe7e06b6."
+    status: completed
+  - id: m10-railway-repin
+    content: SoftOPEN defer — Railway re-pin to sha-fe7e06b was not part of this merge
     status: pending
+  - id: actions-ot-gate
+    content: "Gate Optional BACnet and Wave C isolated workflows so 4.0 master does not pull unpublished openfdd-fieldbus or openfdd-mqtt sha tags. Archive OCI pin stays unbooted."
+    status: completed
   - id: m11-prove
     content: M11 bosspi hour smoke in Timescale (lab evidence only; not full N12 matrix)
     status: in_progress
@@ -291,7 +297,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] **m14-grok-tools** — legacy OT Grok tips flagged retired; MCP OT wire/driver discovery is not in default `tools/list`. Merged #1300 `75d86af5`.
 
 ### Wave-D — publish
-- [ ] **wave-d-m10-ghcr** — VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus
+- [x] **wave-d-m10-ghcr** / **m10-ghcr** — VERSION 4.0.0. Master `#1302` `fe7e06b6` published `ghcr.io/bbartling/openfdd-central:sha-fe7e06b` (`sha256:3ae2c2baaf49d9a8bc0c3c4a7f9dfc799d6e2c0c48ebf9b1d8c773b8c1a82b61`) and `ghcr.io/bbartling/openfdd-web:sha-fe7e06b` (`sha256:5cf2b0f5bf261480ea4443a6faebaba2edae41275be4e32f540473c14b7ccc61`). No fieldbus image. No PyPI publish. Run https://github.com/bbartling/open-fdd/actions/runs/39357186292
+- [x] **actions-ot-gate** — Optional BACnet workflow ([run 39362164673](https://github.com/bbartling/open-fdd/actions/runs/39362164673)) no longer pulls `openfdd-mqtt` / `openfdd-fieldbus` at the portal `sha-<head>`. The Monday schedule is removed. Wave C isolated suites skip on pull request when that mqtt tag is absent. The archive pin is not booted (`--boot` stays refused; `--replay` and the protocol-connector split gate stay the isolated lane).
 
 ### This round
 - [x] **n0-boundary** — 4.0 boundary and requirements matrix in `docs/architecture/wave-nf-4.0-product-boundary.md` (no row qualified). Merged #1296 `de042f70`.
@@ -310,6 +317,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] **n13-release** phased gates (`docs/operations/WAVE_NF_DELIVERY_GATES.md`) + `wave_nf_status.json` (nothing deployed or qualified). Merged #1298 `3d081622`.
 - [ ] SoftOPEN defer — **n2-dns-pin** DNS-at-connect rebinding pin (literal public-mode checks only)
 - [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
+- [ ] SoftOPEN defer — **m10-railway-repin** Railway re-pin to `sha-fe7e06b` (not done in this merge)
 
 ### Already done (do not reopen)
 - [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m5-map, m6-fe-blast, m8-ops-ui, m9-stub-ace
@@ -324,7 +332,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - Wave-B N3 model: bc-9c23a08d
 - Wave-B N11 SPA: bc-7fe03caf
 - Wave-C N8+N10: bc-d24c1c2e
-- Wave-D GHCR: waiting on the master merge of this branch
+- Wave-D GHCR: merged #1302 `fe7e06b6`. Images `sha-fe7e06b`. Railway re-pin stays **m10-railway-repin**.
 
 ### Merge log (into `wave-nf/4.0.0-portal-ingest`)
 - #1290 Wave-A `608ee177`
