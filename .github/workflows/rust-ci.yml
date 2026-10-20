@@ -25,6 +25,9 @@ jobs:
           ./scripts/check_version_sync.sh
           bash -n scripts/test_ghcr_prune_archive_keep.sh
           ./scripts/test_ghcr_prune_archive_keep.sh
+          bash -n scripts/test_data_safe_defaults.sh
+          ./scripts/test_data_safe_defaults.sh
+          python3 scripts/timescale/test_data_safe_seed.py
           python3 scripts/archive/verify_ot_edge_snapshot.py
 
       - uses: dtolnay/rust-toolchain@stable

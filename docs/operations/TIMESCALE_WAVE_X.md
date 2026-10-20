@@ -36,9 +36,17 @@ docker run --rm --network openfdd-wavex-ts_default \
   python:3.12-slim \
   bash -lc 'pip install -q "psycopg[binary]" && python /scripts/auto_seed.py'
 
-# Product recipes attach Timescale overlay automatically (react / react-ot / csv)
-./scripts/openfdd_stack_up.sh react
+# Product recipes attach Timescale overlay automatically (portal / react / csv).
+# `up` reuses the openfdd-timescale volume. Init SQL runs only on an empty volume.
+./scripts/openfdd_stack_up.sh portal
 ```
+
+`auto_seed.py` copies BUILDING_50 only when that site has no `sample` rows.
+If rows or a previous seed exist, it exits without deleting them.
+A reload requires both `OPENFDD_SEED_FORCE=1` and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`.
+A full historian wipe is a separate one-shot command, `scripts/timescale/purge_historian.py`,
+with a new `OPENFDD_RESET_DB` token and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`.
+The same token does not wipe again. Leave `OPENFDD_RESET_DB` unset on updates.
 
 Env: `OPENFDD_DATABASE_URL`, `OPENFDD_HISTORIAN=timescale`, `OPENFDD_FDD_ENGINE=postgres-sql`, `OPENFDD_SQL_ROOT`.
 

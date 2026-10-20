@@ -1,9 +1,40 @@
 #!/usr/bin/env bash
-# Reset local workspace to default empty model — removes CSV import artifacts (never committed to git).
+# Reset local workspace to the default empty model.
+# Deletes CSV import artifacts under the workspace. Does not touch Timescale.
+# Refuses unless --i-understand-data-loss or OPENFDD_ALLOW_DESTRUCTIVE_DB=1.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/data_safe.sh
+source "$ROOT/scripts/lib/data_safe.sh"
 WS="${OPENFDD_WORKSPACE:-$ROOT/workspace}"
+ACK=0
+DRY_RUN=0
+if openfdd_env_flag_on "${OPENFDD_ALLOW_DESTRUCTIVE_DB:-}"; then
+  ACK=1
+fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --i-understand-data-loss) ACK=1 ;;
+    --dry-run) DRY_RUN=1 ;;
+    -h|--help)
+      echo "Usage: $0 [--dry-run] --i-understand-data-loss"
+      echo "Or set OPENFDD_ALLOW_DESTRUCTIVE_DB=1. Default is to refuse."
+      exit 0
+      ;;
+    *) echo "Unknown option: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+if [[ "$ACK" != "1" ]]; then
+  echo "REFUSING workspace reset. Pass --i-understand-data-loss or set OPENFDD_ALLOW_DESTRUCTIVE_DB=1." >&2
+  echo "data_safe_action=refuse" >&2
+  exit 2
+fi
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "data_safe_action=reset_workspace"
+  exit 0
+fi
 DEFAULT_MODEL="$ROOT/workspace/model/default_haystack_grid.json"
 MODEL_DIR="$WS/data/model"
 

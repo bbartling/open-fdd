@@ -158,6 +158,21 @@ railway service source connect --service openfdd-web \
 
 If only env changed and the image source is already correct, `railway redeploy -s <service> -y` is enough. Confirm public SPA + `/api/health` after web comes up.
 
+**Data-safe re-pin.** Re-pin swaps the central and web image tags. It does not replace the Timescale service, its volume, or `OPENFDD_DATABASE_URL`. Existing historian rows stay in place. Leave `OPENFDD_RESET_DB` unset. Central startup detects an existing database and applies forward-only schema (`CREATE … IF NOT EXISTS`). It does not drop, truncate, or reseed. NF portal history reads stay GET-only.
+
+**One-time hub purge, then Building 50.** Use this only when replacing the historian on purpose. The same token does not purge again, and a later re-pin leaves the new rows in place.
+
+```bash
+OPENFDD_DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/DB' \
+OPENFDD_RESET_DB='b50-wipe-20261020' \
+OPENFDD_ALLOW_DESTRUCTIVE_DB=1 \
+python3 scripts/timescale/purge_historian.py
+```
+
+Then point `OPENFDD_SEED_BUILDING50_DIR` at the demo package and run `scripts/timescale/auto_seed.py`. That script copies Building 50 when the site has no `sample` rows. Replacing rows that are already there still needs `OPENFDD_SEED_FORCE=1` and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`.
+
+Setting the same pair on the central service truncates once at the next boot and records the token in `seed_meta`. A later boot with that same `OPENFDD_RESET_DB` value keeps the data. Unset both variables after the purge. `--dry-run` prints the decision and does not connect. A token without `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` refuses and deletes nothing.
+
 **Known failure without tip web:** older images crash with `invalid port in resolver "fd12::10"` — fixed in tip `openfdd-web` entrypoint; re-pin + `OPENFDD_NGINX_RESOLVER=auto`.
 
 **Known failure (fixed in 3.3.9+):** variable `proxy_pass http://$openfdd_central/api/;` doubles the path to `/api/api/…` → empty **404**. Tip web uses `proxy_pass http://$openfdd_central;` (no URI suffix).

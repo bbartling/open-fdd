@@ -184,6 +184,7 @@ Local/edge disk budget defaults to **100 GiB**, oldest cache artifacts first (`O
 - delete `workspace/`
 - run `docker compose down -v`
 - run `docker volume prune`
+- set `OPENFDD_RESET_DB` or `OPENFDD_ALLOW_DESTRUCTIVE_DB` on a routine update (a one-time purge needs a new reset token plus the allow flag; the same token does not purge again)
 - print secrets or tokens
 - expose API on public internet
 - report vulnerabilities in public GitHub issues/discussions

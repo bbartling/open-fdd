@@ -111,6 +111,8 @@ if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]
   fi
 fi
 
+# Data-safe: `up -d` reuses named volumes. This script never passes `-v` / `--volumes`.
+echo "Data-safe update: compose up reuses named volumes (no down -v, no volume prune)."
 if [[ "$DO_BUILD" -eq 1 && "$RECIPE" != "portal" && "$RECIPE" != "react" && "$RECIPE" != "react-ot" ]]; then
   docker compose "${ARGS[@]}" up -d --build --remove-orphans "${EXTRA[@]+"${EXTRA[@]}"}"
 else

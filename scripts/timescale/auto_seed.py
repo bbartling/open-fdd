@@ -16,6 +16,11 @@ from pathlib import Path
 
 import psycopg
 
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+from data_safe import env_flag_on, refuse_message, seed_action  # noqa: E402
+
 URL = os.environ.get(
     "OPENFDD_DATABASE_URL",
     "postgresql://openfdd:openfdd_dev_only@127.0.0.1:5432/openfdd",
@@ -203,22 +208,39 @@ def main() -> int:
     building_id = "BUILDING_50"
     print("fast seed (mapped roles) connecting", URL.split("@")[-1])
     cmap, hs_to_sql = load_maps()
+    allow_destructive = env_flag_on(os.environ.get("OPENFDD_ALLOW_DESTRUCTIVE_DB"))
     with psycopg.connect(URL) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT value FROM seed_meta WHERE key='building50_seed'")
             row = cur.fetchone()
-            if row and row[0] == "ok" and not FORCE:
-                print("already seeded; registry only (OPENFDD_SEED_FORCE=1 to reload)")
-                print("registry", load_registry(conn))
-                return 0
+            already_seeded = bool(row and row[0] == "ok")
+            cur.execute("SELECT count(*) FROM sample WHERE site_id=%s", (building_id,))
+            existing_rows = int(cur.fetchone()[0])
+        action = seed_action(already_seeded, existing_rows, FORCE, allow_destructive)
+        if action == "registry_only":
+            print(
+                "already seeded; registry only "
+                "(OPENFDD_SEED_FORCE=1 and OPENFDD_ALLOW_DESTRUCTIVE_DB=1 to reload)"
+            )
+            print("registry", load_registry(conn))
+            return 0
+        if action == "refuse":
+            print(refuse_message(building_id, existing_rows, FORCE), file=sys.stderr)
+            return 2
         print("registry", load_registry(conn))
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM sample WHERE site_id=%s", (building_id,))
-            cur.execute("DELETE FROM role_map WHERE building_id=%s", (building_id,))
-            cur.execute("DELETE FROM point_map WHERE site_id=%s", (building_id,))
-            cur.execute("DELETE FROM equipment WHERE building_id=%s", (building_id,))
-            cur.execute("DELETE FROM seed_meta WHERE key LIKE 'building50%'")
-        conn.commit()
+        if action == "delete_then_copy":
+            print(
+                f"WARNING: deleting existing {building_id} historian rows "
+                "(OPENFDD_SEED_FORCE=1 and OPENFDD_ALLOW_DESTRUCTIVE_DB=1)",
+                file=sys.stderr,
+            )
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM sample WHERE site_id=%s", (building_id,))
+                cur.execute("DELETE FROM role_map WHERE building_id=%s", (building_id,))
+                cur.execute("DELETE FROM point_map WHERE site_id=%s", (building_id,))
+                cur.execute("DELETE FROM equipment WHERE building_id=%s", (building_id,))
+                cur.execute("DELETE FROM seed_meta WHERE key LIKE 'building50%'")
+            conn.commit()
         total = 0
         csvs = sorted(B50.rglob("history_wide.csv")) + sorted(B50.rglob("history.csv"))
         for csv_path in csvs:
