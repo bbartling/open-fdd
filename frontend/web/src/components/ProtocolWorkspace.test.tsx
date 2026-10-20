@@ -243,4 +243,77 @@ describe("Operations protocol navigation", () => {
     expect(await screen.findByTestId("afdd-config-panel")).toBeTruthy();
     expect(screen.queryByTestId("protocol-workspace")).toBeNull();
   });
+
+  it("shows the provider registry and refuses a gapless reading of one latest sample", async () => {
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path === "/api/providers/health") {
+        return {
+          ok: true,
+          poll_enabled: true,
+          registry: [
+            {
+              kind: "nf",
+              capabilities: [
+                { name: "latest", support: "implemented", http_method: "POST" },
+                { name: "fetch_history", support: "implemented", http_method: "GET" },
+                { name: "update_log", support: "not_implemented", http_method: "GET" },
+              ],
+            },
+            {
+              kind: "ace_iot",
+              capabilities: [
+                { name: "fetch_history", support: "not_implemented" },
+                { name: "latest", support: "not_implemented" },
+              ],
+            },
+          ],
+          sites: [
+            {
+              building_id: "NF_EDGE",
+              provider: "nf",
+              last_ingested_points: 1,
+              health: { status: "ok" },
+              coverage_ledger: {
+                gapless: false,
+                advanced_by_latest_sample: false,
+                windows_complete: 0,
+                guarantee: {
+                  statement:
+                    "NF update log GET /api/v1/point/updates/data returned HTTP 403 on the lab key. Range polling is not gapless.",
+                  gapless: false,
+                },
+                axes: [
+                  { id: "transport_probe", state: "unknown", detail: "no history transport probe yet" },
+                  { id: "requested_window_completeness", state: "unknown", detail: "one latest sample does not complete a window" },
+                  { id: "durable_commit", state: "unknown", detail: "no committed history receipt" },
+                  { id: "source_freshness", state: "unknown", detail: "a latest sample does not establish freshness" },
+                  { id: "late_reconciliation", state: "unknown", detail: "range polling is not gapless" },
+                  { id: "unrecoverable_retention", state: "unknown", detail: "retention has not been evaluated" },
+                ],
+              },
+            },
+          ],
+        };
+      }
+      return {};
+    });
+    render(
+      <MemoryRouter initialEntries={["/operations"]}>
+        <OperationsPage />
+      </MemoryRouter>,
+    );
+    expect((await screen.findByTestId("provider-registry-nf")).textContent).toContain(
+      "fetch_history implemented GET",
+    );
+    expect(screen.getByTestId("provider-registry-ace_iot").textContent).toContain(
+      "fetch_history not_implemented",
+    );
+    expect(screen.getByTestId("coverage-gapless").textContent).toBe("Gapless: no");
+    expect(screen.getByTestId("coverage-guarantee").textContent).toContain("HTTP 403");
+    expect(screen.getByTestId("coverage-guarantee").textContent).toContain("not gapless");
+    expect(screen.getByTestId("coverage-axis-requested_window_completeness").textContent).toContain(
+      "unknown",
+    );
+    expect(screen.getByTestId("coverage-axis-transport_probe").textContent).not.toContain("ok");
+  });
 });

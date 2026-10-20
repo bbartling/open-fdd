@@ -170,6 +170,30 @@ pub struct GapDraft {
     pub recoverability: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckpointFact {
+    pub device_id: String,
+    pub model_revision: String,
+    pub contiguous_end: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceiptFact {
+    pub receipt_id: String,
+    pub job_id: String,
+    pub outcome: String,
+}
+
+/// Read model for the coverage ledger. Jobs, receipts, and gaps stay the
+/// source of truth; a latest scrape is not copied into this snapshot.
+#[derive(Debug, Clone, Default)]
+pub struct CoverageFacts {
+    pub jobs: Vec<JobRecord>,
+    pub gaps: Vec<GapDraft>,
+    pub checkpoints: Vec<CheckpointFact>,
+    pub receipts: Vec<ReceiptFact>,
+}
+
 impl GapDraft {
     fn gap_id(&self) -> String {
         let raw = format!(
@@ -369,6 +393,13 @@ impl HourlyStore {
         match self {
             Self::Memory(inner) => Ok(inner.lock().await.gap_count(canonical_site)),
             Self::Postgres(pool) => super::pg_store::gap_count(pool, canonical_site).await,
+        }
+    }
+
+    pub async fn coverage_facts(&self, canonical_site: &str) -> Result<CoverageFacts, String> {
+        match self {
+            Self::Memory(inner) => Ok(inner.lock().await.coverage_facts(canonical_site)),
+            Self::Postgres(pool) => super::pg_store::coverage_facts(pool, canonical_site).await,
         }
     }
 
@@ -584,6 +615,60 @@ impl MemoryInner {
                 .count(),
         )
         .unwrap_or(u32::MAX)
+    }
+
+    fn coverage_facts(&self, canonical_site: &str) -> CoverageFacts {
+        let mut jobs: Vec<_> = self
+            .jobs
+            .values()
+            .filter(|job| job.canonical_site == canonical_site)
+            .cloned()
+            .collect();
+        jobs.sort_by(|a, b| {
+            (a.window_start, a.shard, &a.purpose, a.generation).cmp(&(
+                b.window_start,
+                b.shard,
+                &b.purpose,
+                b.generation,
+            ))
+        });
+        let job_ids: std::collections::HashSet<_> =
+            jobs.iter().map(|job| job.job_id.as_str()).collect();
+        let mut receipts: Vec<_> = self
+            .receipts
+            .values()
+            .filter(|receipt| job_ids.contains(receipt.job_id.as_str()))
+            .map(|receipt| ReceiptFact {
+                receipt_id: receipt.receipt_id.clone(),
+                job_id: receipt.job_id.clone(),
+                outcome: receipt.outcome.clone(),
+            })
+            .collect();
+        receipts.sort_by(|a, b| a.receipt_id.cmp(&b.receipt_id));
+        let mut gaps: Vec<_> = self
+            .gaps
+            .values()
+            .filter(|gap| gap.canonical_site == canonical_site)
+            .cloned()
+            .collect();
+        gaps.sort_by_key(|gap| gap.window_start);
+        let mut checkpoints: Vec<_> = self
+            .checkpoints
+            .iter()
+            .filter(|(key, _)| key.canonical_site == canonical_site)
+            .map(|(key, end)| CheckpointFact {
+                device_id: key.device_id.clone(),
+                model_revision: key.model_revision.clone(),
+                contiguous_end: *end,
+            })
+            .collect();
+        checkpoints.sort_by(|a, b| a.device_id.cmp(&b.device_id));
+        CoverageFacts {
+            jobs,
+            gaps,
+            checkpoints,
+            receipts,
+        }
     }
 
     fn cancel_stale(

@@ -288,6 +288,7 @@ async fn nf_hourly_loop(
                     update_log_status: report.update_log_status.to_string(),
                     detail: report.health_code(),
                 };
+                let ledger = report.ledger.clone();
                 let (status, as_error) = if report.blocks_green() {
                     if report.failed > 0 && report.committed == 0 && report.no_source_data == 0 {
                         (ProviderHealthStatus::Error, true)
@@ -304,7 +305,7 @@ async fn nf_hourly_loop(
                             status,
                             report.samples_handed_off as u64,
                             Some(report.health_code()),
-                            coverage,
+                            coverage.clone(),
                             true,
                         )
                         .await;
@@ -320,6 +321,7 @@ async fn nf_hourly_loop(
                         )
                         .await;
                 }
+                runtime.record_ledger(&building_id, ledger).await;
                 debug!(%building_id, status = ?status, "hourly tick finished");
             }
             Err(code) => {
@@ -591,6 +593,17 @@ async fn ace_poll_loop(
                     .await;
             }
             Err(err) => {
+                if super::error::safe_operator_code(&err) == "not_implemented" {
+                    backoff_secs = poll_secs;
+                    runtime
+                        .record_error(
+                            &building_id,
+                            ProviderHealthStatus::NotImplemented,
+                            Some("not_implemented".into()),
+                        )
+                        .await;
+                    continue;
+                }
                 backoff_secs = if backoff_secs == 0 {
                     poll_secs.max(30)
                 } else {
@@ -628,6 +641,17 @@ impl Runtime {
             false,
         )
         .await;
+    }
+
+    pub async fn record_ledger(&self, building_id: &str, ledger: super::types::CoverageLedger) {
+        let mut guard = self.health.lock().await;
+        if let Some(site) = guard
+            .sites
+            .iter_mut()
+            .find(|site| site.building_id == building_id)
+        {
+            site.coverage_ledger = Some(ledger);
+        }
     }
 
     pub async fn record_hourly(
@@ -677,9 +701,12 @@ impl Runtime {
             .find(|s| s.building_id == building_id)
         {
             site.last_poll_at = Some(Utc::now());
-            site.consecutive_errors = site.consecutive_errors.saturating_add(1);
             site.health.status = status;
             site.health.message = message.as_deref().map(super::error::safe_operator_code);
+            if status == ProviderHealthStatus::NotImplemented {
+                return;
+            }
+            site.consecutive_errors = site.consecutive_errors.saturating_add(1);
             site.health.last_error_at = Some(Utc::now());
         }
     }

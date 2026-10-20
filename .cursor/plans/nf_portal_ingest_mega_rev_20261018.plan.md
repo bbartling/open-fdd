@@ -36,7 +36,7 @@ todos:
     content: M2 ADR-011 DataProvider + Timescale + RDF
     status: completed
   - id: m3-trait
-    content: M3 DataProvider trait and Timescale writer (prototype; N4 capability/history contract still open)
+    content: M3 DataProvider trait and Timescale writer (N4 capability/history contract landed)
     status: completed
   - id: m4-nf-driver
     content: M4 NF OAuth + point/query latest + GET point/data hour window (connectivity prototype; harden in Wave-A/B)
@@ -94,7 +94,7 @@ todos:
     status: pending
   - id: n4-contract
     content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
-    status: pending
+    status: completed
   - id: n5-durable
     content: "N5 durable per-device completed-hour jobs, receipts, checkpoints, catch-up, bounded reconciliation (fixture-tested; live NF pilot stays n12)"
     status: completed
@@ -102,8 +102,8 @@ todos:
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
     status: completed
   - id: n7-gaps
-    content: "SoftOPEN defer — full coverage ledger UI; N5 states NF update-log 403 and bounded reconciliation (not gapless)"
-    status: pending
+    content: "N7 coverage ledger over N5 jobs/receipts (probe, window, durable commit, freshness, reconcile, retention); update-log 403; not gapless"
+    status: completed
   - id: n8-scale
     content: "SoftOPEN defer — N8 stage 3 live replica controller (stages 1–2 queue/leases landed in Wave-C; simulator is dry-run only)"
     status: pending
@@ -207,7 +207,7 @@ Source: [Points](https://docs.normal.dev/concepts/points/), [GetData](https://do
 
 Lab proof 2026-10-18: GetData returned ~60 samples/UUID over last hour for five mapped points.
 
-**N5 poller (this branch):** per-device completed-hour jobs in Postgres (`sql/schema/04_provider_hourly_jobs.sql`), receipts, checkpoints, catch-up, and a bounded reconcile sweep. History is `GET /api/v1/point/data` only. A history error stays a failed job. The fixed `now−65min` lookback is gone. NF update-log HTTP 403 is stated on provider health; that path is not called and permissions are not expanded. Full ledger UI remains N7. Single-transaction sample+receipt across the historian writer remains N6. N8 replica control is not in this PR; claim SQL is `SKIP LOCKED` plus a fencing token so a later lease PR can build on it.
+**N5 poller (this branch):** per-device completed-hour jobs in Postgres (`sql/schema/04_provider_hourly_jobs.sql`), receipts, checkpoints, catch-up, and a bounded reconcile sweep. History is `GET /api/v1/point/data` only. A history error stays a failed job. The fixed `now−65min` lookback is gone. NF update-log HTTP 403 is stated on provider health; that path is not called and permissions are not expanded. The N7 ledger reads those jobs, receipts, checkpoints, and gaps. A per-device window browser remains a SoftOPEN defer for N11. Single-transaction sample+receipt across the historian writer remains N6. N8 replica control is not in this PR; claim SQL is `SKIP LOCKED` plus a fencing token so a later lease PR can build on it.
 
 ## Highest priority (from evaluation — P1)
 
@@ -244,7 +244,7 @@ No Kubernetes required. Stages: (1) durable jobs + one scheduler owner + one bou
 
 ## Gap guarantee (N7) — short form
 
-Separate: transport probe, requested window completeness, durable commit, source freshness/cadence, late reconciliation, unrecoverable retention expiry. Coverage ledger cannot advance from one latest sample. Without update-log permission, state the **bounded** time-range + recent reconciliation guarantee and its blind spots.
+Separate: transport probe, requested window completeness, durable commit, source freshness/cadence, late reconciliation, unrecoverable retention expiry. The ledger is built from N5 hourly jobs, receipts, checkpoints, and gaps. It cannot advance from one latest sample. Without update-log permission, the guarantee is **bounded** time-range plus recent reconciliation. `GET /api/v1/point/updates/data` returned HTTP 403 on the lab key and is not called. Range polling is not gapless. The Providers panel shows that summary. A full per-device window browser stays with N11.
 
 ## Exit evidence (N12)
 
@@ -297,7 +297,9 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — **n8-scale** stage 3 live replica controller (dry-run preview only; no Kubernetes)
 - [ ] SoftOPEN defer — **m14-grok-tools** historical Grok stress prompts; MCP/agent discovery already retired
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
-- [ ] SoftOPEN defer — **n7-gaps** full coverage ledger UI (N5 already states update-log 403 and bounded reconciliation)
+- [x] **n4-contract** — provider registry (`latest`, `fetch_history` GET with a bounded window, `update_log` NotImplemented). Ace stays visibly NotImplemented. Conformance tests reject an unbounded NF window before any request.
+- [x] **n7-gaps** — coverage ledger over N5 jobs/receipts/checkpoints/gaps. Axes stay separate. Memory receipts are not a durable commit. Update-log HTTP 403 is stated. Range polling is not gapless. A latest sample does not advance the ledger.
+- [ ] SoftOPEN defer — server-published per-device window rows (`GET /api/providers/windows`), backfill submit, and binding preview. The Providers panel shows the N7 six-axis summary from poll health beside the N11 window table.
 - [ ] SoftOPEN defer — N5 historian sample upsert and job receipt are separate writes (one transaction stays with N6)
 - [ ] SoftOPEN defer — **n11-frontend** live window rows, backfill submit, and server-issued binding preview
 - [ ] SoftOPEN defer — **n12-evidence** bounded read-only NF SoftOPEN pilot and published-SPA regression (offline fixture matrix is in CI; no portal flood)

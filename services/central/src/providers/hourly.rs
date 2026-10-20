@@ -298,6 +298,7 @@ pub enum FetchError {
     Persistence,
     Unmapped,
     PartialSeries,
+    NotImplemented,
 }
 
 impl FetchError {
@@ -310,11 +311,12 @@ impl FetchError {
             Self::Persistence => "persistence",
             Self::Unmapped => "unmapped",
             Self::PartialSeries => "partial_series",
+            Self::NotImplemented => "not_implemented",
         }
     }
 
     pub fn immediate_permanent(&self) -> bool {
-        matches!(self, Self::Auth)
+        matches!(self, Self::Auth | Self::NotImplemented)
     }
 
     pub fn retry_after_secs(&self) -> Option<u64> {
