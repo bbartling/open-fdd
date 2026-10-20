@@ -1,24 +1,17 @@
 # Explicit OT archive lane. Not selected by scripts/openfdd_stack_up.sh.
-# Refuses to embed a 4.0 central image. Fieldbus and mqtt build from this snapshot.
-# Set OPENFDD_OT_ARCHIVE_TAG to an explicit tag or digest before render.
-# Do not attach a 4.0 Timescale volume.
+# Images are digest-pinned. This file does not build and does not attach a database.
+# restore-isolated.sh --replay exports the digests from evidence/oci-pin.json.
 
 name: openfdd-ot-archive
 
 services:
   mqtt:
-    image: ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_OT_ARCHIVE_TAG:?set OPENFDD_OT_ARCHIVE_TAG}
-    build:
-      context: ../source/services/mqtt
+    image: ghcr.io/bbartling/openfdd-mqtt@${OPENFDD_OT_MQTT_DIGEST:?set OPENFDD_OT_MQTT_DIGEST}
     ports:
       - "127.0.0.1:8883:8883"
 
   fieldbus:
-    image: ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_OT_ARCHIVE_TAG:?set OPENFDD_OT_ARCHIVE_TAG}
-    build:
-      context: ../source
-      dockerfile: services/fieldbus/Dockerfile.closure
-      target: ${OPENFDD_OT_ARCHIVE_FIELDBUS_TARGET:-compatibility}
+    image: ghcr.io/bbartling/openfdd-fieldbus@${OPENFDD_OT_FIELDBUS_DIGEST:?set OPENFDD_OT_FIELDBUS_DIGEST}
     environment:
       OPENFDD_MQTT_ENABLED: "0"
       OPENFDD_FIELDBUS_HTTP_HOST: 127.0.0.1

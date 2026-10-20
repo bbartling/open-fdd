@@ -54,8 +54,7 @@ jobs:
 
       - name: Central / fieldbus / MQTT contract tests
         run: |
-          cargo test -p openfdd_contracts -p openfdd_mqtt -p fdd_resources -p openfdd-fieldbus
-          cargo test -p openfdd-central -- --skip fixture_acceptance
+          cargo test -p openfdd_contracts -p openfdd_mqtt -p fdd_resources -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
 
@@ -88,10 +87,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Focused format and warnings denied checks
-        run: |
-          cargo fmt --all --check
-          cargo clippy -p openfdd-fieldbus --all-targets -- -D warnings
+      - name: Product workspace excludes live fieldbus
+        run: python3 scripts/archive/verify_ot_edge_snapshot.py
 
       - name: Live process and image isolation gate
         env:
@@ -208,6 +205,8 @@ jobs:
           done
           # S07: selected-OT + HTTPS must render without inventing image-less mqtt.
           bash scripts/ops/render_selected_ot_https.sh
+          OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay >/tmp/ot-archive-replay.txt
+          grep -q 'No containers were started' /tmp/ot-archive-replay.txt
 
       - name: File smoke (stack recipes)
         run: bash scripts/release/smoke_standalone_mqtts.sh

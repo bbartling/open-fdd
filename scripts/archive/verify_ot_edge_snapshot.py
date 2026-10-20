@@ -118,6 +118,57 @@ def check_cargo() -> None:
         fail("closure must not vendor central or the full edge crate")
 
 
+def check_product_boundary() -> None:
+    import tomllib
+
+    workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]
+    members = workspace.get("members") or []
+    exclude = workspace.get("exclude") or []
+    if "services/fieldbus" in members:
+        fail("live services/fieldbus is still a default workspace member")
+    if "services/fieldbus" not in exclude or "archive" not in exclude:
+        fail("workspace must exclude services/fieldbus and archive")
+    central = (ROOT / "services/central/Cargo.toml").read_text()
+    if "openfdd-fieldbus" in central or "../fieldbus" in central:
+        fail("central still depends on live fieldbus")
+    for workflow in (
+        ROOT / ".github/workflows/ghcr-openfdd-stack.yml",
+        ROOT / ".github/workflows/rust-release.yml",
+    ):
+        text = workflow.read_text()
+        if "services/fieldbus/Dockerfile" in text:
+            fail(f"{workflow.name} still publishes the live fieldbus image")
+    stack_up = (ROOT / "scripts/openfdd_stack_up.sh").read_text()
+    if "4.0 does not start fieldbus" not in stack_up:
+        fail("stack up must refuse fieldbus recipes")
+
+
+def check_oci_pin() -> None:
+    pin = json.loads((SNAP / "evidence" / "oci-pin.json").read_text())
+    if pin.get("snapshot_commit") != "cdaa4f15c662b8be242c5b0a9ebaed73fbbbc811":
+        fail("oci pin snapshot commit drifted")
+    protected = (ROOT / "scripts/ghcr-archive-protected-digests.txt").read_text()
+    images = pin.get("images") or []
+    if {row.get("package") for row in images} != {"openfdd-fieldbus", "openfdd-mqtt"}:
+        fail("oci pin must name fieldbus and mqtt")
+    for row in images:
+        if row.get("revision") == pin["snapshot_commit"]:
+            fail("do not claim the published image revision is the snapshot commit")
+        digests = [row.get("index_digest")]
+        digests.extend(item.get("digest") for item in row.get("platforms") or [])
+        for digest in digests:
+            if not isinstance(digest, str) or len(digest) != 71 or not digest.startswith("sha256:"):
+                fail(f"bad digest {digest}")
+            if digest not in protected:
+                fail(f"digest not prune-protected: {digest}")
+    compose = (SNAP / "recipes" / "compose.ot-archive.yml").read_text()
+    for token in ("OPENFDD_OT_FIELDBUS_DIGEST", "OPENFDD_OT_MQTT_DIGEST"):
+        if token not in compose:
+            fail(f"restore compose missing {token}")
+    if "build:" in compose or "openfdd-central" in compose or "timescale" in compose:
+        fail("restore compose must only reference pinned mqtt and fieldbus images")
+
+
 def check_semantic_boundary() -> None:
     edge = (ROOT / "edge/Cargo.toml").read_text()
     central = (ROOT / "services/central/Cargo.toml").read_text()
@@ -137,6 +188,8 @@ def main() -> None:
     check_portal_compose()
     check_cargo()
     check_semantic_boundary()
+    check_product_boundary()
+    check_oci_pin()
     print("OK ot-edge unqualified snapshot")
 
 

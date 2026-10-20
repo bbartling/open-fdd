@@ -28,8 +28,11 @@ Tested dependency closure for the fieldbus crate and the MQTT broker image:
 - `edge/src/drivers` protocol tree copy. This is **not** the whole `edge/` crate.
   Shared semantic, package, RDF, and FDD code stays in the live `edge/` crate.
 
-`cargo metadata --no-deps` on `source/Cargo.toml` resolves that closure. A full
-image build and an isolated stack boot were **not** run for this snapshot.
+`cargo metadata --no-deps` on `source/Cargo.toml` resolves that closure. The
+captured `source/Cargo.lock` still lists parent-workspace crates, so
+`cargo --locked` on that file fails. The protocol split gate copies this tree
+and regenerates the lock in a temp directory before compiling. The checksummed
+lock is not rewritten. A container boot was **not** run.
 
 ## Semantic boundary
 
@@ -37,9 +40,9 @@ Live `open_fdd_edge_prototype` keeps Haystack HTTP and Modbus clients behind the
 `ot-transport` feature. That feature is the crate default so the archived edge
 binary still builds. `openfdd-central` depends on the crate with
 `default-features = false`, so the product library does not link those clients.
-The protocol modules were not deleted from the live tree: the edge binary and the
-existing fieldbus split gate still compile them. Deleting them from the default
-workspace is a later cut.
+Live `services/fieldbus` stays on disk for the historical Dockerfiles and is
+**excluded** from the default Cargo workspace. The split gate compiles this
+snapshot, not the product workspace.
 
 ## 4.0 product path
 
@@ -52,8 +55,9 @@ Central MQTT ingest stays off unless **both** `OPENFDD_MQTT_ENABLED=1` and
 `OPENFDD_OT_ARCHIVE_RESTORE=1` are set. A leftover broker variable alone does not
 start the OT worker.
 
-Explicit legacy recipes (`react`, `react-ot`, `standalone`, `central`, `edge`) set
-the restore flag. They are not the 4.0 default.
+`react` and `central` still exist as mqtt recipes without fieldbus. `standalone`,
+`edge`, and `react-ot` are refused by `openfdd_stack_up.sh` because they would
+start fieldbus.
 
 ## Restore (manual, isolated)
 
@@ -61,17 +65,19 @@ Do not point these binaries at a 4.0 Timescale volume. Compatibility was not pro
 
 ```bash
 export OPENFDD_OT_ARCHIVE_RESTORE=1
-export OPENFDD_OT_ARCHIVE_TAG=unqualified-not-a-digest
-./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh
+./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay
 ```
 
-The script renders `recipes/compose.ot-archive.yml` and stops. It does not boot
-containers, pull images, or write a database. `--boot` exits 2: boot, health, and
-read→ingest→persist→replay evidence are missing (see `evidence/MISSING.md`).
+`--replay` reads `evidence/oci-pin.json`, renders `recipes/compose.ot-archive.yml`
+with those index digests, and stops. It does not boot containers, pull images, or
+write a database. `--boot` exits 2 (see `evidence/MISSING.md`).
+
+The pin is a GHCR resolve of one published fieldbus/mqtt tag. It is not this
+snapshot's source commit and it is not a git freeze tag.
 
 GHCR prune keeps any tag matching `ot-archive-*` or `ot-mqtt-fieldbus-last-good-*`,
 and any digest listed in `scripts/ghcr-archive-protected-digests.txt`, even when
-the same package version also has an old `sha-*` or old semver tag. No digest is
-listed yet because none was verified.
+the same package version also has an old `sha-*` or old semver tag. The committed
+pin digests are in that file.
 
 Archived images are not a security-support commitment.

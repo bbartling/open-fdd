@@ -26,7 +26,6 @@ env:
   MCP_IMAGE: ghcr.io/bbartling/openfdd-mcp
   CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central
   WEB_IMAGE: ghcr.io/bbartling/openfdd-web
-  FIELDBUS_IMAGE: ghcr.io/bbartling/openfdd-fieldbus
   MQTT_IMAGE: ghcr.io/bbartling/openfdd-mqtt
 
 jobs:
@@ -137,7 +136,6 @@ jobs:
 
           build_one openfdd-central services/central/Dockerfile .
           build_one openfdd-web frontend/web/Dockerfile frontend/web
-          build_one openfdd-fieldbus services/fieldbus/Dockerfile .
           build_one openfdd-mqtt services/mqtt/Dockerfile services/mqtt
 
   publish-mcp:
@@ -226,15 +224,16 @@ jobs:
             ```bash
             ghcr.io/bbartling/openfdd-central:${{ needs.validate.outputs.version }}
             ghcr.io/bbartling/openfdd-web:${{ needs.validate.outputs.version }}
-            ghcr.io/bbartling/openfdd-fieldbus:${{ needs.validate.outputs.version }}
             ghcr.io/bbartling/openfdd-mqtt:${{ needs.validate.outputs.version }}
             ghcr.io/bbartling/openfdd-mcp:${{ needs.validate.outputs.version }}
             ```
 
-            ### Deploy (react recipe)
+            4.0 does not publish `openfdd-fieldbus`.
+
+            ### Deploy (portal recipe)
             ```bash
             export OPENFDD_IMAGE_TAG=${{ needs.validate.outputs.version }}
-            ./scripts/openfdd_stack_up.sh react
+            ./scripts/openfdd_stack_up.sh portal
             ```
 
             See [Build recipes](https://bbartling.github.io/open-fdd/operations/build-recipes.html) for csv / central / edge recipes.

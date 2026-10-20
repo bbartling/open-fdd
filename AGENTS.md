@@ -40,7 +40,8 @@ URL until `./scripts/openfdd_demo_gate.sh` exits 0. See
 
 ```bash
 ./scripts/openfdd_stack_up.sh portal       # 4.0: React SPA + central + Timescale
-# archived OT lane (explicit): ./scripts/openfdd_stack_up.sh react-ot
+# OT archive render only (no containers, digest-pinned):
+# OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay
 # csv is central + web without the portal provider env forwarder
 # Admin (UI) — or use username "agent" + OPENFDD_AGENT_PASSWORD for operator JWT (Railway / MCP)
 TOKEN="$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \

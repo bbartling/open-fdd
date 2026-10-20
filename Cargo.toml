@@ -13,8 +13,13 @@ members = [
     "crates/openfdd_contracts",
     "crates/openfdd_connector_runtime",
     "crates/openfdd_mqtt",
-    "services/fieldbus",
     "services/central",
+]
+# Live fieldbus is not a 4.0 workspace member. The unqualified snapshot
+# under archive/ot-edge/ is its own workspace and is the only compile lane.
+exclude = [
+    "services/fieldbus",
+    "archive",
 ]
 
 [workspace.package]

@@ -540,23 +540,6 @@ impl BridgeClient {
         }))
     }
 
-    pub fn bench_topology(&self) -> Value {
-        if let Ok(path) = env::var("OPENFDD_BENCH_TOPOLOGY_FILE") {
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                return serde_json::from_str(&text).unwrap_or_else(
-                    |e| json!({"ok": false, "error": format!("invalid topology JSON: {e}")}),
-                );
-            }
-        }
-        json!({
-            "ok": true,
-            "note": "Set OPENFDD_BENCH_TOPOLOGY_FILE to a gitignored JSON file with bench IPs.",
-            "doc": "docs/agent/bench-driver-setup-wsl-agent.md",
-            "bridge": self.base,
-            "commission_default": "http://127.0.0.1:9091"
-        })
-    }
-
     /// OFDD-MCP-CTX / ENH-13f: pointer-only companion paths (no IDF surgery).
     pub fn agent_context_pointers(&self) -> Value {
         json!({
@@ -575,30 +558,6 @@ impl BridgeClient {
                 "openfdd_reports_draft needs OPENFDD_MCP_ALLOW_WRITES=1 + confirm:true; then GET /api/reports/engineering-findings"
             ]
         })
-    }
-
-    pub fn driver_status(&self) -> Value {
-        let endpoints = [
-            ("/api/health", "GET"),
-            ("/api/haystack/status", "GET"),
-            ("/api/modbus/commission/status", "GET"),
-            ("/api/bacnet/commission/status", "GET"),
-            ("/api/json-api/poll/status", "GET"),
-        ];
-        let mut out = serde_json::Map::new();
-        for (path, method) in endpoints {
-            let key = path.trim_start_matches("/api/").replace('/', "_");
-            let result = if method == "GET" {
-                self.get(path)
-            } else {
-                self.post(path, &json!({}))
-            };
-            out.insert(
-                key,
-                result.unwrap_or_else(|e| json!({"ok": false, "error": e})),
-            );
-        }
-        json!({"ok": true, "drivers": out})
     }
 }
 

@@ -118,8 +118,8 @@ docker run -i --rm --network host \
 | Tool | Description |
 |------|-------------|
 | `openfdd_health` | Central liveness |
-| `openfdd_driver_status` | Driver status bundle |
-| `openfdd_bench_topology` | Bench layout file or doc pointer |
+| `openfdd_provider_health` | Portal driver health (`GET /api/providers/health`) |
+| `openfdd_provider_sites` | Configured provider sites |
 | `openfdd_ingest_jobs` | Scoped durable ingest windows |
 | `openfdd_ingest_receipts` | Scoped commit receipts |
 | `openfdd_ingest_gaps` | Partial / failed / retry windows (`coverage` is not assessed) |

@@ -26,12 +26,13 @@ Usage: openfdd_stack_up.sh [portal|standalone|central|edge|csv|react|react-ot] [
 
 Recipes:
   portal      4.0 default: central + React web + Timescale (no MQTT, no fieldbus)
-  standalone  archived OT: mqtt + central + fieldbus
-  central     archived OT: mqtt + central
-  edge        archived OT: fieldbus only (needs OPENFDD_MQTT_HOST)
+  central     archived OT mqtt + central (no fieldbus)
   csv         central + React web (openfdd-web)
   react       archived OT: mqtt + central + React web (no fieldbus)
-  react-ot    archived OT: mqtt + central + React web + fieldbus
+
+Fieldbus recipes (standalone, edge, react-ot) are refused. Render the pinned
+archive lane instead:
+  OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay
 
 Options:
   --caddy     Start Caddy on :80 → web (/api* → central). Default ON for react/react-ot;
@@ -49,6 +50,15 @@ EOF
     *) EXTRA+=("$1"); shift ;;
   esac
 done
+
+case "$RECIPE" in
+  standalone|edge|react-ot)
+    echo "4.0 does not start fieldbus (recipe=$RECIPE)." >&2
+    echo "Render the pinned OT archive lane (no containers):" >&2
+    echo "  OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay" >&2
+    exit 2
+    ;;
+esac
 
 # React product recipes: Caddy :80 is the default LAN ingress (blank-/login class bugs).
 if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
