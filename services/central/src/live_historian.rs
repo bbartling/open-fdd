@@ -159,6 +159,10 @@ fn release_queue_bytes(bytes: usize) {
 }
 
 impl LiveWriter {
+    #[expect(
+        clippy::expect_used,
+        reason = "thread spawn fails only when the OS cannot create a thread; start() has no Result channel"
+    )]
     pub fn start() -> Self {
         let (tx, rx) = std::sync::mpsc::sync_channel(writer_queue_capacity());
         let thread = std::thread::Builder::new()

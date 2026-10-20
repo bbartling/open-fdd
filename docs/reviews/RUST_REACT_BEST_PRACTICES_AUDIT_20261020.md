@@ -41,7 +41,7 @@ SPA ESLint errors: `react-hooks/rules-of-hooks`, `react-hooks/exhaustive-deps`, 
 | `std` mutex poison recovery (`into_inner`) | request counters panicked on poison | 35 call sites, success path unchanged |
 | SPA ESLint errors under the new rules | 6 | 0 |
 | SPA `react-refresh` warnings | 13 | 13 (pre-existing, still warnings) |
-| Unavoidable production `#[expect]` | — | 8 sites, listed below |
+| Unavoidable production `#[expect]` | — | 9 sites, listed below |
 | MQTT module allows | temporary, until #1306 | dropped after the archive merge |
 
 The old raw grep of about 1,600 `.unwrap` hits counted unit tests and `unwrap_or`. It is not the production count.
@@ -85,6 +85,7 @@ The old raw grep of about 1,600 `.unwrap` hits counted unit tests and `unwrap_or
 | `providers/ledger.rs` `axis()` | `assemble` inserts every `AxisId`. `Option` would change the helper contract. |
 | `mcp` `BridgeClient::from_env` | `reqwest` fails here only when the TLS backend cannot initialize. `from_env` has no `Result` channel. |
 | `mcp` `main` | One `eprintln!` before any tracing subscriber exists, then `exit(1)`. |
+| `live_historian.rs` `LiveWriter::start` | Thread spawn fails only when the OS cannot create a thread. `start()` has no `Result` channel. |
 
 `#[cfg(test)]` helpers that hold a process-wide env lock across `.await` keep their existing `#[expect(clippy::await_holding_lock)]`. That lint is not covered by the test unwrap switches, and the expectation is fulfilled.
 
