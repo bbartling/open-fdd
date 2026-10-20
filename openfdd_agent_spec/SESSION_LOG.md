@@ -5,6 +5,7 @@
 - Opt-in destructive reset also clears `jobs/` and `data/datasets` and leaves `openfdd/control_plane` tenant and user files.
 - Overview: empty sites stay off the picker, weather is called out beside the equipment count, Timescale mapping carries sample start/end, health matrices use PASS/FAULT flags, and `fault_pct` is derived when the stored row omitted it.
 - History reads stay GET. No Parquet/DataFusion product path. `archive/` untouched. Not an ops pin until GHCR publish is green.
+- `Cargo.lock` bumps `rustls-webpki` 0.103.16, `webpki-roots` 1.0.10, and `webpki-root-certs` 1.0.10 for RUSTSEC-2026-0382 / 0381 / 0383.
 
 ## 2026-10-20 — Rust and React review standard
 

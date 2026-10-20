@@ -11,6 +11,7 @@ Workspace patch on master `5d56bf32` (4.0.1). `/api/health` reports `4.0.2+<sha>
 - An explicit one-shot destructive reset also clears `jobs/` and `data/datasets`. `openfdd/control_plane/tenants.json` and `users.json` stay.
 - The Active site list omits historian ids with no equipment and no samples, package dirs without a manifest, and provider sites with zero mapped points.
 - Overview equipment count still excludes weather and says so. Timescale package mapping carries per-equipment first/last timestamps so dataset start, end, and span fill in. AHU health matrices join stored PASS/FAULT rows. Results `fault_pct` is derived from fault hours when the stored row omitted it.
+- `Cargo.lock` bumps `rustls-webpki` to 0.103.16, `webpki-roots` to 1.0.10, and `webpki-root-certs` to 1.0.10 (RUSTSEC-2026-0382, RUSTSEC-2026-0381, RUSTSEC-2026-0383).
 
 ## 4.0.1 — 2026-10-20
 
