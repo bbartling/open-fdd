@@ -5,6 +5,7 @@
 - No VERSION bump. The 4.0.1 patch is a later PR after this train and the data-safe and OT-archive trains merge.
 - Product surface for this standard is the NF portal API and CSV ingest. MQTT, BACnet, Haystack, Modbus, fieldbus, edge, and dual-write paths are not cleaned here. Archived code lives in `archive/` and is never built.
 - Rebased onto `cf6109b1` (#1305). `db_lifecycle` production paths have no unwrap/expect. Timescale seed scripts stay Python with bound SQL.
+- Rebased onto `1d6c4ff9` (#1306). MQTT module allows dropped. `ingest` and `live_historian` are the portal writer. `LiveWriter::start` keeps one `#[expect]` for thread spawn.
 
 ## 2026-10-20 — Rebase legacy tooling purge onto #1306
 
