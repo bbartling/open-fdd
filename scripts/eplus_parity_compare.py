@@ -238,7 +238,7 @@ def _intentional_accepted(
         and r_status.upper() == "FAULT"
         and o_hours is not None
         and r_hours is not None
-        and abs(r_hours - o_hours) <= 0.26
+        and 0 < abs(r_hours - o_hours) <= 0.26
     ):
         return (
             True,

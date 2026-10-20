@@ -241,7 +241,7 @@ The table below is the original product-path deletion list (188 files: scripts 1
 | `scripts/check_ghcr_tip_python_absence.sh`, `release/smoke_react_web_image.sh`, `openfdd_demo_gate.sh`, `openfdd_disk_preflight.*`, `openfdd_maint_update_resume.sh`, `openfdd_docker_maintenance.sh`, `openfdd_data_retention_sidecar.sh`, `ops/kickoff_grok_bot.py` | Generic image/ops utilities. Kept scripts, examples or AGENTS docs still point at them. |
 | `scripts/wattlab_parity_diff.py` (deprecated alias), `eplus_*`, `vibe21_master_build.sh`, `vibe21_export_champion_portable.py` | A test uses the alias, and central runtime hints reference the vibe21 scripts. |
 | `tools/**` | `wattlab_export` (CI PYTHONPATH), `python_oracle` (cookbook-parity CI), `react_parity` (fixtures used by `phase2_shadow_compare.py` in CI), and the `open-fdd-modernization` / `open-fdd-vibe21-production` plan docs (heavily linked). |
-| `tools/wattlab_export/agent_afdd.py` | **Pre-existing syntax error** (unexpected indent, line 77). `smoke_standalone_mqtts.sh` (CI) requires the file to exist. |
+| `tools/wattlab_export/agent_afdd.py` | Kept. The broken `--schedule` argument is restored. `smoke_standalone_mqtts.sh` (CI) requires the file to exist. Offline tooling, not the product request path. |
 
 ## Follow-ups for Ben
 

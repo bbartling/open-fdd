@@ -1,3 +1,9 @@
+## 2026-10-20 — Rebase legacy tooling purge onto #1306
+
+- Rebased `chore/purge-legacy-tooling` onto `origin/master` `1d6c4ff9`. Archive copies under `archive/ot-edge/unmaintained/` stay. Product paths for the nightly bench stay gone.
+- Kept `scripts/gates/afdd_slice_identity.py` (live AFDD contract gate) and `scripts/openfdd_workspace_reset_default.sh` (#1305 data-safe reset).
+- `test_manifest_has_independent_axes` now follows master's semver check (Rust 4.0.0). Re-exported the wattlab parity helpers the alias test imports, and restored the `--schedule` argument in `tools/wattlab_export/agent_afdd.py`. No VERSION bump.
+
 ## 2026-10-04 — Security gate verdict integrity (#999)
 
 - Gates 25, 25b, and 26 now refuse a stale PASS artifact, a FAIL observer that exits 0, and an `ok: false` / `status: PASS` pair. Transport ERROR stays ERROR. The stress recorder does the same when a child exit or an ERROR check contradicts PASS/BLOCKED.
