@@ -297,7 +297,15 @@ def check_motor(cur) -> None:
     sql = (ROOT / "sql" / "analytics" / "postgres" / "queries" / "motor_weekly_runtime.sql").read_text(
         encoding="utf-8"
     )
-    cur.execute(sql, (SITE, None, None, None))
+    # Inline $1..$4. psycopg would treat LIKE '%.role' as its own placeholder.
+    site = SITE.replace("'", "''")
+    sql = (
+        sql.replace("$1", f"'{site}'")
+        .replace("$2", "NULL::timestamptz")
+        .replace("$3", "NULL::timestamptz")
+        .replace("$4", "NULL::text[]")
+    )
+    cur.execute(sql)
     rows = cur.fetchall()
     columns = [desc.name for desc in cur.description]
     equip_idx = columns.index("equipment_id")
