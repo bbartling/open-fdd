@@ -77,6 +77,12 @@ pub struct SiteProviderHealth {
     /// Honest hourly coverage. Absent until the hourly scheduler has run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hourly_coverage: Option<HourlyCoverageHealth>,
+    /// Explicit driver capabilities. Empty only for a hand-built test row.
+    #[serde(default)]
+    pub capabilities: Vec<ProviderCapability>,
+    /// N7 ledger from hourly jobs and receipts. Absent until a tick has run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage_ledger: Option<CoverageLedger>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -92,6 +98,107 @@ pub struct HourlyCoverageHealth {
     pub detail: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityName {
+    Authenticate,
+    Latest,
+    FetchHistory,
+    BoundedWindows,
+    UpdateLog,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilitySupport {
+    Implemented,
+    NotImplemented,
+}
+
+/// One advertised driver capability. History is never implied by `latest`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderCapability {
+    pub name: CapabilityName,
+    pub support: CapabilitySupport,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http_method: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_window_secs: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderRegistration {
+    pub kind: ProviderKind,
+    pub capabilities: Vec<ProviderCapability>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AxisId {
+    TransportProbe,
+    RequestedWindowCompleteness,
+    DurableCommit,
+    SourceFreshness,
+    LateReconciliation,
+    UnrecoverableRetention,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AxisState {
+    Unknown,
+    Ok,
+    Degraded,
+    Failed,
+    NotClaimed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LedgerAxis {
+    pub id: AxisId,
+    pub state: AxisState,
+    pub detail: String,
+}
+
+/// What range polling actually guarantees. `gapless` stays false while the
+/// NF update log is unavailable.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoverageGuarantee {
+    pub mode: String,
+    pub history_method: String,
+    pub history_path: String,
+    pub update_log_method: String,
+    pub update_log_path: String,
+    pub update_log_observed_http: u16,
+    pub update_log_called: bool,
+    pub update_log_status: String,
+    pub reconcile_hours: i64,
+    pub gapless: bool,
+    pub statement: String,
+}
+
+/// Six coverage axes derived from hourly jobs, receipts, checkpoints, and gaps.
+/// A latest scrape is not an input and cannot advance any axis.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoverageLedger {
+    pub guarantee: CoverageGuarantee,
+    pub axes: Vec<LedgerAxis>,
+    pub windows_complete: u32,
+    pub windows_incomplete: u32,
+    pub windows_pending: u32,
+    pub transport_failures: u32,
+    pub durable_receipts: u32,
+    pub reconcile_committed: u32,
+    pub reconcile_open: u32,
+    pub unrecoverable_gaps: u32,
+    pub gapless: bool,
+    pub advanced_by_latest_sample: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvidersHealthBody {
     pub ok: bool,
@@ -100,4 +207,7 @@ pub struct ProvidersHealthBody {
     /// Safe configuration code when ingest config failed closed. No secrets.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub config_error: Option<String>,
+    /// Static driver registry. Present even when no site is configured.
+    #[serde(default)]
+    pub registry: Vec<ProviderRegistration>,
 }

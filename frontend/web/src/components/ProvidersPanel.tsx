@@ -5,6 +5,8 @@ import {
   fetchProviderSites,
   fetchProvidersHealth,
   providerWindowsPath,
+  type CoverageLedgerView,
+  type ProviderRegistrationView,
   type ProviderSiteConfig,
   type ProviderSiteHealth,
 } from "../api/providersApi";
@@ -50,6 +52,10 @@ function modelHref(buildingId: string, row: ProviderWindowRow): string {
 export function ProvidersPanel() {
   const requestGen = useRef(0);
   const [pollEnabled, setPollEnabled] = useState<boolean | null>(null);
+  const [registry, setRegistry] = useState<ProviderRegistrationView[]>([]);
+  const [coverageSites, setCoverageSites] = useState<
+    Array<{ key: string; buildingId: string; provider: string; ledger: CoverageLedgerView | null }>
+  >([]);
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,10 +84,21 @@ export function ProvidersPanel() {
             : null,
       );
       setRows(mergeProviderRows(healthSites, configs));
+      setRegistry(health.registry ?? []);
+      setCoverageSites(
+        healthSites.map((site) => ({
+          key: `${site.building_id ?? "site"}-${site.provider ?? "provider"}`,
+          buildingId: site.building_id ?? "site",
+          provider: site.provider ?? "provider",
+          ledger: site.coverage_ledger ?? null,
+        })),
+      );
       setError(null);
     } catch (err) {
       if (ticket !== requestGen.current) return;
       setRows([]);
+      setRegistry([]);
+      setCoverageSites([]);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       if (ticket === requestGen.current) setLoading(false);
@@ -172,6 +189,56 @@ export function ProvidersPanel() {
           ? " — disabled does not mean the last window was committed."
           : ""}
       </p>
+      {registry.length > 0 ? (
+        <ul data-testid="provider-registry">
+          {registry.map((entry) => (
+            <li key={entry.kind} data-testid={`provider-registry-${entry.kind}`}>
+              {entry.kind}:{" "}
+              {entry.capabilities
+                .map((cap) =>
+                  cap.http_method
+                    ? `${cap.name} ${cap.support} ${cap.http_method}`
+                    : `${cap.name} ${cap.support}`,
+                )
+                .join("; ")}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {coverageSites.map((site) => {
+        const ledger = site.ledger;
+        if (!ledger) {
+          return (
+            <p key={site.key} className="muted" data-testid={`coverage-ledger-absent-${site.key}`}>
+              Coverage ledger for {site.buildingId} has not run. A latest sample is not coverage.
+            </p>
+          );
+        }
+        return (
+          <div key={site.key} data-testid="coverage-ledger">
+            <p data-testid="coverage-guarantee">{ledger.guarantee?.statement}</p>
+            <p data-testid="coverage-gapless">Gapless: {ledger.gapless ? "yes" : "no"}</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Axis</th>
+                  <th>State</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(ledger.axes ?? []).map((axis) => (
+                  <tr key={axis.id} data-testid={`coverage-axis-${axis.id}`}>
+                    <td>{axis.id}</td>
+                    <td>{axis.state}</td>
+                    <td>{axis.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
       {error ? (
         <p className="error" data-testid="providers-error">
           {error}

@@ -9,11 +9,13 @@ pub mod error;
 pub mod hourly;
 pub mod hourly_exec;
 pub mod http_policy;
+pub mod ledger;
 pub mod map;
 pub mod meteo;
 pub mod nf;
 pub mod pg_store;
 pub mod poller;
+pub mod registry;
 pub mod store;
 pub mod types;
 pub mod writer;
@@ -45,20 +47,41 @@ pub trait DataProvider: Send + Sync {
     fn provider_id(&self) -> &str;
     fn kind(&self) -> ProviderKind;
     fn health(&self) -> ProviderHealth;
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "health rows read the registry; conformance tests call the trait"
+        )
+    )]
+    fn capabilities(&self) -> Vec<types::ProviderCapability>;
     /// Concrete pollers call driver history directly. These stay on the trait
     /// so the next adapter does not grow a second scheduler.
-    #[expect(
-        dead_code,
-        reason = "NF poller uses fetch_history; trait method is the adapter contract"
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "NF poller uses fetch_history; trait method is the adapter contract"
+        )
     )]
     fn authenticate(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send;
-    #[expect(
-        dead_code,
-        reason = "NF poller uses fetch_history; trait method is the adapter contract"
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "NF poller uses fetch_history; trait method is the adapter contract"
+        )
     )]
     fn fetch_latest(
         &mut self,
     ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
+    /// Bounded history read. NF implements this as `GET /api/v1/point/data` only.
+    fn fetch_history(
+        &mut self,
+        point_ids: &[String],
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> impl std::future::Future<Output = Result<Vec<map::HistorySeries>, error::ProviderError>> + Send;
 }
 
 impl DataProvider for nf::NfPortalDriver {
@@ -74,6 +97,10 @@ impl DataProvider for nf::NfPortalDriver {
         self.health(ProviderHealthStatus::Ok, None)
     }
 
+    fn capabilities(&self) -> Vec<types::ProviderCapability> {
+        registry::capabilities_for(ProviderKind::Nf)
+    }
+
     async fn authenticate(&mut self) -> Result<(), String> {
         nf::NfPortalDriver::authenticate(self)
             .await
@@ -84,6 +111,16 @@ impl DataProvider for nf::NfPortalDriver {
         nf::NfPortalDriver::query_points(self, 200)
             .await
             .map_err(|err| err.to_string())
+    }
+
+    async fn fetch_history(
+        &mut self,
+        point_ids: &[String],
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<map::HistorySeries>, error::ProviderError> {
+        let points = nf::NfPortalDriver::fetch_history(self, point_ids, from, to).await?;
+        Ok(nf::group_history(points))
     }
 }
 
@@ -100,6 +137,10 @@ impl DataProvider for meteo::OpenMeteoDriver {
         self.health(ProviderHealthStatus::Ok, None)
     }
 
+    fn capabilities(&self) -> Vec<types::ProviderCapability> {
+        registry::capabilities_for(ProviderKind::OpenMeteo)
+    }
+
     async fn authenticate(&mut self) -> Result<(), String> {
         std::future::ready(meteo::OpenMeteoDriver::authenticate(self))
             .await
@@ -110,6 +151,30 @@ impl DataProvider for meteo::OpenMeteoDriver {
         std::future::ready(meteo::OpenMeteoDriver::fetch_latest(self))
             .await
             .map_err(|err| err.to_string())
+    }
+
+    async fn fetch_history(
+        &mut self,
+        point_ids: &[String],
+        from: chrono::DateTime<chrono::Utc>,
+        to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<map::HistorySeries>, error::ProviderError> {
+        let points = meteo::OpenMeteoDriver::fetch_history(self, point_ids, from, to).await?;
+        let mut grouped: std::collections::BTreeMap<String, Vec<map::RawProviderPoint>> =
+            std::collections::BTreeMap::new();
+        for point in points {
+            grouped
+                .entry(point.provider_point_id.clone())
+                .or_default()
+                .push(point);
+        }
+        Ok(grouped
+            .into_iter()
+            .map(|(provider_point_id, samples)| map::HistorySeries {
+                provider_point_id,
+                samples,
+            })
+            .collect())
     }
 }
 
@@ -126,12 +191,27 @@ impl DataProvider for ace_stub::AceIotStubDriver {
         ace_stub::AceIotStubDriver::health(self)
     }
 
+    fn capabilities(&self) -> Vec<types::ProviderCapability> {
+        registry::capabilities_for(ProviderKind::AceIot)
+    }
+
     async fn authenticate(&mut self) -> Result<(), String> {
         ace_stub::AceIotStubDriver::authenticate(self).await
     }
 
     async fn fetch_latest(&mut self) -> Result<Vec<map::RawProviderPoint>, String> {
         ace_stub::AceIotStubDriver::query_points(self).await
+    }
+
+    async fn fetch_history(
+        &mut self,
+        _point_ids: &[String],
+        _from: chrono::DateTime<chrono::Utc>,
+        _to: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<map::HistorySeries>, error::ProviderError> {
+        Err(error::ProviderError::new(
+            error::ProviderErrorCode::NotImplemented,
+        ))
     }
 }
 
@@ -215,6 +295,7 @@ impl Runtime {
                 poll_enabled,
                 sites: site_health,
                 config_error,
+                registry: registry::registrations(),
             }),
             hourly: Mutex::new(None),
         })
@@ -358,6 +439,8 @@ fn health_row(
         last_ingested_points: 0,
         consecutive_errors: 0,
         hourly_coverage: None,
+        capabilities: registry::capabilities_for(site.kind),
+        coverage_ledger: None,
     }
 }
 
@@ -381,6 +464,8 @@ fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
         last_ingested_points: 0,
         consecutive_errors: 0,
         hourly_coverage: None,
+        capabilities: registry::capabilities_for(ProviderKind::Nf),
+        coverage_ledger: None,
     }
 }
 
@@ -463,6 +548,7 @@ mod tests {
         assert!(!provider.provider_id().is_empty());
         let _ = provider.kind();
         let _ = provider.health();
+        assert!(!provider.capabilities().is_empty());
     }
 
     #[test]
@@ -512,6 +598,8 @@ mod tests {
             last_ingested_points: 0,
             consecutive_errors: 1,
             hourly_coverage: None,
+            capabilities: Vec::new(),
+            coverage_ledger: None,
         }
     }
 
@@ -538,6 +626,7 @@ mod tests {
                     "CANARY-SECRET-VALUE leaked",
                 ),
             ],
+            registry: registry::registrations(),
         };
         let a = visible_health(body.clone(), &ctx(&["SITE_A"], false));
         assert_eq!(a.sites.len(), 1);
@@ -568,5 +657,25 @@ mod tests {
             Some("provider_error")
         );
         assert!(!hub.ok);
+        let ace = hub
+            .registry
+            .iter()
+            .find(|row| row.kind == ProviderKind::AceIot)
+            .unwrap();
+        assert!(ace
+            .capabilities
+            .iter()
+            .all(|cap| cap.support == types::CapabilitySupport::NotImplemented));
+        let nf = hub
+            .registry
+            .iter()
+            .find(|row| row.kind == ProviderKind::Nf)
+            .unwrap();
+        let history = nf
+            .capabilities
+            .iter()
+            .find(|cap| cap.name == types::CapabilityName::FetchHistory)
+            .unwrap();
+        assert_eq!(history.http_method.as_deref(), Some("GET"));
     }
 }
