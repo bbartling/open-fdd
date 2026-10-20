@@ -4,7 +4,7 @@ Product Rust and `frontend/web` are clean against the lints this standard turns 
 
 The product surface for this standard is the NF portal API and CSV ingest. MQTT, BACnet, Haystack, Modbus, fieldbus, edge, and dual-write paths are not cleaned here. Archived code lives in `archive/` and is never built.
 
-No version bump. The 4.0.0 → 4.0.1 patch is a later PR after this change, the data-safe-defaults change, and the OT-archive change merge.
+No version bump. #1305, #1306, #1308, and #1309 are already on master. The 4.0.0 → 4.0.1 patch is the next PR after this one.
 
 ## Where the standard lives
 
@@ -24,7 +24,7 @@ No version bump. The 4.0.0 → 4.0.1 patch is a later PR after this change, the 
 
 ## What is enforced
 
-Product crates opt into `[workspace.lints.clippy]`: `services/central`, `mcp`, `fdd_core`, `fdd_csv`, `fdd_store`, `fdd_resources`, `fdd_tsdb`, `fdd_rules`, `openfdd_contracts`, `openfdd_connector_runtime`.
+Product crates opt into `[workspace.lints.clippy]`: `services/central`, `mcp`, `fdd_core`, `fdd_csv`, `fdd_store`, `fdd_resources`, `fdd_tsdb`, `fdd_rules`, `openfdd_contracts`. `openfdd_connector_runtime` is archived and is not a workspace member.
 
 Denied: `unwrap_used`, `expect_used`, `await_holding_lock`, `ptr_arg`, `redundant_clone`, `rc_buffer`, `print_stdout`, `print_stderr`, `dbg_macro`.
 
@@ -81,7 +81,7 @@ The old raw grep of about 1,600 `.unwrap` hits counted unit tests and `unwrap_or
 | `fdd_store` `compaction_coord.rs` | A poisoned fence means a scan or compact counter was left mid-update. Continuing would overlap compaction with a scan. |
 | `parquet_parts.rs` `storage()` | Local-writer accessor. The signature stays `&LocalStorage`. |
 | `fdd_resources` `acquire_compute` | The process-wide semaphore is never closed. |
-| `openfdd_contracts` `topic()` | Protocol-scoped topic kinds. `Result` would change the topic contract. The archive PR removes this helper with the MQTT stack. |
+| `openfdd_contracts` `topic()` | Protocol-scoped topic kinds. `Result` would change the topic contract. |
 | `providers/ledger.rs` `axis()` | `assemble` inserts every `AxisId`. `Option` would change the helper contract. |
 | `mcp` `BridgeClient::from_env` | `reqwest` fails here only when the TLS backend cannot initialize. `from_env` has no `Result` channel. |
 | `mcp` `main` | One `eprintln!` before any tracing subscriber exists, then `exit(1)`. |
@@ -117,6 +117,8 @@ After #1306 merged, the module-level allows on `ingest.rs`, `mqtt_monitor.rs`, a
 
 Success-path results are unchanged. Poisoned request counters no longer panic. A download filename that is not a legal header now returns the existing 500 JSON shape instead of panicking. Lazy routes show "Loading" until the chunk arrives, then the same page.
 
-Local checks on Rust 1.95: workspace Clippy `--all-targets -D warnings` exit 0; `cargo fmt --all --check` exit 0; unit tests for `fdd_core`, `fdd_csv`, `fdd_store`, `fdd_resources`, `fdd_rules`, `fdd_tsdb`, `openfdd_contracts`, `openfdd_connector_runtime`, and `openfdd-mcp` exit 0; `openfdd-central` binary tests 348 passed. SPA: typecheck, 331 tests, and production build exit 0.
+Local checks before the archive rebase, on Rust 1.95: workspace Clippy `--all-targets -D warnings` exit 0; `cargo fmt --all --check` exit 0; unit tests for the opted-in library crates and `openfdd-mcp` exit 0; `openfdd-central` binary tests 348 passed. SPA: typecheck, 331 tests, and production build exit 0. After #1306 the central binary tests were 338 passed. `openfdd_connector_runtime` is no longer a workspace member.
 
 Rebase onto `cf6109b1` (#1305) added `services/central/src/db_lifecycle.rs`. Production code in that module has no `.unwrap()` or `.expect()`. Identifier SQL goes through `is_safe_ident` before `format!`. The two `.expect()` calls sit in `#[cfg(test)]` helpers, which `allow-expect-in-tests` covers. `cargo clippy -p openfdd-central --all-targets -- -D warnings` exits 0 with that file included. `scripts/timescale/` is Python lab seed/purge tooling, not a Clippy target. `data_safe.py` decides preserve versus delete without a product dual-write, and seed SQL uses `%s` binds.
+
+Rebase onto `5dd7f5c1` (#1309) added `starter_seed.rs`, the Timescale product modules, and the Building 50 / NF UI. Production paths in `starter_seed.rs`, `providers/*`, `timescale_analytics.rs`, `timescale_historian.rs`, `timescale_product.rs`, and `crates/fdd_tsdb/src/client.rs` have no `.unwrap()` or `.expect()`. Sample and point-map writes use sqlx binds. Role and table names go through `safe_role` or `ident_ok` before any `format!`. `fixture_acceptance` stays `#[cfg(test)]`, so its helpers are covered by the test switches. The SPA Timescale health lines do not add `any`, index keys, or a fetch without the existing cancel flag. After that rebase, `cargo +1.95.0 clippy --workspace --all-targets -- -D warnings` exits 0 and `npm run lint` exits 0 (13 react-refresh warnings).

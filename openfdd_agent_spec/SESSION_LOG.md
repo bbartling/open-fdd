@@ -7,6 +7,7 @@
 - Rebased onto `cf6109b1` (#1305). `db_lifecycle` production paths have no unwrap/expect. Timescale seed scripts stay Python with bound SQL.
 - Rebased onto `1d6c4ff9` (#1306). MQTT module allows dropped. `ingest` and `live_historian` are the portal writer. `LiveWriter::start` keeps one `#[expect]` for thread spawn.
 - Rebased onto `c4a616b1` (#1308). Kept the legacy-tooling deletions. No VERSION bump.
+- Rebased onto `5dd7f5c1` (#1309). `starter_seed`, provider, and Timescale production paths have no unwrap or expect. Workspace Clippy and SPA ESLint are clean. No VERSION bump. This is the last PR before the 4.0.1 bump.
 
 ## 2026-10-20 — Rebase legacy tooling purge onto #1306
 
