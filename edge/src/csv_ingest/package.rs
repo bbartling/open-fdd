@@ -1966,11 +1966,9 @@ pub fn list_package_buildings_handler() -> Value {
                 let path = e.path();
                 if path.is_dir() {
                     if let Some(name) = e.file_name().to_str() {
-                        if !name.starts_with('.') {
+                        if !name.starts_with('.') && path.join("manifest.json").is_file() {
                             buildings.push(name.to_string());
-                            if path.join("manifest.json").is_file() {
-                                packages.push(name.to_string());
-                            }
+                            packages.push(name.to_string());
                         }
                     }
                 }

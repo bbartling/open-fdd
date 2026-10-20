@@ -36,7 +36,8 @@ On each turnkey stack patch that ships to GHCR nightly, bump workspace patch (`3
 
 | When | Platform VERSION | Immutable pin | Notes |
 | --- | --- | --- | --- |
-| 4.0.1 workspace patch (2026-10-20) | **4.0.1** | `sha-<7>` after this bump merges to `master` | #1305–#1309 on `04673e4f`. Not an ops pin until GHCR publish is green. PyPI stays **4.4.9**. |
+| 4.0.2 workspace patch (2026-10-20) | **4.0.2** | `sha-<7>` after this bump merges to `master` | NF queue window + health, overview span/health/fault percent. Not an ops pin until GHCR publish is green. PyPI stays **4.4.9**. |
+| 4.0.1 workspace patch (2026-10-20) | **4.0.1** | published with 4.0.1 | #1305–#1309 on `04673e4f`. PyPI stays **4.4.9**. |
 | 4.0.0 portal (#1302) | **4.0.0** | `sha-fe7e06b` | Prior workspace tip. Central + web only. |
 
 Older Soft-OPEN pins stay in [`MILESTONES.md`](../../MILESTONES.md). Never claim the new tip until GHCR publish is green and the `sha-*` digest resolves. Pin newest-by-created, not the `:nightly` name.

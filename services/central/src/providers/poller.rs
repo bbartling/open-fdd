@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::Utc;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use futures_util::future::BoxFuture;
 use tokio::sync::{watch, Semaphore};
 use tokio::task::JoinHandle;
@@ -15,9 +15,9 @@ use tracing::{debug, info, warn};
 
 use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
-use super::hourly::HourlyPolicy;
+use super::hourly::{assess_page, HourlyPolicy, LogicalWindow, UPDATE_LOG_STATUS};
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
-use super::map::HistorySeries;
+use super::map::{normalize_mapped, DevicePoints, HistorySeries, ResolvedRole};
 use super::meteo::OpenMeteoDriver;
 use super::nf::NfPortalDriver;
 use super::store::StoreOpen;
@@ -93,10 +93,63 @@ pub async fn run_legacy_site_loops(state: Arc<AppState>, shutdown: &mut watch::R
     let _ = handle.await;
 }
 
-/// One N5 hourly tick for a queue-claimed site. History stays GET point/data.
-pub async fn execute_site(state: &Arc<AppState>, site: &SiteConfig) -> Result<usize, String> {
+/// Samples inside `[start, end)` for one device. Overlap is zero: the queue
+/// job already names its own window.
+pub struct WindowAccept {
+    pub samples: Vec<super::types::NormalizedSample>,
+}
+
+pub fn accept_device_window(
+    building_id: &str,
+    provider_instance_id: &str,
+    device: &DevicePoints,
+    page: &[HistorySeries],
+    window: LogicalWindow,
+) -> WindowAccept {
+    let ids: Vec<String> = device
+        .points
+        .iter()
+        .map(|point| point.provider_point_id.clone())
+        .collect();
+    let assessed = assess_page(&ids, page, window, ChronoDuration::seconds(0));
+    let mut samples = Vec::new();
+    for raw in &assessed.accepted {
+        let Some(point) = device
+            .points
+            .iter()
+            .find(|point| point.provider_point_id == raw.provider_point_id)
+        else {
+            continue;
+        };
+        samples.push(normalize_mapped(
+            building_id,
+            provider_instance_id,
+            raw,
+            &ResolvedRole::binding(
+                &device.device_id,
+                point.role.clone(),
+                point.equip_type.clone(),
+                None,
+            ),
+        ));
+    }
+    WindowAccept { samples }
+}
+
+/// GET one claimed queue window for one device and record provider health.
+/// History stays `GET /api/v1/point/data`. This does not call `run_hourly_tick`.
+pub async fn execute_window(
+    state: &Arc<AppState>,
+    site: &SiteConfig,
+    device_id: &str,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> Result<usize, String> {
     if !matches!(site.kind, super::types::ProviderKind::Nf) {
         return Err("not_implemented".into());
+    }
+    if end <= start {
+        return Err("invalid_window".into());
     }
     let runtime = Arc::clone(&state.providers);
     let mut driver = NfPortalDriver::new(
@@ -108,45 +161,104 @@ pub async fn execute_site(state: &Arc<AppState>, site: &SiteConfig) -> Result<us
         super::http_policy::HttpLimits::default(),
     )
     .map_err(|_| "config_invalid".to_string())?;
-    driver
-        .authenticate()
-        .await
-        .map_err(|_| "auth_failed".to_string())?;
-    let store = match runtime.hourly_store().await {
-        StoreOpen::Durable(store) | StoreOpen::MemoryOnly(store) => store,
-        StoreOpen::Unavailable => return Err("job_store_unavailable".into()),
-    };
+    if driver.authenticate().await.is_err() {
+        runtime
+            .record_error(
+                &site.building_id,
+                ProviderHealthStatus::AuthFailed,
+                Some("auth_failed".into()),
+            )
+            .await;
+        return Err("auth_failed".into());
+    }
     let resolver = runtime.resolver_for(&site.tenant_id, &site.building_id);
     let devices = if resolver.mapped_count() == 0 && site.resolver.mapped_count() > 0 {
         site.resolver.devices()
     } else {
         resolver.devices()
     };
-    let policy = HourlyPolicy::from_env();
-    let owner = std::env::var("OPENFDD_HOURLY_WORKER_ID").unwrap_or_else(|_| "central".into());
-    let provider_instance = driver.provider_id().to_string();
-    let tick = TickInput {
-        now: Utc::now(),
-        tenant: &site.tenant_id,
-        canonical_site: &site.building_id,
-        provider_instance: &provider_instance,
-        devices: &devices,
-        policy: &policy,
-        owner: &owner,
+    let Some(device) = devices
+        .into_iter()
+        .find(|device| device.device_id == device_id)
+    else {
+        runtime
+            .record_error(
+                &site.building_id,
+                ProviderHealthStatus::Error,
+                Some("device_unmapped".into()),
+            )
+            .await;
+        return Err("device_unmapped".into());
     };
-    let mut source = NfHistory {
-        driver: &mut driver,
+    let ids: Vec<String> = device
+        .points
+        .iter()
+        .map(|point| point.provider_point_id.clone())
+        .collect();
+    let page = match driver.read_history_page(&ids, start, end).await {
+        Ok(page) => page,
+        Err(err) => {
+            let code = err.code().to_string();
+            runtime
+                .record_error(
+                    &site.building_id,
+                    ProviderHealthStatus::Error,
+                    Some(code.clone()),
+                )
+                .await;
+            return Err(code);
+        }
     };
-    let mut sink = HistorianSink {
-        state,
-        building_id: &site.building_id,
-        provider_instance_id: &site.provider_instance_id,
+    let accepted = accept_device_window(
+        &site.building_id,
+        &site.provider_instance_id,
+        &device,
+        &page,
+        LogicalWindow { start, end },
+    );
+    let persisted = if accepted.samples.is_empty() {
+        0
+    } else {
+        match writer::ingest_samples(
+            state,
+            &site.building_id,
+            &site.provider_instance_id,
+            &accepted.samples,
+        )
+        .await
+        {
+            Ok(receipt) => receipt.persisted_rows,
+            Err(_) => {
+                runtime
+                    .record_error(
+                        &site.building_id,
+                        ProviderHealthStatus::Error,
+                        Some("persistence".into()),
+                    )
+                    .await;
+                return Err("persistence".into());
+            }
+        }
     };
-    let report = run_hourly_tick(&store, &tick, &mut source, &mut sink).await?;
-    if report.failed > 0 && report.committed == 0 && report.no_source_data == 0 {
-        return Err(report.health_code());
-    }
-    Ok(report.samples_handed_off)
+    let ingested = u64::try_from(persisted).unwrap_or(u64::MAX);
+    runtime
+        .record_hourly(
+            &site.building_id,
+            ProviderHealthStatus::Ok,
+            ingested,
+            None,
+            HourlyCoverageHealth {
+                durable: true,
+                committed: 1,
+                samples_handed_off: ingested,
+                update_log_status: UPDATE_LOG_STATUS.into(),
+                detail: "queue_window".into(),
+                ..HourlyCoverageHealth::default()
+            },
+            false,
+        )
+        .await;
+    Ok(persisted)
 }
 
 async fn site_poll_loop(
@@ -709,5 +821,94 @@ impl Runtime {
             site.consecutive_errors = site.consecutive_errors.saturating_add(1);
             site.health.last_error_at = Some(Utc::now());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::map::{DevicePoints, MappedPoint, RawProviderPoint};
+    use chrono::TimeZone;
+
+    fn minute_series(point_id: &str, start: DateTime<Utc>, n: i64) -> HistorySeries {
+        let mut samples = Vec::new();
+        for offset in 0..n {
+            samples.push(RawProviderPoint {
+                provider_point_id: point_id.to_string(),
+                display_name: None,
+                ts: start + ChronoDuration::minutes(offset),
+                val: offset as f64,
+                unit: Some("degF".into()),
+                source_quality: None,
+                attrs: serde_json::Map::new(),
+            });
+        }
+        HistorySeries {
+            provider_point_id: point_id.to_string(),
+            samples,
+        }
+    }
+
+    #[test]
+    fn past_hour_keeps_sixty_minute_samples() {
+        let start = Utc.with_ymd_and_hms(2026, 3, 1, 12, 0, 0).unwrap();
+        let end = start + ChronoDuration::hours(1);
+        let point = "11111111-1111-4111-8111-111111111111";
+        let mut page = minute_series(point, start, 60);
+        page.samples.push(RawProviderPoint {
+            provider_point_id: point.into(),
+            display_name: None,
+            ts: end,
+            val: 99.0,
+            unit: None,
+            source_quality: None,
+            attrs: serde_json::Map::new(),
+        });
+        let device = DevicePoints {
+            device_id: "device-a".into(),
+            points: vec![MappedPoint {
+                provider_point_id: point.into(),
+                role: "sat".into(),
+                equip_type: Some("ahu".into()),
+            }],
+        };
+        let accepted = accept_device_window(
+            "site-a",
+            "nf:site-a",
+            &device,
+            &[page],
+            LogicalWindow { start, end },
+        );
+        assert_eq!(accepted.samples.len(), 60);
+        assert!(accepted.samples.iter().all(|sample| sample.ts < end));
+    }
+
+    #[tokio::test]
+    async fn accepted_window_sets_last_success_at() {
+        let runtime = super::super::Runtime::health_only_for_test("site-a");
+        runtime
+            .record_hourly(
+                "site-a",
+                ProviderHealthStatus::Ok,
+                60,
+                None,
+                HourlyCoverageHealth {
+                    samples_handed_off: 60,
+                    update_log_status: UPDATE_LOG_STATUS.into(),
+                    detail: "queue_window".into(),
+                    ..HourlyCoverageHealth::default()
+                },
+                false,
+            )
+            .await;
+        let snap = runtime.health_snapshot().await;
+        let site = snap
+            .sites
+            .iter()
+            .find(|site| site.building_id == "site-a")
+            .expect("health row");
+        assert!(site.health.last_success_at.is_some());
+        assert_eq!(site.last_ingested_points, 60);
+        assert_eq!(site.health.status, ProviderHealthStatus::Ok);
     }
 }

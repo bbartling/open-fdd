@@ -696,8 +696,22 @@ fn spec_rule_ids(spec: &MatrixSpec) -> BTreeSet<&'static str> {
     ids
 }
 
-/// Soft-OPEN 371 #1222: hive partition walk only — never full-history GROUP BY.
-fn historian_equipment_ids(bid: &str) -> Vec<String> {
+/// Timescale equipment stamps when that historian is active. Otherwise the
+/// hive partition walk — never a full-history GROUP BY.
+async fn historian_equipment_ids(bid: &str) -> Vec<String> {
+    if crate::timescale_historian::historian_is_timescale() {
+        match crate::timescale_product::type_map_for_building(Some(bid)).await {
+            Ok(map) if !map.is_empty() => {
+                let mut ids: Vec<String> = map.into_keys().collect();
+                ids.sort();
+                return ids;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                tracing::warn!(error = %err, "timescale equipment list failed for health matrix");
+            }
+        }
+    }
     historian::list_equipment_ids_from_hive(bid)
 }
 
@@ -710,7 +724,7 @@ async fn equipment_ids_for_spec(
         EquipmentScope::AnyFdd => {
             // Prefer hive/registry equipment so Overview matrices render before
             // SV/FDD results exist (flags stay Unknown until Run all rules).
-            let hist = historian_equipment_ids(bid);
+            let hist = historian_equipment_ids(bid).await;
             if !hist.is_empty() {
                 return Ok(hist);
             }
@@ -724,7 +738,7 @@ async fn equipment_ids_for_spec(
             ids.dedup();
             Ok(ids)
         }
-        EquipmentScope::Family(_) => Ok(historian_equipment_ids(bid)),
+        EquipmentScope::Family(_) => Ok(historian_equipment_ids(bid).await),
     }
 }
 
@@ -888,6 +902,32 @@ mod tests {
             score_label(&[Flag::True, Flag::Unknown, Flag::False, Flag::False]);
         assert_eq!(label, "?/4");
         assert_eq!(evaluable, 3);
+    }
+
+    #[test]
+    fn fault_and_pass_are_boolean_flags() {
+        let mut rules = HashMap::new();
+        rules.insert("AHU-SATDEV".into(), ("FAULT".into(), 1.5));
+        rules.insert("FC2".into(), ("PASS".into(), 0.0));
+        let mut index = HashMap::new();
+        index.insert("unit-a".into(), rules);
+        let sat = FlagSpec {
+            key: "sat_dev",
+            label: "SAT",
+            primary: "AHU-SATDEV",
+            fallback: None,
+        };
+        let mat = FlagSpec {
+            key: "mat_low",
+            label: "MAT",
+            primary: "FC2",
+            fallback: None,
+        };
+        let (sat_flag, sat_hours) = lookup_flag_with_hours(true, &index, "unit-a", sat);
+        let (mat_flag, _) = lookup_flag_with_hours(true, &index, "unit-a", mat);
+        assert_eq!(sat_flag.to_json(), json!(true));
+        assert_eq!(sat_hours, 1.5);
+        assert_eq!(mat_flag.to_json(), json!(false));
     }
 
     #[test]

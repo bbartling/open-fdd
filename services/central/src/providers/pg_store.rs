@@ -89,9 +89,9 @@ pub async fn put_checkpoint(
     Ok(())
 }
 
-pub async fn insert_job_if_absent(pool: &sqlx::PgPool, job: &NewJob) -> Result<bool, String> {
-    let result = sqlx::query(
-        r#"
+/// Any unique violation is an idempotent no-op. Targeting only `job_id` lets
+/// the logical unique key raise 23505 and warn.
+const INSERT_JOB_SQL: &str = r#"
         INSERT INTO provider_hourly_job (
             job_id, tenant, canonical_site, provider_instance, device_id, model_revision,
             window_start, window_end, shard, shard_count, purpose, generation, state,
@@ -101,26 +101,36 @@ pub async fn insert_job_if_absent(pool: &sqlx::PgPool, job: &NewJob) -> Result<b
             $7, $8, $9, $10, $11, $12, 'queued',
             $13, $14
         )
-        ON CONFLICT (job_id) DO NOTHING
-        "#,
-    )
-    .bind(job.job_id())
-    .bind(&job.tenant)
-    .bind(&job.canonical_site)
-    .bind(&job.provider_instance)
-    .bind(&job.device_id)
-    .bind(&job.model_revision)
-    .bind(job.window_start)
-    .bind(job.window_end)
-    .bind(job.shard)
-    .bind(job.shard_count)
-    .bind(&job.purpose)
-    .bind(job.generation)
-    .bind(job.not_before)
-    .bind(serde_json::json!(job.point_ids))
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
+        ON CONFLICT DO NOTHING
+        "#;
+
+const INSERT_GAP_SQL: &str = r#"
+        INSERT INTO provider_hourly_gap (
+            gap_id, tenant, canonical_site, provider_instance, device_id, model_revision,
+            window_start, window_end, reason, recoverability
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT DO NOTHING
+        "#;
+
+pub async fn insert_job_if_absent(pool: &sqlx::PgPool, job: &NewJob) -> Result<bool, String> {
+    let result = sqlx::query(INSERT_JOB_SQL)
+        .bind(job.job_id())
+        .bind(&job.tenant)
+        .bind(&job.canonical_site)
+        .bind(&job.provider_instance)
+        .bind(&job.device_id)
+        .bind(&job.model_revision)
+        .bind(job.window_start)
+        .bind(job.window_end)
+        .bind(job.shard)
+        .bind(job.shard_count)
+        .bind(&job.purpose)
+        .bind(job.generation)
+        .bind(job.not_before)
+        .bind(serde_json::json!(job.point_ids))
+        .execute(pool)
+        .await
+        .map_err(db_err)?;
     Ok(result.rows_affected() == 1)
 }
 
@@ -576,28 +586,20 @@ async fn insert_gap_tx(
         hasher.update(raw.as_bytes());
         hex::encode(hasher.finalize())
     };
-    sqlx::query(
-        r#"
-        INSERT INTO provider_hourly_gap (
-            gap_id, tenant, canonical_site, provider_instance, device_id, model_revision,
-            window_start, window_end, reason, recoverability
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ON CONFLICT (gap_id) DO NOTHING
-        "#,
-    )
-    .bind(gap_id)
-    .bind(&gap.tenant)
-    .bind(&gap.canonical_site)
-    .bind(&gap.provider_instance)
-    .bind(&gap.device_id)
-    .bind(&gap.model_revision)
-    .bind(gap.window_start)
-    .bind(gap.window_end)
-    .bind(&gap.reason)
-    .bind(&gap.recoverability)
-    .execute(&mut **tx)
-    .await
-    .map_err(db_err)?;
+    sqlx::query(INSERT_GAP_SQL)
+        .bind(gap_id)
+        .bind(&gap.tenant)
+        .bind(&gap.canonical_site)
+        .bind(&gap.provider_instance)
+        .bind(&gap.device_id)
+        .bind(&gap.model_revision)
+        .bind(gap.window_start)
+        .bind(gap.window_end)
+        .bind(&gap.reason)
+        .bind(&gap.recoverability)
+        .execute(&mut **tx)
+        .await
+        .map_err(db_err)?;
     Ok(())
 }
 
@@ -680,4 +682,17 @@ fn row_to_job(row: &sqlx::postgres::PgRow) -> Result<JobRecord, String> {
         safe_error_code: row.try_get("safe_error_code").map_err(db_err)?,
         receipt_id: row.try_get("receipt_id").map_err(db_err)?,
     })
+}
+
+#[cfg(test)]
+mod idempotent_sql_tests {
+    use super::{INSERT_GAP_SQL, INSERT_JOB_SQL};
+
+    #[test]
+    fn unique_conflicts_do_not_target_only_the_primary_key() {
+        assert!(INSERT_JOB_SQL.contains("ON CONFLICT DO NOTHING"));
+        assert!(!INSERT_JOB_SQL.contains("ON CONFLICT (job_id)"));
+        assert!(INSERT_GAP_SQL.contains("ON CONFLICT DO NOTHING"));
+        assert!(!INSERT_GAP_SQL.contains("ON CONFLICT (gap_id)"));
+    }
 }

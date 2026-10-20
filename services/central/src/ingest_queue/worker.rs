@@ -125,6 +125,7 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
             chrono::Duration::seconds(publication_delay_secs() as i64),
             catchup_hours(),
             300,
+            crate::providers::hourly::HourlyPolicy::from_env().window_secs,
             &devices_from_state(state),
         );
         for job in planned {
@@ -187,7 +188,15 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> FinishOutcome {
             code: "not_implemented".into(),
         };
     }
-    match poller::execute_site(state, site).await {
+    match poller::execute_window(
+        state,
+        site,
+        &job.device_id,
+        job.logical_window_start,
+        job.logical_window_end,
+    )
+    .await
+    {
         Ok(ingested) => match u32::try_from(ingested) {
             Ok(count) => FinishOutcome::Committed {
                 counts: JobCounts {
@@ -287,11 +296,16 @@ fn unsafe_poller_allowed() -> bool {
         .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
 }
 
-fn tick_secs() -> u64 {
-    std::env::var("OPENFDD_INGEST_TICK_SECS")
+fn env_tick_secs(key: &str) -> Option<u64> {
+    std::env::var(key)
         .ok()
-        .and_then(|value| value.parse().ok())
+        .and_then(|value| value.trim().parse().ok())
         .filter(|value| *value >= 5)
+}
+
+fn tick_secs() -> u64 {
+    env_tick_secs("OPENFDD_PROVIDER_TICK_SECS")
+        .or_else(|| env_tick_secs("OPENFDD_INGEST_TICK_SECS"))
         .unwrap_or(15)
 }
 
@@ -339,6 +353,25 @@ mod tests {
         restore("OPENFDD_PROCESS_ROLE", prev_role);
         restore("OPENFDD_PROVIDER_POLL_MODE", prev_mode);
         restore("OPENFDD_ALLOW_UNSAFE_POLLER", prev_unsafe);
+    }
+
+    #[test]
+    fn provider_tick_secs_overrides_ingest_tick() {
+        let _guard = crate::test_env_lock::lock_env();
+        let prev_provider = std::env::var("OPENFDD_PROVIDER_TICK_SECS").ok();
+        let prev_ingest = std::env::var("OPENFDD_INGEST_TICK_SECS").ok();
+        std::env::set_var("OPENFDD_INGEST_TICK_SECS", "40");
+        std::env::remove_var("OPENFDD_PROVIDER_TICK_SECS");
+        assert_eq!(tick_secs(), 40);
+        std::env::set_var("OPENFDD_PROVIDER_TICK_SECS", "15");
+        assert_eq!(tick_secs(), 15);
+        std::env::set_var("OPENFDD_PROVIDER_TICK_SECS", "1");
+        assert_eq!(tick_secs(), 40);
+        std::env::remove_var("OPENFDD_PROVIDER_TICK_SECS");
+        std::env::remove_var("OPENFDD_INGEST_TICK_SECS");
+        assert_eq!(tick_secs(), 15);
+        restore("OPENFDD_PROVIDER_TICK_SECS", prev_provider);
+        restore("OPENFDD_INGEST_TICK_SECS", prev_ingest);
     }
 
     fn restore(key: &str, prev: Option<String>) {

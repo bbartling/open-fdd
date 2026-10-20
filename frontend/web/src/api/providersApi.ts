@@ -117,20 +117,23 @@ export async function fetchProviderSites(): Promise<ProviderSitesBody> {
   return apiFetch<ProviderSitesBody>("/api/providers/sites");
 }
 
+/** Sites with mapped points. Zero-point rows stay off the Active site picker. */
+export function buildingIdsFromProviderSites(body: ProviderSitesBody): string[] {
+  const ids = new Set<string>();
+  const consider = (site: { building_id?: string; mapped_points?: number } | undefined) => {
+    const id = (site?.building_id ?? "").trim();
+    if (!id || (site?.mapped_points ?? 0) <= 0) return;
+    ids.add(id);
+  };
+  for (const site of body.sites ?? []) consider(site);
+  for (const site of body.health ?? []) consider(site);
+  return [...ids].sort((a, b) => a.localeCompare(b));
+}
+
 /** Building ids from the provider registry. Empty when the call fails. */
 export async function listProviderBuildingIds(): Promise<string[]> {
   try {
-    const body = await fetchProviderSites();
-    const ids = new Set<string>();
-    for (const site of body.sites ?? []) {
-      const id = (site.building_id ?? "").trim();
-      if (id) ids.add(id);
-    }
-    for (const site of body.health ?? []) {
-      const id = (site.building_id ?? "").trim();
-      if (id) ids.add(id);
-    }
-    return [...ids].sort((a, b) => a.localeCompare(b));
+    return buildingIdsFromProviderSites(await fetchProviderSites());
   } catch {
     return [];
   }

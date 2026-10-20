@@ -1,5 +1,13 @@
 # Open-FDD milestones
 
+## 4.0.2 — platform patch (2026-10-20)
+
+**Base:** master `5d56bf32` (4.0.1).  
+**Workspace:** `VERSION` and Cargo workspace/crate versions **4.0.2**. Sidebar `/api/health` becomes `4.0.2+<sha>` after the master GHCR publish.  
+**Not this release:** PyPI `open-fdd` stays **4.4.9**. No Timescale backup on a normal update. No Parquet or DataFusion product path. `archive/` untouched. Not an ops pin until a published `sha-<7>` is resolved newest-by-created.
+
+Queue ingest records health for the claimed window, honors `OPENFDD_HOURLY_WINDOW_SECS` and `OPENFDD_PROVIDER_TICK_SECS`, and treats hourly-job unique conflicts as idempotent. The opt-in destructive reset also clears job and dataset files and leaves tenant admin files. Overview hides empty sites, explains the weather exclusion, fills dataset span from Timescale, joins AHU health flags to FDD results, and fills `fault_pct` from fault hours.
+
 ## 4.0.1 — platform patch (2026-10-20)
 
 **Base:** master `04673e4f` (4.0.0), which already contains #1305–#1309.  

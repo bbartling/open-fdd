@@ -344,6 +344,44 @@ impl Runtime {
         self.health.lock().await.clone()
     }
 
+    /// Health row only. Used to assert `record_hourly` without loading sites.
+    #[cfg(test)]
+    pub fn health_only_for_test(building_id: &str) -> Arc<Self> {
+        Arc::new(Self {
+            sites: Vec::new(),
+            models: StdMutex::new(CommittedModelStore::default()),
+            health: Mutex::new(ProvidersHealthBody {
+                ok: true,
+                poll_enabled: true,
+                sites: vec![SiteProviderHealth {
+                    building_id: building_id.to_string(),
+                    provider_instance_id: "nf:test".into(),
+                    provider: ProviderKind::Nf,
+                    endpoint: "https://portal.example".into(),
+                    poll_secs: 60,
+                    mapped_points: 1,
+                    health: ProviderHealth {
+                        provider_id: "nf:test".into(),
+                        kind: ProviderKind::Nf,
+                        status: ProviderHealthStatus::NotConfigured,
+                        message: None,
+                        last_success_at: None,
+                        last_error_at: None,
+                    },
+                    last_poll_at: None,
+                    last_ingested_points: 0,
+                    consecutive_errors: 0,
+                    hourly_coverage: None,
+                    capabilities: Vec::new(),
+                    coverage_ledger: None,
+                }],
+                config_error: None,
+                registry: Vec::new(),
+            }),
+            hourly: Mutex::new(None),
+        })
+    }
+
     pub fn sites_config(&self) -> Vec<SiteConfigSummary> {
         self.sites
             .iter()

@@ -369,6 +369,7 @@ describe("fetchCentralOverview", () => {
     });
     expect(out.equipment_ids).not.toContain("weather");
     expect(out.equipment_count).toBeGreaterThanOrEqual(1);
+    expect(out.weather_excluded).toBe(1);
     expect(out.span.start).toBe("2026-03-16T00:40:00");
     expect(out.span.end).toBe("2026-07-17T10:00:00");
     expect(out.span.span_hours).toBe(2961.3);

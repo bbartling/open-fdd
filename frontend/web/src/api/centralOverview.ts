@@ -747,6 +747,7 @@ export async function fetchCentralOverview(opts: {
   const econRows = econ.rows?.length ? econ.rows : econ.equipment;
   const econPoints = econ.points ?? [];
 
+  const weatherExcluded = (opts.equipment ?? []).filter((e) => isWeatherEquipment(e)).length;
   const inventory = (opts.equipment ?? []).filter((e) => !isWeatherEquipment(e));
   const equipmentIds = [
     ...new Set(
@@ -819,6 +820,7 @@ export async function fetchCentralOverview(opts: {
     source: "central-analytics",
     elapsed_s,
     equipment_count: equipmentIds.length,
+    weather_excluded: weatherExcluded,
     equipment_ids: equipmentIds,
     has_weather: Boolean(basOverlayFig),
     span,

@@ -50,7 +50,7 @@ OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080
 
 Bump all three together when cutting a coordinated stack release.
 
-Workspace Cargo version is **4.0.1**. Displayed UI revision is `{semver}+{shortsha}` from central `/api/health`.
+Workspace Cargo version is **4.0.2**. Displayed UI revision is `{semver}+{shortsha}` from central `/api/health`.
 
 ## Resolve the latest verified nightly
 
