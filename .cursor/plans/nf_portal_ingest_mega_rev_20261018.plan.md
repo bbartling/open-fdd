@@ -9,19 +9,19 @@ todos:
     content: "Wave-B parallel — N1 unqualified archive/ot-edge/unqualified-cdaa4f15 + prune dry-run keep. Merged #1294 e0df8bc7."
     status: completed
   - id: wave-b-n5-hourly
-    content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (GET history only; fixture-tested)"
+    content: "Wave-B parallel — N5 durable per-device hourly jobs, receipts, checkpoints, catch-up (GET history only; fixture-tested). Merged #1292 7c311101."
     status: completed
   - id: wave-b-n3-model
-    content: "Wave-B parallel — N3 source-neutral committed model + scoped SPARQL ingest plans"
+    content: "Wave-B parallel — N3 source-neutral committed model + scoped SPARQL ingest plans. Merged #1293 b2575575."
     status: completed
   - id: wave-b-n11-spa
-    content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics"
+    content: "Wave-B parallel — N11 Providers/Sites/Model/ledger SPA + source-neutral analytics. Merged #1289 018741d6."
     status: completed
   - id: wave-c-n8-leases
-    content: "Wave-C — N8 shared Postgres queue/leases before replicas (stages 1–2; stage 3 live controller deferred)"
+    content: "Wave-C — N8 shared Postgres queue/leases before replicas (stages 1–2; stage 3 live controller deferred). Merged #1291 698f8c52."
     status: completed
   - id: wave-c-n10-mcp
-    content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps; OT discovery retired from normal 4.0; provider health/sites stay"
+    content: "Wave-C — N10 scoped REST/MCP jobs/receipts/gaps; OT discovery retired from normal 4.0; provider health/sites stay. Merged #1291 698f8c52."
     status: completed
   - id: wave-d-m10-ghcr
     content: "Wave-D — M10 VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus image"
@@ -69,19 +69,19 @@ todos:
     content: SoftOPEN defer — M13 ACME NF retrofit only after bounded bosspi SoftOPEN pilot is stable
     status: pending
   - id: m14-grok-tools
-    content: "M14 Legacy OT Grok tips flagged retired. MCP OT wire/driver discovery is not in default tools/list. Provider health/sites stay."
+    content: "M14 Legacy OT Grok tips flagged retired. MCP OT wire/driver discovery is not in default tools/list. Provider health/sites stay. Merged #1300 75d86af5."
     status: completed
   - id: n0-boundary
-    content: N0 Define 4.0 product boundary + requirements-to-test matrix labels
+    content: "N0 Define 4.0 product boundary + requirements-to-test matrix labels. Merged #1296 de042f70."
     status: completed
   - id: n1-archive-real
     content: "N1 snapshot landed as unqualified-cdaa4f15. Merged #1294 e0df8bc7."
     status: completed
   - id: n1-restore-boot
-    content: "Isolated restore --replay renders the GHCR digest pin and prune-protects those digests. --boot stays refused (no live deploy)."
+    content: "Isolated restore --replay renders the GHCR digest pin and prune-protects those digests. --boot stays refused (no live deploy). Merged #1300 75d86af5."
     status: completed
   - id: n1-workspace-remove
-    content: "Live services/fieldbus is excluded from the default Cargo workspace, 4.0 publish, and fieldbus recipes. The archive workspace is the compile lane."
+    content: "Live services/fieldbus is excluded from the default Cargo workspace, 4.0 publish, and fieldbus recipes. The archive workspace is the compile lane. Merged #1300 75d86af5."
     status: completed
   - id: n2-security
     content: N2 Tenant filter health/sites; fail-closed secrets; no OAuth redirects; bounds; typed safe errors (Wave-A)
@@ -93,7 +93,7 @@ todos:
     content: SoftOPEN defer — N3 cross-replica derived-plan invalidation, durable multi-process model store, and in-flight SPARQL cancel (with N8)
     status: pending
   - id: n4-contract
-    content: N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented
+    content: "N4 Provider registry with fetch_history capabilities; Ace stays NotImplemented. Merged #1301 5c38e4c1. #1297 and #1299 closed as superseded."
     status: completed
   - id: n5-durable
     content: "N5 durable per-device completed-hour jobs, receipts, checkpoints, catch-up, bounded reconciliation (fixture-tested; live NF pilot stays n12)"
@@ -102,13 +102,16 @@ todos:
     content: N6 Per-equipment type routing; source ts/units/quality; truthful persist counts; DB reconnect (Wave-A)
     status: completed
   - id: n7-gaps
-    content: "N7 coverage ledger over N5 jobs/receipts (probe, window, durable commit, freshness, reconcile, retention); update-log 403; not gapless"
+    content: "N7 coverage ledger over N5 jobs/receipts (probe, window, durable commit, freshness, reconcile, retention); update-log 403; not gapless. Merged #1301 5c38e4c1."
     status: completed
+  - id: n7-device-hour-route
+    content: "SoftOPEN defer — tenant-scoped GET /api/providers/gaps and the #1299 device-hour ledger were not ported. They collide with #1301 CoverageLedger (six-axis summary, Postgres-receipt durable commit)."
+    status: pending
   - id: n8-scale
     content: "SoftOPEN defer — N8 stage 3 live replica controller (stages 1–2 queue/leases landed in Wave-C; simulator is dry-run only)"
     status: pending
   - id: n9-meteo
-    content: N9 Open-Meteo weather adapter + contractor conformance fixture
+    content: "N9 Open-Meteo weather adapter + contractor conformance fixture. Merged #1296 de042f70."
     status: completed
   - id: n10-api-mcp
     content: "N10 scoped REST/MCP jobs/receipts/gaps; OT discovery retired from normal 4.0"
@@ -120,7 +123,7 @@ todos:
     content: "SoftOPEN defer — bounded read-only NF SoftOPEN pilot and published-SPA regression (offline fixture matrix is in CI; no portal flood)"
     status: pending
   - id: n13-release
-    content: N13 phased delivery gates and machine-readable status (nothing deployed or qualified)
+    content: "N13 phased delivery gates and machine-readable status (nothing deployed or qualified). Merged #1298 3d081622."
     status: completed
   - id: n2-dns-pin
     content: SoftOPEN defer — DNS-at-connect rebinding pin for provider endpoints (Wave-A left public-mode literal IP checks only)
@@ -275,35 +278,36 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### Wave-B — parallel after Wave-A merges
 - [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Merged #1294 `e0df8bc7`.
-- [x] **n1-restore-boot** — `--replay` renders `evidence/oci-pin.json` digests; prune file lists them; `--boot` exits 2 (no containers)
-- [x] **n1-workspace-remove** — `services/fieldbus` excluded from the default workspace, publish workflows, and fieldbus recipes. Split gate compiles `archive/ot-edge/unqualified-cdaa4f15/source`
-- [x] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested)
-- [x] **wave-b-n3-model** / **n3-model** — committed model + scoped SPARQL plans (resolver each tick)
+- [x] **n1-restore-boot** — `--replay` renders `evidence/oci-pin.json` digests; prune file lists them; `--boot` exits 2 (no containers). Merged #1300 `75d86af5`.
+- [x] **n1-workspace-remove** — `services/fieldbus` excluded from the default workspace, publish workflows, and fieldbus recipes. Split gate compiles `archive/ot-edge/unqualified-cdaa4f15/source`. Merged #1300 `75d86af5`.
+- [x] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested). Merged #1292 `7c311101`.
+- [x] **wave-b-n3-model** / **n3-model** — committed model + scoped SPARQL plans (resolver each tick). Merged #1293 `b2575575`.
 - [ ] SoftOPEN defer — **n3-replica-store** cross-replica invalidation, durable multi-process store, in-flight SPARQL cancel
-- [x] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA hooks (live rows, backfill submit, and server preview stay deferred)
+- [x] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA hooks (live rows, backfill submit, and server preview stay deferred). Merged #1289 `018741d6`.
 
 ### Wave-C — after Wave-B
-- [x] **wave-c-n8-leases** — N8 Postgres queue/leases/fencing (stages 1–2). API role does not start pollers
-- [x] **wave-c-n10-mcp** — scoped REST/MCP jobs/receipts/gaps; OT discovery retired unless `OPENFDD_OT_TOOLS=1`; provider health/sites stay
-- [x] **m14-grok-tools** — legacy OT Grok tips flagged retired; MCP OT wire/driver discovery is not in default `tools/list`
+- [x] **wave-c-n8-leases** — N8 Postgres queue/leases/fencing (stages 1–2). API role does not start pollers. Merged #1291 `698f8c52`.
+- [x] **wave-c-n10-mcp** — scoped REST/MCP jobs/receipts/gaps; OT discovery retired unless `OPENFDD_OT_TOOLS=1`; provider health/sites stay. Merged #1291 `698f8c52`.
+- [x] **m14-grok-tools** — legacy OT Grok tips flagged retired; MCP OT wire/driver discovery is not in default `tools/list`. Merged #1300 `75d86af5`.
 
 ### Wave-D — publish
 - [ ] **wave-d-m10-ghcr** — VERSION 4.0.0, GHCR central+web newest-by-created, Railway re-pin, no fieldbus
 
 ### This round
-- [x] **n0-boundary** — 4.0 boundary and requirements matrix in `docs/architecture/wave-nf-4.0-product-boundary.md` (no row qualified)
-- [x] **n9-meteo** — Open-Meteo read-only adapter + offline contractor fixture. Ace stays NotImplemented
+- [x] **n0-boundary** — 4.0 boundary and requirements matrix in `docs/architecture/wave-nf-4.0-product-boundary.md` (no row qualified). Merged #1296 `de042f70`.
+- [x] **n9-meteo** — Open-Meteo read-only adapter + offline contractor fixture. Ace stays NotImplemented. Merged #1296 `de042f70`.
 
 ### SoftOPEN defer / later
 - [ ] SoftOPEN defer — **n8-scale** stage 3 live replica controller (dry-run preview only; no Kubernetes)
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
-- [x] **n4-contract** — provider registry (`latest`, `fetch_history` GET with a bounded window, `update_log` NotImplemented). Ace stays visibly NotImplemented. Conformance tests reject an unbounded NF window before any request.
-- [x] **n7-gaps** — coverage ledger over N5 jobs/receipts/checkpoints/gaps. Axes stay separate. Memory receipts are not a durable commit. Update-log HTTP 403 is stated. Range polling is not gapless. A latest sample does not advance the ledger.
+- [x] **n4-contract** — provider registry (`latest`, `fetch_history` GET with a bounded window, `update_log` NotImplemented). Ace stays visibly NotImplemented. Conformance tests reject an unbounded NF window before any request. Merged #1301 `5c38e4c1`. #1297 and #1299 closed as superseded.
+- [x] **n7-gaps** — coverage ledger over N5 jobs/receipts/checkpoints/gaps. Axes stay separate. Memory receipts are not a durable commit. Update-log HTTP 403 is stated. Range polling is not gapless. A latest sample does not advance the ledger. Merged #1301 `5c38e4c1`.
+- [ ] SoftOPEN defer — **n7-device-hour-route** tenant-scoped `GET /api/providers/gaps` and the #1299 device-hour ledger. Not ported: they collide with the #1301 `CoverageLedger` (six-axis summary, Postgres-receipt durable commit).
 - [ ] SoftOPEN defer — server-published per-device window rows (`GET /api/providers/windows`), backfill submit, and binding preview. The Providers panel shows the N7 six-axis summary from poll health beside the N11 window table.
 - [ ] SoftOPEN defer — N5 historian sample upsert and job receipt are separate writes (one transaction stays with N6)
 - [ ] SoftOPEN defer — **n11-frontend** live window rows, backfill submit, and server-issued binding preview
 - [ ] SoftOPEN defer — **n12-evidence** bounded read-only NF SoftOPEN pilot and published-SPA regression (offline fixture matrix is in CI; no portal flood)
-- [x] **n13-release** phased gates (`docs/operations/WAVE_NF_DELIVERY_GATES.md`) + `wave_nf_status.json` (nothing deployed or qualified)
+- [x] **n13-release** phased gates (`docs/operations/WAVE_NF_DELIVERY_GATES.md`) + `wave_nf_status.json` (nothing deployed or qualified). Merged #1298 `3d081622`.
 - [ ] SoftOPEN defer — **n2-dns-pin** DNS-at-connect rebinding pin (literal public-mode checks only)
 - [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
 
@@ -320,4 +324,16 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - Wave-B N3 model: bc-9c23a08d
 - Wave-B N11 SPA: bc-7fe03caf
 - Wave-C N8+N10: bc-d24c1c2e
-- Wave-D GHCR: waiting on merges
+- Wave-D GHCR: waiting on the master merge of this branch
+
+### Merge log (into `wave-nf/4.0.0-portal-ingest`)
+- #1290 Wave-A `608ee177`
+- #1294 N1 archive `e0df8bc7`
+- #1292 N5 `7c311101`
+- #1293 N3 `b2575575`
+- #1289 N11 `018741d6`
+- #1291 Wave-C `698f8c52`
+- #1296 N0+N9 `de042f70`
+- #1301 N4+N7 `5c38e4c1` (supersedes #1297 and #1299; device-hour gaps route stays **n7-device-hour-route**)
+- #1298 N12 fixtures + N13 `3d081622`
+- #1300 N1 leftovers + M14 `75d86af5`
