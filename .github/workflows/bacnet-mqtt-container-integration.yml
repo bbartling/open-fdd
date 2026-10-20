@@ -108,8 +108,8 @@ jobs:
               tag="sha-${PR_BASE_SHA:0:7}"
               if ! ot_trio_published "$tag"; then
                 skip=1
-                tag=""
                 reason="Base ${tag} has no published central+mqtt+fieldbus set. 4.0 does not publish openfdd-fieldbus. Skipping the container smoke."
+                tag=""
               fi
               ;;
             *)
