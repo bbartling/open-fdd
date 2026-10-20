@@ -3,7 +3,10 @@
 //! History reads are `GET /api/v1/point/data`. `POST` on that path is a write
 //! and is never used here. OAuth token calls are `POST /api/v1/auth/token`.
 
+use std::collections::HashMap;
 use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
 
 use chrono::{DateTime, Datelike, Utc};
 use reqwest::Client;
@@ -100,7 +103,17 @@ impl NfPortalDriver {
         if self.anonymous {
             return Ok(());
         }
+        let Some(credential_tag) = self.credential_tag() else {
+            return Err(ProviderError::auth_not_configured());
+        };
         if self.token_fresh() {
+            return Ok(());
+        }
+        if let Some((token, expires_at)) =
+            load_cached_token(&self.provider_id, &self.endpoint, credential_tag)
+        {
+            self.token = Some(token);
+            self.token_expires_at = Some(expires_at);
             return Ok(());
         }
         self.authenticate_force().await
@@ -135,7 +148,31 @@ impl NfPortalDriver {
         } else {
             Some(Utc::now() + chrono::Duration::seconds(ttl))
         };
+        if let (Some(tag), Some(cached), Some(expires_at)) = (
+            self.credential_tag(),
+            self.token.clone(),
+            self.token_expires_at,
+        ) {
+            store_cached_token(&self.provider_id, &self.endpoint, tag, cached, expires_at);
+        }
         Ok(())
+    }
+
+    fn credential_tag(&self) -> Option<u64> {
+        let id = self
+            .client_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?;
+        let secret = self
+            .client_secret
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        id.hash(&mut hasher);
+        secret.hash(&mut hasher);
+        Some(hasher.finish())
     }
 
     pub async fn query_points(
@@ -256,6 +293,14 @@ impl NfPortalDriver {
                 && attempt + 1 < attempts
                 && !self.anonymous
             {
+                if let (Some(tag), Some(rejected)) = (self.credential_tag(), self.token.clone()) {
+                    forget_cached_token_if_matches(
+                        &self.provider_id,
+                        &self.endpoint,
+                        tag,
+                        &rejected,
+                    );
+                }
                 self.token = None;
                 self.token_expires_at = None;
                 continue;
@@ -370,6 +415,72 @@ pub(crate) fn group_history(points: Vec<RawProviderPoint>) -> Vec<HistorySeries>
             samples,
         })
         .collect()
+}
+
+struct CachedPortalToken {
+    token: String,
+    expires_at: DateTime<Utc>,
+}
+
+fn portal_token_cache() -> &'static Mutex<HashMap<String, CachedPortalToken>> {
+    static CACHE: std::sync::OnceLock<Mutex<HashMap<String, CachedPortalToken>>> =
+        std::sync::OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn portal_cache_key(provider_id: &str, endpoint: &str, credential_tag: u64) -> String {
+    format!("{provider_id}\n{endpoint}\n{credential_tag:x}")
+}
+
+fn load_cached_token(
+    provider_id: &str,
+    endpoint: &str,
+    credential_tag: u64,
+) -> Option<(String, DateTime<Utc>)> {
+    let guard = portal_token_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let entry = guard.get(&portal_cache_key(provider_id, endpoint, credential_tag))?;
+    if Utc::now() + chrono::Duration::seconds(60) < entry.expires_at {
+        Some((entry.token.clone(), entry.expires_at))
+    } else {
+        None
+    }
+}
+
+fn store_cached_token(
+    provider_id: &str,
+    endpoint: &str,
+    credential_tag: u64,
+    token: String,
+    expires_at: DateTime<Utc>,
+) {
+    if token.is_empty() {
+        return;
+    }
+    let mut guard = portal_token_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    guard.insert(
+        portal_cache_key(provider_id, endpoint, credential_tag),
+        CachedPortalToken { token, expires_at },
+    );
+}
+
+fn forget_cached_token_if_matches(
+    provider_id: &str,
+    endpoint: &str,
+    credential_tag: u64,
+    rejected: &str,
+) {
+    let mut guard = portal_token_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let key = portal_cache_key(provider_id, endpoint, credential_tag);
+    let same = guard.get(&key).is_some_and(|entry| entry.token == rejected);
+    if same {
+        guard.remove(&key);
+    }
 }
 
 pub fn parse_token_json(text: &str) -> Result<(String, Option<i64>), ProviderError> {
@@ -780,6 +891,67 @@ mod tests {
         let mut driver = lab_driver(port, "secret", limits);
         let err = driver.authenticate().await.unwrap_err();
         assert!(err.to_string().contains("body_too_large"));
+    }
+
+    #[test]
+    fn rejected_token_does_not_drop_a_newer_cache_entry() {
+        let provider = "nf:race-test";
+        let endpoint = "http://portal.example/race-test";
+        let tag = 7_u64;
+        let expires = Utc::now() + chrono::Duration::hours(1);
+        store_cached_token(provider, endpoint, tag, "new-token".into(), expires);
+        forget_cached_token_if_matches(provider, endpoint, tag, "old-token");
+        let (token, _) = load_cached_token(provider, endpoint, tag).expect("newer token stays");
+        assert_eq!(token, "new-token");
+        forget_cached_token_if_matches(provider, endpoint, tag, "new-token");
+        assert!(load_cached_token(provider, endpoint, tag).is_none());
+    }
+
+    #[tokio::test]
+    async fn second_driver_reuses_portal_token() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut sock).await;
+            let body = TOKEN_FIXTURE;
+            let payload = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = sock.write_all(payload.as_bytes()).await;
+        });
+        let mut first = lab_driver(port, "secret", HttpLimits::default());
+        first.authenticate().await.unwrap();
+        let mut second = lab_driver(port, "secret", HttpLimits::default());
+        second.authenticate().await.unwrap();
+        assert!(second.token_fresh());
+        let mut rotated = NfPortalDriver::new(
+            "nf:test",
+            format!("http://127.0.0.1:{port}"),
+            Some("lab-id".into()),
+            Some("other-secret".into()),
+            false,
+            HttpLimits::default(),
+        )
+        .unwrap();
+        let err = rotated.authenticate().await.unwrap_err();
+        assert!(err.to_string().contains("auth") || err.to_string().contains("transport"));
+        let mut missing = NfPortalDriver::new(
+            "nf:test",
+            format!("http://127.0.0.1:{port}"),
+            None,
+            None,
+            false,
+            HttpLimits::default(),
+        )
+        .unwrap();
+        assert!(missing
+            .authenticate()
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("auth_not_configured"));
     }
 
     #[tokio::test]

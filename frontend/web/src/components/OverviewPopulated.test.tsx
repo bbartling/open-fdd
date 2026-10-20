@@ -219,6 +219,21 @@ describe("OverviewPopulated metric isolation", () => {
     fetchCentralOverview.mockResolvedValue(emptyOverview);
   });
 
+  it("explains that weather is omitted from the equipment count", async () => {
+    fetchCentralOverview.mockResolvedValue({
+      ...emptyOverview,
+      equipment_count: 5,
+      weather_excluded: 1,
+    });
+    renderOverview();
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-eq-count").textContent).toContain("5");
+    });
+    expect(screen.getByTestId("overview-eq-count").textContent).toContain(
+      "Weather is not counted as equipment",
+    );
+  });
+
   it("uses the browser IANA timezone instead of a US site default", () => {
     expect(detectedTimeZone()).toBeTruthy();
     renderOverview();

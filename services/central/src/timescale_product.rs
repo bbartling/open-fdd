@@ -1633,9 +1633,18 @@ fn wrap_rule_sql(sql_body: &str, rule: &RuleSpec) -> String {
     if rule_is_metric(rule) {
         format!("SELECT * FROM ({inner}) AS _fdd_rule_q")
     } else {
+        let fault_pct_sql = if rule
+            .output_columns
+            .iter()
+            .any(|column| column == "fault_pct")
+        {
+            ", fault_pct::double precision AS fault_pct"
+        } else {
+            ""
+        };
         format!(
             "SELECT equipment_id::text AS equipment_id, \
-             fault_hours::double precision AS fault_hours \
+             fault_hours::double precision AS fault_hours{fault_pct_sql} \
              FROM ({inner}) AS _fdd_rule_q"
         )
     }
@@ -2160,14 +2169,26 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                         rule_rows.push(row_json);
                     } else {
                         let mut hours = 0.0_f64;
+                        let mut sql_pct: Option<f64> = None;
                         for r in &rows {
                             hours += row_fault_hours(r);
+                            if sql_pct.is_none() {
+                                if let Ok(value) = r.try_get::<f64, _>("fault_pct") {
+                                    if value.is_finite() {
+                                        sql_pct = Some(value.clamp(0.0, 100.0));
+                                    }
+                                }
+                            }
                         }
                         // Soft-OPEN R6: publish confirm detail / fault_series stub.
                         let status = if hours > 0.0 { "FAULT" } else { "PASS" };
+                        let fault_pct = sql_pct
+                            .map(|value| json!(value))
+                            .unwrap_or_else(|| fault_pct_value(hours, n, poll));
                         rule_rows.push(json!({
                             "equipment_id": eq_id,
                             "fault_hours": hours,
+                            "fault_pct": fault_pct,
                             "status": status,
                             "output_kind": "diagnostic",
                             "sample_rows": n,
@@ -2244,6 +2265,38 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
     Ok(meta)
 }
 
+#[derive(Clone, Copy)]
+struct SampleSpan {
+    first: Option<DateTime<Utc>>,
+    last: Option<DateTime<Utc>>,
+    rows: i64,
+}
+
+fn sampling_json(
+    first: Option<DateTime<Utc>>,
+    last: Option<DateTime<Utc>>,
+    row_count: i64,
+) -> Value {
+    json!({
+        "ok": row_count > 0,
+        "row_count": row_count,
+        "source": "timescale_sample",
+        "first_timestamp": first.map(|ts| ts.to_rfc3339()),
+        "last_timestamp": last.map(|ts| ts.to_rfc3339()),
+    })
+}
+
+fn fault_pct_value(hours: f64, sample_rows: i64, poll_seconds: f64) -> Value {
+    if !hours.is_finite() || sample_rows <= 0 || !poll_seconds.is_finite() || poll_seconds <= 0.0 {
+        return Value::Null;
+    }
+    let window_hours = (sample_rows as f64) * poll_seconds / 3600.0;
+    if !window_hours.is_finite() || window_hours <= 0.0 {
+        return Value::Null;
+    }
+    json!(((100.0 * hours) / window_hours).clamp(0.0, 100.0))
+}
+
 fn safe_building_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
@@ -2310,9 +2363,44 @@ pub async fn package_mapping_from_samples(
         }));
     }
     let sample_count = tsdb.sample_count(bid).await.unwrap_or(0);
+    let span_rows = sqlx::query(
+        r#"
+        SELECT split_part(openfdd_key, '.', 1) AS equipment_id,
+               MIN(ts) AS first_ts,
+               MAX(ts) AS last_ts,
+               COUNT(*)::bigint AS row_count
+        FROM sample
+        WHERE site_id = $1
+        GROUP BY 1
+        "#,
+    )
+    .bind(bid)
+    .fetch_all(tsdb.pool())
+    .await
+    .context("sample span for mapping")?;
+    let mut spans: BTreeMap<String, SampleSpan> = BTreeMap::new();
+    for row in span_rows {
+        let eq = row.try_get::<String, _>("equipment_id").unwrap_or_default();
+        if eq.is_empty() {
+            continue;
+        }
+        spans.insert(
+            eq,
+            SampleSpan {
+                first: row.try_get("first_ts").ok(),
+                last: row.try_get("last_ts").ok(),
+                rows: row.try_get("row_count").unwrap_or(0),
+            },
+        );
+    }
     let mut equipment = Vec::new();
     for (eq, typ) in &types {
         let roles = roles_by_eq.get(eq).cloned().unwrap_or_default();
+        let span = spans.get(eq).copied().unwrap_or(SampleSpan {
+            first: None,
+            last: None,
+            rows: 0,
+        });
         let mut role_obj = serde_json::Map::new();
         let columns: Vec<Value> = roles
             .iter()
@@ -2333,11 +2421,7 @@ pub async fn package_mapping_from_samples(
             "ambiguous_roles": {},
             "blockers": [],
             "warnings": [],
-            "sampling": {
-                "ok": sample_count > 0,
-                "row_count": sample_count,
-                "source": "timescale_sample",
-            },
+            "sampling": sampling_json(span.first, span.last, span.rows),
         }));
     }
     let ids: Vec<&str> = equipment
@@ -2561,5 +2645,53 @@ mod plot_role_tests {
             keys.iter().any(|k| k == "AHU_1.sat"),
             "normalized role key missing: {keys:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod span_and_fault_pct_tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn sampling_json_carries_historian_bounds() {
+        let first = Utc.with_ymd_and_hms(2026, 3, 16, 0, 40, 0).unwrap();
+        let last = Utc.with_ymd_and_hms(2026, 7, 17, 10, 0, 0).unwrap();
+        let body = sampling_json(Some(first), Some(last), 12);
+        assert_eq!(body["row_count"], json!(12));
+        assert_eq!(body["first_timestamp"], json!(first.to_rfc3339()));
+        assert_eq!(body["last_timestamp"], json!(last.to_rfc3339()));
+        let empty = sampling_json(None, None, 0);
+        assert!(empty["first_timestamp"].is_null());
+        assert!(empty["last_timestamp"].is_null());
+    }
+
+    #[test]
+    fn diagnostic_wrapper_keeps_declared_fault_pct() {
+        let reg = load_reg().expect("load sql/fdd registry");
+        let oat = reg
+            .rules
+            .iter()
+            .find(|rule| rule.rule_id == "OAT-METEO")
+            .expect("OAT-METEO");
+        let wrapped = wrap_rule_sql("SELECT 1", oat);
+        assert!(wrapped.contains("fault_pct::double precision AS fault_pct"));
+        let fc1 = reg
+            .rules
+            .iter()
+            .find(|rule| rule.rule_id == "FC1")
+            .expect("FC1");
+        let fc1_sql = wrap_rule_sql("SELECT 1", fc1);
+        assert!(!fc1_sql.contains("fault_pct"));
+        assert!(fc1_sql.contains("fault_hours::double precision AS fault_hours"));
+    }
+
+    #[test]
+    fn fault_pct_uses_sample_window_when_sql_omits_it() {
+        let pct = fault_pct_value(2.0, 120, 300.0);
+        let window_hours = 120.0 * 300.0 / 3600.0;
+        let expected = (100.0_f64 * 2.0 / window_hours).clamp(0.0, 100.0);
+        assert!((pct.as_f64().unwrap() - expected).abs() < 1e-9);
+        assert!(fault_pct_value(1.0, 0, 300.0).is_null());
     }
 }

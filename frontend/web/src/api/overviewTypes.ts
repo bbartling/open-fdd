@@ -16,6 +16,8 @@ export interface OverviewVibe19Response {
   source: string;
   elapsed_s: number;
   equipment_count: number;
+  /** Weather-stamped inventory rows omitted from `equipment_count`. */
+  weather_excluded?: number;
   equipment_ids: string[];
   has_weather: boolean;
   span: {

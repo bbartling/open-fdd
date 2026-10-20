@@ -783,6 +783,11 @@ export function OverviewPopulated({
         <Metric
           id="ov-eq"
           label="Equipment"
+          description={
+            (overview?.weather_excluded ?? 0) > 0
+              ? "Weather is not counted as equipment"
+              : undefined
+          }
           value={String(
             overview?.equipment_count && overview.equipment_count > 0
               ? overview.equipment_count

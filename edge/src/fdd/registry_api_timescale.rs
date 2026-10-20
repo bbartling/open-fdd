@@ -510,6 +510,42 @@ pub fn equipment_response_scoped(building_id: Option<&str>, tenant_id: Option<&s
     json!({"ok": true, "count": equipment.len(), "equipment": equipment})
 }
 
+/// Prefer a stored `fault_pct`. Otherwise derive it from fault hours and the
+/// sample window (`sample_rows * poll_seconds`) so older result files still
+/// show a percent.
+pub fn derive_fault_pct(row: &Value) -> Option<f64> {
+    if let Some(value) = row.get("fault_pct").and_then(Value::as_f64) {
+        if value.is_finite() {
+            return Some(value.clamp(0.0, 100.0));
+        }
+    }
+    let hours = row.get("fault_hours").and_then(Value::as_f64)?;
+    if !hours.is_finite() || hours < 0.0 {
+        return None;
+    }
+    let samples = json_f64(row.get("sample_rows"))?;
+    let poll = json_f64(row.get("poll_seconds"))?;
+    if samples <= 0.0 || poll <= 0.0 {
+        return None;
+    }
+    let window_hours = samples * poll / 3600.0;
+    if window_hours <= 0.0 {
+        return None;
+    }
+    Some(((100.0 * hours) / window_hours).clamp(0.0, 100.0))
+}
+
+fn json_f64(value: Option<&Value>) -> Option<f64> {
+    let value = value?;
+    if let Some(n) = value.as_f64() {
+        return n.is_finite().then_some(n);
+    }
+    value
+        .as_i64()
+        .map(|n| n as f64)
+        .or_else(|| value.as_u64().map(|n| n as f64))
+}
+
 /// `GET /api/fdd/results` - normalized rows from the most recent registry run.
 ///
 /// `building_id` reads from the site-scoped results dir so two buildings' runs
@@ -625,7 +661,7 @@ pub fn results_response_with_types(
                     "equipment_type_source": type_source,
                     "status": status,
                     "fault_hours": fault_hours,
-                    "fault_pct": row.get("fault_pct").and_then(Value::as_f64),
+                    "fault_pct": derive_fault_pct(row),
                     "missing_roles": missing_roles,
                     "notes": row.get("notes").cloned().unwrap_or(Value::Null),
                 }));
@@ -791,6 +827,26 @@ pub fn preview_sql(rule_id: &str, overrides: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fault_pct_falls_back_to_fault_hours_over_sample_window() {
+        let row = json!({
+            "status": "FAULT",
+            "fault_hours": 2.0,
+            "sample_rows": 120,
+            "poll_seconds": 300
+        });
+        let pct = derive_fault_pct(&row).expect("derived percent");
+        let window_hours = 120.0 * 300.0 / 3600.0;
+        assert!((pct - (100.0 * 2.0 / window_hours)).abs() < 1e-9);
+        let stored =
+            json!({"fault_pct": 4.5, "fault_hours": 9.0, "sample_rows": 10, "poll_seconds": 60});
+        assert_eq!(derive_fault_pct(&stored), Some(4.5));
+        assert_eq!(
+            derive_fault_pct(&json!({"fault_hours": 1.0, "status": "FAULT"})),
+            None
+        );
+    }
 
     #[test]
     fn oat_meteo_targets_stamped_ahu_not_id_prefix() {

@@ -513,9 +513,9 @@ fn validate_new(job: &NewJob) -> Result<(), QueueError> {
             ));
         }
     }
-    if !is_hour_window(job.logical_window_start, job.logical_window_end) {
+    if !super::model::is_aligned_window(job.logical_window_start, job.logical_window_end) {
         return Err(QueueError::Invalid(
-            "logical window must be one exact UTC hour".into(),
+            "logical window must be an aligned 60 to 3600 second UTC window".into(),
         ));
     }
     Ok(())

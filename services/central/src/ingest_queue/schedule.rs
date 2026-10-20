@@ -1,9 +1,15 @@
-//! Bounded completed-hour planning. This is not the N5 checkpoint walk.
+//! Bounded completed-window planning. This is not the N5 checkpoint walk.
 //!
-//! Each tick enqueues at most `catchup_hours` exact UTC hours per device.
-//! Windows already present stay unique. Older retention recovery is a backfill.
+//! Each tick enqueues the catch-up span (`catchup_hours` × 3600 seconds) split
+//! into `window_secs` slices (default 3600, clamp 60..=3600). A short window
+//! still plans that whole span: a sliding batch would drop the oldest slices
+//! as `now` moves. Enqueue is idempotent. Portal logins are cached on the NF
+//! driver so catch-up does not authenticate once per window. Older retention
+//! recovery is a backfill.
 
-use chrono::{DateTime, Duration, Timelike, Utc};
+use chrono::{DateTime, Duration, Utc};
+
+use crate::providers::hourly::floor_to_window;
 
 use super::model::{NewJob, MAX_CATCHUP_HOURS};
 
@@ -22,17 +28,19 @@ pub fn due_windows(
     publication_delay: Duration,
     catchup_hours: u32,
     stagger_spread_secs: u64,
+    window_secs: i64,
     devices: &[ScheduleDevice],
 ) -> Vec<NewJob> {
     let catchup = catchup_hours.clamp(1, MAX_CATCHUP_HOURS);
-    let effective = now - publication_delay;
-    let latest_end = floor_hour(effective);
+    let step = window_secs.clamp(60, 3600);
+    let latest_end = floor_to_window(now - publication_delay, step);
+    let windows = (i64::from(catchup) * 3600 / step).max(1);
     let mut jobs = Vec::new();
     for device in devices {
         let stagger = stagger_secs(&device.device_id, stagger_spread_secs);
-        for age in 0..catchup {
-            let logical_window_end = latest_end - Duration::hours(i64::from(age));
-            let logical_window_start = logical_window_end - Duration::hours(1);
+        for age in 0..windows {
+            let logical_window_end = latest_end - Duration::seconds(age * step);
+            let logical_window_start = logical_window_end - Duration::seconds(step);
             let not_before = if age == 0 {
                 logical_window_end + publication_delay + Duration::seconds(stagger as i64)
             } else {
@@ -54,15 +62,6 @@ pub fn due_windows(
         }
     }
     jobs
-}
-
-fn floor_hour(ts: DateTime<Utc>) -> DateTime<Utc> {
-    let date = ts.date_naive();
-    let hour = ts.time().hour();
-    date.and_hms_opt(hour, 0, 0)
-        .or_else(|| date.and_hms_opt(0, 0, 0))
-        .map(|naive| naive.and_utc())
-        .unwrap_or(ts)
 }
 
 fn stagger_secs(device_id: &str, spread: u64) -> u64 {
@@ -97,7 +96,7 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("2026-10-19T13:05:00Z")
             .unwrap()
             .with_timezone(&Utc);
-        let jobs = due_windows(now, Duration::minutes(5), 5, 0, &[device("ahu")]);
+        let jobs = due_windows(now, Duration::minutes(5), 5, 0, 3600, &[device("ahu")]);
         let windows: Vec<_> = jobs
             .iter()
             .map(|job| {
@@ -144,6 +143,7 @@ mod tests {
             Duration::minutes(5),
             2,
             300,
+            3600,
             &[device("ahu-a"), device("ahu-b")],
         );
         let a = jobs.iter().find(|job| job.device_id == "ahu-a").unwrap();
@@ -156,5 +156,32 @@ mod tests {
                     .unwrap()
                     .with_timezone(&Utc))
             .all(|job| job.not_before == now));
+    }
+
+    #[test]
+    fn sixty_second_windows_cover_the_catchup_span() {
+        let now = DateTime::parse_from_rfc3339("2026-10-19T13:05:30Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let jobs = due_windows(now, Duration::seconds(0), 1, 0, 60, &[device("ahu")]);
+        assert_eq!(jobs.len(), 60);
+        let newest_end = DateTime::parse_from_rfc3339("2026-10-19T13:05:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert_eq!(jobs[0].logical_window_end, newest_end);
+        assert_eq!(
+            jobs[0].logical_window_start,
+            newest_end - Duration::seconds(60)
+        );
+        let oldest = jobs.last().expect("catchup span");
+        assert_eq!(
+            oldest.logical_window_start,
+            DateTime::parse_from_rfc3339("2026-10-19T12:05:00Z")
+                .unwrap()
+                .with_timezone(&Utc)
+        );
+        assert!(jobs.iter().all(|job| {
+            job.logical_window_end - job.logical_window_start == Duration::seconds(60)
+        }));
     }
 }

@@ -369,9 +369,31 @@ describe("fetchCentralOverview", () => {
     });
     expect(out.equipment_ids).not.toContain("weather");
     expect(out.equipment_count).toBeGreaterThanOrEqual(1);
+    expect(out.weather_excluded).toBe(1);
     expect(out.span.start).toBe("2026-03-16T00:40:00");
     expect(out.span.end).toBe("2026-07-17T10:00:00");
     expect(out.span.span_hours).toBe(2961.3);
+  });
+
+  it("counts weather on the runtime inventory when the caller list omits it", async () => {
+    const { postRuntime } = await import("./analyticsApi");
+    vi.mocked(postRuntime).mockResolvedValueOnce({
+      schema_version: "1",
+      query_version: "runtime-v1",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: [],
+      rows: [],
+      equipment: [
+        { equipment_id: "AHU_1", equipment_type: "ahu" },
+        { equipment_id: "weather", equipment_type: "weather" },
+      ],
+      points: [],
+      skipped: [],
+    } as never);
+    const out = await fetchCentralOverview({ building_id: "SITE" });
+    expect(out.equipment_ids).not.toContain("weather");
+    expect(out.weather_excluded).toBe(1);
   });
 
   it("tip Timescale envelopes (rows-only aliases) still populate Overview plots", async () => {

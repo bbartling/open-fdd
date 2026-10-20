@@ -71,6 +71,13 @@ const BAS_VS_WEB_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/bas_vs_web_oat.sql");
 const ECONOMIZER_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/economizer_deltas.sql");
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "inventory SQL shape is asserted in tests; health matrices join FDD flags"
+    )
+)]
 const PLANT_HEALTH_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/plant_health_inventory.sql");
 const ROLE_TIMESERIES_SQL: &str =
@@ -192,37 +199,6 @@ pub async fn bas_vs_web_oat(
     }
     Ok(with_scope_meta(
         envelope("bas-vs-web-oat", building_id, out),
-        scope,
-    ))
-}
-
-pub async fn plant_health_matrix(
-    tsdb: &Tsdb,
-    building_id: &str,
-    scope: &AnalyticsSqlScope,
-) -> Result<Value> {
-    // Soft-OPEN: equipment filter only — window honestly unsupported (equipment inventory).
-    let rows = sqlx::query(PLANT_HEALTH_SQL)
-        .bind(building_id)
-        .bind(scope.equipment_bind())
-        .fetch_all(tsdb.pool())
-        .await
-        .context("plant_health_matrix")?;
-
-    // Wave-X C6: never fabricate score=1.0. Emit unavailable until scoped
-    // diagnostic SQL health is implemented per cohort (see completion audit WX12).
-    let mut out = Vec::new();
-    for r in rows {
-        out.push(json!({
-            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
-            "equip_type": r.try_get::<Option<String>, _>("equip_type").ok().flatten(),
-            "score": Value::Null,
-            "status": "unavailable",
-            "reason": "plant_health_sql_pending",
-        }));
-    }
-    Ok(with_scope_meta(
-        envelope("plant-health", building_id, out),
         scope,
     ))
 }
@@ -844,17 +820,39 @@ pub async fn respond_query(
     let result = match query_id {
         "runtime" => motor_weekly_runtime(&tsdb, &building, &scope).await,
         "bas-vs-web-oat" => bas_vs_web_oat(&tsdb, &building, &scope).await,
-        "ahu-health"
-        | "vav-health"
-        | "chiller-health"
-        | "boiler-health"
-        | "hp-health"
-        | "zone-other-health"
-        | "cooling-tower-health"
-        | "sensor-health"
-        | "ahu-temperature-health"
-        | "ahu-pressure-health"
-        | "ahu-economizer-health" => plant_health_matrix(&tsdb, &building, &scope).await,
+        "ahu-health" => Ok(crate::analytics::plant_health::handle_ahu(req)
+            .await
+            .to_json()),
+        "ahu-temperature-health" => Ok(crate::analytics::plant_health::handle_ahu_temperature(req)
+            .await
+            .to_json()),
+        "ahu-pressure-health" => Ok(crate::analytics::plant_health::handle_ahu_pressure(req)
+            .await
+            .to_json()),
+        "ahu-economizer-health" => Ok(crate::analytics::plant_health::handle_ahu_economizer(req)
+            .await
+            .to_json()),
+        "chiller-health" => Ok(crate::analytics::plant_health::handle_chiller(req)
+            .await
+            .to_json()),
+        "boiler-health" => Ok(crate::analytics::plant_health::handle_boiler(req)
+            .await
+            .to_json()),
+        "hp-health" => Ok(crate::analytics::plant_health::handle_hp(req)
+            .await
+            .to_json()),
+        "zone-other-health" => Ok(crate::analytics::plant_health::handle_zone_other(req)
+            .await
+            .to_json()),
+        "cooling-tower-health" => Ok(crate::analytics::plant_health::handle_cooling_tower(req)
+            .await
+            .to_json()),
+        "vav-health" => Ok(crate::analytics::vav_health::handle_async(req)
+            .await
+            .to_json()),
+        "sensor-health" => Ok(crate::analytics::sensor_health::handle_async(req)
+            .await
+            .to_json()),
         "economizer" | "rcx-ahu" => economizer_deltas(&tsdb, &building, &scope).await,
         "rcx-vav" => role_timeseries(&tsdb, &building, "zone_t", "rcx-vav", 2000, &scope).await,
         "rcx-chiller" => {

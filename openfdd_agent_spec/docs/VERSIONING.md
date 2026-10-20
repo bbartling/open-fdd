@@ -4,15 +4,15 @@ Distinguish these axes — do not collapse them into one “Open-FDD version” 
 
 | Axis | Where it lives today | Notes |
 | --- | --- | --- |
-| Platform / Rust workspace | Root `Cargo.toml` `version` | Stack image semver tags — **3.3.4** |
-| Python package | `open_fdd/__init__.py` / `pyproject.toml` | PyPI `open-fdd` **4.4.2** — `open_fdd.version.manifest()` |
-| Displayed UI revision | `GET /api/health` → `{CARGO_PKG_VERSION}+sha` | SPA sidebar `3.3.4+shortsha` (7-char). Fallback: web `version.json` `{ version, git, image_tag }` |
+| Platform / Rust workspace | Root `Cargo.toml` `version` | Stack image semver tags — **4.0.2** |
+| Python package | `open_fdd/__init__.py` / `pyproject.toml` | PyPI `open-fdd` **4.4.9** — `open_fdd.version.manifest()` |
+| Displayed UI revision | `GET /api/health` → `{CARGO_PKG_VERSION}+sha` | SPA sidebar `4.0.2+shortsha` (7-char). Fallback: web `version.json` `{ version, git, image_tag }` |
 | SQL rule registry | `sql_rules/registry.yaml` (+ file tree) | Prefer content hash in future manifest |
 | Pandas cookbook / oracle | Docs + `open_fdd.rules` | Tied to package version when shipped |
 | WattLab dump schema | vibe19 package / export code | v2/v3 compatibility matrix |
 | Capability ledger | `docs/migration/react-rust/capabilities.yaml` | Vibe 21 recovery P1-M0 evidence SoT |
 | Shared contracts schema | **Not shipped** | Phase 2 `open_fdd.contracts` |
-| Container git SHA | GHCR `sha-<7>` + `:nightly` on master | Immutable verify uses `sha-*`. Extra `:3.3.4-n<run_number>` is a run pointer, not a pin. |
+| Container git SHA | GHCR `sha-<7>` + `:nightly` on master | Immutable verify uses `sha-*`. Extra `:4.0.2-n<run_number>` is a run pointer, not a pin. |
 | EnergyPlus version | vibe20 image / runtime | When applicable |
 | Unity WebGL artifact | Phase 4 (not shipped) | External ZIP + manifest; never Unity Editor in prod |
 
@@ -20,11 +20,11 @@ Distinguish these axes — do not collapse them into one “Open-FDD version” 
 
 | What you see | Meaning |
 | --- | --- |
-| Sidebar / `/api/health` `3.3.4+abc1234` | Running **central** Cargo version + git SHA (`OPENFDD_GIT_SHA`) |
+| Sidebar / `/api/health` `4.0.2+abc1234` | Running **central** Cargo version + git SHA (`OPENFDD_GIT_SHA`) |
 | `:nightly` | Floating master pointer (retargeted every publish) |
 | `:sha-<7>` | Immutable image for that commit — pin this on benches |
-| `:3.3.4` | Workspace semver alias (often same digest as nightly; not a signed-off stable) |
-| `:3.3.4-n42` | Extra publish-run tag from `github.run_number` |
+| `:4.0.2` | Workspace semver alias (often same digest as nightly; not a signed-off stable) |
+| `:4.0.2-n42` | Extra publish-run tag from `github.run_number` |
 
 UI prefers health so the pin matches the **running central container**, not a stale web `version.json`.
 
@@ -36,7 +36,8 @@ On each turnkey stack patch that ships to GHCR nightly, bump workspace patch (`3
 
 | When | Platform VERSION | Immutable pin | Notes |
 | --- | --- | --- | --- |
-| 4.0.1 workspace patch (2026-10-20) | **4.0.1** | `sha-<7>` after this bump merges to `master` | #1305–#1309 on `04673e4f`. Not an ops pin until GHCR publish is green. PyPI stays **4.4.9**. |
+| 4.0.2 workspace patch (2026-10-20) | **4.0.2** | `sha-<7>` after this bump merges to `master` | NF queue window + health, overview span/health/fault percent. Not an ops pin until GHCR publish is green. PyPI stays **4.4.9**. |
+| 4.0.1 workspace patch (2026-10-20) | **4.0.1** | published with 4.0.1 | #1305–#1309 on `04673e4f`. PyPI stays **4.4.9**. |
 | 4.0.0 portal (#1302) | **4.0.0** | `sha-fe7e06b` | Prior workspace tip. Central + web only. |
 
 Older Soft-OPEN pins stay in [`MILESTONES.md`](../../MILESTONES.md). Never claim the new tip until GHCR publish is green and the `sha-*` digest resolves. Pin newest-by-created, not the `:nightly` name.

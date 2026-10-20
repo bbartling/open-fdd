@@ -4925,16 +4925,21 @@ pub struct PackageBuildingsQuery {
 /// Multi-tenant: listing without `building_id` is allowed and filtered to scope.
 /// Optional `building_id` must be in scope (foreign → 403); response still filtered.
 async fn historian_and_provider_ids(state: &AppState) -> Vec<String> {
-    let mut ids: Vec<String> = state
-        .providers
-        .sites_config()
-        .into_iter()
-        .map(|site| site.building_id)
-        .filter(|id| !id.trim().is_empty())
-        .collect();
+    let mut occupied = Vec::new();
     if let Ok(tsdb) = fdd_tsdb::Tsdb::connect_from_env().await {
         if let Ok(sites) = tsdb.list_site_ids().await {
-            ids.extend(sites);
+            occupied.extend(sites);
+        }
+    }
+    let mut ids = occupied.clone();
+    for site in state.providers.sites_config() {
+        let id = site.building_id.trim();
+        if id.is_empty() {
+            continue;
+        }
+        let already = occupied.iter().any(|have| have == id);
+        if site.mapped_points > 0 || already {
+            ids.push(id.to_string());
         }
     }
     ids.sort();
@@ -6207,39 +6212,6 @@ async fn analytics_ahu_health(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if crate::timescale_historian::historian_is_timescale() {
-        gate_analytics(&state, &headers, &mut req)?;
-        let building = req.query.building_id.clone().ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": "building_id required"})),
-            )
-        })?;
-        match fdd_tsdb::Tsdb::connect_from_env().await {
-            Ok(tsdb) => {
-                let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
-                match crate::timescale_analytics::plant_health_matrix(&tsdb, &building, &scope)
-                    .await
-                {
-                    Ok(v) => return Ok(Json(v)),
-                    Err(e) => {
-                        return Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(
-                                json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"}),
-                            ),
-                        ));
-                    }
-                }
-            }
-            Err(e) => {
-                return Err((
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
-                ));
-            }
-        }
-    }
     cached_analytics!(
         "ahu-health",
         analytics::plant_health::QV_AHU_HEALTH,

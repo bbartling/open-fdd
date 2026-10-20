@@ -267,6 +267,16 @@ pub fn is_hour_window(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
         && start.timestamp_subsec_micros() == 0
 }
 
+/// Queue jobs accept the configured window length (60..=3600 seconds), aligned
+/// to that length. A 3600-second window is still an exact UTC hour.
+pub fn is_aligned_window(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
+    if start.timestamp_subsec_micros() != 0 {
+        return false;
+    }
+    let secs = (end - start).num_seconds();
+    (60..=3600).contains(&secs) && start.timestamp().rem_euclid(secs) == 0
+}
+
 pub fn operator_retry_allowed(state: &str, code: Option<&str>) -> bool {
     if matches!(
         code,

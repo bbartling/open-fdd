@@ -498,7 +498,7 @@ pub async fn handle_zone_other(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 }
 
 async fn handle_matrix(req: &AnalyticsRequest, spec: &MatrixSpec) -> AnalyticsEnvelope {
-    match matrix_from_history_or_fdd(req.query.building_id.as_deref(), spec).await {
+    match matrix_from_history_or_fdd(req, spec).await {
         Ok(env) => env,
         Err(e) => {
             let mut env = envelope_with_engine(
@@ -696,8 +696,22 @@ fn spec_rule_ids(spec: &MatrixSpec) -> BTreeSet<&'static str> {
     ids
 }
 
-/// Soft-OPEN 371 #1222: hive partition walk only — never full-history GROUP BY.
-fn historian_equipment_ids(bid: &str) -> Vec<String> {
+/// Timescale equipment stamps when that historian is active. Otherwise the
+/// hive partition walk — never a full-history GROUP BY.
+async fn historian_equipment_ids(bid: &str) -> Vec<String> {
+    if crate::timescale_historian::historian_is_timescale() {
+        match crate::timescale_product::type_map_for_building(Some(bid)).await {
+            Ok(map) if !map.is_empty() => {
+                let mut ids: Vec<String> = map.into_keys().collect();
+                ids.sort();
+                return ids;
+            }
+            Ok(_) => {}
+            Err(err) => {
+                tracing::warn!(error = %err, "timescale equipment list failed for health matrix");
+            }
+        }
+    }
     historian::list_equipment_ids_from_hive(bid)
 }
 
@@ -710,7 +724,7 @@ async fn equipment_ids_for_spec(
         EquipmentScope::AnyFdd => {
             // Prefer hive/registry equipment so Overview matrices render before
             // SV/FDD results exist (flags stay Unknown until Run all rules).
-            let hist = historian_equipment_ids(bid);
+            let hist = historian_equipment_ids(bid).await;
             if !hist.is_empty() {
                 return Ok(hist);
             }
@@ -724,15 +738,36 @@ async fn equipment_ids_for_spec(
             ids.dedup();
             Ok(ids)
         }
-        EquipmentScope::Family(_) => Ok(historian_equipment_ids(bid)),
+        EquipmentScope::Family(_) => Ok(historian_equipment_ids(bid).await),
     }
 }
 
+fn retain_requested_equipment(ids: &mut Vec<String>, requested: Option<&[String]>) {
+    let Some(requested) = requested else {
+        return;
+    };
+    let allow: BTreeSet<&str> = requested
+        .iter()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .collect();
+    if allow.is_empty() {
+        return;
+    }
+    ids.retain(|id| allow.contains(id.as_str()));
+}
+
 async fn matrix_from_history_or_fdd(
-    building_id: Option<&str>,
+    req: &AnalyticsRequest,
     spec: &MatrixSpec,
 ) -> Result<AnalyticsEnvelope> {
-    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+    let Some(bid) = req
+        .query
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
         let q = AnalyticsQuery::default();
         let mut env = envelope_with_engine(
             spec.query_version,
@@ -746,6 +781,7 @@ async fn matrix_from_history_or_fdd(
 
     let query = AnalyticsQuery {
         building_id: Some(bid.to_string()),
+        equipment_ids: req.query.equipment_ids.clone(),
         ..Default::default()
     };
     let mut env = envelope_with_engine(spec.query_version, &query, vec![], DF_ENGINE);
@@ -760,7 +796,8 @@ async fn matrix_from_history_or_fdd(
             Some(bid),
         )
     };
-    let equipment_ids = equipment_ids_for_spec(bid, spec, &index).await?;
+    let mut equipment_ids = equipment_ids_for_spec(bid, spec, &index).await?;
+    retain_requested_equipment(&mut equipment_ids, req.query.equipment_ids.as_deref());
     let mut score_counts: BTreeMap<String, u32> = BTreeMap::new();
     let mut matched = 0usize;
 
@@ -888,6 +925,43 @@ mod tests {
             score_label(&[Flag::True, Flag::Unknown, Flag::False, Flag::False]);
         assert_eq!(label, "?/4");
         assert_eq!(evaluable, 3);
+    }
+
+    #[test]
+    fn requested_equipment_ids_are_exact() {
+        let mut ids = vec!["AHU_1".into(), "AHU_10".into(), "AHU_2".into()];
+        retain_requested_equipment(&mut ids, Some(&["AHU_1".into(), "  ".into()]));
+        assert_eq!(ids, vec!["AHU_1".to_string()]);
+        let mut all = vec!["AHU_2".into()];
+        retain_requested_equipment(&mut all, None);
+        retain_requested_equipment(&mut all, Some(&[]));
+        assert_eq!(all, vec!["AHU_2".to_string()]);
+    }
+
+    #[test]
+    fn fault_and_pass_are_boolean_flags() {
+        let mut rules = HashMap::new();
+        rules.insert("AHU-SATDEV".into(), ("FAULT".into(), 1.5));
+        rules.insert("FC2".into(), ("PASS".into(), 0.0));
+        let mut index = HashMap::new();
+        index.insert("unit-a".into(), rules);
+        let sat = FlagSpec {
+            key: "sat_dev",
+            label: "SAT",
+            primary: "AHU-SATDEV",
+            fallback: None,
+        };
+        let mat = FlagSpec {
+            key: "mat_low",
+            label: "MAT",
+            primary: "FC2",
+            fallback: None,
+        };
+        let (sat_flag, sat_hours) = lookup_flag_with_hours(true, &index, "unit-a", sat);
+        let (mat_flag, _) = lookup_flag_with_hours(true, &index, "unit-a", mat);
+        assert_eq!(sat_flag.to_json(), json!(true));
+        assert_eq!(sat_hours, 1.5);
+        assert_eq!(mat_flag.to_json(), json!(false));
     }
 
     #[test]

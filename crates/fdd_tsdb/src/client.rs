@@ -310,14 +310,12 @@ impl Tsdb {
         Ok(removed)
     }
 
-    /// Site ids present in Timescale. Used so the UI lists historian buildings
-    /// when the workspace csv folder is empty.
+    /// Site ids that have equipment or samples. Empty tenant/building rows
+    /// stay out of the sidebar picker.
     pub async fn list_site_ids(&self) -> Result<Vec<String>, TsdbError> {
         let rows = sqlx::query(
             "SELECT id FROM (
-                SELECT building_id AS id FROM building
-                UNION
-                SELECT site_id AS id FROM site
+                SELECT building_id AS id FROM equipment
                 UNION
                 SELECT DISTINCT site_id AS id FROM sample
              ) sites

@@ -255,6 +255,26 @@ pub(crate) fn truncate_sql(tables: &[&str]) -> anyhow::Result<String> {
     ))
 }
 
+/// Opt-in reset also drops the file-volume dataset list and job metadata.
+/// Tenant and user admin files under `openfdd/control_plane` stay.
+pub(crate) fn clear_workspace_datasets_and_jobs(root: &std::path::Path) -> std::io::Result<()> {
+    let jobs = root.join("jobs");
+    if jobs.exists() {
+        std::fs::remove_dir_all(&jobs)?;
+    }
+    let datasets = root.join("data").join("datasets");
+    if datasets.exists() {
+        std::fs::remove_dir_all(&datasets)?;
+    }
+    Ok(())
+}
+
+fn clear_file_volume_for_reset() -> anyhow::Result<()> {
+    let root = crate::jobs::workspace_root();
+    clear_workspace_datasets_and_jobs(&root)
+        .with_context(|| format!("clear jobs and datasets under {}", root.display()))
+}
+
 fn exists_sql(table: &str) -> anyhow::Result<String> {
     if !is_safe_ident(table) {
         bail!("unsafe identifier");
@@ -377,6 +397,7 @@ pub(crate) async fn apply_on_startup() -> anyhow::Result<()> {
                 .await
                 .context("bootstrap before recording reset token")?;
             let token = flags.reset_token.as_deref().context("reset token")?;
+            clear_file_volume_for_reset()?;
             record_reset_token(&pool, token).await?;
         }
         StartupAction::EnsureForwardSchema => {
@@ -407,6 +428,7 @@ pub(crate) async fn apply_on_startup() -> anyhow::Result<()> {
                 .await
                 .context("forward schema before destructive reset")?;
             let token = flags.reset_token.as_deref().context("reset token")?;
+            clear_file_volume_for_reset()?;
             truncate_and_consume(&pool, token).await?;
             apply_forward(&pool)
                 .await
@@ -552,6 +574,35 @@ mod tests {
         ] {
             assert!(!env_flag_on(value), "{value:?}");
         }
+    }
+
+    #[test]
+    fn reset_clears_jobs_and_datasets_and_keeps_tenant_admin() {
+        let root =
+            std::env::temp_dir().join(format!("openfdd-reset-volume-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let jobs = root.join("jobs").join("job-1");
+        let datasets = root.join("data").join("datasets");
+        let plane = root.join("openfdd").join("control_plane");
+        std::fs::create_dir_all(&jobs).unwrap();
+        std::fs::create_dir_all(&datasets).unwrap();
+        std::fs::create_dir_all(&plane).unwrap();
+        std::fs::write(jobs.join("job.json"), b"{}").unwrap();
+        std::fs::write(datasets.join("registry.json"), b"{}").unwrap();
+        std::fs::write(plane.join("tenants.json"), b"{\"keep\":true}").unwrap();
+        std::fs::write(plane.join("users.json"), b"{\"keep\":true}").unwrap();
+        clear_workspace_datasets_and_jobs(&root).unwrap();
+        assert!(!root.join("jobs").exists());
+        assert!(!datasets.exists());
+        assert_eq!(
+            std::fs::read_to_string(plane.join("tenants.json")).unwrap(),
+            "{\"keep\":true}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(plane.join("users.json")).unwrap(),
+            "{\"keep\":true}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

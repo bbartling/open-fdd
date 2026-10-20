@@ -1,3 +1,13 @@
+## 2026-10-20 — Platform patch 4.0.2
+
+- Workspace `VERSION` and Cargo crate versions **4.0.1 → 4.0.2**. PyPI `open-fdd` stays **4.4.9**.
+- Ingest queue fetches each job's own window (`OPENFDD_HOURLY_WINDOW_SECS`, `OPENFDD_PROVIDER_TICK_SECS`), records provider health, and inserts hourly jobs/gaps with `ON CONFLICT DO NOTHING`.
+- Opt-in destructive reset also clears `jobs/` and `data/datasets` and leaves `openfdd/control_plane` tenant and user files.
+- Overview: empty sites stay off the picker, weather is called out beside the equipment count, Timescale mapping carries sample start/end, health matrices use PASS/FAULT flags, and `fault_pct` is derived when the stored row omitted it.
+- History reads stay GET. No Parquet/DataFusion product path. `archive/` untouched. Not an ops pin until GHCR publish is green.
+- `Cargo.lock` bumps `rustls-webpki` 0.103.16, `webpki-roots` 1.0.10, and `webpki-root-certs` 1.0.10 for RUSTSEC-2026-0382 / 0381 / 0383.
+- Review fixes: file reset runs before the token is stored; NF logins are cached per portal endpoint; scheduling and execution share one device map; unmapped devices fail permanently; health matrices filter exact equipment ids; diagnostic SQL keeps a declared `fault_pct`.
+
 ## 2026-10-20 — Rust and React review standard
 
 - Canonical review text: [`docs/RUST_BEST_PRACTICES.md`](docs/RUST_BEST_PRACTICES.md), [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md), skill [`skills/openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md). Hygiene file stays the suppression procedure.

@@ -104,4 +104,4 @@ Support for Open-FDD directly funds the monthly time and labor required to keep 
 
 MIT — see [LICENSE](LICENSE).
 
-Version **4.0.1** on tip · PyPI **4.4.9**
+Version **4.0.2** on tip · PyPI **4.4.9**
