@@ -1,0 +1,316 @@
+{
+  "schema": "openfdd-wave-nf-status-v1",
+  "wave": "4.0.0",
+  "updated": "2026-10-19",
+  "deployed": false,
+  "qualified": false,
+  "note": "Nothing in Wave-NF is deployed or qualified. Fixture acceptance does not call a live portal. The bounded read-only NF SoftOPEN pilot remains deferred.",
+  "items": [
+    {
+      "id": "n0-boundary",
+      "phase": "0-foundations",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — 4.0 product boundary and requirements-to-test matrix labels are not a checked-in N0 artifact"
+    },
+    {
+      "id": "n1-archive-real",
+      "phase": "1-archive",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": ""
+    },
+    {
+      "id": "n1-restore-boot",
+      "phase": "1-archive",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — isolated old-stack restore boot/replay and verified OCI digest pin"
+    },
+    {
+      "id": "n1-workspace-remove",
+      "phase": "1-archive",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — live services/fieldbus stays in the default Cargo workspace"
+    },
+    {
+      "id": "n2-security",
+      "phase": "2-security",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": ""
+    },
+    {
+      "id": "n2-dns-pin",
+      "phase": "2-security",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — DNS-at-connect rebinding pin; public-mode literal IP checks only"
+    },
+    {
+      "id": "n2-hot-secrets",
+      "phase": "2-security",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — hot credential reload without process restart"
+    },
+    {
+      "id": "n3-model",
+      "phase": "3-model",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": ""
+    },
+    {
+      "id": "n3-replica-store",
+      "phase": "3-model",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — cross-replica derived-plan invalidation, durable multi-process model store, and in-flight SPARQL cancel"
+    },
+    {
+      "id": "n4-contract",
+      "phase": "4-contract",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — provider capability contract; history fetch stays on the concrete NF driver. Ace remains NotImplemented"
+    },
+    {
+      "id": "n5-durable",
+      "phase": "5-durable",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": ""
+    },
+    {
+      "id": "n6-storage",
+      "phase": "5-durable",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — historian sample upsert and the hourly job receipt are separate writes"
+    },
+    {
+      "id": "n7-gaps",
+      "phase": "5-durable",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — full coverage ledger UI. Update-log HTTP 403 and bounded reconciliation are stated; the cursor is not gapless"
+    },
+    {
+      "id": "n8-scale",
+      "phase": "6-scale",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — replica workers and the optional capped autoscaler are not deployed. The 2–4 worker fence is an in-memory fixture"
+    },
+    {
+      "id": "n9-meteo",
+      "phase": "7-weather",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — Open-Meteo weather adapter and contractor conformance fixture"
+    },
+    {
+      "id": "n10-api-mcp",
+      "phase": "8-api",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — scoped REST/MCP jobs, receipts, and gaps. Provider health and sites tools exist. OT discovery is not retired from normal 4.0"
+    },
+    {
+      "id": "n11-frontend",
+      "phase": "9-spa",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — live window rows, backfill submit, and server-issued binding preview. Providers, Sites, and ledger SPA hooks are on this branch and unit-tested"
+    },
+    {
+      "id": "n12-evidence",
+      "phase": "10-evidence",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — bounded real read-only NF SoftOPEN pilot and published-SPA regression. CI uses offline fixtures only"
+    },
+    {
+      "id": "n13-release",
+      "phase": "11-release",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "Gates and this status file are recorded. No phase is deployed or qualified"
+    },
+    {
+      "id": "m0-milestones",
+      "phase": "0-foundations",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — MILESTONES.md has no Wave-NF section. The 3620 ART sweep stays deferred"
+    },
+    {
+      "id": "m1-freeze-ot",
+      "phase": "1-archive",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "Unqualified snapshot only. No 3.6.18 tag. Restore boot is n1-restore-boot"
+    },
+    {
+      "id": "m2-adr",
+      "phase": "0-foundations",
+      "implemented": true,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "ADR-011 is accepted as direction. It is not a passing qualification"
+    },
+    {
+      "id": "m3-trait",
+      "phase": "4-contract",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — DataProvider trait and writer are a prototype. History capability stays off the trait"
+    },
+    {
+      "id": "m4-nf-driver",
+      "phase": "4-contract",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — live portal connectivity is outside CI. History reads are GET /api/v1/point/data"
+    },
+    {
+      "id": "m5-map",
+      "phase": "3-model",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": ""
+    },
+    {
+      "id": "m6-fe-blast",
+      "phase": "9-spa",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "Operations defaults to Providers. MQTT chrome stays archived and still renders for old deep links"
+    },
+    {
+      "id": "m7-fe-haystack",
+      "phase": "3-model",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — Model/SPARQL SPA for provider-mapped buildings. The server ingest-plan compiler landed with N3"
+    },
+    {
+      "id": "m8-ops-ui",
+      "phase": "9-spa",
+      "implemented": true,
+      "tested": true,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "Poll health and window/gap ledger hooks are on the Ops panel. Live ledger rows stay with N11"
+    },
+    {
+      "id": "m9-stub-ace",
+      "phase": "4-contract",
+      "implemented": true,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "Ace returns NotImplemented. There is no Ace protocol fixture"
+    },
+    {
+      "id": "m10-ghcr",
+      "phase": "11-release",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — VERSION reads 4.0.0. GHCR central+web newest-by-created and the Railway re-pin are not done. No fieldbus image"
+    },
+    {
+      "id": "m11-prove",
+      "phase": "10-evidence",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — one-hour lab smoke is not this fixture matrix and not a live pilot"
+    },
+    {
+      "id": "m12-grok",
+      "phase": "11-release",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — Grok API proof on a published sha"
+    },
+    {
+      "id": "m13-acme-later",
+      "phase": "11-release",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — ACME NF retrofit only after a bounded read-only NF SoftOPEN pilot"
+    },
+    {
+      "id": "m14-grok-tools",
+      "phase": "8-api",
+      "implemented": false,
+      "tested": false,
+      "deployed": false,
+      "qualified": false,
+      "remaining": "SoftOPEN defer — legacy OT Grok tips are not retired for the slimmer hub"
+    }
+  ]
+}

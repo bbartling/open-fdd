@@ -5,6 +5,7 @@ import { apiFetch, apiFetchBlob } from "../api/client";
 import { getStoredActiveTenant } from "../api/tenantApi";
 import { AppShell } from "../components/AppShell";
 import { ProtocolWorkspace } from "../components/ProtocolWorkspace";
+import { ProvidersPanel } from "../components/ProvidersPanel";
 import { SitesPanel } from "../components/SitesPanel";
 import { Button } from "../components/widgets";
 import {
@@ -18,7 +19,8 @@ import {
   type AfddScheduleKind,
 } from "./afddSchedule";
 
-type OperationsView = "afdd" | "mqtt" | "sites";
+type OperationsView = "afdd" | "mqtt" | "sites" | "providers";
+
 type AfddMode = "bulk" | "continuous";
 
 interface AfddConfig {
@@ -1170,7 +1172,9 @@ export function OperationsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawView = searchParams.get("view");
   const view: OperationsView =
-    rawView === "afdd" || rawView === "sites" ? rawView : "mqtt";
+    rawView === "afdd" || rawView === "sites" || rawView === "mqtt" || rawView === "providers"
+      ? (rawView as OperationsView)
+      : "providers";
   const rawProtocol = searchParams.get("protocol");
   const protocol: ProtocolWorkspaceId = PROTOCOL_WORKSPACE_TABS.some(
     (tab) => tab.id === rawProtocol,
@@ -1180,7 +1184,7 @@ export function OperationsPage() {
 
   const setView = (next: OperationsView) => {
     const params = new URLSearchParams(searchParams);
-    if (next === "mqtt") params.delete("view");
+    if (next === "providers") params.delete("view");
     else params.set("view", next);
     setSearchParams(params, { replace: true });
   };
@@ -1197,9 +1201,20 @@ export function OperationsPage() {
       title="Operations"
       activeSectionId="operations"
     >
-      <OtStatusStrip />
+      {view === "mqtt" ? <OtStatusStrip /> : null}
       <fieldset className="section-tabs" aria-label="Operations configuration">
         <legend className="sr-only">Operations configuration</legend>
+        <label>
+          <input
+            type="radio"
+            name="operations-view"
+            value="providers"
+            checked={view === "providers"}
+            onChange={() => setView("providers")}
+            data-testid="operations-view-providers"
+          />
+          Providers
+        </label>
         <label>
           <input
             type="radio"
@@ -1215,17 +1230,6 @@ export function OperationsPage() {
           <input
             type="radio"
             name="operations-view"
-            value="mqtt"
-            checked={view === "mqtt"}
-            onChange={() => setView("mqtt")}
-            data-testid="operations-view-mqtt"
-          />
-          MQTT Test Client
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="operations-view"
             value="afdd"
             checked={view === "afdd"}
             onChange={() => setView("afdd")}
@@ -1233,13 +1237,31 @@ export function OperationsPage() {
           />
           AFDD Config
         </label>
+        <label>
+          <input
+            type="radio"
+            name="operations-view"
+            value="mqtt"
+            checked={view === "mqtt"}
+            onChange={() => setView("mqtt")}
+            data-testid="operations-view-mqtt"
+          />
+          MQTT (archived)
+        </label>
       </fieldset>
-      {view === "sites" ? (
+      {view === "providers" ? (
+        <ProvidersPanel />
+      ) : view === "sites" ? (
         <SitesPanel />
       ) : view === "afdd" ? (
         <AfddPanel />
       ) : (
         <>
+          <p className="muted" data-testid="mqtt-archived-note">
+            MQTT / fieldbus OT chrome is archived for Wave-NF 4.0. Prefer Providers.
+            See docs/architecture/ARCHIVE_OT_EDGE.md. Old deep links still render this
+            panel for operators who need the historical tools.
+          </p>
           <ProtocolWorkspace protocol={protocol} onProtocolChange={setProtocol} />
           {protocol === "mqtt" ? (
             <>

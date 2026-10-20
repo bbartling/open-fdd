@@ -17,8 +17,9 @@ openfdd_stack_recipe_file() {
     edge) echo "$root/docker/compose.edge.yml" ;;
     csv) echo "$root/docker/compose.csv.yml" ;;
     react|react-ot) echo "$root/docker/compose.react.yml" ;;
+    portal) echo "$root/docker/compose.portal.yml" ;;
     *)
-      echo "ERROR: unknown recipe '$recipe' (standalone|central|edge|csv|react|react-ot)" >&2
+      echo "ERROR: unknown recipe '$recipe' (portal|standalone|central|edge|csv|react|react-ot)" >&2
       return 2
       ;;
   esac
@@ -51,6 +52,10 @@ openfdd_stack_compose_args() {
       printf '%s\n' -f "$root/docker/compose.react.yml"
       printf '%s\n' -f "$root/docker/compose.timescale.yml"
       ;;
+    portal)
+      printf '%s\n' -f "$root/docker/compose.portal.yml"
+      printf '%s\n' -f "$root/docker/compose.timescale.yml"
+      ;;
     react-ot)
       printf '%s\n' -f "$root/docker/compose.react.yml"
       printf '%s\n' -f "$root/docker/compose.react.fieldbus.yml"
@@ -71,9 +76,9 @@ openfdd_stack_compose_args() {
 
 openfdd_stack_images() {
   local tag="${OPENFDD_IMAGE_TAG:-nightly}"
+  # 4.0 product images. Fieldbus is not pulled by the default stack.
   echo "ghcr.io/bbartling/openfdd-central:${tag}"
   echo "ghcr.io/bbartling/openfdd-web:${tag}"
-  echo "ghcr.io/bbartling/openfdd-fieldbus:${tag}"
   echo "ghcr.io/bbartling/openfdd-mqtt:${tag}"
   echo "ghcr.io/bbartling/openfdd-mcp:${tag}"
 }

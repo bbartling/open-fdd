@@ -1,0 +1,24 @@
+{
+  "latitude": 43.07,
+  "longitude": -89.4,
+  "timezone": "UTC",
+  "hourly_units": {
+    "time": "iso8601",
+    "temperature_2m": "°F",
+    "relative_humidity_2m": "%",
+    "dew_point_2m": "°F",
+    "wind_speed_10m": "bad<unit>"
+  },
+  "hourly": {
+    "time": [
+      "2026-10-18T14:00",
+      "2026-10-18T15:00",
+      "2026-10-18T16:00"
+    ],
+    "temperature_2m": [55.4, null, 57.1],
+    "relative_humidity_2m": [60, 61, 58],
+    "dew_point_2m": [41.2, 41.5, 42.0],
+    "wind_speed_10m": [5.0, 6.0, 7.0],
+    "display_name": ["Outside Air Temp", "Outside Air Temp", "Outside Air Temp"]
+  }
+}

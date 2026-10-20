@@ -13,15 +13,20 @@ members = [
     "crates/openfdd_contracts",
     "crates/openfdd_connector_runtime",
     "crates/openfdd_mqtt",
-    "services/fieldbus",
     "services/central",
+]
+# Live fieldbus is not a 4.0 workspace member. The unqualified snapshot
+# under archive/ot-edge/ is its own workspace and is the only compile lane.
+exclude = [
+    "services/fieldbus",
+    "archive",
 ]
 
 [workspace.package]
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/bbartling/open-fdd"
-version = "3.6.18"
+version = "4.0.0"
 rust-version = "1.80"
 
 [workspace.dependencies]

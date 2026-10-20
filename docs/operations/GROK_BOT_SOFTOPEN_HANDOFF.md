@@ -8,7 +8,7 @@ doc is how Ben kicks Grok Bot on the bench without retyping.
 
 1. Cursor finishes S0–S14 and writes the filled prompt to the agent store:
    `docs/grok-stress-prompt-sha-<7>.md` (see plan S14 appendix).
-2. Confirm GHCR pin with `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web openfdd-mqtt openfdd-fieldbus` — use **newest-by-OCI-created** `sha-<7>`, not tag-name sort on `:nightly`.
+2. For Wave-NF 4.0, confirm the GHCR pin with `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web` — use **newest-by-OCI-created** `sha-<7>`, not tag-name sort on `:nightly`. Do not include `openfdd-fieldbus` in the 4.0 pin. Legacy OT tips that re-pin fieldbus are retired (`GROK_SOFTOPEN_ACME_RAILWAY_TIP.md`).
 3. Stage the prompt for Grok Bot:
 
 ```bash

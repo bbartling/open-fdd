@@ -1,0 +1,17 @@
+# Archived OT image digests (sha256:...) that must survive ghcr_prune_packages.sh.
+# A matching digest keeps the whole GHCR package version, even when that version
+# also carries an old sha-* tag or an old semver tag.
+#
+# Resolved 2026-10-19 from GHCR tag 3.6.18-n687-a1 on openfdd-fieldbus and
+# openfdd-mqtt (OCI revision 460861037319ad998c280ae79958db4a3a712763).
+# These are not the unqualified snapshot commit cdaa4f15 and not a git freeze tag.
+# See archive/ot-edge/unqualified-cdaa4f15/evidence/oci-pin.json.
+
+# openfdd-fieldbus index + linux platforms
+sha256:4e538fa24e6119be4fe9dd76cf32bde3b5c73fe1441195827c5ee14267c99ced
+sha256:a437f7cb878a8a4d0180dbacc8ac3f95ea1da097e394436d854c7456e17c3c76
+sha256:4a8bd3241b68b763c1ce7fc90ce4b5701ded042fd60b55057f41e98711b51b34
+
+# openfdd-mqtt index + linux/amd64
+sha256:bac59e15d86fd260c2cd3d8d5d5b2eeec2fff174636353ec8a985442c4b5d4ae
+sha256:8ed2e4635a6039159be8923fbd28ded3a33aa4fad2bee5a18ea6339cacff344b

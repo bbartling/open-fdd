@@ -1,0 +1,413 @@
+//! OpenAPI path documentation (utoipa path stubs — handlers live in `routes/`).
+
+#![expect(dead_code)]
+
+use crate::models::*;
+use openfdd_contracts::{
+    ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
+    ConnectorReadResponse, HaystackAboutRequest, HaystackAboutResponse, HaystackCatalogRequest,
+    HaystackCatalogResponse, HaystackCurrentReadRequest, HaystackCurrentReadResponse,
+    HaystackHistoryReadRequest, HaystackHistoryReadResponse, HaystackNavRequest,
+    HaystackNavResponse, PriorityHistoryRequest, PriorityHistoryResponse,
+};
+
+/// Service index and quick links.
+#[utoipa::path(
+    get,
+    path = "/",
+    tag = "Root",
+    responses((status = 200, description = "Service metadata"))
+)]
+pub(crate) fn doc_root() {}
+
+/// Liveness probe.
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "Root",
+    responses((status = 200, description = "OK"))
+)]
+pub(crate) fn doc_health() {}
+
+/// Open-FDD health shape (`service`, `version`, `git_sha`, `poll_running`).
+#[utoipa::path(
+    get,
+    path = "/api/health",
+    tag = "Open-FDD",
+    responses((status = 200, description = "Sidecar health"))
+)]
+pub(crate) fn doc_api_health() {}
+
+/// Authenticated, side-effect-free connector hello and capability snapshot.
+#[utoipa::path(
+    get,
+    path = "/api/connector/hello",
+    tag = "Open-FDD compat",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Versioned connector capability snapshot", body = openfdd_contracts::ConnectorHelloResponse))
+)]
+pub(crate) fn doc_connector_hello() {}
+
+/// Authenticated scoped inventory projection from trusted connector config.
+#[utoipa::path(
+    post,
+    path = "/api/connector/inventory",
+    tag = "Open-FDD compat",
+    request_body = ConnectorInventoryRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Bounded typed connector inventory page", body = ConnectorInventoryResponse),
+        (status = 403, description = "Scope or connector identity denial")
+    )
+)]
+pub(crate) fn doc_connector_inventory() {}
+
+/// Authenticated scoped read-only connector proxy.
+#[utoipa::path(
+    post,
+    path = "/api/connector/read",
+    tag = "Open-FDD compat",
+    request_body = ConnectorReadRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Read-only connector response", body = ConnectorReadResponse),
+        (status = 403, description = "Scope or inventory denial")
+    )
+)]
+pub(crate) fn doc_connector_read() {}
+
+/// Authenticated bounded priority-array history from the opt-in edge scanner.
+#[utoipa::path(
+    post,
+    path = "/api/connector/priority-history",
+    tag = "Open-FDD compat",
+    request_body = PriorityHistoryRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Read-only priority-array history page", body = PriorityHistoryResponse),
+        (status = 403, description = "Scope or scanner identity denial")
+    )
+)]
+pub(crate) fn doc_connector_priority_history() {}
+
+/// ReadProperty on a field device (bench/low-level).
+#[utoipa::path(
+    post,
+    path = "/bacnet/read",
+    tag = "BACnet (bench)",
+    request_body = BacnetReadRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Property value"),
+        (status = 502, description = "BACnet error")
+    )
+)]
+pub(crate) fn doc_bacnet_read() {}
+
+/// WriteProperty; explicit `approved:true` is required for a live write and
+/// omitted/false approval selects the dry-run response. A live response keeps
+/// `verified:false` until the selected priority slot is read back; when the
+/// slot is verified, `readback.selected_priority` contains the typed slot
+/// value (JSON `null` for a release), while `effective_present_value` and
+/// `masked` describe a higher-priority value when it can be determined.
+#[utoipa::path(
+    post,
+    path = "/bacnet/write",
+    tag = "BACnet (bench)",
+    request_body = BacnetWriteRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Write result"),
+        (status = 400, description = "Validation error"),
+        (status = 502, description = "BACnet error")
+    )
+)]
+pub(crate) fn doc_bacnet_write() {}
+
+/// Validate and encode a write without touching the BACnet bus.
+#[utoipa::path(
+    post,
+    path = "/bacnet/write-dry-run",
+    tag = "BACnet (bench)",
+    request_body = BacnetWriteRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Dry-run result"))
+)]
+pub(crate) fn doc_bacnet_write_dry_run() {}
+
+/// ReadPropertyMultiple batch read.
+#[utoipa::path(
+    post,
+    path = "/bacnet/rpm",
+    tag = "BACnet (bench)",
+    request_body = BacnetRpmRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "RPM results"))
+)]
+pub(crate) fn doc_bacnet_rpm() {}
+
+/// Who-Is device discovery — send `{}` to scan all instances (0–4194303); set `low`/`high` to narrow.
+#[utoipa::path(
+    post,
+    path = "/bacnet/whois",
+    tag = "Open-FDD",
+    request_body = BacnetWhoisRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Discovered devices"))
+)]
+pub(crate) fn doc_bacnet_whois() {}
+
+/// Who-Is router-to-network — discovers MS/TP routers on the BACnet/IP segment (no request body).
+#[utoipa::path(
+    post,
+    path = "/bacnet/whois-router",
+    tag = "Open-FDD",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Router list"))
+)]
+pub(crate) fn doc_bacnet_whois_router() {}
+
+/// Point discovery — walks object-list, reads object names, flags commandable points.
+#[utoipa::path(
+    post,
+    path = "/api/bacnet/point-discovery",
+    tag = "Open-FDD",
+    request_body = DeviceInstanceRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Discovered objects with names"))
+)]
+pub(crate) fn doc_api_point_discovery() {}
+
+/// Read all 16 priority-array slots for one object.
+#[utoipa::path(
+    post,
+    path = "/bacnet/priority-array",
+    tag = "Open-FDD",
+    request_body = BacnetObjectRef,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Priority array slots"))
+)]
+pub(crate) fn doc_bacnet_priority_array() {}
+
+/// Supervisory override audit — scans commandable points and reports active priority overrides.
+#[utoipa::path(
+    post,
+    path = "/bacnet/supervisory",
+    tag = "Open-FDD",
+    request_body = DeviceInstanceRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Override audit with points_with_overrides"))
+)]
+pub(crate) fn doc_bacnet_supervisory() {}
+
+/// Open-FDD supervisory override audit (preferred path) — same as `/bacnet/supervisory`.
+#[utoipa::path(
+    post,
+    path = "/api/bacnet/supervisory",
+    tag = "Open-FDD",
+    request_body = DeviceInstanceRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Override audit with points_with_overrides"))
+)]
+pub(crate) fn doc_api_supervisory() {}
+
+/// Background poll engine status and last values.
+#[utoipa::path(
+    get,
+    path = "/bacnet/poll/status",
+    tag = "BACnet (bench)",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Poll status"))
+)]
+pub(crate) fn doc_bacnet_poll_status() {}
+
+/// Run one poll cycle immediately.
+#[utoipa::path(
+    post,
+    path = "/bacnet/poll/once",
+    tag = "BACnet (bench)",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Poll cycle result"))
+)]
+pub(crate) fn doc_bacnet_poll_once() {}
+
+/// List all hosted server objects (device 599999).
+#[utoipa::path(
+    get,
+    path = "/bacnet/server/objects",
+    tag = "Hosted server",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Server object list"))
+)]
+pub(crate) fn doc_bacnet_server_objects() {}
+
+/// Open-FDD alias for `/bacnet/server/objects`.
+#[utoipa::path(
+    get,
+    path = "/api/bacnet/server/points",
+    tag = "Hosted server",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Server object list"))
+)]
+pub(crate) fn doc_api_server_points() {}
+
+/// Commandable points on the hosted server (BACnet-writable, REST read-only).
+#[utoipa::path(
+    get,
+    path = "/bacnet/server/commandable",
+    tag = "Hosted server",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Commandable server points"))
+)]
+pub(crate) fn doc_bacnet_server_commandable() {}
+
+/// Update server-owned points via REST (rejects commandable points).
+#[utoipa::path(
+    post,
+    path = "/bacnet/server/update",
+    tag = "Hosted server",
+    request_body = ServerUpdatePointsRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Update result"))
+)]
+pub(crate) fn doc_bacnet_server_update() {}
+
+/// Cached Open-Meteo weather for the hosted server.
+#[utoipa::path(
+    get,
+    path = "/weather",
+    tag = "Weather",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Weather cache", body = WeatherResponse))
+)]
+pub(crate) fn doc_weather() {}
+
+/// Force refresh weather from Open-Meteo.
+#[utoipa::path(
+    post,
+    path = "/weather/refresh",
+    tag = "Weather",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Refreshed weather"))
+)]
+pub(crate) fn doc_weather_refresh() {}
+
+/// Modbus TCP read (registers specified in body).
+#[utoipa::path(
+    post,
+    path = "/modbus/read",
+    tag = "Modbus",
+    request_body = ModbusReadRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Register values"))
+)]
+pub(crate) fn doc_modbus_read() {}
+
+/// Bounded trusted Haystack catalog page.
+#[utoipa::path(
+    post,
+    path = "/haystack/catalog",
+    tag = "Haystack",
+    request_body = HaystackCatalogRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Catalog page", body = HaystackCatalogResponse))
+)]
+pub(crate) fn doc_haystack_catalog() {}
+
+/// Haystack server metadata.
+#[utoipa::path(
+    post,
+    path = "/haystack/about",
+    tag = "Haystack",
+    request_body = HaystackAboutRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Haystack about", body = HaystackAboutResponse))
+)]
+pub(crate) fn doc_haystack_about() {}
+
+/// Haystack current values by trusted public catalog key.
+#[utoipa::path(
+    post,
+    path = "/haystack/read",
+    tag = "Haystack",
+    request_body = HaystackCurrentReadRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Typed current values", body = HaystackCurrentReadResponse))
+)]
+pub(crate) fn doc_haystack_read() {}
+
+/// Haystack nav tree.
+#[utoipa::path(
+    post,
+    path = "/haystack/nav",
+    tag = "Haystack",
+    request_body = HaystackNavRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Typed navigation nodes", body = HaystackNavResponse))
+)]
+pub(crate) fn doc_haystack_nav() {}
+
+/// Haystack history read.
+#[utoipa::path(
+    post,
+    path = "/haystack/his-read",
+    tag = "Haystack",
+    request_body = HaystackHistoryReadRequest,
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Bounded typed history", body = HaystackHistoryReadResponse))
+)]
+pub(crate) fn doc_haystack_his_read() {}
+
+/// List configured REST/JSON devices with per-device health.
+#[utoipa::path(
+    get,
+    path = "/rest/devices",
+    tag = "REST/JSON",
+    security(("BearerAuth" = [])),
+    responses((status = 200, description = "Device catalog + circuit-breaker health"))
+)]
+pub(crate) fn doc_rest_devices() {}
+
+/// Live read of one configured point (select + scale applied).
+#[utoipa::path(
+    post,
+    path = "/rest/read",
+    tag = "REST/JSON",
+    request_body = RestReadRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Point value"),
+        (status = 404, description = "Unknown device or point"),
+        (status = 502, description = "Upstream error or circuit open")
+    )
+)]
+pub(crate) fn doc_rest_read() {}
+
+/// Raw passthrough GET below the device base_url (relative path only).
+#[utoipa::path(
+    post,
+    path = "/rest/get",
+    tag = "REST/JSON",
+    request_body = RestGetRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Raw upstream response"),
+        (status = 400, description = "Path must be relative")
+    )
+)]
+pub(crate) fn doc_rest_get() {}
+
+/// Allowlisted write — 403 unless rest.allow_write AND the binding are enabled.
+#[utoipa::path(
+    post,
+    path = "/rest/write",
+    tag = "REST/JSON",
+    request_body = RestWriteRequest,
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "Write executed"),
+        (status = 403, description = "Writes disabled (fail closed)"),
+        (status = 404, description = "Unknown device or write binding")
+    )
+)]
+pub(crate) fn doc_rest_write() {}

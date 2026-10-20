@@ -60,18 +60,40 @@ impl Server {
 
     fn tools_list(&self) -> Vec<Value> {
         let mut tools = vec![
-            tool("openfdd_bench_topology", "Bench NIC, API bases, driver endpoints (from OPENFDD_BENCH_TOPOLOGY_FILE or doc pointer)", json!({})),
-            tool("openfdd_driver_status", "Poll bridge driver status endpoints", json!({})),
             tool("openfdd_health", "GET /api/health (public liveness)", json!({})),
+            tool("openfdd_provider_health", "GET /api/providers/health — Wave-NF portal driver health", json!({})),
+            tool("openfdd_provider_sites", "GET /api/providers/sites — configured provider sites + health", json!({})),
+            tool("openfdd_ingest_jobs", "GET /api/ingest/jobs — scoped durable ingest windows", json!({
+                "site_id": {"type": "string"},
+                "state": {"type": "string"},
+                "limit": {"type": "integer"}
+            })),
+            tool("openfdd_ingest_receipts", "GET /api/ingest/receipts — scoped commit receipts", json!({
+                "site_id": {"type": "string"},
+                "limit": {"type": "integer"}
+            })),
+            tool("openfdd_ingest_gaps", "GET /api/ingest/gaps — partial, failed, and retry windows. Coverage is not assessed.", json!({
+                "site_id": {"type": "string"},
+                "limit": {"type": "integer"}
+            })),
+            tool("openfdd_ingest_queue", "GET /api/ingest/queue — backlog age and portal in-flight. No live autoscaler.", json!({})),
+            tool("openfdd_ingest_job_retry", "POST /api/ingest/jobs/{id}/retry — operator retry (confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "job_id": {"type": "string"},
+                "idempotency_key": {"type": "string"}
+            })),
+            tool("openfdd_ingest_backfill", "POST /api/ingest/backfill — at most 48 exact UTC hours (confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "idempotency_key": {"type": "string"},
+                "canonical_site": {"type": "string"},
+                "provider_instance_id": {"type": "string"},
+                "device_id": {"type": "string"},
+                "windows": {"type": "array"}
+            })),
             tool("openfdd_capabilities", "GET /api/capabilities — central feature contract", json!({})),
             tool("openfdd_stack_status", "GET /api/health/stack — data plane strip (public)", json!({})),
             tool("openfdd_faults_status", "GET /api/faults/status — live fault subsystem status", json!({})),
             tool("openfdd_export_meta", "GET /api/export/meta — available export contract", json!({})),
-            tool("openfdd_haystack_status", "GET /api/haystack/status", json!({})),
-            tool("openfdd_haystack_test", "POST /api/haystack/test", json!({})),
-            tool("openfdd_haystack_read", "POST /api/haystack/read", json!({"filter": {"type": "string"}})),
-            tool("openfdd_bacnet_whois", "POST /api/bacnet/whois — BACnet discovery", json!({})),
-            tool("openfdd_bacnet_read", "BACnet read via commission API", json!({"point_id": {"type": "string"}})),
             tool("openfdd_validation_run_status", "GET /api/historian/validation/status", json!({})),
             tool("openfdd_reports_list", "GET /api/reports — generated report index", json!({})),
             tool("openfdd_site_update_dry_run", "Site update checklist (no writes) — run scripts/openfdd_rust_site_update.sh with DRY_RUN on bench", json!({})),
@@ -211,13 +233,19 @@ impl Server {
         for (alias, target) in [
             ("site_health", "openfdd_health"),
             ("stack_status", "openfdd_stack_status"),
-            ("haystack_test", "openfdd_haystack_test"),
-            ("driver_poll_status", "openfdd_driver_status"),
-            ("bacnet_whois", "openfdd_bacnet_whois"),
             ("validation_run_status", "openfdd_validation_run_status"),
             ("report_list", "openfdd_reports_list"),
         ] {
             tools.push(tool(alias, &format!("Alias for {target}"), json!({})));
+        }
+        if !ot_tools_enabled() {
+            tools.retain(|entry| {
+                entry
+                    .get("name")
+                    .and_then(|name| name.as_str())
+                    .map(|name| !is_retired_ot_tool(name))
+                    .unwrap_or(true)
+            });
         }
         tools
     }
@@ -226,26 +254,55 @@ impl Server {
         let canonical = match name {
             "site_health" => "openfdd_health",
             "stack_status" => "openfdd_stack_status",
-            "haystack_test" => "openfdd_haystack_test",
             "driver_poll_status" => "openfdd_driver_status",
-            "bacnet_whois" => "openfdd_bacnet_whois",
             "validation_run_status" => "openfdd_validation_run_status",
             "report_list" => "openfdd_reports_list",
             other => other,
         };
+        if is_retired_ot_tool(canonical) && !ot_tools_enabled() {
+            return Ok(json!({
+                "ok": false,
+                "retired": true,
+                "code": "ot_transport_retired",
+                "surface": "normal-4.0",
+                "message": "BACnet, Modbus, remote Haystack transport, and fieldbus driver tools are retired on the normal 4.0 portal surface (archive/ot-edge). Semantic SPARQL remains. The archive lane sets OPENFDD_OT_TOOLS=1."
+            }));
+        }
         match canonical {
-            "openfdd_bench_topology" => Ok(self.bridge.bench_topology()),
-            "openfdd_driver_status" => Ok(self.bridge.driver_status()),
             "openfdd_health" => self.bridge.get("/api/health"),
+            "openfdd_provider_health" => self.bridge.get("/api/providers/health"),
+            "openfdd_provider_sites" => self.bridge.get("/api/providers/sites"),
+            "openfdd_ingest_jobs" => self.bridge.get(&ingest_query("/api/ingest/jobs", args)),
+            "openfdd_ingest_receipts" => self.bridge.get(&ingest_query("/api/ingest/receipts", args)),
+            "openfdd_ingest_gaps" => self.bridge.get(&ingest_query("/api/ingest/gaps", args)),
+            "openfdd_ingest_queue" => self.bridge.get("/api/ingest/queue"),
+            "openfdd_ingest_job_retry" => {
+                require_write_confirm(args, "openfdd_ingest_job_retry")?;
+                let job_id = args.get("job_id").and_then(|v| v.as_str()).ok_or("job_id required")?;
+                if !safe_token(job_id) {
+                    return Err("job_id is not a safe token".into());
+                }
+                let key = args
+                    .get("idempotency_key")
+                    .and_then(|v| v.as_str())
+                    .ok_or("idempotency_key required")?;
+                self.bridge.post(
+                    &format!("/api/ingest/jobs/{job_id}/retry"),
+                    &json!({ "idempotency_key": key }),
+                )
+            }
+            "openfdd_ingest_backfill" => {
+                require_write_confirm(args, "openfdd_ingest_backfill")?;
+                let mut body = args.clone();
+                if let Some(obj) = body.as_object_mut() {
+                    obj.remove("confirm");
+                }
+                self.bridge.post("/api/ingest/backfill", &body)
+            }
             "openfdd_capabilities" => self.bridge.get("/api/capabilities"),
             "openfdd_stack_status" => self.bridge.get("/api/health/stack"),
             "openfdd_faults_status" => self.bridge.get("/api/faults/status"),
             "openfdd_export_meta" => self.bridge.get("/api/export/meta"),
-            "openfdd_haystack_status" => self.bridge.get("/api/haystack/status"),
-            "openfdd_haystack_test" => self.bridge.post("/api/haystack/test", &json!({})),
-            "openfdd_haystack_read" => self.bridge.haystack_read(args),
-            "openfdd_bacnet_whois" => self.bridge.post("/api/bacnet/whois", &json!({})),
-            "openfdd_bacnet_read" => self.bridge.bacnet_read(args),
             "openfdd_validation_run_status" => self.bridge.get("/api/historian/validation/status"),
             "openfdd_reports_list" => self.bridge.get("/api/reports"),
             "openfdd_site_update_dry_run" => Ok(self.bridge.site_update_dry_run()),
@@ -449,6 +506,58 @@ impl Server {
     }
 }
 
+fn ot_tools_enabled() -> bool {
+    std::env::var("OPENFDD_OT_TOOLS")
+        .ok()
+        .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+}
+
+fn is_retired_ot_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "openfdd_bacnet_whois"
+            | "openfdd_bacnet_read"
+            | "bacnet_whois"
+            | "openfdd_haystack_status"
+            | "openfdd_haystack_test"
+            | "openfdd_haystack_read"
+            | "haystack_test"
+            | "openfdd_driver_status"
+            | "driver_poll_status"
+            | "openfdd_bench_topology"
+    )
+}
+
+fn safe_token(value: &str) -> bool {
+    let n = value.chars().count();
+    (1..=80).contains(&n)
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+}
+
+fn ingest_query(path: &str, args: &Value) -> String {
+    let mut pairs = Vec::new();
+    if let Some(site) = args.get("site_id").and_then(Value::as_str) {
+        if safe_token(site) {
+            pairs.push(format!("site_id={site}"));
+        }
+    }
+    if let Some(state) = args.get("state").and_then(Value::as_str) {
+        if safe_token(state) {
+            pairs.push(format!("state={state}"));
+        }
+    }
+    if let Some(limit) = args.get("limit").and_then(Value::as_u64) {
+        pairs.push(format!("limit={}", limit.min(200)));
+    }
+    if pairs.is_empty() {
+        path.to_string()
+    } else {
+        format!("{path}?{}", pairs.join("&"))
+    }
+}
+
 fn tool(name: &str, description: &str, schema: Value) -> Value {
     json!({
         "name": name,
@@ -474,6 +583,8 @@ mod tests {
             .filter_map(|tool| tool.get("name").and_then(Value::as_str))
             .collect();
         for expected in [
+            "openfdd_provider_health",
+            "openfdd_provider_sites",
             "openfdd_capabilities",
             "openfdd_fdd_registry",
             "openfdd_fdd_equipment",
@@ -485,6 +596,38 @@ mod tests {
         ] {
             assert!(names.contains(&expected), "missing MCP tool {expected}");
         }
+        for retired in [
+            "openfdd_haystack_status",
+            "openfdd_haystack_test",
+            "openfdd_haystack_read",
+            "openfdd_bacnet_whois",
+            "openfdd_bacnet_read",
+            "haystack_test",
+            "bacnet_whois",
+            "openfdd_driver_status",
+            "openfdd_bench_topology",
+            "driver_poll_status",
+        ] {
+            assert!(
+                !names.contains(&retired),
+                "OT wire tool {retired} must not be in default discovery"
+            );
+        }
+        assert!(names.iter().any(|name| name.contains("sparql")));
+    }
+
+    #[test]
+    fn ot_wire_tools_are_retired() {
+        let server = Server::new(BridgeClient::from_env());
+        let retired = server
+            .dispatch_tool("openfdd_bacnet_whois", &json!({}))
+            .expect("retired payload");
+        assert_eq!(retired["ok"], false);
+        assert_eq!(retired["code"], "ot_transport_retired");
+        assert!(retired["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("archive/ot-edge"));
     }
 
     #[test]
@@ -501,5 +644,44 @@ mod tests {
             .as_str()
             .unwrap_or("")
             .contains("companion-wattlab-energyplus"));
+    }
+
+    #[test]
+    fn normal_surface_retires_ot_discovery_and_lists_ingest_tools() {
+        let prev = std::env::var("OPENFDD_OT_TOOLS").ok();
+        std::env::remove_var("OPENFDD_OT_TOOLS");
+        let server = Server::new(BridgeClient::from_env());
+        let tools = server.tools_list();
+        let names: Vec<&str> = tools
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect();
+        for expected in [
+            "openfdd_ingest_jobs",
+            "openfdd_ingest_receipts",
+            "openfdd_ingest_gaps",
+            "openfdd_ingest_queue",
+            "openfdd_model_sparql",
+        ] {
+            assert!(names.contains(&expected), "missing {expected}");
+        }
+        for retired in [
+            "openfdd_bacnet_whois",
+            "openfdd_bacnet_read",
+            "bacnet_whois",
+            "openfdd_haystack_read",
+            "openfdd_haystack_test",
+            "openfdd_driver_status",
+        ] {
+            assert!(!names.contains(&retired), "{retired} still listed");
+        }
+        let retired = server
+            .dispatch_tool("openfdd_bacnet_whois", &json!({}))
+            .expect("retired payload");
+        assert_eq!(retired["code"], "ot_transport_retired");
+        assert_eq!(retired["ok"], false);
+        if let Some(value) = prev {
+            std::env::set_var("OPENFDD_OT_TOOLS", value);
+        }
     }
 }

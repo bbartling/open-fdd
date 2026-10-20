@@ -17,7 +17,7 @@ pub fn dev_harness_reply(body: &Value) -> Value {
     let hint = if path.starts_with("/csv") {
         "CSV batch import: MCP openfdd_csv_import_preflight / openfdd_csv_import_execute, or host scripts — see docs/drivers/csv-batch.html."
     } else if path.starts_with("/bacnet") {
-        "BACnet: MCP openfdd_bacnet_whois or commission reads. Field writes need integrator + approved=true."
+        "BACnet wire tools are retired from default MCP discovery. Use the OT archive lane (archive/ot-edge) for Who-Is and commission reads."
     } else if path.starts_with("/sql-fdd") {
         "SQL FDD: test rules on the tab, then Save rule → dashboard or Export PDF report."
     } else if path.starts_with("/model") {
@@ -35,7 +35,7 @@ pub fn dev_harness_reply(body: &Value) -> Value {
     } else if message.contains("save") || message.contains("arrow") || message.contains("feather") {
         "Persist CSV: MCP openfdd_csv_import_execute after preflight pass.".into()
     } else if message.contains("help") || message.contains("mcp") {
-        "MCP tools: openfdd_health, openfdd_stack_status, openfdd_driver_status, openfdd_csv_*, Haystack/SPARQL. See mcp/README.md.".into()
+        "MCP tools: openfdd_health, openfdd_provider_health, openfdd_provider_sites, openfdd_csv_*, SPARQL. OT wire and driver discovery are retired. See mcp/README.md.".into()
     } else {
         format!("{hint} You asked: \"{message}\". Use MCP tools or the active tab APIs.")
     };

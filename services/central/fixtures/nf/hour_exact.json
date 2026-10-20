@@ -1,0 +1,27 @@
+{
+  "data": [
+    {
+      "uuid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "name": "Mixed Air Temperature",
+      "units": "°F",
+      "values": [
+        {"ts": "2026-10-18T08:59:59Z", "double": 11.0, "quality": "good"},
+        {"ts": "2026-10-18T09:00:00.123456789Z", "double": 70.5, "quality": "good"},
+        {"ts": "2026-10-18T09:15:00Z", "double": 71.0, "quality": "uncertain"},
+        {"ts": "2026-10-18T09:30:00Z", "double": 71.5},
+        {"ts": "2026-10-18T09:45:00Z", "double": 72.0, "quality": "stale"},
+        {"ts": "2026-10-18T09:50:00Z", "double": 12345.0, "quality": "CANARY"},
+        {"ts": "2026-10-18T10:00:00Z", "double": 99.0, "quality": "good"}
+      ]
+    },
+    {
+      "uuid": "bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "name": "Zone Air Temp",
+      "units": "°F",
+      "values": [
+        {"ts": "2026-10-18T09:05:00Z", "double": 55.25, "quality": "bad"},
+        {"ts": "2026-10-18T09:06:00Z", "real": 55.5, "quality": "0"}
+      ]
+    }
+  ]
+}

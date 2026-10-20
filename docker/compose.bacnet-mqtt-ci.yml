@@ -22,6 +22,8 @@ services:
       - ../sql/schema/01_bps_core.sql:/docker-entrypoint-initdb.d/01_bps_core.sql:ro
       - ../sql/schema/02_openfdd_dims.sql:/docker-entrypoint-initdb.d/02_openfdd_dims.sql:ro
       - ../sql/schema/03_wide_history_helper.sql:/docker-entrypoint-initdb.d/03_wide_history_helper.sql:ro
+      - ../sql/schema/04_provider_hourly_jobs.sql:/docker-entrypoint-initdb.d/04_provider_hourly_jobs.sql:ro
+      - ../sql/schema/04_ingest_queue.sql:/docker-entrypoint-initdb.d/05_ingest_queue.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U openfdd -d openfdd"]
       interval: 3s
@@ -55,6 +57,7 @@ services:
     image: ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG}
     environment:
       OPENFDD_MQTT_ENABLED: "1"
+      OPENFDD_OT_ARCHIVE_RESTORE: "1"
       OPENFDD_MQTT_HOST: mqtt
       OPENFDD_MQTT_PORT: "8883"
       OPENFDD_SITE_ID: ci
@@ -94,6 +97,7 @@ services:
       # Wave U fail-closed: non-loopback bind requires API key (CI binds 0.0.0.0).
       OPENFDD_FIELDBUS_API_KEY: ${OPENFDD_FIELDBUS_API_KEY:-bacnet-mqtt-ci-fieldbus-key}
       OPENFDD_MQTT_ENABLED: "1"
+      OPENFDD_OT_ARCHIVE_RESTORE: "1"
       OPENFDD_MQTT_HOST: mqtt
       OPENFDD_MQTT_PORT: "8883"
       OPENFDD_SITE_ID: ci

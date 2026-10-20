@@ -22,6 +22,7 @@ use crate::auth::AuthConfig;
 use crate::capabilities::CapabilitiesAggregator;
 use crate::haystack_rdf::HaystackRdfCache;
 use crate::live_historian::{LiveHistorianIngest, LiveWriter, PersistedMessageGroup};
+use crate::providers;
 use crate::tenant_budget::TenantBudgetTracker;
 
 const MQTT_MONITOR_CAPACITY: usize = 100;
@@ -312,6 +313,12 @@ pub struct AppState {
     pub ingest_receipts_path: PathBuf,
     /// C4 H8: scoped package RDF derived from semantic_meta + pinned defs.
     pub haystack_rdf: HaystackRdfCache,
+    /// Wave-NF HTTPS portal drivers (NF first; Ace stub).
+    pub providers: Arc<providers::Runtime>,
+    /// Tenant membership used to scope provider and ingest reads.
+    pub control_plane: tokio::sync::RwLock<crate::tenant::ControlPlane>,
+    /// Shared ingest queue. Postgres coordinates replicas; memory is single-process only.
+    pub ingest_queue: std::sync::Arc<crate::ingest_queue::QueueClient>,
     recovery_started: AtomicBool,
     last_backpressure_warn: Mutex<Option<Instant>>,
 }
@@ -343,6 +350,11 @@ impl AppState {
             ingest_receipts: AsyncMutex::new(load_receipts()),
             ingest_receipts_path: receipts_path(),
             haystack_rdf: HaystackRdfCache::new(),
+            providers: providers::Runtime::from_env(),
+            control_plane: tokio::sync::RwLock::new(crate::tenant::ControlPlane::load_or_legacy(
+                &crate::jobs::workspace_root(),
+            )),
+            ingest_queue: std::sync::Arc::new(crate::ingest_queue::QueueClient::memory()),
             recovery_started: AtomicBool::new(false),
             last_backpressure_warn: Mutex::new(None),
         }

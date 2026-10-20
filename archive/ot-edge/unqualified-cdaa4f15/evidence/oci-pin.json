@@ -1,0 +1,46 @@
+{
+  "schema_version": "openfdd.ot-archive-oci-pin.v1",
+  "resolved_at": "2026-10-19T21:10:00Z",
+  "registry": "ghcr.io",
+  "owner": "bbartling",
+  "snapshot_id": "unqualified-cdaa4f15",
+  "snapshot_commit": "cdaa4f15c662b8be242c5b0a9ebaed73fbbbc811",
+  "note": "Index digests were read from GHCR for one published tag that exists on both openfdd-fieldbus and openfdd-mqtt. The OCI revision label is not the snapshot commit. This pin is not a git freeze tag. Containers were not started.",
+  "images": [
+    {
+      "package": "openfdd-fieldbus",
+      "tag": "3.6.18-n687-a1",
+      "index_digest": "sha256:4e538fa24e6119be4fe9dd76cf32bde3b5c73fe1441195827c5ee14267c99ced",
+      "created": "2026-10-17T20:26:21.246770219Z",
+      "revision": "460861037319ad998c280ae79958db4a3a712763",
+      "version_label": "3.6.18",
+      "platforms": [
+        {
+          "os": "linux",
+          "architecture": "amd64",
+          "digest": "sha256:a437f7cb878a8a4d0180dbacc8ac3f95ea1da097e394436d854c7456e17c3c76"
+        },
+        {
+          "os": "linux",
+          "architecture": "arm64",
+          "digest": "sha256:4a8bd3241b68b763c1ce7fc90ce4b5701ded042fd60b55057f41e98711b51b34"
+        }
+      ]
+    },
+    {
+      "package": "openfdd-mqtt",
+      "tag": "3.6.18-n687-a1",
+      "index_digest": "sha256:bac59e15d86fd260c2cd3d8d5d5b2eeec2fff174636353ec8a985442c4b5d4ae",
+      "created": "2026-10-17T19:27:07.781132225Z",
+      "revision": "460861037319ad998c280ae79958db4a3a712763",
+      "version_label": "3.6.18",
+      "platforms": [
+        {
+          "os": "linux",
+          "architecture": "amd64",
+          "digest": "sha256:8ed2e4635a6039159be8923fbd28ded3a33aa4fad2bee5a18ea6339cacff344b"
+        }
+      ]
+    }
+  ]
+}

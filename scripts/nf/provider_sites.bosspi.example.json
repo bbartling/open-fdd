@@ -1,0 +1,26 @@
+[
+  {
+    "building_id": "BOSSPI",
+    "tenant_id": "lab",
+    "provider_instance_id": "nf-bosspi",
+    "provider": "nf",
+    "endpoint": "https://6639ffc3-4264-45d3-ba48-e81f451b33d1.normal-online.net",
+    "client_id": "env:NF_CLIENT_ID",
+    "client_secret": "env:NF_CLIENT_SECRET",
+    "poll_secs": 60,
+    "point_map": [
+      {
+        "provider_point_id": "REPLACE_WITH_NF_POINT_UUID_OA_T",
+        "equipment_id": "WEATHER_1",
+        "role": "outside-air-temp",
+        "equip_type": "weather"
+      },
+      {
+        "provider_point_id": "REPLACE_WITH_NF_POINT_UUID_OA_H",
+        "equipment_id": "WEATHER_1",
+        "role": "outside-air-humidity",
+        "equip_type": "weather"
+      }
+    ]
+  }
+]

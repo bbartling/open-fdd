@@ -1,0 +1,6 @@
+# Safe example. Generate an admin credential at restore time.
+# This snapshot does not carry the in-tree lab hash.
+#
+# [users.admin]
+# credential = "<generate-at-restore>"
+# permissions = ["read"]

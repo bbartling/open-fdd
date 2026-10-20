@@ -1452,6 +1452,44 @@ body {
   color: var(--color-danger, #a11);
 }
 
+.provider-status {
+  font-weight: 600;
+}
+
+.provider-status--good {
+  color: var(--color-success, #166534);
+}
+
+.provider-status--warn {
+  color: var(--color-warning, #92400e);
+}
+
+.provider-status--bad {
+  color: var(--color-danger, #991b1b);
+}
+
+.provider-status--neutral {
+  color: var(--color-text-muted, #57534e);
+}
+
+.provider-detail {
+  margin-top: 1rem;
+}
+
+.provider-detail ul {
+  max-width: 46rem;
+}
+
+.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .section-heading-row {
   display: flex;
   flex-wrap: wrap;

@@ -450,7 +450,7 @@ export function RulesPage() {
             <Progress
               id="fdd-run"
               label={`Running FDD… elapsed ${formatDurationMs(runElapsedMs)}`}
-              description="Polled from GET /api/actions while DataFusion runs"
+              description="Polled from GET /api/actions while analytics run"
               value={progressValue}
               testId="fdd-run-progress-bar"
             />

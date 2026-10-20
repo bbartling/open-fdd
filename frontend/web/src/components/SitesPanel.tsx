@@ -7,39 +7,12 @@ import {
 import { apiFetch } from "../api/client";
 import { deleteDataset } from "../api/datasetsApi";
 import { listPackageBuildings } from "../api/mappingApi";
+import { fetchProviderSites, type ProviderSiteConfig } from "../api/providersApi";
+import { siteSourceLabels } from "../lib/providerDisplay";
 import { useSessionQuery } from "../session";
-
-type IngestMode = "CSV" | "MQTT" | "Both";
-
-const INGEST_STORAGE_KEY = "openfdd.sites.ingestMode";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-function loadIngestOverrides(): Record<string, IngestMode> {
-  try {
-    const raw = window.localStorage.getItem(INGEST_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    const out: Record<string, IngestMode> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (value === "CSV" || value === "MQTT" || value === "Both") {
-        out[key] = value;
-      }
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function saveIngestOverrides(next: Record<string, IngestMode>) {
-  try {
-    window.localStorage.setItem(INGEST_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    /* ignore quota */
-  }
 }
 
 interface EdgesListResponse {
@@ -58,7 +31,7 @@ export function SitesPanel() {
 
   const [sites, setSites] = useState<string[]>([]);
   const [mqttSites, setMqttSites] = useState<Set<string>>(new Set());
-  const [overrides, setOverrides] = useState<Record<string, IngestMode>>({});
+  const [providerBySite, setProviderBySite] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,66 +41,66 @@ export function SitesPanel() {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const [ids, edgesBody] = await Promise.all([
-        listPackageBuildings(),
-        apiFetch<EdgesListResponse>("/api/edges").catch(() => null),
-      ]);
-      setSites(ids);
-      const mqtt = new Set<string>();
-      for (const edge of edgesBody?.edges ?? []) {
-        const site = (edge.site_id ?? "").trim();
-        if (site && edge.has_telemetry) mqtt.add(site);
-      }
-      setMqttSites(mqtt);
-      setOverrides(loadIngestOverrides());
-      // Auto-select the only visible site so first paint is not an empty ?site=.
-      if (!activeSite && ids.length === 1) {
-        setQuery({ siteId: ids[0] }, true);
-      }
-    } catch (err) {
-      // Prefer a calm empty state over raw MT JSON for scoped users.
-      const msg = formatErr(err);
-      if (/building_id required/i.test(msg)) {
+    const [pkgResult, edgesBody, providerBody] = await Promise.all([
+      listPackageBuildings()
+        .then((ids) => ({ ok: true as const, ids }))
+        .catch((err: unknown) => ({ ok: false as const, err })),
+      apiFetch<EdgesListResponse>("/api/edges").catch(() => null),
+      fetchProviderSites().catch(() => null),
+    ]);
+    const mqtt = new Set<string>();
+    for (const edge of edgesBody?.edges ?? []) {
+      const site = (edge.site_id ?? "").trim();
+      if (site && edge.has_telemetry) mqtt.add(site);
+    }
+    const providers: Record<string, string> = {};
+    const providerConfigs: ProviderSiteConfig[] = [
+      ...(providerBody?.sites ?? []),
+      ...(providerBody?.health ?? []),
+    ];
+    for (const site of providerConfigs) {
+      const id = (site.building_id ?? "").trim();
+      if (!id) continue;
+      if (!providers[id] && site.provider) providers[id] = site.provider;
+    }
+    if (!pkgResult.ok) {
+      const msg = formatErr(pkgResult.err);
+      const providerIds = Object.keys(providers);
+      if (/building_id required/i.test(msg) && providerIds.length === 0 && mqtt.size === 0) {
+        setSites([]);
+        setMqttSites(mqtt);
+        setProviderBySite(providers);
+        setError(null);
+        setNotice(
+          "No sites loaded yet. Portal sites appear from server provider configuration. CSV packages appear after a zip import.",
+        );
+      } else if (providerIds.length === 0 && mqtt.size === 0) {
+        setSites([]);
+        setError(msg);
+      } else {
         setSites([]);
         setError(null);
-        setNotice("No sites loaded yet. Upload a CSV/ZIP package or ask an admin to bind a building.");
-      } else {
-        setError(msg);
       }
-    } finally {
-      setLoading(false);
+    } else {
+      setSites(pkgResult.ids);
+      setError(null);
     }
+    setMqttSites(mqtt);
+    setProviderBySite(providers);
+    const visible = new Set<string>([
+      ...(pkgResult.ok ? pkgResult.ids : []),
+      ...Object.keys(providers),
+      ...mqtt,
+    ]);
+    if (!activeSite && visible.size === 1) {
+      setQuery({ siteId: [...visible][0] }, true);
+    }
+    setLoading(false);
   }, [activeSite, setQuery]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  const derivedMode = useCallback(
-    (id: string): IngestMode => {
-      const hasCsv = sites.includes(id);
-      const hasMqtt = mqttSites.has(id);
-      if (hasCsv && hasMqtt) return "Both";
-      if (hasMqtt) return "MQTT";
-      return "CSV";
-    },
-    [mqttSites, sites],
-  );
-
-  const displayMode = useCallback(
-    (id: string): IngestMode => overrides[id] ?? derivedMode(id),
-    [derivedMode, overrides],
-  );
-
-  const onIngestChange = (id: string, mode: IngestMode) => {
-    setOverrides((prev) => {
-      const next = { ...prev, [id]: mode };
-      saveIngestOverrides(next);
-      return next;
-    });
-    setNotice(`Ingest label for ${id} set to ${mode}`);
-  };
 
   const onSetActive = (id: string) => {
     setQuery({ siteId: id }, true);
@@ -170,9 +143,9 @@ export function SitesPanel() {
   };
 
   const rows = useMemo(() => {
-    const all = new Set<string>([...sites, ...mqttSites]);
+    const all = new Set<string>([...sites, ...mqttSites, ...Object.keys(providerBySite)]);
     return Array.from(all).sort((a, b) => a.localeCompare(b));
-  }, [mqttSites, sites]);
+  }, [mqttSites, providerBySite, sites]);
 
   return (
     <div className="page-stack" data-testid="sites-page">
@@ -209,8 +182,9 @@ export function SitesPanel() {
         <p data-testid="sites-loading">Loading sites…</p>
       ) : rows.length === 0 ? (
         <InlineAlert id="sites-empty" variant="info" testId="sites-empty">
-          No sites loaded. Import a package zip from the sidebar, or wait for MQTT
-          edges with telemetry.
+          No sites loaded. Portal sites appear from server provider configuration. CSV
+          packages appear after a zip import. Archived MQTT telemetry is listed only when an
+          edge still reports it.
         </InlineAlert>
       ) : (
         <div className="widget-table-wrap" data-testid="sites-table">
@@ -218,7 +192,7 @@ export function SitesPanel() {
             <thead>
               <tr>
                 <th scope="col">Site</th>
-                <th scope="col">Ingest</th>
+                <th scope="col">Sources</th>
                 <th scope="col">Active</th>
                 <th scope="col">Actions</th>
               </tr>
@@ -226,26 +200,18 @@ export function SitesPanel() {
             <tbody>
               {rows.map((id) => {
                 const isActive = activeSite === id;
-                const mode = displayMode(id);
+                const labels = siteSourceLabels({
+                  hasPackage: sites.includes(id),
+                  provider: providerBySite[id],
+                  hasMqttTelemetry: mqttSites.has(id),
+                });
                 return (
                   <tr key={id} data-testid={`sites-row-${id}`}>
                     <td>
                       <code>{id}</code>
                     </td>
-                    <td>
-                      <select
-                        className="sites-ingest-select"
-                        aria-label={`Ingest mode for ${id}`}
-                        value={mode}
-                        onChange={(event) =>
-                          onIngestChange(id, event.target.value as IngestMode)
-                        }
-                        data-testid={`sites-ingest-${id}`}
-                      >
-                        <option value="CSV">CSV</option>
-                        <option value="MQTT">MQTT</option>
-                        <option value="Both">Both</option>
-                      </select>
+                    <td data-testid={`sites-sources-${id}`}>
+                      {labels.length > 0 ? labels.join(", ") : "—"}
                     </td>
                     <td data-testid={`sites-active-${id}`}>
                       {isActive ? "yes" : "—"}

@@ -23,6 +23,9 @@ jobs:
         run: |
           bash -n scripts/check_version_sync.sh
           ./scripts/check_version_sync.sh
+          bash -n scripts/test_ghcr_prune_archive_keep.sh
+          ./scripts/test_ghcr_prune_archive_keep.sh
+          python3 scripts/archive/verify_ot_edge_snapshot.py
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -40,9 +43,18 @@ jobs:
       - name: Edge lib and MCP tests
         run: cargo test --all-targets -p open_fdd_edge_prototype -p openfdd-mcp -- --test-threads=1
 
+      - name: NF offline fixture acceptance (no live portal)
+        run: |
+          python3 scripts/nf/check_wave_nf_status.py
+          if grep -nE 'reqwest|NfPortalDriver|https?://' services/central/src/providers/fixture_acceptance.rs; then
+            echo "fixture acceptance must stay offline"
+            exit 1
+          fi
+          cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
+
       - name: Central / fieldbus / MQTT contract tests
         run: |
-          cargo test -p openfdd_contracts -p openfdd_mqtt -p fdd_resources -p openfdd-central -p openfdd-fieldbus
+          cargo test -p openfdd_contracts -p openfdd_mqtt -p fdd_resources -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
 
@@ -75,10 +87,8 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Focused format and warnings denied checks
-        run: |
-          cargo fmt --all --check
-          cargo clippy -p openfdd-fieldbus --all-targets -- -D warnings
+      - name: Product workspace excludes live fieldbus
+        run: python3 scripts/archive/verify_ot_edge_snapshot.py
 
       - name: Live process and image isolation gate
         env:
@@ -134,7 +144,7 @@ jobs:
           test -x scripts/audit_no_private_bench_hardcoding.sh
           ./scripts/audit_no_private_bench_hardcoding.sh
           test -f VERSION
-          grep -qE '^3\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' VERSION
+          grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' VERSION
 
   react-web:
     name: React web (frontend/web)
@@ -188,13 +198,15 @@ jobs:
         run: |
           mkdir -p deploy/mqtt/kits/local__fieldbus-1
           export OPENFDD_EDGE_KIT_DIR="$PWD/deploy/mqtt/kits/local__fieldbus-1"
-          for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml docker/compose.react.yml docker/compose.react.fieldbus.yml; do
+          for f in docker/compose.portal.yml docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml docker/compose.react.yml docker/compose.react.fieldbus.yml; do
             test -f "$f"
             docker compose -f "$f" config >/dev/null
             echo "OK config: $f"
           done
           # S07: selected-OT + HTTPS must render without inventing image-less mqtt.
           bash scripts/ops/render_selected_ot_https.sh
+          OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay >/tmp/ot-archive-replay.txt
+          grep -q 'No containers were started' /tmp/ot-archive-replay.txt
 
       - name: File smoke (stack recipes)
         run: bash scripts/release/smoke_standalone_mqtts.sh

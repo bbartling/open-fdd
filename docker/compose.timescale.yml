@@ -22,6 +22,8 @@ services:
       - ../sql/schema/01_bps_core.sql:/docker-entrypoint-initdb.d/01_bps_core.sql:ro
       - ../sql/schema/02_openfdd_dims.sql:/docker-entrypoint-initdb.d/02_openfdd_dims.sql:ro
       - ../sql/schema/03_wide_history_helper.sql:/docker-entrypoint-initdb.d/03_wide_history_helper.sql:ro
+      - ../sql/schema/04_provider_hourly_jobs.sql:/docker-entrypoint-initdb.d/04_provider_hourly_jobs.sql:ro
+      - ../sql/schema/04_ingest_queue.sql:/docker-entrypoint-initdb.d/05_ingest_queue.sql:ro
     healthcheck:
       test:
         [
