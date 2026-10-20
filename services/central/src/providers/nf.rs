@@ -293,8 +293,13 @@ impl NfPortalDriver {
                 && attempt + 1 < attempts
                 && !self.anonymous
             {
-                if let Some(tag) = self.credential_tag() {
-                    forget_cached_token(&self.provider_id, &self.endpoint, tag);
+                if let (Some(tag), Some(rejected)) = (self.credential_tag(), self.token.clone()) {
+                    forget_cached_token_if_matches(
+                        &self.provider_id,
+                        &self.endpoint,
+                        tag,
+                        &rejected,
+                    );
                 }
                 self.token = None;
                 self.token_expires_at = None;
@@ -462,11 +467,20 @@ fn store_cached_token(
     );
 }
 
-fn forget_cached_token(provider_id: &str, endpoint: &str, credential_tag: u64) {
+fn forget_cached_token_if_matches(
+    provider_id: &str,
+    endpoint: &str,
+    credential_tag: u64,
+    rejected: &str,
+) {
     let mut guard = portal_token_cache()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    guard.remove(&portal_cache_key(provider_id, endpoint, credential_tag));
+    let key = portal_cache_key(provider_id, endpoint, credential_tag);
+    let same = guard.get(&key).is_some_and(|entry| entry.token == rejected);
+    if same {
+        guard.remove(&key);
+    }
 }
 
 pub fn parse_token_json(text: &str) -> Result<(String, Option<i64>), ProviderError> {
@@ -877,6 +891,20 @@ mod tests {
         let mut driver = lab_driver(port, "secret", limits);
         let err = driver.authenticate().await.unwrap_err();
         assert!(err.to_string().contains("body_too_large"));
+    }
+
+    #[test]
+    fn rejected_token_does_not_drop_a_newer_cache_entry() {
+        let provider = "nf:race-test";
+        let endpoint = "http://portal.example/race-test";
+        let tag = 7_u64;
+        let expires = Utc::now() + chrono::Duration::hours(1);
+        store_cached_token(provider, endpoint, tag, "new-token".into(), expires);
+        forget_cached_token_if_matches(provider, endpoint, tag, "old-token");
+        let (token, _) = load_cached_token(provider, endpoint, tag).expect("newer token stays");
+        assert_eq!(token, "new-token");
+        forget_cached_token_if_matches(provider, endpoint, tag, "new-token");
+        assert!(load_cached_token(provider, endpoint, tag).is_none());
     }
 
     #[tokio::test]
