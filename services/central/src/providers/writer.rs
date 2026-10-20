@@ -62,6 +62,26 @@ pub async fn ingest_samples(
     // ownership on the ingest scope. Sample PK stays the SQL role projection.
     let scope = format!("tenant=-;building={building_id};provider={provider_instance_id}");
     let seq = PROVIDER_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let points = samples_to_points(samples);
+    let observed_at = samples.iter().map(|s| s.ts).max().unwrap_or_else(Utc::now);
+    let mut envelope = TelemetryEnvelope::new(building_id, edge_id, Protocol::Rest, seq, points);
+    envelope.observed_at = observed_at;
+    envelope.message_id = Uuid::new_v4();
+    envelope
+        .validate()
+        .map_err(|_| ProviderError::new(super::error::ProviderErrorCode::InvalidSample))?;
+    let report = state.ingest_live(&scope, &envelope).await.map_err(|err| {
+        tracing::warn!(
+            code = "persistence",
+            connection_lost = crate::timescale_historian::historian_error_drops_connection(&err),
+            "provider sample persist failed"
+        );
+        ProviderError::persistence()
+    })?;
+    Ok(ProviderIngestReceipt::from_report(samples.len(), &report))
+}
+
+fn samples_to_points(samples: &[NormalizedSample]) -> Vec<TelemetryPoint> {
     let mut points = Vec::with_capacity(samples.len());
     for sample in samples {
         let mut tags = serde_json::Map::new();
@@ -163,22 +183,46 @@ pub async fn ingest_samples(
             tags,
         });
     }
+    points
+}
+
+/// Timescale row projection for fixture acceptance. Same point tags as
+/// `ingest_samples`, then `point_to_sample`. No database connection.
+#[cfg(test)]
+pub(crate) fn project_historian_rows(
+    building_id: &str,
+    samples: &[NormalizedSample],
+) -> Result<Vec<fdd_tsdb::SampleRow>, ProviderError> {
+    if samples.is_empty() {
+        return Ok(Vec::new());
+    }
+    let points = samples_to_points(samples);
     let observed_at = samples.iter().map(|s| s.ts).max().unwrap_or_else(Utc::now);
-    let mut envelope = TelemetryEnvelope::new(building_id, edge_id, Protocol::Rest, seq, points);
+    let mut envelope = TelemetryEnvelope::new(
+        building_id,
+        edge_id_for_building(building_id),
+        Protocol::Rest,
+        0,
+        points,
+    );
     envelope.observed_at = observed_at;
-    envelope.message_id = Uuid::new_v4();
+    envelope.message_id = Uuid::nil();
     envelope
         .validate()
         .map_err(|_| ProviderError::new(super::error::ProviderErrorCode::InvalidSample))?;
-    let report = state.ingest_live(&scope, &envelope).await.map_err(|err| {
-        tracing::warn!(
-            code = "persistence",
-            connection_lost = crate::timescale_historian::historian_error_drops_connection(&err),
-            "provider sample persist failed"
-        );
-        ProviderError::persistence()
-    })?;
-    Ok(ProviderIngestReceipt::from_report(samples.len(), &report))
+    let mut rows = Vec::with_capacity(envelope.points.len());
+    for point in &envelope.points {
+        match crate::timescale_historian::point_to_sample(&envelope, point) {
+            Ok(Some(row)) => rows.push(row),
+            Ok(None) => {}
+            Err(_) => {
+                return Err(ProviderError::new(
+                    super::error::ProviderErrorCode::InvalidSample,
+                ))
+            }
+        }
+    }
+    Ok(rows)
 }
 
 #[cfg(test)]

@@ -329,7 +329,10 @@ fn point_value_f64(point: &TelemetryPoint) -> Option<f64> {
     }
 }
 
-fn point_to_sample(env: &TelemetryEnvelope, point: &TelemetryPoint) -> Result<Option<SampleRow>> {
+pub(crate) fn point_to_sample(
+    env: &TelemetryEnvelope,
+    point: &TelemetryPoint,
+) -> Result<Option<SampleRow>> {
     let building_id = tag_str(point, TAG_BUILDING_ID)
         .or_else(|| {
             if env.site_id.is_empty() {
