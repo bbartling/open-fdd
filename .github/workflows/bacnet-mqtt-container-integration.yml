@@ -1,10 +1,28 @@
 name: Optional BACnet to MQTT container integration
 
+# 4.0 portal publish ships openfdd-central and openfdd-web only.
+# openfdd-fieldbus is archived and is not published. openfdd-mqtt is published
+# only by an explicit archived-OT dispatch, and that dispatch still does not
+# publish fieldbus. A normal master publish therefore has no
+# ghcr.io/bbartling/openfdd-fieldbus:sha-<head> (and no matching mqtt tag).
+# Run 39362164673 failed by pulling sha-fe7e06b.
+#
+# This workflow does not boot archive/ot-edge/unqualified-cdaa4f15/evidence/oci-pin.json.
+# That pin is unqualified, it is not this snapshot's source commit, and
+# restore-isolated.sh --boot exits 2. Pointing archived fieldbus at a 4.0
+# Timescale volume is not proven. The isolated lane stays
+# restore-isolated.sh --replay plus scripts/gates/protocol_connector_split.sh.
+#
+# Automatic runs (portal publish, pull request, the old Monday schedule) succeed
+# without pulling images when central+mqtt+fieldbus are not all published at the
+# candidate sha. workflow_dispatch still runs the smoke only when the operator
+# passes a sha-<7> that still has all three manifests.
+
 on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: Immutable Open-FDD GHCR tag (sha-xxxxxxx)
+        description: Historical GHCR tag that still has central, mqtt, and fieldbus (sha-xxxxxxx)
         required: true
         type: string
   workflow_run:
@@ -18,8 +36,6 @@ on:
       - docker/compose.bacnet-mqtt-ci.yml
       - scripts/integration/bacnet_mqtt_container_smoke.sh
       - tests/integration/bacpypes3/**
-  schedule:
-    - cron: "17 8 * * 1"
 
 permissions:
   contents: read
@@ -50,65 +66,50 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
+          manifest_ok() {
+            docker manifest inspect "$1" >/dev/null 2>&1
+          }
+          ot_trio_published() {
+            local tag="$1" image
+            for image in openfdd-central openfdd-mqtt openfdd-fieldbus; do
+              if ! manifest_ok "ghcr.io/bbartling/${image}:${tag}"; then
+                echo "missing ghcr.io/bbartling/${image}:${tag}" >&2
+                return 1
+              fi
+            done
+          }
+          skip=0
+          tag=""
+          reason=""
           case "$GITHUB_EVENT_NAME" in
             workflow_dispatch)
               tag="$DISPATCH_TAG"
+              if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]]; then
+                echo "image tag must match sha-<7 lowercase hex>, got: ${tag:-empty}" >&2
+                exit 1
+              fi
+              if ! ot_trio_published "$tag"; then
+                echo "refusing smoke: ${tag} is not published for central, mqtt, and fieldbus" >&2
+                echo "4.0 does not publish openfdd-fieldbus. This job does not use the OT archive OCI pin." >&2
+                exit 1
+              fi
               ;;
             workflow_run)
               [[ "$PUBLISH_SHA" =~ ^[0-9a-f]{40}$ ]]
               tag="sha-${PUBLISH_SHA:0:7}"
+              if ! ot_trio_published "$tag"; then
+                skip=1
+                tag=""
+                reason="4.0 portal publish does not include openfdd-fieldbus (or a matching openfdd-mqtt tag) at sha-${PUBLISH_SHA:0:7}. BACnet container integration is not a product gate."
+              fi
               ;;
             pull_request)
               [[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-              # Prefer already-published base/master generation; fall back when
-              # base is docs-only / publish still in flight (manifest unknown).
-              candidate="sha-${PR_BASE_SHA:0:7}"
-              if docker manifest inspect "ghcr.io/bbartling/openfdd-mqtt:${candidate}" >/dev/null 2>&1 \
-                && docker manifest inspect "ghcr.io/bbartling/openfdd-central:${candidate}" >/dev/null 2>&1 \
-                && docker manifest inspect "ghcr.io/bbartling/openfdd-fieldbus:${candidate}" >/dev/null 2>&1; then
-                tag="$candidate"
-              else
-                echo "base tag ${candidate} not published yet; resolving newest-by-created common sha-*" >&2
-                data="$(timeout 90 python3 scripts/ghcr_newest_by_created.py --json openfdd-central openfdd-mqtt openfdd-fieldbus || true)"
+              tag="sha-${PR_BASE_SHA:0:7}"
+              if ! ot_trio_published "$tag"; then
+                skip=1
                 tag=""
-                if [[ -n "$data" ]]; then
-                  tag="$(jq -r '
-                    [.[0].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $a |
-                    [.[1].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $b |
-                    [.[2].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $c |
-                    [$a[] as $t | select(($b | index($t)) != null and ($c | index($t)) != null) | $t][0] // empty
-                  ' <<<"$data")"
-                fi
-                # Prefer central tip revision (nightly often retags without a fresh sha-* in mqtt top window).
-                if [[ -z "$tag" && -n "$data" ]]; then
-                  rev="$(jq -r '.[0].revision // empty' <<<"$data")"
-                  if [[ "$rev" =~ ^[0-9a-f]{40}$ ]]; then
-                    tip="sha-${rev:0:7}"
-                    if docker manifest inspect "ghcr.io/bbartling/openfdd-mqtt:${tip}" >/dev/null 2>&1                       && docker manifest inspect "ghcr.io/bbartling/openfdd-central:${tip}" >/dev/null 2>&1                       && docker manifest inspect "ghcr.io/bbartling/openfdd-fieldbus:${tip}" >/dev/null 2>&1; then
-                      tag="$tip"
-                      echo "using central tip revision tag ${tag}" >&2
-                    fi
-                  fi
-                fi
-                # Last-known published common tip when listing/API is unavailable (Wave-X 3.6.14).
-                # Do not use pruned historical FQ pins (sha-1677c33 / sha-7ad6479 are gone from GHCR).
-                if [[ -z "$tag" ]]; then
-                  tag="sha-d252277"
-                  echo "newest-by-created unavailable; falling back to last-known published ${tag}" >&2
-                fi
-              fi
-              ;;
-            schedule)
-              data="$(python3 scripts/ghcr_newest_by_created.py --json openfdd-central openfdd-mqtt openfdd-fieldbus)"
-              tag="$(jq -r '
-                [.[0].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $a |
-                [.[1].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $b |
-                [.[2].top[].tag | select(test("^sha-[0-9a-f]{7}$"))] as $c |
-                [$a[] as $t | select(($b | index($t)) != null and ($c | index($t)) != null) | $t][0] // empty
-              ' <<<"$data")"
-              if [[ -z "$tag" ]]; then
-                echo "no common published sha-* tag found across central/mqtt/fieldbus newest-by-created windows" >&2
-                exit 1
+                reason="Base ${tag} has no published central+mqtt+fieldbus set. 4.0 does not publish openfdd-fieldbus. Skipping the container smoke."
               fi
               ;;
             *)
@@ -116,14 +117,33 @@ jobs:
               exit 1
               ;;
           esac
-          if [[ ! "$tag" =~ ^sha-[0-9a-f]{7}$ ]]; then
-            echo "image tag must match sha-<7 lowercase hex>, got: $tag" >&2
-            exit 1
+          echo "skip=${skip}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          {
+            echo "reason<<EOF"
+            printf '%s\n' "$reason"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [[ "$skip" == "0" ]]; then
+            echo "Testing Open-FDD images: $tag"
+          else
+            echo "$reason"
           fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "Testing Open-FDD images: $tag"
+
+      - name: Record 4.0 skip
+        if: steps.image.outputs.skip == '1'
+        run: |
+          {
+            echo "## BACnet → MQTTS container integration"
+            echo
+            echo "${{ steps.image.outputs.reason }}"
+            echo
+            echo "- OT archive lane stays \`archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay\` (no containers) and \`scripts/gates/protocol_connector_split.sh\`."
+            echo "- This job does not pull \`evidence/oci-pin.json\`. \`--boot\` stays refused."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run BACpypes3 BACnet to Open-FDD MQTTS integration
+        if: steps.image.outputs.skip != '1'
         env:
           OPENFDD_IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
@@ -131,14 +151,14 @@ jobs:
           ./scripts/integration/bacnet_mqtt_container_smoke.sh
 
       - name: Record qualification summary
-        if: always()
+        if: steps.image.outputs.skip != '1'
         run: |
           {
             echo "## BACnet → MQTTS container integration"
             echo
             echo "- Open-FDD image tag: \`${{ steps.image.outputs.tag }}\`"
             echo "- BACnet simulator: BACpypes3 0.0.106 mini-device"
-            echo "- Product path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central parsed ingest + Timescale historian"
+            echo "- Path: BACnet/IP read/poll → openfdd-fieldbus → mTLS MQTT → openfdd-central parsed ingest + Timescale historian"
             echo "- Historian: Timescale via OPENFDD_DATABASE_URL (never Parquet; STORAGE-LOCK)"
             echo "- Product images are pulled from GHCR; only the lightweight Python simulator is built in this job."
           } >> "$GITHUB_STEP_SUMMARY"

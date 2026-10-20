@@ -16,9 +16,9 @@ Actual workflow files under `.github/workflows/` (open-fdd). Re-list with
 | `ghcr-prune.yml` | GHCR retention |
 | `rust-release.yml` | Rust release |
 | `security.yml` / `appsec.yml` | Security / AppSec |
-| `bacnet-mqtt-container-integration.yml` | BACnet→MQTT container integration |
+| `bacnet-mqtt-container-integration.yml` | BACnet→MQTT container integration. 4.0 portal publish skips it when `openfdd-fieldbus` / `openfdd-mqtt` are absent at that sha. |
 | `pypi-sql-parity.yml` | Published-package pandas oracle gate |
-| `wave-c-isolated.yml` | Isolated broker / ZAP qualification umbrella |
+| `wave-c-isolated.yml` | Isolated broker / ZAP qualification umbrella. Pull requests skip when the base sha did not publish `openfdd-mqtt`. |
 
 Removed Stage A (2026-10-15, CI/docs cleanup; no product VERSION bump):
 `docs-pdf.yml` (manual echo placeholder), `historian-scale-qualification.yml`

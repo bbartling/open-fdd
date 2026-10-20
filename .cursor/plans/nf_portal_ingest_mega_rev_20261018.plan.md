@@ -62,6 +62,9 @@ todos:
   - id: m10-railway-repin
     content: SoftOPEN defer — Railway re-pin to sha-fe7e06b was not part of this merge
     status: pending
+  - id: actions-ot-gate
+    content: "Gate Optional BACnet and Wave C isolated workflows so 4.0 master does not pull unpublished openfdd-fieldbus or openfdd-mqtt sha tags. Archive OCI pin stays unbooted."
+    status: completed
   - id: m11-prove
     content: M11 bosspi hour smoke in Timescale (lab evidence only; not full N12 matrix)
     status: in_progress
@@ -295,6 +298,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### Wave-D — publish
 - [x] **wave-d-m10-ghcr** / **m10-ghcr** — VERSION 4.0.0. Master `#1302` `fe7e06b6` published `ghcr.io/bbartling/openfdd-central:sha-fe7e06b` (`sha256:3ae2c2baaf49d9a8bc0c3c4a7f9dfc799d6e2c0c48ebf9b1d8c773b8c1a82b61`) and `ghcr.io/bbartling/openfdd-web:sha-fe7e06b` (`sha256:5cf2b0f5bf261480ea4443a6faebaba2edae41275be4e32f540473c14b7ccc61`). No fieldbus image. No PyPI publish. Run https://github.com/bbartling/open-fdd/actions/runs/39357186292
+- [x] **actions-ot-gate** — Optional BACnet workflow ([run 39362164673](https://github.com/bbartling/open-fdd/actions/runs/39362164673)) no longer pulls `openfdd-mqtt` / `openfdd-fieldbus` at the portal `sha-<head>`. The Monday schedule is removed. Wave C isolated suites skip on pull request when that mqtt tag is absent. The archive pin is not booted (`--boot` stays refused; `--replay` and the protocol-connector split gate stay the isolated lane).
 
 ### This round
 - [x] **n0-boundary** — 4.0 boundary and requirements matrix in `docs/architecture/wave-nf-4.0-product-boundary.md` (no row qualified). Merged #1296 `de042f70`.
