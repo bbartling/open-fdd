@@ -1,6 +1,6 @@
 [package]
 name = "open_fdd_edge_prototype"
-version = "4.0.0"
+version = "4.0.1"
 edition = "2021"
 
 # Library only. The edge process and BACnet/Modbus/Haystack wire clients live

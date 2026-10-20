@@ -1,5 +1,19 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
+## 4.0.1 platform patch (2026-10-20)
+
+Workspace **4.0.1** on master `04673e4f` (prior workspace **4.0.0**). This row is the release note for the patch. It is not a new gate FAIL and it is not an ops pin.
+
+| PR | Disposition |
+| --- | --- |
+| **#1305** data-safe DB | Startup keeps historian rows. Wipe is a new one-shot `OPENFDD_RESET_DB` token plus `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`. No routine backup in this bump. |
+| **#1306** OT archive / MQTT removal | BACnet, Modbus, Haystack wire, fieldbus, MQTT broker/client, and the Parquet micro-batch writer are under `archive/ot-edge/unmaintained`. Product ingest is the NF portal and CSV. Historian is Timescale. |
+| **#1307** Rust/React standard | Portal and CSV crates deny `unwrap` / `expect` / lock-across-await. SPA ESLint errors cover hooks, keys, `any`, and direct DOM. |
+| **#1308** legacy purge | 3.x OT-edge, ACME, and Railway stress harnesses removed from the product tree. `archive/` was not edited by that purge or by this bump. |
+| **#1309** Building 50 + NF hourly + UI P0 | Empty Timescale copies the Building 50 starter once. NF hourly accepts a short validation window. Provider panel shows the last pull. Stamped-equipment rules, `confirmed_fault` overlays, and status-based motor weekly hours. |
+
+PyPI `open-fdd` stays **4.4.9**. No publish. GHCR central and web tags appear when this bump merges to `master` (`sha-<7>`, `<version>-n<run>-a<attempt>`, `:nightly`).
+
 **Date:** 2026-09-12 (Wave M **OPS PINNED 3.5.7** · M5 stress **PARTIAL** on Mint · mode OFF)  
 **Platform:** Railway hub + Mint OptiPlex ops host (no Raspberry Pi in Open-FDD stress; fieldbus kit **missing** on Mint)  
 **Tip / pin (ops):** `0bfcd81b` · VERSION **3.5.7** · health **`3.5.7+0bfcd81b949f`** · GHCR **central/web/mqtt/fieldbus `sha-0bfcd81`** · `multi_tenant=false` · `historian_prefix=""` · `active_tenant_id=legacy` · `tenant_budgets=false` · `OPENFDD_RULE_RESULTS_DIR=/workspace/openfdd/rule_results`  

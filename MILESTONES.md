@@ -1,5 +1,19 @@
 # Open-FDD milestones
 
+## 4.0.1 — platform patch (2026-10-20)
+
+**Base:** master `04673e4f` (4.0.0), which already contains #1305–#1309.  
+**Workspace:** `VERSION` and Cargo workspace/crate versions **4.0.1**. Sidebar `/api/health` becomes `4.0.1+<sha>` after the master GHCR publish.  
+**Not this release:** PyPI `open-fdd` stays **4.4.9** (no tag, no publish). No Timescale backup. No Parquet or DataFusion product path. `archive/` untouched. Not an ops pin and not FQ until a published `sha-<7>` is resolved newest-by-created.
+
+| PR | What landed on `04673e4f` |
+| --- | --- |
+| [#1305](https://github.com/bbartling/open-fdd/pull/1305) | Data-safe DB. Forward-only schema on startup. A wipe needs a new one-shot `OPENFDD_RESET_DB` token and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`. |
+| [#1306](https://github.com/bbartling/open-fdd/pull/1306) | OT archive and MQTT removal. Portal + CSV ingest. Timescale historian. No fieldbus or MQTT images in the 4.0 publish set. |
+| [#1307](https://github.com/bbartling/open-fdd/pull/1307) | Rust and React review standard. Portal/CSV Clippy deny set and SPA ESLint errors for hooks, keys, `any`, and direct DOM access. |
+| [#1308](https://github.com/bbartling/open-fdd/pull/1308) | Legacy 3.x OT / ACME / Railway stress tooling purge. |
+| [#1309](https://github.com/bbartling/open-fdd/pull/1309) | Building 50 starter seed on an empty Timescale, NF hourly short window, provider last-pull, and Timescale UI P0 fixes (rules, `confirmed_fault`, motor weekly hours). |
+
 ## Wave-X — Timescale 3.6.0 hard cutover (2026-10-12) — Soft-OPEN tip (≠ FQ)
 
 **Plan (3.6.0):** [`.cursor/plans/timescale_sql_warehouse_greenfield_explore_20261012.plan.md`](.cursor/plans/timescale_sql_warehouse_greenfield_explore_20261012.plan.md)  

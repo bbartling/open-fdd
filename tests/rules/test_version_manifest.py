@@ -24,7 +24,7 @@ def test_manifest_has_independent_axes():
     rust = rust_engine_version()
     if rust is not None:
         assert rust == doc["rust_engine_version"]
-        # Cargo workspace semver (4.0.0 on this line). Do not pin a major.
+        # Cargo workspace semver (4.0.1 on this line). Do not pin a major.
         assert rust.count(".") >= 2
         assert all(part.isdigit() for part in rust.split("."))
 
