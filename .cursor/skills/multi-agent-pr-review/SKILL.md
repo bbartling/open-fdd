@@ -12,6 +12,17 @@ When reviewing a PR, branch vs base, patch, diff, merge request, code change, or
 
 Do not nitpick style unless it hides a real defect. Do not rubber-stamp. Do not make broad edits unless explicitly asked after review.
 
+## Open-FDD Rust and React
+
+When the diff touches product Rust or `frontend/web`, include the canonical standard in the review. Do not restate a second checklist.
+
+- `openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md`
+- `openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md`
+- `openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md`
+- `openfdd_agent_spec/skills/openfdd-code-review-rust-react/SKILL.md`
+
+Each language finding needs a brief why and a concrete refactor snippet. Crate-wide `#![allow]` is not an acceptable fix.
+
 ## Operating principles
 
 - Stay evidence-led. Every non-obvious conclusion must be backed by file paths, symbols, command output, issue/PR links, or source references.

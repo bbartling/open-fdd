@@ -98,7 +98,7 @@ pub struct EvictionReport {
     pub keep_bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PreflightInput {
     pub disk_total_bytes: u64,
     pub disk_free_bytes: u64,
@@ -631,21 +631,21 @@ mod tests {
 
         let test_skip = preflight_update(&input(PreflightInput {
             test_deploy: true,
-            ..base.clone()
+            ..base
         }));
         assert!(matches!(test_skip, PreflightDecision::SkipBackup { .. }));
 
         let test_asked = preflight_update(&input(PreflightInput {
             test_deploy: true,
             operator_requested_backup: true,
-            ..base.clone()
+            ..base
         }));
         assert_eq!(test_asked, PreflightDecision::ProceedWithBackup);
 
         let tight_test = preflight_update(&input(PreflightInput {
             test_deploy: true,
             disk_free_bytes: gib,
-            ..base.clone()
+            ..base
         }));
         assert!(matches!(tight_test, PreflightDecision::FailClosed { .. }));
 
@@ -653,7 +653,7 @@ mod tests {
             disk_free_bytes: 30 * gib,
             backup_bytes: 90 * gib,
             operator_requested_backup: true,
-            ..base.clone()
+            ..base
         }));
         assert!(
             matches!(no_room_for_copy, PreflightDecision::SkipBackup { .. }),
@@ -665,7 +665,7 @@ mod tests {
             backup_bytes: 90 * gib,
             operator_requested_backup: true,
             backup_required: true,
-            ..base.clone()
+            ..base
         }));
         assert!(matches!(required, PreflightDecision::FailClosed { .. }));
 
@@ -674,7 +674,7 @@ mod tests {
             backup_bytes: 50 * gib,
             bytes_over_budget: 60 * gib,
             operator_requested_backup: true,
-            ..base.clone()
+            ..base
         }));
         assert_eq!(
             prune,

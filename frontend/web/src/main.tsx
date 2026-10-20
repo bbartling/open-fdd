@@ -8,6 +8,8 @@ import "@fontsource/source-sans-3/700.css";
 import App from "./App";
 import "./styles/app.css";
 
+// SPA mount. React owns the tree after this call.
+// eslint-disable-next-line no-restricted-syntax -- the root element is outside React
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

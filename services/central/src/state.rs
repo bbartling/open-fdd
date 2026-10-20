@@ -387,15 +387,24 @@ impl AppState {
     #[cfg(test)]
     pub fn note_ingest_backpressure(&self, detail: &str) {
         self.ingest_backpressure.fetch_add(1, Ordering::Relaxed);
-        *self.ingest_reject.lock().unwrap() += 1;
+        *self
+            .ingest_reject
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) += 1;
         {
-            let mut buckets = self.ingest_reject_buckets.lock().unwrap();
+            let mut buckets = self
+                .ingest_reject_buckets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             *buckets
                 .entry("receipt_ledger_backpressure".into())
                 .or_insert(0) += 1;
         }
         let should_warn = {
-            let mut last = self.last_backpressure_warn.lock().unwrap();
+            let mut last = self
+                .last_backpressure_warn
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             match *last {
                 Some(prev) if prev.elapsed() < Duration::from_secs(30) => false,
                 _ => {
@@ -692,12 +701,21 @@ impl AppState {
 
     /// Record a successful ingest accept (bumps counter + last_ingest_at).
     pub fn note_ingest_ok(&self) {
-        *self.ingest_ok.lock().unwrap() += 1;
-        *self.last_ingest_at.lock().unwrap() = Some(Utc::now());
+        *self
+            .ingest_ok
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) += 1;
+        *self
+            .last_ingest_at
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Utc::now());
     }
 
     pub fn note_durable_ingest(&self) {
-        *self.last_durable_at.lock().unwrap() = Some(Utc::now());
+        *self
+            .last_durable_at
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Utc::now());
     }
 
     /// Fail-closed when authenticated HTTP concurrency is saturated (#1169).
@@ -711,7 +729,10 @@ impl AppState {
     pub fn mutation_rate_limited(&self, kind: &'static str) -> bool {
         let limit = mutation_rate_limit(kind);
         let window = Duration::from_secs(mutation_rate_window_secs());
-        let mut map = self.mutation_windows.lock().unwrap();
+        let mut map = self
+            .mutation_windows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let slots = map.entry(kind).or_default();
         let now = Instant::now();
         while slots
@@ -739,7 +760,10 @@ impl AppState {
     pub fn login_is_throttled(&self, key: &str) -> bool {
         const MAX_FAILS: u32 = 8;
         const WINDOW: Duration = Duration::from_secs(15 * 60);
-        let mut map = self.login_failures.lock().unwrap();
+        let mut map = self
+            .login_failures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Self::sweep_login_failures(&mut map, WINDOW);
         match map.get(key) {
             Some((n, at)) if *n >= MAX_FAILS && at.elapsed() < WINDOW => true,
@@ -754,7 +778,10 @@ impl AppState {
     pub fn login_record_failure(&self, key: &str) {
         const WINDOW: Duration = Duration::from_secs(15 * 60);
         const MAX_KEYS: usize = 10_000;
-        let mut map = self.login_failures.lock().unwrap();
+        let mut map = self
+            .login_failures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         Self::sweep_login_failures(&mut map, WINDOW);
         if map.len() >= MAX_KEYS && !map.contains_key(key) {
             // Bound unique spoofed keys: drop an arbitrary expired-or-oldest entry.
@@ -776,7 +803,10 @@ impl AppState {
     }
 
     pub fn login_record_success(&self, key: &str) {
-        self.login_failures.lock().unwrap().remove(key);
+        self.login_failures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(key);
     }
 
     fn sweep_login_failures(map: &mut HashMap<String, (u32, Instant)>, window: Duration) {
@@ -1055,6 +1085,10 @@ fn compact_resident_committed(receipt: &mut IngestReceipt) {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "TelemetryEnvelope is a plain Serialize struct; to_vec fails only if that serializer breaks, and an empty digest would collide in the receipt journal"
+)]
 fn envelope_digest(envelope: &TelemetryEnvelope) -> String {
     let bytes = serde_json::to_vec(envelope).expect("TelemetryEnvelope is serializable");
     hex::encode(Sha256::digest(bytes))

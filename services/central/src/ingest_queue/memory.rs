@@ -104,7 +104,7 @@ impl MemoryStore {
             counts: JobCounts::default(),
         };
         let idx = inner.jobs.len();
-        inner.by_key.insert(key.clone(), idx);
+        inner.by_key.insert(key, idx);
         inner.jobs.push(StoredJob { view: view.clone() });
         let _ = now;
         Ok(EnqueueOutcome::Created(view))
@@ -592,7 +592,11 @@ fn budget_allows(inner: &mut Inner, portal: &str, now: DateTime<Utc>) -> bool {
     portal_claimable(inner, portal, now)
 }
 
-fn refresh_budget(inner: &mut Inner, portal: &str, now: DateTime<Utc>) {
+fn refresh_budget<'a>(
+    inner: &'a mut Inner,
+    portal: &str,
+    now: DateTime<Utc>,
+) -> &'a mut PortalBudget {
     let defaults = inner.defaults;
     let budget = inner
         .budgets
@@ -613,6 +617,7 @@ fn refresh_budget(inner: &mut Inner, portal: &str, now: DateTime<Utc>) {
         budget.tokens = budget.max_per_minute;
         budget.window_start = now;
     }
+    budget
 }
 
 fn consume_token(inner: &mut Inner, portal: &str, now: DateTime<Utc>) {
@@ -624,11 +629,7 @@ fn consume_token(inner: &mut Inner, portal: &str, now: DateTime<Utc>) {
 }
 
 fn budget_mut<'a>(inner: &'a mut Inner, portal: &str, now: DateTime<Utc>) -> &'a mut PortalBudget {
-    refresh_budget(inner, portal, now);
-    inner
-        .budgets
-        .get_mut(portal)
-        .expect("budget inserted by refresh")
+    refresh_budget(inner, portal, now)
 }
 
 fn in_flight_count(inner: &Inner, portal: &str, now: DateTime<Utc>) -> u32 {

@@ -104,12 +104,10 @@ fn lookup(property_type: &str) -> (PeerRow, &'static str) {
     if let Some(r) = PEERS.iter().find(|r| r.property_type == norm) {
         return (*r, "exact");
     }
-    let fb = PEERS
-        .iter()
-        .find(|r| r.property_type == FALLBACK)
-        .copied()
-        .expect("commercial_all peer row");
-    (fb, "fallback_commercial_all")
+    match PEERS.iter().find(|r| r.property_type == FALLBACK).copied() {
+        Some(fb) => (fb, "fallback_commercial_all"),
+        None => (PEERS[0], "fallback_commercial_all"),
+    }
 }
 
 /// Compare a site EUI (kBtu/ft²·yr) against its peer-group band.

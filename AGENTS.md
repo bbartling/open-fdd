@@ -54,14 +54,21 @@ On Railway: set `OPENFDD_JWT_SECRET`, `OPENFDD_ADMIN_PASSWORD`, and `OPENFDD_AGE
 
 Discover routes: `curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/api/agent/tools | jq '.tools | length'`
 
-## Rust hygiene (agents)
+## Rust and React best practices (agents)
 
-When changing Rust in this repo (full rules: [`openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md`](openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md)):
+Product Rust and the React SPA follow one review standard. Coding and review agents read it before editing or approving either tree.
+
+- **Rust:** [`openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md`](openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md) — safety, async locks, API shape, Clippy denies. Suppressions: [`openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md`](openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md).
+- **React:** [`openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md`](openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md) — render cost, hooks, fetch abort, TypeScript, accessibility. Screen rules stay in [`openfdd-react-spa`](openfdd_agent_spec/skills/openfdd-react-spa/SKILL.md).
+- **Review skill:** [`openfdd-code-review-rust-react`](openfdd_agent_spec/skills/openfdd-code-review-rust-react/SKILL.md).
+- **Product surface:** NF portal API and CSV ingest only. No legacy protocol code (MQTT, BACnet, Haystack, Modbus, fieldbus, edge wire) and no dual-write paths in product code. Archived code lives in `archive/` and is not a workspace member.
+
+When changing Rust:
 
 - **Delete** unused items (`dead_code`) — do not keep “just in case”; Git retains history.
 - **Remove** `#[allow(...)]` / `#![allow(...)]`; fix the cause. Prefer `_` / `_guard`, `?`, or smallest-scope `#[expect(...)]` with a one-line constraint comment. Never crate-wide `#![allow]`.
 - Never silently discard `Result`/`Option`; prefer `?` or explicit match/log. Last resort: `let _ = …;` + why.
-- Prefer `?` / combinators over `.unwrap()` on production paths.
+- Prefer `?` / combinators over `.unwrap()` on production paths. Tests may unwrap and expect (`allow-unwrap-in-tests` and `allow-expect-in-tests`). Product crates deny `clippy::unwrap_used` and `clippy::expect_used`.
 - Historian: **Timescale** (`OPENFDD_DATABASE_URL` / `OPENFDD_HISTORIAN=timescale`) is canonical ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md), [`TIMESCALE_WAVE_X.md`](docs/operations/TIMESCALE_WAVE_X.md)). No dual-write. Do not resurrect DataFusion/Parquet/Arrow on the product path (`legacy-*` features stay OFF). Feather dual-write remains retired.
 
 Patch-cycle train after Plans 1–4: log gate FAILs in [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) **before** fixing → tiny rev bump (product only) → GHCR `sha-*` → re-pin → smoke → re-stress affected gate → move row to patched. Local synthetic CSV FDD and Railway F1 are separate stress tiers (see [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md) § Ops patch cycle).

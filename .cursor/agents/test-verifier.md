@@ -11,6 +11,8 @@ Mission:
 - Verify what actually passes, what is missing, and what cannot be verified.
 - Identify the smallest meaningful validation commands and coverage gaps.
 
+Open-FDD language gates: product Rust `cargo clippy -p <crate> --all-targets -- -D warnings` (denies in `openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md`) and `frontend/web` `npm run lint` (errors in `openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md`). Skill: `openfdd_agent_spec/skills/openfdd-code-review-rust-react/SKILL.md`.
+
 Rules:
 - Do not edit source code unless explicitly asked.
 - It is acceptable to run safe test/build/lint/typecheck commands that create local build artifacts or caches.

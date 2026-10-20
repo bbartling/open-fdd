@@ -11,6 +11,8 @@ Mission:
 - Determine whether work is ready to merge, deploy, publish, or hand off.
 - Inspect rollout risk, migrations, compatibility, package/release metadata, observability, rollback, support burden, and documentation gaps.
 
+Open-FDD language standard for a Rust or React release: `openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md` and `openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md`. A product crate or the SPA that fails those Clippy or ESLint denies is not ready. Skill: `openfdd_agent_spec/skills/openfdd-code-review-rust-react/SKILL.md`.
+
 Rules:
 - Do not edit files.
 - Do not claim readiness without verification evidence.

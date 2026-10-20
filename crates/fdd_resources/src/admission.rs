@@ -69,6 +69,10 @@ pub fn try_acquire_compute(class: ComputeClass) -> Option<ComputePermit> {
 }
 
 /// Async admission (waits). Prefer `try_acquire_compute` for HTTP 429 paths.
+#[expect(
+    clippy::expect_used,
+    reason = "the process-wide semaphore is never closed; acquire_owned errors only if every permit and the semaphore were dropped"
+)]
 pub async fn acquire_compute(class: ComputeClass) -> ComputePermit {
     let sem = global_semaphore().clone();
     let permit = sem

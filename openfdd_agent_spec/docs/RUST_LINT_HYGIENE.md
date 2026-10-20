@@ -2,6 +2,8 @@
 
 Eliminate suppressions; fix the cause. CI uses `-D warnings` — treat warnings as failures.
 
+The review standard (what to flag, and the Clippy denies) is [`RUST_BEST_PRACTICES.md`](RUST_BEST_PRACTICES.md). This file is only how to suppress a lint that must remain.
+
 ## 1. Scan and remove
 
 Scan `#[allow(...)]` / `#![allow(...)]` — remove and fix:
@@ -27,6 +29,8 @@ Scan `#[allow(...)]` / `#![allow(...)]` — remove and fix:
 
 ## Related
 
+- Review standard: [`RUST_BEST_PRACTICES.md`](RUST_BEST_PRACTICES.md)
+- React standard: [`REACT_BEST_PRACTICES.md`](REACT_BEST_PRACTICES.md)
 - Root [`AGENTS.md`](../../AGENTS.md) § Rust hygiene
 - Version bumps: [`VERSIONING.md`](VERSIONING.md)
 - Patch-cycle BUG_REPORT: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md)

@@ -11,6 +11,8 @@ description: >-
 ## When to use
 
 - Changing `frontend/web` pages, API clients, or Plotly builders
+
+How the code is written (hooks, keys, abort, TypeScript, accessibility) is [`docs/REACT_BEST_PRACTICES.md`](../../docs/REACT_BEST_PRACTICES.md). Review with [`openfdd-code-review-rust-react`](../openfdd-code-review-rust-react/SKILL.md). This skill is the product screen contract.
 - Overview / FDD / RCx chart parity vs vibe19 **presentation** (colors, axes)
 - Operations MQTT monitor / OT strip, Sites inventory
 - Auth/login hygiene for internet-facing UI
@@ -116,4 +118,5 @@ description: >-
 - [`openfdd-rcx-fdd-plot-poll`](../openfdd-rcx-fdd-plot-poll/SKILL.md) — empty RCx/FDD screens
 - [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — roles behind a chart
 - [`openfdd-architecture`](../openfdd-architecture/SKILL.md) — SPA versus central
+- [`openfdd-code-review-rust-react`](../openfdd-code-review-rust-react/SKILL.md) — Rust and React review standard
 - [`openfdd-typst-rcx-report`](../openfdd-typst-rcx-report/SKILL.md) — offline PDF using the same chart helpers

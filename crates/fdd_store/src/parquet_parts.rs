@@ -100,6 +100,10 @@ impl ParquetPartWriter {
     ///
     /// Existing H2 callers/tests are local-only. Backend-neutral callers should
     /// not depend on this accessor.
+    #[expect(
+        clippy::expect_used,
+        reason = "storage() is the local-writer accessor; a remote backend has no LocalStorage and the signature stays &LocalStorage"
+    )]
     pub fn storage(&self) -> &LocalStorage {
         self.local_storage
             .as_ref()

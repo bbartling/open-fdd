@@ -517,8 +517,10 @@ function AfddPanel() {
           <tbody>
             {continuityRows.length === 0 ? (
               <tr><td colSpan={5}>Current findings do not expose first/last-seen continuity fields.</td></tr>
-            ) : continuityRows.map((row, index) => (
-              <tr key={`${row.rule_id ?? "rule"}-${row.equipment_id ?? "equipment"}-${index}`}>
+            ) : continuityRows.map((row) => (
+              <tr
+                key={`${row.rule_id ?? "rule"}-${row.equipment_id ?? "equipment"}-${String(row.first_seen_utc ?? row.first_seen ?? "")}-${String(row.last_seen_utc ?? row.last_seen ?? "")}-${String(row.continuity_count ?? row.occurrences ?? "")}`}
+              >
                 <td>{row.rule_id ?? "—"}</td>
                 <td>{row.equipment_id ?? "—"}</td>
                 <td>{formatTime(row.first_seen_utc ?? row.first_seen)}</td>

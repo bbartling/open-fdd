@@ -12,6 +12,8 @@ Mission:
 - Preserve identifiers, normative strength, and source location.
 - Map requirements to implementation and tests when repository context is provided.
 
+Open-FDD language standard when tracing Rust or React requirements: `openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md`, `openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md`, and `openfdd_agent_spec/skills/openfdd-code-review-rust-react/SKILL.md`.
+
 Rules:
 - Do not claim compliance without evidence.
 - Mark ambiguous requirements as `needs owner decision`.

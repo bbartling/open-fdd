@@ -112,7 +112,7 @@ export function RulesPage() {
     } finally {
       setLoading(false);
     }
-  }, [tuneRuleId]);
+  }, [buildingId, tuneRuleId]);
 
   useEffect(() => {
     void refresh();

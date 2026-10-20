@@ -44,3 +44,23 @@ sha2 = "0.10"
 thiserror = "2"
 url = "2"
 walkdir = "2"
+
+# Product crates opt in with `lints.workspace = true`.
+# OT archive trees (edge, openfdd_mqtt, fieldbus) do not.
+# Standard: openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md
+[workspace.lints.rust]
+# Tombstone cfgs remain on retired branches until those call sites are deleted.
+unexpected_cfgs = { level = "allow", check-cfg = [
+  'cfg(feature, values("legacy-datafusion", "legacy-parquet"))',
+] }
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+await_holding_lock = "deny"
+ptr_arg = "deny"
+redundant_clone = "deny"
+rc_buffer = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+dbg_macro = "deny"

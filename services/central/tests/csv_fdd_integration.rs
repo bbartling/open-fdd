@@ -1,4 +1,12 @@
 //! Central HTTP integration: CSV upload → parquet ingest → FDD registry run.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::dbg_macro,
+    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
+)]
 //!
 //! Wave-X Soft-OPEN: product FDD is Timescale `sql/fdd` only. Without
 //! `OPENFDD_DATABASE_URL`, `/api/fdd/run` must fail closed (no dual-write DF).

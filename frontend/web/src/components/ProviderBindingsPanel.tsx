@@ -84,8 +84,10 @@ export function ProviderBindingsPanel({ buildingId }: { buildingId: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {view.bindings.map((binding, index) => (
-                    <tr key={`${binding.provider_point_id ?? "point"}-${index}`}>
+                  {view.bindings.map((binding) => (
+                    <tr
+                      key={`${binding.equipment_id ?? ""}-${binding.role ?? ""}-${binding.provider_point_id ?? ""}-${binding.selection_status ?? ""}`}
+                    >
                       <td>{binding.equipment_id || "—"}</td>
                       <td>{binding.equip_type || "—"}</td>
                       <td>{binding.role || "—"}</td>

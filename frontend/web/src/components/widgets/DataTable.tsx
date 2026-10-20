@@ -83,12 +83,15 @@ export function DataTable<T extends Record<string, unknown>>({
                 <td colSpan={columns.length}>No data</td>
               </tr>
             ) : (
-              rows.map((row, rowIdx) => {
+              rows.map((row) => {
                 const extra = rowClassName?.(row);
                 const broken = extra?.match(/broken-(\d)/)?.[1];
+                const rowKey = columns
+                  .map((col) => String(row[col.key] ?? ""))
+                  .join("\u001f");
                 return (
                   <tr
-                    key={rowIdx}
+                    key={rowKey}
                     className={extra || undefined}
                     data-broken={broken ?? undefined}
                   >

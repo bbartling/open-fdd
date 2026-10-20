@@ -158,7 +158,9 @@ fn merge_stream_existing(
         // Emit any incoming rows that sort before this existing timestamp.
         while let Some((in_ts, _)) = incoming_iter.peek() {
             if in_ts.as_str() < ts.as_str() {
-                let (in_ts, in_row) = incoming_iter.next().expect("peeked");
+                let Some((in_ts, in_row)) = incoming_iter.next() else {
+                    break;
+                };
                 write_aligned_row(&mut writer, &headers, incoming_headers, &in_row, report)?;
                 report.rows_added += 1;
                 track_span(report, &in_ts);
@@ -169,11 +171,12 @@ fn merge_stream_existing(
 
         if let Some((in_ts, _)) = incoming_iter.peek() {
             if in_ts == &ts {
-                let (in_ts, in_row) = incoming_iter.next().expect("peeked");
-                write_aligned_row(&mut writer, &headers, incoming_headers, &in_row, report)?;
-                report.rows_duped += 1;
-                track_span(report, &in_ts);
-                continue;
+                if let Some((in_ts, in_row)) = incoming_iter.next() {
+                    write_aligned_row(&mut writer, &headers, incoming_headers, &in_row, report)?;
+                    report.rows_duped += 1;
+                    track_span(report, &in_ts);
+                    continue;
+                }
             }
         }
 

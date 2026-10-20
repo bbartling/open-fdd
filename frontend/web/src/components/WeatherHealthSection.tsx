@@ -156,7 +156,7 @@ export function WeatherHealthSection({
     return () => {
       cancelled = true;
     };
-  }, [buildingId, refreshToken, families.hasWeather, refresh]);
+  }, [buildingId, refreshToken, families.hasWeather, refresh, equipment]);
 
   return (
     <section className="overview-section" data-testid="overview-weather-health">

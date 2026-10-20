@@ -13,11 +13,8 @@ path = "src/main.rs"
 [features]
 default = []
 
-[lints.rust]
-# Tombstone cfgs remain on retired branches until those call sites are deleted.
-unexpected_cfgs = { level = "allow", check-cfg = [
-  'cfg(feature, values("legacy-datafusion", "legacy-parquet"))',
-] }
+[lints]
+workspace = true
 
 [dependencies]
 openfdd_contracts = { path = "../../crates/openfdd_contracts", features = ["openapi"] }

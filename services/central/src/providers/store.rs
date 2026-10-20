@@ -558,13 +558,16 @@ impl MemoryInner {
     }
 
     fn commit(&mut self, job_id: &str, token: i64, owner: &str, patch: &CommitPatch) -> bool {
-        let Some(job) = self.jobs.get(job_id) else {
-            return false;
-        };
-        if !fence_holds(job, token, owner, patch.now) {
+        let allowed = self
+            .jobs
+            .get(job_id)
+            .is_some_and(|job| fence_holds(job, token, owner, patch.now));
+        if !allowed {
             return false;
         }
-        let job = self.jobs.get_mut(job_id).expect("job present");
+        let Some(job) = self.jobs.get_mut(job_id) else {
+            return false;
+        };
         job.state = JobState::Committed;
         job.fetched_count = patch.receipt.fetched_count;
         job.accepted_count = patch.receipt.accepted_count;
@@ -583,13 +586,16 @@ impl MemoryInner {
     }
 
     fn fail(&mut self, job_id: &str, token: i64, owner: &str, patch: &FailPatch) -> bool {
-        let Some(job) = self.jobs.get(job_id) else {
-            return false;
-        };
-        if !fence_holds(job, token, owner, patch.now) {
+        let allowed = self
+            .jobs
+            .get(job_id)
+            .is_some_and(|job| fence_holds(job, token, owner, patch.now));
+        if !allowed {
             return false;
         }
-        let job = self.jobs.get_mut(job_id).expect("job present");
+        let Some(job) = self.jobs.get_mut(job_id) else {
+            return false;
+        };
         job.state = patch.state;
         job.not_before = patch.not_before;
         job.safe_error_code = Some(patch.safe_error_code.clone());

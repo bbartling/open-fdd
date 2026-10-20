@@ -1,4 +1,12 @@
 //! Milestone C0 — Jobs REST adversarial smoke (spawn real binary).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::dbg_macro,
+    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
+)]
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};

@@ -152,9 +152,9 @@ impl InFlightGuard {
         let cancel = token.flag();
         register_token(&cancel);
         let stop = Arc::new(AtomicBool::new(false));
-        let cancel_watch = cancel.clone();
+        let cancel_watch = cancel;
         let stop_watch = stop.clone();
-        let class_watch = class.clone();
+        let class_watch = class;
         let interval = Duration::from_millis(sample_interval_ms());
         let watchdog = tokio::spawn(async move {
             let mut prev_current: Option<u64> = None;

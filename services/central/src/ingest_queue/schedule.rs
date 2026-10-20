@@ -57,10 +57,12 @@ pub fn due_windows(
 }
 
 fn floor_hour(ts: DateTime<Utc>) -> DateTime<Utc> {
-    ts.date_naive()
-        .and_hms_opt(ts.time().hour(), 0, 0)
-        .unwrap_or_else(|| ts.date_naive().and_hms_opt(0, 0, 0).expect("midnight"))
-        .and_utc()
+    let date = ts.date_naive();
+    let hour = ts.time().hour();
+    date.and_hms_opt(hour, 0, 0)
+        .or_else(|| date.and_hms_opt(0, 0, 0))
+        .map(|naive| naive.and_utc())
+        .unwrap_or(ts)
 }
 
 fn stagger_secs(device_id: &str, spread: u64) -> u64 {

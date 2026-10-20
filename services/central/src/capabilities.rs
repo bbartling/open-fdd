@@ -758,8 +758,7 @@ fn empty_report(error: Option<String>) -> CapabilitiesAggregateResponse {
         service_identity: None,
         observed_at: Utc::now(),
     };
-    let report = aggregate_report(central.clone(), Vec::new());
-    let mut report = report;
+    let mut report = aggregate_report(central, Vec::new());
     report.diagnostic = error;
     report
 }
@@ -1425,7 +1424,7 @@ mod tests {
             Some("priority slot unavailable")
         );
 
-        let mut foreign_scanner = sanitized.clone();
+        let mut foreign_scanner = sanitized;
         foreign_scanner.scanner.scope.edge_id = "edge-foreign".into();
         assert!(sanitize_public_priority_history(foreign_scanner, &request).is_err());
     }

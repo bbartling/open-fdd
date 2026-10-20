@@ -66,6 +66,7 @@ retest. Do not confuse those with this engineering OS.
 5. **Internet-facing auth/UI hygiene:** Never put bench/dev secrets, credential file paths, default passwords, or JWT dumps on login or other product surfaces. Generic login errors only.
 6. Test containers on **`OPENFDD_IMAGE_TAG=nightly`**, but **pin/run `sha-*`** per [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md).
 6b. **Rust lint hygiene:** eliminate `#[allow]` / `#![allow]` — see [`docs/RUST_LINT_HYGIENE.md`](docs/RUST_LINT_HYGIENE.md). Prefer fix / `_` / `?` / smallest-scope `#[expect]` + comment; never crate-wide `#![allow]`.
+6c. **Rust and React review standard (canonical):** product Rust and `frontend/web` follow [`docs/RUST_BEST_PRACTICES.md`](docs/RUST_BEST_PRACTICES.md) and [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md). Review with [`skills/openfdd-code-review-rust-react/SKILL.md`](skills/openfdd-code-review-rust-react/SKILL.md). Each finding is a brief why plus an idiomatic snippet. Product crates deny `clippy::unwrap_used`, `clippy::expect_used`, `clippy::await_holding_lock`, `clippy::ptr_arg`, `clippy::redundant_clone`, `clippy::rc_buffer`, `clippy::print_stdout`, `clippy::print_stderr`, and `clippy::dbg_macro` (`clippy.toml` sets `allow-unwrap-in-tests` and `allow-expect-in-tests`). The SPA lints those docs name are ESLint errors. Product code is the NF portal API and CSV ingest only. No legacy protocol code (MQTT, BACnet, Haystack, Modbus, fieldbus, edge) and no dual-write paths in product code. Archived code lives in `archive/` and is never built. Do not clean or extend `archive/`. Protocol crates are not workspace members. `ingest` and `live_historian` are the portal and CSV writer and follow the deny set.
 7. Playground images: `ghcr.io/bbartling/vibe19:develop`, `vibe20:develop` (external).
 8. `edge/` and `os/` are future concepts — never delete.
 9. Bounded PRs only — see [`PR_PROTOCOL.md`](PR_PROTOCOL.md).
@@ -78,7 +79,7 @@ retest. Do not confuse those with this engineering OS.
 16. When blocked (secrets, permissions), finish non-blocked work and record the exact error.
 17. Bound each PR to its declared scope.
 18. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest.
-19. For `frontend/web` work: follow [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md).
+19. For `frontend/web` work: follow [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) and [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md). Review diffs with [`openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md).
 20. Central product image is **debian + Rust binaries only** — no Python. **Engineering & ML bundle** export is Rust-first (`POST /api/jobs/{id}/exports`, schema `openfdd_engineering_bundle_v1`). Offline Python parity stays in `tools/wattlab_export/` (`OPENFDD_WATTLAB_PYTHON_EXPORT=1` bench only). `/wattlab/dumps` is a deprecated alias.
 21. **Site lock:** Overview + sidebar Active site are the only editors of `?site=`. `SectionTabs` (and sidebar App pages) must `navigate` with `hrefWithSession` so `site` + `eq` survive. FDD / RCx / Results / **Dump** show a locked `zip:BUILDING_*` caption — no Building `<Select>`.
 22. **FDD Plots = vibe19 `rule_result_chart`:** auto-load series; last y-axis title is `fault`; `confirmed_fault` is the last trace on the bottom domain (`domain[0] < 0.4`). A successful rule run with an empty overlay is a bug (fail the test), not a soft banner.
@@ -189,6 +190,7 @@ Author only the files in this table. Sibling links inside each skill point at th
 | --- | --- |
 | [`openfdd-architecture`](skills/openfdd-architecture/SKILL.md) | Ownership / engine boundaries |
 | [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) | Product SPA (`frontend/web`) |
+| [`openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md) | Rust + React best-practice review (`RUST_BEST_PRACTICES.md`, `REACT_BEST_PRACTICES.md`) |
 | [`openfdd-package-mapping`](skills/openfdd-package-mapping/SKILL.md) | Zip / `equipType` / Haystack→SQL / empty charts |
 | [`openfdd-rcx-fdd-plot-poll`](skills/openfdd-rcx-fdd-plot-poll/SKILL.md) | Blank RCx/FDD → roles → fieldbus poll gaps (no TEC / Modbus gateway) |
 | [`openfdd-mt-security`](skills/openfdd-mt-security/SKILL.md) | Pre-auth disclosure, tenant ACL, Kali disposition, CSP/`security.txt` |

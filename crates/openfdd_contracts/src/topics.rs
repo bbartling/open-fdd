@@ -84,6 +84,10 @@ impl TopicBuilder {
         }
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "telemetry, metadata, discovery, commands, and acks are protocol-scoped; changing topic() to Result would change the MQTT topic contract"
+    )]
     pub fn topic(&self, kind: TopicKind, protocol: Option<Protocol>) -> String {
         let base = self.base();
         match kind {

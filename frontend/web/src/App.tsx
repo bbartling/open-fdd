@@ -1,18 +1,16 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { AuthGate } from "./components/AuthGate";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 import { HomePage } from "./pages/HomePage";
 import { JobsPage } from "./pages/JobsPage";
 import { UploadPage } from "./pages/UploadPage";
 import { MappingPage } from "./pages/MappingPage";
 import { ActionsPage } from "./pages/ActionsPage";
 import { FindingsPage } from "./pages/FindingsPage";
-import { ReportsPage } from "./pages/ReportsPage";
-import { MeteringPage } from "./pages/MeteringPage";
-import { InspectPage } from "./pages/InspectPage";
 import { ExportPage } from "./pages/WattLabPage";
 import { AuthPage } from "./pages/AuthPage";
 import { SitesPage } from "./pages/SitesPage";
-import { RcxPage } from "./pages/RcxPage";
 import { OperationsPage } from "./pages/OperationsPage";
 import { AdminPage } from "./pages/AdminPage";
 import { REPORTS_API_ROOT, REPORTS_ROUTE } from "./api/reportsApi";
@@ -21,8 +19,35 @@ import { REPORTS_API_ROOT, REPORTS_ROUTE } from "./api/reportsApi";
 void REPORTS_ROUTE;
 void REPORTS_API_ROOT;
 
-function gated(element: React.ReactNode) {
-  return <AuthGate>{element}</AuthGate>;
+const ReportsPage = lazy(() =>
+  import("./pages/ReportsPage").then((m) => ({ default: m.ReportsPage })),
+);
+const RcxPage = lazy(() =>
+  import("./pages/RcxPage").then((m) => ({ default: m.RcxPage })),
+);
+const InspectPage = lazy(() =>
+  import("./pages/InspectPage").then((m) => ({ default: m.InspectPage })),
+);
+const MeteringPage = lazy(() =>
+  import("./pages/MeteringPage").then((m) => ({ default: m.MeteringPage })),
+);
+
+function PageFallback() {
+  return (
+    <div role="status" className="muted" data-testid="route-loading">
+      Loading
+    </div>
+  );
+}
+
+function gated(element: ReactNode) {
+  return (
+    <AuthGate>
+      <RouteErrorBoundary>
+        <Suspense fallback={<PageFallback />}>{element}</Suspense>
+      </RouteErrorBoundary>
+    </AuthGate>
+  );
 }
 
 export default function App() {

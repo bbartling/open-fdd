@@ -168,7 +168,9 @@ pub fn derive_window_row_params(params: &HashMap<String, String>) -> HashMap<Str
         if !minutes.is_finite() || minutes < 0.0 {
             continue;
         }
-        let prefix = key.strip_suffix("_MIN").unwrap();
+        let Some(prefix) = key.strip_suffix("_MIN") else {
+            continue;
+        };
         let rows = if minutes <= 0.0 {
             1_i64
         } else {

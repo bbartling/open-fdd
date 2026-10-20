@@ -44,6 +44,10 @@ pub fn observe_latest_sample(
         reason = "conformance tests read one ledger axis without comparing the whole snapshot"
     )
 )]
+#[expect(
+    clippy::expect_used,
+    reason = "assemble inserts every AxisId; a missing axis is a programming bug, and Option would change the test helper contract"
+)]
 pub fn axis(ledger: &CoverageLedger, id: AxisId) -> &LedgerAxis {
     ledger
         .axes
