@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 
 use chrono::{DateTime, Datelike, Utc};
@@ -102,19 +103,20 @@ impl NfPortalDriver {
         if self.anonymous {
             return Ok(());
         }
+        let Some(credential_tag) = self.credential_tag() else {
+            return Err(ProviderError::auth_not_configured());
+        };
         if self.token_fresh() {
             return Ok(());
         }
-        if let Some((token, expires_at)) = load_cached_token(&self.provider_id, &self.endpoint) {
+        if let Some((token, expires_at)) =
+            load_cached_token(&self.provider_id, &self.endpoint, credential_tag)
+        {
             self.token = Some(token);
             self.token_expires_at = Some(expires_at);
             return Ok(());
         }
-        self.authenticate_force().await?;
-        if let (Some(token), Some(expires_at)) = (&self.token, self.token_expires_at) {
-            store_cached_token(&self.provider_id, &self.endpoint, token.clone(), expires_at);
-        }
-        Ok(())
+        self.authenticate_force().await
     }
 
     async fn authenticate_force(&mut self) -> Result<(), ProviderError> {
@@ -146,7 +148,31 @@ impl NfPortalDriver {
         } else {
             Some(Utc::now() + chrono::Duration::seconds(ttl))
         };
+        if let (Some(tag), Some(cached), Some(expires_at)) = (
+            self.credential_tag(),
+            self.token.clone(),
+            self.token_expires_at,
+        ) {
+            store_cached_token(&self.provider_id, &self.endpoint, tag, cached, expires_at);
+        }
         Ok(())
+    }
+
+    fn credential_tag(&self) -> Option<u64> {
+        let id = self
+            .client_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?;
+        let secret = self
+            .client_secret
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())?;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        id.hash(&mut hasher);
+        secret.hash(&mut hasher);
+        Some(hasher.finish())
     }
 
     pub async fn query_points(
@@ -267,6 +293,9 @@ impl NfPortalDriver {
                 && attempt + 1 < attempts
                 && !self.anonymous
             {
+                if let Some(tag) = self.credential_tag() {
+                    forget_cached_token(&self.provider_id, &self.endpoint, tag);
+                }
                 self.token = None;
                 self.token_expires_at = None;
                 continue;
@@ -394,15 +423,19 @@ fn portal_token_cache() -> &'static Mutex<HashMap<String, CachedPortalToken>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn portal_cache_key(provider_id: &str, endpoint: &str) -> String {
-    format!("{provider_id}\n{endpoint}")
+fn portal_cache_key(provider_id: &str, endpoint: &str, credential_tag: u64) -> String {
+    format!("{provider_id}\n{endpoint}\n{credential_tag:x}")
 }
 
-fn load_cached_token(provider_id: &str, endpoint: &str) -> Option<(String, DateTime<Utc>)> {
+fn load_cached_token(
+    provider_id: &str,
+    endpoint: &str,
+    credential_tag: u64,
+) -> Option<(String, DateTime<Utc>)> {
     let guard = portal_token_cache()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let entry = guard.get(&portal_cache_key(provider_id, endpoint))?;
+    let entry = guard.get(&portal_cache_key(provider_id, endpoint, credential_tag))?;
     if Utc::now() + chrono::Duration::seconds(60) < entry.expires_at {
         Some((entry.token.clone(), entry.expires_at))
     } else {
@@ -410,7 +443,13 @@ fn load_cached_token(provider_id: &str, endpoint: &str) -> Option<(String, DateT
     }
 }
 
-fn store_cached_token(provider_id: &str, endpoint: &str, token: String, expires_at: DateTime<Utc>) {
+fn store_cached_token(
+    provider_id: &str,
+    endpoint: &str,
+    credential_tag: u64,
+    token: String,
+    expires_at: DateTime<Utc>,
+) {
     if token.is_empty() {
         return;
     }
@@ -418,9 +457,16 @@ fn store_cached_token(provider_id: &str, endpoint: &str, token: String, expires_
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     guard.insert(
-        portal_cache_key(provider_id, endpoint),
+        portal_cache_key(provider_id, endpoint, credential_tag),
         CachedPortalToken { token, expires_at },
     );
+}
+
+fn forget_cached_token(provider_id: &str, endpoint: &str, credential_tag: u64) {
+    let mut guard = portal_token_cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    guard.remove(&portal_cache_key(provider_id, endpoint, credential_tag));
 }
 
 pub fn parse_token_json(text: &str) -> Result<(String, Option<i64>), ProviderError> {
@@ -852,6 +898,32 @@ mod tests {
         let mut second = lab_driver(port, "secret", HttpLimits::default());
         second.authenticate().await.unwrap();
         assert!(second.token_fresh());
+        let mut rotated = NfPortalDriver::new(
+            "nf:test",
+            format!("http://127.0.0.1:{port}"),
+            Some("lab-id".into()),
+            Some("other-secret".into()),
+            false,
+            HttpLimits::default(),
+        )
+        .unwrap();
+        let err = rotated.authenticate().await.unwrap_err();
+        assert!(err.to_string().contains("auth") || err.to_string().contains("transport"));
+        let mut missing = NfPortalDriver::new(
+            "nf:test",
+            format!("http://127.0.0.1:{port}"),
+            None,
+            None,
+            false,
+            HttpLimits::default(),
+        )
+        .unwrap();
+        assert!(missing
+            .authenticate()
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("auth_not_configured"));
     }
 
     #[tokio::test]
