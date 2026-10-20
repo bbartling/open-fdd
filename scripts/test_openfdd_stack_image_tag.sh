@@ -18,8 +18,9 @@ openfdd_stack_export_image_env
 
 [[ "$OPENFDD_CENTRAL_IMAGE" == "ghcr.io/bbartling/openfdd-central:sha-deadbeef" ]]
 [[ "$OPENFDD_WEB_IMAGE" == "ghcr.io/bbartling/openfdd-web:sha-deadbeef" ]]
-[[ "$OPENFDD_MQTT_IMAGE" == "ghcr.io/bbartling/openfdd-mqtt:sha-deadbeef" ]]
-[[ "$OPENFDD_FIELDBUS_IMAGE" == "ghcr.io/bbartling/openfdd-fieldbus:sha-deadbeef" ]]
+# Archived broker and fieldbus images are not retagged by the product exporter.
+[[ "$OPENFDD_MQTT_IMAGE" == "ghcr.io/bbartling/openfdd-mqtt:nightly" ]]
+[[ "$OPENFDD_FIELDBUS_IMAGE" == "ghcr.io/bbartling/openfdd-fieldbus:nightly" ]]
 [[ "$OPENFDD_MCP_IMAGE" == "ghcr.io/bbartling/openfdd-mcp:sha-deadbeef" ]]
 
 # Custom non-GHCR override preserved when IMAGE_TAG set.
@@ -35,7 +36,7 @@ unset OPENFDD_MQTT_IMAGE
 export OPENFDD_CENTRAL_IMAGE=registry.example/openfdd-central:dev
 openfdd_stack_export_image_env
 [[ "$OPENFDD_CENTRAL_IMAGE" == "registry.example/openfdd-central:dev" ]]
-[[ "$OPENFDD_MQTT_IMAGE" == "ghcr.io/bbartling/openfdd-mqtt:nightly" ]]
+[[ -z "${OPENFDD_MQTT_IMAGE:-}" ]]
 
 echo "PASS openfdd_stack_export_image_env tip pin + custom override"
 

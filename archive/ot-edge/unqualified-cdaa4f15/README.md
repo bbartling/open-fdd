@@ -1,5 +1,10 @@
 # OT edge archive — unqualified snapshot `unqualified-cdaa4f15`
 
+The later live OT tree (fieldbus, broker, drivers, compose, CI) now lives in
+[`../unmaintained/`](../unmaintained/README.md). This directory stays the
+checksummed pin of commit `cdaa4f15`. Do not edit `source/` or
+`CHECKSUMS.sha256`. Where the trees overlap, `unmaintained/` is the newer copy.
+
 This directory is a source snapshot of the BACnet, Modbus, Haystack wire, and MQTTS
 broker pieces that 4.0 no longer launches by default. It is **not** a verified
 freeze. There is no git tag `ot-mqtt-fieldbus-last-good-*` in this clone, and no
@@ -36,13 +41,9 @@ lock is not rewritten. A container boot was **not** run.
 
 ## Semantic boundary
 
-Live `open_fdd_edge_prototype` keeps Haystack HTTP and Modbus clients behind the
-`ot-transport` feature. That feature is the crate default so the archived edge
-binary still builds. `openfdd-central` depends on the crate with
-`default-features = false`, so the product library does not link those clients.
-Live `services/fieldbus` stays on disk for the historical Dockerfiles and is
-**excluded** from the default Cargo workspace. The split gate compiles this
-snapshot, not the product workspace.
+The product `edge/` crate is the CSV/NF role and RDF library. Protocol clients
+and the edge process are in `../unmaintained/`. `openfdd-central` does not link
+`openfdd_mqtt`. This snapshot's `source/` is frozen and is not the product build.
 
 ## 4.0 product path
 
@@ -50,14 +51,8 @@ snapshot, not the product workspace.
 ./scripts/openfdd_stack_up.sh portal
 ```
 
-`portal` is central + React web + Timescale. It does not start MQTT or fieldbus.
-Central MQTT ingest stays off unless **both** `OPENFDD_MQTT_ENABLED=1` and
-`OPENFDD_OT_ARCHIVE_RESTORE=1` are set. A leftover broker variable alone does not
-start the OT worker.
-
-`react` and `central` still exist as mqtt recipes without fieldbus. `standalone`,
-`edge`, and `react-ot` are refused by `openfdd_stack_up.sh` because they would
-start fieldbus.
+`portal` is central + React web + Timescale. Ingest is the Normal Framework portal
+and CSV. Central does not start MQTT or fieldbus.
 
 ## Restore (manual, isolated)
 

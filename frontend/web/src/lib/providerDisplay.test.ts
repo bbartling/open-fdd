@@ -66,8 +66,8 @@ describe("provider display", () => {
 
   it("labels sources as read-only facts", () => {
     expect(
-      siteSourceLabels({ hasPackage: true, provider: "nf", hasMqttTelemetry: true }),
-    ).toEqual(["CSV package", "NF", "Archived MQTT telemetry"]);
+      siteSourceLabels({ hasPackage: true, provider: "nf" }),
+    ).toEqual(["CSV package", "NF"]);
   });
 
   it("treats a missing or shapeless ledger as unavailable", () => {

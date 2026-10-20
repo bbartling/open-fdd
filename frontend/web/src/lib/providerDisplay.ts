@@ -169,12 +169,10 @@ export function staticDriverNotes(provider: string | null | undefined): string[]
 export function siteSourceLabels(input: {
   hasPackage: boolean;
   provider?: string | null;
-  hasMqttTelemetry: boolean;
 }): string[] {
   const out: string[] = [];
   if (input.hasPackage) out.push("CSV package");
   if ((input.provider ?? "").trim()) out.push(providerLabel(input.provider));
-  if (input.hasMqttTelemetry) out.push("Archived MQTT telemetry");
   return out;
 }
 

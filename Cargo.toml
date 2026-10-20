@@ -11,14 +11,12 @@ members = [
     "crates/fdd_tsdb",
     "crates/fdd_rules",
     "crates/openfdd_contracts",
-    "crates/openfdd_connector_runtime",
-    "crates/openfdd_mqtt",
     "services/central",
 ]
-# Live fieldbus is not a 4.0 workspace member. The unqualified snapshot
-# under archive/ot-edge/ is its own workspace and is the only compile lane.
+# OT field containers, the MQTT broker, the MQTT client, and the edge process
+# are archived under archive/ot-edge/. Product ingest is the Normal Framework
+# portal and CSV only.
 exclude = [
-    "services/fieldbus",
     "archive",
 ]
 

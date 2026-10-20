@@ -21,8 +21,7 @@ unexpected_cfgs = { level = "allow", check-cfg = [
 
 [dependencies]
 openfdd_contracts = { path = "../../crates/openfdd_contracts", features = ["openapi"] }
-openfdd_mqtt = { path = "../../crates/openfdd_mqtt" }
-# Semantic/package/RDF only. ot-transport (Haystack HTTP client + Modbus) stays off.
+# Semantic/package/RDF library for CSV and NF role mapping. OT wire clients are archived.
 open_fdd_edge_prototype = { path = "../../edge", default-features = false }
 fdd_core = { path = "../../crates/fdd_core" }
 fdd_rules = { path = "../../crates/fdd_rules" }
@@ -62,12 +61,10 @@ dashmap = "6"
 tempfile = "3"
 # aws_lc_rs avoids transitive `rsa` (RUSTSEC-2023-0071); we only mint/verify HS256.
 jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs"] }
-rumqttc = { version = "0.24", default-features = false, features = ["use-native-tls"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "stream", "rustls-tls"] }
 
 [dev-dependencies]
 base64 = "0.22"
-openfdd_connector_runtime = { path = "../../crates/openfdd_connector_runtime" }
 jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs"] }
 serde_json = "1"
 tempfile = "3"

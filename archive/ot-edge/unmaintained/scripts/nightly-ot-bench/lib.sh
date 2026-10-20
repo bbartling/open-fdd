@@ -3,7 +3,10 @@
 # shellcheck disable=SC2034
 
 NIGHTLY_OT_BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Two levels up is the unmaintained archive root (config/fieldbus lives here).
 ROOT="$(cd "$NIGHTLY_OT_BENCH_DIR/../.." && pwd)"
+# Product helpers stayed on the checkout after this bench was archived.
+REPO_ROOT="$(git -C "$NIGHTLY_OT_BENCH_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 
 load_bench_env() {
   local example="$NIGHTLY_OT_BENCH_DIR/bench.env.example"
@@ -54,8 +57,16 @@ load_bench_env() {
   PARQUET_WAIT_SECS="${PARQUET_WAIT_SECS:-${FEATHER_WAIT_SECS:-90}}"
   export OPENFDD_REACT_UI="${OPENFDD_REACT_UI:-1}"
   export OPENFDD_UI_GENERATION_DEFAULT="${OPENFDD_UI_GENERATION_DEFAULT:-react}"
-  # shellcheck source=scripts/openfdd_stack_lib.sh
-  source "$ROOT/scripts/openfdd_stack_lib.sh"
+  if [[ -f "$ROOT/scripts/openfdd_stack_lib.sh" ]]; then
+    # shellcheck source=scripts/openfdd_stack_lib.sh
+    source "$ROOT/scripts/openfdd_stack_lib.sh"
+  elif [[ -n "${REPO_ROOT:-}" && -f "$REPO_ROOT/scripts/openfdd_stack_lib.sh" ]]; then
+    # shellcheck source=scripts/openfdd_stack_lib.sh
+    source "$REPO_ROOT/scripts/openfdd_stack_lib.sh"
+  else
+    echo "openfdd_stack_lib.sh not found under archive root or checkout" >&2
+    return 1
+  fi
   openfdd_stack_export_image_env
   # Restore explicit MCP pin after stack export (which derives from IMAGE_TAG).
   if [[ "$railway_only" == "1" && -n "$saved_mcp_image" ]]; then

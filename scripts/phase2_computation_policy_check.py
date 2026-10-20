@@ -25,10 +25,10 @@ FORBIDDEN_ENV = (
 )
 
 PRODUCT_COMPOSE_REL = (
+    "docker/compose.portal.yml",
     "docker/compose.react.yml",
-    "docker/compose.react.fieldbus.yml",
     "docker/compose.central.yml",
-    "docker/compose.standalone.yml",
+    "docker/compose.csv.yml",
     "docker/compose.caddy.react.yml",
     "docker/compose.wattlab.react.yml",
     "docker/compose.web.local-overview.yml",
@@ -44,8 +44,6 @@ FORBIDDEN_COMPOSE_MARKERS = (
 
 PRODUCT_SRC_RELS = (
     "services/central/src",
-    "services/fieldbus/src",
-    "crates/openfdd_mqtt/src",
     "edge/src",
 )
 

@@ -14,18 +14,19 @@ use chrono::Utc;
 use futures_util::StreamExt;
 use openfdd_contracts::{
     CapabilitiesAggregateResponse, CapabilityState, ConnectorAction, ConnectorCapability,
-    ConnectorHelloResponse, ConnectorInventoryRequest, ConnectorInventoryResponse,
-    ConnectorProtocol, ConnectorReadRequest, ConnectorReadResponse, ConnectorReadResult,
-    ConnectorScope, DeliveryStatus, HaystackAboutRequest, HaystackAboutResponse,
-    HaystackCatalogRequest, HaystackCatalogResponse, HaystackCurrentReadRequest,
-    HaystackCurrentReadResponse, HaystackHistoryReadRequest, HaystackHistoryReadResponse,
-    HaystackNavRequest, HaystackNavResponse, PriorityHistoryRequest, PriorityHistoryResponse,
-    PriorityHistoryTriggerRequest, PriorityHistoryTriggerResponse, ReadValueState,
-    RecipeObservation, ServiceVersion, UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1,
-    CAPABILITIES_CONTRACT_V1, HAYSTACK_MAX_BODY_BYTES,
+    ConnectorHelloResponse, ConnectorProtocol, DeliveryStatus, RecipeObservation, ServiceVersion,
+    UpstreamCapability, CAPABILITIES_AGGREGATE_CONTRACT_V1, CAPABILITIES_CONTRACT_V1,
+};
+#[cfg(test)]
+use openfdd_contracts::{
+    ConnectorInventoryRequest, ConnectorInventoryResponse, ConnectorReadRequest,
+    ConnectorReadResponse, ConnectorReadResult, ConnectorScope, HaystackCatalogRequest,
+    HaystackCatalogResponse, PriorityHistoryRequest, PriorityHistoryResponse, ReadValueState,
+    HAYSTACK_MAX_BODY_BYTES,
 };
 use reqwest::redirect::Policy;
 use reqwest::Client;
+#[cfg(test)]
 use serde::Serialize;
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::timeout;
@@ -37,7 +38,6 @@ const DEFAULT_TTL: Duration = Duration::from_secs(30);
 const MAX_STALE: Duration = Duration::from_secs(300);
 const MAX_BODY_BYTES: usize = 256 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
-const MAX_UPSTREAMS: usize = 32;
 const MAX_CONCURRENT_PROBES: usize = 4;
 
 #[derive(Clone)]
@@ -315,67 +315,7 @@ impl CapabilitiesAggregator {
         }
     }
 
-    /// Forward one explicitly requested read through a configured edge.  The
-    /// request carries no URL or network address and is scope checked by the
-    /// route before this method is called.
-    pub async fn proxy_read(
-        &self,
-        edge_id: &str,
-        request: &ConnectorReadRequest,
-    ) -> Result<ConnectorReadResponse, ProxyError> {
-        request.validate().map_err(|_| ProxyError::BadRequest)?;
-        let upstream = self
-            .upstreams
-            .iter()
-            .find(|upstream| upstream.edge_id == edge_id)
-            .ok_or(ProxyError::NotConfigured)?;
-        if upstream.tenant_id != request.scope.tenant_id
-            || upstream.building_id != request.scope.building_id
-        {
-            return Err(ProxyError::BadRequest);
-        }
-        if upstream.token.is_none() && !central_bool("OPENFDD_FIELDBUS_UPSTREAM_ALLOW_ANONYMOUS") {
-            return Err(ProxyError::AuthFailure);
-        }
-        let client = self.client.as_ref().ok_or(ProxyError::Incompatible)?;
-        let _probe_permit = timeout(Duration::from_secs(2), self.probe_gate.acquire())
-            .await
-            .map_err(|_| ProxyError::Unreachable)?
-            .map_err(|_| ProxyError::Unreachable)?;
-        let endpoint = endpoint(&upstream.base_url, "api/connector/read")
-            .map_err(|_| ProxyError::Incompatible)?;
-        let mut outgoing = client.post(endpoint).json(request);
-        if let Some(token) = upstream.token.as_deref() {
-            outgoing = outgoing.bearer_auth(token);
-        }
-        let response = timeout(REQUEST_TIMEOUT, outgoing.send())
-            .await
-            .map_err(|_| ProxyError::Unreachable)?
-            .map_err(|_| ProxyError::Unreachable)?;
-        if response.status() == StatusCode::UNAUTHORIZED
-            || response.status() == StatusCode::FORBIDDEN
-        {
-            return Err(ProxyError::AuthFailure);
-        }
-        if !response.status().is_success() || response.status().is_redirection() {
-            return Err(ProxyError::Incompatible);
-        }
-        let body = bounded_body(response)
-            .await
-            .map_err(|_| ProxyError::Incompatible)?;
-        let result: ConnectorReadResponse =
-            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        let result =
-            sanitize_public_read_response(result, request).map_err(|_| ProxyError::Incompatible)?;
-        if !result.ok {
-            return Err(ProxyError::Rejected);
-        }
-        Ok(result)
-    }
-
-    /// Forward one explicitly requested inventory page through a configured
-    /// edge. Inventory is a trusted configuration projection; the central
-    /// service never supplies a URL or asks the edge to discover OT devices.
+    #[cfg(test)]
     pub async fn proxy_inventory(
         &self,
         edge_id: &str,
@@ -429,112 +369,7 @@ impl CapabilitiesAggregator {
         Ok(result)
     }
 
-    /// Forward one bounded, read-only priority history page through the
-    /// configured edge. This is a history projection only; central never
-    /// asks the edge to discover, write, release, or remediate an OT value.
-    pub async fn proxy_priority_history(
-        &self,
-        edge_id: &str,
-        request: &PriorityHistoryRequest,
-    ) -> Result<PriorityHistoryResponse, ProxyError> {
-        request.validate().map_err(|_| ProxyError::BadRequest)?;
-        let upstream = self
-            .upstreams
-            .iter()
-            .find(|upstream| upstream.edge_id == edge_id)
-            .ok_or(ProxyError::NotConfigured)?;
-        if upstream.tenant_id != request.scope.tenant_id
-            || upstream.building_id != request.scope.building_id
-        {
-            return Err(ProxyError::BadRequest);
-        }
-        if upstream.token.is_none() && !central_bool("OPENFDD_FIELDBUS_UPSTREAM_ALLOW_ANONYMOUS") {
-            return Err(ProxyError::AuthFailure);
-        }
-        let client = self.client.as_ref().ok_or(ProxyError::Incompatible)?;
-        let _probe_permit = timeout(Duration::from_secs(2), self.probe_gate.acquire())
-            .await
-            .map_err(|_| ProxyError::Unreachable)?
-            .map_err(|_| ProxyError::Unreachable)?;
-        let endpoint = endpoint(&upstream.base_url, "api/connector/priority-history")
-            .map_err(|_| ProxyError::Incompatible)?;
-        let mut outgoing = client.post(endpoint).json(request);
-        if let Some(token) = upstream.token.as_deref() {
-            outgoing = outgoing.bearer_auth(token);
-        }
-        let response = timeout(REQUEST_TIMEOUT, outgoing.send())
-            .await
-            .map_err(|_| ProxyError::Unreachable)?
-            .map_err(|_| ProxyError::Unreachable)?;
-        if response.status() == StatusCode::UNAUTHORIZED
-            || response.status() == StatusCode::FORBIDDEN
-        {
-            return Err(ProxyError::AuthFailure);
-        }
-        if !response.status().is_success() || response.status().is_redirection() {
-            return Err(ProxyError::Incompatible);
-        }
-        let body = bounded_body(response)
-            .await
-            .map_err(|_| ProxyError::Incompatible)?;
-        let response: PriorityHistoryResponse =
-            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        sanitize_public_priority_history(response, request).map_err(|_| ProxyError::Incompatible)
-    }
-
-    pub async fn proxy_priority_history_trigger(
-        &self,
-        edge_id: &str,
-        request: &PriorityHistoryTriggerRequest,
-    ) -> Result<PriorityHistoryTriggerResponse, ProxyError> {
-        request.validate().map_err(|_| ProxyError::BadRequest)?;
-        let upstream = self
-            .upstreams
-            .iter()
-            .find(|upstream| upstream.edge_id == edge_id)
-            .ok_or(ProxyError::NotConfigured)?;
-        if upstream.tenant_id != request.scope.tenant_id
-            || upstream.building_id != request.scope.building_id
-        {
-            return Err(ProxyError::BadRequest);
-        }
-        if upstream.token.is_none() && !central_bool("OPENFDD_FIELDBUS_UPSTREAM_ALLOW_ANONYMOUS") {
-            return Err(ProxyError::AuthFailure);
-        }
-        let client = self.client.as_ref().ok_or(ProxyError::Incompatible)?;
-        let _probe_permit = timeout(Duration::from_secs(2), self.probe_gate.acquire())
-            .await
-            .map_err(|_| ProxyError::Unreachable)?
-            .map_err(|_| ProxyError::Unreachable)?;
-        let endpoint = endpoint(&upstream.base_url, "api/connector/priority-history/trigger")
-            .map_err(|_| ProxyError::Incompatible)?;
-        let mut outgoing = client.post(endpoint).json(request);
-        if let Some(token) = upstream.token.as_deref() {
-            outgoing = outgoing.bearer_auth(token);
-        }
-        let response = timeout(REQUEST_TIMEOUT, outgoing.send())
-            .await
-            .map_err(|_| ProxyError::Unreachable)?
-            .map_err(|_| ProxyError::Unreachable)?;
-        if response.status() == StatusCode::UNAUTHORIZED
-            || response.status() == StatusCode::FORBIDDEN
-        {
-            return Err(ProxyError::AuthFailure);
-        }
-        if !response.status().is_success() || response.status().is_redirection() {
-            return Err(ProxyError::Incompatible);
-        }
-        let body = bounded_body(response)
-            .await
-            .map_err(|_| ProxyError::Incompatible)?;
-        let response: PriorityHistoryTriggerResponse =
-            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        response
-            .validate_for(request)
-            .map_err(|_| ProxyError::Incompatible)?;
-        Ok(response)
-    }
-
+    #[cfg(test)]
     async fn proxy_haystack_body<T: Serialize>(
         &self,
         edge_id: &str,
@@ -588,6 +423,7 @@ impl CapabilitiesAggregator {
             .map_err(|_| ProxyError::Incompatible)
     }
 
+    #[cfg(test)]
     pub async fn proxy_haystack_catalog(
         &self,
         edge_id: &str,
@@ -604,80 +440,13 @@ impl CapabilitiesAggregator {
             .map_err(|_| ProxyError::Incompatible)?;
         Ok(response)
     }
-
-    pub async fn proxy_haystack_about(
-        &self,
-        edge_id: &str,
-        request: &HaystackAboutRequest,
-    ) -> Result<HaystackAboutResponse, ProxyError> {
-        request.validate().map_err(|_| ProxyError::BadRequest)?;
-        let body = self
-            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/about", request)
-            .await?;
-        let response: HaystackAboutResponse =
-            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        response
-            .validate_for(request)
-            .map_err(|_| ProxyError::Incompatible)?;
-        Ok(response)
-    }
-
-    pub async fn proxy_haystack_current_read(
-        &self,
-        edge_id: &str,
-        request: &HaystackCurrentReadRequest,
-    ) -> Result<HaystackCurrentReadResponse, ProxyError> {
-        request.validate().map_err(|_| ProxyError::BadRequest)?;
-        let body = self
-            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/read", request)
-            .await?;
-        let response: HaystackCurrentReadResponse =
-            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        response
-            .validate_for(request)
-            .map_err(|_| ProxyError::Incompatible)?;
-        Ok(response)
-    }
-
-    pub async fn proxy_haystack_nav(
-        &self,
-        edge_id: &str,
-        request: &HaystackNavRequest,
-    ) -> Result<HaystackNavResponse, ProxyError> {
-        request.validate().map_err(|_| ProxyError::BadRequest)?;
-        let body = self
-            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/nav", request)
-            .await?;
-        let response: HaystackNavResponse =
-            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        response
-            .validate_for(request)
-            .map_err(|_| ProxyError::Incompatible)?;
-        Ok(response)
-    }
-
-    pub async fn proxy_haystack_history(
-        &self,
-        edge_id: &str,
-        request: &HaystackHistoryReadRequest,
-    ) -> Result<HaystackHistoryReadResponse, ProxyError> {
-        request.validate().map_err(|_| ProxyError::BadRequest)?;
-        let body = self
-            .proxy_haystack_body(edge_id, &request.scope, "api/haystack/his-read", request)
-            .await?;
-        let response: HaystackHistoryReadResponse =
-            serde_json::from_slice(&body).map_err(|_| ProxyError::Incompatible)?;
-        response
-            .validate_for(request)
-            .map_err(|_| ProxyError::Incompatible)?;
-        Ok(response)
-    }
 }
 
 /// Validate and reduce every connector read to the public DTO surface.  The
 /// connector is allowed to keep detailed BACnet diagnostics internally, but
 /// those details must not cross the central API boundary in a priority slot or
 /// failed response.
+#[cfg(test)]
 fn sanitize_public_read_response(
     mut response: ConnectorReadResponse,
     request: &ConnectorReadRequest,
@@ -721,6 +490,7 @@ fn sanitize_public_read_response(
     Ok(response)
 }
 
+#[cfg(test)]
 fn sanitize_public_priority_history(
     mut response: PriorityHistoryResponse,
     request: &PriorityHistoryRequest,
@@ -765,6 +535,7 @@ async fn bounded_body_limit(response: reqwest::Response, max_bytes: usize) -> Re
     Ok(body)
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProxyError {
     BadRequest,
@@ -772,31 +543,6 @@ pub enum ProxyError {
     Unreachable,
     AuthFailure,
     Incompatible,
-    Rejected,
-}
-
-impl ProxyError {
-    pub fn status(self) -> StatusCode {
-        match self {
-            Self::BadRequest => StatusCode::BAD_REQUEST,
-            Self::NotConfigured => StatusCode::NOT_FOUND,
-            Self::Unreachable => StatusCode::BAD_GATEWAY,
-            Self::AuthFailure => StatusCode::BAD_GATEWAY,
-            Self::Incompatible => StatusCode::BAD_GATEWAY,
-            Self::Rejected => StatusCode::BAD_GATEWAY,
-        }
-    }
-
-    pub fn message(self) -> &'static str {
-        match self {
-            Self::BadRequest => "invalid read proxy request",
-            Self::NotConfigured => "edge connector is not configured",
-            Self::Unreachable => "edge connector is unreachable",
-            Self::AuthFailure => "edge connector authentication failed",
-            Self::Incompatible => "edge connector read contract is incompatible",
-            Self::Rejected => "edge connector rejected the read",
-        }
-    }
 }
 
 fn failed_upstream(
@@ -1000,7 +746,7 @@ fn empty_report(error: Option<String>) -> CapabilitiesAggregateResponse {
             build: env!("CARGO_PKG_VERSION").into(),
             contract: CAPABILITIES_CONTRACT_V1.into(),
         },
-        compiled_protocols: vec![ConnectorProtocol::Mqtt],
+        compiled_protocols: vec![ConnectorProtocol::Rest],
         connectors: Vec::new(),
         recipe: RecipeObservation {
             declared: None,
@@ -1041,11 +787,8 @@ fn declared_recipe() -> Option<String> {
 pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
     const DURABLE_FRESHNESS: Duration = Duration::from_secs(5 * 60);
     const SOURCE_FRESHNESS: Duration = Duration::from_secs(5 * 60);
-    let mqtt_enabled = crate::ingest::mqtt_ot_archive_restore_enabled();
-    let mqtt_configured = std::env::var("OPENFDD_MQTT_HOST")
-        .ok()
-        .is_some_and(|host| !host.trim().is_empty());
-    let monitor = state.mqtt_monitor_snapshot();
+    let portal_sites = state.providers.sites.len();
+    let portal_configured = portal_sites > 0;
     let historian = crate::durable_storage::historian_root_present();
     let last_durable_at = *state
         .last_durable_at
@@ -1055,17 +798,6 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
         .last_ingest_at
         .lock()
         .unwrap_or_else(|poison| poison.into_inner());
-    let mqtt_state = if !mqtt_enabled {
-        DeliveryStatus::Disabled
-    } else if !mqtt_configured {
-        DeliveryStatus::NotConfigured
-    } else if monitor.connected {
-        DeliveryStatus::Ready
-    } else if monitor.errors > 0 {
-        DeliveryStatus::Unreachable
-    } else {
-        DeliveryStatus::Checking
-    };
     let durable_state = if !historian {
         DeliveryStatus::Incompatible
     } else if last_durable_at.as_ref().is_some_and(|observed| {
@@ -1080,14 +812,10 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
     } else {
         DeliveryStatus::Unknown
     };
-    let readiness = if !mqtt_enabled {
-        CapabilityState::Disabled
-    } else if !mqtt_configured {
-        CapabilityState::NotConfigured
-    } else if monitor.connected {
+    let readiness = if portal_configured {
         CapabilityState::Ready
     } else {
-        CapabilityState::Checking
+        CapabilityState::NotConfigured
     };
     let source_health = if last_ingest_at.as_ref().is_some_and(|observed| {
         Utc::now()
@@ -1102,20 +830,8 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
         CapabilityState::Checking
     };
     let declared = declared_recipe();
-    let configured_services = {
-        let mut services = vec!["central".to_string()];
-        if mqtt_configured {
-            services.push("mqtt".into());
-        }
-        services
-    };
-    let observed_services = {
-        let mut services = vec!["central".to_string()];
-        if mqtt_state == DeliveryStatus::Ready {
-            services.push("mqtt".into());
-        }
-        services
-    };
+    let configured_services = vec!["central".to_string()];
+    let observed_services = vec!["central".to_string()];
     let reconciliation = RecipeObservation::reconcile(
         declared.as_deref(),
         &configured_services,
@@ -1130,20 +846,20 @@ pub fn central_hello(state: &AppState) -> ConnectorHelloResponse {
             build: crate::routes::resolve_build_version(),
             contract: CAPABILITIES_CONTRACT_V1.into(),
         },
-        compiled_protocols: vec![ConnectorProtocol::Mqtt],
+        compiled_protocols: vec![ConnectorProtocol::Rest],
         connectors: vec![ConnectorCapability {
-            protocol: ConnectorProtocol::Mqtt,
+            protocol: ConnectorProtocol::Rest,
             compiled: true,
-            configured: mqtt_configured,
-            enabled: mqtt_enabled,
+            configured: portal_configured,
+            enabled: portal_configured,
             readiness,
             source_health,
-            mqtt_connection: mqtt_state,
+            mqtt_connection: DeliveryStatus::Disabled,
             durable_delivery: durable_state,
             supported_actions: vec![ConnectorAction::MetadataRead],
-            detail: Some(
-                "central MQTT connection and durable historian delivery are separate states".into(),
-            ),
+            detail: Some(format!(
+                "NF portal sites loaded: {portal_sites}. CSV package ingest is built in. MQTT and field protocols are archived."
+            )),
         }],
         recipe: RecipeObservation {
             declared,
@@ -1167,66 +883,15 @@ fn env_duration(name: &str, default: Duration, min: u64, max: u64) -> Duration {
 }
 
 fn configured_upstreams_from_env() -> (Vec<ConfiguredUpstream>, Vec<String>) {
-    let raw = std::env::var("OPENFDD_FIELDBUS_UPSTREAMS")
-        .ok()
-        .or_else(|| {
-            std::env::var("OPENFDD_FIELDBUS_UPSTREAM_URL")
-                .ok()
-                .map(|url| {
-                    format!(
-                        "{}={url}",
-                        std::env::var("OPENFDD_EDGE_ID").unwrap_or_else(|_| "fieldbus-1".into())
-                    )
-                })
-        });
-    let token = std::env::var("OPENFDD_FIELDBUS_UPSTREAM_TOKEN")
-        .or_else(|_| std::env::var("OPENFDD_FIELDBUS_API_KEY"))
-        .ok()
-        .filter(|token| !token.trim().is_empty());
-    let mut upstreams: Vec<ConfiguredUpstream> = Vec::new();
-    let mut errors = Vec::new();
-    for (index, item) in raw
-        .unwrap_or_default()
-        .split(',')
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-        .enumerate()
-    {
-        let Some((scope_key, raw_url)) = item.split_once('=') else {
-            errors.push(format!("upstream {index} is malformed"));
-            continue;
-        };
-        let Ok((tenant_id, building_id, edge_id)) = configured_scope(scope_key.trim()) else {
-            errors.push(format!(
-                "upstream {index} has an invalid tenant/building/edge scope"
-            ));
-            continue;
-        };
-        if upstreams.iter().any(|upstream| upstream.edge_id == edge_id) {
-            errors.push(format!("upstream {edge_id} is configured more than once"));
-            continue;
-        }
-        match parse_base_url(raw_url.trim()) {
-            Ok(base_url) => upstreams.push(ConfiguredUpstream {
-                tenant_id,
-                building_id,
-                edge_id,
-                base_url,
-                token: token.clone(),
-            }),
-            Err(_) => errors.push(format!("upstream {edge_id} has an invalid URL")),
-        }
-        if upstreams.len() >= MAX_UPSTREAMS {
-            break;
-        }
-    }
-    (upstreams, errors)
+    // Fieldbus upstreams are archived. Startup does not read OPENFDD_FIELDBUS_*.
+    (Vec::new(), Vec::new())
 }
 
 /// Parse the trusted scope prefix used by `OPENFDD_FIELDBUS_UPSTREAMS`.
 /// Entries use `tenant|building|edge=https://...`. A one-part legacy entry is
 /// accepted only when the process has explicit `OPENFDD_TENANT_ID` and
 /// `OPENFDD_BUILDING_ID` bindings; otherwise it is rejected fail-closed.
+#[cfg(test)]
 fn configured_scope(raw: &str) -> Result<(String, String, String), ()> {
     let parts: Vec<_> = raw.split('|').map(str::trim).collect();
     let (tenant_id, building_id, edge_id) = match parts.as_slice() {
@@ -1254,6 +919,7 @@ fn configured_scope(raw: &str) -> Result<(String, String, String), ()> {
     Ok((tenant_id, building_id, edge_id))
 }
 
+#[cfg(test)]
 fn parse_base_url(raw: &str) -> Result<Url, ()> {
     let url = Url::parse(raw).map_err(|_| ())?;
     if !matches!(url.scheme(), "http" | "https")

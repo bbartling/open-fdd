@@ -1,0 +1,751 @@
+//! MQTTS subscriber -> canonical historian writer + optional compatibility mirror + edge shadow.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use openfdd_contracts::{
+    parse_topic, payload_matches_topic, TelemetryEnvelope, TopicIdentity, TopicKind,
+};
+use openfdd_mqtt::{MqttConfig, MqttHandle};
+use rumqttc::Incoming;
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
+use tracing::{debug, info, warn};
+
+use crate::state::AppState;
+use crate::tenant::multi_tenant_enabled;
+
+fn workspace_path_ingest() -> PathBuf {
+    PathBuf::from(std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()))
+}
+
+fn receipt_scope(topic: &TopicIdentity) -> String {
+    format!(
+        "tenant={};building={}",
+        topic.tenant_id.as_deref().unwrap_or("-"),
+        topic.site_id()
+    )
+}
+
+fn redact_payload(payload: &[u8]) -> String {
+    if payload.is_empty() {
+        return "<redacted empty utf8 payload: 0 bytes>".into();
+    }
+
+    match std::str::from_utf8(payload) {
+        Ok(_) => format!("<redacted utf8 payload: {} bytes>", payload.len()),
+        Err(_) => format!("<redacted binary payload: {} bytes>", payload.len()),
+    }
+}
+
+fn subscribe_topics(site: &str, edge: &str) -> Vec<String> {
+    let base = format!("openfdd/v1/sites/{site}/edges/{edge}");
+    let mut topics = vec![
+        format!("{base}/telemetry/#"),
+        format!("{base}/metadata/#"),
+        format!("{base}/discovery/#"),
+        format!("{base}/status"),
+        format!("{base}/acks/#"),
+    ];
+    // Wave L L3: when multi-tenant mode is ON, also subscribe the ADR namespace.
+    if multi_tenant_enabled() {
+        topics.extend([
+            "openfdd/v1/tenants/+/buildings/+/edges/+/telemetry/#".into(),
+            "openfdd/v1/tenants/+/buildings/+/edges/+/metadata/#".into(),
+            "openfdd/v1/tenants/+/buildings/+/edges/+/discovery/#".into(),
+            "openfdd/v1/tenants/+/buildings/+/edges/+/status".into(),
+            "openfdd/v1/tenants/+/buildings/+/edges/+/acks/#".into(),
+        ]);
+    }
+    topics
+}
+
+pub fn spawn_mqtt_ingest_with_shutdown(
+    state: Arc<AppState>,
+    shutdown: watch::Receiver<bool>,
+) -> JoinHandle<()> {
+    spawn_mqtt_ingest_inner(state, Some(shutdown))
+}
+
+pub fn spawn_live_historian_flush_with_shutdown(
+    state: Arc<AppState>,
+    mut shutdown: watch::Receiver<bool>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(1));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                _ = tick.tick() => {
+                    if let Err(error) = state.flush_live(false).await {
+                        warn!(%error, "canonical live historian time flush failed; buffered rows retained for retry");
+                    }
+                }
+                changed = shutdown.changed() => {
+                    if changed.is_err() || *shutdown.borrow() {
+                        if let Err(error) = state.flush_live(true).await {
+                            warn!(%error, "canonical live historian graceful flush failed");
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+    })
+}
+
+fn env_flag_on(name: &str) -> bool {
+    matches!(
+        std::env::var(name)
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
+/// 4.0 product ingest does not start MQTT because a stale broker env is present.
+/// Both flags are required. The second flag is the explicit OT archive restore lane.
+pub fn mqtt_ot_archive_restore_enabled() -> bool {
+    env_flag_on("OPENFDD_MQTT_ENABLED") && env_flag_on("OPENFDD_OT_ARCHIVE_RESTORE")
+}
+
+fn spawn_mqtt_ingest_inner(
+    state: Arc<AppState>,
+    mut shutdown: Option<watch::Receiver<bool>>,
+) -> JoinHandle<()> {
+    if !mqtt_ot_archive_restore_enabled() {
+        info!(
+            "central MQTT ingest disabled (need OPENFDD_MQTT_ENABLED=1 and OPENFDD_OT_ARCHIVE_RESTORE=1)"
+        );
+        return tokio::spawn(async {});
+    }
+
+    tokio::spawn(async move {
+        let site = std::env::var("OPENFDD_SITE_ID").unwrap_or_else(|_| "local".into());
+        let edge = std::env::var("OPENFDD_EDGE_ID").unwrap_or_else(|_| "+".into());
+        let host = std::env::var("OPENFDD_MQTT_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+        let port: u16 = std::env::var("OPENFDD_MQTT_PORT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(8883);
+        let cfg = MqttConfig {
+            host,
+            port,
+            client_id: format!("central:{site}"),
+            ca_pem: PathBuf::from(
+                std::env::var("OPENFDD_MQTT_CA_PEM").unwrap_or_else(|_| "/mqtt/ca.pem".into()),
+            ),
+            cert_pem: PathBuf::from(
+                std::env::var("OPENFDD_MQTT_CERT_PEM")
+                    .unwrap_or_else(|_| "/mqtt/central.cert.pem".into()),
+            ),
+            key_pem: PathBuf::from(
+                std::env::var("OPENFDD_MQTT_KEY_PEM")
+                    .unwrap_or_else(|_| "/mqtt/central.key.pem".into()),
+            ),
+            keep_alive_secs: 30,
+        };
+
+        loop {
+            let connection = tokio::select! {
+                _ = wait_for_shutdown(&mut shutdown) => {
+                    state.mqtt_mark_disconnected("Central shutting down");
+                    return;
+                }
+                result = MqttHandle::connect(cfg.clone()) => result,
+            };
+            match connection {
+                Ok(handle) => {
+                    let topics = subscribe_topics(&site, &edge);
+                    for topic in &topics {
+                        if let Err(err) = handle.subscribe(topic).await {
+                            warn!(%err, topic, "subscribe failed");
+                            state.mqtt_record_error(format!("subscription failed for {topic}"));
+                        }
+                    }
+
+                    state.mqtt_mark_connected(cfg.client_id.clone(), topics.clone());
+                    let (publisher, mut events) = handle.split();
+                    state.set_mqtt_publisher(publisher);
+                    info!(
+                        multi_tenant = multi_tenant_enabled(),
+                        "central MQTT ingest connected; publisher ready for commands"
+                    );
+
+                    loop {
+                        tokio::select! {
+                            _ = wait_for_shutdown(&mut shutdown) => {
+                                *state.mqtt_publisher.lock().unwrap() = None;
+                                state.mqtt_mark_disconnected("Central shutting down");
+                                return;
+                            }
+                            maybe_event = events.recv() => {
+                                let Some(ev) = maybe_event else {
+                                    break;
+                                };
+                                if let Incoming::Publish(p) = ev {
+                                    let topic = p.topic.clone();
+                                    state.mqtt_observe(
+                                        &topic,
+                                        &p.payload,
+                                        format!("{:?}", p.qos),
+                                        p.retain,
+                                    );
+                                    handle_payload(&state, &topic, &p.payload).await;
+                                }
+                            }
+                        }
+                    }
+                    warn!("central mqtt event stream ended; reconnecting");
+                    *state.mqtt_publisher.lock().unwrap() = None;
+                    state.mqtt_mark_disconnected("MQTT event stream ended; reconnecting");
+                    // Brief backoff before outer-loop connect + re-subscribe.
+                    tokio::select! {
+                        _ = wait_for_shutdown(&mut shutdown) => {
+                            state.mqtt_mark_disconnected("Central shutting down");
+                            return;
+                        }
+                        _ = tokio::time::sleep(Duration::from_secs(2)) => {}
+                    }
+                }
+                Err(err) => {
+                    warn!(%err, "central mqtt connect failed; retrying");
+                    state.mqtt_record_error("MQTT connect failed; retrying");
+                    tokio::select! {
+                        _ = wait_for_shutdown(&mut shutdown) => {
+                            state.mqtt_mark_disconnected("Central shutting down");
+                            return;
+                        }
+                        _ = tokio::time::sleep(Duration::from_secs(3)) => {}
+                    }
+                }
+            }
+        }
+    })
+}
+
+async fn wait_for_shutdown(shutdown: &mut Option<watch::Receiver<bool>>) {
+    let Some(receiver) = shutdown.as_mut() else {
+        std::future::pending::<()>().await;
+        return;
+    };
+    if *receiver.borrow() {
+        return;
+    }
+    let _ = receiver.changed().await;
+}
+
+async fn handle_payload(state: &AppState, topic: &str, payload: &[u8]) {
+    let Some(parsed) = parse_topic(topic) else {
+        handle_untyped_payload(state, payload);
+        return;
+    };
+
+    // Mode ON: require tenant-scoped topics so payload labels cannot spoof another firm.
+    if multi_tenant_enabled() && !parsed.is_tenant_scoped() {
+        record_reject(
+            state,
+            payload,
+            "multi-tenant mode requires openfdd/v1/tenants/{tid}/buildings/{bid}/edges/{eid}/… topics",
+        );
+        return;
+    }
+
+    match parsed.kind {
+        TopicKind::Telemetry => handle_telemetry(state, &parsed, payload).await,
+        TopicKind::Metadata => {
+            if let Ok(value) = serde_json::from_slice(payload) {
+                store_shadow_payload(
+                    state,
+                    &parsed.edge_id,
+                    parsed.site_id(),
+                    parsed.tenant_id.as_deref(),
+                    |shadow| {
+                        let key = parsed.protocol.as_deref().unwrap_or("mixed");
+                        shadow.last_metadata.insert(key.to_string(), value);
+                    },
+                );
+            } else {
+                record_reject(state, payload, "metadata decode failed");
+            }
+        }
+        TopicKind::Discovery => {
+            if let Ok(value) = serde_json::from_slice(payload) {
+                store_shadow_payload(
+                    state,
+                    &parsed.edge_id,
+                    parsed.site_id(),
+                    parsed.tenant_id.as_deref(),
+                    |shadow| {
+                        let key = parsed.protocol.as_deref().unwrap_or("mixed");
+                        shadow.last_discovery.insert(key.to_string(), value);
+                    },
+                );
+            } else {
+                record_reject(state, payload, "discovery decode failed");
+            }
+        }
+        TopicKind::Status => {
+            if let Ok(value) = serde_json::from_slice(payload) {
+                store_shadow_payload(
+                    state,
+                    &parsed.edge_id,
+                    parsed.site_id(),
+                    parsed.tenant_id.as_deref(),
+                    |shadow| {
+                        shadow.last_status = Some(value);
+                    },
+                );
+            } else {
+                record_reject(state, payload, "status decode failed");
+            }
+        }
+        TopicKind::Acks => handle_ack(state, payload),
+        TopicKind::Commands => {}
+    }
+}
+
+fn store_shadow_payload(
+    state: &AppState,
+    edge_id: &str,
+    site_id: &str,
+    tenant_id: Option<&str>,
+    update: impl FnOnce(&mut crate::state::EdgeShadow),
+) {
+    let entry = state.edges.entry(edge_id.to_string()).or_default();
+    let mut guard = entry.lock().unwrap();
+    if !site_id.is_empty() {
+        guard.registered_site_id = Some(site_id.to_string());
+    }
+    guard.registered_tenant_id = tenant_id.map(str::to_string);
+    update(&mut guard);
+}
+
+async fn handle_telemetry(state: &AppState, topic: &TopicIdentity, payload: &[u8]) {
+    state.recover_pending_receipts_once().await;
+    match serde_json::from_slice::<TelemetryEnvelope>(payload) {
+        Ok(env) => {
+            if let Err(err) = env.validate() {
+                record_reject(state, payload, &err);
+                return;
+            }
+            if !payload_matches_topic(topic, &env.site_id, &env.edge_id) {
+                record_reject(
+                    state,
+                    payload,
+                    &format!(
+                        "envelope site/edge ({}/{}) does not match topic ({}/{})",
+                        env.site_id,
+                        env.edge_id,
+                        topic.site_id(),
+                        topic.edge_id
+                    ),
+                );
+                return;
+            }
+            let scope = receipt_scope(topic);
+            // Durable reservation is shared with local HTTP. Pending and
+            // committed receipts both suppress a concurrent/replayed copy.
+            // Dedup authority is this ledger — no independent seen map (#1127 P3).
+            if !state.reserve_receipt_at(&scope, env.clone()).await {
+                // Soft-OPEN 371 T1e: Absent after failed reserve is ledger
+                // pressure/eviction — not an idempotent duplicate.
+                if matches!(
+                    state
+                        .lookup_receipt(&scope, &env.edge_id, env.message_id)
+                        .await,
+                    crate::state::ReceiptLookup::Absent
+                ) {
+                    // #1168: visible backpressure — never silent-drop / never mark MQTT down.
+                    state.note_ingest_backpressure("durable ingest receipt ledger unavailable");
+                    return;
+                }
+                *state.ingest_dup.lock().unwrap() += 1;
+                return;
+            }
+
+            // Wave O6: refuse MQTT append when building historian size cap is already hit.
+            if let Some(msg) = crate::historian_limits::deny_building_over_size(
+                &workspace_path_ingest(),
+                &env.site_id,
+            ) {
+                record_reject(state, payload, &msg);
+                state
+                    .release_receipt(&scope, &env.edge_id, env.message_id)
+                    .await;
+                return;
+            }
+
+            let _persisted_rows = match state.ingest_live(&scope, &env).await {
+                Ok(report) => {
+                    for duplicate in &report.duplicate_roles {
+                        warn!(
+                            building_id = %duplicate.building_id,
+                            equipment_id = %duplicate.equipment_id,
+                            role = %duplicate.role,
+                            "dropped later duplicate canonical live role"
+                        );
+                        open_fdd_edge_prototype::auth::audit::log_event(
+                            "mqtt_ingest_duplicate_role",
+                            serde_json::json!({
+                                "building_id": duplicate.building_id,
+                                "equipment_id": duplicate.equipment_id,
+                                "role": duplicate.role,
+                                "resolution": "first_point_wins",
+                            }),
+                        );
+                    }
+                    if report.eligible_points > 0 {
+                        debug!(
+                            message_id = %env.message_id,
+                            eligible_points = report.eligible_points,
+                            skipped_points = report.skipped_points,
+                            persisted_rows = report.persisted_rows,
+                            "accepted canonical live historian telemetry"
+                        );
+                    } else if report.skipped_points > 0 {
+                        debug!(
+                            message_id = %env.message_id,
+                            skipped_points = report.skipped_points,
+                            "telemetry has no explicit canonical historian identity"
+                        );
+                    }
+                    report.persisted_rows
+                }
+                Err(err) => {
+                    record_reject(
+                        state,
+                        payload,
+                        &format!("canonical historian ingest failed: {err}"),
+                    );
+                    state
+                        .release_receipt(&scope, &env.edge_id, env.message_id)
+                        .await;
+                    return;
+                }
+            };
+
+            let entry = state.edges.entry(env.edge_id.clone()).or_default();
+            let mut shadow = entry.lock().unwrap();
+            shadow
+                .sequences
+                .insert(format!("{:?}", env.protocol), env.sequence);
+            if !env.site_id.is_empty() {
+                shadow.registered_site_id = Some(env.site_id.clone());
+            }
+            shadow.registered_tenant_id = topic.tenant_id.clone();
+            shadow.last_telemetry = Some(env);
+            state.note_ingest_ok();
+        }
+        Err(_) => handle_untyped_payload(state, payload),
+    }
+}
+
+fn handle_ack(state: &AppState, payload: &[u8]) {
+    let Ok(ack) = serde_json::from_slice::<openfdd_contracts::CommandAck>(payload) else {
+        record_reject(state, payload, "ack decode failed");
+        return;
+    };
+    accept_bound_command_ack(state, ack);
+}
+
+fn handle_untyped_payload(state: &AppState, payload: &[u8]) {
+    // Do not accept ACK-shaped bodies from untyped/malformed topics — only
+    // explicit ack-topic dispatch may mutate command_acks (S05).
+    record_reject(state, payload, "decode failed");
+}
+
+/// Bind MQTT ACK to an exact pending command (site/edge/id). Unknown, mismatched,
+/// or replayed terminal ACKs are rejected so forged edges cannot close foreign
+/// commands. `Accepted` updates the ack map but keeps pending so a later
+/// `Executed`/`Failed` can land; first terminal ACK wins.
+fn accept_bound_command_ack(state: &AppState, ack: openfdd_contracts::CommandAck) {
+    let terminal = matches!(
+        ack.status,
+        openfdd_contracts::CommandStatus::Executed
+            | openfdd_contracts::CommandStatus::Failed
+            | openfdd_contracts::CommandStatus::Rejected
+            | openfdd_contracts::CommandStatus::Expired
+    );
+    if let Some(existing) = state.command_acks.get(&ack.command_id) {
+        if matches!(
+            existing.status,
+            openfdd_contracts::CommandStatus::Executed
+                | openfdd_contracts::CommandStatus::Failed
+                | openfdd_contracts::CommandStatus::Rejected
+                | openfdd_contracts::CommandStatus::Expired
+        ) {
+            return;
+        }
+    }
+    let Some(pending) = state.pending_commands.get(&ack.command_id) else {
+        record_reject(
+            state,
+            &serde_json::to_vec(&ack).unwrap_or_default(),
+            "ack for unknown command_id",
+        );
+        return;
+    };
+    if ack.site_id != pending.command.site_id || ack.edge_id != pending.command.edge_id {
+        drop(pending);
+        record_reject(
+            state,
+            &serde_json::to_vec(&ack).unwrap_or_default(),
+            "ack site/edge does not match pending command",
+        );
+        return;
+    }
+    drop(pending);
+    if terminal {
+        state.pending_commands.remove(&ack.command_id);
+    }
+    state.command_acks.insert(ack.command_id, ack);
+}
+
+fn reject_reason_bucket(error: &str) -> &'static str {
+    if error.contains("multi-tenant mode requires") {
+        "topic_tenant_scope"
+    } else if error.contains("does not match topic") {
+        "topic_identity_mismatch"
+    } else if error.contains("canonical historian ingest failed") {
+        "historian_persist"
+    } else if error.contains("historian size") || error.contains("size cap") {
+        "historian_size_cap"
+    } else if error.contains("ack for unknown") || error.contains("ack site/edge") {
+        "ack_authority"
+    } else if error.ends_with("decode failed") {
+        "decode_failed"
+    } else {
+        "validation_or_other"
+    }
+}
+
+fn record_reject(state: &AppState, payload: &[u8], error: &str) {
+    *state.ingest_reject.lock().unwrap() += 1;
+    let bucket = reject_reason_bucket(error).to_string();
+    {
+        let mut buckets = state.ingest_reject_buckets.lock().unwrap();
+        *buckets.entry(bucket).or_insert(0) += 1;
+    }
+    state.dead_letters.lock().unwrap().push(serde_json::json!({
+        "error": error,
+        "raw": redact_payload(payload),
+    }));
+    open_fdd_edge_prototype::auth::audit::log_event(
+        "mqtt_ingest_reject",
+        serde_json::json!({
+            "reason": error,
+            // Never include raw payload bytes in audit.
+        }),
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reject_bucket_classifies_common_errors() {
+        assert_eq!(
+            reject_reason_bucket("metadata decode failed"),
+            "decode_failed"
+        );
+        assert_eq!(
+            reject_reason_bucket("envelope site/edge (a/b) does not match topic (c/d)"),
+            "topic_identity_mismatch"
+        );
+        assert_eq!(
+            reject_reason_bucket("ack for unknown command_id"),
+            "ack_authority"
+        );
+    }
+
+    #[test]
+    fn bound_ack_requires_pending_and_matching_site_edge() {
+        use crate::state::PendingCommand;
+        use chrono::Utc;
+        use openfdd_contracts::{CommandAck, CommandEnvelope, CommandStatus, Protocol};
+
+        let state = AppState::new();
+        let cmd = CommandEnvelope::new(
+            "ACME",
+            "vim-1",
+            Protocol::Mixed,
+            "edge:telemetry",
+            serde_json::json!({"action": "suspend"}),
+            "stress",
+            "openfdd/v1/sites/ACME/edges/vim-1/acks/mixed",
+            180,
+        );
+        let id = cmd.command_id;
+        state.pending_commands.insert(
+            id,
+            PendingCommand {
+                command: cmd.clone(),
+                publish_topic: "cmd".into(),
+                response_topic: cmd.response_topic.clone(),
+                issued_at: Utc::now(),
+                published: true,
+            },
+        );
+
+        // Foreign site/edge must not close the pending command.
+        let forged = CommandAck {
+            schema: cmd.schema.clone(),
+            command_id: id,
+            status: CommandStatus::Executed,
+            observed_at: Utc::now(),
+            site_id: "OTHER".into(),
+            edge_id: "other-edge".into(),
+            detail: Some("forged".into()),
+        };
+        accept_bound_command_ack(&state, forged);
+        assert!(state.pending_commands.contains_key(&id));
+        assert!(!state.command_acks.contains_key(&id));
+
+        let good = CommandAck::new(&cmd, CommandStatus::Executed, Some("ok".into()));
+        accept_bound_command_ack(&state, good.clone());
+        assert!(!state.pending_commands.contains_key(&id));
+        assert_eq!(
+            state.command_acks.get(&id).map(|a| a.status),
+            Some(CommandStatus::Executed)
+        );
+
+        // Replay of a different terminal status must not overwrite.
+        let replay = CommandAck::new(&cmd, CommandStatus::Failed, Some("replay".into()));
+        accept_bound_command_ack(&state, replay);
+        assert_eq!(
+            state.command_acks.get(&id).map(|a| a.status),
+            Some(CommandStatus::Executed)
+        );
+    }
+
+    #[test]
+    fn accepted_ack_keeps_pending_for_executed() {
+        use crate::state::PendingCommand;
+        use chrono::Utc;
+        use openfdd_contracts::{CommandAck, CommandEnvelope, CommandStatus, Protocol};
+
+        let state = AppState::new();
+        let cmd = CommandEnvelope::new(
+            "ACME",
+            "vim-1",
+            Protocol::Mixed,
+            "edge:telemetry",
+            serde_json::json!({"action": "suspend"}),
+            "stress",
+            "openfdd/v1/sites/ACME/edges/vim-1/acks/mixed",
+            180,
+        );
+        let id = cmd.command_id;
+        state.pending_commands.insert(
+            id,
+            PendingCommand {
+                command: cmd.clone(),
+                publish_topic: "cmd".into(),
+                response_topic: cmd.response_topic.clone(),
+                issued_at: Utc::now(),
+                published: true,
+            },
+        );
+        accept_bound_command_ack(&state, CommandAck::new(&cmd, CommandStatus::Accepted, None));
+        assert!(state.pending_commands.contains_key(&id));
+        assert_eq!(
+            state.command_acks.get(&id).map(|a| a.status),
+            Some(CommandStatus::Accepted)
+        );
+        accept_bound_command_ack(
+            &state,
+            CommandAck::new(&cmd, CommandStatus::Executed, Some("done".into())),
+        );
+        assert!(!state.pending_commands.contains_key(&id));
+        assert_eq!(
+            state.command_acks.get(&id).map(|a| a.status),
+            Some(CommandStatus::Executed)
+        );
+    }
+
+    #[test]
+    fn parse_telemetry_topic() {
+        let p = parse_topic("openfdd/v1/sites/lab/edges/pi-1/telemetry/bacnet").unwrap();
+        assert_eq!(p.building_id, "lab");
+        assert_eq!(p.edge_id, "pi-1");
+        assert_eq!(p.kind, TopicKind::Telemetry);
+        assert_eq!(p.protocol.as_deref(), Some("bacnet"));
+    }
+
+    #[test]
+    fn parse_tenant_telemetry_topic() {
+        let p = parse_topic("openfdd/v1/tenants/acme/buildings/bldg2/edges/pi-1/telemetry/bacnet")
+            .unwrap();
+        assert_eq!(p.tenant_id.as_deref(), Some("acme"));
+        assert_eq!(p.building_id, "bldg2");
+        assert!(p.is_tenant_scoped());
+    }
+
+    #[test]
+    fn parse_metadata_topic() {
+        let p = parse_topic("openfdd/v1/sites/lab/edges/pi-1/metadata/bacnet").unwrap();
+        assert_eq!(p.kind, TopicKind::Metadata);
+    }
+
+    #[test]
+    fn parse_status_topic() {
+        let p = parse_topic("openfdd/v1/sites/lab/edges/pi-1/status").unwrap();
+        assert_eq!(p.kind, TopicKind::Status);
+    }
+
+    #[test]
+    fn redacts_utf8_payload() {
+        let payload = br#"{"username":"admin","password":"secret"}"#;
+        let redacted = redact_payload(payload);
+        assert_eq!(redacted, "<redacted utf8 payload: 40 bytes>");
+    }
+
+    #[test]
+    fn redacts_binary_payload() {
+        let payload = [0xff, 0xfe, 0xfd, 0xfc];
+        let redacted = redact_payload(&payload);
+        assert_eq!(redacted, "<redacted binary payload: 4 bytes>");
+    }
+
+    #[test]
+    fn redacts_empty_payload() {
+        let redacted = redact_payload(b"");
+        assert_eq!(redacted, "<redacted empty utf8 payload: 0 bytes>");
+    }
+
+    #[tokio::test]
+    async fn status_topic_registers_site_without_telemetry() {
+        let state = AppState::new();
+        let topic = "openfdd/v1/tenants/acme/buildings/ACME/edges/vim-1/status";
+        handle_payload(&state, topic, br#"{"ok":true,"suspended":false}"#).await;
+        let entry = state.edges.get("vim-1").expect("edge shadow from status");
+        let shadow = entry.lock().unwrap();
+        assert!(shadow.last_telemetry.is_none());
+        assert_eq!(shadow.registered_site_id.as_deref(), Some("ACME"));
+        assert_eq!(shadow.known_site_id().as_deref(), Some("ACME"));
+    }
+
+    #[test]
+    fn known_site_id_prefers_telemetry_over_registration() {
+        use crate::state::EdgeShadow;
+        use openfdd_contracts::{Protocol, TelemetryEnvelope};
+
+        let mut shadow = EdgeShadow {
+            registered_site_id: Some("from-status".into()),
+            ..Default::default()
+        };
+        assert_eq!(shadow.known_site_id().as_deref(), Some("from-status"));
+        shadow.last_telemetry = Some(TelemetryEnvelope::new(
+            "from-tel",
+            "e1",
+            Protocol::Mixed,
+            1,
+            vec![],
+        ));
+        assert_eq!(shadow.known_site_id().as_deref(), Some("from-tel"));
+    }
+}

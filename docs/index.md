@@ -7,13 +7,13 @@ permalink: /
 
 # Open-FDD
 
-**Open-FDD is a local-first Rust edge platform for building telemetry, semantic modeling, supervisory fault detection, and HVAC analytics.**
+**Open-FDD is a Normal Framework portal: Timescale historian, SQL fault detection, and a React UI.**
 
-Open-source building analytics for operators, integrators, and engineers who need vendor-neutral fault detection on premises — without sending BACnet traffic or historian data to the public internet.
+Open-source building analytics for operators and engineers. Live BACnet, Modbus, Haystack wire, and the MQTT broker are archived and are not part of the product build.
 
-## Field to cloud
+## Portal
 
-Secure HVAC data collection, fault detection, and portfolio access for mechanical systems integrators.
+Fault detection and portfolio access for mechanical systems. Sites are polled through the Normal Framework portal or loaded from CSV. BACnet, Modbus, Haystack wire, and MQTT are archived and are not product ingest paths.
 
 <figure class="architecture-diagram">
   <img
@@ -28,16 +28,15 @@ Secure HVAC data collection, fault detection, and portfolio access for mechanica
 
 | Path | Protocol |
 |------|----------|
-| Building OT → field edge | BACnet / Modbus (+ Haystack model) |
-| Field → hub | MQTTS |
+| Normal Framework portal | Provider poll into central |
 | Office browser | HTTPS → React SPA |
 | AI / automation agents | JWT REST (+ optional MCP) |
-| Weather assist | HTTPS Open-Meteo fetch at the edge |
+| Temporary ACME bridge | MQTT ingest into central (existing broker) |
 | Offline import | CSV / JSON package |
 
 ## What it does
 
-- Collects live data from **BACnet**, **Modbus**, **Haystack**, **JSON API**, and **CSV** imports
+- Ingests portal and **CSV** packages (live BACnet / Modbus / Haystack wire containers are archived)
 - Stores telemetry in a **TimescaleDB** historian (PostgreSQL + hypertables; [ADR-010]({{ site.baseurl }}/architecture/adr-010-timescale-hard-cutover.html))
 - Models sites with **Project Haystack** semantics
 - Runs **Timescale / PostgreSQL SQL** rules (`sql/fdd/registry.yaml`) — not Arrow/DataFusion
@@ -52,15 +51,15 @@ The web application runs SQL against Timescale. Python/pandas is offline/oracle 
 
 | Role | Typical use |
 |------|-------------|
-| **OT / BAS integrators** | Live edge on LAN/VPN — BACnet/Modbus, historian, FDD |
+| **Operators** | Portal historian, SQL FDD, React UI on LAN/VPN |
 | **Energy / RCx engineers** | CSV analytics on a workstation — import, SQL rules, reports |
 | **Developers & agents** | API + MCP for commissioning and validation |
 
 ## Deployment models
 
-### Live OT edge
+### Portal
 
-Linux edge host on the building LAN. Pull GHCR images, bind-mount `workspace/`, keep API on loopback or behind a reverse proxy.
+Central, React web, and Timescale. Pull GHCR images, bind-mount `workspace/`, keep API on loopback or behind a reverse proxy. Field containers are under `archive/ot-edge/`.
 
 ### Offline engineering
 

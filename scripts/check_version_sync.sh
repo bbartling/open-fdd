@@ -20,7 +20,7 @@ while IFS= read -r f; do
     echo "FAIL: $f version=$pkg_ver expected $VERSION_FILE" >&2
     MISMATCH=1
   fi
-done < <(find edge services crates/openfdd_contracts crates/openfdd_mqtt -name Cargo.toml 2>/dev/null)
+done < <(find edge services crates/openfdd_contracts -name Cargo.toml)
 
 if [[ "$MISMATCH" != "0" ]]; then
   exit 1

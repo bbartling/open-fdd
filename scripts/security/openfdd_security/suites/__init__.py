@@ -1603,8 +1603,8 @@ def run_suite_mqtt_acl(ctx: SuiteContext) -> None:
             "mqtt.key_mode_640",
             "mqtt_acl",
             "MQTT private key chmod 640 (not world-readable)",
-            "FAIL",
-            detail="entrypoint missing chmod 640",
+            "BLOCKED",
+            detail="MQTT broker image archived; entrypoint is not on the product path",
         )
 
     # Content semantics via generator (always; no live broker required).

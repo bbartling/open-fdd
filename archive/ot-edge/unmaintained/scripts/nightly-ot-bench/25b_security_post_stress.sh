@@ -2,7 +2,7 @@
 # Gate 25b_security_post_stress — re-validate credentials + bounded authz reads.
 # Finalize even after preceding failures; cannot erase precheck failure.
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 # Tip sequential / Railway: ACME ops env names ↔ A_OPS fixture names (Q4 / #999).
 if [[ -z "${OPENFDD_USER_A_OPS_PASSWORD:-}" && -n "${OPENFDD_USER_ACME_OPS_PASSWORD:-}" ]]; then
   export OPENFDD_USER_A_OPS_PASSWORD="$OPENFDD_USER_ACME_OPS_PASSWORD"

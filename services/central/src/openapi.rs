@@ -8,7 +8,7 @@ use utoipa::OpenApi;
 use crate::auth::{JwtClaims, Role};
 use crate::models::*;
 use crate::tenant_budget::{TenantBudgetConfig, TenantBudgetsResponse};
-use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
+use openfdd_contracts::TelemetryEnvelope;
 
 /// Doc-only OpenAPI path descriptors (OFDD-071).
 ///
@@ -122,110 +122,10 @@ mod live_routes {
     pub fn datasets_delete() {}
 
     #[utoipa::path(
-        post, path = "/api/ingest/local", tag = "central",
-        request_body = openfdd_contracts::TelemetryEnvelope,
-        responses(
-            (status = 200, description = "Persist one local fieldbus telemetry envelope", body = openfdd_contracts::LocalIngestReceipt),
-            (status = 202, description = "Receipt is pending durable publication", body = openfdd_contracts::LocalIngestReceipt),
-            (status = 400, description = "Rejected envelope", body = openfdd_contracts::LocalIngestReceipt),
-            (status = 401, description = "Missing or invalid local ingest bearer", body = openfdd_contracts::LocalIngestReceipt),
-            (status = 403, description = "Tenant or building identity mismatch", body = openfdd_contracts::LocalIngestReceipt),
-            (status = 409, description = "Message id payload conflict", body = openfdd_contracts::LocalIngestReceipt),
-            (status = 413, description = "Payload exceeds the local ingest limit", body = openfdd_contracts::LocalIngestReceipt),
-            (status = 503, description = "Retryable local ingest failure", body = openfdd_contracts::LocalIngestReceipt)
-        )
-    )]
-    pub fn local_fieldbus_ingest() {}
-
-    #[utoipa::path(
         get, path = "/api/capabilities", tag = "central",
         responses((status = 200, description = "Authenticated central and configured connector capabilities", body = serde_json::Value))
     )]
     pub fn capabilities() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/inventory", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::ConnectorInventoryRequest,
-        responses(
-            (status = 200, description = "Scoped typed connector inventory page", body = openfdd_contracts::ConnectorInventoryResponse),
-            (status = 403, description = "Authenticated tenant or edge scope denied")
-        )
-    )]
-    pub fn connector_inventory() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/read", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::ConnectorReadRequest,
-        responses(
-            (status = 200, description = "Scoped read-only connector response", body = openfdd_contracts::ConnectorReadResponse),
-            (status = 403, description = "Authenticated tenant or edge scope denied")
-        )
-    )]
-    pub fn connector_read() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/haystack/catalog", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::HaystackCatalogRequest,
-        responses((status = 200, description = "Scoped Haystack catalog page", body = openfdd_contracts::HaystackCatalogResponse))
-    )]
-    pub fn connector_haystack_catalog() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/haystack/about", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::HaystackAboutRequest,
-        responses((status = 200, description = "Scoped Haystack about response", body = openfdd_contracts::HaystackAboutResponse))
-    )]
-    pub fn connector_haystack_about() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/haystack/read", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::HaystackCurrentReadRequest,
-        responses((status = 200, description = "Scoped Haystack current values", body = openfdd_contracts::HaystackCurrentReadResponse))
-    )]
-    pub fn connector_haystack_read() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/haystack/nav", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::HaystackNavRequest,
-        responses((status = 200, description = "Scoped Haystack navigation", body = openfdd_contracts::HaystackNavResponse))
-    )]
-    pub fn connector_haystack_nav() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/haystack/his-read", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::HaystackHistoryReadRequest,
-        responses((status = 200, description = "Scoped bounded Haystack history", body = openfdd_contracts::HaystackHistoryReadResponse))
-    )]
-    pub fn connector_haystack_history() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/priority-history", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::PriorityHistoryRequest,
-        responses(
-            (status = 200, description = "Scoped bounded priority-array history page", body = openfdd_contracts::PriorityHistoryResponse),
-            (status = 403, description = "Authenticated tenant or edge scope denied")
-        )
-    )]
-    pub fn connector_priority_history() {}
-
-    #[utoipa::path(
-        post, path = "/api/connectors/{edge_id}/priority-history/trigger", tag = "central",
-        params(("edge_id" = String, Path, description = "Configured edge identifier")),
-        request_body = openfdd_contracts::PriorityHistoryTriggerRequest,
-        responses(
-            (status = 200, description = "Operator-triggered bounded priority-array device visit", body = openfdd_contracts::PriorityHistoryTriggerResponse),
-            (status = 403, description = "Operator role or tenant/building/edge scope denied")
-        )
-    )]
-    pub fn connector_priority_history_trigger() {}
 
     #[utoipa::path(
         get, path = "/api/fdd/results", tag = "fdd",
@@ -432,13 +332,7 @@ mod live_routes {
         crate::routes::list_tenants,
         crate::routes::select_tenant,
         crate::routes::list_tenant_budgets,
-        crate::routes::list_edges,
-        crate::routes::get_edge,
-        crate::routes::get_edge_discovery,
-        crate::routes::get_edge_metadata,
         crate::routes::ingest_stats,
-        crate::routes::issue_command,
-        crate::routes::get_ack,
         crate::routes::agent_tools,
         live_routes::ingest_jobs,
         live_routes::ingest_receipts,
@@ -462,17 +356,7 @@ mod live_routes {
         live_routes::jobs_queue_eplus_run,
         live_routes::datasets_list,
         live_routes::datasets_delete,
-        live_routes::local_fieldbus_ingest,
         live_routes::capabilities,
-        live_routes::connector_inventory,
-        live_routes::connector_read,
-        live_routes::connector_haystack_catalog,
-        live_routes::connector_haystack_about,
-        live_routes::connector_haystack_read,
-        live_routes::connector_haystack_nav,
-        live_routes::connector_haystack_history,
-        live_routes::connector_priority_history,
-        live_routes::connector_priority_history_trigger,
         live_routes::fuel_weather_fetch,
         live_routes::fdd_results,
         live_routes::fdd_equipment,
@@ -502,14 +386,7 @@ mod live_routes {
         OkHealthResponse,
         crate::tenant::TenantsListResponse,
         crate::tenant::TenantRecord,
-        EdgesListResponse,
-        EdgeSummary,
-        EdgeDetailResponse,
-        EdgePayloadResponse,
         IngestStatsResponse,
-        IssueCommandRequest,
-        IssueCommandResponse,
-        CommandAckResponse,
         AgentToolsResponse,
         AgentTool,
         FddRunRequest,
@@ -517,20 +394,7 @@ mod live_routes {
         ErrorResponse,
         JwtClaims,
         Role,
-        CommandEnvelope,
-        CommandAck,
         TelemetryEnvelope,
-        openfdd_contracts::LocalIngestReceipt,
-        openfdd_contracts::HaystackAboutRequest,
-        openfdd_contracts::HaystackAboutResponse,
-        openfdd_contracts::HaystackCatalogRequest,
-        openfdd_contracts::HaystackCatalogResponse,
-        openfdd_contracts::HaystackCurrentReadRequest,
-        openfdd_contracts::HaystackCurrentReadResponse,
-        openfdd_contracts::HaystackHistoryReadRequest,
-        openfdd_contracts::HaystackHistoryReadResponse,
-        openfdd_contracts::HaystackNavRequest,
-        openfdd_contracts::HaystackNavResponse,
         AuthStatusResponse,
         AuthMeResponse,
         AuthLoginRequest,
@@ -545,7 +409,7 @@ mod live_routes {
     info(
         title = "Open-FDD Central API",
         version = "3.5.4",
-        description = "Open-FDD Central control plane — MQTTS ingest, edge shadow, commands, and FDD.\n\n\
+        description = "Open-FDD Central control plane — Normal Framework portal and CSV ingest, Timescale historian, and FDD.\n\n\
             **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
             except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
             Binding a non-loopback address without a strong JWT secret and admin password **fails closed**. \
@@ -557,12 +421,12 @@ mod live_routes {
             **Logins:** `admin` + `OPENFDD_ADMIN_PASSWORD` → admin JWT; `agent` + `OPENFDD_AGENT_PASSWORD` → operator JWT \
             (preferred for Railway MCP / Cursor). Admins may also `POST /api/auth/agent-token` for short-lived operator JWTs.\n\n\
             **Claims:** `sub` (subject), `role` one of `viewer`, `operator`, `admin`. \
-            `POST /api/commands` requires `operator` or `admin` when auth is enabled."
+            Operator and admin JWTs are for portal and CSV writes when auth is enabled."
     ),
     tags(
         (name = "central", description = "Open-FDD Central control plane"),
         (name = "jobs", description = "Persistent analysis Jobs + WattLab / EnergyPlus handoff"),
-        (name = "analytics", description = "Typed analytics envelopes (historian DataFusion / inline)"),
+        (name = "analytics", description = "Typed analytics envelopes (Timescale historian or inline)"),
         (name = "datasets", description = "Ingested site datasets (Delete site)"),
         (name = "fuel", description = "Campus fuel ZIP analytics + Open-Meteo weather"),
         (name = "fdd", description = "Site-scoped FDD rule results / equipment"),

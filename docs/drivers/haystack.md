@@ -2,6 +2,7 @@
 title: Haystack
 parent: Drivers
 nav_order: 3
+nav_exclude: true
 ---
 
 # Haystack driver

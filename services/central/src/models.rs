@@ -1,6 +1,5 @@
 //! OpenAPI request/response schemas for central REST handlers.
 
-use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
@@ -10,11 +9,10 @@ pub struct OkHealthResponse {
     pub ok: bool,
     pub service: String,
     pub version: String,
-    pub edges: usize,
-    /// Successful MQTT/CSV ingest accepts **since this process started** (resets on re-pin).
-    pub ingest_ok: u64,
-    pub ingest_dup: u64,
-    pub ingest_reject: u64,
+    /// Portal driver sites loaded from `OPENFDD_PROVIDER_SITES` (NF and other HTTPS providers).
+    pub portal_providers: usize,
+    /// CSV package import is a built-in ingest path.
+    pub csv_ingest: String,
     /// Ledger-full drops after durable eviction failed (#1168).
     #[serde(default)]
     pub ingest_backpressure: u64,
@@ -40,10 +38,10 @@ pub struct OkHealthResponse {
     /// True when OPENFDD storage/parquet root exists on disk (durable historian, not since-boot).
     #[serde(default)]
     pub historian_present: bool,
-    /// Wave-X: `timescale` | `parquet-legacy`.
+    /// Product historian. Always `timescale`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub historian: Option<String>,
-    /// Wave-X: `postgres-sql` | `datafusion`.
+    /// Product FDD engine. Always `postgres-sql`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fdd_engine: Option<String>,
     /// Always false after Wave-X cutover (no Parquet+Timescale co-canonical).
@@ -53,34 +51,6 @@ pub struct OkHealthResponse {
     /// Health stays HTTP 200 with shed_state when under memory pressure (capacity 24b).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_budget: Option<Value>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct EdgeSummary {
-    pub edge_id: String,
-    /// Site from latest telemetry, else last MQTT topic registration (status/metadata/…).
-    /// Omitted only when truly unknown — never invented as `lab`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub site_id: Option<String>,
-    pub has_telemetry: bool,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct EdgesListResponse {
-    pub ok: bool,
-    pub edges: Vec<EdgeSummary>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct EdgeDetailResponse {
-    pub ok: bool,
-    pub edge_id: String,
-    #[schema(value_type = Object, nullable = true)]
-    pub last_telemetry: Option<TelemetryEnvelope>,
-    #[schema(value_type = Object)]
-    pub sequences: std::collections::HashMap<String, u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -106,62 +76,6 @@ pub struct IngestStatsResponse {
     pub dead_letters: usize,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct IssueCommandRequest {
-    #[serde(default = "default_site")]
-    pub site_id: String,
-    #[serde(default = "default_edge")]
-    pub edge_id: String,
-    /// Wave N+ MT: when set (or resolvable from site_id/building), commands use
-    /// `tenants/{tid}/buildings/{bid}/edges/{eid}/…` instead of legacy `sites/…`.
-    #[serde(default)]
-    pub tenant_id: Option<String>,
-    pub target_id: String,
-    pub approved_by: String,
-    #[schema(value_type = Object)]
-    pub value: Value,
-    #[serde(default = "default_ttl")]
-    pub ttl_secs: i64,
-}
-
-fn default_site() -> String {
-    "local".into()
-}
-fn default_edge() -> String {
-    "fieldbus-1".into()
-}
-fn default_ttl() -> i64 {
-    120
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct IssueCommandResponse {
-    pub ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub command: Option<CommandEnvelope>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub publish_topic: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_topic: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub published: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hint: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct CommandAckResponse {
-    pub ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ack: Option<CommandAck>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pending: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AgentTool {
     pub name: String,
@@ -177,16 +91,6 @@ pub struct AgentToolsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ot_discovery: Option<String>,
     pub tools: Vec<AgentTool>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct EdgePayloadResponse {
-    pub ok: bool,
-    pub edge_id: String,
-    #[schema(value_type = Object, nullable = true)]
-    pub payload: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

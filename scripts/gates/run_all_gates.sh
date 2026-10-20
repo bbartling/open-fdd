@@ -36,8 +36,6 @@ run_gate() {
 echo "== Open-FDD run_all_gates (quick=$QUICK) =="
 
 run_gate "$GATES_DIR/architecture_no_central_fieldwire.sh"
-run_gate "$GATES_DIR/no_anonymous_mqtt.sh"
-run_gate "$GATES_DIR/sole_bacnet_udp_owner.sh"
 run_gate "$GATES_DIR/afdd_schedule_upsert_contract.sh"
 
 if [[ "$QUICK" -eq 1 ]]; then
@@ -47,8 +45,6 @@ else
   run_gate "$GATES_DIR/mqtt_contract_unit.sh"
   run_gate "$GATES_DIR/openapi_central_present.sh"
 fi
-
-run_gate "$RELEASE_DIR/smoke_standalone_mqtts.sh"
 
 echo ""
 echo "PASS: all gates"

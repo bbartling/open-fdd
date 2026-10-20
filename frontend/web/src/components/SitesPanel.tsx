@@ -4,7 +4,6 @@ import {
   ConfirmModal,
   InlineAlert,
 } from "./widgets";
-import { apiFetch } from "../api/client";
 import { deleteDataset } from "../api/datasetsApi";
 import { listPackageBuildings } from "../api/mappingApi";
 import { fetchProviderSites, type ProviderSiteConfig } from "../api/providersApi";
@@ -13,11 +12,6 @@ import { useSessionQuery } from "../session";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-interface EdgesListResponse {
-  ok?: boolean;
-  edges?: Array<{ edge_id: string; site_id?: string | null; has_telemetry?: boolean }>;
 }
 
 /**
@@ -30,7 +24,6 @@ export function SitesPanel() {
   const activeSite = query.siteId ?? "";
 
   const [sites, setSites] = useState<string[]>([]);
-  const [mqttSites, setMqttSites] = useState<Set<string>>(new Set());
   const [providerBySite, setProviderBySite] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -41,18 +34,12 @@ export function SitesPanel() {
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [pkgResult, edgesBody, providerBody] = await Promise.all([
+    const [pkgResult, providerBody] = await Promise.all([
       listPackageBuildings()
         .then((ids) => ({ ok: true as const, ids }))
         .catch((err: unknown) => ({ ok: false as const, err })),
-      apiFetch<EdgesListResponse>("/api/edges").catch(() => null),
       fetchProviderSites().catch(() => null),
     ]);
-    const mqtt = new Set<string>();
-    for (const edge of edgesBody?.edges ?? []) {
-      const site = (edge.site_id ?? "").trim();
-      if (site && edge.has_telemetry) mqtt.add(site);
-    }
     const providers: Record<string, string> = {};
     const providerConfigs: ProviderSiteConfig[] = [
       ...(providerBody?.sites ?? []),
@@ -66,15 +53,14 @@ export function SitesPanel() {
     if (!pkgResult.ok) {
       const msg = formatErr(pkgResult.err);
       const providerIds = Object.keys(providers);
-      if (/building_id required/i.test(msg) && providerIds.length === 0 && mqtt.size === 0) {
+      if (/building_id required/i.test(msg) && providerIds.length === 0) {
         setSites([]);
-        setMqttSites(mqtt);
         setProviderBySite(providers);
         setError(null);
         setNotice(
           "No sites loaded yet. Portal sites appear from server provider configuration. CSV packages appear after a zip import.",
         );
-      } else if (providerIds.length === 0 && mqtt.size === 0) {
+      } else if (providerIds.length === 0) {
         setSites([]);
         setError(msg);
       } else {
@@ -85,12 +71,10 @@ export function SitesPanel() {
       setSites(pkgResult.ids);
       setError(null);
     }
-    setMqttSites(mqtt);
     setProviderBySite(providers);
     const visible = new Set<string>([
       ...(pkgResult.ok ? pkgResult.ids : []),
       ...Object.keys(providers),
-      ...mqtt,
     ]);
     if (!activeSite && visible.size === 1) {
       setQuery({ siteId: [...visible][0] }, true);
@@ -143,9 +127,9 @@ export function SitesPanel() {
   };
 
   const rows = useMemo(() => {
-    const all = new Set<string>([...sites, ...mqttSites, ...Object.keys(providerBySite)]);
+    const all = new Set<string>([...sites, ...Object.keys(providerBySite)]);
     return Array.from(all).sort((a, b) => a.localeCompare(b));
-  }, [mqttSites, providerBySite, sites]);
+  }, [providerBySite, sites]);
 
   return (
     <div className="page-stack" data-testid="sites-page">
@@ -183,8 +167,7 @@ export function SitesPanel() {
       ) : rows.length === 0 ? (
         <InlineAlert id="sites-empty" variant="info" testId="sites-empty">
           No sites loaded. Portal sites appear from server provider configuration. CSV
-          packages appear after a zip import. Archived MQTT telemetry is listed only when an
-          edge still reports it.
+          packages appear after a zip import.
         </InlineAlert>
       ) : (
         <div className="widget-table-wrap" data-testid="sites-table">
@@ -203,7 +186,6 @@ export function SitesPanel() {
                 const labels = siteSourceLabels({
                   hasPackage: sites.includes(id),
                   provider: providerBySite[id],
-                  hasMqttTelemetry: mqttSites.has(id),
                 });
                 return (
                   <tr key={id} data-testid={`sites-row-${id}`}>

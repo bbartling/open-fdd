@@ -91,9 +91,9 @@ def selftest() -> dict:
     # Matrix covers required control names
     for need in ("authz", "idor", "ssrf", "mqtt"):
         checks.append({"id": f"matrix_has_{need}", "ok": need in MATRIX})
-    # mqtt ACL fixture exists
-    acl = SEC / "fixtures" / "mqtt_tenant_acl" / "acl"
-    checks.append({"id": "mqtt_acl_fixture", "ok": acl.is_file()})
+    # Broker ACL fixtures moved with the archived Mosquitto image.
+    live_broker = (SEC.parents[1] / "services" / "mqtt").exists()
+    checks.append({"id": "mqtt_broker_archived", "ok": not live_broker})
     # IDOR aliases into Y
     checks.append({"id": "idor_maps_to_Y", "ok": MATRIX["idor"]["suite"] == "Y"})
     ok = all(c["ok"] for c in checks)

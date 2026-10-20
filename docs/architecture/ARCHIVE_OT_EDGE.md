@@ -10,18 +10,12 @@
 
 ## Policy
 
-4.0 product ingest is HTTPS vendor portals into central, then Timescale. Haystack
-**semantics**, RDF, SPARQL, roles, CSV import, and SQL FDD stay in the product.
-BACnet, Modbus, the Haystack **wire** client, and the MQTTS broker are archive-only.
+4.0 product ingest is the Normal Framework portal and CSV into central, then Timescale. Haystack
+**semantics**, RDF, SPARQL, roles, CSV import, and SQL FDD stay in the product library.
+BACnet, Modbus, the Haystack **wire** client, the MQTTS broker, and the MQTT client crate are archive-only.
 
-Normal 4.0 does **not** keep publishing or launching those services as the default
-stack. `./scripts/openfdd_stack_up.sh` defaults to `portal` (central + web +
-Timescale). Legacy recipes (`react`, `react-ot`, `standalone`, `central`, `edge`)
-are the explicit OT lane and set `OPENFDD_OT_ARCHIVE_RESTORE=1`.
-
-Central starts MQTT ingest only when `OPENFDD_MQTT_ENABLED=1` **and**
-`OPENFDD_OT_ARCHIVE_RESTORE=1`. A stale broker variable on its own does not start
-the worker.
+Normal 4.0 does **not** keep publishing or launching those services. `./scripts/openfdd_stack_up.sh` defaults to `portal` (central + web +
+Timescale). Central does not start an MQTT subscriber. `OPENFDD_MQTT_ENABLED` is not a product switch.
 
 The default GHCR publish path builds central and web. It does not build or push
 `openfdd-fieldbus`. Archived MQTT still publishes only when the workflow is

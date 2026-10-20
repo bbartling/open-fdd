@@ -68,7 +68,7 @@ python3 - <<'PY' "$CENTRAL_BASE" "$OUT" "$SUMMARY" "$BUILDING" "$MAX_WALL" "$EXP
 import json, os, sys, time, urllib.error, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.join(os.getcwd(), "scripts", "nightly-ot-bench"))
+sys.path.insert(0, os.path.join(os.getcwd(), "scripts", "gates"))
 from afdd_slice_identity import slice_key
 
 base, out, summary, building, max_wall, expect_interval, expect_lb_h, expect_schedule = sys.argv[1:9]
@@ -402,7 +402,7 @@ def fully_inside(window, win_start, win_end):
         return False
     return ws >= win_start and we <= win_end
 
-# slice_key: scripts/nightly-ot-bench/afdd_slice_identity.py
+# slice_key: scripts/gates/afdd_slice_identity.py
 # Unscoped legacy / preserved / null-bound slices compare equal.
 
 # F. Outside-window slices stay hash-identical. No prior outside slice is a

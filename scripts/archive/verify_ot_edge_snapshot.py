@@ -86,8 +86,8 @@ def check_portal_compose() -> None:
     for banned in ("openfdd-mqtt", "openfdd-fieldbus", "fieldbus:", "mqtt:", "47808"):
         if banned in text:
             fail(f"portal compose contains {banned}")
-    if 'OPENFDD_MQTT_ENABLED: "0"' not in text:
-        fail("portal compose must disable MQTT")
+    if "OPENFDD_MQTT" in text or "openfdd-mqtt" in text:
+        fail("portal compose must not configure MQTT")
     if "OPENFDD_OT_ARCHIVE_RESTORE" in text:
         fail("portal compose must not opt into the OT restore lane")
 
@@ -124,20 +124,33 @@ def check_product_boundary() -> None:
     workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]
     members = workspace.get("members") or []
     exclude = workspace.get("exclude") or []
-    if "services/fieldbus" in members:
-        fail("live services/fieldbus is still a default workspace member")
-    if "services/fieldbus" not in exclude or "archive" not in exclude:
-        fail("workspace must exclude services/fieldbus and archive")
+    if "services/fieldbus" in members or "services/mqtt" in members:
+        fail("archived fieldbus or mqtt broker is still a workspace member")
+    if "archive" not in exclude:
+        fail("workspace must exclude archive")
+    if "crates/openfdd_mqtt" in members or "crates/openfdd_connector_runtime" in members:
+        fail("MQTT client or connector runtime is still a workspace member")
+    for live in (
+        "services/fieldbus",
+        "services/mqtt",
+        "docker/compose.edge.yml",
+        "crates/openfdd_mqtt",
+        "crates/openfdd_connector_runtime",
+    ):
+        if (ROOT / live).exists():
+            fail(f"live OT path still present: {live}")
     central = (ROOT / "services/central/Cargo.toml").read_text()
-    if "openfdd-fieldbus" in central or "../fieldbus" in central:
-        fail("central still depends on live fieldbus")
+    if "openfdd-fieldbus" in central or "../fieldbus" in central or "openfdd_mqtt" in central:
+        fail("central still depends on fieldbus or the MQTT client")
+    if not (ROOT / "archive/ot-edge/unmaintained/crates/openfdd_mqtt/Cargo.toml").is_file():
+        fail("archived MQTT client crate is missing")
     for workflow in (
         ROOT / ".github/workflows/ghcr-openfdd-stack.yml",
         ROOT / ".github/workflows/rust-release.yml",
     ):
         text = workflow.read_text()
-        if "services/fieldbus/Dockerfile" in text:
-            fail(f"{workflow.name} still publishes the live fieldbus image")
+        if "services/fieldbus/Dockerfile" in text or "services/mqtt/Dockerfile" in text:
+            fail(f"{workflow.name} still publishes an archived OT image")
     stack_up = (ROOT / "scripts/openfdd_stack_up.sh").read_text()
     if "4.0 does not start fieldbus" not in stack_up:
         fail("stack up must refuse fieldbus recipes")
@@ -172,12 +185,12 @@ def check_oci_pin() -> None:
 def check_semantic_boundary() -> None:
     edge = (ROOT / "edge/Cargo.toml").read_text()
     central = (ROOT / "services/central/Cargo.toml").read_text()
-    if 'default = ["ot-transport"]' not in edge:
-        fail("edge default feature must be ot-transport")
-    if "optional = true" not in edge or "rusty-modbus-client" not in edge:
-        fail("modbus client must be optional")
+    if "ot-transport" in edge or "rusty-modbus-client" in edge or "rusty-haystack-client" in edge:
+        fail("product edge crate must not depend on OT transport clients")
+    if (ROOT / "edge/src/drivers").exists() or (ROOT / "edge/src/main.rs").exists():
+        fail("edge process sources must live under the OT archive")
     if "default-features = false" not in central:
-        fail("central must not enable edge ot-transport")
+        fail("central must not enable optional edge features")
 
 
 def main() -> None:

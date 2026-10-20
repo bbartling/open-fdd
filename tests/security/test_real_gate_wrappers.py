@@ -24,10 +24,10 @@ sys.path.insert(0, str(ROOT / "scripts/security"))
 from openfdd_security.evidence import CheckResult, SecurityReport, write_report  # noqa: E402
 from openfdd_security.profiles import required_check_ids  # noqa: E402
 
-GATE25 = ROOT / "scripts/nightly-ot-bench/25_security_python_harness.sh"
-GATE25B = ROOT / "scripts/nightly-ot-bench/25b_security_post_stress.sh"
-GATE26 = ROOT / "scripts/nightly-ot-bench/26_security_mqtt_acl.sh"
-LIB = ROOT / "scripts/nightly-ot-bench/lib_security_gate.sh"
+_BENCH = ROOT / "archive/ot-edge/unmaintained/scripts/nightly-ot-bench"
+GATE25 = _BENCH / "25_security_python_harness.sh"
+GATE25B = _BENCH / "25b_security_post_stress.sh"
+LIB = _BENCH / "lib_security_gate.sh"
 EXAMPLE = ROOT / "scripts/security/config/example_security_fixtures.json"
 
 _FAKE_PY = textwrap.dedent(
@@ -288,158 +288,6 @@ class RealGateWrapperTests(unittest.TestCase):
         verdict = self._verdict(art)
         self.assertEqual(verdict["status"], "ERROR")
         self.assertFalse(verdict["ok"])
-
-    def test_gate26_fail_observer_exit_zero_is_not_green(self) -> None:
-        art = self.root / "g26fail"
-        template = self.root / "observer-fail.json"
-        template.write_text(
-            json.dumps(
-                {
-                    "ok": False,
-                    "status": "FAIL",
-                    "image": "ghcr.io/bbartling/openfdd-mqtt:sha-test",
-                    "acl_source": "generated",
-                    "reason": "observer failed closed",
-                }
-            ),
-            encoding="utf-8",
-        )
-        proc = self._run(
-            GATE26,
-            self._env(
-                art,
-                "observer-fail-rc0",
-                OPENFDD_MQTT_ACL_EXECUTE="1",
-                OPENFDD_SABOTAGE_TEMPLATE=str(template),
-            ),
-        )
-        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        verdict = self._verdict(art)
-        self.assertFalse(verdict["ok"])
-        self.assertNotEqual(verdict["status"], "PASS")
-
-    def test_gate26_ok_false_status_pass_is_not_green(self) -> None:
-        art = self.root / "g26flip"
-        template = self.root / "observer-flip.json"
-        template.write_text(
-            json.dumps(
-                {
-                    "ok": False,
-                    "status": "PASS",
-                    "image": "ghcr.io/bbartling/openfdd-mqtt:sha-test",
-                    "acl_source": "generated",
-                    "reason": "contradictory observer",
-                }
-            ),
-            encoding="utf-8",
-        )
-        proc = self._run(
-            GATE26,
-            self._env(
-                art,
-                "observer-contradict",
-                OPENFDD_MQTT_ACL_EXECUTE="1",
-                OPENFDD_SABOTAGE_TEMPLATE=str(template),
-            ),
-        )
-        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        verdict = self._verdict(art)
-        self.assertFalse(verdict["ok"])
-        self.assertEqual(verdict["status"], "ERROR")
-
-    def test_gate26_empty_checks_top_level_pass_is_not_green(self) -> None:
-        art = self.root / "g26empty"
-        template = self.root / "observer-empty.json"
-        template.write_text(
-            json.dumps(
-                {
-                    "ok": True,
-                    "status": "PASS",
-                    "image": None,
-                    "acl_source": None,
-                    "checks": [],
-                }
-            ),
-            encoding="utf-8",
-        )
-        proc = self._run(
-            GATE26,
-            self._env(
-                art,
-                "copy-template",
-                OPENFDD_MQTT_ACL_EXECUTE="1",
-                OPENFDD_SABOTAGE_TEMPLATE=str(template),
-            ),
-        )
-        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        verdict = self._verdict(art)
-        self.assertFalse(verdict["ok"])
-        self.assertNotEqual(verdict["status"], "PASS")
-
-    def test_gate26_inner_fail_with_top_level_pass_is_not_green(self) -> None:
-        art = self.root / "g26inner"
-        template = self.root / "observer-inner-fail.json"
-        template.write_text(
-            json.dumps(
-                {
-                    "ok": True,
-                    "status": "PASS",
-                    "image": "ghcr.io/bbartling/openfdd-mqtt:sha-test",
-                    "acl_source": "provisioner",
-                    "checks": [
-                        {"check": "mqtt.key_mode_640", "status": "PASS"},
-                        {"check": "mqtt.acl.content_semantics", "status": "PASS"},
-                        {"check": "mqtt.acl.broker_image_policy", "status": "PASS"},
-                        {
-                            "check": "mqtt.acl.live_broker_observer",
-                            "status": "FAIL",
-                            "detail": "synthetic inner fail",
-                        },
-                    ],
-                }
-            ),
-            encoding="utf-8",
-        )
-        proc = self._run(
-            GATE26,
-            self._env(
-                art,
-                "copy-template",
-                OPENFDD_MQTT_ACL_EXECUTE="1",
-                OPENFDD_SABOTAGE_TEMPLATE=str(template),
-            ),
-        )
-        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        verdict = self._verdict(art)
-        self.assertFalse(verdict["ok"])
-        self.assertEqual(verdict["status"], "FAIL")
-
-    def test_gate26_stale_pass_observer_is_not_green(self) -> None:
-        art = self.root / "g26stale"
-        obs = art / "observer"
-        obs.mkdir(parents=True)
-        payload = {
-            "ok": True,
-            "status": "PASS",
-            "image": "ghcr.io/bbartling/openfdd-mqtt:sha-test",
-            "acl_source": "generated",
-            "reason": "stale pass",
-        }
-        (obs / "mqtt_acl_observer.json").write_text(json.dumps(payload), encoding="utf-8")
-        time.sleep(1.1)
-        proc = self._run(
-            GATE26,
-            self._env(
-                art,
-                "stale-pass",
-                OPENFDD_MQTT_ACL_EXECUTE="1",
-            ),
-        )
-        self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        verdict = self._verdict(art)
-        self.assertFalse(verdict["ok"])
-        self.assertNotEqual(verdict["status"], "PASS")
-        self.assertIn("stale", verdict["reason"].lower())
 
     def test_record_status_refuses_pass_when_child_failed(self) -> None:
         proc = subprocess.run(

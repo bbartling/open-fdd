@@ -189,7 +189,7 @@ class ManifestVerdictsTest(unittest.TestCase):
     def test_railway_runner_requires_both_gate36_variants(self):
         runner = (
             Path(__file__).resolve().parents[2]
-            / "scripts/nightly-ot-bench/run_railway_hub_stress.sh"
+            / "archive/ot-edge/unmaintained/scripts/nightly-ot-bench/run_railway_hub_stress.sh"
         ).read_text(encoding="utf-8")
         self.assertIn("--required 36_mv_sql_oracle_twin", runner)
         self.assertIn("--required 36_model_ecm_qualification", runner)

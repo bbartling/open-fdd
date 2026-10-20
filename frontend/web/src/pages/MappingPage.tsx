@@ -15,18 +15,14 @@ import {
   buildMappingManifest,
   getPackageMapping,
   getSessionConfig,
-  getSparqlCatalog,
   invertRolesToSessionMap,
   listCookbookRoles,
   listPackageBuildings,
   putSessionConfig,
-  runSparqlQuery,
   updatePackageRoles,
   type MappingEquipment,
   type PackageMappingResponse,
   type SessionConfig,
-  type SparqlCatalogQuery,
-  type SparqlQueryResult,
 } from "../api/mappingApi";
 import { listProviderBuildingIds } from "../api/providersApi";
 import { buildDataModelTurtle } from "../api/dataModelTurtle";
@@ -43,154 +39,6 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-type SparqlResultRow = Record<string, string> & { id: string };
-
-const DEFAULT_SPARQL = `SELECT DISTINCT ?equipmentId WHERE {
-  ?equip ofdd:equipmentId ?equipmentId .
-}
-ORDER BY ?equipmentId
-LIMIT 50`;
-
-function SparqlPanel({ buildingId }: { buildingId: string }) {
-  const [catalog, setCatalog] = useState<SparqlCatalogQuery[]>([]);
-  const [queryText, setQueryText] = useState(DEFAULT_SPARQL);
-  const [result, setResult] = useState<SparqlQueryResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const q = await getSparqlCatalog();
-        if (!cancelled) setCatalog(q);
-      } catch (e) {
-        if (!cancelled) setError(formatErr(e));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const onRun = async () => {
-    if (!buildingId.trim()) {
-      setError("Select an active site before running SPARQL.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const out = await runSparqlQuery(buildingId, queryText);
-      if (out.ok === false) {
-        setError(out.error ?? "SPARQL query failed");
-        setResult(null);
-      } else {
-        setResult(out);
-      }
-    } catch (e) {
-      setError(formatErr(e));
-      setResult(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const columns = result?.columns ?? [];
-  const rows = result?.rows ?? [];
-
-  return (
-    <section data-testid="data-model-sparql-panel">
-      <h2>SPARQL</h2>
-      <p style={{ maxWidth: "48rem", marginBottom: "0.75rem" }}>
-        Read-only SELECT/ASK against the active site&apos;s committed Haystack
-        model. Templates load into the editor; Run executes the visible text.
-      </p>
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "0.5rem",
-          marginBottom: "0.75rem",
-        }}
-      >
-        {catalog.map((q) => (
-          <Button
-            key={q.id}
-            id={`sparql-tmpl-${q.id}`}
-            label={q.label || q.id}
-            variant="secondary"
-            testId={`sparql-template-${q.id}`}
-            onClick={() => {
-              if (q.query) setQueryText(q.query);
-              else setQueryText(DEFAULT_SPARQL);
-            }}
-          />
-        ))}
-      </div>
-      <label htmlFor="sparql-editor" className="sr-only">
-        SPARQL query
-      </label>
-      <textarea
-        id="sparql-editor"
-        data-testid="sparql-editor"
-        value={queryText}
-        onChange={(e) => setQueryText(e.target.value)}
-        rows={12}
-        style={{
-          width: "100%",
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          fontSize: "0.85rem",
-          marginBottom: "0.75rem",
-        }}
-      />
-      <Button
-        id="sparql-run"
-        label={busy ? "Running…" : "Run"}
-        onClick={() => void onRun()}
-        disabled={busy || !buildingId}
-        testId="sparql-run"
-      />
-      {error ? (
-        <InlineAlert id="sparql-error" variant="danger" testId="sparql-error">
-          {error}
-        </InlineAlert>
-      ) : null}
-      {result?.kind === "ask" ? (
-        <p data-testid="sparql-ask-result">
-          ASK result: <strong>{String(result.boolean)}</strong>
-        </p>
-      ) : null}
-      {result?.kind === "select" ? (
-        <>
-          <p data-testid="sparql-row-count">
-            {result.row_count ?? 0} row(s)
-            {result.truncated ? " (truncated)" : ""}
-            {result.defs_pin ? ` · defs ${result.defs_pin}` : ""}
-          </p>
-          <DataTable<SparqlResultRow>
-            id="sparql-results"
-            label="SPARQL result rows"
-            testId="sparql-results-table"
-            columns={columns.map((c) => ({
-              key: c as keyof SparqlResultRow & string,
-              header: c,
-            }))}
-            rows={rows.map((r, i) => {
-              const row: SparqlResultRow = { id: String(i) };
-              for (const c of columns) {
-                row[c] = String(r[c] ?? "");
-              }
-              return row;
-            })}
-          />
-        </>
-      ) : null}
-    </section>
-  );
-}
-
-/** Invert registry required∪optional roles → consuming rule ids. */
 function buildRoleToFddRules(rules: FddRuleSummary[]): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const r of rules) {
@@ -217,17 +65,11 @@ export function MappingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const buildingId = query.siteId ?? "";
   const equipmentId = query.equipment ?? "";
-  const view =
-    searchParams.get("view") === "results"
-      ? "results"
-      : searchParams.get("view") === "sparql"
-        ? "sparql"
-        : "mapping";
+  const view = searchParams.get("view") === "results" ? "results" : "mapping";
 
-  const setView = (next: "mapping" | "results" | "sparql") => {
+  const setView = (next: "mapping" | "results") => {
     const params = new URLSearchParams(searchParams);
     if (next === "results") params.set("view", "results");
-    else if (next === "sparql") params.set("view", "sparql");
     else params.delete("view");
     setSearchParams(params, { replace: true });
   };
@@ -569,22 +411,10 @@ export function MappingPage() {
           >
             Results by Category
           </button>
-          <button
-            type="button"
-            role="tab"
-            className={`data-model-subnav__tab${view === "sparql" ? " data-model-subnav__tab--active" : ""}`}
-            aria-selected={view === "sparql"}
-            onClick={() => setView("sparql")}
-            data-testid="data-model-tab-sparql"
-          >
-            SPARQL
-          </button>
         </div>
 
         {view === "results" ? (
           <ResultsByCategoryPanel />
-        ) : view === "sparql" ? (
-          <SparqlPanel buildingId={buildingId} />
         ) : (
           <>
         <h2>Role mapping</h2>
