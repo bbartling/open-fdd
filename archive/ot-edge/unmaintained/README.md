@@ -24,6 +24,7 @@ This tree is the BACnet, Modbus, Haystack wire, fieldbus gateway, Mosquitto brok
 | `services/central/src/ingest.rs` | MQTT subscriber copied from the product before it was removed |
 | `scripts/security` | Broker ACL observer, field-only exposure lint, OT compose selection |
 | `tests/security` | CI unit tests that covered those checks |
+| `tests/qualification` | MQTTS gap-blame and Wave I/K building tests for the archived bench |
 
 The checksummed pin of commit `cdaa4f15` remains at [`../unqualified-cdaa4f15/`](../unqualified-cdaa4f15/README.md). Do not treat that snapshot and this tree as interchangeable: this tree is newer and is the one to read. The snapshot's `source/` and `CHECKSUMS.sha256` stay frozen.
 
