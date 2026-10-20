@@ -68,5 +68,4 @@ and the `mcp/` crate tool registry in sync once tools are implemented.
 - `docs/migration/vibe21/ROLE_IMPORT_LANES.md` — ZIP lane contract (SoT)
 - `docs/migration/vibe21/MASTER_BUILD.md` — offline stage graph
 - `docs/migration/vibe21/OFFLINE_NOTEBOOK_BOUNDARY.md` — Python boundary
-- `scripts/vibe21_master_build.sh`, `scripts/vibe21_export_champion_portable.py`,
-  `scripts/vibe21_turnkey_openfdd.sh`
+- `scripts/vibe21_master_build.sh`, `scripts/vibe21_export_champion_portable.py`

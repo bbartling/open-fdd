@@ -44,8 +44,6 @@ python3 scripts/security/nessus/import_nessus_report.py --selftest
 python3 scripts/security/peer_probe_https.py --selftest
 # Optional isolated Compose soak (official caddy + stub web; no product image builds):
 OPENFDD_HTTPS_PEER_PROBE=1 ./scripts/security/probe_standalone_https.sh
-# MQTT tenant ACL observer (content + key-mode; live mosquitto when Docker OK):
-OPENFDD_MQTT_ACL_EXECUTE=1 ./scripts/nightly-ot-bench/26_security_mqtt_acl.sh
 # When licensed scan exists (private artifact):
 python3 scripts/security/nessus/import_nessus_report.py \
   --report /path/to/private.nessus --require-credentialed --out reports/nessus/measured.json

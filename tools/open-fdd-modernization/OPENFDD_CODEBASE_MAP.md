@@ -245,7 +245,6 @@ Inspect:
 - `crates/openfdd_mqtt`;
 - broker/compose configuration;
 - `scripts/release/smoke_standalone_mqtts.sh`;
-- `scripts/gates/e2e_mqtts_feather.md`;
 - `scripts/gates/sole_bacnet_udp_owner.sh`;
 - `docs/drivers/bacnet.md`;
 - local smoke-profile examples.

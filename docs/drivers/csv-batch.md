@@ -27,7 +27,6 @@ Execute requires preflight `verdict: pass` (or `warn` when strict mode allows).
 
 Hourly append after a seeded package: `POST /api/csv/import/package/append` (JWT, `confirm: true`). See [CSV batch import](../web-app/csv-batch-import.html).
 
-**AFDD routine sim (BUILDING_50):** [`scripts/csv_flood_afdd_routine_sim.py`](https://github.com/bbartling/open-fdd/blob/master/scripts/csv_flood_afdd_routine_sim.py) — seed + hourly append + session-config patches + `POST /api/fdd/run`.
 
 ## Host batch (daily pull example)
 

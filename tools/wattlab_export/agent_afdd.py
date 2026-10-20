@@ -74,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
         default="pandas",
         help="FDD engine. pandas is standalone (no central_client). datafusion fails closed if central is missing.",
     )
+    parser.add_argument(
+        "--schedule",
         type=str,
         default=None,
         help="JSON occupancy calendar (timezone + days mon..sun). Pins occupied/unoccupied slices.",

@@ -62,17 +62,7 @@ OPENFDD_PARQUET_ROOT="$PWD/workspace/openfdd" ./scripts/release/smoke_mcp_centra
 
 Scoped FDD on Railway/local: use `rule_ids` in `/api/fdd/run` POST body; avoid full-building rule floods within the default 120s smoke window.
 
-### Patch-cycle restore smoke (gate 18)
-
-After every image re-pin (local or Railway), historian data must still be queryable from the **same volume**:
-
-```bash
-cd ~/open-fdd
-# Stack must be up; requires existing Parquet on workspace/openfdd
-./scripts/nightly-ot-bench/18_volume_restore_smoke.sh
-```
-
-What this proves:
+### What persists across re-pin
 
 | Source | Persisted as | Restore mechanism |
 |--------|--------------|-------------------|

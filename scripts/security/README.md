@@ -169,16 +169,6 @@ Verdict: `reports/security/standalone_https_probe.json`.
 python3 -B -m unittest discover -s tests/security -v
 ```
 
-## Stress wiring (HOLD — do not live-run without authorization)
-
-Gate scripts (IDs, not Wave L script numbers):
-
-- `scripts/nightly-ot-bench/25_security_python_harness.sh` → gate `25_security_python_harness`
-- `scripts/nightly-ot-bench/25b_security_post_stress.sh` → gate `25b_security_post_stress`
-- `scripts/nightly-ot-bench/26_security_mqtt_acl.sh` → gate `26_security_mqtt_acl` (BLOCKED unless `OPENFDD_MQTT_ACL_EXECUTE=1`; then runs `mqtt_tenant_acl_observer.py`)
-
-Distinct from existing `25_wave_l_tenant_ui_session.sh` (Wave L OFF smoke).
-
 ## Requirements
 
 Stdlib only for the harness. Optional pins would go in

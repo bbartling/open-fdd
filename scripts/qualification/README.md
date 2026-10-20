@@ -59,8 +59,6 @@ Rust product.
 
 | Profile | Entry | Environment |
 |---------|-------|-------------|
-| `railway_field` | `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` | Authorized live ops window; includes data mutations and telemetry pause/resume, plus public ZAP baseline. **STRESS NOTE #1:** watch central RAM (Railway memory limit/current/max + capacity sampler) under Overview/RCx/AFDD; hard-fail silent restart / OOM / 499 storm. ACME AFDD stays lookback-sized (daily → 24h). See [`STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md). |
-| `lab_local` | `./scripts/nightly-ot-bench/run_all.sh` | Disposable/local stack (not field closeout) |
 | `harness_selftest` | `python3 scripts/qualification/write_manifest.py selftest` | No network |
 
 **Tier split** (see `docs/operations/STRESS_CLOSEOUT.md`):
@@ -93,12 +91,6 @@ SPARSE_OK / INCONCLUSIVE; exit 2 is BLOCKED (missing probe), not a pass.
 All-N/A security remains `NOT_APPLICABLE`; no security evidence remains
 `null`. Dry-run harness artifacts cannot fully qualify.
 
-**Wave S4 M&V twin (Soft-OPEN):** `scripts/qualification/mv_sql_oracle_twin_gate.py`
-+ gate `36_mv_sql_oracle_twin.sh`. Default **BLOCKED** without
-`OPENFDD_SECURITY_EXECUTE=1` (or `OPENFDD_MV_TWIN_EXECUTE=1`). With EXECUTE,
-compares thin PyPI twin vs `POST /api/analytics/mv` on
-`fixtures/mv_change_point_seed.json`. Not OPS PINNED until FQ MEGA.
-
 Harness: [`scripts/security/README.md`](../security/README.md). Offline tests:
 `python3 -B -m unittest discover -s tests/security -v`. Audit contract:
 [`.cursor/plans/security_stress_integration_audit.md`](../../.cursor/plans/security_stress_integration_audit.md).
@@ -118,29 +110,12 @@ python3 -B scripts/qualification/write_manifest.py selftest
 | `protocol_connector_qualification.py` | Phase 5D split image/recipe and read-only bench evidence evaluator; fail-closed selftest |
 | `write_manifest.py` | Create / record / finalize / selftest |
 | `zap_baseline_verdict.py` | Parse ZAP JSON; High always fails; Medium explicit |
-| `auth_role_matrix.sh` | anon/admin/operator(/viewer) REST checks |
-| `railway_mcp_accuracy.sh` | MCP↔REST on Railway HTTPS; no local central fallback |
 | `run_wave_c_isolated.sh` | Wave C entry: MQTTS isolation + restore-to-empty + ZAP AF |
 | `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint disposable **web+central** from GHCR, then call `zap/run_af_disposable.py` (single evaluator). Digest-pinned ZAP. Default `OPENFDD_MULTI_TENANT=0`. **Never** activeScan live Railway OT; no fallback crawl. |
 | `zap/run_af_disposable.py` | Single ZAP AF evaluator (A06–A07): plan hygiene, verified `/api/auth/me` (status+identity schema), digest pin gate, High/Medium verdict. `--selftest` → **BLOCKED**. Execute via `OPENFDD_ZAP_AF_EXECUTE=1`. |
 | `zap/run_af_disposable.sh` | Thin shell alias to `run_af_disposable.py`. |
-| `wave_l_ab_isolation_harness.sh` | Tier-2 synthetic Tenant A↔B path + MQTT namespace self-test (no live OT) |
-| `wave_l_tip_digest_scan.sh` | Same-sha tip completeness (+ python-absence) |
-| `../ops/wave_l_legacy_migrate_dry_run.sh` | L7 legacy-tenant inventory dry-run (refuses APPLY on HTTPS) |
 | `restore_to_empty.sh` | Backup → empty volume restore + bounded API budgets |
 | `../integration/mqtts_transport_isolation.sh` | Disposable MQTTS cert/ACL/QoS/reconnect |
-
-## Example env
-
-```bash
-export OPENFDD_API_BASE=https://openfdd-web-production-af99.up.railway.app
-export OPENFDD_ADMIN_PASSWORD=…   # from Railway vars; do not source conflicting local .env
-export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-<7>
-export EXPECTED_EDGE_ID=pi-1      # optional; else any has_telemetry
-# ACCEPT_ZAP_MEDIUM=1 (default) — Medium residuals accepted but recorded
-# SKIP_ZAP=1 → required gate SKIPPED → not fully_qualified
-./scripts/nightly-ot-bench/run_railway_hub_stress.sh
-```
 
 ## Wave C isolated (pull GHCR only)
 
@@ -156,7 +131,6 @@ Field Railway closeout stays public `zap-baseline`. Gate 18 same-volume recreate
 
 | Blocker | Tier |
 |---------|------|
-| Viewer password path in `auth_role_matrix.sh` (hub password login exists) | soft / optional |
 | Active payload scans / OT write tests | **never** on live hub by default |
 | Tightening bounded-perf baselines after CI green week | isolated |
 

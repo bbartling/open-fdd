@@ -3,9 +3,6 @@
 
 Picks the newest image by OCI config `created` across all tags (nightly/sha-/semver).
 Prints AGENT_LOOP_WAKE_ghcr_newer when a newer successful image appears.
-
-Successor to ``wattlab_parity_watch_ghcr.py`` — wake text points at maint pull +
-synthetic-59 soaks (vibe19 dual-parity retired).
 """
 
 from __future__ import annotations
@@ -119,8 +116,7 @@ def main() -> int:
                         f"Pull tag={info['tag']} created={info['created']} "
                         f"digest={info['digest']}, run "
                         "./scripts/openfdd_maint_update_resume.sh react-ot nightly, "
-                        "then synthetic_59_target_pair_soak.py --side ofdd, "
-                        "overview + health-matrix soaks. Update watch baseline."
+                        "then smoke /api/health. Update watch baseline."
                     ),
                     "tag": info["tag"],
                     "created": info["created"],

@@ -46,4 +46,3 @@ Artifact root: `EPLUS_DUMP_ROOT` (default `reports/eplus-dump/`). Legacy `report
 - Product export: `services/central/src/engineering_bundle.rs` (Rust; no Python in image)
 - Offline parity: `tools/wattlab_export/` (`OPENFDD_WATTLAB_PYTHON_EXPORT=1`)
 - Compare helpers (tests): `scripts/eplus_parity_compare.py`
-- Retired vibe19 dual-parity: `scripts/retired/vibe19-parity/`

@@ -49,8 +49,4 @@ curl -s -X POST http://127.0.0.1:8080/api/fdd/run \
   -d '{"mode":"registry","building_id":"BUILDING_50","rule_ids":["VAV-1","ECON-1"]}'
 ```
 
-**Bench orchestrator:** [`scripts/csv_flood_afdd_routine_sim.py`](../../scripts/csv_flood_afdd_routine_sim.py) with [`scripts/fixtures/b50_afdd_routine.json`](../../scripts/fixtures/b50_afdd_routine.json) — see [CSV flood + AFDD routine](../agent/CSV_FLOOD_AFDD_ROUTINE.md).
 
-```bash
-./scripts/openfdd_csv_preflight.sh /path/to/file.csv
-```

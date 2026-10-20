@@ -24,7 +24,7 @@ Checklist: [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](../../../docs/operations/RAILWAY_
 | **Product hub pin** | **FQ OPS PINNED** **`sha-7ad6479`** / **3.5.43** · stress `20260921T234148Z` **`fully_qualified=true`** (Wave U V6). Prior: **`sha-1677c33`** / **3.5.37**. Soft Tip B: **`sha-4a5c11e`** / **3.5.28**. |
 | Stress closeout | Wave N gate = ACL trio (31) + MQTTS continuity (32) + hub stress while ACME streams — [`BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md`](../../../docs/operations/BUG_REPORT_WAVE_N_MULTI_TENANT_SECURITY.md) · [`STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md) |
 | Local firewall hub | HTTP only — [`LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md) |
-| Fieldbus | **Not** a Railway service — ACME VIM OT edge (private) or bensbench x86 via `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` |
+| Fieldbus | **Not** a Railway service; archived in 4.0 (sites ingest via the NF portal) |
 
 ### Live services (names matter for CLI)
 
@@ -42,7 +42,6 @@ Always `railway status` / `railway service list` before re-pin — do **not** as
 | --- | --- |
 | Publish / tip images | GitHub Actions `Publish Open-FDD stack to GHCR` + `./scripts/check_ghcr_tip_stack.sh` |
 | Backup + re-pin hub | **This skill** (Railway CLI) |
-| Edge → MQTTS | `./scripts/openfdd_fieldbus_railway_up.sh` on bensbench |
 | FDD / analytics for Cursor/Codex | [`mcp/`](../../../mcp/) `openfdd-mcp` + agent JWT — **not** Railway MCP |
 | Local CSV lab | `./scripts/openfdd_stack_up.sh react` (firewall HTTP) |
 
@@ -53,9 +52,8 @@ See [`PATCH_CYCLE.md`](../../../docs/operations/PATCH_CYCLE.md). After each tiny
 1. Tip Actions green + GHCR Publish
 2. GH tidy (0 open PRs; delete feature branch)
 3. **Backup** then re-pin central → mqtt → web
-4. `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` (bensbench x86 only — no Pi)
-5. `./scripts/nightly-ot-bench/run_railway_hub_stress.sh`
-6. Sync [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md)
+4. Smoke `/api/health`
+5. Sync [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md)
 
 MQTT certs: volume on `openfdd-mqtt` at `/mosquitto/certs` (`ca.pem`, `server.cert.pem`, `server.key.pem`, `acl`).  
 **Learned (Wave N):** (1) `server.key.pem` must be readable by uid **1883** (`mosquitto`) — root `0600` → crash `Permission denied`; tip mqtt image entrypoint `chmod a+r` + `chown`. (2) Server cert **must include SAN** (`DNS:openfdd-mqtt`, `DNS:openfdd-mqtt.railway.internal`, TCP-proxy host) — rustls rejects CN-only → `ssl/tls alert bad certificate` while `openssl s_client` still OK. (3) Volume SFTP/`service files` fail while mqtt is crash-looping — detach volume → temporary alpine `sleep infinity` helper → chmod/upload → reattach → delete helper. Never leave stray Railway projects from `railway up` without `--project`. TCP proxy: `railway tcp-proxy list -s openfdd-mqtt`. Never commit PEMs/tokens.
@@ -108,8 +106,6 @@ railway service source connect --service openfdd-web \
   --image "ghcr.io/bbartling/openfdd-web:${SHA}"
 # If ingest_ok stuck at 0 after mqtt re-pin: railway redeploy -s "$CENTRAL_SVC" -y
 
-# Fieldbus is local on bensbench (not a Railway service):
-./scripts/openfdd_fieldbus_railway_up.sh "$SHA"
 ```
 
 Smoke: public SPA + `https://<web>/api/health` (lean readiness only). With auth ON, **`/api/tenants` requires Bearer** — do not smoke it unauthenticated (Kali O2c). After login, `/api/tenants` shows membership-scoped tenants; hub admin sees all. Version must match the **pinned** SHA. Export **`RAILWAY_ADMIN_PASSWORD`** from Railway vars for mid-wave gates (local `.env` must not clobber).

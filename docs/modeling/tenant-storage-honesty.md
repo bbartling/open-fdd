@@ -23,7 +23,6 @@ multi-tenant (MT) mode. Update when paths migrate.
 ## Dual-read + migrate (Wave U V7)
 
 - **Reads:** `fdd_store::resolve_building_read_root` loads the newer Parquet tree of `tenants/{tid}/…` and hub-root `building=*`. A tree counts only when it contains `.parquet` (an empty legacy `building=` directory does not). Freshness is the max of file mtime and `part-` / `compact-` UTC stamps in the file name; a tie prefers hub-root so a copied or compacted tenant snapshot cannot mask live hub parts. A tenant-only tree still reads `tenants/{tid}/…`. Ambiguous identical labels under two tenants without a preferred tid fall through to hub-root (fail closed).
-- **Migrate:** additive copy via `scripts/ops/wave_u_v7_tenant_path_migrate.sh` of each hub-root building tree into `tenants/{tid}/`. The helper's site map is deployment config, not a product default. Never deletes hub-root.
 - **ACL:** foreign tenant deny; hub_admin sees all (`TenantContext::allow_building` + gate 31 / preauth matrix).
 
 ## Soft-OPEN closed by V7
@@ -42,8 +41,5 @@ multi-tenant (MT) mode. Update when paths migrate.
 # Operator A: own building → 200; foreign building → 403/404
 # Covered by security harness Y checks + gate 22 / 25 / 25b.
 # Dual-read unit: cargo test -p fdd_store dual_read
-# Migrate dry-run: HUB_PARQUET_ROOT=… ./scripts/ops/wave_u_v7_tenant_path_migrate.sh
 ```
 
-Model/ECM qualification gate (wired for stress profiles; FQ on S4 tip):
-[`scripts/nightly-ot-bench/36_model_ecm_qualification.sh`](../../scripts/nightly-ot-bench/36_model_ecm_qualification.sh).

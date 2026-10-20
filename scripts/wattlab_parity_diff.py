@@ -6,6 +6,11 @@ used in tests (``compare_fdd``, ``compare_analytics_tables``).
 """
 
 from eplus_parity_compare import *  # noqa: F403
+from eplus_parity_compare import (  # noqa: F401
+    _intentional_accepted,
+    _sql_screening_pair,
+    _status_ok,
+)
 
 if __name__ == "__main__":
     from eplus_parity_compare import main

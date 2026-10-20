@@ -107,7 +107,6 @@ Agents must not treat pandas oracle output as production FDD execution.
 
 Do not commit vendor appenders or full Building 50 zips. CI uses `tests/fixtures/hourly_append/`.
 
-Bench orchestrator: [`scripts/csv_flood_afdd_routine_sim.py`](../scripts/csv_flood_afdd_routine_sim.py) — slices `raw_BUILDING_50_openfdd.zip` into hourly appends, applies **AFDD routine** JSON (`openfdd_afdd_routine_v1`: `rule_ids`, `params`, `patches[]` at `append_step`), logs to `reports/eplus-dump/artifacts/csv_flood_sim/`. See [`docs/agent/CSV_FLOOD_AFDD_ROUTINE.md`](../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md).
 
 ---
 
@@ -129,8 +128,6 @@ Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING
 | Path | Use |
 | --- | --- |
 | `scripts/synthetic_59_*.py` | Golden 59-rule contract (OpenFDD-only) |
-| `scripts/csv_flood_afdd_routine_sim.py` | Real-site BUILDING_50 stream + AFDD routine |
-| `scripts/retired/vibe19-parity/` | Retired vibe19 dual-parity (do not run) |
 | `scripts/eplus_parity_compare.py` | Dump compare helpers (tests only) |
 
 ---

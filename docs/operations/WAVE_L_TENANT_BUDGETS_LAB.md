@@ -32,4 +32,3 @@
 ## Evidence
 
 - Unit tests in `services/central/src/tenant_budget.rs`
-- Mid-wave gate **15** (`scripts/nightly-ot-bench/26_wave_l_tenant_budgets.sh`) asserts `enabled=false` while mode OFF

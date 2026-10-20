@@ -33,8 +33,7 @@ This is the **optional WAN** pattern: on-prem protocol publishes into a **Recipe
 
 Production OT on the bench is still **`openfdd-fieldbus` (rusty-bacnet)**. BACpypes3 is
 diagnose-only (Who-Is / RP when fieldbus is stopped). See
-[`LOCAL_BACNET_BACPYPE3_BENCH.md`](LOCAL_BACNET_BACPYPE3_BENCH.md) ·
-`./scripts/ops/local_bacnet_ot_bench.sh`.
+[`LOCAL_BACNET_BACPYPE3_BENCH.md`](LOCAL_BACNET_BACPYPE3_BENCH.md).
 
 ## Policy
 
