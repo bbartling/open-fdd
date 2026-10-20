@@ -6,8 +6,8 @@ use sqlx::Row;
 
 use super::hourly::LogicalWindow;
 use super::store::{
-    claim_ready_sql, plan_claim_ids, CheckpointKey, CommitPatch, FailPatch, GapDraft, JobRecord,
-    JobState, NewJob, ReceiptDraft,
+    claim_ready_sql, plan_claim_ids, CheckpointFact, CheckpointKey, CommitPatch, CoverageFacts,
+    FailPatch, GapDraft, JobRecord, JobState, NewJob, ReceiptDraft, ReceiptFact,
 };
 
 pub async fn ensure_schema(pool: &sqlx::PgPool) -> Result<(), String> {
@@ -354,6 +354,99 @@ pub async fn insert_gap(pool: &sqlx::PgPool, gap: &GapDraft) -> Result<(), Strin
     Ok(())
 }
 
+pub async fn coverage_facts(
+    pool: &sqlx::PgPool,
+    canonical_site: &str,
+) -> Result<CoverageFacts, String> {
+    let sql = format!(
+        "SELECT {JOB_COLUMNS} FROM provider_hourly_job WHERE canonical_site = $1 \
+         ORDER BY window_start, shard, purpose, generation"
+    );
+    let rows = sqlx::query(&sql)
+        .bind(canonical_site)
+        .fetch_all(pool)
+        .await
+        .map_err(db_err)?;
+    let mut jobs = Vec::new();
+    for row in rows {
+        jobs.push(row_to_job(&row)?);
+    }
+    let gap_rows = sqlx::query(
+        r#"
+        SELECT tenant, canonical_site, provider_instance, device_id, model_revision,
+               window_start, window_end, reason, recoverability
+        FROM provider_hourly_gap
+        WHERE canonical_site = $1
+        ORDER BY window_start
+        "#,
+    )
+    .bind(canonical_site)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    let mut gaps = Vec::new();
+    for row in gap_rows {
+        gaps.push(GapDraft {
+            tenant: row.try_get("tenant").map_err(db_err)?,
+            canonical_site: row.try_get("canonical_site").map_err(db_err)?,
+            provider_instance: row.try_get("provider_instance").map_err(db_err)?,
+            device_id: row.try_get("device_id").map_err(db_err)?,
+            model_revision: row.try_get("model_revision").map_err(db_err)?,
+            window_start: row.try_get("window_start").map_err(db_err)?,
+            window_end: row.try_get("window_end").map_err(db_err)?,
+            reason: row.try_get("reason").map_err(db_err)?,
+            recoverability: row.try_get("recoverability").map_err(db_err)?,
+        });
+    }
+    let checkpoint_rows = sqlx::query(
+        r#"
+        SELECT device_id, model_revision, contiguous_end
+        FROM provider_hourly_checkpoint
+        WHERE canonical_site = $1
+        ORDER BY device_id
+        "#,
+    )
+    .bind(canonical_site)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    let mut checkpoints = Vec::new();
+    for row in checkpoint_rows {
+        checkpoints.push(CheckpointFact {
+            device_id: row.try_get("device_id").map_err(db_err)?,
+            model_revision: row.try_get("model_revision").map_err(db_err)?,
+            contiguous_end: row.try_get("contiguous_end").map_err(db_err)?,
+        });
+    }
+    let receipt_rows = sqlx::query(
+        r#"
+        SELECT r.receipt_id, r.job_id, r.outcome
+        FROM provider_hourly_receipt r
+        JOIN provider_hourly_job j ON j.job_id = r.job_id
+        WHERE j.canonical_site = $1
+        ORDER BY r.receipt_id
+        "#,
+    )
+    .bind(canonical_site)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    let mut receipts = Vec::new();
+    for row in receipt_rows {
+        receipts.push(ReceiptFact {
+            receipt_id: row.try_get("receipt_id").map_err(db_err)?,
+            job_id: row.try_get("job_id").map_err(db_err)?,
+            outcome: row.try_get("outcome").map_err(db_err)?,
+        });
+    }
+    Ok(CoverageFacts {
+        jobs,
+        gaps,
+        checkpoints,
+        receipts,
+    })
+}
+
 pub async fn gap_count(pool: &sqlx::PgPool, canonical_site: &str) -> Result<u32, String> {
     let row = sqlx::query(
         r#"SELECT COUNT(*)::int AS n FROM provider_hourly_gap WHERE canonical_site = $1"#,
@@ -530,14 +623,20 @@ async fn load_job_pool(pool: &sqlx::PgPool, job_id: &str) -> Result<Option<JobRe
     row.map(|row| row_to_job(&row)).transpose()
 }
 
-const JOB_SQL: &str = r#"
-SELECT job_id, tenant, canonical_site, provider_instance, device_id, model_revision,
-       window_start, window_end, shard, shard_count, purpose, generation, state, attempt,
-       not_before, lease_owner, lease_expiry, fencing_token, point_ids,
-       fetched_count, accepted_count, rejected_count, overlap_count, writer_acknowledged,
-       received_at, committed_at, safe_error_code, receipt_id
-FROM provider_hourly_job WHERE job_id = $1
-"#;
+const JOB_COLUMNS: &str =
+    "job_id, tenant, canonical_site, provider_instance, device_id, model_revision, \
+       window_start, window_end, shard, shard_count, purpose, generation, state, attempt, \
+       not_before, lease_owner, lease_expiry, fencing_token, point_ids, \
+       fetched_count, accepted_count, rejected_count, overlap_count, writer_acknowledged, \
+       received_at, committed_at, safe_error_code, receipt_id";
+
+const JOB_SQL: &str =
+    "SELECT job_id, tenant, canonical_site, provider_instance, device_id, model_revision, \
+       window_start, window_end, shard, shard_count, purpose, generation, state, attempt, \
+       not_before, lease_owner, lease_expiry, fencing_token, point_ids, \
+       fetched_count, accepted_count, rejected_count, overlap_count, writer_acknowledged, \
+       received_at, committed_at, safe_error_code, receipt_id \
+FROM provider_hourly_job WHERE job_id = $1";
 
 fn row_to_job(row: &sqlx::postgres::PgRow) -> Result<JobRecord, String> {
     let state_raw: String = row.try_get("state").map_err(db_err)?;

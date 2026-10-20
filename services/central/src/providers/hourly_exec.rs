@@ -11,11 +11,13 @@ use super::hourly::{
     retry_delay_secs, shard_ids, stagger_secs, CoverageOutcome, FetchError, HourlyPolicy,
     LogicalWindow, UPDATE_LOG_STATUS,
 };
+use super::ledger::{build_ledger, LedgerContext};
 use super::map::{normalize_mapped, DevicePoints, HistorySeries, ResolvedRole};
 use super::store::{
     CheckpointKey, CommitPatch, FailPatch, GapDraft, HourlyStore, JobRecord, JobState, NewJob,
     ReceiptDraft,
 };
+use super::types::CoverageLedger;
 use super::types::NormalizedSample;
 
 #[derive(Debug, Clone)]
@@ -64,6 +66,7 @@ pub struct TickReport {
     pub last_safe_code: Option<String>,
     pub fetches: u32,
     pub update_log_status: &'static str,
+    pub ledger: CoverageLedger,
 }
 
 impl TickReport {
@@ -115,6 +118,7 @@ pub async fn run_hourly_tick(
         last_safe_code: None,
         fetches: 0,
         update_log_status: UPDATE_LOG_STATUS,
+        ledger: empty_ledger(input),
     };
     let mut active = Vec::new();
     for device in input.devices {
@@ -163,7 +167,26 @@ pub async fn run_hourly_tick(
         }
     }
     report.unrecoverable_gaps = store.gap_count(input.canonical_site).await?;
+    report.ledger = build_ledger(
+        &store.coverage_facts(input.canonical_site).await?,
+        &LedgerContext {
+            durable_store: store.is_durable(),
+            now: input.now,
+            policy: input.policy.clone(),
+        },
+    );
     Ok(report)
+}
+
+fn empty_ledger(input: &TickInput<'_>) -> CoverageLedger {
+    build_ledger(
+        &super::store::CoverageFacts::default(),
+        &LedgerContext {
+            durable_store: false,
+            now: input.now,
+            policy: input.policy.clone(),
+        },
+    )
 }
 
 fn scope_key(input: &TickInput<'_>, device_id: &str, revision: &str) -> CheckpointKey {
@@ -708,6 +731,27 @@ mod tests {
         assert!(report.failed >= 1);
         assert!(report.blocks_green());
         assert_eq!(report.last_safe_code.as_deref(), Some("transport"));
+        assert!(!report.ledger.gapless);
+        assert!(!report.ledger.advanced_by_latest_sample);
+        assert_eq!(report.ledger.windows_complete, 0);
+        assert_eq!(
+            crate::providers::ledger::axis(
+                &report.ledger,
+                crate::providers::types::AxisId::TransportProbe
+            )
+            .state,
+            crate::providers::types::AxisState::Failed
+        );
+        assert_eq!(
+            crate::providers::ledger::axis(
+                &report.ledger,
+                crate::providers::types::AxisId::DurableCommit
+            )
+            .state,
+            crate::providers::types::AxisState::NotClaimed
+        );
+        assert!(report.ledger.guarantee.statement.contains("HTTP 403"));
+        assert!(report.ledger.guarantee.statement.contains("not gapless"));
         assert!(writer.batches.lock().unwrap().is_empty());
         let jobs = store.list_jobs("site-a").await.unwrap();
         assert!(jobs.iter().any(|job| job.state == JobState::RetryWait));
@@ -809,6 +853,16 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(report.committed, 5);
+        assert_eq!(report.ledger.windows_complete, 5);
+        assert!(!report.ledger.gapless);
+        assert_eq!(
+            crate::providers::ledger::axis(
+                &report.ledger,
+                crate::providers::types::AxisId::DurableCommit
+            )
+            .state,
+            crate::providers::types::AxisState::NotClaimed
+        );
         assert_eq!(
             writer
                 .batches

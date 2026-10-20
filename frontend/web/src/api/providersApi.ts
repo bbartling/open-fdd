@@ -18,12 +18,43 @@ export interface ProviderSiteHealth {
     last_success_at?: string | null;
     last_error_at?: string | null;
   };
+  capabilities?: ProviderCapabilityView[];
+  /** N7 six-axis ledger. Absent until an hourly tick has run. */
+  coverage_ledger?: CoverageLedgerView | null;
+}
+
+export interface ProviderCapabilityView {
+  name: string;
+  support: string;
+  http_method?: string | null;
+  path?: string | null;
+  note?: string | null;
+}
+
+export interface ProviderRegistrationView {
+  kind: string;
+  capabilities: ProviderCapabilityView[];
+}
+
+export interface CoverageAxisView {
+  id: string;
+  state: string;
+  detail: string;
+}
+
+export interface CoverageLedgerView {
+  guarantee?: { statement?: string; gapless?: boolean };
+  axes?: CoverageAxisView[];
+  gapless?: boolean;
+  advanced_by_latest_sample?: boolean;
+  windows_complete?: number;
 }
 
 export interface ProvidersHealthBody {
   ok?: boolean;
   poll_enabled?: boolean;
   sites?: ProviderSiteHealth[];
+  registry?: ProviderRegistrationView[];
 }
 
 export interface ProviderSiteConfig {
