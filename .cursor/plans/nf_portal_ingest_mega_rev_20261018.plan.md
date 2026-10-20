@@ -60,10 +60,10 @@ todos:
     content: "M10 VERSION 4.0.0. GHCR central sha-fe7e06b sha256:3ae2c2baaf49d9a8bc0c3c4a7f9dfc799d6e2c0c48ebf9b1d8c773b8c1a82b61 and web sha-fe7e06b sha256:5cf2b0f5bf261480ea4443a6faebaba2edae41275be4e32f540473c14b7ccc61. No fieldbus image. No PyPI publish. Merged #1302 fe7e06b6."
     status: completed
   - id: m10-railway-repin
-    content: SoftOPEN defer — Railway re-pin to sha-fe7e06b was not part of this merge
-    status: pending
-  - id: actions-ot-gate
-    content: "Gate Optional BACnet and Wave C isolated workflows so 4.0 master does not pull unpublished openfdd-fieldbus or openfdd-mqtt sha tags. Archive OCI pin stays unbooted."
+    content: "M10 Railway re-pin 2026-10-19 22:58 CDT: openfdd-central-cQ-F and openfdd-web sha-4608610 (3.6.18) → sha-fe7e06b; health 4.0.0+fe7e06b6a20b, web 200, no crash/OOM after 300s; provider health/sites 401 unauth, 200 admin. openfdd-mqtt left on sha-4608610. ACME MQTT ingest stopped (central: MQTT ingest disabled, needs OPENFDD_MQTT_ENABLED=1 and OPENFDD_OT_ARCHIVE_RESTORE=1; edges 0, ingest_ok 0); Ben decides. Rollback pins: sha-4608610."
+    status: completed
+  - id: m10-railway-repin-0ac07ab
+    content: "M10 Railway re-pin 2026-10-20 07:29 CDT: openfdd-central-cQ-F then openfdd-web sha-fe7e06b → sha-0ac07ab (master tip, #1303). Central env OPENFDD_MQTT_ENABLED=1 (already set) + OPENFDD_OT_ARCHIVE_RESTORE=1 (new). Health 4.0.0+0ac07ab65580, single boot 12:29:48Z, mem ~149 MB, shed ok. ACME MQTT ingest restored: edges 1, ingest_ok 68, reject 0; Timescale sample ACME rows since re-pin 2990 (07:35 CDT) → 5980 (07:38 CDT), max(ts) 07:37:29 CDT. openfdd-mqtt untouched. Rollback pins sha-4608610. No backup."
     status: completed
   - id: m11-prove
     content: M11 bosspi hour smoke in Timescale (lab evidence only; not full N12 matrix)
@@ -286,19 +286,20 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] **wave-b-n1-archive** / **n1-archive-real** — N1 `archive/ot-edge/unqualified-cdaa4f15/` + prune dry-run keep. No 3.6.18 tag. Merged #1294 `e0df8bc7`.
 - [x] **n1-restore-boot** — `--replay` renders `evidence/oci-pin.json` digests; prune file lists them; `--boot` exits 2 (no containers). Merged #1300 `75d86af5`.
 - [x] **n1-workspace-remove** — `services/fieldbus` excluded from the default workspace, publish workflows, and fieldbus recipes. Split gate compiles `archive/ot-edge/unqualified-cdaa4f15/source`. Merged #1300 `75d86af5`.
-- [x] **wave-b-n5-hourly** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested). Merged #1292 `7c311101`.
+- [x] **wave-b-n5-hourly** / **n5-durable** — N5 durable hourly jobs/receipts/checkpoints/catch-up (**GET history only**; fixture-tested). Merged #1292 `7c311101`.
 - [x] **wave-b-n3-model** / **n3-model** — committed model + scoped SPARQL plans (resolver each tick). Merged #1293 `b2575575`.
 - [ ] SoftOPEN defer — **n3-replica-store** cross-replica invalidation, durable multi-process store, in-flight SPARQL cancel
 - [x] **wave-b-n11-spa** — N11 Providers/Sites/Model/ledger SPA hooks (live rows, backfill submit, and server preview stay deferred). Merged #1289 `018741d6`.
 
 ### Wave-C — after Wave-B
 - [x] **wave-c-n8-leases** — N8 Postgres queue/leases/fencing (stages 1–2). API role does not start pollers. Merged #1291 `698f8c52`.
-- [x] **wave-c-n10-mcp** — scoped REST/MCP jobs/receipts/gaps; OT discovery retired unless `OPENFDD_OT_TOOLS=1`; provider health/sites stay. Merged #1291 `698f8c52`.
+- [x] **wave-c-n10-mcp** / **n10-api-mcp** — scoped REST/MCP jobs/receipts/gaps; OT discovery retired unless `OPENFDD_OT_TOOLS=1`; provider health/sites stay. Merged #1291 `698f8c52`.
 - [x] **m14-grok-tools** — legacy OT Grok tips flagged retired; MCP OT wire/driver discovery is not in default `tools/list`. Merged #1300 `75d86af5`.
 
 ### Wave-D — publish
+- [x] **m10-railway-repin** — 2026-10-19 22:58 CDT Railway `openfdd-central-cQ-F` + `openfdd-web` `sha-4608610` (3.6.18) → `sha-fe7e06b`. Health `4.0.0+fe7e06b6a20b`; web 200; no crash/OOM after 300s; `/api/providers/health|sites` 401 unauth, 200 admin. `openfdd-mqtt` left on `sha-4608610`. **ACME MQTT ingest stopped:** central logs `MQTT ingest disabled (need OPENFDD_MQTT_ENABLED=1 and OPENFDD_OT_ARCHIVE_RESTORE=1)`; edges 0, ingest_ok 0 (vim-1 still connected to broker). Owner decision; rollback pins `sha-4608610`. No backup (owner rule).
+- [x] **m10-railway-repin-0ac07ab** — 2026-10-20 07:29 CDT Railway `openfdd-central-cQ-F` then `openfdd-web` `sha-fe7e06b` → `sha-0ac07ab` (master tip after #1303). Central env `OPENFDD_MQTT_ENABLED=1` (already present) + `OPENFDD_OT_ARCHIVE_RESTORE=1` (added; owner chose to restore ACME ingest). Health `4.0.0+0ac07ab65580`, one boot (`started_at` 12:29:48Z), mem ~149 MB / peak ~168 MB, shed ok. **ACME MQTT ingest restored:** edges 1, ingest_ok 68, reject 0 at 07:38 CDT; Timescale `sample` ACME rows since re-pin 2990 (07:35 CDT) → 5980 (07:38 CDT), `max(ts)` 07:37:29 CDT. `openfdd-mqtt` untouched. Rollback pins `sha-4608610`. No backup.
 - [x] **wave-d-m10-ghcr** / **m10-ghcr** — VERSION 4.0.0. Master `#1302` `fe7e06b6` published `ghcr.io/bbartling/openfdd-central:sha-fe7e06b` (`sha256:3ae2c2baaf49d9a8bc0c3c4a7f9dfc799d6e2c0c48ebf9b1d8c773b8c1a82b61`) and `ghcr.io/bbartling/openfdd-web:sha-fe7e06b` (`sha256:5cf2b0f5bf261480ea4443a6faebaba2edae41275be4e32f540473c14b7ccc61`). No fieldbus image. No PyPI publish. Run https://github.com/bbartling/open-fdd/actions/runs/39357186292
-- [x] **actions-ot-gate** — Optional BACnet workflow ([run 39362164673](https://github.com/bbartling/open-fdd/actions/runs/39362164673)) no longer pulls `openfdd-mqtt` / `openfdd-fieldbus` at the portal `sha-<head>`. The Monday schedule is removed. Wave C isolated suites skip on pull request when that mqtt tag is absent. The archive pin is not booted (`--boot` stays refused; `--replay` and the protocol-connector split gate stay the isolated lane).
 
 ### This round
 - [x] **n0-boundary** — 4.0 boundary and requirements matrix in `docs/architecture/wave-nf-4.0-product-boundary.md` (no row qualified). Merged #1296 `de042f70`.
@@ -306,6 +307,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 
 ### SoftOPEN defer / later
 - [ ] SoftOPEN defer — **n8-scale** stage 3 live replica controller (dry-run preview only; no Kubernetes)
+- [ ] SoftOPEN defer — **m7-fe-haystack** Model/SPARQL SPA for provider-mapped buildings (server ingest-plan compiler landed with N3)
+- [ ] **m12-grok** — Grok API proof on published sha (coverage/scoped endpoints, not rows-only)
 - [ ] SoftOPEN defer — **m13-acme-later** ACME NF retrofit after bosspi SoftOPEN pilot
 - [x] **n4-contract** — provider registry (`latest`, `fetch_history` GET with a bounded window, `update_log` NotImplemented). Ace stays visibly NotImplemented. Conformance tests reject an unbounded NF window before any request. Merged #1301 `5c38e4c1`. #1297 and #1299 closed as superseded.
 - [x] **n7-gaps** — coverage ledger over N5 jobs/receipts/checkpoints/gaps. Axes stay separate. Memory receipts are not a durable commit. Update-log HTTP 403 is stated. Range polling is not gapless. A latest sample does not advance the ledger. Merged #1301 `5c38e4c1`.
@@ -317,7 +320,6 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [x] **n13-release** phased gates (`docs/operations/WAVE_NF_DELIVERY_GATES.md`) + `wave_nf_status.json` (nothing deployed or qualified). Merged #1298 `3d081622`.
 - [ ] SoftOPEN defer — **n2-dns-pin** DNS-at-connect rebinding pin (literal public-mode checks only)
 - [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
-- [ ] SoftOPEN defer — **m10-railway-repin** Railway re-pin to `sha-fe7e06b` (not done in this merge)
 
 ### Already done (do not reopen)
 - [x] m0-milestones, m1-freeze-ot (snapshot only; boot stays **n1-restore-boot**), m2-adr, m3-trait (prototype), m5-map, m6-fe-blast, m8-ops-ui, m9-stub-ace
@@ -332,7 +334,7 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - Wave-B N3 model: bc-9c23a08d
 - Wave-B N11 SPA: bc-7fe03caf
 - Wave-C N8+N10: bc-d24c1c2e
-- Wave-D GHCR: merged #1302 `fe7e06b6`. Images `sha-fe7e06b`. Railway re-pin stays **m10-railway-repin**.
+- Wave-D GHCR: merged #1302 `fe7e06b6`. Images `sha-fe7e06b`. Railway re-pin **m10-railway-repin** done 2026-10-19 (central+web `sha-fe7e06b`; ACME MQTT ingest off by 4.0 default). Re-pinned 2026-10-20 to `sha-0ac07ab` with ACME MQTT ingest restored (**m10-railway-repin-0ac07ab**).
 
 ### Merge log (into `wave-nf/4.0.0-portal-ingest`)
 - #1290 Wave-A `608ee177`
