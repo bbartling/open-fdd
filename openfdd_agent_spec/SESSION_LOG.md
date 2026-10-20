@@ -4,6 +4,7 @@
 - Product crates opt into Clippy denies (`unwrap_used`, `expect_used`, `await_holding_lock`, `ptr_arg`, `redundant_clone`, `rc_buffer`, print/dbg). SPA ESLint errors cover hooks, keys, `any`, `no-danger`, and `document.getElementById`. Tests may still unwrap.
 - No VERSION bump. The 4.0.1 patch is a later PR after this train and the data-safe and OT-archive trains merge.
 - Product surface for this standard is the NF portal API and CSV ingest. MQTT, BACnet, Haystack, Modbus, fieldbus, edge, and dual-write paths are not cleaned here. Archived code lives in `archive/` and is never built.
+- Rebased onto `cf6109b1` (#1305). `db_lifecycle` production paths have no unwrap/expect. Timescale seed scripts stay Python with bound SQL.
 
 ## 2026-10-20 — Rebase legacy tooling purge onto #1306
 
