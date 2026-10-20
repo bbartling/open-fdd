@@ -1633,9 +1633,18 @@ fn wrap_rule_sql(sql_body: &str, rule: &RuleSpec) -> String {
     if rule_is_metric(rule) {
         format!("SELECT * FROM ({inner}) AS _fdd_rule_q")
     } else {
+        let fault_pct_sql = if rule
+            .output_columns
+            .iter()
+            .any(|column| column == "fault_pct")
+        {
+            ", fault_pct::double precision AS fault_pct"
+        } else {
+            ""
+        };
         format!(
             "SELECT equipment_id::text AS equipment_id, \
-             fault_hours::double precision AS fault_hours \
+             fault_hours::double precision AS fault_hours{fault_pct_sql} \
              FROM ({inner}) AS _fdd_rule_q"
         )
     }
@@ -2655,6 +2664,26 @@ mod span_and_fault_pct_tests {
         let empty = sampling_json(None, None, 0);
         assert!(empty["first_timestamp"].is_null());
         assert!(empty["last_timestamp"].is_null());
+    }
+
+    #[test]
+    fn diagnostic_wrapper_keeps_declared_fault_pct() {
+        let reg = load_reg().expect("load sql/fdd registry");
+        let oat = reg
+            .rules
+            .iter()
+            .find(|rule| rule.rule_id == "OAT-METEO")
+            .expect("OAT-METEO");
+        let wrapped = wrap_rule_sql("SELECT 1", oat);
+        assert!(wrapped.contains("fault_pct::double precision AS fault_pct"));
+        let fc1 = reg
+            .rules
+            .iter()
+            .find(|rule| rule.rule_id == "FC1")
+            .expect("FC1");
+        let fc1_sql = wrap_rule_sql("SELECT 1", fc1);
+        assert!(!fc1_sql.contains("fault_pct"));
+        assert!(fc1_sql.contains("fault_hours::double precision AS fault_hours"));
     }
 
     #[test]

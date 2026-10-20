@@ -211,31 +211,47 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> FinishOutcome {
                 code: "count_overflow".into(),
             },
         },
-        Err(err) => {
-            if portal_throttled(&err) {
-                if let Err(note_err) = state
-                    .ingest_queue
-                    .note_throttle(
-                        &job.provider_instance_id,
-                        Utc::now(),
-                        chrono::Duration::seconds(60),
-                    )
-                    .await
-                {
-                    warn!(error = %note_err, "portal throttle note failed");
-                }
-            }
-            if job.attempt >= 8 {
-                FinishOutcome::Permanent {
-                    code: "provider_poll_failed".into(),
-                }
-            } else {
-                let backoff = (30i64 * 2i64.saturating_pow(job.attempt.saturating_sub(1))).min(900);
-                FinishOutcome::Retry {
-                    code: "provider_poll_failed".into(),
-                    not_before: Utc::now() + chrono::Duration::seconds(backoff),
-                }
-            }
+        Err(err) => finish_for_poll_error(state, job, &err).await,
+    }
+}
+
+async fn finish_for_poll_error(state: &Arc<AppState>, job: &JobView, err: &str) -> FinishOutcome {
+    if err == "device_unmapped" {
+        return FinishOutcome::Permanent {
+            code: err.to_string(),
+        };
+    }
+    if portal_throttled(err) {
+        if let Err(note_err) = state
+            .ingest_queue
+            .note_throttle(
+                &job.provider_instance_id,
+                Utc::now(),
+                chrono::Duration::seconds(60),
+            )
+            .await
+        {
+            warn!(error = %note_err, "portal throttle note failed");
+        }
+    }
+    classify_poll_error(err, job.attempt, Utc::now())
+}
+
+fn classify_poll_error(err: &str, attempt: u32, now: chrono::DateTime<Utc>) -> FinishOutcome {
+    if err == "device_unmapped" {
+        return FinishOutcome::Permanent {
+            code: err.to_string(),
+        };
+    }
+    if attempt >= 8 {
+        FinishOutcome::Permanent {
+            code: "provider_poll_failed".into(),
+        }
+    } else {
+        let backoff = (30i64 * 2i64.saturating_pow(attempt.saturating_sub(1))).min(900);
+        FinishOutcome::Retry {
+            code: "provider_poll_failed".into(),
+            not_before: now + chrono::Duration::seconds(backoff),
         }
     }
 }
@@ -254,9 +270,12 @@ fn devices_from_state(state: &AppState) -> Vec<ScheduleDevice> {
             site.tenant_id.clone()
         };
         let provider_instance_id = site.provider_instance_id.clone();
-        let mut equipment = site.resolver.equipment_ids();
+        let live = state
+            .providers
+            .resolver_for(&site.tenant_id, &site.building_id);
+        let equipment = poller::schedule_equipment_ids(&live, &site.resolver);
         if equipment.is_empty() {
-            equipment.push(site.building_id.clone());
+            continue;
         }
         for device_id in equipment {
             let estimated =
@@ -353,6 +372,19 @@ mod tests {
         restore("OPENFDD_PROCESS_ROLE", prev_role);
         restore("OPENFDD_PROVIDER_POLL_MODE", prev_mode);
         restore("OPENFDD_ALLOW_UNSAFE_POLLER", prev_unsafe);
+    }
+
+    #[test]
+    fn unmapped_device_does_not_retry() {
+        let now = Utc::now();
+        assert!(matches!(
+            classify_poll_error("device_unmapped", 1, now),
+            FinishOutcome::Permanent { code } if code == "device_unmapped"
+        ));
+        assert!(matches!(
+            classify_poll_error("auth_failed", 1, now),
+            FinishOutcome::Retry { .. }
+        ));
     }
 
     #[test]

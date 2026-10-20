@@ -1,8 +1,11 @@
 //! Bounded completed-window planning. This is not the N5 checkpoint walk.
 //!
 //! Each tick enqueues the catch-up span (`catchup_hours` × 3600 seconds) split
-//! into `window_secs` slices (default 3600, clamp 60..=3600). Windows already
-//! present stay unique. Older retention recovery is a backfill.
+//! into `window_secs` slices (default 3600, clamp 60..=3600). A short window
+//! still plans that whole span: a sliding batch would drop the oldest slices
+//! as `now` moves. Enqueue is idempotent. Portal logins are cached on the NF
+//! driver so catch-up does not authenticate once per window. Older retention
+//! recovery is a backfill.
 
 use chrono::{DateTime, Duration, Utc};
 

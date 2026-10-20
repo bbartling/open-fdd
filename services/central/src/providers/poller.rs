@@ -17,7 +17,7 @@ use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
 use super::hourly::{assess_page, HourlyPolicy, LogicalWindow, UPDATE_LOG_STATUS};
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
-use super::map::{normalize_mapped, DevicePoints, HistorySeries, ResolvedRole};
+use super::map::{normalize_mapped, DevicePoints, HistorySeries, ResolvedRole, RoleResolver};
 use super::meteo::OpenMeteoDriver;
 use super::nf::NfPortalDriver;
 use super::store::StoreOpen;
@@ -136,6 +136,20 @@ pub fn accept_device_window(
     WindowAccept { samples }
 }
 
+/// Live plan wins. The site file is the fallback only when the live plan has
+/// no mapped points. An empty result schedules nothing.
+pub fn schedule_equipment_ids(live: &RoleResolver, site: &RoleResolver) -> Vec<String> {
+    chosen_resolver(live, site).equipment_ids()
+}
+
+fn chosen_resolver<'a>(live: &'a RoleResolver, site: &'a RoleResolver) -> &'a RoleResolver {
+    if live.mapped_count() == 0 && site.mapped_count() > 0 {
+        site
+    } else {
+        live
+    }
+}
+
 /// GET one claimed queue window for one device and record provider health.
 /// History stays `GET /api/v1/point/data`. This does not call `run_hourly_tick`.
 pub async fn execute_window(
@@ -171,12 +185,8 @@ pub async fn execute_window(
             .await;
         return Err("auth_failed".into());
     }
-    let resolver = runtime.resolver_for(&site.tenant_id, &site.building_id);
-    let devices = if resolver.mapped_count() == 0 && site.resolver.mapped_count() > 0 {
-        site.resolver.devices()
-    } else {
-        resolver.devices()
-    };
+    let live = runtime.resolver_for(&site.tenant_id, &site.building_id);
+    let devices = chosen_resolver(&live, &site.resolver).devices();
     let Some(device) = devices
         .into_iter()
         .find(|device| device.device_id == device_id)
@@ -361,12 +371,8 @@ async fn nf_hourly_loop(
                 continue;
             }
         };
-        let resolver = runtime.resolver_for(&tenant_id, &building_id);
-        let devices = if resolver.mapped_count() == 0 && site.resolver.mapped_count() > 0 {
-            site.resolver.devices()
-        } else {
-            resolver.devices()
-        };
+        let live = runtime.resolver_for(&tenant_id, &building_id);
+        let devices = chosen_resolver(&live, &site.resolver).devices();
         let now = Utc::now();
         let provider_instance = driver.provider_id().to_string();
         let tick = TickInput {
@@ -910,5 +916,35 @@ mod tests {
         assert!(site.health.last_success_at.is_some());
         assert_eq!(site.last_ingested_points, 60);
         assert_eq!(site.health.status, ProviderHealthStatus::Ok);
+    }
+
+    fn point(id: &str, equipment: &str, role: &str) -> crate::providers::map::PointMapEntry {
+        crate::providers::map::PointMapEntry {
+            provider_point_id: id.into(),
+            semantic_point_id: None,
+            equipment_id: equipment.into(),
+            role: role.into(),
+            equip_type: Some("ahu".into()),
+            unit: None,
+            kind: None,
+            provisional: false,
+        }
+    }
+
+    #[test]
+    fn schedule_uses_the_same_resolver_as_execution() {
+        let live = RoleResolver::from_point_map(&[point("live-point", "LIVE_EQ", "sat")]).unwrap();
+        let site = RoleResolver::from_point_map(&[point("site-point", "SITE_EQ", "mat")]).unwrap();
+        assert_eq!(
+            schedule_equipment_ids(&live, &site),
+            vec!["LIVE_EQ".to_string()]
+        );
+        assert_eq!(
+            schedule_equipment_ids(&RoleResolver::default(), &site),
+            vec!["SITE_EQ".to_string()]
+        );
+        assert!(
+            schedule_equipment_ids(&RoleResolver::default(), &RoleResolver::default()).is_empty()
+        );
     }
 }

@@ -498,7 +498,7 @@ pub async fn handle_zone_other(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 }
 
 async fn handle_matrix(req: &AnalyticsRequest, spec: &MatrixSpec) -> AnalyticsEnvelope {
-    match matrix_from_history_or_fdd(req.query.building_id.as_deref(), spec).await {
+    match matrix_from_history_or_fdd(req, spec).await {
         Ok(env) => env,
         Err(e) => {
             let mut env = envelope_with_engine(
@@ -742,11 +742,32 @@ async fn equipment_ids_for_spec(
     }
 }
 
+fn retain_requested_equipment(ids: &mut Vec<String>, requested: Option<&[String]>) {
+    let Some(requested) = requested else {
+        return;
+    };
+    let allow: BTreeSet<&str> = requested
+        .iter()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .collect();
+    if allow.is_empty() {
+        return;
+    }
+    ids.retain(|id| allow.contains(id.as_str()));
+}
+
 async fn matrix_from_history_or_fdd(
-    building_id: Option<&str>,
+    req: &AnalyticsRequest,
     spec: &MatrixSpec,
 ) -> Result<AnalyticsEnvelope> {
-    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+    let Some(bid) = req
+        .query
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
         let q = AnalyticsQuery::default();
         let mut env = envelope_with_engine(
             spec.query_version,
@@ -760,6 +781,7 @@ async fn matrix_from_history_or_fdd(
 
     let query = AnalyticsQuery {
         building_id: Some(bid.to_string()),
+        equipment_ids: req.query.equipment_ids.clone(),
         ..Default::default()
     };
     let mut env = envelope_with_engine(spec.query_version, &query, vec![], DF_ENGINE);
@@ -774,7 +796,8 @@ async fn matrix_from_history_or_fdd(
             Some(bid),
         )
     };
-    let equipment_ids = equipment_ids_for_spec(bid, spec, &index).await?;
+    let mut equipment_ids = equipment_ids_for_spec(bid, spec, &index).await?;
+    retain_requested_equipment(&mut equipment_ids, req.query.equipment_ids.as_deref());
     let mut score_counts: BTreeMap<String, u32> = BTreeMap::new();
     let mut matched = 0usize;
 
@@ -902,6 +925,17 @@ mod tests {
             score_label(&[Flag::True, Flag::Unknown, Flag::False, Flag::False]);
         assert_eq!(label, "?/4");
         assert_eq!(evaluable, 3);
+    }
+
+    #[test]
+    fn requested_equipment_ids_are_exact() {
+        let mut ids = vec!["AHU_1".into(), "AHU_10".into(), "AHU_2".into()];
+        retain_requested_equipment(&mut ids, Some(&["AHU_1".into(), "  ".into()]));
+        assert_eq!(ids, vec!["AHU_1".to_string()]);
+        let mut all = vec!["AHU_2".into()];
+        retain_requested_equipment(&mut all, None);
+        retain_requested_equipment(&mut all, Some(&[]));
+        assert_eq!(all, vec!["AHU_2".to_string()]);
     }
 
     #[test]

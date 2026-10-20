@@ -397,8 +397,8 @@ pub(crate) async fn apply_on_startup() -> anyhow::Result<()> {
                 .await
                 .context("bootstrap before recording reset token")?;
             let token = flags.reset_token.as_deref().context("reset token")?;
-            record_reset_token(&pool, token).await?;
             clear_file_volume_for_reset()?;
+            record_reset_token(&pool, token).await?;
         }
         StartupAction::EnsureForwardSchema => {
             tracing::info!("db lifecycle: existing Timescale data preserved; forward-only schema");
@@ -428,11 +428,11 @@ pub(crate) async fn apply_on_startup() -> anyhow::Result<()> {
                 .await
                 .context("forward schema before destructive reset")?;
             let token = flags.reset_token.as_deref().context("reset token")?;
+            clear_file_volume_for_reset()?;
             truncate_and_consume(&pool, token).await?;
             apply_forward(&pool)
                 .await
                 .context("forward schema after destructive reset")?;
-            clear_file_volume_for_reset()?;
             tracing::warn!("db lifecycle: one-shot destructive reset committed");
         }
     }
