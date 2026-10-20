@@ -11,6 +11,7 @@ mod capabilities;
 mod contract;
 mod csv_site_export;
 mod cutover;
+mod db_lifecycle;
 mod durable_storage;
 mod engineering_bundle;
 mod eplus_runner;
@@ -58,6 +59,7 @@ async fn main() -> anyhow::Result<()> {
     logging::init_tracing("info,openfdd_central=info,security_audit=info");
 
     durable_storage::assert_authoritative_storage()?;
+    db_lifecycle::apply_on_startup().await?;
 
     initialize_s3_scope_index().await?;
 

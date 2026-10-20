@@ -49,7 +49,7 @@ Deploy **three** Railway services from GHCR, in order:
 8. Keep central + mqtt **private**; public domain on **web only**.
 9. Wire central’s MQTT client env to the private broker (host/port/certs) — see main Railway guide; never commit certs.
 10. Tell the human: FDD assistance = local Cursor/Claude/Codex + `agent` JWT; Railway AI does **not** run `openfdd-mcp`.
-11. **App updates must not wipe telemetry:** keep the same Timescale volume / `OPENFDD_DATABASE_URL` (and `/workspace` for non-historian scratch). Only replace GHCR image tags. Soft-OPEN Railway/ACME: **no site backups** unless Ben asks — Timescale-only, dual-write false ([TIMESCALE_WAVE_X.md](TIMESCALE_WAVE_X.md)).
+11. **App updates must not wipe telemetry:** keep the same Timescale volume / `OPENFDD_DATABASE_URL` (and `/workspace` for non-historian scratch). Only replace GHCR image tags. Leave `OPENFDD_RESET_DB` and `OPENFDD_ALLOW_DESTRUCTIVE_DB` unset. Central applies forward-only schema. A one-time purge uses a new `OPENFDD_RESET_DB` token plus `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` (`scripts/timescale/purge_historian.py` or one central boot). That token is stored and will not purge again. Do not delete or replace the Timescale volume on a re-pin. Soft-OPEN Railway/ACME: **no site backups** unless Ben asks — Timescale-only, dual-write false ([TIMESCALE_WAVE_X.md](TIMESCALE_WAVE_X.md)).
 
 ### Auth model (human vs external AI)
 

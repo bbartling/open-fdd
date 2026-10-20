@@ -155,5 +155,8 @@ gh workflow run "Stack Release (GHCR + GitHub Release)" \
 ## Never
 
 - `docker compose down -v`
+- `docker volume prune` during an update (`scripts/openfdd_docker_maintenance.sh` skips it unless `--prune-volumes --i-understand-data-loss` or `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`)
 - Delete `workspace/` or Railway `/workspace` volume for an “upgrade”
+- Replace the Timescale volume or `OPENFDD_DATABASE_URL` while re-pinning images
+- Set `OPENFDD_RESET_DB` for a routine re-pin. A one-time purge needs a new token plus `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` (`scripts/timescale/purge_historian.py`). The same token does not purge again. Without the allow flag, central refuses to start and does not delete rows.
 - Re-pin central **without** a backup (unless human waiver)

@@ -76,9 +76,18 @@ Use `http://` (not `https://`) for local Compose. See [`mcp/README.md`](../../mc
 
 Closeout: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) / `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` against **Railway**. ZAP targets the Railway public URL.
 
+## Data-safe updates
+
+`./scripts/openfdd_stack_up.sh` and `./scripts/openfdd_maint_update_resume.sh` reuse the `openfdd-timescale` named volume. They do not drop, truncate, or re-seed it. Postgres init SQL in `docker/compose.timescale.yml` runs only when that volume is empty. Central startup applies the same SQL forward-only (`CREATE … IF NOT EXISTS`) and leaves existing `sample` rows in place.
+
+Maintenance prunes stopped containers and dangling images. It does not prune volumes. Volume prune requires `./scripts/openfdd_docker_maintenance.sh --prune-volumes --i-understand-data-loss` (or `--prune-volumes` with `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`).
+
+Leave `OPENFDD_RESET_DB` unset on updates. A one-time historian purge is `scripts/timescale/purge_historian.py` with a fresh `OPENFDD_RESET_DB` token and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` (or `--reset-db` and `--i-understand-data-loss`). The same token does not purge again. Central startup uses that same rule and refuses a token that lacks the allow flag. Building 50 reseed (`scripts/timescale/auto_seed.py`) copies into an empty site. It deletes that site only when `OPENFDD_SEED_FORCE=1` and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` are both set.
+
 ## Anti-patterns
 
 - Pasting a public URL for a local-only HTTP stack.
 - Claiming “local has TLS” without an explicit Caddy/standalone HTTPS mode (or ops proxy).
 - Building central/web images locally on bensbench.
 - Pointing bosspi at local mqtt during Railway parity stress.
+- `docker compose down -v`, `docker volume prune`, or `OPENFDD_RESET_DB` as part of an image update.

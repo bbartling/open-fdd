@@ -255,7 +255,7 @@ main() {
   fi
 
   if [[ "$DO_MAINT" -eq 1 ]]; then
-    log "Running docker maintenance (non-aggressive prune)"
+    log "Running docker maintenance (stopped containers and dangling images; volumes kept)"
     "$ROOT/scripts/openfdd_docker_maintenance.sh"
   else
     log "Skipping docker maintenance"
