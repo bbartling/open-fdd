@@ -11,6 +11,8 @@ use crate::sample::{SampleRow, UpsertBatch};
 pub enum TsdbError {
     #[error("OPENFDD_DATABASE_URL is required for Timescale historian")]
     MissingDatabaseUrl,
+    #[error("invalid building id")]
+    InvalidBuildingId,
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 }
@@ -257,6 +259,79 @@ impl Tsdb {
         Ok(())
     }
 
+    /// Row count for the whole historian. Used to decide an empty-database seed.
+    pub async fn sample_row_count(&self) -> Result<i64, TsdbError> {
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM sample")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(n)
+    }
+
+    /// Delete one building's historian rows in FK-safe order. Other buildings stay.
+    pub async fn purge_building(&self, building_id: &str) -> Result<u64, TsdbError> {
+        let id = building_id.trim();
+        if id.is_empty()
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            return Err(TsdbError::InvalidBuildingId);
+        }
+        let mut tx = self.pool.begin().await?;
+        let mut removed = 0u64;
+        removed += delete_by_job_site(&mut tx, id).await?;
+        // Building-scoped subset of db_lifecycle::RESET_TABLES / purge_historian.RESET_TABLES.
+        // The full historian wipe stays on that one-shot token. This deletes one site.
+        for (table, column) in [
+            ("provider_hourly_gap", "canonical_site"),
+            ("provider_hourly_job", "canonical_site"),
+            ("provider_hourly_checkpoint", "canonical_site"),
+            ("ingest_receipt", "canonical_site"),
+            ("ingest_job", "canonical_site"),
+            ("sample", "site_id"),
+            ("fdd_run", "site_id"),
+            ("analytics_result", "building_id"),
+            ("point_map", "site_id"),
+            ("role_map", "building_id"),
+            ("batch_job", "site_id"),
+            ("equipment", "building_id"),
+            ("building", "building_id"),
+            ("site", "site_id"),
+        ] {
+            removed += delete_where(&mut tx, table, column, id).await?;
+        }
+        if id == "BUILDING_50" && relation_exists(&mut tx, "seed_meta").await? {
+            let res = sqlx::query("DELETE FROM seed_meta WHERE key LIKE 'building50%'")
+                .execute(&mut *tx)
+                .await?;
+            removed += res.rows_affected();
+        }
+        tx.commit().await?;
+        Ok(removed)
+    }
+
+    /// Site ids present in Timescale. Used so the UI lists historian buildings
+    /// when the workspace csv folder is empty.
+    pub async fn list_site_ids(&self) -> Result<Vec<String>, TsdbError> {
+        let rows = sqlx::query(
+            "SELECT id FROM (
+                SELECT building_id AS id FROM building
+                UNION
+                SELECT site_id AS id FROM site
+                UNION
+                SELECT DISTINCT site_id AS id FROM sample
+             ) sites
+             WHERE id IS NOT NULL AND btrim(id) <> ''
+             ORDER BY 1",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|row| row.try_get::<String, _>("id").ok())
+            .collect())
+    }
+
     /// Apply transaction-local statement/lock deadlines for a request-scoped txn.
     pub async fn apply_request_timeouts(
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -292,4 +367,57 @@ impl SampleRow {
             role: None,
         }
     }
+}
+
+fn ident_ok(name: &str) -> bool {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_alphabetic() || first == '_' => {}
+        _ => return false,
+    }
+    chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+}
+
+async fn relation_exists(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    table: &str,
+) -> Result<bool, TsdbError> {
+    let reg: Option<String> = sqlx::query_scalar("SELECT to_regclass($1)::text")
+        .bind(format!("public.{table}"))
+        .fetch_one(&mut **tx)
+        .await?;
+    Ok(reg.is_some())
+}
+
+async fn delete_where(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    table: &str,
+    column: &str,
+    id: &str,
+) -> Result<u64, TsdbError> {
+    if !ident_ok(table) || !ident_ok(column) || !relation_exists(tx, table).await? {
+        return Ok(0);
+    }
+    let sql = format!("DELETE FROM {table} WHERE {column} = $1");
+    let res = sqlx::query(&sql).bind(id).execute(&mut **tx).await?;
+    Ok(res.rows_affected())
+}
+
+async fn delete_by_job_site(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    id: &str,
+) -> Result<u64, TsdbError> {
+    if !relation_exists(tx, "provider_hourly_receipt").await?
+        || !relation_exists(tx, "provider_hourly_job").await?
+    {
+        return Ok(0);
+    }
+    let res = sqlx::query(
+        "DELETE FROM provider_hourly_receipt WHERE job_id IN (\
+         SELECT job_id FROM provider_hourly_job WHERE canonical_site = $1)",
+    )
+    .bind(id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(res.rows_affected())
 }

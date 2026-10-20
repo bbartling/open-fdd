@@ -28,6 +28,7 @@ mod openapi;
 mod providers;
 mod routes;
 mod sql_anomaly;
+mod starter_seed;
 mod state;
 mod tenant;
 mod tenant_budget;
@@ -59,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
 
     durable_storage::assert_authoritative_storage()?;
     db_lifecycle::apply_on_startup().await?;
+    starter_seed::spawn();
 
     initialize_s3_scope_index().await?;
 

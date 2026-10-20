@@ -269,6 +269,7 @@ pub fn historian_error_drops_connection(err: &anyhow::Error) -> bool {
 fn tsdb_error_is_connection_loss(err: &fdd_tsdb::TsdbError) -> bool {
     match err {
         fdd_tsdb::TsdbError::MissingDatabaseUrl => true,
+        fdd_tsdb::TsdbError::InvalidBuildingId => false,
         fdd_tsdb::TsdbError::Sqlx(inner) => sqlx_is_connection_loss(inner),
     }
 }

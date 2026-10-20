@@ -125,7 +125,7 @@ export function InspectPage() {
         setErr(
           next
             ? null
-            : "No plottable numeric columns for this equipment in historian Parquet.",
+            : "No plottable numeric columns for this equipment in Timescale.",
         );
       } catch (e) {
         if (n !== seq.current) return;
@@ -145,7 +145,7 @@ export function InspectPage() {
   return (
     <AppShell
       title="Inspect"
-      caption="Raw CSV / equipment overlay from historian Parquet."
+      caption="Raw CSV / equipment overlay from the Timescale historian."
       activeSectionId="inspect"
     >
       <div className="page-stack" data-testid="inspect-page">

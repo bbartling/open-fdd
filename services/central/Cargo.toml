@@ -36,6 +36,7 @@ sqlx = { version = "0.8", default-features = false, features = [
   "chrono",
   "json",
 ] }
+flate2 = "1"
 
 axum = { version = "0.8", features = ["macros"] }
 bytes = "1"

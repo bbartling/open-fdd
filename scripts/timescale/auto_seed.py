@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Faster Wave-X seed using COPY + column_map → SQL roles.
 
-Compose-init only — not product runtime.
+Compose-init only — not product runtime. The central image has no Python, so an
+empty database is also copied by `services/central/src/starter_seed.rs`. Both
+paths set `seed_meta.building50_seed = ok` and neither deletes rows. A full
+wipe stays `purge_historian.py` / `OPENFDD_RESET_DB`.
 Maps package column_map.json through warehouse role_map.json so openfdd_key
 uses warehouse SQL roles (sat/mat/fan_status/…), not raw vendor headers.
 """

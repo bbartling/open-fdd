@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, Utc};
 
-use super::hourly::{completed_hour_end, HourlyPolicy, UPDATE_LOG_STATUS};
+use super::hourly::{completed_window_end, HourlyPolicy, UPDATE_LOG_STATUS};
 use super::store::{CoverageFacts, JobRecord, JobState};
 use super::types::{AxisId, AxisState, CoverageGuarantee, CoverageLedger, LedgerAxis};
 
@@ -327,7 +327,11 @@ fn freshness_axis(facts: &CoverageFacts, ctx: &LedgerContext) -> LedgerAxis {
             detail: "no history cursor; a latest sample does not establish freshness".into(),
         };
     };
-    let horizon = completed_hour_end(ctx.now, ctx.policy.publication_delay);
+    let horizon = completed_window_end(
+        ctx.now,
+        ctx.policy.publication_delay,
+        ctx.policy.window_secs,
+    );
     if oldest >= horizon {
         LedgerAxis {
             id: AxisId::SourceFreshness,

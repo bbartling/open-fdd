@@ -140,9 +140,16 @@ pub async fn motor_weekly_runtime(
             .try_get::<f64, _>("runtime_hours")
             .ok()
             .or_else(|| r.try_get::<f64, _>("run_hours").ok());
+        let equipment_id = r.try_get::<String, _>("equipment_id").unwrap_or_default();
+        let signal = r.try_get::<String, _>("signal").ok();
+        let label = signal
+            .as_ref()
+            .map(|sig| format!("{equipment_id} · {}", sig.replace('_', "-")));
         out.push(json!({
-            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            "equipment_id": equipment_id,
             "kind": r.try_get::<String, _>("kind").unwrap_or_else(|_| "motor".into()),
+            "signal": signal,
+            "label": label,
             "plant_group": r.try_get::<String, _>("plant_group").ok(),
             "week_start": r.try_get::<chrono::DateTime<chrono::Utc>, _>("week_start")
                 .ok()
@@ -1040,6 +1047,20 @@ mod pack_version_tests {
         assert!(
             declared.contains("softopen"),
             "Soft-OPEN pack_version must include softopen marker"
+        );
+    }
+
+    #[test]
+    fn motor_weekly_sql_prefers_status_over_command() {
+        assert!(
+            MOTOR_WEEKLY_SQL.contains("MIN(signal_rank)"),
+            "status must win over command so plant_group hours are not doubled"
+        );
+        assert!(MOTOR_WEEKLY_SQL.contains("fan_status"));
+        assert!(MOTOR_WEEKLY_SQL.contains("fan_cmd"));
+        assert!(
+            !MOTOR_WEEKLY_SQL.contains("GROUP BY 1, 3, 4\n"),
+            "the old group-by counted fan_status and fan_cmd in one plant_group"
         );
     }
 }

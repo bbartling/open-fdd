@@ -1,0 +1,767 @@
+{
+  "schema_version": "bps_dataset_pack_v1",
+  "site_id": "building-50",
+  "dis": "Building 50",
+  "timezone": "UTC",
+  "grid_minutes": 5,
+  "source": {
+    "origin": "TADCO BUILDING_50_openfdd.zip",
+    "equipment": [
+      "AHU_1",
+      "AHU_2",
+      "CHILLER_1",
+      "CHILLER_2",
+      "BOILERS_PUMPS",
+      "weather"
+    ],
+    "slice": "AHU_1_2_CHILLER_1_2_BOILERS_2026-03-16_to_2026-07-17",
+    "evidence_tier": "VERIFIED_SYNTHETIC"
+  },
+  "units_policy": {
+    "canonicalize_on_ingest": true,
+    "allow_mixed_source_units": true,
+    "canonical": {
+      "temperature": "degF",
+      "pressure_air": "inH2O",
+      "ratio": "percent_0_100",
+      "binary": "numeric_bool"
+    }
+  },
+  "haystack": {
+    "site": {
+      "id": "building-50",
+      "dis": "Building 50",
+      "geoCountry": "CA"
+    },
+    "equipment": [
+      {
+        "equipment_id": "AHU_1",
+        "dis": "AHU_1",
+        "markers": [
+          "equip",
+          "ahu"
+        ]
+      },
+      {
+        "equipment_id": "AHU_2",
+        "dis": "AHU_2",
+        "markers": [
+          "equip",
+          "ahu"
+        ]
+      },
+      {
+        "equipment_id": "CHILLER_1",
+        "dis": "CHILLER_1",
+        "markers": [
+          "equip",
+          "chiller"
+        ]
+      },
+      {
+        "equipment_id": "CHILLER_2",
+        "dis": "CHILLER_2",
+        "markers": [
+          "equip",
+          "chiller"
+        ]
+      },
+      {
+        "equipment_id": "BOILERS_PUMPS",
+        "dis": "BOILERS_PUMPS",
+        "markers": [
+          "equip",
+          "boiler"
+        ]
+      },
+      {
+        "equipment_id": "weather",
+        "dis": "Site weather (web / meteo)",
+        "markers": [
+          "equip",
+          "weather"
+        ],
+        "equipType": "weather"
+      }
+    ],
+    "points": [
+      {
+        "point_id": "BUILDING_50_AHU_1_COOLING_VALVE",
+        "openfdd_key": "AHU_1.cooling-valve",
+        "role": "cooling-valve",
+        "equipment_id": "AHU_1",
+        "source_unit": "percent_0_100",
+        "canonical_unit": "percent_0_100",
+        "quantity": "ratio",
+        "markers": [
+          "point",
+          "cmd",
+          "valve",
+          "cooling"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_DISCHARGE_AIR_TEMP",
+        "openfdd_key": "AHU_1.discharge-air-temp",
+        "role": "discharge-air-temp",
+        "equipment_id": "AHU_1",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "discharge",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_DISCHARGE_AIR_TEMP_SP",
+        "openfdd_key": "AHU_1.discharge-air-temp-sp",
+        "role": "discharge-air-temp-sp",
+        "equipment_id": "AHU_1",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sp",
+          "temp",
+          "discharge",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_DUCT_STATIC_PRESSURE",
+        "openfdd_key": "AHU_1.duct-static-pressure",
+        "role": "duct-static-pressure",
+        "equipment_id": "AHU_1",
+        "source_unit": "inH2O",
+        "canonical_unit": "inH2O",
+        "quantity": "pressure_air",
+        "markers": [
+          "point",
+          "sensor",
+          "pressure",
+          "discharge",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_DUCT_STATIC_PRESSURE_SP",
+        "openfdd_key": "AHU_1.duct-static-pressure-sp",
+        "role": "duct-static-pressure-sp",
+        "equipment_id": "AHU_1",
+        "source_unit": "inH2O",
+        "canonical_unit": "inH2O",
+        "quantity": "pressure_air",
+        "markers": [
+          "point",
+          "sp",
+          "pressure",
+          "discharge",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_FAN_CMD",
+        "openfdd_key": "AHU_1.fan-cmd",
+        "role": "fan-cmd",
+        "equipment_id": "AHU_1",
+        "source_unit": "percent_0_100",
+        "canonical_unit": "percent_0_100",
+        "quantity": "ratio",
+        "markers": [
+          "point",
+          "cmd",
+          "fan",
+          "discharge"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_FAN_STATUS",
+        "openfdd_key": "AHU_1.fan-status",
+        "role": "fan-status",
+        "equipment_id": "AHU_1",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "sensor",
+          "fan",
+          "discharge"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_MIXED_AIR_TEMP",
+        "openfdd_key": "AHU_1.mixed-air-temp",
+        "role": "mixed-air-temp",
+        "equipment_id": "AHU_1",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_OCCUPIED",
+        "openfdd_key": "AHU_1.occupied",
+        "role": "occupied",
+        "equipment_id": "AHU_1",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "sensor"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_OUTSIDE_AIR_DAMPER",
+        "openfdd_key": "AHU_1.outside-air-damper",
+        "role": "outside-air-damper",
+        "equipment_id": "AHU_1",
+        "source_unit": "percent_0_100",
+        "canonical_unit": "percent_0_100",
+        "quantity": "ratio",
+        "markers": [
+          "point",
+          "cmd",
+          "damper"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_OUTSIDE_AIR_TEMP",
+        "openfdd_key": "AHU_1.outside-air-temp",
+        "role": "outside-air-temp",
+        "equipment_id": "AHU_1",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "outside",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_RETURN_AIR_TEMP",
+        "openfdd_key": "AHU_1.return-air-temp",
+        "role": "return-air-temp",
+        "equipment_id": "AHU_1",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "return",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_1_RETURN_FAN_CMD",
+        "openfdd_key": "AHU_1.return-fan-cmd",
+        "role": "return-fan-cmd",
+        "equipment_id": "AHU_1",
+        "source_unit": "percent_0_100",
+        "canonical_unit": "percent_0_100",
+        "quantity": "ratio",
+        "markers": [
+          "point",
+          "cmd",
+          "fan",
+          "return"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_COOLING_VALVE",
+        "openfdd_key": "AHU_2.cooling-valve",
+        "role": "cooling-valve",
+        "equipment_id": "AHU_2",
+        "source_unit": "percent_0_100",
+        "canonical_unit": "percent_0_100",
+        "quantity": "ratio",
+        "markers": [
+          "point",
+          "cmd",
+          "valve",
+          "cooling"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_DISCHARGE_AIR_TEMP",
+        "openfdd_key": "AHU_2.discharge-air-temp",
+        "role": "discharge-air-temp",
+        "equipment_id": "AHU_2",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "discharge",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_DISCHARGE_AIR_TEMP_SP",
+        "openfdd_key": "AHU_2.discharge-air-temp-sp",
+        "role": "discharge-air-temp-sp",
+        "equipment_id": "AHU_2",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sp",
+          "temp",
+          "discharge",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_DUCT_STATIC_PRESSURE",
+        "openfdd_key": "AHU_2.duct-static-pressure",
+        "role": "duct-static-pressure",
+        "equipment_id": "AHU_2",
+        "source_unit": "inH2O",
+        "canonical_unit": "inH2O",
+        "quantity": "pressure_air",
+        "markers": [
+          "point",
+          "sensor",
+          "pressure",
+          "discharge",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_DUCT_STATIC_PRESSURE_SP",
+        "openfdd_key": "AHU_2.duct-static-pressure-sp",
+        "role": "duct-static-pressure-sp",
+        "equipment_id": "AHU_2",
+        "source_unit": "inH2O",
+        "canonical_unit": "inH2O",
+        "quantity": "pressure_air",
+        "markers": [
+          "point",
+          "sp",
+          "pressure",
+          "discharge",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_FAN_CMD",
+        "openfdd_key": "AHU_2.fan-cmd",
+        "role": "fan-cmd",
+        "equipment_id": "AHU_2",
+        "source_unit": "percent_0_100",
+        "canonical_unit": "percent_0_100",
+        "quantity": "ratio",
+        "markers": [
+          "point",
+          "cmd",
+          "fan",
+          "discharge"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_FAN_STATUS",
+        "openfdd_key": "AHU_2.fan-status",
+        "role": "fan-status",
+        "equipment_id": "AHU_2",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "sensor",
+          "fan",
+          "discharge"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_MIXED_AIR_TEMP",
+        "openfdd_key": "AHU_2.mixed-air-temp",
+        "role": "mixed-air-temp",
+        "equipment_id": "AHU_2",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_OCCUPIED",
+        "openfdd_key": "AHU_2.occupied",
+        "role": "occupied",
+        "equipment_id": "AHU_2",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "sensor"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_OUTSIDE_AIR_DAMPER",
+        "openfdd_key": "AHU_2.outside-air-damper",
+        "role": "outside-air-damper",
+        "equipment_id": "AHU_2",
+        "source_unit": "percent_0_100",
+        "canonical_unit": "percent_0_100",
+        "quantity": "ratio",
+        "markers": [
+          "point",
+          "cmd",
+          "damper"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_OUTSIDE_AIR_TEMP",
+        "openfdd_key": "AHU_2.outside-air-temp",
+        "role": "outside-air-temp",
+        "equipment_id": "AHU_2",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "outside",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_RETURN_AIR_TEMP",
+        "openfdd_key": "AHU_2.return-air-temp",
+        "role": "return-air-temp",
+        "equipment_id": "AHU_2",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "return",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_AHU_2_RETURN_FAN_CMD",
+        "openfdd_key": "AHU_2.return-fan-cmd",
+        "role": "return-fan-cmd",
+        "equipment_id": "AHU_2",
+        "source_unit": "percent_0_100",
+        "canonical_unit": "percent_0_100",
+        "quantity": "ratio",
+        "markers": [
+          "point",
+          "cmd",
+          "fan",
+          "return"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_CHILLER_1_CHILLED_WATER_RETURN_TEMP",
+        "openfdd_key": "CHILLER_1.chilled-water-return-temp",
+        "role": "chilled-water-return-temp",
+        "equipment_id": "CHILLER_1",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "chilled"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_CHILLER_1_CHILLED_WATER_SUPPLY_TEMP",
+        "openfdd_key": "CHILLER_1.chilled-water-supply-temp",
+        "role": "chilled-water-supply-temp",
+        "equipment_id": "CHILLER_1",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "chilled"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_CHILLER_1_CHILLER_AMPS",
+        "openfdd_key": "CHILLER_1.chiller-amps",
+        "role": "chiller-amps",
+        "equipment_id": "CHILLER_1",
+        "source_unit": "A",
+        "canonical_unit": "A",
+        "quantity": "other",
+        "markers": [
+          "point",
+          "sensor",
+          "amps",
+          "chiller"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_CHILLER_1_CHILLER_STATUS",
+        "openfdd_key": "CHILLER_1.chiller-status",
+        "role": "chiller-status",
+        "equipment_id": "CHILLER_1",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "cmd",
+          "chiller"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_CHILLER_2_CHILLED_WATER_RETURN_TEMP",
+        "openfdd_key": "CHILLER_2.chilled-water-return-temp",
+        "role": "chilled-water-return-temp",
+        "equipment_id": "CHILLER_2",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "chilled"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_CHILLER_2_CHILLED_WATER_SUPPLY_TEMP",
+        "openfdd_key": "CHILLER_2.chilled-water-supply-temp",
+        "role": "chilled-water-supply-temp",
+        "equipment_id": "CHILLER_2",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "chilled"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_CHILLER_2_CHILLER_AMPS",
+        "openfdd_key": "CHILLER_2.chiller-amps",
+        "role": "chiller-amps",
+        "equipment_id": "CHILLER_2",
+        "source_unit": "A",
+        "canonical_unit": "A",
+        "quantity": "other",
+        "markers": [
+          "point",
+          "sensor",
+          "amps",
+          "chiller"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_CHILLER_2_CHILLER_STATUS",
+        "openfdd_key": "CHILLER_2.chiller-status",
+        "role": "chiller-status",
+        "equipment_id": "CHILLER_2",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "cmd",
+          "chiller"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_BOILERS_PUMPS_BOILER_STATUS",
+        "openfdd_key": "BOILERS_PUMPS.boiler-status",
+        "role": "boiler-status",
+        "equipment_id": "BOILERS_PUMPS",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "cmd",
+          "boiler"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_BOILERS_PUMPS_HOT_WATER_SUPPLY_TEMP",
+        "openfdd_key": "BOILERS_PUMPS.hot-water-supply-temp",
+        "role": "hot-water-supply-temp",
+        "equipment_id": "BOILERS_PUMPS",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "hot"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_BOILERS_PUMPS_HOT_WATER_RETURN_TEMP",
+        "openfdd_key": "BOILERS_PUMPS.hot-water-return-temp",
+        "role": "hot-water-return-temp",
+        "equipment_id": "BOILERS_PUMPS",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "hot"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_BOILERS_PUMPS_HW_PUMP_CMD",
+        "openfdd_key": "BOILERS_PUMPS.hw-pump-cmd",
+        "role": "hw-pump-cmd",
+        "equipment_id": "BOILERS_PUMPS",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "cmd",
+          "pump"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_BOILERS_PUMPS_PUMP_STATUS",
+        "openfdd_key": "BOILERS_PUMPS.pump-status",
+        "role": "pump-status",
+        "equipment_id": "BOILERS_PUMPS",
+        "source_unit": "numeric_bool",
+        "canonical_unit": "numeric_bool",
+        "quantity": "binary",
+        "markers": [
+          "point",
+          "sensor",
+          "pump"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_BOILERS_PUMPS_OUTSIDE_AIR_TEMP",
+        "openfdd_key": "BOILERS_PUMPS.outside-air-temp",
+        "role": "outside-air-temp",
+        "equipment_id": "BOILERS_PUMPS",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "temp",
+          "outside",
+          "air"
+        ]
+      },
+      {
+        "point_id": "BUILDING_50_WEATHER_WEB_OUTSIDE_AIR_TEMP",
+        "openfdd_key": "weather.web-outside-air-temp",
+        "role": "web-outside-air-temp",
+        "equipment_id": "weather",
+        "source_unit": "degF",
+        "canonical_unit": "degF",
+        "quantity": "temperature",
+        "markers": [
+          "point",
+          "sensor",
+          "outside",
+          "air",
+          "temp",
+          "weather"
+        ]
+      }
+    ]
+  },
+  "history_files": [
+    {
+      "path": "history/AHU_1_roles.csv",
+      "format": "wide_roles",
+      "timestamp_column": "timestamp_utc",
+      "equipment_id": "AHU_1",
+      "column_is_role": true
+    },
+    {
+      "path": "history/AHU_2_roles.csv",
+      "format": "wide_roles",
+      "timestamp_column": "timestamp_utc",
+      "equipment_id": "AHU_2",
+      "column_is_role": true
+    },
+    {
+      "path": "history/CHILLER_1_roles.csv",
+      "format": "wide_roles",
+      "timestamp_column": "timestamp_utc",
+      "equipment_id": "CHILLER_1",
+      "column_is_role": true
+    },
+    {
+      "path": "history/CHILLER_2_roles.csv",
+      "format": "wide_roles",
+      "timestamp_column": "timestamp_utc",
+      "equipment_id": "CHILLER_2",
+      "column_is_role": true
+    },
+    {
+      "path": "history/BOILERS_PUMPS_roles.csv",
+      "format": "wide_roles",
+      "timestamp_column": "timestamp_utc",
+      "equipment_id": "BOILERS_PUMPS",
+      "column_is_role": true
+    },
+    {
+      "path": "history/WEATHER_roles.csv",
+      "format": "wide_roles",
+      "timestamp_column": "timestamp_utc",
+      "equipment_id": "weather",
+      "column_is_role": true
+    }
+  ],
+  "fdd_starter_rules": [
+    "FC1",
+    "AHU-SATDEV",
+    "AHU-DUCTHI",
+    "FAN-RUNTIME-HOURS",
+    "FC10",
+    "FC12",
+    "CHW-1"
+  ],
+  "cleaning_requirements": [
+    "Every point must declare source_unit and quantity.",
+    "Wide CSV columns are Open-FDD role names; openfdd_key is equipment_id.role.",
+    "Timestamps must be timezone-aware UTC ISO-8601."
+  ]
+}

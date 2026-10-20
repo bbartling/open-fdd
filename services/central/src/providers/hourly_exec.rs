@@ -7,7 +7,7 @@ use chrono::{DateTime, Duration, Utc};
 use futures_util::future::BoxFuture;
 
 use super::hourly::{
-    assess_page, catch_up_windows, completed_hour_end, model_revision, reconciliation_windows,
+    assess_page, catch_up_windows, completed_window_end, model_revision, reconciliation_windows,
     retry_delay_secs, shard_ids, stagger_secs, CoverageOutcome, FetchError, HourlyPolicy,
     LogicalWindow, UPDATE_LOG_STATUS,
 };
@@ -163,7 +163,7 @@ pub async fn run_hourly_tick(
         execute_job(store, input, &job, fetch, writer, &mut report).await?;
         if job.purpose == "hourly" {
             let key = scope_key(input, &job.device_id, &job.model_revision);
-            advance_checkpoint(store, &key).await?;
+            advance_checkpoint(store, &key, input.policy.window_secs).await?;
         }
     }
     report.unrecoverable_gaps = store.gap_count(input.canonical_site).await?;
@@ -212,7 +212,13 @@ async fn ensure_origin(
         .first()
         .map(|w| w.start)
         .or_else(|| due.first().map(|w| w.start))
-        .unwrap_or_else(|| completed_hour_end(input.now, input.policy.publication_delay));
+        .unwrap_or_else(|| {
+            completed_window_end(
+                input.now,
+                input.policy.publication_delay,
+                input.policy.window_secs,
+            )
+        });
     store.put_checkpoint(key, anchor).await
 }
 
@@ -278,8 +284,14 @@ async fn enqueue_reconcile(
     let ids: Vec<String> = points.iter().map(|p| p.provider_point_id.clone()).collect();
     let shards = shard_ids(&ids, input.policy.points_per_shard);
     let shard_count = i32::try_from(shards.len()).unwrap_or(0);
-    let sweep = completed_hour_end(input.now, input.policy.publication_delay).timestamp();
-    for window in reconciliation_windows(cp, input.policy.reconcile_hours) {
+    let sweep = completed_window_end(
+        input.now,
+        input.policy.publication_delay,
+        input.policy.window_secs,
+    )
+    .timestamp();
+    for window in reconciliation_windows(cp, input.policy.reconcile_hours, input.policy.window_secs)
+    {
         let existing = store.shard_count_for(key, window).await?;
         if !store.hourly_committed(key, window, existing).await? {
             continue;
@@ -360,14 +372,19 @@ fn gap_for(
     }
 }
 
-async fn advance_checkpoint(store: &HourlyStore, key: &CheckpointKey) -> Result<(), String> {
+async fn advance_checkpoint(
+    store: &HourlyStore,
+    key: &CheckpointKey,
+    window_secs: i64,
+) -> Result<(), String> {
+    let step = window_secs.max(60);
     for _ in 0..48 {
         let Some(cp) = store.checkpoint(key).await? else {
             break;
         };
         let window = LogicalWindow {
             start: cp,
-            end: cp + Duration::seconds(3600),
+            end: cp + Duration::seconds(step),
         };
         let shards = store.shard_count_for(key, window).await?;
         if shards <= 0 || !store.hourly_committed(key, window, shards).await? {
@@ -812,6 +829,49 @@ mod tests {
         assert_eq!(batch[0].len(), 60);
         assert!((batch[0][0].val - batch[0][59].val).abs() > 1.0);
         assert_eq!(store.checkpoint(&key).await.unwrap(), Some(anchor));
+    }
+
+    #[tokio::test]
+    async fn a_committed_hour_is_not_fetched_again() {
+        let store = HourlyStore::memory();
+        let mut policy = policy();
+        policy.bootstrap = Duration::seconds(3600);
+        policy.reconcile_hours = 0;
+        let devices = vec![device(&["p1"])];
+        let now = ts(10, 5);
+        let mut fetch = ScriptFetch {
+            results: StdMutex::new(vec![Ok(vec![series("p1", vec![point("p1", 9, 15, 70.5)])])]),
+            calls: StdMutex::new(Vec::new()),
+        };
+        let mut writer = MemWrite {
+            batches: StdMutex::new(Vec::new()),
+            fail: false,
+        };
+        let first = run_hourly_tick(
+            &store,
+            &input(now, &devices, &policy),
+            &mut fetch,
+            &mut writer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(first.committed, 1);
+        assert_eq!(fetch.calls.lock().unwrap().len(), 1);
+        let second = run_hourly_tick(
+            &store,
+            &input(now, &devices, &policy),
+            &mut fetch,
+            &mut writer,
+        )
+        .await
+        .unwrap();
+        assert_eq!(second.failed, 0);
+        assert_eq!(
+            fetch.calls.lock().unwrap().len(),
+            1,
+            "an overlapping restart must not pull a committed hour again"
+        );
+        assert_eq!(writer.batches.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

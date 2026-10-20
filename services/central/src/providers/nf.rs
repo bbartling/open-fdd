@@ -783,6 +783,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hourly_window_is_get_after_token_and_a_failure_is_not_success() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let to = Utc::now() - chrono::Duration::minutes(30);
+        let from = to - chrono::Duration::hours(1);
+        let sample_ts = (from + chrono::Duration::minutes(15))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let history_body = format!(
+            r#"{{"data":[{{"uuid":"11111111-2222-3333-4444-555555555555","values":[{{"double":70.5,"ts":"{sample_ts}","quality":"good"}}]}}]}}"#
+        );
+        let requests = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let recorded = std::sync::Arc::clone(&requests);
+        tokio::spawn(async move {
+            for step in 0..3 {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let req = read_http_request(&mut sock).await;
+                recorded.lock().await.push(req);
+                let body = if step == 0 {
+                    TOKEN_FIXTURE.to_string()
+                } else if step == 1 {
+                    history_body.clone()
+                } else {
+                    r#"{"error":"upstream"}"#.to_string()
+                };
+                let status = if step == 2 {
+                    "503 Service Unavailable"
+                } else {
+                    "200 OK"
+                };
+                let payload = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = sock.write_all(payload.as_bytes()).await;
+            }
+        });
+        let mut driver = lab_driver(port, "secret", HttpLimits::default());
+        driver.authenticate().await.unwrap();
+        let points = driver
+            .fetch_history(&["11111111-2222-3333-4444-555555555555".into()], from, to)
+            .await
+            .unwrap();
+        assert_eq!(points.len(), 1);
+        assert!((points[0].val - 70.5).abs() < 1e-9);
+        let err = driver
+            .fetch_history(&["11111111-2222-3333-4444-555555555555".into()], from, to)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("unavailable")
+                || err.to_string().contains("http")
+                || err.to_string().contains("5"),
+            "{err}"
+        );
+        let seen = requests.lock().await.clone();
+        assert!(
+            seen[0].starts_with("POST /api/v1/auth/token"),
+            "{}",
+            seen[0]
+        );
+        assert!(
+            seen[1].starts_with("GET /api/v1/point/data?"),
+            "{}",
+            seen[1]
+        );
+        assert!(seen[1].contains("from.seconds="), "{}", seen[1]);
+        assert!(
+            seen[1].contains("11111111-2222-3333-4444-555555555555"),
+            "{}",
+            seen[1]
+        );
+        assert!(seen
+            .iter()
+            .all(|req| !req.starts_with("POST /api/v1/point/data")));
+    }
+
+    #[tokio::test]
     async fn stalled_body_hits_deadline_and_history_is_get() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();

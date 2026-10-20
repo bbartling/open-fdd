@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""Opt-in pandas == Timescale SQL parity for a deterministic synthetic site.
+
+This is the stress check. It is not a boot seed. Central's empty-database
+starter copies Building 50 only. This script loads site ``SYNTH_PARITY`` into
+whatever ``OPENFDD_DATABASE_URL`` points at, runs FC1 through the same postgres
+SQL file central renders, and compares fault hours with
+``open_fdd.rules`` (pandas cookbook + ``confirm_fault``).
+
+The frame is fixed: 12 five-minute samples, no randomness. ``AHU_FAULT`` is
+low duct static at full fan for every row (1.0 fault hour). ``AHU_OK`` holds
+static at setpoint (0.0).
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+SITE = "SYNTH_PARITY"
+POLL_SECONDS = 300.0
+CONFIRM_SECONDS = 300.0
+SAMPLES = 12
+START = datetime(2026, 6, 1, tzinfo=timezone.utc)
+FAULT_EQUIPMENT = "AHU_FAULT"
+OK_EQUIPMENT = "AHU_OK"
+HOUR_TOLERANCE = 1e-6
+
+SQL_PARAMS = {
+    "POLL_SECONDS": "300",
+    "CONFIRM_SECONDS": "300",
+    "CONFIRM_ROWS": "1",
+    "EPS_DSP": "0.12",
+    "EPS_VFD_SPD": "0.13",
+    "FAN_ON_MIN": "0.01",
+    "MODE_DELAY_MIN": "0",
+    "MODE_DELAY_ROWS": "1",
+    "MODE_DELAY_ROWS_PRECEDING": "0",
+    "REQUIRE_OPERATIONAL_GATE": "1",
+    "MINIMUM_ACTIVE_COVERAGE_PCT": "5",
+}
+
+
+def synthetic_rows() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for index in range(SAMPLES):
+        ts = START + timedelta(seconds=index * int(POLL_SECONDS))
+        stamp = ts.strftime("%Y-%m-%dT%H:%M:%SZ")
+        for equipment_id, static, setpoint in (
+            (FAULT_EQUIPMENT, 0.20, 1.00),
+            (OK_EQUIPMENT, 1.00, 1.00),
+        ):
+            rows.append(
+                {
+                    "ts": stamp,
+                    "equipment_id": equipment_id,
+                    "fan_status": 1.0,
+                    "fan_cmd": 1.0,
+                    "duct_static": static,
+                    "duct_static_sp": setpoint,
+                }
+            )
+    return rows
+
+
+def pandas_fault_hours() -> dict[str, tuple[int, float]]:
+    import pandas as pd
+
+    from open_fdd.rules.base import confirm_fault, hours_true
+    from open_fdd.rules.cookbook_catalog import fc1
+
+    params = {
+        "eps_dsp": 0.12,
+        "eps_vfd_spd": 0.13,
+        "mode_delay_min": 0.0,
+        "fan_on_min": 0.01,
+    }
+    out: dict[str, tuple[int, float]] = {}
+    for equipment_id, static, setpoint in (
+        (FAULT_EQUIPMENT, 0.20, 1.00),
+        (OK_EQUIPMENT, 1.00, 1.00),
+    ):
+        frame = pd.DataFrame(
+            {
+                "duct-static-pressure": [static] * SAMPLES,
+                "duct-static-pressure-sp": [setpoint] * SAMPLES,
+                "fan-status": [1.0] * SAMPLES,
+                "fan-cmd": [1.0] * SAMPLES,
+            }
+        )
+        raw = fc1(frame, params, POLL_SECONDS)
+        confirmed = confirm_fault(
+            raw, poll_seconds=POLL_SECONDS, confirm_seconds=CONFIRM_SECONDS
+        )
+        flags = int(confirmed.fillna(False).astype(bool).sum())
+        hours = float(hours_true(confirmed, POLL_SECONDS))
+        out[equipment_id] = (flags, hours)
+    return out
+
+
+def _statements(text: str) -> list[str]:
+    current: list[str] = []
+    out: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("--"):
+            continue
+        current.append(line)
+        if stripped.endswith(";"):
+            stmt = "\n".join(current).strip().rstrip(";").strip()
+            current = []
+            if stmt:
+                out.append(stmt)
+    tail = "\n".join(current).strip().rstrip(";").strip()
+    if tail:
+        out.append(tail)
+    return out
+
+
+def apply_schema(conn) -> None:
+    schema = ROOT / "sql" / "schema"
+    for name in (
+        "00_extensions.sql",
+        "01_bps_core.sql",
+        "02_openfdd_dims.sql",
+        "03_wide_history_helper.sql",
+    ):
+        for stmt in _statements((schema / name).read_text(encoding="utf-8")):
+            with conn.cursor() as cur:
+                cur.execute(stmt)
+        conn.commit()
+
+
+def render_fc1() -> str:
+    raw = (ROOT / "sql" / "fdd" / "postgres" / "rules" / "fc1_duct_static_low.sql").read_text(
+        encoding="utf-8"
+    )
+    for key, value in SQL_PARAMS.items():
+        raw = raw.replace("{{" + key + "}}", value)
+    if "{{" in raw:
+        raise SystemExit(f"unrendered FC1 placeholder remains: {raw[raw.find('{{'):raw.find('{{')+40]}")
+    return raw
+
+
+def connect_with_retry(database_url: str):
+    import psycopg
+
+    last = None
+    for _ in range(30):
+        try:
+            return psycopg.connect(database_url, connect_timeout=3)
+        except Exception as err:  # noqa: BLE001 — wait for the CI database
+            last = err
+            import time
+
+            time.sleep(2)
+    raise SystemExit(f"could not connect to Timescale: {last}")
+
+
+def load_and_query(database_url: str) -> dict[str, float]:
+    rows = synthetic_rows()
+    with connect_with_retry(database_url) as conn:
+        apply_schema(conn)
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM sample WHERE site_id = %s", (SITE,))
+            cur.execute("DELETE FROM point_map WHERE site_id = %s", (SITE,))
+            cur.execute("DELETE FROM role_map WHERE building_id = %s", (SITE,))
+            cur.execute("DELETE FROM equipment WHERE building_id = %s", (SITE,))
+            cur.execute("DELETE FROM building WHERE building_id = %s", (SITE,))
+            cur.execute("DELETE FROM site WHERE site_id = %s", (SITE,))
+            cur.execute(
+                "INSERT INTO site(site_id, dis, timezone, enabled) VALUES (%s, %s, 'UTC', true)",
+                (SITE, SITE),
+            )
+            cur.execute(
+                "INSERT INTO building(building_id, site_id, dis, timezone) VALUES (%s, %s, %s, 'UTC')",
+                (SITE, SITE, SITE),
+            )
+            for equipment_id in (FAULT_EQUIPMENT, OK_EQUIPMENT):
+                cur.execute(
+                    """
+                    INSERT INTO equipment(building_id, equipment_id, equip_type)
+                    VALUES (%s, %s, 'ahu')
+                    """,
+                    (SITE, equipment_id),
+                )
+            for row in rows:
+                for role in ("fan_status", "fan_cmd", "duct_static", "duct_static_sp"):
+                    openfdd_key = f"{row['equipment_id']}.{role}"
+                    cur.execute(
+                        """
+                        INSERT INTO sample (ts, site_id, openfdd_key, haystack_id, val)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (row["ts"], SITE, openfdd_key, openfdd_key, row[role]),
+                    )
+            cur.execute(
+                """
+                CREATE TEMP TABLE history (
+                  equipment_id text,
+                  timestamp_utc timestamptz,
+                  duct_static double precision,
+                  duct_static_sp double precision,
+                  fan_status double precision,
+                  fan_cmd double precision
+                ) ON COMMIT DROP
+                """
+            )
+            cur.execute(
+                """
+                INSERT INTO history (equipment_id, timestamp_utc, duct_static, duct_static_sp, fan_status, fan_cmd)
+                SELECT split_part(openfdd_key, '.', 1),
+                       ts,
+                       max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'duct_static'),
+                       max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'duct_static_sp'),
+                       max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'fan_status'),
+                       max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'fan_cmd')
+                FROM sample
+                WHERE site_id = %s
+                GROUP BY 1, 2
+                """,
+                (SITE,),
+            )
+            cur.execute(render_fc1())
+            found = {equipment_id: float(hours) for equipment_id, hours in cur.fetchall()}
+        conn.commit()
+    return found
+
+
+def check_fixture() -> dict[str, tuple[int, float]]:
+    got = pandas_fault_hours()
+    expect = {
+        FAULT_EQUIPMENT: (SAMPLES, SAMPLES * POLL_SECONDS / 3600.0),
+        OK_EQUIPMENT: (0, 0.0),
+    }
+    for equipment_id, (flags, hours) in expect.items():
+        got_flags, got_hours = got[equipment_id]
+        if got_flags != flags or abs(got_hours - hours) > HOUR_TOLERANCE:
+            raise SystemExit(
+                f"pandas fixture {equipment_id}: flags {got_flags} hours {got_hours}, "
+                f"expected flags {flags} hours {hours}"
+            )
+    return got
+
+
+def main() -> int:
+    if "--check-fixture" in sys.argv:
+        got = check_fixture()
+        print("pandas fixture", got)
+        return 0
+    database_url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
+    if not database_url:
+        print("OPENFDD_DATABASE_URL is required for the Timescale comparison", file=sys.stderr)
+        return 2
+    pandas_hours = check_fixture()
+    sql_hours = load_and_query(database_url)
+    mismatches = []
+    for equipment_id, (_flags, hours) in pandas_hours.items():
+        sql = sql_hours.get(equipment_id)
+        if sql is None or abs(sql - hours) > HOUR_TOLERANCE:
+            mismatches.append(f"{equipment_id}: pandas={hours} sql={sql}")
+    if mismatches:
+        print("FAIL pandas != SQL", *mismatches, sep="\n", file=sys.stderr)
+        return 1
+    print("OK FC1 pandas == SQL", {k: v[1] for k, v in pandas_hours.items()})
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

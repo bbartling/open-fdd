@@ -22,6 +22,8 @@ export interface ProviderRow {
   mappedPoints?: number;
   clientIdConfigured?: boolean;
   lastPollAt?: string | null;
+  lastSuccessAt?: string | null;
+  lastErrorAt?: string | null;
   lastIngested?: number;
   consecutiveErrors?: number;
   status?: string;
@@ -216,6 +218,8 @@ export function mergeProviderRows(
     row.pollSecs = site.poll_secs ?? row.pollSecs;
     row.mappedPoints = site.mapped_points ?? row.mappedPoints;
     row.lastPollAt = site.last_poll_at ?? row.lastPollAt;
+    row.lastSuccessAt = site.health?.last_success_at ?? row.lastSuccessAt;
+    row.lastErrorAt = site.health?.last_error_at ?? row.lastErrorAt;
     row.lastIngested = site.last_ingested_points ?? row.lastIngested;
     row.consecutiveErrors = site.consecutive_errors ?? row.consecutiveErrors;
     row.status = site.health?.status ?? row.status;

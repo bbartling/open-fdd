@@ -267,7 +267,9 @@ export function ProvidersPanel() {
                 <th>Mapped points</th>
                 <th>Credential ref</th>
                 <th>Last poll</th>
+                <th>Last success</th>
                 <th>Last ingested</th>
+                <th>Last error</th>
                 <th>Errors</th>
               </tr>
             </thead>
@@ -313,7 +315,13 @@ export function ProvidersPanel() {
                     <td>{row.mappedPoints ?? "—"}</td>
                     <td>{credentialRefLabel(row.clientIdConfigured)}</td>
                     <td>{row.lastPollAt ?? "—"}</td>
+                    <td data-testid={`provider-last-success-${row.buildingId}`}>
+                      {row.lastSuccessAt ?? "—"}
+                    </td>
                     <td>{row.lastIngested ?? "—"}</td>
+                    <td data-testid={`provider-last-error-${row.buildingId}`}>
+                      {row.message || row.lastErrorAt || "—"}
+                    </td>
                     <td>{row.consecutiveErrors ?? "—"}</td>
                   </tr>
                 );
