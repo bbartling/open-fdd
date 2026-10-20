@@ -43,9 +43,18 @@ jobs:
       - name: Edge lib and MCP tests
         run: cargo test --all-targets -p open_fdd_edge_prototype -p openfdd-mcp -- --test-threads=1
 
+      - name: NF offline fixture acceptance (no live portal)
+        run: |
+          python3 scripts/nf/check_wave_nf_status.py
+          if grep -nE 'reqwest|NfPortalDriver|https?://' services/central/src/providers/fixture_acceptance.rs; then
+            echo "fixture acceptance must stay offline"
+            exit 1
+          fi
+          cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
+
       - name: Central / fieldbus / MQTT contract tests
         run: |
-          cargo test -p openfdd_contracts -p openfdd_mqtt -p fdd_resources -p openfdd-central
+          cargo test -p openfdd_contracts -p openfdd_mqtt -p fdd_resources -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
 

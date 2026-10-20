@@ -117,11 +117,11 @@ todos:
     content: SoftOPEN defer — N11 live window rows, backfill submit, and server-issued binding preview wait on N5/N3 (SPA hooks landed)
     status: pending
   - id: n12-evidence
-    content: SoftOPEN defer — N12 Full acceptance matrix (fixtures then bounded NF SoftOPEN pilot); no portal flooding
+    content: "SoftOPEN defer — bounded read-only NF SoftOPEN pilot and published-SPA regression (offline fixture matrix is in CI; no portal flood)"
     status: pending
   - id: n13-release
-    content: SoftOPEN defer — N13 Phased delivery gates; truthful implemented/tested/deployed/remaining status
-    status: pending
+    content: N13 phased delivery gates and machine-readable status (nothing deployed or qualified)
+    status: completed
   - id: n2-dns-pin
     content: SoftOPEN defer — DNS-at-connect rebinding pin for provider endpoints (Wave-A left public-mode literal IP checks only)
     status: pending
@@ -302,8 +302,8 @@ Update this section **and** the YAML frontmatter after every merge. Prefix unfin
 - [ ] SoftOPEN defer — server-published per-device window rows (`GET /api/providers/windows`), backfill submit, and binding preview. The Providers panel shows the N7 six-axis summary from poll health beside the N11 window table.
 - [ ] SoftOPEN defer — N5 historian sample upsert and job receipt are separate writes (one transaction stays with N6)
 - [ ] SoftOPEN defer — **n11-frontend** live window rows, backfill submit, and server-issued binding preview
-- [ ] SoftOPEN defer — **n12-evidence** full acceptance matrix (no portal flood)
-- [ ] SoftOPEN defer — **n13-release** phased gates + truthful remaining status
+- [ ] SoftOPEN defer — **n12-evidence** bounded read-only NF SoftOPEN pilot and published-SPA regression (offline fixture matrix is in CI; no portal flood)
+- [x] **n13-release** phased gates (`docs/operations/WAVE_NF_DELIVERY_GATES.md`) + `wave_nf_status.json` (nothing deployed or qualified)
 - [ ] SoftOPEN defer — **n2-dns-pin** DNS-at-connect rebinding pin (literal public-mode checks only)
 - [ ] SoftOPEN defer — **n2-hot-secrets** hot credential reload without process restart
 
