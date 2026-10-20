@@ -12,7 +12,7 @@ Workspace patch on master `5d56bf32` (4.0.1). `/api/health` reports `4.0.2+<sha>
 - The Active site list omits historian ids with no equipment and no samples, package dirs without a manifest, and provider sites with zero mapped points.
 - Overview equipment count still excludes weather and says so. Timescale package mapping carries per-equipment first/last timestamps so dataset start, end, and span fill in. AHU health matrices join stored PASS/FAULT rows. Results `fault_pct` is derived from fault hours when the stored row omitted it.
 - `Cargo.lock` bumps `rustls-webpki` to 0.103.16, `webpki-roots` to 1.0.10, and `webpki-root-certs` to 1.0.10 (RUSTSEC-2026-0382, RUSTSEC-2026-0381, RUSTSEC-2026-0383).
-- Destructive reset clears `jobs/` and `data/datasets` before the one-shot token is stored. Short ingest windows still enqueue the whole catch-up span. NF portal logins are reused across those windows. Queue scheduling uses the same device map as execution, and an unmapped device is a permanent job failure. Health matrices honor requested equipment ids. Diagnostic SQL that declares `fault_pct` keeps that column.
+- Destructive reset clears `jobs/` and `data/datasets` before the one-shot token is stored. Short ingest windows still enqueue the whole catch-up span. NF portal logins are reused for the same credentials and replaced after HTTP 401. Queue scheduling uses the same device map as execution, and an unmapped device is a permanent job failure. Health matrices honor requested equipment ids. Diagnostic SQL that declares `fault_pct` keeps that column.
 
 ## 4.0.1 — 2026-10-20
 
