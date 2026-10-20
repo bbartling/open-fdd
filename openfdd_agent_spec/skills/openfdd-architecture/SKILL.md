@@ -36,6 +36,7 @@ missing cookbook paths / terminology regressions.
 
 - [`openfdd-sql-fdd`](../openfdd-sql-fdd/SKILL.md) — product FDD engine
 - [`openfdd-react-spa`](../openfdd-react-spa/SKILL.md) — product UI
+- [`openfdd-code-review-rust-react`](../openfdd-code-review-rust-react/SKILL.md) — Rust and React review standard
 - [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — library boundary
 - [`openfdd-milestone-a-pr`](../openfdd-milestone-a-pr/SKILL.md) — PR loop
 - [`openfdd-stack-ghcr`](../openfdd-stack-ghcr/SKILL.md) — image pull

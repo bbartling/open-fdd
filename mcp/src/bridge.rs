@@ -12,6 +12,10 @@ pub struct BridgeClient {
 }
 
 impl BridgeClient {
+    #[expect(
+        clippy::expect_used,
+        reason = "reqwest Client::build fails only when the TLS backend cannot initialize; from_env has no Result channel"
+    )]
     pub fn from_env() -> Self {
         let base = env::var("OPENFDD_API_BASE").unwrap_or_else(|_| "http://127.0.0.1:8080".into());
         let token = env::var("OPENFDD_MCP_TOKEN")

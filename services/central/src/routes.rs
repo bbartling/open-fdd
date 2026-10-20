@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::{DefaultBodyLimit, Extension, Path, Query, Request, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
@@ -1874,9 +1874,18 @@ pub async fn ingest_stats(State(state): State<Arc<AppState>>) -> Json<IngestStat
     let ledger = state.receipt_ledger_stats().await;
     Json(IngestStatsResponse {
         ok: !ledger.high_water,
-        ingest_ok: *state.ingest_ok.lock().unwrap(),
-        ingest_dup: *state.ingest_dup.lock().unwrap(),
-        ingest_reject: *state.ingest_reject.lock().unwrap(),
+        ingest_ok: *state
+            .ingest_ok
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        ingest_dup: *state
+            .ingest_dup
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        ingest_reject: *state
+            .ingest_reject
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
         ingest_backpressure: state
             .ingest_backpressure
             .load(std::sync::atomic::Ordering::Relaxed),
@@ -1884,8 +1893,16 @@ pub async fn ingest_stats(State(state): State<Arc<AppState>>) -> Json<IngestStat
         receipts_capacity: ledger.capacity,
         receipts_pending: ledger.pending,
         live_writer_queue_bytes: crate::live_historian::live_writer_queue_bytes(),
-        reject_buckets: state.ingest_reject_buckets.lock().unwrap().clone(),
-        dead_letters: state.dead_letters.lock().unwrap().len(),
+        reject_buckets: state
+            .ingest_reject_buckets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone(),
+        dead_letters: state
+            .dead_letters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len(),
     })
 }
 
@@ -2812,7 +2829,7 @@ pub async fn fdd_status() -> Json<FddStatusResponse> {
         .exists();
     Json(FddStatusResponse {
         ok: true,
-        rules_dir: rules_dir.clone(),
+        rules_dir,
         rules_dir_exists,
         rule_count: count,
         hint: if count == 0 {
@@ -4314,7 +4331,7 @@ pub async fn model_agent_context(
                 preferred.as_deref(),
             );
         let model_tree = agent_context_model_tree(meta.as_ref(), &inventory);
-        let overlay_root = root.clone();
+        let overlay_root = root;
         let overlay_rev =
             open_fdd_edge_prototype::csv_ingest::model_overlay::load_revision(&overlay_root)
                 .unwrap_or(0);
@@ -5994,12 +6011,19 @@ async fn jobs_download_engineering_export(
             .map_err(job_err)?;
     let (artifact, bytes) = loaded;
     let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/zip".parse().unwrap());
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/zip"),
+    );
+    let disposition = format!("attachment; filename=\"{}\"", artifact.filename);
     headers.insert(
         header::CONTENT_DISPOSITION,
-        format!("attachment; filename=\"{}\"", artifact.filename)
-            .parse()
-            .unwrap(),
+        disposition.parse().map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "invalid export filename"})),
+            )
+        })?,
     );
     Ok((StatusCode::OK, headers, bytes))
 }
@@ -6031,7 +6055,10 @@ async fn jobs_download_wattlab_dump(
         .map_err(job_err)?;
     let (artifact, bytes) = loaded;
     let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/zip".parse().unwrap());
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/zip"),
+    );
     let disposition = format!("attachment; filename=\"{}\"", artifact.filename);
     headers.insert(
         header::CONTENT_DISPOSITION,

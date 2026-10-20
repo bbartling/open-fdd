@@ -107,7 +107,9 @@ fn package_fallback_csv(building_id: &str, include_faults: bool) -> Result<Vec<u
                 .map_err(|e| JobError::Io(e.to_string()))?;
             out_headers = Some(hdrs);
         }
-        let hdrs = out_headers.as_ref().expect("headers written");
+        let Some(hdrs) = out_headers.as_ref() else {
+            return Err(JobError::Io("csv headers were not written".into()));
+        };
         let ts_col = hdrs
             .iter()
             .position(|h| h == "timestamp_utc" || h == "timestamp");
@@ -221,7 +223,7 @@ fn maybe_join_faults(
         .position(|h| h == "equipment_id")
         .ok_or_else(|| JobError::Invalid("historian CSV missing equipment_id column".into()))?;
     let fault_index = load_confirmed_fault_index(building_id);
-    let mut out_headers = headers.clone();
+    let mut out_headers = headers;
     out_headers.push("fault".into());
     out_headers.push("fault_rules".into());
     let mut wtr = WriterBuilder::new()

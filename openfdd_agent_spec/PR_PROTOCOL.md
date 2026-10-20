@@ -23,14 +23,14 @@ docs/openfdd-agent-spec   # docs-only OK
 ## Steps
 
 1. **Sync** — `git fetch --prune`; switch `master` (open-fdd) or `develop` (playground); `pull --ff-only`. Do not destructive-reset unrelated dirty work.
-2. **Read** — root `AGENTS.md`, this spec, applicable skills, nearby `AGENTS.md`.
+2. **Read** — root `AGENTS.md`, this spec, applicable skills, nearby `AGENTS.md`. Rust or `frontend/web` diffs also read [`docs/RUST_BEST_PRACTICES.md`](docs/RUST_BEST_PRACTICES.md), [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md), and [`skills/openfdd-code-review-rust-react/SKILL.md`](skills/openfdd-code-review-rust-react/SKILL.md).
 3. **Inspect** — `git log -15`; `gh pr list`; `gh run list --limit 20`. Do not duplicate open work.
 4. **Bound the PR** — in-scope / out-of-scope / acceptance / tests / docs.
 5. **Branch** — `git switch -c milestone-a/<work>`.
 6. **Test-first migration** — inventory → characterize → implement shared → parity → cutover → delete twin → regression → docs.
 7. **Validate locally (hard gate before push)** — catch easy failures **before** GitHub Actions:
-   - Rust product change: `cargo fmt --check`, `cargo clippy -p <crate> -- -D warnings`, `cargo test -p <crate>` (plus `--test preauth_disclosure` when MT/auth touched).
-   - SPA change: `cd frontend/web && npm test -- --run` (and `npm run typecheck` when types changed).
+   - Rust product change: `cargo fmt --check`, `cargo clippy -p <crate> --all-targets -- -D warnings` (product crates carry the Clippy denies in [`docs/RUST_BEST_PRACTICES.md`](docs/RUST_BEST_PRACTICES.md)), `cargo test -p <crate>` (plus `--test preauth_disclosure` when MT/auth touched).
+   - SPA change: `cd frontend/web && npm run lint && npm test -- --run` (and `npm run typecheck` when types changed). Lint rules are the errors in [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md).
    - Security/qualification Python: `python3 -B -m pytest tests/security -q` and/or `tests/qualification` as touched.
    - Docs-only: link/path sanity; no need for full cargo.
    - Do **not** open or undraft a PR until local targeted tests are green. Actions are the second line, not the first.

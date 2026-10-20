@@ -9,12 +9,10 @@ pub fn load_column_role_map(path: &Path) -> Result<HashMap<String, String>> {
     let mut out = HashMap::new();
     let mut rdr = csv::Reader::from_path(path)?;
     let headers = rdr.headers()?.clone();
-    let col_idx = header_index(&headers, &["col", "column"]);
     let role_idx = header_index(&headers, &["point_role", "role"]);
-    if col_idx.is_none() {
+    let Some(col_idx) = header_index(&headers, &["col", "column"]) else {
         return Ok(out);
-    }
-    let col_idx = col_idx.unwrap();
+    };
 
     for rec in rdr.records() {
         let rec = rec?;

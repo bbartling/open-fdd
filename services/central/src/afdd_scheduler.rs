@@ -145,7 +145,10 @@ impl AfddSchedulerRuntime {
     }
 
     fn config_snapshot(&self) -> AfddConfig {
-        self.config.lock().unwrap().clone()
+        self.config
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     fn checkpoint(&self) -> Result<Option<AfddSchedulerCheckpoint>> {
@@ -263,14 +266,20 @@ impl AfddSchedulerRuntime {
 
     fn update_operator_schedule(&self, schedule: AfddOperatorSchedule) -> Result<AfddConfig> {
         schedule.validate_allowlist()?;
-        let mut config = self.config.lock().unwrap();
+        let mut config = self
+            .config
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         config.apply_operator_schedule(&schedule)?;
         self.persist_operator_schedule(&schedule)?;
         Ok(config.clone())
     }
 
     fn record_cycle(&self, record: AfddCycleRecord) {
-        let mut status = self.status.lock().unwrap();
+        let mut status = self
+            .status
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         status.last_error = record.error.clone();
         status.recent_cycles.push_front(record);
         status.recent_cycles.truncate(MAX_RECENT_CYCLES);
@@ -698,7 +707,10 @@ impl AfddSchedulerRuntime {
             .wall_clock_timezone
             .as_deref()
             .and_then(|tz| wall_clock_local_rfc3339(next_due, tz).ok());
-        let status = self.status.lock().unwrap();
+        let status = self
+            .status
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let timer_enabled = config.mode == AfddMode::Continuous;
         let schedule_kind = config.schedule_kind;
         let watermark_source = if crate::timescale_historian::historian_is_timescale() {
@@ -969,7 +981,11 @@ pub fn spawn(runtime: Arc<AfddSchedulerRuntime>) -> Option<tokio::task::JoinHand
                 Ok(None) => {}
                 Err(error) => {
                     warn!(scope = %scope, %error, "continuous AFDD cycle failed");
-                    runtime.status.lock().unwrap().last_error = Some(error.to_string());
+                    runtime
+                        .status
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .last_error = Some(error.to_string());
                 }
             }
         }

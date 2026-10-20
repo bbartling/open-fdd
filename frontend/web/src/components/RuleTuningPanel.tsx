@@ -308,7 +308,7 @@ export function RuleTuningPanel() {
         }
       }
     },
-    [opsGate],
+    [buildingId, opsGate],
   );
 
   const schedulePersist = useCallback(

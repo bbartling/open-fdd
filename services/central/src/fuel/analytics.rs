@@ -203,37 +203,40 @@ fn fuel_monthly(campus: &Campus, gap_fill: bool, warnings: &mut Vec<String>) -> 
             }));
         }
     }
-    if gap_fill && !all_months.is_empty() {
-        let start = all_months.iter().next().unwrap().clone();
-        let end = all_months.iter().next_back().unwrap().clone();
-        let months = continuous_months(&start, &end);
-        let existing: BTreeSet<(String, String)> = rows
-            .iter()
-            .filter_map(|r| {
-                Some((
-                    r.get("month")?.as_str()?.to_string(),
-                    r.get("meter_id")?.as_str()?.to_string(),
-                ))
-            })
-            .collect();
-        for m in &campus.meters {
-            for month in &months {
-                if !existing.contains(&(month.clone(), m.meter_id.clone())) {
-                    rows.push(json!({
-                        "month": month,
-                        "meter_id": m.meter_id,
-                        "fuel": m.fuel,
-                        "usage": Value::Null,
-                        "unit": m.unit,
-                        "cost_usd": Value::Null,
-                        "demand_kw": Value::Null,
-                        "kbtu": Value::Null,
-                        "gap": true,
-                    }));
+    if gap_fill {
+        if let (Some(start), Some(end)) = (
+            all_months.iter().next().cloned(),
+            all_months.iter().next_back().cloned(),
+        ) {
+            let months = continuous_months(&start, &end);
+            let existing: BTreeSet<(String, String)> = rows
+                .iter()
+                .filter_map(|r| {
+                    Some((
+                        r.get("month")?.as_str()?.to_string(),
+                        r.get("meter_id")?.as_str()?.to_string(),
+                    ))
+                })
+                .collect();
+            for m in &campus.meters {
+                for month in &months {
+                    if !existing.contains(&(month.clone(), m.meter_id.clone())) {
+                        rows.push(json!({
+                            "month": month,
+                            "meter_id": m.meter_id,
+                            "fuel": m.fuel,
+                            "usage": Value::Null,
+                            "unit": m.unit,
+                            "cost_usd": Value::Null,
+                            "demand_kw": Value::Null,
+                            "kbtu": Value::Null,
+                            "gap": true,
+                        }));
+                    }
                 }
             }
+            warnings.push("gap_fill: inserted null rows for missing meter-months".into());
         }
-        warnings.push("gap_fill: inserted null rows for missing meter-months".into());
     }
     rows.sort_by(|a, b| {
         let am = a.get("month").and_then(|v| v.as_str()).unwrap_or("");
@@ -380,8 +383,12 @@ fn fuel_quality(campus: &Campus, _warnings: &mut Vec<String>) -> Value {
             }));
             continue;
         }
-        let start = months.iter().next().unwrap().clone();
-        let end = months.iter().next_back().unwrap().clone();
+        let (Some(start), Some(end)) = (
+            months.iter().next().cloned(),
+            months.iter().next_back().cloned(),
+        ) else {
+            continue;
+        };
         let expected = continuous_months(&start, &end);
         let missing: Vec<_> = expected
             .iter()
@@ -439,8 +446,11 @@ fn synthetic_monthly_degree_days(
         return out;
     };
 
-    let start_date = NaiveDate::from_ymd_opt(sy, sm, 1)
-        .unwrap_or_else(|| NaiveDate::from_ymd_opt(2000, 1, 1).unwrap());
+    let Some(start_date) =
+        NaiveDate::from_ymd_opt(sy, sm, 1).or_else(|| NaiveDate::from_ymd_opt(2000, 1, 1))
+    else {
+        return out;
+    };
     let end_exclusive = if em == 12 {
         NaiveDate::from_ymd_opt(ey + 1, 1, 1)
     } else {

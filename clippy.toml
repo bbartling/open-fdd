@@ -1,0 +1,7 @@
+# Production crates deny clippy::unwrap_used and clippy::expect_used.
+# Tests stay exempt. expect_used has its own switch; unwrap's switch does not cover it.
+# See openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true

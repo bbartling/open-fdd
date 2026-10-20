@@ -304,7 +304,11 @@ export function AppShell({
       }`}
       data-testid="app-shell"
       data-sidebar-collapsed={collapsed ? "true" : "false"}
-      style={{ ["--sidebar-width" as any]: `${sidebarWidthPx}px` }}
+      style={
+        {
+          "--sidebar-width": `${sidebarWidthPx}px`,
+        } as React.CSSProperties
+      }
     >
       {centralNotice ? (
         <div

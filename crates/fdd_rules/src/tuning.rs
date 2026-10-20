@@ -124,8 +124,11 @@ pub fn assert_sql_placeholders(sql: &str, rule: &RuleSpec) -> Result<()> {
                 format!("{prefix}_MIN_PERIODS"),
             ]);
         }
-        if p.sql_placeholder == "MODE_DELAY_MIN" || p.sql_placeholder == "STARTUP_DELAY_MIN" {
-            let prefix = p.sql_placeholder.strip_suffix("_MIN").unwrap();
+        if let Some(prefix) = match p.sql_placeholder.as_str() {
+            "MODE_DELAY_MIN" => Some("MODE_DELAY"),
+            "STARTUP_DELAY_MIN" => Some("STARTUP_DELAY"),
+            _ => None,
+        } {
             keys.extend([format!("{prefix}_ROWS"), format!("{prefix}_ROWS_PRECEDING")]);
         }
         keys

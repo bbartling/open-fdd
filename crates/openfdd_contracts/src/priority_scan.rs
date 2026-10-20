@@ -568,7 +568,7 @@ mod tests {
         continued.cursor = Some(cursor.clone());
         assert_eq!(continued.offset_for_revision("history-1").unwrap(), 2);
 
-        let mut foreign = request.clone();
+        let mut foreign = request;
         foreign.scope.edge_id = "other-edge".into();
         foreign.cursor = Some(cursor);
         assert!(foreign.offset_for_revision("history-1").is_err());

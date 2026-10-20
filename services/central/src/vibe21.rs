@@ -9,7 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
 use axum::extract::{DefaultBodyLimit, Extension, Path as AxumPath, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::middleware;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -128,20 +128,22 @@ fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
     }
 }
 
-fn mime_for(path: &Path) -> &'static str {
-    match path.extension().and_then(|e| e.to_str()).unwrap_or("") {
-        "html" => "text/html; charset=utf-8",
-        "js" => "application/javascript",
-        "wasm" => "application/wasm",
-        "data" | "unityweb" => "application/octet-stream",
-        "json" => "application/json",
-        "css" => "text/css",
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "svg" => "image/svg+xml",
-        "ico" => "image/x-icon",
-        _ => "application/octet-stream",
-    }
+fn mime_for(path: &Path) -> HeaderValue {
+    HeaderValue::from_static(
+        match path.extension().and_then(|e| e.to_str()).unwrap_or("") {
+            "html" => "text/html; charset=utf-8",
+            "js" => "application/javascript",
+            "wasm" => "application/wasm",
+            "data" | "unityweb" => "application/octet-stream",
+            "json" => "application/json",
+            "css" => "text/css",
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "svg" => "image/svg+xml",
+            "ico" => "image/x-icon",
+            _ => "application/octet-stream",
+        },
+    )
 }
 
 async fn unity_asset(
@@ -168,14 +170,17 @@ async fn unity_asset(
     match std::fs::read(&path) {
         Ok(bytes) => {
             let mut headers = HeaderMap::new();
-            headers.insert(header::CONTENT_TYPE, mime_for(&path).parse().unwrap());
-            headers.insert(header::X_CONTENT_TYPE_OPTIONS, "nosniff".parse().unwrap());
+            headers.insert(header::CONTENT_TYPE, mime_for(&path));
+            headers.insert(
+                header::X_CONTENT_TYPE_OPTIONS,
+                HeaderValue::from_static("nosniff"),
+            );
             if path.extension().and_then(|e| e.to_str()) == Some("html") {
-                headers.insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
+                headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
             } else {
                 headers.insert(
                     header::CACHE_CONTROL,
-                    "public, max-age=31536000, immutable".parse().unwrap(),
+                    HeaderValue::from_static("public, max-age=31536000, immutable"),
                 );
             }
             (StatusCode::OK, headers, bytes).into_response()
@@ -864,16 +869,22 @@ async fn training_export(
     match result {
         Ok(bytes) if !bytes.is_empty() => {
             let mut headers = HeaderMap::new();
-            headers.insert(header::CONTENT_TYPE, "application/zip".parse().unwrap());
             headers.insert(
-                header::CONTENT_DISPOSITION,
-                format!(
-                    "attachment; filename=\"training_export_{}.zip\"",
-                    bundle.job_id
-                )
-                .parse()
-                .unwrap(),
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/zip"),
             );
+            let disposition = format!(
+                "attachment; filename=\"training_export_{}.zip\"",
+                bundle.job_id
+            );
+            let Ok(disposition) = HeaderValue::from_str(&disposition) else {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"ok": false, "error": "invalid training export filename"})),
+                )
+                    .into_response();
+            };
+            headers.insert(header::CONTENT_DISPOSITION, disposition);
             (StatusCode::OK, headers, bytes).into_response()
         }
         Ok(_) => (

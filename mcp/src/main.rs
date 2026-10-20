@@ -8,6 +8,10 @@ mod protocol;
 
 use protocol::Server;
 
+#[expect(
+    clippy::print_stderr,
+    reason = "fatal MCP startup error before a tracing subscriber exists"
+)]
 fn main() {
     if let Err(e) = Server::new(bridge::BridgeClient::from_env()).run_stdio() {
         eprintln!("openfdd-mcp error: {e}");

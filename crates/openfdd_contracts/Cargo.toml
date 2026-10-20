@@ -17,5 +17,8 @@ uuid = { version = "1", features = ["v4", "serde"] }
 default = []
 openapi = ["dep:utoipa"]
 
+[lints]
+workspace = true
+
 [dev-dependencies]
 serde_json = "1"

@@ -709,7 +709,7 @@ mod tests {
             .to_string();
         let plan = CompactionPlan {
             partition_path: partition,
-            input_paths: vec![input.clone(), input.clone()],
+            input_paths: vec![input.clone(), input],
             input_bytes: 0,
         };
         let compactor = ParquetCompactor::new(storage, 2, 128).unwrap();
@@ -855,7 +855,7 @@ mod tests {
             )
             .unwrap();
 
-        let compactor = ParquetCompactor::new(storage.clone(), 2, 128).unwrap();
+        let compactor = ParquetCompactor::new(storage, 2, 128).unwrap();
         let plan = compactor.plan_history().unwrap().remove(0);
         let result = compactor.compact_plan(&plan).unwrap();
 

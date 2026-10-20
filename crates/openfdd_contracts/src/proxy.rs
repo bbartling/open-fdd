@@ -484,7 +484,7 @@ mod tests {
             object_instance: 3,
             property_id: "present-value".into(),
         };
-        let point_req = request(point_target.clone());
+        let point_req = request(point_target);
         ConnectorReadResponse::success(&point_req, ConnectorReadResult::Point(point()))
             .validate_for(&point_req)
             .unwrap();
@@ -536,7 +536,7 @@ mod tests {
             object_type: "analog-output".into(),
             object_instance: 4,
         };
-        let priority_req = request(priority_target.clone());
+        let priority_req = request(priority_target);
         ConnectorReadResponse::success(
             &priority_req,
             ConnectorReadResult::PriorityArray(priority_array()),

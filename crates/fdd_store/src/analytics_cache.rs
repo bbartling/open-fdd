@@ -328,7 +328,10 @@ pub fn read_result(
     let batch = if batches.is_empty() {
         RecordBatch::new_empty(schema)
     } else if batches.len() == 1 {
-        batches.pop().expect("len checked")
+        match batches.pop() {
+            Some(batch) => batch,
+            None => RecordBatch::new_empty(schema),
+        }
     } else {
         arrow::compute::concat_batches(&batches[0].schema(), &batches)?
     };
@@ -991,7 +994,7 @@ mod tests {
             result_query_version: "runtime-v1".into(),
         };
         write_result(tmp.path(), &key, &sample_table(), &provenance).unwrap();
-        let mut other = key.clone();
+        let mut other = key;
         other.config_hash = config_hash("b");
         assert!(read_result(tmp.path(), &other).unwrap().is_none());
     }

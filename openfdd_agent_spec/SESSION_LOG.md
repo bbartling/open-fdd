@@ -1,3 +1,14 @@
+## 2026-10-20 — Rust and React review standard
+
+- Canonical review text: [`docs/RUST_BEST_PRACTICES.md`](docs/RUST_BEST_PRACTICES.md), [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md), skill [`skills/openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md). Hygiene file stays the suppression procedure.
+- Product crates opt into Clippy denies (`unwrap_used`, `expect_used`, `await_holding_lock`, `ptr_arg`, `redundant_clone`, `rc_buffer`, print/dbg). SPA ESLint errors cover hooks, keys, `any`, `no-danger`, and `document.getElementById`. Tests may still unwrap.
+- No VERSION bump. The 4.0.1 patch is a later PR after this train and the data-safe and OT-archive trains merge.
+- Product surface for this standard is the NF portal API and CSV ingest. MQTT, BACnet, Haystack, Modbus, fieldbus, edge, and dual-write paths are not cleaned here. Archived code lives in `archive/` and is never built.
+- Rebased onto `cf6109b1` (#1305). `db_lifecycle` production paths have no unwrap/expect. Timescale seed scripts stay Python with bound SQL.
+- Rebased onto `1d6c4ff9` (#1306). MQTT module allows dropped. `ingest` and `live_historian` are the portal writer. `LiveWriter::start` keeps one `#[expect]` for thread spawn.
+- Rebased onto `c4a616b1` (#1308). Kept the legacy-tooling deletions. No VERSION bump.
+- Rebased onto `5dd7f5c1` (#1309). `starter_seed`, provider, and Timescale production paths have no unwrap or expect. Workspace Clippy and SPA ESLint are clean. No VERSION bump. This is the last PR before the 4.0.1 bump.
+
 ## 2026-10-20 — Rebase legacy tooling purge onto #1306
 
 - Rebased `chore/purge-legacy-tooling` onto `origin/master` `1d6c4ff9`. Archive copies under `archive/ot-edge/unmaintained/` stay. Product paths for the nightly bench stay gone.

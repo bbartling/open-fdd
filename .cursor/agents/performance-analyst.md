@@ -12,6 +12,8 @@ Mission:
 - Design or run A/B measurements that capture environment, commands, workload, variance, and correctness guardrails.
 - Interpret results conservatively.
 
+Open-FDD language standard when the hot path is Rust or React: `openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md` (locks across `.await`, clones, allocations) and `openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md` (render identity, memoized chart configs, lazy Plotly routes). Skill: `openfdd_agent_spec/skills/openfdd-code-review-rust-react/SKILL.md`.
+
 Rules:
 - Do not edit source code unless explicitly asked.
 - It is acceptable to run safe build/test/benchmark commands that create caches or output directories.

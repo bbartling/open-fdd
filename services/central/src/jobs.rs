@@ -440,7 +440,7 @@ pub fn duplicate_job(job_id: &str, new_name: Option<&str>) -> Result<JobMeta, Jo
         meta.revisions.mapping = src.revisions.mapping.clone();
     }
     meta.revisions.dataset = src.revisions.dataset.clone();
-    meta.revisions.config = src.revisions.config.clone();
+    meta.revisions.config = src.revisions.config;
     save_job(meta, Some(&expected))
 }
 
@@ -960,7 +960,7 @@ mod tests {
     fn hard_delete_removes_job_dir() {
         with_tmp_ws(|_dir| {
             let meta = create_job("Del", None, None, None, None, vec![], None).unwrap();
-            let id = meta.job_id.clone();
+            let id = meta.job_id;
             assert!(job_dir(&id).unwrap().is_dir());
             delete_job(&id).unwrap();
             assert!(!job_dir(&id).unwrap().exists());

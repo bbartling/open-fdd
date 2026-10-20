@@ -389,7 +389,10 @@ fn flatten_fuel_files_to_root(dir: &Path) -> Result<()> {
     }
     walk(dir, &mut found);
     for src in found {
-        let name = src.file_name().unwrap().to_owned();
+        let Some(name) = src.file_name() else {
+            continue;
+        };
+        let name = name.to_owned();
         let dest = dir.join(&name);
         if src == dest {
             continue;

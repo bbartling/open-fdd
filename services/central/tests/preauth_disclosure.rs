@@ -1,4 +1,12 @@
 //! Kali Wave P2c — pre-auth disclosure + tenant list ACL (auth ON).
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::dbg_macro,
+    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
+)]
 //! Failing tests first: anonymous must not see tenants / topology / MCP.
 
 use std::io::{Read, Write};

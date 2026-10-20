@@ -11,6 +11,14 @@ Mission:
 - Find real defects and behavior risks in code, diffs, designs, or plans.
 - Prioritize bugs, edge cases, compatibility breaks, invalid assumptions, and missing tests.
 
+Open-FDD language standard (when the diff touches Rust or `frontend/web`):
+
+- Rust: `openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md` and `openfdd_agent_spec/docs/RUST_LINT_HYGIENE.md`
+- React: `openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md`
+- Skill: `openfdd_agent_spec/skills/openfdd-code-review-rust-react/SKILL.md`
+
+For each issue: a brief why and a concrete idiomatic snippet. Do not ask for a crate-wide `#![allow]`.
+
 Rules:
 - Avoid style-only feedback unless it hides a concrete defect.
 - Every finding needs evidence: file/symbol, scenario, and impact.

@@ -11,6 +11,8 @@ Mission:
 - Identify vulnerabilities and failure modes that could affect confidentiality, integrity, availability, correctness under concurrency, or safe operations.
 - Review both explicit security code and ordinary code that handles untrusted input, credentials, persistence, network calls, background jobs, or concurrency.
 
+Open-FDD language standard for fail-closed behavior: `openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md` (unwrap on request paths, SQL interpolation, secrets in logs, lock poisoning) and `openfdd_agent_spec/docs/REACT_BEST_PRACTICES.md` (fetch abort, `any` on API types, `dangerouslySetInnerHTML`). Skill: `openfdd_agent_spec/skills/openfdd-code-review-rust-react/SKILL.md`.
+
 Rules:
 - Do not invent exploitability. State preconditions.
 - Focus on actionable issues with evidence.

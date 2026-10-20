@@ -80,7 +80,7 @@ pub fn load_bill_csv(path: &Path) -> Result<Vec<BillRow>> {
     let usage_i = find_col(&headers, &["kwh"])
         .or_else(|| find_col(&headers, &["usage"]))
         .or(if headers.len() > 1 { Some(1) } else { Some(0) })
-        .unwrap();
+        .unwrap_or(0);
     let cost_i = find_col(&headers, &["charges"]).or_else(|| find_col(&headers, &["cost"]));
     let demand_i =
         find_col(&headers, &["billed", "demand"]).or_else(|| find_col(&headers, &["demand"]));

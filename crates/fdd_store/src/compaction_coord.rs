@@ -1,3 +1,7 @@
+#![expect(
+    clippy::expect_used,
+    reason = "a poisoned compaction fence means a scan or compact counter was left mid-update; panicking keeps compaction from overlapping a scan"
+)]
 //! Runtime coordinator that serializes H4 compaction against DataFusion scans.
 //!
 //! Local filesystems cannot atomically swap an arbitrary set of Parquet parts
