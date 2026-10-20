@@ -8,6 +8,24 @@ nav_exclude: true
 
 # Backup, update, restore
 
+## Data-safe updates (default)
+
+Image updates and `docker compose up` keep the database. They do not drop schema,
+truncate `sample`, delete volumes, or reseed a demo building.
+
+| Action | Default | Opt-in for an intentional wipe |
+| --- | --- | --- |
+| Railway re-pin (`scripts/railway_repin_hub.sh`, `openfdd_railway_release.sh`) | Swap GHCR image tags only. Timescale and `OPENFDD_DATABASE_URL` stay. | Do not point a re-pin at a new empty volume. There is no wipe flag on the re-pin script. |
+| Local update (`openfdd_stack_up.sh`, `openfdd_maint_update_resume.sh`) | `up -d` recreates containers and keeps named volumes. | `down`, `-v`, `--volumes`, and `--renew-anon-volumes` are refused unless `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`. |
+| Docker maintenance (`openfdd_docker_maintenance.sh`) | Prunes dangling images, stopped containers, and build cache. Volumes stay. | `--prune-volumes` plus `--reset-db --i-understand-data-loss`, or `--prune-volumes` with `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`. |
+| Central startup | Forward-only `CREATE … IF NOT EXISTS` when `OPENFDD_DATABASE_URL` is set. An existing `site` / `sample` relation is preserved, including when `sample` has zero rows. | Startup ignores `OPENFDD_ALLOW_DESTRUCTIVE_DB`. It never drops, truncates, or reseeds. |
+| Timescale init SQL | `docker-entrypoint-initdb.d` runs only on an empty data directory. | Replacing the named volume is a new database. Do not replace it on upgrade. |
+| Lab seed (`scripts/timescale/auto_seed.py`, `auto_seed_fast.py`) | If any site or sample exists, the script exits 2 and deletes nothing. A fresh database may be loaded. | Reload requires **both** `OPENFDD_SEED_FORCE=1` and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`. |
+| Workspace scratch reset | `openfdd_workspace_reset_default.sh` refuses. | `--reset-db --i-understand-data-loss` or `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`. This does not drop Timescale. |
+| Retention purge execute | Dry-run unless `OPENFDD_RETENTION_DRY_RUN=0`. | Execute also requires `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`. |
+
+Disposable CI projects (`openfdd-csv-smoke-*`, `openfdd-restore-empty-*`, `openfdd-bacnet-mqtt-ci-*`, `openfdd-zap-*`) may delete only the volumes they created. A name containing `openfdd-timescale` is still refused without `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`.
+
 Local/edge historian plus analytics result parquet defaults to a **100 GiB** oldest-first cap. A backup of that live set is a second copy. Do not assume a ~200 GiB host can hold both. Run `scripts/openfdd_disk_preflight.py --full-copy` before `tar` of `workspace/`. Exit 10 means skip the on-box copy (offload it). Exit 20 means free space is under the reserved percent — do not start the update. Any deploy with `OPENFDD_TEST_DEPLOY=1` skips the release backup unless `OPENFDD_BACKUP_ON_UPDATE=1`. The flag is not tied to a site id. Detail: [DATA_RETENTION_BUDGET.md](DATA_RETENTION_BUDGET.md).
 
 ## Soft-OPEN vs production (Wave-X Timescale)

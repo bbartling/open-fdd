@@ -2,6 +2,8 @@
 # Optional retention sidecar — calls data-management API only (never deletes Feather directly).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/openfdd_data_safety.sh
+source "$ROOT/scripts/openfdd_data_safety.sh"
 API_BASE="${OPENFDD_RETENTION_API_BASE:-http://127.0.0.1:8080}"
 POLICY="${OPENFDD_RETENTION_POLICY_FILE:-$ROOT/workspace/data-management/retention.local.toml}"
 DRY_RUN="${OPENFDD_RETENTION_DRY_RUN:-1}"
@@ -37,6 +39,11 @@ if grep -q 'validation_days' "$POLICY" 2>/dev/null; then
     echo "DRY_RUN=1 — no execute"
     exit 0
   fi
+  if ! openfdd_destructive_db_allowed; then
+    echo "REFUSED: retention purge execute requires OPENFDD_ALLOW_DESTRUCTIVE_DB=1" >&2
+    exit 1
+  fi
+  echo "WARNING: DATA LOSS — retention purge execute is running." >&2
   curl -fsS -X POST "$API_BASE/api/data-management/purge/execute" \
     -H "Authorization: Bearer $TOKEN" \
     -H 'Content-Type: application/json' \

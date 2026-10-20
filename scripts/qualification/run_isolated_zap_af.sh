@@ -10,6 +10,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=scripts/openfdd_data_safety.sh
+source "$ROOT/scripts/openfdd_data_safety.sh"
 cd "$ROOT"
 
 TAG="${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG to an immutable sha-<7> tag}"
@@ -52,7 +54,11 @@ TARGET_ORIGIN="http://web:8080"
 
 cleanup() {
   docker rm -f "$CTR_WEB" "$CTR_CENTRAL" >/dev/null 2>&1 || true
-  docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+  if openfdd_allow_volume_delete "$VOL"; then
+    docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+  else
+    echo "REFUSED: left volume ${VOL} in place" >&2
+  fi
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT

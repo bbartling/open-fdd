@@ -4,6 +4,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=scripts/openfdd_data_safety.sh
+source "$ROOT/scripts/openfdd_data_safety.sh"
 cd "$ROOT"
 
 TAG="${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG to an immutable sha-<7> tag}"
@@ -28,7 +30,11 @@ export OPENFDD_FIELDBUS_API_KEY="${OPENFDD_FIELDBUS_API_KEY:-bacnet-mqtt-ci-fiel
 FB_AUTH=(-H "Authorization: Bearer ${OPENFDD_FIELDBUS_API_KEY}")
 
 cleanup() {
-  "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  if openfdd_allow_volume_delete "$PROJECT"; then
+    "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  else
+    echo "REFUSED: left compose project ${PROJECT} volumes in place" >&2
+  fi
   rm -rf "$TMP"
 }
 trap cleanup EXIT

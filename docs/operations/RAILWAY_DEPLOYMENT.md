@@ -139,6 +139,8 @@ railway whoami
 
 After a patch-cycle tip is published (e.g. `sha-9667888`), re-pin **central → mqtt → web**. Prefer immutable `:sha-<7>`.
 
+Re-pin is data-safe by default. It swaps app images only. It does not drop Timescale, truncate `public.sample`, delete the central `/workspace` volume, or reseed a demo building. `scripts/railway_repin_hub.sh` has no wipe flag. Keep the same Postgres/Timescale service and volume. See [backup-update-restore.md](backup-update-restore.md) § Data-safe updates.
+
 ```bash
 cd ~/open-fdd
 SHA=sha-9667888

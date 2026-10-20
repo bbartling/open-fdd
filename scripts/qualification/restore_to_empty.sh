@@ -4,6 +4,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=scripts/openfdd_data_safety.sh
+source "$ROOT/scripts/openfdd_data_safety.sh"
 cd "$ROOT"
 
 TAG="${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG to an immutable sha-<7> tag}"
@@ -29,7 +31,11 @@ PORT="$((18000 + RANDOM % 1000))"
 
 cleanup() {
   docker rm -f "$CTR" >/dev/null 2>&1 || true
-  docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+  if openfdd_allow_volume_delete "$VOL"; then
+    docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+  else
+    echo "REFUSED: left volume ${VOL} in place" >&2
+  fi
 }
 trap cleanup EXIT
 
@@ -100,6 +106,7 @@ ls -la "$ART/workspace-backup.tgz" | tee "$ART/backup_size.txt"
 
 echo "== Wipe volume (empty) =="
 docker rm -f "$CTR" >/dev/null
+openfdd_allow_volume_delete "$VOL"
 docker volume rm -f "$VOL" >/dev/null
 docker volume create "$VOL" >/dev/null
 # Prove empty

@@ -45,6 +45,8 @@ jobs:
       - name: cargo test (plot roles + registry)
         run: |
           cargo test -p fdd_rules
+          cargo test -p fdd_tsdb -- --test-threads=1
+          cargo test -p openfdd-central db_safety -- --test-threads=1
           cargo test -p openfdd-central plot_role_tests -- --nocapture
       - name: SQL/fdd registry = 77 warehouse rules
         run: |

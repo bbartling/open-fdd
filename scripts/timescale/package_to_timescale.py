@@ -10,7 +10,8 @@ import sys
 from pathlib import Path
 
 # Reuse fast seeder by pointing B50 env at the package root.
-os.environ.setdefault("OPENFDD_SEED_FORCE", "1")
+# Do not force a reload. Occupied databases refuse unless the operator sets
+# OPENFDD_SEED_FORCE=1 and OPENFDD_ALLOW_DESTRUCTIVE_DB=1.
 pkg = Path(sys.argv[1] if len(sys.argv) > 1 else os.environ.get("OPENFDD_SEED_BUILDING50_DIR", "."))
 os.environ["OPENFDD_SEED_BUILDING50_DIR"] = str(pkg.resolve())
 sys.path.insert(0, str(Path(__file__).resolve().parent))

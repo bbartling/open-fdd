@@ -152,6 +152,7 @@ PY
 fi
 
 echo "=== EXECUTE: re-pin services to $TAG (bounded timeout ${TIMEOUT_SECS}s) ==="
+echo "DATA-SAFE: re-pin does not drop Timescale, delete volumes, or reseed."
 # Explicit image identity - agents must not improvise ad-hoc railway sequences.
 # Prefer existing ops pin scripts when present; otherwise document BLOCKED.
 if [[ -x "$ROOT/scripts/railway_repin_hub.sh" ]]; then

@@ -22,7 +22,9 @@ remain FQ-open. See [`docs/softopen/SOFTOPEN_WAL_RESTORE_R8d.md`](../softopen/SO
 # Timescale core + schema init
 docker compose -p openfdd-wavex-ts -f docker/compose.timescale.core.yml up -d timescale
 
-# Seed warehouse registry + BUILDING_50 (ART defaults)
+# Seed warehouse registry + BUILDING_50 on an empty Timescale only.
+# If any site or sample row already exists, auto_seed.py exits 2 and deletes nothing.
+# A reload also needs OPENFDD_SEED_FORCE=1 and OPENFDD_ALLOW_DESTRUCTIVE_DB=1.
 docker run --rm --network openfdd-wavex-ts_default \
   -e OPENFDD_DATABASE_URL='postgresql://openfdd:openfdd_dev_only@timescale:5432/openfdd' \
   -e OPENFDD_SEED_WAREHOUSE_DIR=/seeds/warehouse \

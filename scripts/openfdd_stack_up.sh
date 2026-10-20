@@ -8,6 +8,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/openfdd_stack_lib.sh
 source "$ROOT/scripts/openfdd_stack_lib.sh"
+# shellcheck source=scripts/openfdd_data_safety.sh
+source "$ROOT/scripts/openfdd_data_safety.sh"
 
 RECIPE="portal"
 DO_BUILD=0
@@ -42,6 +44,9 @@ Options:
 Env: OPENFDD_IMAGE_TAG, OPENFDD_*_IMAGE, OPENFDD_JWT_SECRET, OPENFDD_ADMIN_PASSWORD
      OPENFDD_CADDY=1|0, OPENFDD_CENTRAL_BIND=127.0.0.1 (LAN via Caddy)
      OPENFDD_WATTLAB=1 (same as --wattlab), OPENFDD_WATTLAB_HOST_WORKSPACE, OPENFDD_WATTLAB_HOST_SRC
+
+Data: `up` keeps named volumes. It refuses `down`, `-v`, `--volumes`, and
+`--renew-anon-volumes` unless OPENFDD_ALLOW_DESTRUCTIVE_DB=1.
 EOF
       exit 0
       ;;
@@ -109,6 +114,10 @@ if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]
     echo "NOTE: building openfdd-web locally (image not present or --build): $OPENFDD_WEB_IMAGE"
     docker compose "${ARGS[@]}" build web
   fi
+fi
+
+if [[ ${#EXTRA[@]} -gt 0 ]]; then
+  openfdd_reject_destructive_compose_args "${EXTRA[@]}"
 fi
 
 if [[ "$DO_BUILD" -eq 1 && "$RECIPE" != "portal" && "$RECIPE" != "react" && "$RECIPE" != "react-ot" ]]; then

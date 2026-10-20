@@ -173,7 +173,7 @@ Git alone is **not** enough for kits/certs/zips.
 | `scripts/nightly-ot-bench/run_railway_hub_stress.sh` | CSV + ZAP closeout |
 | `scripts/gates/railway_b100_parity_spot.sh` | B100 Railway parity |
 | `scripts/gates/creekside_package_import_spot.sh` | Creekside import |
-| `scripts/openfdd_docker_maintenance.sh` | Low-RAM non-aggressive cleanup |
+| `scripts/openfdd_docker_maintenance.sh` | Low-RAM image/cache cleanup. Does not prune volumes unless `--prune-volumes` and an explicit data-loss opt-in |
 
 ## Anti-patterns
 

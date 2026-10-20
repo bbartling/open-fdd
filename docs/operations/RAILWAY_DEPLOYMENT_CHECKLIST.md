@@ -186,3 +186,4 @@ Cloud MQTTS is the hub: on-prem fieldbus publishes into Railway MQTTS; Central i
 - [ ] Reintroducing Feather/Parquet dual-write or `legacy-datafusion` / `legacy-parquet` product features (Timescale-only — ADR-010)
 - [ ] Treating Railway AI as the FDD/HVAC assistant
 - [ ] Recreating an empty Timescale / `/workspace` volume on every image upgrade (destroys history)
+- [ ] Running an update with a database wipe. Default re-pin and `docker compose up` keep data. A wipe needs `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` or `--reset-db --i-understand-data-loss` on the specific command that deletes data ([backup-update-restore.md](backup-update-restore.md))

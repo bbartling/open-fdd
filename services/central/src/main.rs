@@ -11,6 +11,7 @@ mod capabilities;
 mod contract;
 mod csv_site_export;
 mod cutover;
+mod db_safety;
 mod durable_storage;
 mod engineering_bundle;
 mod eplus_runner;
@@ -61,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
 
     initialize_s3_scope_index().await?;
 
+    db_safety::bootstrap_on_startup().await;
     let state = Arc::new(AppState::new());
     // Joinable boot line for ART / Railway log windows around started_at flips (Q1a).
     info!(

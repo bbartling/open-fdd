@@ -16,6 +16,8 @@ from pathlib import Path
 
 import psycopg
 
+from seed_safety import decide_seed
+
 URL = os.environ.get(
     "OPENFDD_DATABASE_URL",
     "postgresql://openfdd:openfdd_dev_only@127.0.0.1:5432/openfdd",
@@ -23,7 +25,6 @@ URL = os.environ.get(
 B50 = Path(os.environ.get("OPENFDD_SEED_BUILDING50_DIR", "/seeds/BUILDING_50"))
 SQL_ROOT = Path(os.environ.get("OPENFDD_SQL_ROOT", "/sql"))
 WAREHOUSE = Path(os.environ.get("OPENFDD_SEED_WAREHOUSE_DIR", "/seeds/warehouse"))
-FORCE = os.environ.get("OPENFDD_SEED_FORCE", "0").lower() in {"1", "true", "yes"}
 
 
 def load_registry(conn) -> int:
@@ -207,18 +208,49 @@ def main() -> int:
         with conn.cursor() as cur:
             cur.execute("SELECT value FROM seed_meta WHERE key='building50_seed'")
             row = cur.fetchone()
-            if row and row[0] == "ok" and not FORCE:
-                print("already seeded; registry only (OPENFDD_SEED_FORCE=1 to reload)")
-                print("registry", load_registry(conn))
-                return 0
+            marker_ok = bool(row and row[0] == "ok")
+            cur.execute("SELECT EXISTS (SELECT 1 FROM site LIMIT 1)")
+            has_site = bool(cur.fetchone()[0])
+            cur.execute("SELECT EXISTS (SELECT 1 FROM sample LIMIT 1)")
+            has_sample = bool(cur.fetchone()[0])
+        decision = decide_seed(
+            marker_ok=marker_ok,
+            existing_samples=1 if has_sample else 0,
+            existing_sites=1 if has_site else 0,
+        )
+        if decision == "skip_already":
+            print(
+                "already seeded; registry only "
+                "(reload requires OPENFDD_SEED_FORCE=1 and OPENFDD_ALLOW_DESTRUCTIVE_DB=1)"
+            )
+            print("registry", load_registry(conn))
+            return 0
+        if decision == "refuse":
+            print(
+                "REFUSED: existing Timescale data detected. "
+                "Seed will not delete or reload it.",
+                file=sys.stderr,
+            )
+            print(
+                "To wipe and reload, set OPENFDD_SEED_FORCE=1 and "
+                "OPENFDD_ALLOW_DESTRUCTIVE_DB=1.",
+                file=sys.stderr,
+            )
+            return 2
         print("registry", load_registry(conn))
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM sample WHERE site_id=%s", (building_id,))
-            cur.execute("DELETE FROM role_map WHERE building_id=%s", (building_id,))
-            cur.execute("DELETE FROM point_map WHERE site_id=%s", (building_id,))
-            cur.execute("DELETE FROM equipment WHERE building_id=%s", (building_id,))
-            cur.execute("DELETE FROM seed_meta WHERE key LIKE 'building50%'")
-        conn.commit()
+        if decision == "reload":
+            print(
+                f"WARNING: DATA LOSS — deleting Timescale rows for site {building_id} "
+                "because OPENFDD_SEED_FORCE=1 and OPENFDD_ALLOW_DESTRUCTIVE_DB=1",
+                file=sys.stderr,
+            )
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM sample WHERE site_id=%s", (building_id,))
+                cur.execute("DELETE FROM role_map WHERE building_id=%s", (building_id,))
+                cur.execute("DELETE FROM point_map WHERE site_id=%s", (building_id,))
+                cur.execute("DELETE FROM equipment WHERE building_id=%s", (building_id,))
+                cur.execute("DELETE FROM seed_meta WHERE key LIKE 'building50%'")
+            conn.commit()
         total = 0
         csvs = sorted(B50.rglob("history_wide.csv")) + sorted(B50.rglob("history.csv"))
         for csv_path in csvs:

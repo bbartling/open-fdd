@@ -16,6 +16,7 @@ services:
       POSTGRES_USER: openfdd
       POSTGRES_PASSWORD: openfdd_ci_only
       POSTGRES_DB: openfdd
+    # CI project only. Init scripts run when this volume's data directory is empty.
     volumes:
       - timescale-data:/var/lib/postgresql/data
       - ../sql/schema/00_extensions.sql:/docker-entrypoint-initdb.d/00_extensions.sql:ro

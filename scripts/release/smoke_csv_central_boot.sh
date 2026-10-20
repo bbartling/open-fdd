@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=scripts/openfdd_data_safety.sh
+source "$ROOT/scripts/openfdd_data_safety.sh"
 cd "$ROOT"
 
 PROJECT="openfdd-csv-smoke-$$"
@@ -13,6 +15,10 @@ WEB_IMAGE="${OPENFDD_WEB_IMAGE:-openfdd-web:ci}"
 SKIP_BUILD="${OPENFDD_SMOKE_SKIP_BUILD:-0}"
 
 cleanup() {
+  if ! openfdd_allow_volume_delete "$PROJECT"; then
+    echo "REFUSED: left compose project ${PROJECT} volumes in place" >&2
+    return 0
+  fi
   "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup EXIT

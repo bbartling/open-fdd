@@ -16,6 +16,8 @@ services:
       POSTGRES_DB: ${OPENFDD_TIMESCALE_DB:-openfdd}
     ports:
       - "${OPENFDD_TIMESCALE_BIND:-127.0.0.1}:5432:5432"
+    # Init scripts run only when the data directory is empty (official Postgres
+    # entrypoint). Recreating the container does not wipe this named volume.
     volumes:
       - openfdd-timescale:/var/lib/postgresql/data
       - ../sql/schema/00_extensions.sql:/docker-entrypoint-initdb.d/00_extensions.sql:ro

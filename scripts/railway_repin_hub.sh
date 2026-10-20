@@ -23,6 +23,7 @@ command -v railway >/dev/null || { echo "railway CLI required" >&2; exit 2; }
 command -v jq >/dev/null || { echo "jq required" >&2; exit 2; }
 railway whoami >/dev/null
 
+echo "DATA-SAFE: re-pin swaps GHCR images only. Timescale, OPENFDD_DATABASE_URL, and the central volume are not dropped, truncated, or reinitialized."
 echo "=== re-pin central $CENTRAL_SVC -> ghcr.io/bbartling/openfdd-central:${TAG} ==="
 railway service source connect --service "$CENTRAL_SVC" \
   --image "ghcr.io/bbartling/openfdd-central:${TAG}"

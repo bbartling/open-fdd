@@ -56,6 +56,24 @@ curl -sf http://127.0.0.1:8080/api/health | jq '{ok,version,service}'
 
 **Never** `docker build` stack images on low-RAM hosts — wait for Actions, pull `sha-*`.
 
+## Update an existing stack
+
+`./scripts/openfdd_stack_up.sh` and `./scripts/openfdd_maint_update_resume.sh` recreate containers and keep named volumes, including Timescale. Central startup applies forward-only schema (`CREATE … IF NOT EXISTS`) and does not truncate or reseed when `site` or `sample` already exists.
+
+```bash
+OPENFDD_IMAGE_TAG=sha-<7> ./scripts/openfdd_stack_up.sh portal
+# optional disk cleanup — does not prune volumes:
+./scripts/openfdd_docker_maintenance.sh
+```
+
+These commands refuse `down -v`, `docker volume prune`, and workspace scratch deletion unless you opt in. Volume prune:
+
+```bash
+./scripts/openfdd_docker_maintenance.sh --prune-volumes --reset-db --i-understand-data-loss
+```
+
+The same wipe is `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` plus `--prune-volumes`. Do not export that variable for a normal update. Full table: [backup-update-restore.md](backup-update-restore.md) § Data-safe updates.
+
 MQTT ACL for local: place under `deploy/mqtt/certs/acl` (tip mqtt images read `acl_file /mosquitto/certs/acl`).
 
 ## Dual pipeline (retired for closeout)

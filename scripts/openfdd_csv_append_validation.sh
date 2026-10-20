@@ -132,6 +132,15 @@ openfdd_csv_append_purge_validation() {
   matched="$(jq -r '.matched_row_count // 0' <<<"$preview")"
   [[ "$matched" -gt 0 ]] || echo "WARN: purge preview matched 0 rows" >&2
 
+  case "$(printf '%s' "${OPENFDD_ALLOW_DESTRUCTIVE_DB:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+    1|true|yes) ;;
+    *)
+      echo "REFUSED: purge execute requires OPENFDD_ALLOW_DESTRUCTIVE_DB=1" >&2
+      return 1
+      ;;
+  esac
+  echo "WARNING: DATA LOSS — validation purge execute is running." >&2
+
   curl "${CURL_TLS[@]:-}" -fsS -X POST "${base}/api/data-management/purge/execute" \
     -H "Authorization: Bearer $token" \
     -H 'Content-Type: application/json' \
