@@ -196,3 +196,31 @@ jobs:
           bash scripts/test_openfdd_stack_image_tag.sh
           test -f docker/compose.wattlab.react.yml
           test -f docs/mcp-agents/companion-wattlab-energyplus.md
+
+  synthetic-sql-parity:
+    name: Synthetic pandas equals Timescale SQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      timescale:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: openfdd
+          POSTGRES_PASSWORD: openfdd
+          POSTGRES_DB: openfdd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openfdd -d openfdd"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pandas oracle and Timescale FC1 parity
+        env:
+          OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+        run: |
+          python3 -m pip install --user 'psycopg[binary]' 'pandas>=2.0' 'numpy>=1.26' 'openpyxl>=3.1' 'pyyaml>=6'
+          python3 scripts/timescale/test_synthetic_pandas_sql_parity.py
+          python3 scripts/timescale/test_ui_p0_timescale.py

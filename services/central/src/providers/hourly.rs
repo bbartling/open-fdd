@@ -34,6 +34,9 @@ pub struct HourlyPolicy {
     pub max_attempts: i32,
     pub points_per_shard: usize,
     pub retry_jitter_secs: i64,
+    /// Logical hour length. Production stays 3600. `OPENFDD_HOURLY_WINDOW_SECS`
+    /// shortens it for a fast validation tick only.
+    pub window_secs: i64,
 }
 
 impl Default for HourlyPolicy {
@@ -50,6 +53,7 @@ impl Default for HourlyPolicy {
             max_attempts: 8,
             points_per_shard: 50,
             retry_jitter_secs: 30,
+            window_secs: 3600,
         }
     }
 }
@@ -81,6 +85,9 @@ impl HourlyPolicy {
         if let Some(v) = env_i64("OPENFDD_HOURLY_POINTS_PER_SHARD") {
             policy.points_per_shard = usize::try_from(v.clamp(1, 500)).unwrap_or(50);
         }
+        if let Some(v) = env_i64("OPENFDD_HOURLY_WINDOW_SECS") {
+            policy.window_secs = v.clamp(60, 3600);
+        }
         policy
     }
 }
@@ -95,16 +102,21 @@ pub struct LogicalWindow {
     pub end: DateTime<Utc>,
 }
 
-pub fn floor_hour(ts: DateTime<Utc>) -> DateTime<Utc> {
+pub fn floor_to_window(ts: DateTime<Utc>, window_secs: i64) -> DateTime<Utc> {
+    let w = window_secs.max(1);
     let secs = ts.timestamp();
-    let floored = secs - secs.rem_euclid(3600);
+    let floored = secs - secs.rem_euclid(w);
     DateTime::from_timestamp(floored, 0).unwrap_or(ts)
 }
 
-/// End of the last completed hour. At 10:05 with a 5-minute delay this is 10:00,
-/// so the logical window is `[09:00, 10:00)`.
-pub fn completed_hour_end(now: DateTime<Utc>, publication_delay: Duration) -> DateTime<Utc> {
-    floor_hour(now - publication_delay)
+/// End of the last completed window. At 10:05 with a 5-minute delay and a
+/// 3600-second window this is 10:00, so the logical window is `[09:00, 10:00)`.
+pub fn completed_window_end(
+    now: DateTime<Utc>,
+    publication_delay: Duration,
+    window_secs: i64,
+) -> DateTime<Utc> {
+    floor_to_window(now - publication_delay, window_secs)
 }
 
 pub fn catch_up_windows(
@@ -112,14 +124,15 @@ pub fn catch_up_windows(
     now: DateTime<Utc>,
     policy: &HourlyPolicy,
 ) -> (Vec<LogicalWindow>, Vec<LogicalWindow>) {
-    let horizon = completed_hour_end(now, policy.publication_delay);
+    let step = policy.window_secs.max(60);
+    let horizon = completed_window_end(now, policy.publication_delay, step);
     let retention_edge = now - policy.retention;
-    let bootstrap_start = floor_hour(horizon - policy.bootstrap);
+    let bootstrap_start = floor_to_window(horizon - policy.bootstrap, step);
     let mut cursor = match contiguous_end {
-        Some(end) => floor_hour(end),
+        Some(end) => floor_to_window(end, step),
         None => {
             let mut start = bootstrap_start;
-            let retention_floor = floor_hour(retention_edge);
+            let retention_floor = floor_to_window(retention_edge, step);
             if start < retention_floor {
                 start = retention_floor;
             }
@@ -132,8 +145,9 @@ pub fn catch_up_windows(
         return (due, unrecoverable);
     }
     let mut guard = 0;
-    while cursor < horizon && guard < 24 * 120 {
-        let end = cursor + Duration::seconds(3600);
+    let guard_max = 24 * 120 * (3600 / step).max(1);
+    while cursor < horizon && guard < guard_max {
+        let end = cursor + Duration::seconds(step);
         let window = LogicalWindow { start: cursor, end };
         if end <= retention_edge {
             unrecoverable.push(window);
@@ -165,12 +179,17 @@ pub fn fair_windows(due: &[LogicalWindow], limit: usize) -> Vec<LogicalWindow> {
     out
 }
 
-pub fn reconciliation_windows(contiguous_end: DateTime<Utc>, hours: i64) -> Vec<LogicalWindow> {
+pub fn reconciliation_windows(
+    contiguous_end: DateTime<Utc>,
+    hours: i64,
+    window_secs: i64,
+) -> Vec<LogicalWindow> {
+    let step = window_secs.max(60);
     let mut out = Vec::new();
     let mut end = contiguous_end;
     let mut left = hours.max(0);
     while left > 0 {
-        let start = end - Duration::seconds(3600);
+        let start = end - Duration::seconds(step);
         out.push(LogicalWindow { start, end });
         end = start;
         left -= 1;
@@ -370,7 +389,7 @@ mod tests {
     fn completed_hour_waits_for_publication_delay() {
         let delay = Duration::seconds(300);
         let at_1005 = ts(10, 5);
-        assert_eq!(completed_hour_end(at_1005, delay), ts(10, 0));
+        assert_eq!(completed_window_end(at_1005, delay, 3600), ts(10, 0));
         let (due, gaps) = catch_up_windows(Some(ts(9, 0)), at_1005, &policy());
         assert!(gaps.is_empty());
         assert_eq!(due.len(), 1);
@@ -378,7 +397,7 @@ mod tests {
         assert_eq!(due[0].end, ts(10, 0));
 
         let at_1004 = ts(10, 4);
-        assert_eq!(completed_hour_end(at_1004, delay), ts(9, 0));
+        assert_eq!(completed_window_end(at_1004, delay, 3600), ts(9, 0));
         let (early, _) = catch_up_windows(Some(ts(8, 0)), at_1004, &policy());
         assert_eq!(early.len(), 1);
         assert_eq!(early[0].start, ts(8, 0));

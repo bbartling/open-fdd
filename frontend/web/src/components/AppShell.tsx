@@ -103,6 +103,7 @@ export function AppShell({
   } | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
   const [centralNotice, setCentralNotice] = useState<string | null>(null);
+  const [timescaleOk, setTimescaleOk] = useState(false);
   const [tenantLabel, setTenantLabel] = useState<string | null>(() => {
     return getStoredActiveTenant();
   });
@@ -222,10 +223,15 @@ export function AppShell({
     void (async () => {
       let centralVer = "";
       try {
-        const h = await apiFetch<{ version?: string }>("/api/health");
+        const h = await apiFetch<{ version?: string; timescale_ok?: boolean; historian?: string }>(
+          "/api/health",
+        );
         centralVer = String(h.version ?? "").trim();
         if (!cancelled && centralVer) setRevision(shortRevision(centralVer));
-        if (!cancelled) setCentralNotice(null);
+        if (!cancelled) {
+          setTimescaleOk(h.timescale_ok === true && h.historian === "timescale");
+          setCentralNotice(null);
+        }
       } catch (err) {
         if (!cancelled && isCentralUnavailable(err)) {
           setCentralNotice(
@@ -360,6 +366,11 @@ export function AppShell({
                 title={revision.full}
               >
                 {collapsed ? revision.collapsed : revision.display}
+              </div>
+            ) : null}
+            {timescaleOk ? (
+              <div className="app-sidebar__revision" data-testid="historian-timescale">
+                Timescale connected
               </div>
             ) : null}
             {tenantLabel && tenantLabel !== "legacy" ? (

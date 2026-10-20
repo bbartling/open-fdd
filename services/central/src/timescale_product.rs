@@ -656,11 +656,21 @@ pub async fn rcx_zone_comfort_rank(
 
 /// Dispatch for respond_query("equipment-inspect").
 pub async fn inspect_json(req: &AnalyticsRequest) -> Result<Value> {
-    let building = req
+    let Some(building) = req
         .query
         .building_id
         .clone()
-        .unwrap_or_else(|| "BUILDING_50".into());
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    else {
+        return Ok(json!({
+            "ok": false,
+            "error": "building_id required for Timescale inspect",
+            "engine": TS_ENGINE,
+            "points": [],
+            "warnings": ["building_id required"],
+        }));
+    };
     let eq = req
         .query
         .equipment_ids
@@ -897,7 +907,7 @@ LIMIT $2
         let ts = r
             .try_get::<DateTime<Utc>, _>("timestamp_utc")
             .ok()
-            .map(|t| t.to_rfc3339());
+            .map(ts_key);
         let mut row = json!({
             "timestamp_utc": ts,
             "equipment_id": equipment_id,
@@ -919,20 +929,45 @@ LIMIT $2
         }
         out_rows.push(row);
     }
-    if let Ok(fault_map) = load_confirmed_fault_hint(building_id, equipment_id, &rule.rule_id) {
-        for row in &mut out_rows {
-            let ts_owned = row
-                .get("timestamp_utc")
-                .and_then(|v| v.as_str())
-                .map(str::to_string);
-            if let Some(ts) = ts_owned {
-                if let Some(flag) = fault_map.get(ts.as_str()) {
-                    if let Some(obj) = row.as_object_mut() {
-                        obj.insert("confirmed_fault".into(), json!(flag));
-                    }
-                    fault_ts.push(json!(ts));
-                    fault_y.push(json!(if *flag { 1 } else { 0 }));
+    let mut fault_map = match load_live_confirmed_fault(
+        &tsdb,
+        &reg,
+        rule,
+        building_id,
+        equipment_id,
+        window_start,
+        window_end,
+    )
+    .await
+    {
+        Ok(map) => map,
+        Err(err) => {
+            tracing::warn!(
+                rule = %rule.rule_id,
+                equipment_id,
+                error = %err,
+                "confirmed_fault series query failed"
+            );
+            HashMap::new()
+        }
+    };
+    if fault_map.is_empty() {
+        if let Ok(hint) = load_confirmed_fault_hint(building_id, equipment_id, &rule.rule_id) {
+            fault_map = hint;
+        }
+    }
+    for row in &mut out_rows {
+        let ts_owned = row
+            .get("timestamp_utc")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        if let Some(ts) = ts_owned {
+            if let Some(flag) = fault_map.get(ts.as_str()) {
+                if let Some(obj) = row.as_object_mut() {
+                    obj.insert("confirmed_fault".into(), json!(*flag));
                 }
+                fault_ts.push(json!(ts));
+                fault_y.push(json!(if *flag { 1 } else { 0 }));
             }
         }
     }
@@ -1314,6 +1349,158 @@ pub fn cached_run_all_if_present(building_id: &str) -> Option<Value> {
                     Use force_new_data=true only after new historian samples, \
                     or run a single rule_id from Lab / rule tuning.",
     }))
+}
+
+/// Rewrite aggregated cookbook SQL into a per-timestamp confirmed_fault series.
+///
+/// Registry runs persist equipment-level fault_hours. Trend charts need the
+/// swim-lane bool on each history timestamp.
+fn rewrite_rule_sql_to_fault_series(sql: &str, equipment_id: &str) -> Option<String> {
+    if !safe_ident(equipment_id) {
+        return None;
+    }
+    let sql = sql.trim().trim_end_matches(';');
+    let lower = sql.to_ascii_lowercase();
+    if !lower.contains("final as") || !lower.contains("from ranked") {
+        return None;
+    }
+    if !lower.contains("fault_hours") {
+        return None;
+    }
+    let final_at = lower.find("final as")?;
+    let select_at = lower.rfind("select")?;
+    if select_at <= final_at || !lower[select_at..].contains("fault_hours") {
+        return None;
+    }
+    let mut head = sql[..select_at].to_string();
+    let head_lower = head.to_ascii_lowercase();
+    if let Some(rel_final) = head_lower[final_at..].find("final as (") {
+        let body_start = final_at + rel_final + "final as (".len();
+        let body_slice = &head_lower[body_start..];
+        let from_ranked = body_slice.find("from ranked")?;
+        let final_body = &head_lower[body_start..body_start + from_ranked];
+        if !final_body.contains("timestamp_utc") {
+            if let Some(eq_rel) = final_body.find("equipment_id") {
+                let abs = body_start + eq_rel;
+                let after = &head[abs..];
+                if let Some(comma_rel) = after.find(',') {
+                    let insert_at = abs + comma_rel + 1;
+                    head.insert_str(insert_at, "\n    timestamp_utc,");
+                }
+            }
+        }
+    }
+    Some(format!(
+        "{head}SELECT equipment_id, timestamp_utc, confirmed AS confirmed_fault\n\
+         FROM final\n\
+         WHERE equipment_id = '{equipment_id}'\n\
+         ORDER BY timestamp_utc"
+    ))
+}
+
+fn history_roles_for_rule(rule: &RuleSpec) -> Vec<String> {
+    let mut role_set: BTreeSet<String> = rule.required_roles.iter().cloned().collect();
+    for role in &rule.optional_roles {
+        role_set.insert(role.clone());
+    }
+    for extra in [
+        "fan_status",
+        "fan_cmd",
+        "occ_mode",
+        "oa_t",
+        "web_oa_t",
+        "chw_supply_t",
+        "chw_return_t",
+        "chw_flow",
+        "chw_dp",
+        "chw_pump_cmd",
+        "pump_status",
+        "chiller_status",
+        "chiller_current",
+        "chiller_amps",
+        "chiller_power",
+    ] {
+        if rule.required_roles.iter().any(|r| r == extra)
+            || rule.optional_roles.iter().any(|r| r == extra)
+            || matches!(extra, "fan_status" | "fan_cmd" | "occ_mode")
+        {
+            role_set.insert(extra.into());
+        }
+    }
+    role_set.into_iter().filter(|r| safe_ident(r)).collect()
+}
+
+fn ts_key(ts: DateTime<Utc>) -> String {
+    ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+async fn load_live_confirmed_fault(
+    tsdb: &Tsdb,
+    reg: &RuleRegistry,
+    rule: &RuleSpec,
+    building_id: &str,
+    equipment_id: &str,
+    window_start: Option<&str>,
+    window_end: Option<&str>,
+) -> Result<HashMap<String, bool>> {
+    if rule_is_metric(rule) || !safe_ident(equipment_id) {
+        return Ok(HashMap::new());
+    }
+    let rendered = render_rule_sql(
+        reg,
+        rule,
+        300.0,
+        rule.confirm_seconds,
+        building_id,
+        Some(equipment_id),
+        None,
+    )?;
+    let Some(series_sql) = rewrite_rule_sql_to_fault_series(&rendered, equipment_id) else {
+        return Ok(HashMap::new());
+    };
+    let roles = history_roles_for_rule(rule);
+    let mut tx = tsdb.pool().begin().await?;
+    ensure_history_table(&mut tx, &roles).await?;
+    let n = fill_history_for_equipment(
+        &mut tx,
+        building_id,
+        equipment_id,
+        &roles,
+        window_start,
+        window_end,
+    )
+    .await?;
+    if n == 0 {
+        let _ = tx.rollback().await;
+        return Ok(HashMap::new());
+    }
+    let rows = sqlx::query(&series_sql)
+        .fetch_all(&mut *tx)
+        .await
+        .context("confirmed_fault series")?;
+    let _ = tx.rollback().await;
+    let mut map = HashMap::new();
+    for row in rows {
+        let Some(ts) = row
+            .try_get::<DateTime<Utc>, _>("timestamp_utc")
+            .ok()
+            .map(ts_key)
+        else {
+            continue;
+        };
+        let flag = row
+            .try_get::<i32, _>("confirmed_fault")
+            .ok()
+            .or_else(|| {
+                row.try_get::<i64, _>("confirmed_fault")
+                    .ok()
+                    .map(|v| v as i32)
+            })
+            .unwrap_or(0)
+            != 0;
+        map.insert(ts, flag);
+    }
+    Ok(map)
 }
 
 fn load_confirmed_fault_hint(
@@ -2057,6 +2244,122 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
     Ok(meta)
 }
 
+fn safe_building_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Package-mapping shape from Timescale `equipment` + `sample` keys.
+///
+/// CSV sidecars are optional. A provider building (hourly NF pull) still lists
+/// equipment and roles so Inspect can plot the samples.
+pub async fn package_mapping_from_samples(
+    building_id: &str,
+    equipment_id: Option<&str>,
+) -> Result<Value> {
+    let bid = building_id.trim();
+    if !safe_building_id(bid) {
+        return Ok(json!({
+            "ok": false,
+            "error": "building_id required",
+            "source": "timescale_sample",
+        }));
+    }
+    let tsdb = Tsdb::connect_from_env().await?;
+    let typed = list_equipment(&tsdb, bid).await?;
+    let mut types: BTreeMap<String, Option<String>> = typed.into_iter().collect();
+    let role_rows = sqlx::query(
+        r#"
+        SELECT split_part(openfdd_key, '.', 1) AS equipment_id,
+               split_part(openfdd_key, '.', 2) AS role
+        FROM sample
+        WHERE site_id = $1
+          AND split_part(openfdd_key, '.', 2) <> ''
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+        "#,
+    )
+    .bind(bid)
+    .fetch_all(tsdb.pool())
+    .await
+    .context("sample roles for mapping")?;
+    let mut roles_by_eq: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in role_rows {
+        let eq = row.try_get::<String, _>("equipment_id").unwrap_or_default();
+        let role = row.try_get::<String, _>("role").unwrap_or_default();
+        if eq.is_empty() || !safe_ident(&role) {
+            continue;
+        }
+        types.entry(eq.clone()).or_insert(None);
+        roles_by_eq.entry(eq).or_default().push(role);
+    }
+    if let Some(want) = equipment_id.map(str::trim).filter(|s| !s.is_empty()) {
+        types.retain(|id, _| id == want);
+        roles_by_eq.retain(|id, _| id == want);
+    }
+    if types.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "error": format!("no Timescale samples for building {bid}"),
+            "building_id": bid,
+            "source": "timescale_sample",
+            "equipment": [],
+        }));
+    }
+    let sample_count = tsdb.sample_count(bid).await.unwrap_or(0);
+    let mut equipment = Vec::new();
+    for (eq, typ) in &types {
+        let roles = roles_by_eq.get(eq).cloned().unwrap_or_default();
+        let mut role_obj = serde_json::Map::new();
+        let columns: Vec<Value> = roles
+            .iter()
+            .map(|role| {
+                role_obj.insert(role.clone(), json!(role));
+                json!({"column": role, "role": role, "status": "mapped"})
+            })
+            .collect();
+        equipment.push(json!({
+            "equipment_id": eq,
+            "equipment_type": typ.clone().unwrap_or_else(|| "unclassified".into()),
+            "equipment_type_raw": typ,
+            "equipment_type_source": if typ.is_some() { "timescale_equipment" } else { "timescale_sample" },
+            "ok": !roles.is_empty(),
+            "columns": columns,
+            "roles": role_obj,
+            "unmapped_columns": [],
+            "ambiguous_roles": {},
+            "blockers": [],
+            "warnings": [],
+            "sampling": {
+                "ok": sample_count > 0,
+                "row_count": sample_count,
+                "source": "timescale_sample",
+            },
+        }));
+    }
+    let ids: Vec<&str> = equipment
+        .iter()
+        .filter_map(|row| row.get("equipment_id").and_then(Value::as_str))
+        .collect();
+    let n = equipment.len();
+    Ok(json!({
+        "ok": true,
+        "building_id": bid,
+        "source": "timescale_sample",
+        "sample_count": sample_count,
+        "equipment_ids": ids,
+        "equipment": equipment,
+        "validation": {
+            "blocker_count": 0,
+            "warning_count": 0,
+            "equipment_count": n,
+        },
+    }))
+}
+
 pub async fn equipment_from_timescale(building_id: Option<&str>) -> Result<Value> {
     let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
         return Ok(json!({"ok": true, "count": 0, "equipment": [], "engine": TS_ENGINE}));
@@ -2134,6 +2437,76 @@ mod plot_role_tests {
             roles.iter().any(|r| r.contains("oa") || r.contains("web")),
             "OAT-METEO should include OAT/web roles, got {roles:?}"
         );
+    }
+
+    #[test]
+    fn fc1_sql_rewrites_to_per_sample_confirmed_fault() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../sql/fdd/postgres/rules/fc1_duct_static_low.sql");
+        let raw = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path:?}: {e}"));
+        let series = rewrite_rule_sql_to_fault_series(&raw, "AHU_1").expect("FC1 rewrite");
+        assert!(series.contains("confirmed AS confirmed_fault"));
+        assert!(series.contains("timestamp_utc"));
+        assert!(series.contains("WHERE equipment_id = 'AHU_1'"));
+        let lower = series.to_ascii_lowercase();
+        let tail = lower.rfind("select").expect("outer select");
+        assert!(
+            !lower[tail..].contains("fault_hours"),
+            "overlay select must be per-sample, not the fault_hours aggregate"
+        );
+        assert!(rewrite_rule_sql_to_fault_series(&raw, "AHU 1").is_none());
+    }
+
+    #[test]
+    fn starter_rules_apply_to_building50_stamps() {
+        let reg = load_reg().expect("registry");
+        let starter = [
+            "FC1",
+            "AHU-SATDEV",
+            "AHU-DUCTHI",
+            "FAN-RUNTIME-HOURS",
+            "FC10",
+            "FC12",
+            "CHW-1",
+        ];
+        let ahu_roles = [
+            "duct_static",
+            "duct_static_sp",
+            "fan_cmd",
+            "fan_status",
+            "sat",
+            "sat_sp",
+            "mat",
+            "oa_t",
+            "oa_damper_pct",
+            "clg_valve_pct",
+        ];
+        let chw_roles = ["chw_supply_t", "chw_return_t", "chiller_status"];
+        for rule_id in starter {
+            let rule = reg
+                .rules
+                .iter()
+                .find(|r| r.rule_id == rule_id)
+                .unwrap_or_else(|| panic!("missing starter rule {rule_id}"));
+            let kinds: Vec<&str> = rule.equipment_kinds.iter().map(String::as_str).collect();
+            let ahu = kinds.is_empty() || equip_matches_kinds(Some("ahu"), &kinds);
+            let chw = kinds.is_empty() || equip_matches_kinds(Some("chwPlant"), &kinds);
+            assert!(
+                ahu || chw,
+                "{rule_id} matches neither ahu nor chwPlant ({kinds:?})"
+            );
+            let pool: &[&str] = if equip_matches_kinds(Some("chwPlant"), &kinds) && !ahu {
+                &chw_roles
+            } else {
+                &ahu_roles
+            };
+            for role in &rule.required_roles {
+                assert!(
+                    pool.contains(&role.as_str()) || chw_roles.contains(&role.as_str()),
+                    "{rule_id} required role {role} is not in the Building 50 starter pack"
+                );
+            }
+        }
     }
 
     #[test]

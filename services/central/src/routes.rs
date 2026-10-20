@@ -484,6 +484,20 @@ async fn protected_admission_middleware(
     response
 }
 
+/// Bounded Timescale ping for `/api/health`. A wedged pool must not stall liveness.
+async fn timescale_ping_ok() -> bool {
+    if !crate::timescale_historian::historian_is_timescale() {
+        return false;
+    }
+    let Ok(tsdb) = fdd_tsdb::Tsdb::connect_from_env().await else {
+        return false;
+    };
+    matches!(
+        tokio::time::timeout(std::time::Duration::from_secs(2), tsdb.health_ping()).await,
+        Ok(Ok(()))
+    )
+}
+
 fn analytics_body_limit_bytes() -> usize {
     std::env::var("OPENFDD_ANALYTICS_BODY_LIMIT_BYTES")
         .ok()
@@ -570,6 +584,15 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         .unwrap_or_else(|poison| poison.into_inner())
         .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
     let historian_present = crate::durable_storage::historian_root_present();
+    let timescale_ok = timescale_ping_ok().await;
+    let starter_seed = {
+        let label = crate::starter_seed::status_label();
+        if label.is_empty() {
+            None
+        } else {
+            Some(label)
+        }
+    };
     let ledger = state.receipt_ledger_stats().await;
     let ingest_backpressure = state
         .ingest_backpressure
@@ -595,6 +618,8 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         last_ingest_at,
         historian_present,
         historian: Some("timescale".into()),
+        timescale_ok,
+        starter_seed,
         fdd_engine: Some("postgres-sql".into()),
         dual_write: false,
         memory_budget: Some(fdd_resources::memory_budget_json()),
@@ -3313,15 +3338,37 @@ pub async fn csv_import_package_mapping(
         .map(str::to_string);
     let ctx = resolve_tenant_context(&state, &headers);
     let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
-    let result = tokio::task::spawn_blocking(move || {
+    let disk_building = building_id.clone();
+    let disk_equipment = equipment_id.clone();
+    let mut result = tokio::task::spawn_blocking(move || {
         open_fdd_edge_prototype::csv_ingest::package::get_package_mapping_handler_scoped(
-            &building_id,
-            equipment_id.as_deref(),
+            &disk_building,
+            disk_equipment.as_deref(),
             preferred.as_deref(),
         )
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package mapping task: {e}")}));
+    let disk_equipment_count = result
+        .get("equipment")
+        .and_then(Value::as_array)
+        .map(|rows| rows.len())
+        .unwrap_or(0);
+    let disk_ok = result.get("ok").and_then(Value::as_bool).unwrap_or(false);
+    if crate::timescale_historian::historian_is_timescale()
+        && (!disk_ok || disk_equipment_count == 0)
+    {
+        if let Ok(mapped) = crate::timescale_product::package_mapping_from_samples(
+            &building_id,
+            equipment_id.as_deref(),
+        )
+        .await
+        {
+            if mapped.get("ok").and_then(Value::as_bool) == Some(true) {
+                result = mapped;
+            }
+        }
+    }
     Ok(Json(result))
 }
 
@@ -4860,6 +4907,72 @@ pub struct PackageBuildingsQuery {
 /// List ingested package buildings under workspace csv_buildings.
 /// Multi-tenant: listing without `building_id` is allowed and filtered to scope.
 /// Optional `building_id` must be in scope (foreign → 403); response still filtered.
+async fn historian_and_provider_ids(state: &AppState) -> Vec<String> {
+    let mut ids: Vec<String> = state
+        .providers
+        .sites_config()
+        .into_iter()
+        .map(|site| site.building_id)
+        .filter(|id| !id.trim().is_empty())
+        .collect();
+    if let Ok(tsdb) = fdd_tsdb::Tsdb::connect_from_env().await {
+        if let Ok(sites) = tsdb.list_site_ids().await {
+            ids.extend(sites);
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+async fn merge_historian_building_ids(state: &AppState, body: &mut Value) {
+    let ids = historian_and_provider_ids(state).await;
+    let listed: Vec<String> = body
+        .get("buildings")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    for id in &ids {
+        if !listed.iter().any(|have| have == id) {
+            let _ = crate::starter_seed::ensure_semantic_sidecar(id).await;
+        }
+    }
+    let Some(arr) = body.get_mut("buildings").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    for id in ids {
+        if !arr.iter().any(|v| v.as_str() == Some(id.as_str())) {
+            arr.push(json!(id));
+        }
+    }
+}
+
+async fn merge_historian_datasets(state: &AppState, body: &mut Value) {
+    let ids = historian_and_provider_ids(state).await;
+    let Some(arr) = body.get_mut("datasets").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    for id in ids {
+        let present = arr.iter().any(|row| {
+            row.get("id")
+                .or_else(|| row.get("building_id"))
+                .and_then(|v| v.as_str())
+                == Some(id.as_str())
+        });
+        if !present {
+            arr.push(json!({
+                "id": id,
+                "building_id": id,
+                "source": "timescale",
+            }));
+        }
+    }
+}
+
 pub async fn csv_import_package_buildings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -4882,6 +4995,8 @@ pub async fn csv_import_package_buildings(
     )
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package buildings task: {e}")}));
+    let mut result = result;
+    merge_historian_building_ids(&state, &mut result).await;
     if !crate::tenant::multi_tenant_enabled() {
         return Ok(Json(result));
     }
@@ -4977,6 +5092,7 @@ pub async fn csv_list_datasets(
     }
     crate::building_sessions::note_catalog_list();
     let mut body = open_fdd_edge_prototype::csv_ingest::list_datasets();
+    merge_historian_datasets(&state, &mut body).await;
     // When a building filter is present, only return that building's rows
     // (defense in depth after ACL). Hub-admin unfiltered list stays full.
     if let Some(bid) = building_id {
@@ -5033,6 +5149,16 @@ pub async fn csv_delete_dataset(
     })
     .await
     .unwrap_or_else(|e| Err(format!("dataset delete task failed: {e}")));
+    let mut timescale_rows = 0u64;
+    let mut timescale_error: Option<String> = None;
+    match fdd_tsdb::Tsdb::connect_from_env().await {
+        Ok(tsdb) => match tsdb.purge_building(&id).await {
+            Ok(n) => timescale_rows = n,
+            Err(err) => timescale_error = Some(err.to_string()),
+        },
+        Err(fdd_tsdb::TsdbError::MissingDatabaseUrl) => {}
+        Err(err) => timescale_error = Some(err.to_string()),
+    }
     let mut jobs_deleted = 0usize;
     let mut job_errors: Vec<String> = Vec::new();
     if outcome.is_ok() {
@@ -5041,16 +5167,22 @@ pub async fn csv_delete_dataset(
         job_errors = errs;
     }
     let jobs_ok = job_errors.is_empty();
-    let (ok, error) = match &outcome {
-        Ok(()) if jobs_ok => (true, None),
-        Ok(()) => (
+    let (ok, error) = match (&outcome, &timescale_error) {
+        (Ok(()), None) if jobs_ok => (true, None),
+        (Ok(()), Some(ts_err)) => (
+            false,
+            Some(format!(
+                "workspace dataset removed but Timescale purge failed: {ts_err}"
+            )),
+        ),
+        (Ok(()), None) => (
             false,
             Some(format!(
                 "site data purged but job delete failed: {}",
                 job_errors.join("; ")
             )),
         ),
-        Err(e) => (false, Some(e.clone())),
+        (Err(e), _) => (false, Some(e.clone())),
     };
     if let Some(ref aid) = action_id {
         let status = if ok { "ok" } else { "fail" };
@@ -5062,6 +5194,7 @@ pub async fn csv_delete_dataset(
                 "building_id": id,
                 "dataset_id": id,
                 "jobs_deleted": jobs_deleted,
+                "timescale_rows_deleted": timescale_rows,
                 "job_errors": job_errors,
                 "error": error,
             })),
@@ -5072,6 +5205,7 @@ pub async fn csv_delete_dataset(
             "ok": true,
             "action_id": action_id,
             "jobs_deleted": jobs_deleted,
+            "timescale_rows_deleted": timescale_rows,
         })))
     } else {
         Ok(Json(json!({

@@ -16,7 +16,7 @@ COPY services ./services
 COPY sql_rules ./sql_rules
 COPY sql ./sql
 COPY rule_tuning ./rule_tuning
-RUN cargo build --release -p openfdd-central -p openfdd_mqtt
+RUN cargo build --release -p openfdd-central
 
 FROM debian:bookworm-slim
 ARG OPENFDD_GIT_SHA=""
@@ -24,15 +24,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /src/target/release/openfdd-central /usr/local/bin/openfdd-central
-COPY --from=builder /src/target/release/openfdd-provision /usr/local/bin/openfdd-provision
 COPY sql_rules /app/sql_rules
 COPY sql /app/sql
 COPY rule_tuning /app/rule_tuning
+COPY fixtures/starter /app/fixtures/starter
 ENV OPENFDD_CENTRAL_HOST=0.0.0.0
 ENV OPENFDD_IMAGE_NAME=ghcr.io/bbartling/openfdd-central
 ENV OPENFDD_SQL_RULES_DIR=/app/sql_rules
 ENV OPENFDD_SQL_ROOT=/app/sql/fdd
 ENV OPENFDD_SQL_SCHEMA_DIR=/app/sql/schema
+ENV OPENFDD_STARTER_PACK=/app/fixtures/starter/building_50
 ENV OPENFDD_CENTRAL_PORT=8080
 # OFDD-071: stamp tip SHA so /api/health → {version}+{sha} (runtime env preferred by resolve_build_version).
 ENV OPENFDD_GIT_SHA=$OPENFDD_GIT_SHA

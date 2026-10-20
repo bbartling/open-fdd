@@ -404,7 +404,43 @@ fn rule_applies_to_kind(kinds: &[String], kind: &str) -> bool {
     if kinds.is_empty() {
         return true;
     }
-    kinds.iter().any(|k| k.eq_ignore_ascii_case(kind))
+    let kind_c = crate::equipment_types::canonical_kind(kind).unwrap_or(kind);
+    kinds.iter().any(|k| {
+        let rule_c = crate::equipment_types::canonical_kind(k).unwrap_or(k.as_str());
+        rule_c.eq_ignore_ascii_case(kind_c) || k.eq_ignore_ascii_case(kind)
+    })
+}
+
+/// Keep a completed PASS/FAULT when the stamp applies. A stored
+/// `NOT_APPLICABLE*` label from an empty Parquet type map must not survive
+/// once Timescale has a matching equip_type. A missing stamp still matches
+/// nothing when the rule names kinds.
+fn displayed_result_status(
+    stored: Option<&str>,
+    fault_hours: f64,
+    rule_kinds: Option<&[String]>,
+    stamped: Option<&str>,
+) -> String {
+    let kinds = rule_kinds.unwrap_or(&[]);
+    let has_stamp = stamped.map(str::trim).is_some_and(|s| !s.is_empty());
+    let kind = crate::equipment_types::kind_for("", stamped);
+    let applies = if !has_stamp {
+        kinds.is_empty()
+    } else {
+        kinds.is_empty() || rule_applies_to_kind(kinds, kind)
+    };
+    if !applies {
+        return "NOT_APPLICABLE_EQUIPMENT_TYPE".into();
+    }
+    let stored = stored.unwrap_or("").trim();
+    if stored.is_empty() || stored.to_ascii_uppercase().contains("NOT_APPLICABLE") {
+        return if fault_hours > 0.0 {
+            "FAULT".into()
+        } else {
+            "PASS".into()
+        };
+    }
+    stored.to_string()
 }
 
 /// `GET /api/fdd/equipment` - equipment present in the parquet cache.
@@ -553,20 +589,23 @@ pub fn results_response_with_types(
                 // otherwise derive FAULT/PASS from fault_hours (OFDD-066).
                 let stamped = stamped_types.get(equipment_id).map(String::as_str);
                 let kind = crate::equipment_types::kind_for(equipment_id, stamped);
-                let applies = kinds_by_rule
-                    .get(rule_id)
-                    .map(|k| rule_applies_to_kind(k, kind))
-                    .unwrap_or(true);
-                let status = if !applies {
-                    "NOT_APPLICABLE_EQUIPMENT_TYPE".to_string()
+                let applies = if stamped.map(str::trim).is_some_and(|s| !s.is_empty()) {
+                    kinds_by_rule
+                        .get(rule_id)
+                        .map(|k| rule_applies_to_kind(k, kind))
+                        .unwrap_or(true)
                 } else {
-                    row.get("status")
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                        .unwrap_or_else(|| {
-                            if fault_hours > 0.0 { "FAULT" } else { "PASS" }.to_string()
-                        })
+                    kinds_by_rule
+                        .get(rule_id)
+                        .map(|k| k.is_empty())
+                        .unwrap_or(true)
                 };
+                let status = displayed_result_status(
+                    row.get("status").and_then(Value::as_str),
+                    fault_hours,
+                    kinds_by_rule.get(rule_id).map(Vec::as_slice),
+                    stamped,
+                );
                 let fault_hours = if applies { fault_hours } else { 0.0 };
                 let missing_roles = row
                     .get("missing_roles")
@@ -916,6 +955,80 @@ mod tests {
                 None => std::env::remove_var("OPENFDD_RULE_RESULTS_DIR"),
             }
         }
+    }
+
+    #[test]
+    fn chwplant_stamp_keeps_fault_instead_of_not_applicable() {
+        let relabeled = displayed_result_status(
+            Some("NOT_APPLICABLE_EQUIPMENT_TYPE"),
+            2.0,
+            Some(&["chiller".to_string()]),
+            Some("chwPlant"),
+        );
+        assert_eq!(relabeled, "FAULT");
+        let pass = displayed_result_status(
+            Some("NOT_APPLICABLE"),
+            0.0,
+            Some(&["ahu".to_string()]),
+            Some("ahu"),
+        );
+        assert_eq!(pass, "PASS");
+        let missing = displayed_result_status(Some("FAULT"), 1.0, Some(&["ahu".to_string()]), None);
+        assert_eq!(missing, "NOT_APPLICABLE_EQUIPMENT_TYPE");
+    }
+
+    #[test]
+    fn building50_result_files_are_not_all_not_applicable() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "BUILDING_50";
+        let dir = results_dir(Some(building));
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        std::fs::write(
+            dir.join("FC1.json"),
+            r#"{"rows":[{"equipment_id":"AHU_1","fault_hours":1.5,"status":"NOT_APPLICABLE"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("CHW-1.json"),
+            r#"{"rows":[{"equipment_id":"CHILLER_1","fault_hours":2.0,"status":"NOT_APPLICABLE_EQUIPMENT_TYPE"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("AHU-SATDEV.json"),
+            r#"{"rows":[{"equipment_id":"AHU_1","fault_hours":0.0,"status":"PASS"}]}"#,
+        )
+        .unwrap();
+        let mut types = BTreeMap::new();
+        types.insert("AHU_1".into(), "ahu".into());
+        types.insert("CHILLER_1".into(), "chwPlant".into());
+        let body = results_response_with_types(Some(building), &types, "timescale_equipment");
+        let results = body["results"].as_array().expect("results");
+        assert!(!results.is_empty());
+        assert!(
+            results.iter().any(|row| {
+                let status = row["status"].as_str().unwrap_or("");
+                status == "PASS" || status == "FAULT"
+            }),
+            "{body}"
+        );
+        assert!(
+            results.iter().all(|row| !row["status"]
+                .as_str()
+                .unwrap_or("")
+                .contains("NOT_APPLICABLE")),
+            "{body}"
+        );
+        let fc1 = results
+            .iter()
+            .find(|row| row["rule_id"] == "FC1" && row["equipment_id"] == "AHU_1")
+            .expect("FC1");
+        assert_eq!(fc1["status"], "FAULT");
+        let chw = results
+            .iter()
+            .find(|row| row["rule_id"] == "CHW-1")
+            .expect("CHW-1");
+        assert_eq!(chw["status"], "FAULT");
     }
 
     #[test]

@@ -15,7 +15,13 @@ const appCss = readFileSync(
 vi.mock("../api/client", () => ({
   apiFetch: vi.fn(async (path: string) => {
     if (path === "/api/health") {
-      return { ok: true, version: "3.3.2+abcdef123456", service: "openfdd-central" };
+      return {
+        ok: true,
+        version: "3.3.2+abcdef123456",
+        service: "openfdd-central",
+        historian: "timescale",
+        timescale_ok: true,
+      };
     }
     if (path === "/api/tenants") {
       return {
@@ -87,6 +93,7 @@ describe("AppShell layout parity", () => {
     expect(screen.getByText("Open-FDD")).toBeTruthy();
     expect(await screen.findByTestId("app-revision")).toBeTruthy();
     expect(screen.getByTestId("app-revision").textContent).toBe("3.3.2+abcdef1");
+    expect(screen.getByTestId("historian-timescale").textContent).toMatch(/Timescale connected/);
     expect(screen.queryByTestId("app-tenant")).toBeNull();
     expect(screen.getByTestId("app-sign-in")).toBeTruthy();
     expect(screen.getByTestId("sidebar-sites")).toBeTruthy();

@@ -173,6 +173,7 @@ function cycleState(cycle: AfddCycleRecord): string {
 function AfddPanel() {
   const [status, setStatus] = useState<AfddSchedulerStatus | null>(null);
   const [historian, setHistorian] = useState<Record<string, unknown> | null>(null);
+  const [timescaleOk, setTimescaleOk] = useState<boolean | null>(null);
   const [continuity, setContinuity] = useState<FddContinuityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -191,13 +192,17 @@ function AfddPanel() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [next, historianSummary, results] = await Promise.all([
+      const [next, historianSummary, results, health] = await Promise.all([
         apiFetch<AfddSchedulerStatus>("/api/afdd/scheduler/status"),
         apiFetch<Record<string, unknown>>("/api/data-management/summary").catch(() => null),
         apiFetch<FddResultsResponse>("/api/fdd/results").catch(() => null),
+        apiFetch<{ timescale_ok?: boolean; historian?: string }>("/api/health").catch(() => null),
       ]);
       setStatus(next);
       setHistorian(historianSummary);
+      setTimescaleOk(
+        health?.timescale_ok === true && health.historian === "timescale" ? true : health ? false : null,
+      );
       setContinuity(results?.results ?? []);
       if (next.config) {
         setIntervalMinutes(nearestIntervalMinutes(next.config.interval_minutes));
@@ -470,6 +475,10 @@ function AfddPanel() {
       <h3>Historian health</h3>
       <p className="muted">Read-only values from Central data-management health. Missing values are reported as unavailable rather than synthesized.</p>
       <div className="summary-grid">
+        {metric(
+          "Timescale",
+          timescaleOk == null ? "Not reported" : timescaleOk ? "Connected" : "Not connected",
+        )}
         {metric("Backend", historianBackend ?? "Not reported")}
         {metric("Files / parts", historianFiles ?? "Not reported")}
         {metric("Bytes", historianBytes ?? "Not reported")}

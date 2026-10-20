@@ -45,10 +45,15 @@ describe("ProvidersPanel", () => {
               endpoint: "https://user:secret@portal.example/api?token=abc",
               poll_secs: 3600,
               mapped_points: 5,
-              last_poll_at: null,
+              last_poll_at: "2026-10-19T10:05:00Z",
               last_ingested_points: 60,
               consecutive_errors: 0,
-              health: { status: "ok", message: null },
+              health: {
+                status: "ok",
+                message: null,
+                last_success_at: "2026-10-19T10:00:00Z",
+                last_error_at: null,
+              },
             },
           ],
         };
@@ -71,9 +76,12 @@ describe("ProvidersPanel", () => {
     });
     renderPanel();
     await waitFor(() => {
-      expect(screen.getByTestId("provider-status-NF_EDGE").textContent).toMatch(/Poll reported ok/);
+      expect(screen.getByTestId("provider-status-NF_EDGE").textContent).toMatch(/Poll ok/);
     });
     expect(screen.getByTestId("provider-origin-NF_EDGE").textContent).toBe("https://portal.example");
+    expect(screen.getByTestId("provider-last-success-NF_EDGE").textContent).toBe(
+      "2026-10-19T10:00:00Z",
+    );
     expect(screen.getByTestId("providers-health-table").textContent).not.toMatch(/secret/);
     expect(screen.getByTestId("providers-poll-enabled").textContent).toMatch(/enabled/);
     fireEvent.click(screen.getByTestId("provider-open-NF_EDGE"));

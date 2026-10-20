@@ -41,6 +41,13 @@ pub struct OkHealthResponse {
     /// Product historian. Always `timescale`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub historian: Option<String>,
+    /// True when the Timescale pool answers `SELECT 1`.
+    /// Process liveness stays in `ok`; this flag is the connection the UI shows.
+    #[serde(default)]
+    pub timescale_ok: bool,
+    /// Empty-database starter seed status (`seeded`, `skipped_existing`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starter_seed: Option<String>,
     /// Product FDD engine. Always `postgres-sql`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fdd_engine: Option<String>,
