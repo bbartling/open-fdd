@@ -1,4 +1,4 @@
-//! Open-FDD Central — MQTTS ingest + REST/OpenAPI control plane.
+//! Open-FDD Central — Normal Framework portal and CSV ingest, Timescale, REST.
 
 mod actions;
 mod admin_cp;
@@ -24,7 +24,6 @@ mod jobs;
 mod live_historian;
 mod logging;
 mod models;
-mod mqtt_monitor;
 mod openapi;
 mod providers;
 mod routes;
@@ -80,11 +79,10 @@ async fn main() -> anyhow::Result<()> {
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let historian_flush_task =
-        ingest::spawn_live_historian_flush_with_shutdown(Arc::clone(&state), shutdown_rx.clone());
+        ingest::spawn_live_historian_flush_with_shutdown(Arc::clone(&state), shutdown_rx);
     let provider_shutdown = shutdown_tx.subscribe();
     let provider_task =
         providers::spawn_poller_with_shutdown(Arc::clone(&state), provider_shutdown);
-    let ingest_task = ingest::spawn_mqtt_ingest_with_shutdown(Arc::clone(&state), shutdown_rx);
     let session_evictor = tokio::spawn(async {
         loop {
             tokio::time::sleep(Duration::from_secs(15)).await;
@@ -98,7 +96,6 @@ async fn main() -> anyhow::Result<()> {
             Arc::clone(&state),
             Arc::clone(&afdd_runtime),
         ))
-        .merge(mqtt_monitor::router(Arc::clone(&state)))
         .merge(sql_anomaly::router(Arc::clone(&state)))
         .merge(cutover::router())
         .merge(vibe21::router(Arc::clone(&state)))
@@ -140,9 +137,6 @@ async fn main() -> anyhow::Result<()> {
         task.abort();
     }
     session_evictor.abort();
-    if let Err(error) = ingest_task.await {
-        warn!(%error, "MQTT ingest task ended unexpectedly during shutdown");
-    }
     if let Err(error) = historian_flush_task.await {
         warn!(%error, "historian flush task ended unexpectedly during shutdown");
     }

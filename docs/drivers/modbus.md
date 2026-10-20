@@ -2,6 +2,7 @@
 title: Modbus
 parent: Drivers
 nav_order: 2
+nav_exclude: true
 ---
 
 # Modbus driver

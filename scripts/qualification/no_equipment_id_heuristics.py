@@ -21,7 +21,6 @@ from pathlib import Path
 
 PRODUCT_ROOTS = (
     "services/central/src",
-    "services/fieldbus/src",
     "edge/src",
     "crates",
     "frontend/web/src",

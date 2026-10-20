@@ -507,12 +507,11 @@ impl BridgeClient {
             "dry_run": true,
             "steps": [
                 "tar -czf ~/openfdd-backups/latest/workspace-full.tgz workspace/",
-                "OPENFDD_IMAGE_TAG=<tag> ./scripts/openfdd_stack_up.sh standalone",
-                "./scripts/openfdd_health_check.sh",
-                "./scripts/openfdd_drivers_validate.sh"
+                "OPENFDD_IMAGE_TAG=<tag> ./scripts/openfdd_stack_up.sh portal",
+                "./scripts/openfdd_health_check.sh"
             ],
             "doc": "docs/quick-start/site-lifecycle.md",
-            "note": "MCP does not execute site update — operator or bench agent runs scripts on host."
+            "note": "MCP does not execute site update. Field drivers, the MQTT broker, and central MQTT ingest are archived. Product ingest is the Normal Framework portal and CSV."
         })
     }
 

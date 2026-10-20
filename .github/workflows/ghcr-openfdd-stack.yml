@@ -1,8 +1,7 @@
 # Publish Open-FDD 4.0 images to GHCR (central + web).
 # Product UI is openfdd-web (React SPA).
-# This workflow does not publish openfdd-fieldbus.
-# Archived MQTT publishes only on workflow_dispatch with publish_archived_ot=true.
-# A portal publish does not wait on OT images.
+# This workflow does not publish openfdd-fieldbus or openfdd-mqtt.
+# The Railway MQTT broker keeps its already-published image.
 # Tag contract:
 # - every publish: immutable sha-<7>
 # - master: moving nightly + rerun-unique immutable run tag
@@ -17,12 +16,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      publish_archived_ot:
-        description: "Also publish the archived MQTT image. Fieldbus is not published."
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
   group: ghcr-openfdd-stack
@@ -36,7 +29,6 @@ env:
   REGISTRY: ghcr.io/bbartling
   CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central
   WEB_IMAGE: ghcr.io/bbartling/openfdd-web
-  MQTT_IMAGE: ghcr.io/bbartling/openfdd-mqtt
 
 jobs:
   test:
@@ -56,10 +48,10 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Clippy (stack crates)
-        run: cargo clippy -p openfdd-central -p openfdd_mqtt -- -D warnings
+        run: cargo clippy -p openfdd-central -- -D warnings
 
       - name: Stack crate tests
-        run: cargo test -p openfdd-central -p openfdd_mqtt
+        run: cargo test -p openfdd-central
 
       - name: React sole product UI
         run: |
@@ -69,7 +61,7 @@ jobs:
           test -f docker/compose.react.yml
           grep -q '3000:8080' docker/compose.react.yml
           ! test -d services/ui
-          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
+          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml
 
       - name: Build openfdd-web image (no push)
         run: |
@@ -85,19 +77,12 @@ jobs:
 
       - name: Compose config check (all recipes)
         env:
-          OPENFDD_SITE_ID: local
-          OPENFDD_EDGE_ID: fieldbus-1
-          OPENFDD_MQTT_HOST: 127.0.0.1
           OPENFDD_JWT_SECRET: ci-compose-config-secret-not-for-prod
         run: |
-          mkdir -p deploy/mqtt/kits/local__fieldbus-1
-          export OPENFDD_EDGE_KIT_DIR="$PWD/deploy/mqtt/kits/local__fieldbus-1"
-          for f in docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml docker/compose.react.yml docker/compose.react.fieldbus.yml; do
+          for f in docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml docker/compose.react.yml; do
             docker compose -f "$f" config >/dev/null
             echo "OK config: $f"
           done
-          chmod +x scripts/release/smoke_standalone_mqtts.sh
-          ./scripts/release/smoke_standalone_mqtts.sh
           bash -n scripts/openfdd_stack_lib.sh
           bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_stack_pull.sh
@@ -115,7 +100,7 @@ jobs:
           export OPENFDD_SMOKE_SKIP_BUILD=1
           ./scripts/release/smoke_csv_central_boot.sh
 
-  # Railway hub tip: central + web + mqtt (amd64). Must not wait on multi-arch fieldbus.
+  # Railway hub tip: central + web (amd64). The MQTT broker image is not rebuilt.
   # Job budget must cover central RocksDB/oxrocksdb link (often >90m cold) + web + mqtt.
   publish-hub:
     needs: test
@@ -186,7 +171,6 @@ jobs:
 
           write_tags central_tags "$CENTRAL_IMAGE"
           write_tags web_tags "$WEB_IMAGE"
-          write_tags mqtt_tags "$MQTT_IMAGE"
 
           echo "GHCR hub tag suffixes: ${suffixes[*]}"
 
@@ -240,28 +224,6 @@ jobs:
       - name: Tag openfdd-web nightly
         if: steps.vars.outputs.nightly == 'true'
         run: docker buildx imagetools create -t "${{ env.WEB_IMAGE }}:nightly" "${{ env.WEB_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
-
-      - name: Build and push openfdd-mqtt
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_archived_ot }}
-        uses: docker/build-push-action@v6
-        timeout-minutes: 15
-        with:
-          context: services/mqtt
-          file: services/mqtt/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.vars.outputs.mqtt_tags }}
-          labels: |
-            org.opencontainers.image.title=Open-FDD MQTT Broker
-            org.opencontainers.image.source=https://github.com/bbartling/open-fdd
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
-          cache-from: type=gha,scope=openfdd-mqtt
-          cache-to: type=gha,mode=max,scope=openfdd-mqtt
-
-      - name: Tag openfdd-mqtt nightly
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_archived_ot && steps.vars.outputs.nightly == 'true' }}
-        run: docker buildx imagetools create -t "${{ env.MQTT_IMAGE }}:nightly" "${{ env.MQTT_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
 
       - name: Verify product tags (central/web)
         env:

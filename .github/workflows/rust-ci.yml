@@ -57,7 +57,7 @@ jobs:
 
       - name: Central / fieldbus / MQTT contract tests
         run: |
-          cargo test -p openfdd_contracts -p openfdd_mqtt -p fdd_resources -p openfdd-central -- --skip fixture_acceptance
+          cargo test -p openfdd_contracts -p fdd_resources -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
 
@@ -76,48 +76,6 @@ jobs:
           test -f .gitignore
           grep -q 'auth.env.local' .gitignore || grep -q '/workspace' .gitignore
 
-  protocol-connectors:
-    name: Protocol connector split gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-          components: rustfmt, clippy
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Product workspace excludes live fieldbus
-        run: python3 scripts/archive/verify_ot_edge_snapshot.py
-
-      - name: Live process and image isolation gate
-        env:
-          OPENFDD_SPLIT_EVIDENCE_DIR: ${{ runner.temp }}/protocol-connector-split-evidence
-        run: bash scripts/gates/protocol_connector_split.sh
-
-      - name: Evaluate immutable image and recipe evidence
-        if: always()
-        run: |
-          test -f "$RUNNER_TEMP/protocol-connector-split-evidence/image_recipe.json"
-          python3 scripts/qualification/protocol_connector_qualification.py \
-            --stage image_recipe \
-            --evidence "$RUNNER_TEMP/protocol-connector-split-evidence/image_recipe.json" \
-            --require-stage image_recipe \
-            --report-dir "$RUNNER_TEMP/protocol-connector-qualification"
-
-      - name: Upload protocol connector qualification evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: protocol-connector-qualification-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/protocol-connector-split-evidence/
-            ${{ runner.temp }}/protocol-connector-qualification/
-          if-no-files-found: error
-
   frontend:
     name: Product UI guards (React)
     runs-on: ubuntu-latest
@@ -133,21 +91,21 @@ jobs:
           test -f frontend/web/Dockerfile
           test -f docker/compose.react.yml
           ! test -d services/ui
-          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.central.yml docker/compose.csv.yml docker/compose.standalone.yml
+          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml
           ! test -d workspace/dashboard/src
           ! test -f workspace/dashboard/package.json
 
-      - name: BACnet NIC helper guards
+      - name: Product tree guards
         run: |
-          test -x scripts/openfdd_bacnet_nic_setup.sh
-          bash -n scripts/openfdd_bacnet_nic_setup.sh
           test -f .env.example
-          grep -q "OPENFDD_BACNET_MODE=live" .env.example
-          grep -q "OPENFDD_VALIDATION_PROFILE" .env.example
           test -x scripts/audit_no_private_bench_hardcoding.sh
           ./scripts/audit_no_private_bench_hardcoding.sh
           test -f VERSION
           grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' VERSION
+          test ! -d services/fieldbus
+          test ! -d services/mqtt
+          test ! -d crates/openfdd_mqtt
+          test -f archive/ot-edge/unmaintained/crates/openfdd_mqtt/Cargo.toml
 
   react-web:
     name: React web (frontend/web)
@@ -199,20 +157,13 @@ jobs:
           OPENFDD_JWT_SECRET: ci-compose-config-secret-not-for-prod
           OPENFDD_ADMIN_PASSWORD: ci-compose-admin-not-for-prod
         run: |
-          mkdir -p deploy/mqtt/kits/local__fieldbus-1
-          export OPENFDD_EDGE_KIT_DIR="$PWD/deploy/mqtt/kits/local__fieldbus-1"
-          for f in docker/compose.portal.yml docker/compose.standalone.yml docker/compose.central.yml docker/compose.edge.yml docker/compose.csv.yml docker/compose.react.yml docker/compose.react.fieldbus.yml; do
+          for f in docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml docker/compose.react.yml; do
             test -f "$f"
             docker compose -f "$f" config >/dev/null
             echo "OK config: $f"
           done
-          # S07: selected-OT + HTTPS must render without inventing image-less mqtt.
-          bash scripts/ops/render_selected_ot_https.sh
           OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay >/tmp/ot-archive-replay.txt
           grep -q 'No containers were started' /tmp/ot-archive-replay.txt
-
-      - name: File smoke (stack recipes)
-        run: bash scripts/release/smoke_standalone_mqtts.sh
 
       - name: Stack script syntax
         run: |
@@ -220,8 +171,6 @@ jobs:
           bash -n scripts/openfdd_stack_pull.sh
           bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_caddy_smoke.sh
-          bash -n scripts/release/smoke_standalone_mqtts.sh
-          bash -n scripts/ops/render_selected_ot_https.sh
           bash -n scripts/test_openfdd_stack_image_tag.sh
           bash scripts/test_openfdd_stack_image_tag.sh
           test -f docker/compose.wattlab.react.yml

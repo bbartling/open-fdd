@@ -8,14 +8,10 @@ permalink: /drivers/
 
 # Drivers
 
-Open-FDD supports live field protocols and CSV import. Each driver exposes a tree in the dashboard and REST endpoints under `/api/{driver}/*`.
+Live BACnet, Modbus, Haystack wire, and JSON API field drivers are archived
+under `archive/ot-edge/unmaintained/` and are not part of the product build.
+Package import remains:
 
 | Driver | Guide |
 |--------|-------|
-| [BACnet](bacnet.html) | IP discover, poll, overrides |
-| [Modbus](modbus.html) | TCP register reads |
-| [Haystack](haystack.html) | Remote Haystack server client |
-| [JSON API](json-api.html) | HTTP polling sources |
 | [CSV driver](csv-batch.html) | Offline / engineering imports |
-
-Unified tree: `GET /api/drivers/tree`

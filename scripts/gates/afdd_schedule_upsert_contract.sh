@@ -33,12 +33,7 @@ require crates/fdd_store/src/afdd_window.rs '"update_all"'
 require crates/fdd_rules/src/runner.rs "fn scope_table_to_time_window"
 require services/central/src/afdd_scheduler.rs "result-slices"
 require services/central/src/afdd_scheduler.rs "lookback_matches_cadence"
-require scripts/nightly-ot-bench/38_acme_afdd_qualification.sh "outside_window"
-require scripts/nightly-ot-bench/38_acme_afdd_qualification.sh "afdd_slice_identity"
-python3 scripts/nightly-ot-bench/afdd_slice_identity.py
-require scripts/nightly-ot-bench/38_acme_afdd_qualification.sh "update_all_rejected"
-require scripts/nightly-ot-bench/38_acme_afdd_qualification.sh "central_stay_up"
-require scripts/nightly-ot-bench/38_acme_afdd_qualification.sh "schedule_semantics"
+python3 scripts/gates/afdd_slice_identity.py
 
 if [[ "$CARGO" -eq 1 ]]; then
   if ! command -v cargo >/dev/null 2>&1; then

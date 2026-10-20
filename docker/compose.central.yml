@@ -1,35 +1,16 @@
-# Open-FDD Central only (broker + API). Edges connect over MQTTS.
-# Product UI is React (`compose.react.yml` / `openfdd-web`).
+# Open-FDD Central API. Product UI is React (`compose.react.yml` / `openfdd-web`).
+# Ingest is the Normal Framework portal and CSV. The MQTT broker is archived.
 
 name: openfdd-central
 
 services:
-  mqtt:
-    image: ${OPENFDD_MQTT_IMAGE:-ghcr.io/bbartling/openfdd-mqtt:nightly}
-    build:
-      context: ../services/mqtt
-    ports:
-      - "8883:8883"
-    volumes:
-      - ../deploy/mqtt/certs:/mosquitto/certs:ro
-      - mqtt-data:/mosquitto/data
-    restart: unless-stopped
-
   central:
     image: ${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
     build:
       context: ..
       dockerfile: services/central/Dockerfile
     environment:
-      OPENFDD_MQTT_ENABLED: "1"
-      OPENFDD_OT_ARCHIVE_RESTORE: "1"
-      OPENFDD_MQTT_HOST: mqtt
-      OPENFDD_MQTT_PORT: "8883"
       OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
-      OPENFDD_EDGE_ID: "+"
-      OPENFDD_MQTT_CA_PEM: /mqtt/ca.pem
-      OPENFDD_MQTT_CERT_PEM: /mqtt/central.cert.pem
-      OPENFDD_MQTT_KEY_PEM: /mqtt/central.key.pem
       OPENFDD_WORKSPACE: /workspace
       OPENFDD_STORAGE_URL: file:///workspace/openfdd
       OPENFDD_PARQUET_FLUSH_ROWS: ${OPENFDD_PARQUET_FLUSH_ROWS:-5000}
@@ -48,9 +29,6 @@ services:
       - "${OPENFDD_CENTRAL_BIND:-0.0.0.0}:8080:8080"
     volumes:
       - ../workspace:/workspace
-      - ../deploy/mqtt/kits/${OPENFDD_SITE_ID:-local}__central:/mqtt:ro
-    depends_on:
-      - mqtt
     restart: unless-stopped
 
   mcp:
@@ -67,6 +45,3 @@ services:
     stdin_open: true
     tty: true
     restart: unless-stopped
-
-volumes:
-  mqtt-data:

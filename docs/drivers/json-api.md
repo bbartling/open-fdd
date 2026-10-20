@@ -2,6 +2,7 @@
 title: JSON API
 parent: Drivers
 nav_order: 4
+nav_exclude: true
 ---
 
 # JSON API driver

@@ -258,7 +258,8 @@ impl ControlPlane {
         }
     }
 
-    /// First tenant that lists `building_id` (case-sensitive). Used for MT command topics.
+    /// First tenant that lists `building_id` (case-sensitive).
+    #[cfg(test)]
     pub fn tenant_for_building(&self, building_id: &str) -> Option<String> {
         let bid = building_id.trim();
         if bid.is_empty() {

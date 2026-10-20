@@ -7,7 +7,7 @@ cd "$ROOT"
 
 REPORT_DIR="${OPENFDD_MIGRATION_REPORT_DIR:-$ROOT/reports}"
 REPORT="$REPORT_DIR/migration-report.json"
-MIGRATOR="$ROOT/scripts/migrate_driver_tree_to_fieldbus.py"
+MIGRATOR="$ROOT/archive/ot-edge/unmaintained/scripts/migrate_driver_tree_to_fieldbus.py"
 TREE="${OPENFDD_DRIVER_TREE:-$ROOT/workspace/data/drivers/bacnet/driver_tree.json}"
 
 mkdir -p "$REPORT_DIR"

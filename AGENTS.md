@@ -10,7 +10,7 @@ connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 
 | Layer | Responsibility |
 | --- | --- |
-| **central** | Portal HTTPS ingest, **Timescale** historian, `.sql` FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python). MQTT ingest requires `OPENFDD_OT_ARCHIVE_RESTORE=1`. Wave-X 3.6.0: no DataFusion/Parquet/Arrow product path ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)) |
+| **central** | Portal HTTPS ingest, **Timescale** historian, `.sql` FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python). Ingest is the Normal Framework portal and CSV only. Wave-X 3.6.0: no DataFusion/Parquet/Arrow product path ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)) |
 | **web** | React product UI (`frontend/web`) — sole product UI ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
 | **fieldbus** | Archived OT drivers (BACnet / Modbus / Haystack wire). Not in the `portal` recipe. |
 | **mqtt** | Archived Mosquitto MQTTS broker. Not in the `portal` recipe. |

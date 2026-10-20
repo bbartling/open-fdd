@@ -2,6 +2,7 @@
 title: BACnet
 parent: Drivers
 nav_order: 1
+nav_exclude: true
 ---
 
 # BACnet driver

@@ -10,7 +10,14 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPOSURE = ROOT / "scripts" / "security" / "exposure" / "field_only_ot.json"
-EDGE_COMPOSE = ROOT / "docker" / "compose.edge.yml"
+EDGE_COMPOSE = (
+    ROOT
+    / "archive"
+    / "ot-edge"
+    / "unmaintained"
+    / "docker"
+    / "compose.edge.yml"
+)
 
 
 def lint_exposure(data: dict[str, Any]) -> list[str]:

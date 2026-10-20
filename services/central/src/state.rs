@@ -3,14 +3,15 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
+#[cfg(test)]
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use openfdd_contracts::{CommandAck, CommandEnvelope, TelemetryEnvelope};
-use openfdd_mqtt::AsyncClient;
+use openfdd_contracts::TelemetryEnvelope;
 use serde::Deserialize;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -25,14 +26,13 @@ use crate::live_historian::{LiveHistorianIngest, LiveWriter, PersistedMessageGro
 use crate::providers;
 use crate::tenant_budget::TenantBudgetTracker;
 
-const MQTT_MONITOR_CAPACITY: usize = 100;
-const MQTT_PREVIEW_BYTES: usize = 4096;
-const LOCAL_RECEIPTS_FILE: &str = "state/local-fieldbus-receipts.jsonl";
+const LOCAL_RECEIPTS_FILE: &str = "state/portal-ingest-receipts.jsonl";
 /// Default durable ledger horizon. Override with `OPENFDD_RECEIPT_CAPACITY` (tests).
 const RECEIPT_CAPACITY_DEFAULT: usize = 50_000;
 const PENDING_RECEIPT_CAPACITY_DEFAULT: usize = 10_000;
 /// Evict oldest durable tombstones when the map would exceed capacity.
 /// Pending / Retryable receipts are never selected (#1168).
+#[cfg(test)]
 const RECEIPT_EVICT_BATCH_MIN: usize = 64;
 /// Compaction folds the append log. Durable identities may later be watermark-
 /// evicted; pending envelopes are never reduced to tombstones.
@@ -56,6 +56,7 @@ fn pending_receipt_capacity() -> usize {
         .unwrap_or(PENDING_RECEIPT_CAPACITY_DEFAULT)
 }
 
+#[cfg(test)]
 fn receipt_evict_batch(capacity: usize) -> usize {
     (capacity / 100).max(RECEIPT_EVICT_BATCH_MIN).min(capacity)
 }
@@ -74,6 +75,7 @@ fn equipment_key(building_id: &str, equipment_id: &str) -> String {
     format!("{building_id}\u{1f}{equipment_id}")
 }
 
+#[cfg(test)]
 fn eligible_equipment_keys(envelope: &TelemetryEnvelope) -> BTreeSet<String> {
     envelope
         .points
@@ -103,6 +105,7 @@ fn eligible_equipment_keys(envelope: &TelemetryEnvelope) -> BTreeSet<String> {
         .collect()
 }
 
+#[cfg(test)]
 fn eligible_point_count(envelope: &TelemetryEnvelope) -> usize {
     envelope
         .points
@@ -144,6 +147,7 @@ pub enum IngestReceiptStatus {
 /// `Absent` means the ledger no longer remembers the id (never reserved,
 /// released, or evicted). It is not a journal I/O failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg(test)]
 pub enum ReceiptLookup {
     Present(IngestReceiptStatus),
     Absent,
@@ -183,7 +187,6 @@ struct ReceiptJournalEntry {
 
 #[derive(Debug, Default)]
 pub struct EdgeShadow {
-    pub last_status: Option<serde_json::Value>,
     pub last_telemetry: Option<TelemetryEnvelope>,
     /// Site/building from MQTT topic path (status/metadata/discovery/telemetry).
     /// Retained when `last_telemetry` is absent so `/api/edges` still attributes site.
@@ -192,11 +195,6 @@ pub struct EdgeShadow {
     /// Kept with the edge shadow so overlapping building ids cannot authorize
     /// an edge from another tenant.
     pub registered_tenant_id: Option<String>,
-    /// protocol slug → last metadata payload
-    pub last_metadata: HashMap<String, serde_json::Value>,
-    /// protocol slug → last discovery payload
-    pub last_discovery: HashMap<String, serde_json::Value>,
-    pub sequences: HashMap<String, u64>,
 }
 
 impl EdgeShadow {
@@ -216,68 +214,11 @@ impl EdgeShadow {
     }
 }
 
-#[derive(Debug, Clone)]
-#[allow(dead_code)] // retained for ack correlation / audit surfaces
-pub struct PendingCommand {
-    pub command: CommandEnvelope,
-    pub publish_topic: String,
-    pub response_topic: String,
-    pub issued_at: DateTime<Utc>,
-    pub published: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct MqttObservedMessage {
-    pub received_at_utc: DateTime<Utc>,
-    pub topic: String,
-    pub qos: String,
-    pub retain: bool,
-    pub payload_bytes: usize,
-    pub payload_encoding: String,
-    pub payload_preview: String,
-    pub truncated: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct MqttMonitorEvent {
-    pub at_utc: DateTime<Utc>,
-    pub kind: String,
-    pub message: String,
-}
-
-#[derive(Debug, Default)]
-struct MqttMonitorState {
-    connected: bool,
-    client_id: Option<String>,
-    subscriptions: Vec<String>,
-    received_messages: u64,
-    reconnects: u64,
-    errors: u64,
-    recent_messages: VecDeque<MqttObservedMessage>,
-    recent_events: VecDeque<MqttMonitorEvent>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct MqttMonitorSnapshot {
-    pub connected: bool,
-    pub client_id: Option<String>,
-    pub subscriptions: Vec<String>,
-    pub received_messages: u64,
-    pub reconnects: u64,
-    pub errors: u64,
-    pub buffer_capacity: usize,
-    pub recent_messages: Vec<MqttObservedMessage>,
-    pub recent_events: Vec<MqttMonitorEvent>,
-    pub test_publish_enabled: bool,
-}
-
 pub struct AppState {
     pub auth: AuthConfig,
     /// Explicit capability probes and scoped read proxy. Health never probes.
     pub capabilities: std::sync::Arc<CapabilitiesAggregator>,
     pub edges: DashMap<String, Mutex<EdgeShadow>>,
-    pub command_acks: DashMap<Uuid, CommandAck>,
-    pub pending_commands: DashMap<Uuid, PendingCommand>,
     pub dead_letters: Mutex<Vec<serde_json::Value>>,
     pub ingest_ok: Mutex<u64>,
     pub ingest_dup: Mutex<u64>,
@@ -288,14 +229,12 @@ pub struct AppState {
     pub ingest_reject_buckets: Mutex<std::collections::BTreeMap<String, u64>>,
     /// Process boot instant for `/api/health` honesty after re-pin.
     pub started_at: DateTime<Utc>,
-    /// Last successful ingest accept this process (MQTT/CSV paths that bump `ingest_ok`).
+    /// Last successful portal ingest accept this process.
     pub last_ingest_at: Mutex<Option<DateTime<Utc>>>,
     /// Last receipt-backed, persisted row observed by this process. This is
     /// the only signal used for durable delivery capability; accepts alone do
     /// not establish persistence.
     pub last_durable_at: Mutex<Option<DateTime<Utc>>>,
-    pub mqtt_publisher: Mutex<Option<AsyncClient>>,
-    mqtt_monitor: Mutex<MqttMonitorState>,
     /// Login failures keyed by ip+username (generic throttle; no secrets).
     pub login_failures: Mutex<HashMap<String, (u32, std::time::Instant)>>,
     /// Authenticated HTTP in-flight cap (fail-closed 503; health stays public).
@@ -305,8 +244,7 @@ pub struct AppState {
     pub mutation_windows: Mutex<HashMap<&'static str, VecDeque<Instant>>>,
     /// Wave L L5 — per-tenant sliding-window budgets (noop when disabled).
     pub tenant_budgets: TenantBudgetTracker,
-    /// One canonical writer shared by MQTT and local HTTP delivery.
-    /// Parquet publication runs on this writer's dedicated blocking thread.
+    /// Canonical Timescale writer shared by portal and CSV ingest.
     pub live_writer: LiveWriter,
     /// Durable pending/committed receipt ledger for replay-safe local ingest.
     pub ingest_receipts: AsyncMutex<HashMap<(String, String, Uuid), IngestReceipt>>,
@@ -319,7 +257,7 @@ pub struct AppState {
     pub control_plane: tokio::sync::RwLock<crate::tenant::ControlPlane>,
     /// Shared ingest queue. Postgres coordinates replicas; memory is single-process only.
     pub ingest_queue: std::sync::Arc<crate::ingest_queue::QueueClient>,
-    recovery_started: AtomicBool,
+    #[cfg(test)]
     last_backpressure_warn: Mutex<Option<Instant>>,
 }
 
@@ -329,8 +267,6 @@ impl AppState {
             auth: AuthConfig::load(),
             capabilities: CapabilitiesAggregator::from_env(),
             edges: DashMap::new(),
-            command_acks: DashMap::new(),
-            pending_commands: DashMap::new(),
             dead_letters: Mutex::new(Vec::new()),
             ingest_ok: Mutex::new(0),
             ingest_dup: Mutex::new(0),
@@ -340,8 +276,6 @@ impl AppState {
             started_at: Utc::now(),
             last_ingest_at: Mutex::new(None),
             last_durable_at: Mutex::new(None),
-            mqtt_publisher: Mutex::new(None),
-            mqtt_monitor: Mutex::new(MqttMonitorState::default()),
             login_failures: Mutex::new(HashMap::new()),
             http_inflight: Arc::new(Semaphore::new(http_max_inflight())),
             mutation_windows: Mutex::new(HashMap::new()),
@@ -355,11 +289,12 @@ impl AppState {
                 &crate::jobs::workspace_root(),
             )),
             ingest_queue: std::sync::Arc::new(crate::ingest_queue::QueueClient::memory()),
-            recovery_started: AtomicBool::new(false),
+            #[cfg(test)]
             last_backpressure_warn: Mutex::new(None),
         }
     }
 
+    #[cfg(test)]
     pub async fn reserve_receipt_at(&self, scope: &str, envelope: TelemetryEnvelope) -> bool {
         let edge_id = envelope.edge_id.clone();
         let message_id = envelope.message_id;
@@ -449,6 +384,7 @@ impl AppState {
     }
 
     /// Visible ledger-full drop: counters + rate-limited warn. Does not mark MQTT down.
+    #[cfg(test)]
     pub fn note_ingest_backpressure(&self, detail: &str) {
         self.ingest_backpressure.fetch_add(1, Ordering::Relaxed);
         *self.ingest_reject.lock().unwrap() += 1;
@@ -476,50 +412,12 @@ impl AppState {
             );
         }
         open_fdd_edge_prototype::auth::audit::log_event(
-            "mqtt_ingest_backpressure",
+            "portal_ingest_backpressure",
             serde_json::json!({ "reason": detail }),
         );
     }
 
-    /// Return whether an existing receipt has the same immutable payload.
-    /// `None` means there is no receipt for this identity yet.
-    pub async fn receipt_payload_matches(
-        &self,
-        scope: &str,
-        edge_id: &str,
-        message_id: Uuid,
-        envelope: &TelemetryEnvelope,
-    ) -> Option<bool> {
-        let digest = envelope_digest(envelope);
-        self.ingest_receipts
-            .lock()
-            .await
-            .get(&(scope.to_string(), edge_id.to_string(), message_id))
-            .map(|receipt| receipt.payload_digest == digest)
-    }
-
-    /// Recover durable pending envelopes once after process start. Normal
-    /// duplicate requests only query the receipt; this path owns the sole
-    /// replay attempt after a crash.
-    pub async fn recover_pending_receipts_once(&self) {
-        if self.recovery_started.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        let pending: Vec<_> = self
-            .ingest_receipts
-            .lock()
-            .await
-            .values()
-            .filter(|receipt| receipt.status == IngestReceiptStatus::Pending)
-            .map(|receipt| (receipt.scope.clone(), receipt.envelope.clone()))
-            .collect();
-        for (scope, envelope) in pending {
-            if self.ingest_live(&scope, &envelope).await.is_ok() {
-                let _ = self.flush_live(false).await;
-            }
-        }
-    }
-
+    #[cfg(test)]
     pub async fn release_receipt(&self, scope: &str, edge_id: &str, message_id: Uuid) -> bool {
         let mut receipts = self.ingest_receipts.lock().await;
         let key = (scope.to_string(), edge_id.to_string(), message_id);
@@ -592,6 +490,7 @@ impl AppState {
     /// Persist a terminal receipt when the envelope contained no eligible
     /// historian points. This makes the zero-row outcome replay safe without
     /// pretending a row was durable.
+    #[cfg(test)]
     pub async fn mark_zero_eligible(&self, scope: &str, edge_id: &str, message_id: Uuid) -> bool {
         let mut receipts = self.ingest_receipts.lock().await;
         let key = (scope.to_string(), edge_id.to_string(), message_id);
@@ -729,16 +628,6 @@ impl AppState {
         Ok(report)
     }
 
-    /// Publish the scope's buffered rows and commit those receipts. Local HTTP
-    /// uses this so the response is not a 202 while the row waits for the
-    /// shared micro-batch threshold.
-    pub async fn publish_pending(&self, scope: &str) -> anyhow::Result<LiveHistorianIngest> {
-        let report = self.live_writer.publish_pending(scope).await?;
-        self.commit_published_groups(&report.persisted_message_groups)
-            .await;
-        Ok(report)
-    }
-
     /// Commit each published group under the scope and edge carried on that
     /// group. A row-threshold flush can include an earlier edge's batch; using
     /// the triggering request's edge would leave that receipt pending after
@@ -757,6 +646,7 @@ impl AppState {
         committed
     }
 
+    #[cfg(test)]
     pub async fn receipt_status(
         &self,
         scope: &str,
@@ -773,6 +663,7 @@ impl AppState {
     /// Soft-OPEN 371 T1e: explicit Absent vs Present. Eviction deletes the
     /// remembered identity (`Absent`); that is not a journal read error.
     /// Callers must not treat Absent as "already committed".
+    #[cfg(test)]
     pub async fn lookup_receipt(
         &self,
         scope: &str,
@@ -785,6 +676,7 @@ impl AppState {
         }
     }
 
+    #[cfg(test)]
     pub async fn receipt_persisted_rows(
         &self,
         scope: &str,
@@ -798,19 +690,6 @@ impl AppState {
             .map(|receipt| receipt.persisted_rows)
     }
 
-    pub async fn receipt_eligible_points(
-        &self,
-        scope: &str,
-        edge_id: &str,
-        message_id: Uuid,
-    ) -> Option<usize> {
-        self.ingest_receipts
-            .lock()
-            .await
-            .get(&(scope.to_string(), edge_id.to_string(), message_id))
-            .map(|receipt| receipt.eligible_points)
-    }
-
     /// Record a successful ingest accept (bumps counter + last_ingest_at).
     pub fn note_ingest_ok(&self) {
         *self.ingest_ok.lock().unwrap() += 1;
@@ -819,86 +698,6 @@ impl AppState {
 
     pub fn note_durable_ingest(&self) {
         *self.last_durable_at.lock().unwrap() = Some(Utc::now());
-    }
-
-    pub fn set_mqtt_publisher(&self, client: AsyncClient) {
-        *self.mqtt_publisher.lock().unwrap() = Some(client);
-    }
-
-    pub fn mqtt_mark_connected(&self, client_id: String, subscriptions: Vec<String>) {
-        let mut monitor = self.mqtt_monitor.lock().unwrap();
-        if monitor.client_id.is_some() {
-            monitor.reconnects = monitor.reconnects.saturating_add(1);
-        }
-        monitor.connected = true;
-        monitor.client_id = Some(client_id);
-        monitor.subscriptions = subscriptions;
-        push_monitor_event(&mut monitor, "connected", "MQTT ingest connected");
-    }
-
-    pub fn mqtt_mark_disconnected(&self, message: impl Into<String>) {
-        let mut monitor = self.mqtt_monitor.lock().unwrap();
-        monitor.connected = false;
-        push_monitor_event(&mut monitor, "disconnected", message.into());
-    }
-
-    pub fn mqtt_record_error(&self, message: impl Into<String>) {
-        let mut monitor = self.mqtt_monitor.lock().unwrap();
-        monitor.connected = false;
-        monitor.errors = monitor.errors.saturating_add(1);
-        push_monitor_event(&mut monitor, "error", message.into());
-    }
-
-    pub fn mqtt_observe(&self, topic: &str, payload: &[u8], qos: String, retain: bool) {
-        let mut monitor = self.mqtt_monitor.lock().unwrap();
-        monitor.received_messages = monitor.received_messages.saturating_add(1);
-        let preview_len = payload.len().min(MQTT_PREVIEW_BYTES);
-        let preview_bytes = &payload[..preview_len];
-        let (payload_encoding, payload_preview) =
-            match serde_json::from_slice::<serde_json::Value>(preview_bytes) {
-                Ok(value) if payload.len() <= MQTT_PREVIEW_BYTES => (
-                    "json".to_string(),
-                    serde_json::to_string_pretty(&value).unwrap_or_default(),
-                ),
-                _ => match std::str::from_utf8(preview_bytes) {
-                    Ok(text) => ("text".to_string(), text.to_string()),
-                    Err(_) => (
-                        "hex".to_string(),
-                        preview_bytes
-                            .iter()
-                            .map(|byte| format!("{byte:02x}"))
-                            .collect::<Vec<_>>()
-                            .join(" "),
-                    ),
-                },
-            };
-        monitor.recent_messages.push_front(MqttObservedMessage {
-            received_at_utc: Utc::now(),
-            topic: topic.to_string(),
-            qos,
-            retain,
-            payload_bytes: payload.len(),
-            payload_encoding,
-            payload_preview,
-            truncated: payload.len() > MQTT_PREVIEW_BYTES,
-        });
-        monitor.recent_messages.truncate(MQTT_MONITOR_CAPACITY);
-    }
-
-    pub fn mqtt_monitor_snapshot(&self) -> MqttMonitorSnapshot {
-        let monitor = self.mqtt_monitor.lock().unwrap();
-        MqttMonitorSnapshot {
-            connected: monitor.connected,
-            client_id: monitor.client_id.clone(),
-            subscriptions: monitor.subscriptions.clone(),
-            received_messages: monitor.received_messages,
-            reconnects: monitor.reconnects,
-            errors: monitor.errors,
-            buffer_capacity: MQTT_MONITOR_CAPACITY,
-            recent_messages: monitor.recent_messages.iter().cloned().collect(),
-            recent_events: monitor.recent_events.iter().cloned().collect(),
-            test_publish_enabled: false,
-        }
     }
 
     /// Fail-closed when authenticated HTTP concurrency is saturated (#1169).
@@ -1021,15 +820,6 @@ fn mutation_rate_limit(kind: &str) -> usize {
         })
 }
 
-fn push_monitor_event(monitor: &mut MqttMonitorState, kind: &str, message: impl Into<String>) {
-    monitor.recent_events.push_front(MqttMonitorEvent {
-        at_utc: Utc::now(),
-        kind: kind.to_string(),
-        message: message.into(),
-    });
-    monitor.recent_events.truncate(MQTT_MONITOR_CAPACITY);
-}
-
 fn receipts_path() -> PathBuf {
     PathBuf::from(std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()))
         .join(LOCAL_RECEIPTS_FILE)
@@ -1041,7 +831,7 @@ fn default_receipt_observed_at() -> DateTime<Utc> {
 
 fn load_receipts() -> HashMap<(String, String, Uuid), IngestReceipt> {
     load_receipts_at(&receipts_path()).unwrap_or_else(|error| {
-        panic!("local fieldbus receipt journal is corrupt; refusing startup: {error}")
+        panic!("portal ingest receipt journal is corrupt; refusing startup: {error}")
     })
 }
 
@@ -1120,6 +910,7 @@ async fn append_receipt_event(
     .is_some()
 }
 
+#[cfg(test)]
 fn durable_receipt_evictable(status: IngestReceiptStatus) -> bool {
     matches!(
         status,
@@ -1132,6 +923,7 @@ fn durable_receipt_evictable(status: IngestReceiptStatus) -> bool {
 /// Drop oldest durable tombstones to free ledger slots. Pending/Retryable are
 /// never selected. Each eviction is journaled as a delete tombstone before the
 /// in-memory remove so restart cannot resurrect a dropped committed id as live.
+#[cfg(test)]
 async fn evict_durable_receipts(
     receipts: &mut HashMap<(String, String, Uuid), IngestReceipt>,
     path: &std::path::Path,

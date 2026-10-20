@@ -21,7 +21,6 @@ case "$RECIPE" in
   central)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
     docker pull "$OPENFDD_WEB_IMAGE"
-    docker pull "$OPENFDD_MQTT_IMAGE"
     ;;
   csv|portal)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
@@ -29,7 +28,6 @@ case "$RECIPE" in
     ;;
   react)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
-    docker pull "$OPENFDD_MQTT_IMAGE"
     if ! docker pull "$OPENFDD_WEB_IMAGE" 2>/dev/null; then
       echo "WARN: $OPENFDD_WEB_IMAGE not in registry — build web locally on up" >&2
     fi

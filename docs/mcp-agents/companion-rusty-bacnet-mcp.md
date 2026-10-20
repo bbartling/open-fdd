@@ -2,6 +2,7 @@
 title: Companion — rusty-bacnet-mcp
 parent: MCP Agents
 nav_order: 6
+nav_exclude: true
 ---
 
 # Companion: rusty-bacnet-mcp (BACnet debug)

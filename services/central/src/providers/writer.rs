@@ -78,6 +78,7 @@ pub async fn ingest_samples(
         );
         ProviderError::persistence()
     })?;
+    state.note_ingest_ok();
     Ok(ProviderIngestReceipt::from_report(samples.len(), &report))
 }
 

@@ -76,10 +76,9 @@ openfdd_stack_compose_args() {
 
 openfdd_stack_images() {
   local tag="${OPENFDD_IMAGE_TAG:-nightly}"
-  # 4.0 product images. Fieldbus is not pulled by the default stack.
+  # 4.0 product images. The MQTT broker and fieldbus images are archived.
   echo "ghcr.io/bbartling/openfdd-central:${tag}"
   echo "ghcr.io/bbartling/openfdd-web:${tag}"
-  echo "ghcr.io/bbartling/openfdd-mqtt:${tag}"
   echo "ghcr.io/bbartling/openfdd-mcp:${tag}"
 }
 
@@ -108,8 +107,6 @@ openfdd_stack_export_image_env() {
   local tag="${OPENFDD_IMAGE_TAG:-nightly}"
   openfdd_stack_apply_image_tag OPENFDD_CENTRAL_IMAGE central "$tag"
   openfdd_stack_apply_image_tag OPENFDD_WEB_IMAGE web "$tag"
-  openfdd_stack_apply_image_tag OPENFDD_FIELDBUS_IMAGE fieldbus "$tag"
-  openfdd_stack_apply_image_tag OPENFDD_MQTT_IMAGE mqtt "$tag"
   openfdd_stack_apply_image_tag OPENFDD_MCP_IMAGE mcp "$tag"
 }
 

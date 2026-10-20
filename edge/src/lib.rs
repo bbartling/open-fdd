@@ -7,8 +7,6 @@ pub mod control;
 pub mod csv_ingest;
 pub mod dashboard;
 pub mod data_management;
-#[cfg(feature = "ot-transport")]
-pub mod drivers;
 pub mod equipment_types;
 pub mod export;
 pub mod faults;
@@ -19,8 +17,6 @@ pub mod ingest;
 pub mod model;
 pub mod ops;
 pub mod reports;
-#[cfg(feature = "ot-transport")]
-pub mod server;
 pub mod test_support;
 pub mod timeseries;
 pub mod tls;
