@@ -51,3 +51,5 @@ not a Soft-OPEN driver, and not a new GitHub repo. Haystack semantics stay.
 - Checkpoint smoke: `scripts/nf/read_sensors.py`
 - OT snapshot: `archive/ot-edge/unqualified-cdaa4f15/` · `ARCHIVE_OT_EDGE.md`
 - Prior: [ADR-010](adr-010-timescale-hard-cutover.md)
+- 4.0 boundary and requirement matrix: [wave-nf-4.0-product-boundary.md](wave-nf-4.0-product-boundary.md)
+- Open-Meteo is a read-only public weather adapter on the same completed-hour path (`providers/meteo.rs`). Ace IoT remains the NotImplemented stub.
