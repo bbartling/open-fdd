@@ -38,10 +38,7 @@ from a live Who-Is (do not bake private IPs into product code).
    Policy: [`docs/operations/BACNET_OT_POLICY.md`](../../../docs/operations/BACNET_OT_POLICY.md)
 2. **BACpypes3 diagnose-only** (stop fieldbus first if you need host `:47808`)
    - Doc: [`docs/operations/LOCAL_BACNET_BACPYPE3_BENCH.md`](../../../docs/operations/LOCAL_BACNET_BACPYPE3_BENCH.md)
-   - Script: `./scripts/ops/local_bacnet_ot_bench.sh sensor`
-   - Python: `scripts/ops/bacpypes3_whois_smoke.py` (`whois` | `read` | `sensor`)
 3. **MQTTS pipeline** (containers, no live MS/TP required) —
-   `./scripts/ops/local_bacnet_ot_bench.sh pipeline` or
    `scripts/integration/bacnet_mqtt_container_smoke.sh`
 4. **Companion rusty-bacnet-mcp** (read-only wire debug) —
    [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](../../../docs/mcp-agents/companion-rusty-bacnet-mcp.md)

@@ -32,7 +32,7 @@ Named product recipes: **Recipe 1** cloud hub (mqtt+central+web, amd64) · **Rec
 
 | Helper | Named recipe | Compose | Use |
 |--------|--------------|---------|-----|
-| **`edge` + `compose.edge.railway.yml`** | optional WAN → Recipe 1 | fieldbus only → Railway MQTTS | **Patch-cycle default** — `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
+| **`edge` + `compose.edge.railway.yml`** | optional WAN → Recipe 1 | fieldbus only → Railway MQTTS | Legacy (archived OT edge) |
 | `csv` / `react` | **Recipe 2** (no/optional protocol) | web + central | Local CSV / broker-free edge lab |
 | `react-ot` / `standalone` | **Recipe 2** (+ local mqtt optional) | + fieldbus (+ mqtt) | Optional local OT lab (not closeout; no Pis) |
 
@@ -74,7 +74,7 @@ Use `http://` (not `https://`) for local Compose. See [`mcp/README.md`](../../mc
 
 ## Stress
 
-Closeout: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) / `./scripts/nightly-ot-bench/run_railway_hub_stress.sh` against **Railway**. ZAP targets the Railway public URL.
+Closeout: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) against **Railway**. ZAP targets the Railway public URL.
 
 ## Data-safe updates
 

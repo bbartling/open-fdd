@@ -19,7 +19,6 @@ Vite defaults to `:5173`. Proxy `/api` to central via `vite.config.ts` or set
 # SPA must be up on :3000 (react-ot). Hard-fail mode:
 OPENFDD_PLAYWRIGHT_REQUIRE_STACK=1 npm run test:e2e -- e2e/product.spec.ts
 # Nightly:
-./scripts/nightly-ot-bench/16_playwright_web.sh
 ```
 
 `e2e/smoke.spec.ts` soft-skips when SPA is down (CI without stack).

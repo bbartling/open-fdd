@@ -45,7 +45,6 @@ See [examples/external-agents.md](../examples/external-agents.md).
 | [model-routing.md](model-routing.md) | Codex/Cursor agent routing |
 | [openfdd-mcp-tool-contract.md](openfdd-mcp-tool-contract.md) | MCP tool surface |
 | [PACKAGE_AUTHORING.md](PACKAGE_AUTHORING.md) | Zip / equipType / Haystack→SQL (any BAS job) |
-| [CSV_FLOOD_AFDD_ROUTINE.md](CSV_FLOOD_AFDD_ROUTINE.md) | BUILDING_50 hourly append + updatable AFDD routine sim |
 | [EPLUS_DUMP_CLUSTERING.md](EPLUS_DUMP_CLUSTERING.md) | E+ dump zip + pandas clustering export |
 | [bench-vs-source.md](bench-vs-source.md) | Bench vs product source trees *(paste-only — not on Pages)* |
 | [vibe19-parity-nightly-monster-prompt.md](vibe19-parity-nightly-monster-prompt.md) | **Product agent** — vibe19 look/feel + 59 rules + security PR train *(paste-only)* |

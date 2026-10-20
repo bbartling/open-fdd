@@ -153,8 +153,7 @@ building a disconnected demonstration that cannot exercise the product.
 
 ## Stress, deployment and completion
 
-Audit and enhance `scripts/nightly-ot-bench/36_model_ecm_qualification.sh`, its
-runner wiring and `scripts/qualification/write_manifest.py` together. Give model
+Audit and enhance `scripts/qualification/write_manifest.py`. Give model
 checks stable IDs and an explicit required-set contract. The final manifest must
 consume executed semantic results, fixture/candidate identities and artifacts.
 HTTP 200, presence of prefixes, or importing an ECM module do not prove readiness.

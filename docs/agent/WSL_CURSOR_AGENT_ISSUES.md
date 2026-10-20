@@ -36,10 +36,3 @@ curl -fsS -X POST http://127.0.0.1:8080/api/bacnet/read \
   -H "Authorization: Bearer $TOK" -d '{"point_id":"bacnet:5007:analog-input:1173"}'
 ```
 
-## Deep-sleep GHCR watch (product agent)
-
-```bash
-./scripts/openfdd_product_ghcr_deep_sleep.sh
-```
-
-Posts to #429 on publish success/fail; 30-minute wake interval.

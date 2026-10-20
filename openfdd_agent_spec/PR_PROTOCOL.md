@@ -66,7 +66,6 @@ When driving a **tiny-rev / ops closeout** (not Milestone A migration PRs):
 5. **Post-merge** — GHCR publish → backup + re-pin (Railway + local) → smoke → re-stress affected gate only. **Skip Railway re-pin while Kali owns the hub** unless operator OK.
 6. **Railway F1** — cloud pipeline stress (DF55, BUILDING_50, AFDD flood, bldg2) is logged under BUG_REPORT **Railway F1**; it does not block declaring local synthetic CSV FDD evidence.
 
-Full gate matrix: [`scripts/nightly-ot-bench/README.md`](../scripts/nightly-ot-bench/README.md).
 
 ## PR body template
 

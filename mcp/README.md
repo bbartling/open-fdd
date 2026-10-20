@@ -148,7 +148,7 @@ docker run -i --rm --network host \
 
 Contract: [ingest contract (archive)](../docs/archive/agent/ingest-contract-v1.md) · [MCP docs](https://bbartling.github.io/open-fdd/mcp-agents/mcp.html)
 
-**Host scripts (not MCP):** CSV flood + AFDD routine — [`docs/agent/CSV_FLOOD_AFDD_ROUTINE.md`](../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md). E+ dump/clustering — [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
+**Host scripts (not MCP):** E+ dump/clustering — [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
 
 Bench agent prompt (archive): [docs/archive/agent/bench-driver-setup-wsl-agent.md](../docs/archive/agent/bench-driver-setup-wsl-agent.md)
 

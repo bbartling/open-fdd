@@ -40,8 +40,7 @@ Bring-up: [`docs/operations/TIMESCALE_WAVE_X.md`](../docs/operations/TIMESCALE_W
 OT LAN benches are the explicit archive lane — recipe **`react-ot`**
 (`compose.react.yml` + `compose.react.fieldbus.yml`), not the 4.0 default.
 Snapshot: `archive/ot-edge/unqualified-cdaa4f15/` (no verified 3.6.18 freeze).
-Full stress suite:
-[`scripts/nightly-ot-bench/`](../scripts/nightly-ot-bench/README.md) · agent handbook
+Agent handbook:
 [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md).
 
 **Local UI/API are plain HTTP** (`:3000` / `:8080`) behind a firewall — product
@@ -58,9 +57,6 @@ GHCR tags. Prefer:
 
 ```bash
 cd ~/open-fdd
-./scripts/nightly-ot-bench/00_pull_ghcr_up.sh
-# or full suite:
-# WEATHER_SOAK_SECS=120 ./scripts/nightly-ot-bench/run_all.sh
 ```
 
 Manual pin path (only after GHCR Actions are green for that SHA):
@@ -136,7 +132,7 @@ Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRES
 | Fix | One PR; VERSION bump when shipping stack images |
 | Publish | Wait GHCR Publish green on merge sha |
 | Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-<7>` (product tip; docs-tip incompleteness may be noise) |
-| Re-pin | **Railway CLI** backup → central → mqtt → web; `./scripts/openfdd_fieldbus_railway_up.sh sha-*` |
+| Re-pin | **Railway CLI** backup → central → mqtt → web |
 | Smoke | Mid-wave: health + gates **11–14**. Ship/L8: full stress |
 | Cleanup | `docker rm -f` zap-* / openfdd-mcp-railway-* leftovers (low-RAM) |
 | Close | BUG_REPORT + hygiene (0 open PRs / only `master`) |

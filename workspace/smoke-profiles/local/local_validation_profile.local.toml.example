@@ -4,7 +4,6 @@
 #
 # Run validation:
 #   OPENFDD_VALIDATION_PROFILE=workspace/smoke-profiles/local/local_validation_profile.local.toml \
-#     ./scripts/openfdd_one_hour_validation_report.sh
 
 profile_id = "local_validation"
 site_id = "site:local"

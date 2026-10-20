@@ -35,7 +35,7 @@ Modeling (agent context, docs-only expansions):
 5. Motor ≠ compressor ≠ valve. Status/cmd before amps. Never CHW pump or `clg_valve_pct` as compressor proof. Never motor hours from leave temp. Never infer compressor from fan status; never invent mode/setpoint columns.
 6. Weather lives at `{building}/weather/` with `web-outside-air-temp` → `web_oa_t`. Distinguish BAS `oa_t` from web `web_oa_t`. Lat/lon in preprocess. `prefer_web_oat`.
 7. `timestamp_utc` is RFC3339 (`Z` or `+00:00`). String `"equip": "AHU_1"` is metadata.
-8. Import with existing `POST /api/csv/import/package` + MCP `openfdd_csv_import_*` / `openfdd_csv_package_append`. For **streaming sim** on Liberty B50: host script `scripts/csv_flood_afdd_routine_sim.py` (append + AFDD routine patches). Do **not** implement SCAFFOLD `mapping_suggest` / `package_preflight` this cycle.
+8. Import with existing `POST /api/csv/import/package` + MCP `openfdd_csv_import_*` / `openfdd_csv_package_append`. Do **not** implement SCAFFOLD `mapping_suggest` / `package_preflight` this cycle.
 9. No vendor, campus, or fixture-id hardcoding in product. Gold ids (`AHU_1` / `VAV_1` / `CHW_1` / `weather/`) are layout examples, not selectors. Select by `equipType` / roles; exact id only after the type filter (`RTU_01` must not hit `RTU_010`).
 10. **HP-1 caveat:** registry may list `fan_status` optional while SQL still gates on `fan_cmd` — fan-status-only packages are typically **not runnable**. Do not map binary fan status into fake percent `fan_cmd`. See rule-readiness doc.
 

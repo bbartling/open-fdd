@@ -71,7 +71,6 @@ Patch-cycle train after Plans 1–4: log gate FAILs in [`docs/operations/BUG_REP
 ```bash
 ./scripts/openfdd_stack_pull.sh react-ot
 ./scripts/openfdd_stack_up.sh react-ot
-./scripts/nightly-ot-bench/run_all.sh      # pull sha-* + OT/API gates
 ./scripts/openfdd_stack_up.sh csv
 ```
 
@@ -115,10 +114,10 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 - **SCHED-1 occupancy:** treat numeric `0` / `0.0` / `false` **and** string `unoccupied` (and related tokens) as unoccupied — SQL + pandas cookbook stay aligned.
 - **Synthetic-59:** soak via `scripts/synthetic_59_*.py` under `reports/eplus-dump/fixtures/synthetic_59/` (legacy `reports/wattlab-parity/` still works). Do not greenwash `expected_faults.csv`. Vibe19 dual-parity is **retired** — use OpenFDD-only soaks + `scripts/eplus_dump_clustering_export.py` for E+ dump/clustering.
 - **Units:** FDD SQL is °F canonical. Metric CSVs convert at query (`unit_system=metric|si`). Lab sliders show °C when metric is selected; Run all rules after switching.
-- **Hourly append:** seed with `POST /api/csv/import/package`, then `POST /api/csv/import/package/append` (JWT, `confirm:true`). **AFDD routine sim:** `scripts/csv_flood_afdd_routine_sim.py` + `scripts/fixtures/b50_afdd_routine.json` (BUILDING_50 hourly flood + mid-stream rule patches). Custom vendor appenders stay outside the repo.
+- **Hourly append:** seed with `POST /api/csv/import/package`, then `POST /api/csv/import/package/append` (JWT, `confirm:true`). Custom vendor appenders stay outside the repo.
 - **Package timestamps + maps:** `timestamp_utc` accepts ISO-8601 `Z` and `+00:00`. Unparseable rows are skipped (never epoch 0 / now). String `"equip": "AHU_1"` on a sidecar is metadata; package maps need object `equip`/`equipment`. Site vendor names belong in zip preprocess — not product code. See [`docs/RUST_DATAFUSION_ENGINE.md`](docs/RUST_DATAFUSION_ENGINE.md) and [`docs/mcp-agents/roles/package-mapping.md`](docs/mcp-agents/roles/package-mapping.md).
 - **Overview layout:** full width beside sidebar (Streamlit-like); named Plotly PNG stems via `downloadFilename` on RCx / Inspect / FDD Plots; Lab rule menu A–Z; FDD series = required∪optional roles.
-- **Mech OAT bins:** status/cmd before amps; prefer web/weather OAT. Analytics envelopes: `scripts/synthetic_59_overview_analytics_soak.py`.
+- **Mech OAT bins:** status/cmd before amps; prefer web/weather OAT.
 
 ## Deployment
 
@@ -157,7 +156,7 @@ A Railway one-click template should eventually encode **central → mqtt → web
 
 ## AFDD vs bulk FDD
 
-Same Timescale SQL registry. Bulk = CSV/package / manual run; continuous AFDD = opt-in timer + lookback on live MQTT (watermark/incremental — not full-DB every tick). Multi-site isolation is by `building_id`. Full contract: [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md). Combined OT+synth gate: `./scripts/gates/combined_ot_synth_validate.sh`.
+Same Timescale SQL registry. Bulk = CSV/package / manual run; continuous AFDD = opt-in timer + lookback on the Timescale historian (watermark/incremental — not full-DB every tick). Ingest is the Normal Framework portal and CSV. Multi-site isolation is by `building_id`. Full contract: [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
 
 Local fieldbus ingest (#1048) uses explicit `OPENFDD_INGEST_MODE=mqtts|local_fieldbus|dual`.
 The broker-free path requires deployment-token auth and trusted tenant/building/edge

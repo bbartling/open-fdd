@@ -79,7 +79,7 @@ Use existing `openfdd_csv_import_*` + `openfdd_csv_package_append`. SCAFFOLD `pa
 5. **`openfdd_csv_import_preflight`** — **required**; loop until `verdict: "pass"` (read `validation.checks` + `agent_hints`).
 6. **`openfdd_csv_import_execute`** — `confirm: true` + write gate → Arrow + historian (fail-closed unless preflight pass).
 7. **Hourly IoT** — seed package then **`openfdd_csv_package_append`** (`confirm: true`, `building_id`, `equipment_id`, `csv`).
-8. **AFDD routine (after append)** — `openfdd_fdd_session_config` PUT `params` → **`openfdd_fdd_run`** (`mode: registry`, `building_id`, optional `rule_ids`). Bench reference: `scripts/csv_flood_afdd_routine_sim.py` + `scripts/fixtures/b50_afdd_routine.json` ([doc](../docs/agent/CSV_FLOOD_AFDD_ROUTINE.md)).
+8. **AFDD routine (after append)** — `openfdd_fdd_session_config` PUT `params` → **`openfdd_fdd_run`** (`mode: registry`, `building_id`, optional `rule_ids`).
 9. Optional **`openfdd_model_commissioning_import`** — sites/equipment/points/assignments/rules bundle.
 10. **`openfdd_fdd_rule_test_sql`** → **`openfdd_rules_batch`** (not `openfdd_fdd_run` for saved rules).
 11. **`openfdd_reports_from_fdd_sql_run`** — PDF with `download_url`.
@@ -88,9 +88,8 @@ Composite: **`openfdd_integration_smoke`** — `{ import_dir?, session_id?, conf
 
 **E+ dump / clustering (offline):** host scripts `scripts/agent_eplus_dump.sh` + `scripts/eplus_dump_clustering_export.py` — not MCP tools yet. Doc: [`docs/agent/EPLUS_DUMP_CLUSTERING.md`](../docs/agent/EPLUS_DUMP_CLUSTERING.md).
 
-**Parity:** synthetic golden = `scripts/synthetic_59_*.py` (OpenFDD-only). Vibe19 B100 dump-parity retired (`scripts/retired/vibe19-parity/`).
+**Parity:** Vibe19 B100 dump-parity is retired.
 
-Helper script (bash only): `scripts/openfdd_csv_preflight.sh <session_id>`.
 
 ### Vendor long-format CSV (preprocess example)
 
