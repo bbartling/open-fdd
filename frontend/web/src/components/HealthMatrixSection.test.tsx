@@ -1,6 +1,7 @@
+import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { DataTable } from "./widgets/DataTable";
+import { assignDataTableRowKeys, DataTable } from "./widgets/DataTable";
 import {
   HealthMatrixSection,
   healthRowClass,
@@ -127,19 +128,312 @@ describe("health matrix tint", () => {
       <HealthMatrixSection {...props} buildingId="site-a" refreshToken={0} />,
     );
     await waitFor(() => {
-      expect(fetchHealth).toHaveBeenCalledWith("site-a", undefined);
+      expect(fetchHealth).toHaveBeenCalledWith(
+        "site-a",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
+    expect(fetchHealth.mock.calls[0]?.[1]?.refresh).toBeUndefined();
     view.rerender(
       <HealthMatrixSection {...props} buildingId="site-a" refreshToken={1} />,
     );
     await waitFor(() => {
-      expect(fetchHealth).toHaveBeenLastCalledWith("site-a", { refresh: true });
+      expect(fetchHealth).toHaveBeenLastCalledWith(
+        "site-a",
+        expect.objectContaining({
+          refresh: true,
+          signal: expect.any(AbortSignal),
+        }),
+      );
     });
     view.rerender(
       <HealthMatrixSection {...props} buildingId="site-b" refreshToken={1} />,
     );
     await waitFor(() => {
-      expect(fetchHealth).toHaveBeenLastCalledWith("site-b", undefined);
+      expect(fetchHealth).toHaveBeenLastCalledWith(
+        "site-b",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
+    const last = fetchHealth.mock.calls.at(-1)?.[1];
+    expect(last?.refresh).toBeUndefined();
+  });
+});
+
+function diagnosticEnvelope(
+  site: string,
+  queryId: string,
+  rows: Record<string, unknown>[],
+): AnalyticsEnvelope {
+  return {
+    schema_version: "diagnostic_matrix_v1",
+    query_version: "diagnostic-matrix-v1",
+    generated_at: "2026-10-22T00:00:00Z",
+    engine: "timescale-sql",
+    warnings: [],
+    rows,
+    equipment: [],
+    points: [],
+    skipped: [],
+    site_id: site,
+    building_id: site,
+    query_id: queryId,
+  };
+}
+
+function diagnosticRow(
+  site: string,
+  equipment: string,
+  role: string,
+  flag: string,
+  kind: "fault" | "hunt",
+): Record<string, unknown> {
+  return {
+    row_key: `${site}\u001f${equipment}\u001f${role}`,
+    site_id: site,
+    building_id: site,
+    equipment_id: equipment,
+    role,
+    flag,
+    flag_kind: kind,
+    ...(kind === "fault" ? { fault_flag: flag } : { hunt_flag: flag }),
+    n: 24,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function MountToken({ token }: { token: string }) {
+  const first = useRef(token);
+  return <span data-testid="mount-token">{first.current}</span>;
+}
+
+describe("diagnostic matrix rows", () => {
+  const sensorColumns = [
+    { key: "flatline", ruleId: "SV-FLATLINE" },
+    { key: "range", ruleId: "SV-RANGE" },
+  ];
+
+  it("shows the proxy flag and role instead of unknown FDD columns", async () => {
+    render(
+      <HealthMatrixSection
+        family="sensor"
+        title="Sensor faults"
+        buildingId="site-a"
+        refreshToken={0}
+        fetchHealth={async () =>
+          diagnosticEnvelope("site-a", "sensor-faults", [
+            diagnosticRow("site-a", "flat_unit", "sat", "FLATLINE", "fault"),
+            diagnosticRow("site-a", "flat_unit", "zone_t", "OK", "fault"),
+          ])
+        }
+        flagColumns={sensorColumns}
+      />,
+    );
+    expect(await screen.findByText("FLATLINE")).toBeTruthy();
+    expect(screen.getByText("sat")).toBeTruthy();
+    expect(screen.getByText("zone_t")).toBeTruthy();
+    expect(screen.getByText("OK")).toBeTruthy();
+    expect(screen.queryByText("unknown")).toBeNull();
+    expect(screen.queryByText("SV-FLATLINE")).toBeNull();
+    const body = screen
+      .getByTestId("sensor-health-table")
+      .querySelectorAll("tbody tr");
+    expect(body).toHaveLength(2);
+    const keys = [...body].map((row) => row.getAttribute("data-row-key"));
+    expect(keys).toEqual([
+      "site-a\u001fflat_unit\u001fsat",
+      "site-a\u001fflat_unit\u001fzone_t",
+    ]);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("keeps the hunt flag on its role", async () => {
+    render(
+      <HealthMatrixSection
+        family="pid"
+        title="PID Hunting"
+        buildingId="site-a"
+        refreshToken={0}
+        fetchHealth={async () =>
+          diagnosticEnvelope("site-a", "pid-hunting", [
+            diagnosticRow("site-a", "hunt_unit", "zone_t", "HUNT_PROXY", "hunt"),
+            diagnosticRow("site-a", "hunt_unit", "sat", "OK", "hunt"),
+          ])
+        }
+        flagColumns={[
+          { key: "operating_state_hunt", ruleId: "FC4" },
+          { key: "control_output_hunt", ruleId: "PID-HUNT-1" },
+        ]}
+      />,
+    );
+    expect(await screen.findByText("HUNT_PROXY")).toBeTruthy();
+    expect(screen.getByText("hunt")).toBeTruthy();
+    expect(screen.queryByText("FC4")).toBeNull();
+    expect(screen.queryByText("unknown")).toBeNull();
+  });
+
+  it("collapses a repeated site equipment role and does not warn on duplicate keys", async () => {
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      errors.push(args);
+    });
+    render(
+      <HealthMatrixSection
+        family="sensor"
+        title="Sensor faults"
+        buildingId="site-a"
+        refreshToken={0}
+        fetchHealth={async () =>
+          diagnosticEnvelope("site-a", "sensor-faults", [
+            diagnosticRow("site-a", "flat_unit", "sat", "OK", "fault"),
+            diagnosticRow("site-a", "flat_unit", "sat", "FLATLINE", "fault"),
+            diagnosticRow("site-a", "flat_unit", "zone_t", "OK", "fault"),
+          ])
+        }
+        flagColumns={sensorColumns}
+      />,
+    );
+    expect(await screen.findByText("FLATLINE")).toBeTruthy();
+    const body = screen
+      .getByTestId("sensor-health-table")
+      .querySelectorAll("tbody tr");
+    expect(body).toHaveLength(2);
+    const keys = [...body].map((row) => row.getAttribute("data-row-key"));
+    expect(new Set(keys).size).toBe(2);
+    const warned = errors.some((args) =>
+      args.some((part) => String(part).includes("same key")),
+    );
+    expect(warned).toBe(false);
+    spy.mockRestore();
+  });
+
+  it("ignores a late response from the previous site", async () => {
+    const siteA = deferred<AnalyticsEnvelope>();
+    const siteB = deferred<AnalyticsEnvelope>();
+    let signalA: AbortSignal | undefined;
+    const fetchHealth = vi.fn((id: string, opts?: { signal?: AbortSignal }) => {
+      if (id === "site-a") {
+        signalA = opts?.signal;
+        return siteA.promise;
+      }
+      return siteB.promise;
+    });
+    const props = {
+      family: "sensor",
+      title: "Sensor faults",
+      flagColumns: sensorColumns,
+      fetchHealth,
+    };
+    const view = render(
+      <HealthMatrixSection {...props} buildingId="site-a" refreshToken={0} />,
+    );
+    await waitFor(() => {
+      expect(signalA).toBeInstanceOf(AbortSignal);
+    });
+    view.rerender(
+      <HealthMatrixSection {...props} buildingId="site-b" refreshToken={0} />,
+    );
+    expect(signalA?.aborted).toBe(true);
+    siteA.resolve(
+      diagnosticEnvelope("site-a", "sensor-faults", [
+        diagnosticRow("site-a", "unit_from_a", "sat", "FLATLINE", "fault"),
+      ]),
+    );
+    siteB.resolve(
+      diagnosticEnvelope("site-b", "sensor-faults", [
+        diagnosticRow("site-b", "unit_from_b", "zone_t", "OK", "fault"),
+      ]),
+    );
+    expect(await screen.findByText("unit_from_b")).toBeTruthy();
+    expect(screen.queryByText("unit_from_a")).toBeNull();
+    const keys = [
+      ...screen.getByTestId("sensor-health-table").querySelectorAll("tbody tr"),
+    ].map((row) => row.getAttribute("data-row-key"));
+    expect(keys).toEqual(["site-b\u001funit_from_b\u001fzone_t"]);
+  });
+});
+
+describe("DataTable row keys", () => {
+  it("remounts when the identity changes even if the displayed cells match", () => {
+    const columns = [
+      { key: "equipment_id", header: "equip" },
+      { key: "role", header: "role" },
+      { key: "flag", header: "flag" },
+    ];
+    const view = render(
+      <DataTable
+        id="swap"
+        label="Health"
+        testId="swap-table"
+        columns={columns}
+        rows={[
+          {
+            row_key: "site-a\u001fAHU\u001fsat",
+            equipment_id: "AHU",
+            role: "sat",
+            flag: <MountToken token="site-a" />,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("mount-token").textContent).toBe("site-a");
+    view.rerender(
+      <DataTable
+        id="swap"
+        label="Health"
+        testId="swap-table"
+        columns={columns}
+        rows={[
+          {
+            row_key: "site-b\u001fAHU\u001fsat",
+            equipment_id: "AHU",
+            role: "sat",
+            flag: <MountToken token="site-b" />,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("mount-token").textContent).toBe("site-b");
+  });
+
+  it("assigns distinct keys when displayed cells and row_key collide", () => {
+    const rows = [
+      { row_key: "same", equipment_id: "AHU", role: "sat", flag: "OK" },
+      { row_key: "same", equipment_id: "AHU", role: "sat", flag: "OK" },
+    ];
+    const keys = assignDataTableRowKeys(rows);
+    expect(keys[0]).not.toBe(keys[1]);
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      errors.push(args);
+    });
+    render(
+      <DataTable
+        id="dup"
+        label="Health"
+        testId="dup-table"
+        columns={[
+          { key: "equipment_id", header: "equip" },
+          { key: "role", header: "role" },
+          { key: "flag", header: "flag" },
+        ]}
+        rows={rows}
+      />,
+    );
+    const body = screen.getByTestId("dup-table").querySelectorAll("tbody tr");
+    expect(body).toHaveLength(2);
+    const domKeys = [...body].map((row) => row.getAttribute("data-row-key"));
+    expect(new Set(domKeys).size).toBe(2);
+    expect(
+      errors.some((args) => args.some((part) => String(part).includes("same key"))),
+    ).toBe(false);
+    spy.mockRestore();
   });
 });
