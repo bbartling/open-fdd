@@ -8,8 +8,9 @@ SQL file central renders, and compares fault hours with
 ``open_fdd.rules`` (pandas cookbook + ``confirm_fault``).
 
 The frame is fixed: 12 five-minute samples, no randomness. ``AHU_FAULT`` is
-low duct static at full fan for every row (1.0 fault hour). ``AHU_OK`` holds
-static at setpoint (0.0).
+low duct static at full fan for every row. Eligible time is the forward delta,
+so 11 intervals are one hour minus one sample (the last sample adds nothing).
+``AHU_OK`` holds static at setpoint (0.0).
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ SQL_PARAMS = {
     "MODE_DELAY_ROWS_PRECEDING": "0",
     "REQUIRE_OPERATIONAL_GATE": "1",
     "MINIMUM_ACTIVE_COVERAGE_PCT": "5",
+    "MAX_GAP_HOURS": "1",
 }
 
 
@@ -92,7 +94,8 @@ def pandas_fault_hours() -> dict[str, tuple[int, float]]:
                 "duct-static-pressure-sp": [setpoint] * SAMPLES,
                 "fan-status": [1.0] * SAMPLES,
                 "fan-cmd": [1.0] * SAMPLES,
-            }
+            },
+            index=pd.date_range(START, periods=SAMPLES, freq="5min", tz="UTC"),
         )
         raw = fc1(frame, params, POLL_SECONDS)
         confirmed = confirm_fault(
@@ -228,7 +231,7 @@ def load_and_query(database_url: str) -> dict[str, float]:
                 (SITE,),
             )
             cur.execute(render_fc1())
-            found = {equipment_id: float(hours) for equipment_id, hours in cur.fetchall()}
+            found = {row[0]: float(row[1]) for row in cur.fetchall()}
         conn.commit()
     return found
 
@@ -236,7 +239,7 @@ def load_and_query(database_url: str) -> dict[str, float]:
 def check_fixture() -> dict[str, tuple[int, float]]:
     got = pandas_fault_hours()
     expect = {
-        FAULT_EQUIPMENT: (SAMPLES, SAMPLES * POLL_SECONDS / 3600.0),
+        FAULT_EQUIPMENT: (SAMPLES, (SAMPLES - 1) * POLL_SECONDS / 3600.0),
         OK_EQUIPMENT: (0, 0.0),
     }
     for equipment_id, (flags, hours) in expect.items():

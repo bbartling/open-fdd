@@ -1942,15 +1942,16 @@ def _mask_hours_from_index(mask: pd.Series) -> float:
     if not isinstance(idx, pd.DatetimeIndex):
         return 0.0
     m = mask.reindex(idx).fillna(False).astype(bool)
-    if len(idx) == 1:
-        return 0.0
-    # Duration for sample i is time until next sample; last uses median delta.
-    deltas_h = idx.to_series().diff().dt.total_seconds().shift(-1) / 3600.0
-    med = float(deltas_h.dropna().median()) if deltas_h.notna().any() else 0.0
-    if not np.isfinite(med) or med < 0:
-        med = 0.0
-    deltas_h = deltas_h.fillna(med).clip(lower=0.0)
-    return float((m.astype(float) * deltas_h).sum())
+    # Forward hold only. The last sample adds nothing, and a gap over one hour
+    # is unknown rather than a median fill.
+    durations = interval_durations(
+        idx,
+        nominal_seconds=300.0,
+        max_gap_seconds=3600.0,
+        final_duration_seconds=0.0,
+        preserve_row_order=True,
+    )
+    return float((m.astype(float) * (durations.fillna(0.0) / 3600.0)).sum())
 
 
 def economizer_weather_summary(

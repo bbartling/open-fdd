@@ -9,6 +9,10 @@ import pandas as pd
 # Pass as max_gap_seconds to disable capping. None means the public default (3x nominal).
 UNLIMITED_GAP_SECONDS = math.inf
 
+# Eligible forward hold for fault and runtime hours. A longer gap is unknown:
+# it contributes nothing, and it is not clipped down to this cap.
+ELAPSED_MAX_GAP_SECONDS = 3600.0
+
 
 def interval_durations(
     index: pd.Index,
@@ -27,9 +31,9 @@ def interval_durations(
     Pass ``UNLIMITED_GAP_SECONDS`` (``math.inf``) for no upper cap — do not use
     ``None`` for that, since ``None`` selects the default 3x policy.
 
-    Rule confirmation paths use ``preserve_row_order=True`` with
-    ``UNLIMITED_GAP_SECONDS`` to keep original row order, duplicates, and
-    uncapped forward deltas.
+    Intervals longer than the cap are unknown and become 0. They are not
+    shortened to the cap. The final row is ``final_duration_seconds`` (default
+    0): the series does not invent a trailing interval.
     """
     if not isinstance(index, pd.DatetimeIndex) or index.empty:
         return pd.Series(dtype=float)
@@ -40,11 +44,13 @@ def interval_durations(
         working = pd.DatetimeIndex(index).drop_duplicates().sort_values()
 
     seconds = working.to_series().shift(-1).sub(working.to_series()).dt.total_seconds()
+    seconds = seconds.clip(lower=0.0)
     if max_gap_seconds is None:
         cap = max(float(nominal_seconds) * 3.0, float(nominal_seconds))
     else:
         cap = float(max_gap_seconds)
-    seconds = seconds.clip(lower=0.0, upper=cap)
+    if math.isfinite(cap):
+        seconds = seconds.mask(seconds > cap, 0.0)
     if len(seconds):
         seconds.iloc[-1] = max(float(final_duration_seconds), 0.0)
     return seconds.astype(float)

@@ -49,7 +49,19 @@ joined AS (
   FROM comp c
   JOIN oat o ON o.ts = c.ts
   WHERE c.active IS NOT NULL AND o.oat_f IS NOT NULL
-    AND c.active > 0.05
+),
+ordered AS (
+  -- Inactive samples stay on the timeline so an active sample cannot hold
+  -- across them. Only the active sample's own forward delta is credited.
+  SELECT
+    equipment_id,
+    ts,
+    active,
+    oat_f,
+    EXTRACT(EPOCH FROM (
+      LEAD(ts) OVER (PARTITION BY equipment_id ORDER BY ts) - ts
+    )) AS dt_seconds
+  FROM joined
 )
 SELECT
   'oat_bin'::text AS kind,
@@ -62,8 +74,16 @@ SELECT
     WHEN oat_f < 90 THEN '80-90'
     ELSE '>=90'
   END AS oat_bin,
-  (COUNT(*)::double precision * 300.0 / 3600.0) AS run_hours
-FROM joined
+  -- Active time is the forward delta. Gaps longer than 1 hour are unknown.
+  (SUM(CASE
+     WHEN COALESCE(active, 0) > 0.05
+      AND dt_seconds > 0.0
+      AND dt_seconds <= 3600.0
+     THEN dt_seconds
+     ELSE 0.0::double precision
+   END) / 3600.0) AS run_hours
+FROM ordered
+WHERE COALESCE(active, 0) > 0.05
 GROUP BY 1, 2, 3
 ORDER BY equipment_id, oat_bin
 LIMIT 500;

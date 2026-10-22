@@ -276,8 +276,17 @@ mod tests {
     fn confirm_rows_from_seconds() {
         let p = rule_params(300.0, 900);
         assert_eq!(p.get("CONFIRM_ROWS"), Some(&"3".to_string()));
+        assert_eq!(p.get("CONFIRM_SECONDS"), Some(&"900".to_string()));
         let p2 = rule_params(300.0, 0);
         assert_eq!(p2.get("CONFIRM_ROWS"), Some(&"1".to_string()));
+        assert_eq!(p2.get("CONFIRM_SECONDS"), Some(&"0".to_string()));
+    }
+
+    #[test]
+    fn max_gap_hours_defaults_to_one_hour() {
+        let sql = "dt > ({{MAX_GAP_HOURS}} * 3600.0) AND streak >= {{CONFIRM_SECONDS}}";
+        let out = substitute_sql(sql, &rule_params(300.0, 600));
+        assert_eq!(out, "dt > (1 * 3600.0) AND streak >= 600");
     }
 
     #[test]
