@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 107,
-  "pack_sha256": "36465e3ea0e13291ecb622b035a3bbf60ca27d2599919575af5d246690759cd6",
+  "pack_sha256": "0b8430ae1154a854c9733f68c2afaad342bbaf1cde3aa948bcc1a12e39b3f968",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -37,18 +37,18 @@
     },
     {
       "path": "sql/fdd/postgres/rules/ahu_ducthi.sql",
-      "sha256": "cc79f15b6edeeda59bb3b81c732497b36a5b8f349ff110075cf9dd010ce7274f",
-      "bytes": 2217
+      "sha256": "5e04812cd2872a069e4e460a2c0c423ba1785f348239656d199f600a0b647e36",
+      "bytes": 3336
     },
     {
       "path": "sql/fdd/postgres/rules/ahu_satdev.sql",
-      "sha256": "1079ea60e1cf2702373d7a705c603014081559bb81fcdee947b96d3027df0a7c",
-      "bytes": 2024
+      "sha256": "b972d3fc93ef81bbdd356e31233603645b074a42733891a026c08ac9fb8181de",
+      "bytes": 3143
     },
     {
       "path": "sql/fdd/postgres/rules/ahu_simul.sql",
-      "sha256": "ef376c9340a3f7aee75cf4e5e219055af3fd9d3ca8acb9df61c90d9ecc5d6602",
-      "bytes": 1940
+      "sha256": "49750b7c8ec2e726989287a0694cc50b8a10ff5b063d16cfb69e9fe5c745c4ae",
+      "bytes": 3063
     },
     {
       "path": "sql/fdd/postgres/rules/avg_zone_temp.sql",
@@ -57,368 +57,368 @@
     },
     {
       "path": "sql/fdd/postgres/rules/chw1_low_dt.sql",
-      "sha256": "c0a3cb64bd4a55af4471e9497a5ee7ff8d38686288b71a7187c2c1dd5b7b2c99",
-      "bytes": 2586
+      "sha256": "dfa2eb712262cb36407a6eb543d3dbec14d20af1fdf5a821d076fd3ba04f3f54",
+      "bytes": 3692
     },
     {
       "path": "sql/fdd/postgres/rules/chw2_dp_low.sql",
-      "sha256": "559e288ede354539e5766bf79ed6491e6c7f1ad9c6eaeb1f5a168888d0cafadf",
-      "bytes": 2047
+      "sha256": "19ea393af1f569b317d585f8ed01bdf7830a048a4f347394071450d6d36eba3b",
+      "bytes": 3165
     },
     {
       "path": "sql/fdd/postgres/rules/chw3_supply_band.sql",
-      "sha256": "e9857a74befd67f1cdbfeea659f5555b3c3db9afe3b909b8db1656d6bb48b952",
-      "bytes": 2045
+      "sha256": "db88635c033187dd64bb4b4ab203a0953bf2ff1f474eb4257547fa3ce47e7a06",
+      "bytes": 3164
     },
     {
       "path": "sql/fdd/postgres/rules/chw4_flow_high.sql",
-      "sha256": "0f3bdf14acbb98f5458db718fddc294ad8630752f41dc1b525b74853c1f08a58",
-      "bytes": 1906
-    },
-    {
-      "path": "sql/fdd/postgres/rules/chw_noload_1.sql",
-      "sha256": "c72959452bd39633684bc9f625068d0e208adf57ebeffe1bf3ff03bbad25e1e7",
-      "bytes": 2753
-    },
-    {
-      "path": "sql/fdd/postgres/rules/cmd1_fan_mismatch.sql",
-      "sha256": "2a9adf0622ee977795111454056535d6041906abce5883f5cf28b424a73bfc2b",
-      "bytes": 1469
-    },
-    {
-      "path": "sql/fdd/postgres/rules/cw_apr_1.sql",
-      "sha256": "11a8507f55f122a2a6b5d4724de2c02c981d63afe8be27e2273a47df83a438c4",
-      "bytes": 2138
-    },
-    {
-      "path": "sql/fdd/postgres/rules/cw_fan_1.sql",
-      "sha256": "9f16e016c2180b05bf8da880aabed4143c2c745dc4bea33ed754cd381a979cef",
-      "bytes": 2171
-    },
-    {
-      "path": "sql/fdd/postgres/rules/cw_opt_1.sql",
-      "sha256": "92ede06f888c580f95c775508bd0e7f02212b30b85fa1026582db21ab6e20186",
-      "bytes": 1977
-    },
-    {
-      "path": "sql/fdd/postgres/rules/dmp1_oa_damper_leak.sql",
-      "sha256": "4aeac7c98a1d94d793aeb31619fafe408ce834f8a1065cd1f630227493844063",
-      "bytes": 1835
-    },
-    {
-      "path": "sql/fdd/postgres/rules/econ1_stuck_closed.sql",
-      "sha256": "4546913539eb8738459d4d2ce6fb35029dbb54ebba92a548479927c6bb7b9c60",
-      "bytes": 2198
-    },
-    {
-      "path": "sql/fdd/postgres/rules/econ3_mech_without_econ.sql",
-      "sha256": "a04b2ea3ae54e17db00129f45823f8d770ef6ded0bf0272b11ca787cf8ae3fb3",
-      "bytes": 2598
-    },
-    {
-      "path": "sql/fdd/postgres/rules/econ4_low_oa_frac.sql",
-      "sha256": "0bc33f0b9666694960eef51182f161bcc349a93414001d12f708617889c33271",
-      "bytes": 1919
-    },
-    {
-      "path": "sql/fdd/postgres/rules/econ5_preheat_over.sql",
-      "sha256": "0e9278f705074dd20bd5e836966259dbbe949c34bfba67214c7a4035d908f2bd",
-      "bytes": 2159
-    },
-    {
-      "path": "sql/fdd/postgres/rules/econ6_econ_freezing.sql",
-      "sha256": "98ba395968a6bd1b0d1f69fee83f7e4f503353893bcb289aa1a8e5fa95fd9a4e",
-      "bytes": 2179
-    },
-    {
-      "path": "sql/fdd/postgres/rules/econ7_ok_not_economizing.sql",
-      "sha256": "08d7adb2ba33df182c538c034be5e044760df6ff2619ce403446632e6cbbcd97",
-      "bytes": 2550
-    },
-    {
-      "path": "sql/fdd/postgres/rules/economizer_fault.sql",
-      "sha256": "67f0a4eecff5f98c19f62bcb4ae50a565a5a4c1d791a7fe8eb5101fcfe0bb2cf",
-      "bytes": 1764
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fan_runtime_hours.sql",
-      "sha256": "36d9b292ed5607cb447b342ece9691b6831211ea735587ba076ba761a67ce992",
-      "bytes": 700
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fault_elapsed_hours.sql",
-      "sha256": "76afaba14b2f21abf8258c6def6d77ba390ebfe4f6f1841bc81151f1aad9a89a",
-      "bytes": 518
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc10_mat_oa_clg.sql",
-      "sha256": "a9e0b807ee85dc68df256be039f4e9d07952a23b31a96d6598e0cfa598560b21",
-      "bytes": 2986
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc11_oa_sat_sp_clg.sql",
-      "sha256": "ab476d89ef1683961a52d8e73192bacc9b7dc719029c1e9666b8be06229c323e",
-      "bytes": 3012
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc12_sat_mat_clg.sql",
-      "sha256": "f81a76a614e84a5d914ef96604311f8b3354f11da1bd51800d9e4accc696f552",
-      "bytes": 3019
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc14_chw_coil_dt_inactive.sql",
-      "sha256": "8e516035324742be46a3a01fe3f987e2b248b60b4674e0ba2b2909d30840eb84",
-      "bytes": 3217
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc15_hw_coil_dt_inactive.sql",
-      "sha256": "e44f0380cb7372ff2866471992adc92d51585a254fd3e124ead48d999a58f892",
-      "bytes": 3302
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc1_duct_static_low.sql",
-      "sha256": "04cfa2c5f8bf611da7744e1cb65709bcc18318219a8cfdd1fd758cee174aefd9",
-      "bytes": 3176
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc2_mat_low.sql",
-      "sha256": "f59935776f5dcbb53a8a1cbe64af07c9543e1233ce4fbae4ac8f1321748d6e7d",
-      "bytes": 2746
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc3_mat_high.sql",
-      "sha256": "8e5dfc2db6375745d8f5085d35c31abfa7baeb4a558a23fd41212e207a67f2ae",
-      "bytes": 2747
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc4_os_hunting.sql",
-      "sha256": "63a0b7fdaf0fe02f0d019d25a250b4e353849fd680cf94f20265e0961d794a78",
-      "bytes": 4136
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc5_sat_cold_heating.sql",
-      "sha256": "533942827bd28218ceb6fd676ca7fbfaf455d8e018e5abf3f291de5b1f78c662",
-      "bytes": 2883
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc6_oa_frac_mismatch.sql",
-      "sha256": "1bebe36a7b38393a073cc62b337ee2a02e5f6f1966dd54cba3e150ceef3620c9",
-      "bytes": 3089
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc7_sat_low_heating.sql",
-      "sha256": "38cd1d37f2b69d8c535c905a1ac55c2fb6212eec8944bd81b857dfeebe1a19e8",
-      "bytes": 2564
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc8_sat_mat_econ.sql",
-      "sha256": "9e8458748ebb8232274449a61ef9b7245b59ea3dd88295f72f79351622dfbfb2",
-      "bytes": 3019
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fc9_oa_sat_sp_econ.sql",
-      "sha256": "17505d0bbc0f58ec5bfb599efba1be1f4675d22f105d9723082fdfd4eb988b2f",
-      "bytes": 3006
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_clg_coil.sql",
-      "sha256": "fa0ff01477f4d84bdd502ad3e3508dfc0c38943b3a722455d33d0186ea6b8c96",
-      "bytes": 1983
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_co2_damper.sql",
-      "sha256": "ad44c321a437e3b57853ab327b0b85ac1359b0ff7af9b620f090e310e7b627b8",
-      "bytes": 2002
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_damper_pos.sql",
-      "sha256": "cf7572dc9a88eef0ee4f2ac9e156be93de96563f3114a56276677e4cb3fabc2d",
-      "bytes": 1983
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_deadband.sql",
-      "sha256": "4b4c3029976067641b50938c9b68e6f4d99efc5aa0b93d76edf571def92a56bd",
-      "bytes": 475
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_htg_coil.sql",
-      "sha256": "8d97c138fdaf7b7d3f9b9f24cd6af40285c707624ab2164b1b0dd9169439699b",
-      "bytes": 1979
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_mode_cycle.sql",
-      "sha256": "4f178e7c60d8af5d1c710fe81840ec2e074014986e6260a2bdbaf1633e5e09ca",
-      "bytes": 1424
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_sensor_null.sql",
-      "sha256": "7b1de0105976d2083e5f5023ae3c0d57578b230b84eef8e38fdb6fb619dfe8d0",
-      "bytes": 833
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_valve_pass_clg.sql",
-      "sha256": "040bd936f151ffef2c65456a26fbb1551de1cbbaa93d31830120e5f8072784dc",
-      "bytes": 1991
-    },
-    {
-      "path": "sql/fdd/postgres/rules/fcu_valve_pass_htg.sql",
-      "sha256": "9129fdc10aca3a3e909ea29469b2c64b288186e751804fa7f20b8f79a32d61d3",
-      "bytes": 1991
-    },
-    {
-      "path": "sql/fdd/postgres/rules/hp1_discharge_cold.sql",
-      "sha256": "4fb057e6d26824c53b512006f59ec69ea96f0159d88e31e67a17cbc179ad07d8",
-      "bytes": 1947
-    },
-    {
-      "path": "sql/fdd/postgres/rules/mech_oat_1.sql",
-      "sha256": "88068c795e46297c33b1e93d68758ca182437f475ceba8c92ee944df743b4013",
-      "bytes": 1752
-    },
-    {
-      "path": "sql/fdd/postgres/rules/oa1_low_oa_frac.sql",
-      "sha256": "c20cfaf92fb7128fc895ee4fb97993f31b96140e40f69750e72825a036cbff42",
-      "bytes": 1881
-    },
-    {
-      "path": "sql/fdd/postgres/rules/oat_meteo_fault.sql",
-      "sha256": "d58ad97f06d9cc40c44a5c7294a525939015647994d92926d73f64a1d9fb5119",
-      "bytes": 2160
-    },
-    {
-      "path": "sql/fdd/postgres/rules/pid_hunt_1.sql",
-      "sha256": "cc07120ddc00095c5e085ffa7dc4783aa0b6a8ecd48b79c5b93bb3773f59ef63",
-      "bytes": 5349
-    },
-    {
-      "path": "sql/fdd/postgres/rules/reset1_sat_oa_reset.sql",
-      "sha256": "8817ca48495262779741be936eda1b0048e8554969d52b406d3b2f93c8bca4da",
-      "bytes": 1804
-    },
-    {
-      "path": "sql/fdd/postgres/rules/sat_high_fault.sql",
-      "sha256": "c1ccefe21e1011f3017419b63d24c46fefd60791b237cc926cac0929159e40c0",
+      "sha256": "b7dfa789907fab06a1489b43283058dbbd4ecdd75e4ae24bc70be00e760f3946",
       "bytes": 3026
     },
     {
+      "path": "sql/fdd/postgres/rules/chw_noload_1.sql",
+      "sha256": "da8295c9de248bee791216c48914c620dc010b7dd64aceb4070832c6bd068e01",
+      "bytes": 3847
+    },
+    {
+      "path": "sql/fdd/postgres/rules/cmd1_fan_mismatch.sql",
+      "sha256": "0f1ab784d35b4d96df6ba6124d18b167e9c07c56a50eb9ecd87e045a660cb2a4",
+      "bytes": 2601
+    },
+    {
+      "path": "sql/fdd/postgres/rules/cw_apr_1.sql",
+      "sha256": "78484c3c23b77a1ce8a2246188bd2569440fbdfa159eb840926273055910752d",
+      "bytes": 3256
+    },
+    {
+      "path": "sql/fdd/postgres/rules/cw_fan_1.sql",
+      "sha256": "98f9abe63ece9079aa06eeca03722735d87b71addf152ab129e9a257783f3c87",
+      "bytes": 3289
+    },
+    {
+      "path": "sql/fdd/postgres/rules/cw_opt_1.sql",
+      "sha256": "fee55234fa8c24bc2e9a27c6982b558a69791445df03cf50a7ef2148b6878d34",
+      "bytes": 3097
+    },
+    {
+      "path": "sql/fdd/postgres/rules/dmp1_oa_damper_leak.sql",
+      "sha256": "e7780009c1c9a6ca59fe2fe655afca227b9ee498e78e10d9fb33f7a63d33ca44",
+      "bytes": 2958
+    },
+    {
+      "path": "sql/fdd/postgres/rules/econ1_stuck_closed.sql",
+      "sha256": "04a0da28ff4b3635e6a2a5e075dfb8d0ab7ddc4ba48e57af9a386609a6ffb902",
+      "bytes": 3316
+    },
+    {
+      "path": "sql/fdd/postgres/rules/econ3_mech_without_econ.sql",
+      "sha256": "16629daf87744c3a4591e2d026e494e5b966bd0f48263550a47552264916361d",
+      "bytes": 3707
+    },
+    {
+      "path": "sql/fdd/postgres/rules/econ4_low_oa_frac.sql",
+      "sha256": "3d8602bbbe4bea845d4405b5762ddbf980a273f8388169dfa7088f3f05eff098",
+      "bytes": 3042
+    },
+    {
+      "path": "sql/fdd/postgres/rules/econ5_preheat_over.sql",
+      "sha256": "1b0e1a76c8a69067c5caff368d55dd09316e7c2bac8190351244c1dc4509369f",
+      "bytes": 3277
+    },
+    {
+      "path": "sql/fdd/postgres/rules/econ6_econ_freezing.sql",
+      "sha256": "734211861325cb09108eaf84a8ded6f32d363389130f8409374afa616ae08ece",
+      "bytes": 3293
+    },
+    {
+      "path": "sql/fdd/postgres/rules/econ7_ok_not_economizing.sql",
+      "sha256": "b99a8056e386467c4603382099a90d409468520cd37b06b1701f80a5624c1ac1",
+      "bytes": 3660
+    },
+    {
+      "path": "sql/fdd/postgres/rules/economizer_fault.sql",
+      "sha256": "808d25e664d88f302c459572b707cb951816bf924249770fb62bf063b8f05997",
+      "bytes": 2895
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fan_runtime_hours.sql",
+      "sha256": "baf3d07d671df5085006ae280ad7cea1bc36c71f5aeeea40044509763c0ef93d",
+      "bytes": 1232
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fault_elapsed_hours.sql",
+      "sha256": "1f3b4698b97bd22411bd605d2fafbe64f40bbc85f22edcbc2e55cd62da4d5557",
+      "bytes": 1360
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc10_mat_oa_clg.sql",
+      "sha256": "8a42022b39e2532ea3a70546c1e550f7b84848b7c1f8d2745b3ff2d7b605c5cc",
+      "bytes": 4364
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc11_oa_sat_sp_clg.sql",
+      "sha256": "08ce0f4243a695d466f99cc54d4b3ddc171d98d7586a79c5999ce6c93777eba1",
+      "bytes": 4390
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc12_sat_mat_clg.sql",
+      "sha256": "524a3b49c2b0f4f9159b32bd3d6b180d3f66a305ee8c2bb4f48a2f7974e55130",
+      "bytes": 4397
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc14_chw_coil_dt_inactive.sql",
+      "sha256": "1934ae39b4c527196065f6e76d190ec5e0d81541ced223a20c8a52e1656777d1",
+      "bytes": 4594
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc15_hw_coil_dt_inactive.sql",
+      "sha256": "b786621cf34afe45e77d3dbb35353394cae403a7f6be22e57176409d392e27d1",
+      "bytes": 4677
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc1_duct_static_low.sql",
+      "sha256": "b4285422d6eb8f2f12f14e516e8aa96cd136536d58a8b6c4b485fd00cce3454b",
+      "bytes": 4551
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc2_mat_low.sql",
+      "sha256": "3d95824fd1f7e15b7eaef1d00b5abc41612ad67af602d5c4c4c5e00ab1ae9aba",
+      "bytes": 4127
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc3_mat_high.sql",
+      "sha256": "3c37b7a600cf7f525a694f3e32f0590abe5562b2165213d6c583b3ef594766b5",
+      "bytes": 4128
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc4_os_hunting.sql",
+      "sha256": "963df27111acee8f390ad25b6f12344664aa5ec07f4a9601d7c4f34fabad13f8",
+      "bytes": 5481
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc5_sat_cold_heating.sql",
+      "sha256": "c371df84e902ff640e5548a2310ce5483657f1ac866189929d7d6384d3943826",
+      "bytes": 4263
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc6_oa_frac_mismatch.sql",
+      "sha256": "9306a4608d7a9c3d81e52aa766aa56c43bf5244b568c11e8ca947e8020065f1d",
+      "bytes": 4465
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc7_sat_low_heating.sql",
+      "sha256": "9849da77d8a9243b7619c4358687c031ea4fb0776923533bccd2ed3e204da62f",
+      "bytes": 3951
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc8_sat_mat_econ.sql",
+      "sha256": "39568dcbfc16c3f3eb350c662ee42674f1d0871aa8a8b6706af4122a3fc7fcc2",
+      "bytes": 4397
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fc9_oa_sat_sp_econ.sql",
+      "sha256": "d77f416b1568761ddc8b596ff9b3b614718b6adfbf8779887d63588bc2a2f3da",
+      "bytes": 4384
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_clg_coil.sql",
+      "sha256": "8503060dfac9b26f1b4990e8852d4c5c91340ce3aa639ead507307ff16f557a0",
+      "bytes": 3153
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_co2_damper.sql",
+      "sha256": "d17f6b2ce91fc500ad0d002e6ecfbec089dec89d6435555650d1cae351a01be1",
+      "bytes": 3172
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_damper_pos.sql",
+      "sha256": "f297a703f97a31000dbdc6e1ea6090cad61054e26ac32722a9ebcdfb0e3144df",
+      "bytes": 3153
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_deadband.sql",
+      "sha256": "2b42beba086d2a49338b4bc759f7627bae4acac3ffa45c99a8b44e7af2c40620",
+      "bytes": 1337
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_htg_coil.sql",
+      "sha256": "21f7bf3508de4d6a9b9d688c7a4016ae8e1ab6df64d4680ad67e72c5b7d109ea",
+      "bytes": 3149
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_mode_cycle.sql",
+      "sha256": "2f2497fdb5e4fe76bbdde54c75425ce110615314805b2fcb3b11e8aae5a6e5ef",
+      "bytes": 2065
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_sensor_null.sql",
+      "sha256": "df71b85a347b27655300468be825bc836a4799d5ebe2b8eb19a2bd063879b109",
+      "bytes": 1717
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_valve_pass_clg.sql",
+      "sha256": "cef3fd63afffb5a2f63c793eba278ec3f7e99671aeb84a1156a1ac4a9d6f5fff",
+      "bytes": 3161
+    },
+    {
+      "path": "sql/fdd/postgres/rules/fcu_valve_pass_htg.sql",
+      "sha256": "e161e11f64147fbfe0f2f9928fd8d6f386042c4477c415f07f18e5c9a3debe8b",
+      "bytes": 3161
+    },
+    {
+      "path": "sql/fdd/postgres/rules/hp1_discharge_cold.sql",
+      "sha256": "de8cbce54c84c9556f5dbda16156f80beac05a74721e3ff7a92f1fd8a974b9a2",
+      "bytes": 3069
+    },
+    {
+      "path": "sql/fdd/postgres/rules/mech_oat_1.sql",
+      "sha256": "9a58c3458ab1fab7c11f61771eed3496282e44b5ae8b17a17f1702f849a55cbe",
+      "bytes": 2880
+    },
+    {
+      "path": "sql/fdd/postgres/rules/oa1_low_oa_frac.sql",
+      "sha256": "2fcfcbe2736a4a77213222e6a045256f627a25097769a5134a5d9d489d101c78",
+      "bytes": 3004
+    },
+    {
+      "path": "sql/fdd/postgres/rules/oat_meteo_fault.sql",
+      "sha256": "b53fbcdbd09a4c68c83658d2c8c5b884c93a8ce29f4ac7e258b794091cd55952",
+      "bytes": 3126
+    },
+    {
+      "path": "sql/fdd/postgres/rules/pid_hunt_1.sql",
+      "sha256": "60257beecdf9451e199d6b4526992bc4a232ed2fb3b68e3255328049227a6c19",
+      "bytes": 6456
+    },
+    {
+      "path": "sql/fdd/postgres/rules/reset1_sat_oa_reset.sql",
+      "sha256": "7e3b2bc1541d387fdee03dc933228c2de8817b0978fe8ea97ae59742360fa2f8",
+      "bytes": 2929
+    },
+    {
+      "path": "sql/fdd/postgres/rules/sat_high_fault.sql",
+      "sha256": "9a0fcbbf309e60a239eadfa184b93618945a75069e8cbf3c357536ec14aa2adb",
+      "bytes": 4403
+    },
+    {
       "path": "sql/fdd/postgres/rules/sched1_unoccupied_runtime.sql",
-      "sha256": "4137f579b723024bd6edf3458cfe92e2f50e1a1f0338f75b6e73842e4266583c",
-      "bytes": 2190
+      "sha256": "787a04895af340a5e29a023f70364951ec052a36f6d3d36945d85784d30349f5",
+      "bytes": 3312
     },
     {
       "path": "sql/fdd/postgres/rules/sched247_always_on.sql",
-      "sha256": "b80a229fb8279d6b00d7f11ce76ebd1154218b9b47cd8658845732990959a613",
-      "bytes": 2382
+      "sha256": "609d0100a26a48f9a9bf67f2efbc77a9075acef162415987d530e7402cd4b9e4",
+      "bytes": 3488
     },
     {
       "path": "sql/fdd/postgres/rules/sv_flatline.sql",
-      "sha256": "f891966b97ced9d93a4571fbba5c2f45862f68ba46a3b65244b7c9402a4d6a24",
-      "bytes": 7854
+      "sha256": "7eb47081258363a0c619a1296186b3557f5f0078f3db59e668f6fa55351381ca",
+      "bytes": 8928
     },
     {
       "path": "sql/fdd/postgres/rules/sv_range.sql",
-      "sha256": "7963b2249ed727f058d72eb3e439d222fd2f1b9d71eea6ad24a9a02b756195dd",
-      "bytes": 4184
+      "sha256": "70b954d0fea01dae918253946fc7eabe05dd4eb91c690f47c3521cb80bca35d4",
+      "bytes": 5296
     },
     {
       "path": "sql/fdd/postgres/rules/sv_rate.sql",
-      "sha256": "723f40b0aac412f08a2164a7ab8e3769f36a5b57b27d0a858e38cc4f5b815d0a",
-      "bytes": 3405
+      "sha256": "94f82d9f6077a96cdacca2062992b4f48af8a9db19f0589584681deae0996151",
+      "bytes": 4498
     },
     {
       "path": "sql/fdd/postgres/rules/sv_spike.sql",
-      "sha256": "390096bc06c3ce3761cfed8dd1405081a03eb46ade240187d39a55d83a009739",
-      "bytes": 5115
+      "sha256": "2141854d090dd0fc44f5ccfadb7921365a911a84832b7b4ad3be9c18bff1d9d5",
+      "bytes": 6486
     },
     {
       "path": "sql/fdd/postgres/rules/sv_stale.sql",
-      "sha256": "ca6d2ee04a049059f03ab907094b9da0da4c86266e79c94e692988af6eb45522",
-      "bytes": 8083
+      "sha256": "560785542329d5810ac9633a8bddc0763130175269488e2bfbf3136416e3efc1",
+      "bytes": 9155
     },
     {
       "path": "sql/fdd/postgres/rules/trim1_duct_static.sql",
-      "sha256": "cf61af338caf237c71c9b23e6f33db78fea205b531705279e20bce621c469572",
-      "bytes": 1810
+      "sha256": "18048740b2d3e2dcfa16525f28ae339dda0aab3f29cd9e89f50ce0b05442ce93",
+      "bytes": 2939
     },
     {
       "path": "sql/fdd/postgres/rules/trim3_hwst.sql",
-      "sha256": "f68aec73b12a4a1c87b0ae6c79dccde9b11e93cefb291b3fb5020889c7fde025",
-      "bytes": 1982
+      "sha256": "442bf3051d5ab41756ea8631d6a017b76656a96eeae7c51c6cd1ca30b341241b",
+      "bytes": 3101
     },
     {
       "path": "sql/fdd/postgres/rules/trim4_chw_reset.sql",
-      "sha256": "5e22a3132382554788c16ed9c6addf2013bb41096811d2b0d453742ad4ee8ab6",
-      "bytes": 1997
+      "sha256": "db873b510640164bb5a9e55742495315ea28f381b605f144af9253a7a57efcd1",
+      "bytes": 3116
     },
     {
       "path": "sql/fdd/postgres/rules/util_interval_fault.sql",
-      "sha256": "ab132e54de8fd1b75cd794aba0f0ad078c470007513c2b2760a84942dc6634ae",
-      "bytes": 1098
+      "sha256": "d0a3edd01019befc8729bc1397a74200075eacbb01ce4aa3384e9147fa54a56d",
+      "bytes": 1515
     },
     {
       "path": "sql/fdd/postgres/rules/util_monthly_fault.sql",
-      "sha256": "27a399cec802fc24f389b9747cb57f095e0f435652a243a71d222605f5f7e1d5",
-      "bytes": 1292
+      "sha256": "0b108cd672ce71b22c1f80f3088f18e1695ecadae1a5a513b79bd5ebfa76b090",
+      "bytes": 1717
     },
     {
       "path": "sql/fdd/postgres/rules/vav1_comfort_fault.sql",
-      "sha256": "aae09874ca703ea9a2bbd51f3d47c7ff199ba5ea457bd485580b07b8c71e1cc5",
-      "bytes": 2400
+      "sha256": "1b98e37f5f423d1a3813a565cb2b488d69733a1d3e7814a3867793a11d534227",
+      "bytes": 3462
     },
     {
       "path": "sql/fdd/postgres/rules/vav2_night_setback.sql",
-      "sha256": "076991af4b57ca0734a9dc7dc90f86f7dd486178399f8b6718a4d99661bb3478",
-      "bytes": 1711
+      "sha256": "1d61f5b21e2ed54764d875e712e86fc26fcd9b233bbf5bfc8c8ca2286f66fa9f",
+      "bytes": 2840
     },
     {
       "path": "sql/fdd/postgres/rules/vav3_excessive_reheat.sql",
-      "sha256": "6474ddaca6c91e6320c28d3af5f8f63ae8b38d856894d2d5507a58ad80c66c5a",
-      "bytes": 1904
+      "sha256": "05880d8cea2ca70d1bba54ea3141a616d52e31c4e28e2f0ed37dbc4b1c692df2",
+      "bytes": 3026
     },
     {
       "path": "sql/fdd/postgres/rules/vav4_damper_full_open.sql",
-      "sha256": "fb2d73703ce4895378011a8cbd65e9c88835222228faa079807ee6e050d3b537",
-      "bytes": 2744
+      "sha256": "4a136b93e9c86ee20caffba32b1707efd5f05f51ec4aa864856b72ab7e53f6bf",
+      "bytes": 3936
     },
     {
       "path": "sql/fdd/postgres/rules/vav5_airflow_bias.sql",
-      "sha256": "a2bee79d93319dedac0c7b9f17da8a700d845edad176c3bf449d87084b5e4451",
-      "bytes": 1823
+      "sha256": "7a7509eb4ea6525d7523f5a693a4065c11cdec0be28874c109976e5f00ac351c",
+      "bytes": 2946
     },
     {
       "path": "sql/fdd/postgres/rules/vav6_reheat_free_cool.sql",
-      "sha256": "2d4cc4c50935dbf017a3cf9bfb6e00ca3a9050c9656049e9c093866477c731ab",
-      "bytes": 1603
+      "sha256": "3065ae6e503e241b59cd065bfe8d63803289545278e6daa4045326e73e2e2fa5",
+      "bytes": 2731
     },
     {
       "path": "sql/fdd/postgres/rules/vav7_min_airflow.sql",
-      "sha256": "74b6a378cad13023a717583ec257ee72ac59fd3961bb7d7b0a224865445fa422",
-      "bytes": 2925
+      "sha256": "650796cb1448aec01bac0828c28733523c2ced8c8653244799ccdd5026070a31",
+      "bytes": 4022
     },
     {
       "path": "sql/fdd/postgres/rules/vav_ahu_leave.sql",
-      "sha256": "f9a54ee1381d3f3f4ffbccd2f054c5db7f41a842318601dfa03270d4d3d6b6d3",
-      "bytes": 1797
+      "sha256": "f7bfbedd95a13fb0d683cb4a208fddf39948a5a0bfbf1f3989d7fd9877fd10a3",
+      "bytes": 2919
     },
     {
       "path": "sql/fdd/postgres/rules/vav_reheat.sql",
-      "sha256": "5c27f75bb0d55cb8e539749521671a1b157fb6cba4aafad798328f280cfdf09c",
-      "bytes": 1981
+      "sha256": "3861d61a5ed9140d562a297dc645c170f77eae2fa39f66686a29f620f84e3eb5",
+      "bytes": 3102
     },
     {
       "path": "sql/fdd/postgres/rules/vlv1_clg_valve_leak.sql",
-      "sha256": "aaf055ed39aee66d6c0db8a05e0bededbfeada2df066fdf14034caa519aab181",
-      "bytes": 1931
+      "sha256": "909379af5fe3ab18608ae51e02c8155242847643fbb71d9e8d6cebe3df729533",
+      "bytes": 3051
     },
     {
       "path": "sql/fdd/postgres/rules/wx1_oa_spike.sql",
-      "sha256": "a2dbf75cfadc7a7c253cc5bf9ae44dbc10f89c9b2286dd4f21f175ed1af55d56",
-      "bytes": 1418
+      "sha256": "1b9e3441ad3648b2b9539913ff1d0c1351d58708608d58f2dfeddd107b12a522",
+      "bytes": 2550
     },
     {
       "path": "sql/fdd/postgres/rules/zone_comfort_pct.sql",
-      "sha256": "65900e8ec91fc6cfa1a1bd8f992c2b688036bdab508f4c220a57566ef1698635",
-      "bytes": 392
+      "sha256": "03e5fd80b5cfad6fd5422cd53836d0dc2d8bf1a53eac9c0cab44de277a3f9b5f",
+      "bytes": 1001
     },
     {
       "path": "sql/fdd/postgres/postgres_helpers.sql",
@@ -447,8 +447,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/economizer_deltas.sql",
-      "sha256": "64dcfee4b807124d232836f6b95fd775016921fb4494ea5f57664394a6a7abf6",
-      "bytes": 1456
+      "sha256": "e704d0061af7d9ecab9716cc2ecfbc88f4efb8b179a6aa4263a1db0c98e0c035",
+      "bytes": 2120
     },
     {
       "path": "sql/analytics/postgres/queries/fuel_daily.sql",
@@ -457,8 +457,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/mechanical_cooling_oat_bins.sql",
-      "sha256": "e142946726d2833d9e9f349859d6efa823770ccbeee255e2f9b09d30bc61d096",
-      "bytes": 2136
+      "sha256": "22ccdc0818b6eb8b0c6d420a030ae7db68de845bdafe1b15d969df871dfd88e4",
+      "bytes": 2700
     },
     {
       "path": "sql/analytics/postgres/queries/metering_kwh.sql",
@@ -467,8 +467,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/motor_weekly_runtime.sql",
-      "sha256": "9e58389e7b7b75fbde22dcb83aa4adcb374e4d107b545e4ae51b1558795b8f58",
-      "bytes": 1691
+      "sha256": "66dc3c9bffdc1624799dd5ad7038ad6470a0a7703ec3ceb3569aed6f5bfd7aea",
+      "bytes": 3114
     },
     {
       "path": "sql/analytics/postgres/queries/mv_change_point_daily.sql",
@@ -527,23 +527,23 @@
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "1acae3100f1a5e8801a5c78300745f9f491f35b9328622a5a4be84887e38e058",
-      "bytes": 4166
+      "sha256": "1f47ce8fe9739ebd22aa4ad00bde3e8fc29477ae8fb7cc6fc9c8443df455f5a4",
+      "bytes": 4165
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",
-      "sha256": "60be05fcf8e14ed02bafd166cf6f244339707a06ddb934efc6866984dd9cb0e0",
-      "bytes": 1293
+      "sha256": "5bb71c5fe3a44f47c0022967f9e653298adc6b8c38305d939c15350e5a767afd",
+      "bytes": 1292
     },
     {
       "path": "sql/contract/metric_units.json",
-      "sha256": "af562baad55f8882516ff987649f860d70a98948e20297163ff3c9cdf01c63c9",
-      "bytes": 2831
+      "sha256": "70cdd282097265a20f7f93dafe8eb755184050ab3f7f9dd5b2df4a6b43b55ae4",
+      "bytes": 2830
     },
     {
       "path": "sql/contract/goldens/unit_vectors.json",
-      "sha256": "d8c8ac38e0b0269c6da21abca2b848ad37030cfa526b8f5638f0c02b6aa52429",
-      "bytes": 1398
+      "sha256": "4ab566bad752c1bd45e128a7f46216c216f59c0365b86a4cc7ac143d4a6b4029",
+      "bytes": 1397
     },
     {
       "path": "sql/contract/README.md",

@@ -734,6 +734,7 @@ export async function fetchCentralOverview(opts: {
   const econ = normalizeTipOverviewEnvelope(
     "economizer",
     await postEconomizer(body, { signal }),
+    { dtMinF: dtMin },
   );
   const bas = normalizeTipOverviewEnvelope(
     "bas-vs-web-oat",

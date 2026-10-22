@@ -81,7 +81,7 @@ export async function loadOverviewRcxPreset(
   };
   if (presetId in PLANT_FOR) {
     const raw = await postRuntime(body);
-    // Soft-OPEN P0-5: tip SQL emits plant_group=ahu|motor; Overview bars need air|boiler|chiller.
+    // Tip SQL emits plant_group=ahu|motor; Overview bars need air|boiler|chiller.
     const env = normalizeTipOverviewEnvelope("runtime", raw);
     const plants = weeklyPlantFigures(env.rows ?? []);
     const plant = plants.find((p) => p.plant_group === PLANT_FOR[presetId]);
@@ -96,14 +96,20 @@ export async function loadOverviewRcxPreset(
     };
   }
   if (presetId === "mech_cooling_oat_bins") {
-    const env = await postMechanicalCooling(body);
+    const env = normalizeTipOverviewEnvelope(
+      "mechanical-cooling",
+      await postMechanicalCooling(body),
+    );
     const { figure } = mechFigure(env.rows ?? []);
     return {
       figure,
       companion: null,
       env,
       tables: rcxPresetTables(presetId, env),
-      error: figure ? undefined : env.warnings?.[0],
+      error: figure
+        ? undefined
+        : env.warnings[0] ??
+          "No mechanical-cooling outdoor-air bins. Compressor or chiller status with outdoor air is required.",
     };
   }
   if (
@@ -111,7 +117,9 @@ export async function loadOverviewRcxPreset(
     presetId === "economizer_mat_resid" ||
     presetId === "economizer_temps_overlay"
   ) {
-    const env = await postEconomizer(body);
+    const env = normalizeTipOverviewEnvelope("economizer", await postEconomizer(body), {
+      dtMinF: body.dt_min_f,
+    });
     const points = env.points ?? [];
     if (presetId === "economizer_delta") {
       const figure = econDeltaScatter(points, 10);
@@ -120,7 +128,10 @@ export async function loadOverviewRcxPreset(
         companion: null,
         env,
         tables: rcxPresetTables(presetId, env),
-        error: figure ? undefined : env.warnings?.[0],
+        error: figure
+          ? undefined
+          : env.warnings[0] ??
+            "No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ 10°F, and a measured MAT are required.",
       };
     }
     if (presetId === "economizer_mat_resid") {
@@ -130,7 +141,10 @@ export async function loadOverviewRcxPreset(
         companion: null,
         env,
         tables: rcxPresetTables(presetId, env),
-        error: figure ? undefined : env.warnings?.[0],
+        error: figure
+          ? undefined
+          : env.warnings[0] ??
+            "No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ 10°F, and a measured MAT are required.",
       };
     }
     const overlay = econTempsOverlay(points, overlayEq ?? null);
@@ -139,11 +153,17 @@ export async function loadOverviewRcxPreset(
       companion: null,
       env,
       tables: rcxPresetTables(presetId, env),
-      error: overlay.figure ? undefined : env.warnings?.[0],
+      error: overlay.figure
+        ? undefined
+        : env.warnings[0] ??
+          "No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ 10°F, and a measured MAT are required.",
     };
   }
   if (presetId === "bas_vs_web_oat") {
-    const env = await postBasVsWebOat(body);
+    const env = normalizeTipOverviewEnvelope(
+      "bas-vs-web-oat",
+      await postBasVsWebOat(body),
+    );
     const overlay = basOverlay(env.points ?? [], 5);
     const hist = basHist(env.rows ?? []);
     return {
@@ -151,7 +171,10 @@ export async function loadOverviewRcxPreset(
       companion: hist,
       env,
       tables: rcxPresetTables(presetId, env),
-      error: overlay ? undefined : env.warnings?.[0],
+      error: overlay
+        ? undefined
+        : env.warnings[0] ??
+          "No coincident BAS and web outdoor-air samples for this site and window.",
     };
   }
   throw new Error(`Unknown Overview RCx preset ${presetId}`);
