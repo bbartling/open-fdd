@@ -41,6 +41,8 @@ mod routes;
 #[cfg(test)]
 mod rule_catalog_fixtures;
 #[cfg(test)]
+mod runtime_weekly_fixtures;
+#[cfg(test)]
 mod sat_pairing_fixtures;
 mod sql_anomaly;
 mod starter_seed;

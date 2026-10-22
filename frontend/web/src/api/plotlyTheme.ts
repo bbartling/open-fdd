@@ -18,9 +18,6 @@ export const RAINBOW_PALETTE: string[] = [
   "#dc2626", // red
 ];
 
-/** Bare-min occupied hours/week for the air-side weekly chart. */
-export const AIR_BARE_MIN_OCC_HOURS_WEEK = 60;
-
 export function rainbowColor(index: number): string {
   return RAINBOW_PALETTE[index % RAINBOW_PALETTE.length];
 }

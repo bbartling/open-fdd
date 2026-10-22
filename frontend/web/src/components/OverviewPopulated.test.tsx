@@ -6,6 +6,7 @@ import {
   clearOverviewSiteCacheForTests,
   detectedTimeZone,
 } from "./OverviewPopulated";
+import { getSessionConfig } from "../api/mappingApi";
 
 const emptyOverview = {
   ok: true,
@@ -217,6 +218,8 @@ describe("OverviewPopulated metric isolation", () => {
     clearOverviewSiteCacheForTests();
     fetchCentralOverview.mockClear();
     fetchCentralOverview.mockResolvedValue(emptyOverview);
+    vi.mocked(getSessionConfig).mockReset();
+    vi.mocked(getSessionConfig).mockResolvedValue({ ok: true, config: { params: {} } });
   });
 
   it("explains that weather is omitted from the equipment count", async () => {
@@ -511,5 +514,101 @@ describe("OverviewPopulated metric isolation", () => {
     });
     expect(screen.queryByTestId("overview-equipment-select")).toBeNull();
     expect(screen.queryByTestId("overview-inspect-eq")).toBeNull();
+  });
+
+  it("loads each site's saved schedule and ignores a global occupancy draft", async () => {
+    localStorage.setItem(
+      "openfdd.ui.occupancy_schedule.v2",
+      JSON.stringify({
+        tz: "Pacific/Honolulu",
+        week: {
+          Monday: { occupied: true, start: "00:00", end: "24:00" },
+          Tuesday: { occupied: true, start: "00:00", end: "24:00" },
+          Wednesday: { occupied: true, start: "00:00", end: "24:00" },
+          Thursday: { occupied: true, start: "00:00", end: "24:00" },
+          Friday: { occupied: true, start: "00:00", end: "24:00" },
+          Saturday: { occupied: true, start: "00:00", end: "24:00" },
+          Sunday: { occupied: true, start: "00:00", end: "24:00" },
+        },
+      }),
+    );
+    vi.mocked(getSessionConfig).mockImplementation(async (buildingId?: string) => {
+      if (buildingId === "SITE_B") {
+        return {
+          ok: true,
+          config: {
+            schema_version: "openfdd.session.v1",
+            occupancy_schedule: {
+              timezone: "America/Chicago",
+              nominal_occ_hours_week: 60,
+              days: {
+                mon: { occupied: true, start: "07:00", end: "17:00" },
+                tue: { occupied: true, start: "07:00", end: "17:00" },
+                wed: { occupied: true, start: "07:00", end: "17:00" },
+                thu: { occupied: true, start: "07:00", end: "17:00" },
+                fri: { occupied: true, start: "07:00", end: "17:00" },
+              },
+            },
+          },
+        };
+      }
+      return {
+        ok: true,
+        config: {
+          schema_version: "openfdd.session.v1",
+          occupancy_schedule: {
+            timezone: "America/Chicago",
+            nominal_occ_hours_week: 60,
+            days: {
+              mon: { occupied: true, start: "08:00", end: "16:00" },
+              tue: { occupied: true, start: "08:00", end: "16:00" },
+              wed: { occupied: true, start: "08:00", end: "16:00" },
+              thu: { occupied: true, start: "08:00", end: "16:00" },
+              fri: { occupied: false, start: "08:00", end: "16:00" },
+            },
+          },
+        },
+      };
+    });
+    const view = render(
+      <MemoryRouter>
+        <OverviewPopulated
+          buildingId="SITE_A"
+          equipmentId="AHU_1"
+          equipment={EQUIPMENT}
+          unitSystem="imperial"
+          onEquipmentChange={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("overview-bare-min").querySelector(".widget-metric__value")
+          ?.textContent,
+      ).toBe("32");
+    });
+    expect((screen.getByTestId("overview-timezone") as HTMLInputElement).value).toBe(
+      "America/Chicago",
+    );
+    view.rerender(
+      <MemoryRouter>
+        <OverviewPopulated
+          buildingId="SITE_B"
+          equipmentId="AHU_1"
+          equipment={EQUIPMENT}
+          unitSystem="imperial"
+          onEquipmentChange={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("overview-bare-min").querySelector(".widget-metric__value")
+          ?.textContent,
+      ).toBe("50");
+      expect((screen.getByTestId("overview-timezone") as HTMLInputElement).value).toBe(
+        "America/Chicago",
+      );
+    });
   });
 });

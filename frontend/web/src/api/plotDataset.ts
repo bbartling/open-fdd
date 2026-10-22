@@ -34,6 +34,14 @@ export type PlotlyFigure = {
     max_points?: number;
     point_count?: number;
     provenance?: string;
+    /** Aggregate weekly cells. Excludes the occupancy reference line and OAT overlay. */
+    weekly_observations?: number;
+    /** Historian samples that formed the weekly cells, when every row reported one. */
+    sample_count?: number;
+    /** Occupied-hours reference drawn on the air-side chart. */
+    schedule_hours?: number;
+    schedule_timezone?: string;
+    schedule_source?: "session" | "default";
   };
 };
 

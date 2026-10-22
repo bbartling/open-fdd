@@ -16,7 +16,8 @@ import {
   weeklyPlantFigures,
 } from "./centralOverview";
 import { analyticsWindowFromSampling } from "../lib/overviewMetrics";
-import { getPackageMapping } from "./mappingApi";
+import { getPackageMapping, getSessionConfig } from "./mappingApi";
+import { scheduleReferenceFromSession } from "./occupancySchedule";
 import type { PlotlyFigure } from "./plotDataset";
 import { rcxPresetTables, type RcxPresetTable } from "./rcxPresetTables";
 import type { UnitSystem } from "./roleUnits";
@@ -90,9 +91,19 @@ export async function loadOverviewRcxPreset(
   };
   if (presetId in PLANT_FOR) {
     const raw = await postRuntime(body, { signal });
+    const session = await getSessionConfig(buildingId).catch((err: unknown) => {
+      if (isAbortError(err)) throw err;
+      return null;
+    });
+    const schedule = scheduleReferenceFromSession(session?.config, "UTC");
     // Tip SQL emits plant_group=ahu|motor; Overview bars need air|boiler|chiller.
     const env = normalizeTipOverviewEnvelope("runtime", raw);
-    const plants = weeklyPlantFigures(env.rows ?? [], unitSystem);
+    const plants = weeklyPlantFigures(env.rows ?? [], {
+      schedule,
+      windowStart: window.start ?? null,
+      windowEnd: window.end ?? null,
+      unitSystem,
+    });
     const plant = plants.find((p) => p.plant_group === PLANT_FOR[presetId]);
     return {
       figure: plant?.figure ?? null,
