@@ -101,7 +101,8 @@ function presetValues(): string[] {
 
 describe("RcxPage vibe19 catalog", () => {
   beforeEach(() => {
-    vi.mocked(listRcxPresets).mockClear();
+    vi.mocked(listRcxPresets).mockReset();
+    vi.mocked(listRcxPresets).mockImplementation(async () => ALL_PRESETS);
     vi.mocked(postRcxPreset).mockClear();
   });
 
@@ -313,7 +314,7 @@ describe("RcxPage vibe19 catalog", () => {
   });
 
   it("reports weekly observations and the saved schedule reference together", async () => {
-    vi.mocked(listRcxPresets).mockResolvedValueOnce([
+    vi.mocked(listRcxPresets).mockResolvedValue([
       {
         id: "ahu_motor_weekly",
         title: "Weekly runtime",
@@ -391,10 +392,20 @@ describe("RcxPage vibe19 catalog", () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId("rcx-family").querySelector("select")).toBeTruthy();
+      const family = screen.getByTestId("rcx-family").querySelector("select");
+      const values = [...(family?.options ?? [])].map((option) => option.value);
+      expect(values).toContain("AHU / air");
     });
     fireEvent.change(screen.getByTestId("rcx-family").querySelector("select")!, {
       target: { value: "AHU / air" },
+    });
+    await waitFor(() => {
+      const preset = screen.getByTestId("rcx-preset").querySelector("select");
+      const values = [...(preset?.options ?? [])].map((option) => option.value);
+      expect(values).toContain("ahu_motor_weekly");
+    });
+    fireEvent.change(screen.getByTestId("rcx-preset").querySelector("select")!, {
+      target: { value: "ahu_motor_weekly" },
     });
     await waitFor(() => {
       expect(screen.getByTestId("rcx-provenance").textContent).toContain(
