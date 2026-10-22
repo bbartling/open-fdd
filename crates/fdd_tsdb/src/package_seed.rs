@@ -426,7 +426,135 @@ async fn upsert_roles(
     Ok(())
 }
 
-/// Full package replace: validate → stage → atomic promote. Last-good survives failure.
+/// Debug and test builds can abort after this package's sample delete, inside
+/// the open transaction, so the delete and the equipment rows roll back together.
+/// Release binaries compile the hook out.
+fn abort_after_sample_delete() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        std::env::var("OPENFDD_PACKAGE_SEED_FAIL_AFTER_DELETE")
+            .ok()
+            .is_some_and(|value| value == "1")
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
+}
+
+async fn discard_stage(tsdb: &Tsdb, import_id: uuid::Uuid) {
+    if let Err(err) = sqlx::query("DELETE FROM sample_import_stage WHERE import_id = $1")
+        .bind(import_id)
+        .execute(tsdb.pool())
+        .await
+    {
+        tracing::warn!(%err, %import_id, "package seed could not discard its stage rows");
+    }
+}
+
+async fn ensure_site_building_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    building_id: &str,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO site(site_id, dis, timezone, enabled)
+        VALUES ($1, $1, 'UTC', true)
+        ON CONFLICT (site_id) DO NOTHING
+        "#,
+    )
+    .bind(building_id)
+    .execute(&mut **tx)
+    .await
+    .context("ensure site")?;
+    sqlx::query(
+        r#"
+        INSERT INTO building(building_id, site_id, dis, timezone)
+        VALUES ($1, $1, $1, 'UTC')
+        ON CONFLICT (building_id) DO NOTHING
+        "#,
+    )
+    .bind(building_id)
+    .execute(&mut **tx)
+    .await
+    .context("ensure building")?;
+    Ok(())
+}
+
+async fn upsert_equipment_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    building_id: &str,
+    equipment_id: &str,
+    equip_type: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO equipment(building_id, equipment_id, equip_type)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (building_id, equipment_id) DO UPDATE
+          SET equip_type = COALESCE(EXCLUDED.equip_type, equipment.equip_type)
+        "#,
+    )
+    .bind(building_id)
+    .bind(equipment_id)
+    .bind(equip_type)
+    .execute(&mut **tx)
+    .await
+    .context("upsert equipment")?;
+    Ok(())
+}
+
+async fn upsert_roles_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    building_id: &str,
+    equipment_id: &str,
+    roles_seen: &HashSet<String>,
+) -> Result<()> {
+    for role in roles_seen {
+        let openfdd_key = format!("{equipment_id}.{role}");
+        sqlx::query(
+            r#"
+            INSERT INTO role_map(building_id, equipment_id, openfdd_key, role)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (building_id, equipment_id, openfdd_key) DO UPDATE
+              SET role = EXCLUDED.role
+            "#,
+        )
+        .bind(building_id)
+        .bind(equipment_id)
+        .bind(&openfdd_key)
+        .bind(role)
+        .execute(&mut **tx)
+        .await
+        .context("role_map")?;
+        sqlx::query(
+            r#"
+            INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, equipment_id)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (site_id, openfdd_key) DO UPDATE
+              SET haystack_id = EXCLUDED.haystack_id,
+                  role = EXCLUDED.role,
+                  equipment_id = EXCLUDED.equipment_id
+            "#,
+        )
+        .bind(building_id)
+        .bind(&openfdd_key)
+        .bind(&openfdd_key)
+        .bind(role)
+        .bind(equipment_id)
+        .execute(&mut **tx)
+        .await
+        .context("point_map")?;
+    }
+    Ok(())
+}
+
+/// Full package replace: validate → stage → one transaction for this package.
+///
+/// Scratch rows live in `sample_import_stage`. Equipment, roles, and samples
+/// for this building commit together. A failure rolls that transaction back
+/// and discards the stage rows. Other buildings are not deleted, and the
+/// database is not re-initialized.
 pub async fn seed_package_dir(
     tsdb: &Tsdb,
     package_root: &Path,
@@ -441,23 +569,14 @@ pub async fn seed_package_dir(
         );
     }
 
-    tsdb.ensure_site_building(building_id).await?;
     ensure_stage_table(tsdb).await?;
     let import_id = uuid::Uuid::new_v4();
-
-    // Clean any leftover rows for this import id (shouldn't exist) then stage.
-    sqlx::query("DELETE FROM sample_import_stage WHERE import_id = $1")
-        .bind(import_id)
-        .execute(tsdb.pool())
-        .await
-        .ok();
+    discard_stage(tsdb, import_id).await;
 
     let mut staged = 0u64;
     let mut role_sets: Vec<(String, Option<String>, HashSet<String>)> = Vec::new();
     for plan in &plans {
-        tsdb.upsert_equipment(building_id, &plan.equipment_id, plan.equip_type.as_deref())
-            .await?;
-        let (n, roles) = stage_one_csv(
+        let staged_one = stage_one_csv(
             tsdb,
             import_id,
             building_id,
@@ -465,8 +584,16 @@ pub async fn seed_package_dir(
             &plan.csv_path,
             &plan.col_to_role,
         )
-        .await
-        .with_context(|| format!("stage {} ({})", plan.equipment_id, plan.csv_path.display()))?;
+        .await;
+        let (n, roles) = match staged_one {
+            Ok(pair) => pair,
+            Err(err) => {
+                discard_stage(tsdb, import_id).await;
+                return Err(err).with_context(|| {
+                    format!("stage {} ({})", plan.equipment_id, plan.csv_path.display())
+                });
+            }
+        };
         tracing::info!(
             equipment_id = %plan.equipment_id,
             n,
@@ -478,21 +605,48 @@ pub async fn seed_package_dir(
     }
 
     if staged == 0 {
-        sqlx::query("DELETE FROM sample_import_stage WHERE import_id = $1")
-            .bind(import_id)
-            .execute(tsdb.pool())
-            .await
-            .ok();
+        discard_stage(tsdb, import_id).await;
         bail!("staged zero samples for {building_id}; preserving last-good Timescale history");
     }
 
+    let committed = promote_staged_package(tsdb, import_id, building_id, &plans, &role_sets).await;
+    if committed.is_err() {
+        discard_stage(tsdb, import_id).await;
+    }
+    committed
+}
+
+async fn promote_staged_package(
+    tsdb: &Tsdb,
+    import_id: uuid::Uuid,
+    building_id: &str,
+    plans: &[SeedPlan],
+    role_sets: &[(String, Option<String>, HashSet<String>)],
+) -> Result<u64> {
     let mut tx = tsdb.pool().begin().await.context("begin promote txn")?;
+    ensure_site_building_tx(&mut tx, building_id).await?;
+    for plan in plans {
+        upsert_equipment_tx(
+            &mut tx,
+            building_id,
+            &plan.equipment_id,
+            plan.equip_type.as_deref(),
+        )
+        .await?;
+    }
     let deleted = sqlx::query("DELETE FROM sample WHERE site_id = $1")
         .bind(building_id)
         .execute(&mut *tx)
         .await
         .context("delete prior samples in promote txn")?
         .rows_affected();
+    if abort_after_sample_delete() {
+        // Dropping `tx` rolls back this package's equipment rows and the
+        // sample delete. The caller discards stage rows after the error.
+        bail!(
+            "package seed aborted after partial writes for {building_id}; transaction rolled back"
+        );
+    }
     let inserted = sqlx::query(
         r#"
         INSERT INTO sample (ts, site_id, openfdd_key, haystack_id, val)
@@ -510,6 +664,9 @@ pub async fn seed_package_dir(
     .await
     .context("promote stage → sample")?
     .rows_affected();
+    for (equipment_id, _et, roles) in role_sets {
+        upsert_roles_tx(&mut tx, building_id, equipment_id, roles).await?;
+    }
     sqlx::query("DELETE FROM sample_import_stage WHERE import_id = $1")
         .bind(import_id)
         .execute(&mut *tx)
@@ -520,13 +677,8 @@ pub async fn seed_package_dir(
         %building_id,
         deleted,
         inserted,
-        staged,
         "Wave-X package seed: atomic promote complete"
     );
-
-    for (equipment_id, _et, roles) in &role_sets {
-        upsert_roles(tsdb, building_id, equipment_id, roles).await?;
-    }
     Ok(inserted)
 }
 

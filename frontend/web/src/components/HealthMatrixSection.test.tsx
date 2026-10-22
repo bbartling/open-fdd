@@ -436,4 +436,80 @@ describe("DataTable row keys", () => {
     ).toBe(false);
     spy.mockRestore();
   });
+
+  it("keeps no-equipment, unsupported, no-history, and error distinct", async () => {
+    const base = emptyEnvelope();
+    const props = {
+      family: "vav",
+      title: "VAV zone health",
+      buildingId: "B1",
+      refreshToken: 0,
+      flagColumns: [{ key: "poor_zone_performance", ruleId: "ZONE-COMFORT" }],
+      renderEmptyTable: true,
+    };
+    const view = render(
+      <HealthMatrixSection
+        {...props}
+        fetchHealth={async () => ({
+          ...base,
+          coverage: { availability: "no_equipment", message: "No VAV equipment in this data model." },
+        })}
+      />,
+    );
+    expect(await screen.findByTestId("vav-health-empty")).toBeTruthy();
+    expect(screen.queryByTestId("vav-health-error")).toBeNull();
+    expect(screen.queryByTestId("vav-health-unsupported")).toBeNull();
+    expect(screen.queryByTestId("vav-health-no-history")).toBeNull();
+    expect(screen.getByTestId("vav-health-table")).toBeTruthy();
+
+    view.rerender(
+      <HealthMatrixSection
+        {...props}
+        refreshToken={1}
+        fetchHealth={async () => ({
+          ...base,
+          coverage: {
+            availability: "unsupported",
+            message: "VAV equipment is present, but no zone temperature role is mapped.",
+          },
+        })}
+      />,
+    );
+    expect(await screen.findByTestId("vav-health-unsupported")).toBeTruthy();
+    expect(screen.queryByTestId("vav-health-empty")).toBeNull();
+    expect(screen.queryByTestId("vav-health-table")).toBeNull();
+    expect(screen.queryByText(/No VAV equipment/)).toBeNull();
+
+    view.rerender(
+      <HealthMatrixSection
+        {...props}
+        refreshToken={2}
+        fetchHealth={async () => ({
+          ...base,
+          coverage: {
+            availability: "no_history",
+            message: "VAV zone temperature is mapped, but this window has no samples.",
+          },
+        })}
+      />,
+    );
+    expect(await screen.findByTestId("vav-health-no-history")).toBeTruthy();
+    expect(screen.queryByTestId("vav-health-empty")).toBeNull();
+    expect(screen.queryByText(/No VAV equipment/)).toBeNull();
+
+    view.rerender(
+      <HealthMatrixSection
+        {...props}
+        refreshToken={3}
+        fetchHealth={async () => ({
+          ...base,
+          coverage: { availability: "error", message: "vav-health query failed" },
+        })}
+      />,
+    );
+    expect(await screen.findByTestId("vav-health-error")).toBeTruthy();
+    expect(screen.queryByTestId("vav-health-empty")).toBeNull();
+    expect(screen.queryByTestId("vav-health-table")).toBeNull();
+    expect(screen.queryByText(/No VAV equipment/)).toBeNull();
+  });
 });

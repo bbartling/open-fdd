@@ -73,6 +73,20 @@ export type BindingsView =
 const SECRET_TEXT = /client_secret|authorization|bearer\s|access_token|refresh_token|token=/i;
 const SECRET_QUERY_KEY = /secret|token|authorization|password/i;
 
+const ARCHIVED_FIELD_DRIVERS = new Set([
+  "mqtt",
+  "mqtts",
+  "bacnet",
+  "modbus",
+  "haystack",
+  "fieldbus",
+]);
+
+/** Archived OT drivers are not product ingest. NF and CSV stay visible. */
+export function isArchivedFieldDriver(kind: string | null | undefined): boolean {
+  return ARCHIVED_FIELD_DRIVERS.has((kind ?? "").trim().toLowerCase());
+}
+
 export function providerLabel(kind: string | null | undefined): string {
   const k = (kind ?? "").trim().toLowerCase();
   if (k === "nf" || k === "normal" || k === "normal_framework") return "NF";

@@ -38,6 +38,7 @@ import {
   cookbookKind,
   cookbookRuleCount,
   datasetTimeSpan,
+  equipmentTypeCountLabel,
   formatOverviewTs,
   isWeatherEquipment,
   spanHoursBetween,
@@ -270,7 +271,8 @@ export function OverviewPopulated({
           }));
         })();
     for (const row of raw) {
-      map.set(row.equipment_type, row.count);
+      const label = equipmentTypeCountLabel(row.equipment_type);
+      map.set(label, (map.get(label) ?? 0) + row.count);
     }
     return [...map.entries()]
       .map(([equipment_type, count]) => ({ equipment_type, count }))

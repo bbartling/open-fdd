@@ -13,6 +13,7 @@ import {
 import {
   credentialRefLabel,
   interpretWindowLedger,
+  isArchivedFieldDriver,
   mergeProviderRows,
   providerLabel,
   providerStatusView,
@@ -74,8 +75,12 @@ export function ProvidersPanel() {
         fetchProviderSites().catch(() => null),
       ]);
       if (ticket !== requestGen.current) return;
-      const healthSites: ProviderSiteHealth[] = health.sites ?? sites?.health ?? [];
-      const configs: ProviderSiteConfig[] = sites?.sites ?? [];
+      const healthSites: ProviderSiteHealth[] = (health.sites ?? sites?.health ?? []).filter(
+        (site) => !isArchivedFieldDriver(site.provider ?? site.health?.kind),
+      );
+      const configs: ProviderSiteConfig[] = (sites?.sites ?? []).filter(
+        (site) => !isArchivedFieldDriver(site.provider),
+      );
       setPollEnabled(
         typeof health.poll_enabled === "boolean"
           ? health.poll_enabled
@@ -84,7 +89,9 @@ export function ProvidersPanel() {
             : null,
       );
       setRows(mergeProviderRows(healthSites, configs));
-      setRegistry(health.registry ?? []);
+      setRegistry(
+        (health.registry ?? []).filter((entry) => !isArchivedFieldDriver(entry.kind)),
+      );
       setCoverageSites(
         healthSites.map((site) => ({
           key: `${site.building_id ?? "site"}-${site.provider ?? "provider"}`,
@@ -181,6 +188,9 @@ export function ProvidersPanel() {
       <p className="muted">
         Portal connections for this account. Green means the last poll reported success with no
         consecutive errors. It does not mean a completed hour was committed without gaps.
+      </p>
+      <p data-testid="providers-ingest">
+        Ingest is the NF portal and CSV packages. Archived field drivers are not available.
       </p>
       <p data-testid="providers-poll-enabled">
         Poll loop:{" "}

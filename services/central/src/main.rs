@@ -29,6 +29,8 @@ mod live_historian;
 mod logging;
 mod models;
 mod openapi;
+#[cfg(test)]
+mod package_preflight_fixtures;
 mod providers;
 #[cfg(test)]
 mod rcx_row_fixtures;
