@@ -31,6 +31,8 @@ mod logging;
 mod metering_scope_fixtures;
 mod models;
 mod openapi;
+#[cfg(test)]
+mod package_preflight_fixtures;
 mod providers;
 #[cfg(test)]
 mod rcx_row_fixtures;

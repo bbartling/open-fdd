@@ -21,7 +21,7 @@ function healthRequest(
     : { building_id: buildingId };
 }
 
-/** MQTT and CSV sites share the same Overview health-matrix chrome (empty shells when no equip). */
+/** Overview health matrices for CSV packages and the NF portal. */
 export function PlantHealthSections({
   buildingId,
   refreshToken,
@@ -309,7 +309,7 @@ export function PlantHealthSections({
         fetchHealth={fetchZoneOther}
         renderEmptyTable
         pendingFlags={pendingFlags}
-        emptyMessage="No Zone Other equipment in this data model — waiting MQTT or package stamp zone_other."
+        emptyMessage="No Zone Other equipment in this data model. CSV packages and the NF portal stamp zone_other when that equipment is present."
         flagColumns={[
           {
             key: "zone_comfort",

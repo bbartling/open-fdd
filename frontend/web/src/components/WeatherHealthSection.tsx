@@ -52,7 +52,9 @@ export function WeatherHealthSection({
         if (!families.hasWeather) {
           if (!cancelled) {
             setRows([]);
-            setNote("No weather equipment in this data model — empty shell (MQTT=CSV chrome).");
+            setNote(
+              "No weather equipment in this data model. CSV packages and the NF portal include weather when it is mapped.",
+            );
             setLoading(false);
           }
           return;
