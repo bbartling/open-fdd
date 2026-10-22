@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router";
 import { HomePage } from "./HomePage";
 
 vi.mock("../api/client", () => ({
@@ -190,6 +190,19 @@ import { apiFetch } from "../api/client";
 import { listPackageBuildings } from "../api/mappingApi";
 import { listFddEquipment } from "../api/analyticsApi";
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="loc">{location.search}</span>;
+}
+
 describe("HomePage overview", () => {
   beforeEach(() => {
     sessionStorage.clear();
@@ -245,4 +258,61 @@ describe("HomePage overview", () => {
     expect(listPackageBuildings).toHaveBeenCalled();
     expect(listFddEquipment).toHaveBeenCalled();
   });
+
+  it("commits only the latest site when a previous inventory response arrives late", async () => {
+    const lists = new Map<
+      string,
+      ReturnType<typeof deferred<Awaited<ReturnType<typeof listFddEquipment>>>>
+    >();
+    vi.mocked(listPackageBuildings).mockResolvedValue(["SITE_A", "SITE_B"]);
+    vi.mocked(listFddEquipment).mockImplementation(async (site?: string) => {
+      const slot = deferred<Awaited<ReturnType<typeof listFddEquipment>>>();
+      lists.set(String(site), slot);
+      return slot.promise;
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/?site=SITE_A&eq=EQ_A"]}>
+        <LocationProbe />
+        <HomePage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(lists.has("SITE_A")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar-active-site")).toBeTruthy();
+    });
+    fireEvent.change(screen.getByTestId("sidebar-active-site"), {
+      target: { value: "SITE_B" },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("loc").textContent).toContain("site=SITE_B");
+    });
+    expect(screen.getByTestId("loc").textContent ?? "").not.toContain("EQ_A");
+    await waitFor(() => {
+      expect(lists.has("SITE_B")).toBe(true);
+    });
+    lists.get("SITE_B")!.resolve([
+      { equipment_id: "EQ_B", equipment_type: "VAV" },
+    ]);
+    await waitFor(() => {
+      expect(deviceTypeCount("VAV")).toBe("1");
+    });
+    lists.get("SITE_A")!.resolve([
+      { equipment_id: "EQ_A", equipment_type: "AHU" },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(deviceTypeCount("VAV")).toBe("1");
+    expect(deviceTypeCount("AHU")).toBe("0");
+    expect(screen.getByTestId("loc").textContent ?? "").not.toContain("EQ_A");
+    expect(screen.getByTestId("loc").textContent).toContain("EQ_B");
+  });
 });
+
+function deviceTypeCount(type: string): string {
+  const table = screen.getByTestId("overview-devices-table");
+  const rows = [...table.querySelectorAll("tbody tr")];
+  const row = rows.find((tr) => tr.querySelector("td")?.textContent === type);
+  return row?.querySelectorAll("td")[1]?.textContent ?? "";
+}

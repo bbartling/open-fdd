@@ -1,6 +1,10 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
+
+vi.mock("../api/sessionsApi", () => ({
+  leaveBuildingSession: vi.fn(),
+}));
 import {
   buildSessionSearch,
   hrefWithSession,
@@ -98,6 +102,46 @@ describe("useSessionQuery deep-link / back", () => {
     expect(screen.getByTestId("job").textContent).toBe("seed");
     fireEvent.click(screen.getByTestId("set-job"));
     expect(screen.getByTestId("job").textContent).toBe("job-9");
+  });
+
+  it("clears equipment when the active site changes", () => {
+    function SiteProbe() {
+      const { query, setQuery } = useSessionQuery();
+      return (
+        <div>
+          <span data-testid="site">{query.siteId ?? ""}</span>
+          <span data-testid="eq">{query.equipment ?? ""}</span>
+          <button
+            type="button"
+            data-testid="switch-site"
+            onClick={() => setQuery({ siteId: "SITE_B" }, true)}
+          >
+            switch
+          </button>
+          <button
+            type="button"
+            data-testid="switch-keep"
+            onClick={() => setQuery({ siteId: "SITE_C", equipment: "SHARED" }, true)}
+          >
+            keep
+          </button>
+        </div>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/inspect?site=SITE_A&eq=EQ_A"]}>
+        <Routes>
+          <Route path="/inspect" element={<SiteProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("eq").textContent).toBe("EQ_A");
+    fireEvent.click(screen.getByTestId("switch-site"));
+    expect(screen.getByTestId("site").textContent).toBe("SITE_B");
+    expect(screen.getByTestId("eq").textContent).toBe("");
+    fireEvent.click(screen.getByTestId("switch-keep"));
+    expect(screen.getByTestId("site").textContent).toBe("SITE_C");
+    expect(screen.getByTestId("eq").textContent).toBe("SHARED");
   });
 
   it("survives navigation to a deep-linked jobs URL", () => {
