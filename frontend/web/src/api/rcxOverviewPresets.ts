@@ -19,6 +19,7 @@ import { analyticsWindowFromSampling } from "../lib/overviewMetrics";
 import { getPackageMapping } from "./mappingApi";
 import type { PlotlyFigure } from "./plotDataset";
 import { rcxPresetTables, type RcxPresetTable } from "./rcxPresetTables";
+import type { UnitSystem } from "./roleUnits";
 import { normalizeTipOverviewEnvelope } from "./tipAnalyticsNormalize";
 
 export const OVERVIEW_RCX_PRESET_IDS = [
@@ -63,6 +64,7 @@ export async function loadOverviewRcxPreset(
   presetId: string,
   overlayEq?: string | null,
   refresh?: boolean,
+  unitSystem: UnitSystem = "imperial",
 ): Promise<{
   figure: PlotlyFigure | null;
   companion: PlotlyFigure | null;
@@ -83,7 +85,7 @@ export async function loadOverviewRcxPreset(
     const raw = await postRuntime(body);
     // Tip SQL emits plant_group=ahu|motor; Overview bars need air|boiler|chiller.
     const env = normalizeTipOverviewEnvelope("runtime", raw);
-    const plants = weeklyPlantFigures(env.rows ?? []);
+    const plants = weeklyPlantFigures(env.rows ?? [], unitSystem);
     const plant = plants.find((p) => p.plant_group === PLANT_FOR[presetId]);
     return {
       figure: plant?.figure ?? null,
@@ -100,7 +102,7 @@ export async function loadOverviewRcxPreset(
       "mechanical-cooling",
       await postMechanicalCooling(body),
     );
-    const { figure } = mechFigure(env.rows ?? []);
+    const { figure } = mechFigure(env.rows ?? [], unitSystem);
     return {
       figure,
       companion: null,
@@ -122,7 +124,7 @@ export async function loadOverviewRcxPreset(
     });
     const points = env.points ?? [];
     if (presetId === "economizer_delta") {
-      const figure = econDeltaScatter(points, 10);
+      const figure = econDeltaScatter(points, 10, unitSystem);
       return {
         figure,
         companion: null,
@@ -135,7 +137,7 @@ export async function loadOverviewRcxPreset(
       };
     }
     if (presetId === "economizer_mat_resid") {
-      const figure = econMatResidual(points);
+      const figure = econMatResidual(points, unitSystem);
       return {
         figure,
         companion: null,
@@ -147,7 +149,7 @@ export async function loadOverviewRcxPreset(
             "No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ 10°F, and a measured MAT are required.",
       };
     }
-    const overlay = econTempsOverlay(points, overlayEq ?? null);
+    const overlay = econTempsOverlay(points, overlayEq ?? null, unitSystem);
     return {
       figure: overlay.figure,
       companion: null,
@@ -164,8 +166,8 @@ export async function loadOverviewRcxPreset(
       "bas-vs-web-oat",
       await postBasVsWebOat(body),
     );
-    const overlay = basOverlay(env.points ?? [], 5);
-    const hist = basHist(env.rows ?? []);
+    const overlay = basOverlay(env.points ?? [], 5, unitSystem);
+    const hist = basHist(env.rows ?? [], unitSystem);
     return {
       figure: overlay,
       companion: hist,

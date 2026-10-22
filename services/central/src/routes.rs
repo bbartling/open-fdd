@@ -6569,12 +6569,14 @@ async fn analytics_inspect(
                 })
             });
             let max_points = req.query.max_points.unwrap_or(2000);
+            let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
             match analytics::historian::inspect_from_history(
                 req.query.building_id.as_deref(),
                 eq,
                 columns.as_deref(),
                 max_points,
                 req.read_tenant_id.as_deref(),
+                &scope,
             )
             .await
             {
@@ -6720,6 +6722,7 @@ async fn analytics_rcx_preset(
                 .to_string();
             let building_id = req.query.building_id.clone();
             let max_points = req.query.max_points.unwrap_or(8000);
+            let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
             let action_id = actions::start_action(
                 "analytics_rcx",
                 &format!(
@@ -6745,6 +6748,7 @@ async fn analytics_rcx_preset(
                 building_id.as_deref(),
                 &preset_id,
                 max_points,
+                &scope,
             )
             .await
             {

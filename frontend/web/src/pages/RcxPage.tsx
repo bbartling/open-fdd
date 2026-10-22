@@ -31,7 +31,11 @@ import {
   vavHealthDonut,
   vavHealthWorstBars,
 } from "../api/vibeCharts";
-import { resolveRoleUnit } from "../api/roleUnits";
+import {
+  displayUnitLabel,
+  resolveRoleUnit,
+  type UnitSystem,
+} from "../api/roleUnits";
 import type { PlotlyFigure } from "../api/plotDataset";
 import {
   isOverviewRcxPreset,
@@ -49,18 +53,44 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function rcxYTitle(roleCol: string | undefined, fallback: string): string {
+const UNITS_KEY = "openfdd.ui.unit_system";
+
+function readUnitSystem(): UnitSystem {
+  return localStorage.getItem(UNITS_KEY) === "metric" ? "metric" : "imperial";
+}
+
+function rcxYTitle(
+  roleCol: string | undefined,
+  fallback: string,
+  unitSystem: UnitSystem,
+): string {
   const role = (roleCol ?? "").trim();
   if (!role) return fallback;
-  const unit = resolveRoleUnit(role);
+  const unit = resolveRoleUnit(role, unitSystem);
   return unit || role || fallback;
 }
 
-function rcxScatterXTitle(coverage: Record<string, unknown> | undefined): string {
-  if (coverage?.prefer_wetbulb === true) return "Web wet-bulb °F";
-  const oat = String(coverage?.oat_column ?? "");
-  if (oat.includes("wb") || oat.includes("wet")) return "Web wet-bulb °F";
-  return "Web dry-bulb °F";
+function scatterXQuantity(
+  coverage: Record<string, unknown> | undefined,
+): string {
+  const point = coverage?.x_point;
+  if (point && typeof point === "object") {
+    const quantity = (point as Record<string, unknown>).quantity;
+    if (typeof quantity === "string" && quantity.trim()) return quantity.trim();
+  }
+  const direct = coverage?.x_quantity;
+  return typeof direct === "string" ? direct.trim() : "";
+}
+
+function rcxScatterXTitle(
+  coverage: Record<string, unknown> | undefined,
+  unitSystem: UnitSystem,
+): string {
+  const unit = displayUnitLabel("°F", unitSystem, "temperature");
+  if (scatterXQuantity(coverage) === "wet_bulb_temperature") {
+    return `Web wet-bulb ${unit}`;
+  }
+  return `Web dry-bulb ${unit}`;
 }
 
 function pointsLookLikeTimeseries(
@@ -117,6 +147,17 @@ export function RcxPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>(readUnitSystem);
+
+  useEffect(() => {
+    const onUnits = (event: Event) => {
+      const detail = (event as CustomEvent<UnitSystem>).detail;
+      if (detail === "metric" || detail === "imperial") setUnitSystem(detail);
+    };
+    window.addEventListener("openfdd:unit-system-changed", onUnits);
+    return () =>
+      window.removeEventListener("openfdd:unit-system-changed", onUnits);
+  }, []);
 
   useEffect(() => {
     if (!buildingId) {
@@ -268,6 +309,7 @@ export function RcxPage() {
           presetId,
           undefined,
           opts?.refresh,
+          unitSystem,
         );
         setEnv(loaded.env);
         setFigure(loaded.figure);
@@ -341,17 +383,22 @@ export function RcxPage() {
       }
       let fig: PlotlyFigure | null = null;
       const roleCol = String(res.coverage?.role_col ?? res.coverage?.y_col ?? "");
-      const unitTitle = rcxYTitle(roleCol, "value");
+      const unitTitle = rcxYTitle(roleCol, "value", unitSystem);
       if (kind === "scatter_oat") {
         fig = oatScatter(points, {
           title,
           yTitle: unitTitle,
-          xTitle: rcxScatterXTitle(res.coverage as Record<string, unknown>),
+          xTitle: rcxScatterXTitle(
+            res.coverage as Record<string, unknown>,
+            unitSystem,
+          ),
+          unitSystem,
         });
       } else if (kind === "box") {
         fig = multiEquipmentBox(points, {
           title,
           yTitle: unitTitle,
+          unitSystem,
         });
       } else if (kind === "ranking") {
         fig = rankingBars(points, {
@@ -368,6 +415,7 @@ export function RcxPage() {
             multiEquipmentTimeseries(points, {
               title: "Worst zones — space temp",
               yTitle: unitTitle || "zone_t",
+              unitSystem,
             }),
           );
         } else {
@@ -386,6 +434,7 @@ export function RcxPage() {
         fig = multiEquipmentTimeseries(points, {
           title,
           yTitle: unitTitle,
+          unitSystem,
         });
       }
       if (rcxFigureHasFaultLane(fig)) {
@@ -410,7 +459,7 @@ export function RcxPage() {
     } finally {
       setLoading(false);
     }
-  }, [buildingId, presetId, familyPresets]);
+  }, [buildingId, presetId, familyPresets, unitSystem]);
 
   useEffect(() => {
     if (!buildingId || !presetId) return;
