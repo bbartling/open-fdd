@@ -8,7 +8,26 @@ import {
 } from "./plotDataset";
 import { overviewChartLayout, rainbowColor } from "./plotlyTheme";
 import { ruleLabelPlotTitle } from "../lib/ruleLabels";
-import { familyOrderKeys, resolveRoleUnit, unitFamily } from "./roleUnits";
+import {
+  displayStoredQuantity,
+  displayUnitLabel,
+  familyOrderKeys,
+  resolveRoleUnit,
+  unitFamily,
+  type UnitSystem,
+} from "./roleUnits";
+
+function shownStored(
+  value: unknown,
+  quantity: string,
+  unit: string,
+  unitSystem: UnitSystem,
+): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return displayStoredQuantity(n, quantity, unit, unitSystem);
+}
 
 /** Outlier red — vibe19 charts.py stroke for z-score outliers. */
 export const OUTLIER_RED = "#dc2626";
@@ -69,9 +88,10 @@ export function rcxFigureHasFaultLane(fig: PlotlyFigure | null): boolean {
 
 export function multiEquipmentTimeseries(
   points: Array<Record<string, unknown>>,
-  opts: { title: string; yTitle?: string },
+  opts: { title: string; yTitle?: string; unitSystem?: UnitSystem },
 ): PlotlyFigure | null {
   if (!points.length) return null;
+  const unitSystem = opts.unitSystem ?? "imperial";
   const outliers = outlierEquipmentIds(points);
   const byKey = new Map<string, Array<Record<string, unknown>>>();
   for (const p of points) {
@@ -111,12 +131,14 @@ export function multiEquipmentTimeseries(
       mode: "lines",
       name: isOut ? `${name} ★` : name,
       x: rows.map((r) => String(r.timestamp_utc ?? "")),
-      y: rows.map((r) => {
-        const v = r.value_f;
-        if (v == null || v === "") return null;
-        const n = typeof v === "number" ? v : Number(v);
-        return Number.isFinite(n) ? n : null;
-      }),
+      y: rows.map((r) =>
+        shownStored(
+          r.value_f,
+          String(r.quantity ?? ""),
+          String(r.unit ?? ""),
+          unitSystem,
+        ),
+      ),
       line: {
         width: isOut ? 2.4 : 1.4,
         color,
@@ -137,12 +159,14 @@ export function multiEquipmentTimeseries(
       mode: "lines",
       name,
       x: rows.map((r) => String(r.timestamp_utc ?? "")),
-      y: rows.map((r) => {
-        const v = r.value_f;
-        if (v == null || v === "") return null;
-        const n = typeof v === "number" ? v : Number(v);
-        return Number.isFinite(n) ? n : null;
-      }),
+      y: rows.map((r) =>
+        shownStored(
+          r.value_f,
+          String(r.quantity ?? ""),
+          String(r.unit ?? ""),
+          unitSystem,
+        ),
+      ),
       line: { width: 1.2, color, dash: "dot" },
       connectgaps: false,
     });
@@ -213,9 +237,10 @@ export function multiEquipmentTimeseries(
 
 export function oatScatter(
   points: Array<Record<string, unknown>>,
-  opts: { title: string; yTitle: string; xTitle?: string },
+  opts: { title: string; yTitle: string; xTitle?: string; unitSystem?: UnitSystem },
 ): PlotlyFigure | null {
   if (!points.length) return null;
+  const unitSystem = opts.unitSystem ?? "imperial";
   const byEq = new Map<string, Array<Record<string, unknown>>>();
   for (const p of points) {
     const eq = String(p.equipment_id ?? "eq");
@@ -239,16 +264,22 @@ export function oatScatter(
       type: "scatter",
       mode: "markers",
       name: isOut ? `${eq} ★` : eq,
-      x: rows.map((r) => {
-        const v = r.oat_f;
-        const n = typeof v === "number" ? v : Number(v);
-        return Number.isFinite(n) ? n : null;
-      }),
-      y: rows.map((r) => {
-        const v = r.y_f;
-        const n = typeof v === "number" ? v : Number(v);
-        return Number.isFinite(n) ? n : null;
-      }),
+      x: rows.map((r) =>
+        shownStored(
+          r.oat_f,
+          String(r.x_quantity ?? "dry_bulb_temperature"),
+          String(r.x_unit ?? "°F"),
+          unitSystem,
+        ),
+      ),
+      y: rows.map((r) =>
+        shownStored(
+          r.y_f,
+          String(r.y_quantity ?? "absolute_temperature"),
+          String(r.y_unit ?? "°F"),
+          unitSystem,
+        ),
+      ),
       marker: { size: isOut ? 7 : 6, opacity: 0.65, color },
     });
   }
@@ -258,23 +289,31 @@ export function oatScatter(
       type: "scatter",
       mode: "markers",
       name: "dry-bulb ref (x)",
-      x: points.map((r) => {
-        const v = r.dry_bulb_f;
-        const n = typeof v === "number" ? v : Number(v);
-        return Number.isFinite(n) ? n : null;
-      }),
-      y: points.map((r) => {
-        const v = r.y_f;
-        const n = typeof v === "number" ? v : Number(v);
-        return Number.isFinite(n) ? n : null;
-      }),
+      x: points.map((r) =>
+        shownStored(
+          r.dry_bulb_f,
+          String(r.dry_bulb_quantity ?? "dry_bulb_temperature"),
+          String(r.dry_bulb_unit ?? "°F"),
+          unitSystem,
+        ),
+      ),
+      y: points.map((r) =>
+        shownStored(
+          r.y_f,
+          String(r.y_quantity ?? "absolute_temperature"),
+          String(r.y_unit ?? "°F"),
+          unitSystem,
+        ),
+      ),
       marker: { size: 5, opacity: 0.35, symbol: "x", color: "#64748b" },
     });
   }
   return {
     data,
     layout: overviewChartLayout({
-      xTitle: opts.xTitle ?? "Web dry-bulb °F",
+      xTitle:
+        opts.xTitle ??
+        `Web dry-bulb ${displayUnitLabel("°F", unitSystem, "temperature")}`,
       yTitle: opts.yTitle,
       height: 420,
       tickangle: 0,
@@ -290,15 +329,20 @@ export function oatScatter(
 
 export function multiEquipmentBox(
   points: Array<Record<string, unknown>>,
-  opts: { title: string; yTitle?: string },
+  opts: { title: string; yTitle?: string; unitSystem?: UnitSystem },
 ): PlotlyFigure | null {
   if (!points.length) return null;
+  const unitSystem = opts.unitSystem ?? "imperial";
   const byEq = new Map<string, number[]>();
   for (const p of points) {
     const eq = String(p.equipment_id ?? "eq");
-    const v = p.value_f;
-    const n = typeof v === "number" ? v : Number(v);
-    if (!Number.isFinite(n)) continue;
+    const n = shownStored(
+      p.value_f,
+      String(p.quantity ?? ""),
+      String(p.unit ?? ""),
+      unitSystem,
+    );
+    if (n == null) continue;
     const list = byEq.get(eq) ?? [];
     list.push(n);
     byEq.set(eq, list);

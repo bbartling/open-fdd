@@ -448,7 +448,11 @@ pub fn presets_json() -> Value {
         .collect::<Vec<_>>())
 }
 
-fn annotate(mut env: AnalyticsEnvelope, meta: &RcxPresetMeta) -> AnalyticsEnvelope {
+fn annotate(
+    mut env: AnalyticsEnvelope,
+    meta: &RcxPresetMeta,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
+) -> AnalyticsEnvelope {
     env.query_version = format!("rcx-preset-{}-v1", meta.id);
     let mut cov = env.coverage.unwrap_or_else(|| json!({}));
     if let Some(obj) = cov.as_object_mut() {
@@ -464,10 +468,38 @@ fn annotate(mut env: AnalyticsEnvelope, meta: &RcxPresetMeta) -> AnalyticsEnvelo
         }
     }
     env.coverage = Some(cov);
+    stamp_requested_scope(&mut env, scope);
     env
 }
 
-fn empty_stub(meta: &RcxPresetMeta, reason: &str) -> AnalyticsEnvelope {
+fn stamp_requested_scope(
+    env: &mut AnalyticsEnvelope,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
+) {
+    let mut cov = env.coverage.clone().unwrap_or_else(|| json!({}));
+    if let Some(obj) = cov.as_object_mut() {
+        obj.insert(
+            "window_start".into(),
+            json!(scope
+                .start
+                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
+        );
+        obj.insert(
+            "window_end".into(),
+            json!(scope
+                .end
+                .map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))),
+        );
+        obj.insert("equipment_ids".into(), json!(scope.equipment_ids));
+    }
+    env.coverage = Some(cov);
+}
+
+fn empty_stub(
+    meta: &RcxPresetMeta,
+    reason: &str,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
+) -> AnalyticsEnvelope {
     let query = AnalyticsQuery::default();
     let engine = if crate::timescale_historian::historian_is_timescale() {
         "timescale-sql"
@@ -489,27 +521,40 @@ fn empty_stub(meta: &RcxPresetMeta, reason: &str) -> AnalyticsEnvelope {
         "y_col": meta.role_col,
         "empty": true,
     }));
+    stamp_requested_scope(&mut env, scope);
     env
 }
 
-/// Run a named RCx preset against historian parquet.
+/// Run a named RCx preset against the Timescale historian.
 pub async fn run_preset(
     building_id: Option<&str>,
     preset_id: &str,
     max_points: usize,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let Some(meta) = preset_by_id(preset_id) else {
         return Ok(None);
     };
+    let read = crate::timescale_product::RcxQuery {
+        max_points,
+        scope: scope.clone(),
+    };
     if meta.id == "vav_health_matrix" {
         return Ok(Some(
-            match super::vav_health::vav_health_from_history(building_id, 70.0, 75.0, None, None)
-                .await?
+            match super::vav_health::vav_health_from_history(
+                building_id,
+                70.0,
+                75.0,
+                scope.start,
+                scope.end,
+            )
+            .await?
             {
-                Some(env) => annotate(env, meta),
+                Some(env) => annotate(env, meta, scope),
                 None => empty_stub(
                     meta,
                     "VAV health matrix unavailable — missing historian or no VAV equipment",
+                    scope,
                 ),
             },
         ));
@@ -518,6 +563,7 @@ pub async fn run_preset(
         return Ok(Some(empty_stub(
             meta,
             "Use Overview analytics POSTs (runtime / mechanical-cooling / economizer / bas-vs-web-oat) — SPA RCx page intercepts this preset",
+            scope,
         )));
     }
     let out = match meta.chart {
@@ -529,7 +575,7 @@ pub async fn run_preset(
                 meta.pair_return_col,
                 meta.eq_kinds,
                 meta.filter_fan_on,
-                max_points,
+                &read,
             )
             .await?
         }
@@ -539,7 +585,7 @@ pub async fn run_preset(
                 meta.role_col,
                 meta.eq_kinds,
                 meta.prefer_wetbulb,
-                max_points,
+                &read,
             )
             .await?
         }
@@ -549,13 +595,19 @@ pub async fn run_preset(
                 meta.role_col,
                 meta.eq_kinds,
                 meta.filter_fan_on,
-                max_points,
+                &read,
             )
             .await?
         }
         "ranking" => {
-            historian::rcx_zone_comfort_rank_from_history(building_id, meta.eq_kinds, 70.0, 75.0)
-                .await?
+            historian::rcx_zone_comfort_rank_from_history(
+                building_id,
+                meta.eq_kinds,
+                70.0,
+                75.0,
+                scope,
+            )
+            .await?
         }
         "metering" => {
             historian::rcx_metering_from_history(
@@ -573,17 +625,19 @@ pub async fn run_preset(
                     "RCx preset '{}' chart kind '{other}' not yet wired in DataFusion",
                     meta.id
                 ),
+                scope,
             )));
         }
     };
     Ok(Some(match out {
-        Some(env) => annotate(env, meta),
+        Some(env) => annotate(env, meta, scope),
         None => empty_stub(
             meta,
             &format!(
                 "RCx preset '{}' unavailable — missing historian column '{}' or no matching equipment",
                 meta.id, meta.role_col
             ),
+            scope,
         ),
     }))
 }

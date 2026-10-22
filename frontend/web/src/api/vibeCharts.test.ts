@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   multiEquipmentBox,
   multiEquipmentTimeseries,
+  oatScatter,
   rankingBars,
   rcxFigureHasFaultLane,
   ruleResultChart,
@@ -14,7 +15,7 @@ import {
   isOatMeteoRule,
   withConfirmedFaultLane,
 } from "./vibeCharts";
-import { basOverlay } from "./centralOverview";
+import { basOverlay, econDeltaScatter } from "./centralOverview";
 import chartContract from "./charts.contract.json";
 
 describe("vibeCharts", () => {
@@ -358,5 +359,103 @@ describe("vibeCharts", () => {
     // reversed for horizontal display: bottom = worst
     expect(fig?.data[0]?.y?.at(-1)).toBe("VAV_hi");
     expect(fig?.data[0]?.x?.at(-1)).toBe(40);
+  });
+
+  it("oatScatter converts the bound X and Y by quantity", () => {
+    const fig = oatScatter(
+      [
+        {
+          equipment_id: "AHU_1",
+          oat_f: 32,
+          y_f: 50,
+          x_quantity: "dry_bulb_temperature",
+          x_unit: "°F",
+          y_quantity: "absolute_temperature",
+          y_unit: "°F",
+        },
+      ],
+      { title: "sat", yTitle: "SAT", unitSystem: "metric" },
+    );
+    expect(fig?.data[0]?.x).toEqual([0]);
+    expect(fig?.data[0]?.y?.[0]).toBeCloseTo((50 - 32) * (5 / 9), 9);
+    expect(fig?.layout?.xaxis?.title).toBe("Web dry-bulb °C");
+    const imperial = oatScatter(
+      [
+        {
+          equipment_id: "AHU_1",
+          oat_f: 60,
+          y_f: 48,
+          x_quantity: "dry_bulb_temperature",
+          x_unit: "°F",
+          y_quantity: "absolute_temperature",
+          y_unit: "°F",
+        },
+      ],
+      { title: "sat", yTitle: "°F" },
+    );
+    expect(imperial?.data[0]?.x).toEqual([60]);
+    expect(imperial?.data[0]?.y).toEqual([48]);
+    expect(imperial?.layout?.xaxis?.title).toBe("Web dry-bulb °F");
+  });
+
+  it("timeseries converts absolute, delta, and pressure independently", () => {
+    const fig = multiEquipmentTimeseries(
+      [
+        {
+          equipment_id: "AHU_1",
+          timestamp_utc: "2026-06-01T12:00:00Z",
+          value_f: 32,
+          series: "primary",
+          quantity: "absolute_temperature",
+          unit: "°F",
+        },
+        {
+          equipment_id: "AHU_1",
+          timestamp_utc: "2026-06-01T12:00:00Z",
+          value_f: 10,
+          series: "delta_t",
+          quantity: "temperature_difference",
+          unit: "°F",
+        },
+        {
+          equipment_id: "AHU_1",
+          timestamp_utc: "2026-06-01T12:00:00Z",
+          value_f: 0.12,
+          series: "overlay",
+          quantity: "air_pressure",
+          unit: "in. w.c.",
+        },
+        {
+          equipment_id: "AHU_1",
+          timestamp_utc: "2026-06-01T12:00:00Z",
+          value_f: 0.4,
+          series: "return",
+          quantity: "fraction",
+          unit: "",
+        },
+      ],
+      { title: "mixed", yTitle: "value", unitSystem: "metric" },
+    );
+    const byName = new Map((fig?.data ?? []).map((trace) => [trace.name, trace]));
+    expect(byName.get("AHU_1")?.y).toEqual([0]);
+    expect(byName.get("AHU_1 · ΔT")?.y?.[0]).toBeCloseTo(10 * (5 / 9), 9);
+    expect(byName.get("AHU_1 · setpoint")?.y?.[0]).toBeCloseTo(0.12 * 249.088908333, 6);
+    expect(byName.get("AHU_1 · return")?.y).toEqual([0.4]);
+  });
+
+  it("economizer delta scatter scales a temperature difference without the 32°F offset", () => {
+    const points = Array.from({ length: 5 }, () => ({
+      identifiable: true,
+      equipment_id: "AHU_1",
+      delta_or_f: 18,
+      delta_mr_f: 9,
+    }));
+    const fig = econDeltaScatter(points, 10, "metric");
+    const trace = fig?.data.find((item) => item.name === "AHU_1");
+    expect(trace?.x?.[0]).toBeCloseTo(10, 5);
+    expect(trace?.y?.[0]).toBeCloseTo(5, 5);
+    expect(String(fig?.layout?.xaxis?.title)).toContain("Δ°C");
+    expect(String(fig?.layout?.title)).not.toContain("10°C");
+    expect(String(fig?.layout?.title)).toContain("5.6");
   });
 });

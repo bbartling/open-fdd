@@ -4,6 +4,7 @@ import {
   deltaCToDeltaF,
   deltaFToDeltaC,
   displayScalar,
+  displayStoredQuantity,
   displayUnitLabel,
   fahrenheitToCelsius,
   resolveQuantityKind,
@@ -118,5 +119,25 @@ describe("quantity round-trips", () => {
       6,
     );
     expect(displayScalar(0.12, "inwc", "imperial", "pressure", "eps_dsp")).toBe(0.12);
+  });
+
+  it("converts a stored sample by quantity, not by a shared axis offset", () => {
+    expect(displayStoredQuantity(32, "absolute_temperature", "°F", "metric")).toBe(0);
+    expect(displayStoredQuantity(32, "dry_bulb_temperature", "°F", "metric")).toBe(0);
+    expect(displayStoredQuantity(32, "wet_bulb_temperature", "°F", "metric")).toBe(0);
+    expect(displayStoredQuantity(10, "temperature_difference", "°F", "metric")).toBeCloseTo(
+      10 * (5 / 9),
+      9,
+    );
+    expect(displayStoredQuantity(10, "temperature_delta", "°F", "metric")).not.toBeCloseTo(0, 5);
+    expect(displayStoredQuantity(0.12, "air_pressure", "in. w.c.", "metric")).toBeCloseTo(
+      0.12 * 249.088908333,
+      6,
+    );
+    expect(displayStoredQuantity(0.4, "fraction", "", "metric")).toBe(0.4);
+    expect(displayStoredQuantity(15, "percent", "%", "metric")).toBe(15);
+    expect(displayStoredQuantity(10, "minutes", "min", "metric")).toBe(10);
+    expect(displayStoredQuantity(70, "absolute_temperature", "°F", "imperial")).toBe(70);
+    expect(displayStoredQuantity(10, "temperature_difference", "°F", "imperial")).toBe(10);
   });
 });
