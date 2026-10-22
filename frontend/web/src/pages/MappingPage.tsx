@@ -43,10 +43,12 @@ function buildRoleToFddRules(rules: FddRuleSummary[]): Map<string, string[]> {
   const map = new Map<string, string[]>();
   for (const r of rules) {
     const id = String(r.rule_id ?? "").trim();
-    if (!id) continue;
+    if (!id || r.applicability === "unknown" || !Array.isArray(r.required_roles)) {
+      continue;
+    }
     const roles = [
-      ...(r.required_roles ?? []),
-      ...(r.optional_roles ?? []),
+      ...r.required_roles,
+      ...(Array.isArray(r.optional_roles) ? r.optional_roles : []),
     ];
     for (const role of roles) {
       const key = String(role ?? "").trim();

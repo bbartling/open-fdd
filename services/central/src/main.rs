@@ -33,6 +33,8 @@ mod providers;
 #[cfg(test)]
 mod rcx_row_fixtures;
 mod routes;
+#[cfg(test)]
+mod rule_catalog_fixtures;
 mod sql_anomaly;
 mod starter_seed;
 mod state;

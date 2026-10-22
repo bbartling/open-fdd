@@ -25,8 +25,18 @@ vi.mock("../api/mappingApi", async () => {
 
 vi.mock("../api/fddApi", () => ({
   listFddRules: vi.fn(async () => [
-    { rule_id: "FC1", required_roles: ["duct_static"], optional_roles: ["fan_cmd"] },
-    { rule_id: "CMD-1", required_roles: ["fan_cmd", "fan_status"], optional_roles: [] },
+    {
+      rule_id: "FC1",
+      required_roles: ["duct_static"],
+      optional_roles: ["fan_cmd"],
+      applicability: "typed",
+    },
+    {
+      rule_id: "CMD-1",
+      required_roles: ["fan_cmd", "fan_status"],
+      optional_roles: [],
+      applicability: "typed",
+    },
   ]),
   getFddResultsDocument: vi.fn(async () => ({
     ok: true,
@@ -42,6 +52,7 @@ vi.mock("../api/providersApi", () => ({
     `/api/providers/bindings?building_id=${encodeURIComponent(buildingId)}`,
 }));
 
+import { listFddRules } from "../api/fddApi";
 import {
   getPackageMapping,
   getSessionConfig,
@@ -60,6 +71,20 @@ function renderMapping(entry = "/mapping?site=B1&eq=AHU_1") {
 
 describe("MappingPage", () => {
   beforeEach(() => {
+    vi.mocked(listFddRules).mockResolvedValue([
+      {
+        rule_id: "FC1",
+        required_roles: ["duct_static"],
+        optional_roles: ["fan_cmd"],
+        applicability: "typed",
+      },
+      {
+        rule_id: "CMD-1",
+        required_roles: ["fan_cmd", "fan_status"],
+        optional_roles: [],
+        applicability: "typed",
+      },
+    ]);
     vi.mocked(listPackageBuildings).mockResolvedValue(["B1"]);
     vi.mocked(getSessionConfig).mockResolvedValue({
       ok: true,
@@ -173,6 +198,95 @@ describe("MappingPage", () => {
     await waitFor(() => {
       expect(screen.getByTestId("mapping-notice").textContent).toMatch(/Saved mapping/);
     });
+  });
+
+  it("lists shared runtime-role consumers for AHU and VAV and skips unknown metadata", async () => {
+    vi.mocked(listFddRules).mockResolvedValue([
+      {
+        rule_id: "FC5",
+        equipment_kinds: ["ahu"],
+        required_roles: ["sat", "mat", "htg_valve_pct", "fan_cmd"],
+        optional_roles: ["fan_status", "fan_cmd"],
+        applicability: "typed",
+      },
+      {
+        rule_id: "VAV-3",
+        equipment_kinds: ["vav"],
+        required_roles: ["oa_t", "reheat_valve_pct", "zone_flow"],
+        optional_roles: ["fan_status", "fan_cmd"],
+        applicability: "typed",
+      },
+      {
+        rule_id: "TRIM-3",
+        equipment_kinds: ["boiler"],
+        required_roles: ["hw_supply_t"],
+        optional_roles: ["pump_status"],
+        applicability: "typed",
+      },
+      {
+        rule_id: "W4A-UNKNOWN",
+        applicability: "unknown",
+        equipment_kinds: ["ahu", "vav", "boiler"],
+        required_roles: ["sat", "fan_status", "hw_supply_t"],
+        optional_roles: ["fan_cmd"],
+      },
+    ]);
+    vi.mocked(getPackageMapping).mockResolvedValue({
+      ok: true,
+      building_id: "B1",
+      unit_system: "imperial",
+      equipment_ids: ["AHU_1"],
+      equipment: [
+        {
+          equipment_id: "AHU_1",
+          equipment_type: "AHU",
+          ok: true,
+          parent_ahu: null,
+          roles: {
+            SAT: "sat",
+            SF_STS: "fan_status",
+            HWST: "hw_supply_t",
+          },
+          columns: [
+            { column: "SAT", role: "sat", status: "mapped" },
+            { column: "SF_STS", role: "fan_status", status: "mapped" },
+            { column: "HWST", role: "hw_supply_t", status: "mapped" },
+          ],
+          unmapped_columns: [],
+          blockers: [],
+          warnings: [],
+          sampling: {
+            ok: true,
+            row_count: 2,
+            first_timestamp: "2024-01-01T00:00:00Z",
+            last_timestamp: "2024-01-01T00:05:00Z",
+          },
+        },
+      ],
+      validation: { blocker_count: 0, warning_count: 0, equipment_count: 1 },
+    });
+    renderMapping();
+    await waitFor(() => {
+      expect(screen.getByTestId("map-columns-table")).toBeTruthy();
+    });
+    const rows = [
+      ...screen.getByTestId("map-columns-table").querySelectorAll("tbody tr"),
+    ].map((row) => row.textContent ?? "");
+    const row = (column: string) => {
+      const found = rows.find((text) => text.includes(column));
+      expect(found, column).toBeTruthy();
+      return found ?? "";
+    };
+    const sat = row("SAT");
+    const fan = row("SF_STS");
+    const hw = row("HWST");
+    expect(sat).toMatch(/FC5/);
+    expect(sat).not.toMatch(/VAV-3|TRIM-3|W4A-UNKNOWN|analytics only/);
+    expect(fan).toMatch(/FC5/);
+    expect(fan).toMatch(/VAV-3/);
+    expect(fan).not.toMatch(/TRIM-3|W4A-UNKNOWN|analytics only/);
+    expect(hw).toMatch(/TRIM-3/);
+    expect(hw).not.toMatch(/FC5|VAV-3|W4A-UNKNOWN|analytics only/);
   });
 
   it("prompts to select a building when site is empty", async () => {
