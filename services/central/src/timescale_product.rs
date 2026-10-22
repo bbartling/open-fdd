@@ -2815,12 +2815,14 @@ mod plot_role_tests {
 
     #[test]
     fn all_77_catalog_rules_have_plot_roles() {
+        let _lock = crate::test_env_lock::lock_env();
         let reg = load_reg().expect("load sql/fdd registry");
         assert_all_rules_have_plot_roles(&reg).expect("77 plot roles");
     }
 
     #[test]
     fn oat_meteo_roles_exclude_duct_static() {
+        let _lock = crate::test_env_lock::lock_env();
         let reg = load_reg().expect("registry");
         let rule = reg
             .rules
@@ -2860,6 +2862,7 @@ mod plot_role_tests {
 
     #[test]
     fn starter_rules_apply_to_building50_stamps() {
+        let _lock = crate::test_env_lock::lock_env();
         let reg = load_reg().expect("registry");
         let starter = [
             "FC1",
@@ -2912,6 +2915,7 @@ mod plot_role_tests {
 
     #[test]
     fn fc1_confirm_min_zero_fills_sql_placeholders() {
+        let _lock = crate::test_env_lock::lock_env();
         let reg = load_reg().expect("load sql/fdd registry");
         let rule = reg.rules.iter().find(|r| r.rule_id == "FC1").expect("FC1");
         let payload = json!({
@@ -2993,6 +2997,7 @@ mod span_and_fault_pct_tests {
 
     #[test]
     fn diagnostic_wrapper_keeps_declared_fault_pct() {
+        let _lock = crate::test_env_lock::lock_env();
         let reg = load_reg().expect("load sql/fdd registry");
         let oat = reg
             .rules
@@ -3028,6 +3033,7 @@ mod span_and_fault_pct_tests {
 
     #[test]
     fn duct_high_sql_integrates_elapsed_hold() {
+        let _lock = crate::test_env_lock::lock_env();
         let reg = load_reg().expect("load sql/fdd registry");
         let rule = reg
             .rules
@@ -3046,6 +3052,7 @@ mod span_and_fault_pct_tests {
 
     #[test]
     fn metric_wrapper_casts_runtime_hours_to_float8() {
+        let _lock = crate::test_env_lock::lock_env();
         let reg = load_reg().expect("load sql/fdd registry");
         let rule = reg
             .rules

@@ -14,6 +14,9 @@ pub struct RuleParameterDef {
     pub max: f64,
     pub step: f64,
     pub unit: String,
+    /// Optional catalog override. Empty means classify from `unit` and the parameter key.
+    #[serde(default)]
+    pub quantity: Option<String>,
     #[serde(default = "default_control")]
     pub frontend_control: String,
     pub sql_placeholder: String,
