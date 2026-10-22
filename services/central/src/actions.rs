@@ -25,6 +25,29 @@ pub struct ActionEntry {
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<Value>,
+    /// Tenant that owned the site when the row was written, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<String>,
+    /// Site the row belongs to. Older rows may carry this only inside `detail`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub building_id: Option<String>,
+}
+
+/// Identity copied out of a row for an audit event. Labels and detail stay in the log.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ActionRef {
+    pub id: String,
+    pub tenant_id: Option<String>,
+    pub building_id: Option<String>,
+}
+
+pub(crate) enum RemoveOne {
+    Removed {
+        action: ActionRef,
+        in_scope_remaining: usize,
+    },
+    OutOfScope(ActionRef),
+    Missing,
 }
 
 fn workspace_root() -> PathBuf {
@@ -176,7 +199,7 @@ fn append_unlocked(entry: &ActionEntry) -> Result<(), String> {
 /// from overlapping DataFusion runs.
 pub fn start_action(kind: &str, label: &str, detail: Option<Value>) -> Result<String, String> {
     let id = format!("act-{}", Uuid::new_v4());
-    let entry = ActionEntry {
+    let mut entry = ActionEntry {
         id: id.clone(),
         kind: kind.to_string(),
         label: label.to_string(),
@@ -185,7 +208,10 @@ pub fn start_action(kind: &str, label: &str, detail: Option<Value>) -> Result<St
         duration_ms: None,
         status: "running".into(),
         detail,
+        tenant_id: None,
+        building_id: None,
     };
+    crate::actions_scope::bind_entry_scope(&mut entry);
     let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
     reclaim_stale_running_unlocked(Utc::now())?;
     if is_heavy_fdd_kind(kind) {
@@ -245,57 +271,84 @@ pub fn finish_action(id: &str, status: &str, detail: Option<Value>) -> Result<Ac
             }
         }
     }
+    crate::actions_scope::bind_entry_scope(entry);
     let out = entry.clone();
     rewrite_all_unlocked(&entries)?;
     Ok(out)
 }
 
-/// Delete one action by id.
-pub fn delete_action(id: &str) -> Result<Value, String> {
-    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
-    let mut entries = read_all_unlocked();
-    let before = entries.len();
-    entries.retain(|e| e.id != id);
-    if entries.len() == before {
-        return Err(format!("action not found: {id}"));
-    }
-    rewrite_all_unlocked(&entries)?;
-    Ok(json!({ "ok": true, "deleted": id, "remaining": entries.len() }))
-}
-
-/// Clear the entire actions JSONL.
-pub fn clear_actions() -> Result<Value, String> {
-    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
-    rewrite_all_unlocked(&[])?;
-    Ok(json!({ "ok": true, "cleared": true, "remaining": 0 }))
-}
-
-/// List recent actions, newest first.
-pub fn list_actions(limit: usize) -> Value {
-    let limit = if limit == 0 {
+pub(crate) fn clamp_list_limit(limit: usize) -> usize {
+    if limit == 0 {
         DEFAULT_LIST_LIMIT
     } else {
         limit.min(MAX_LIST_LIMIT)
-    };
-    let _guard = match LOG_LOCK.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return json!({
-                "ok": false,
-                "error": "actions log lock poisoned",
-                "actions": [],
-            });
-        }
-    };
+    }
+}
+
+/// Newest-first rows that `visible` accepts, after the usual stale-run reclaim.
+///
+/// The predicate must not call back into this log. The lock is held for the read.
+pub(crate) fn list_visible(
+    limit: usize,
+    visible: impl Fn(&ActionEntry) -> bool,
+) -> Result<Vec<ActionEntry>, String> {
+    let limit = clamp_list_limit(limit);
+    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
+    // Reclaim is best-effort: a rewrite error must not hide rows already on disk.
     let _ = reclaim_stale_running_unlocked(Utc::now());
     let mut entries = read_all_unlocked();
     entries.reverse();
+    entries.retain(visible);
     entries.truncate(limit);
-    json!({
-        "ok": true,
-        "count": entries.len(),
-        "actions": entries,
+    Ok(entries)
+}
+
+/// Delete `id` when `allow` is true. `stamp` copies the audit identity while the row is still stored.
+///
+/// Both callbacks run under the log lock and must not re-enter it.
+pub(crate) fn remove_one(
+    id: &str,
+    allow: impl Fn(&ActionEntry) -> bool,
+    stamp: impl Fn(&ActionEntry) -> ActionRef,
+) -> Result<RemoveOne, String> {
+    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
+    let mut entries = read_all_unlocked();
+    let Some(pos) = entries.iter().position(|entry| entry.id == id) else {
+        return Ok(RemoveOne::Missing);
+    };
+    let action = stamp(&entries[pos]);
+    if !allow(&entries[pos]) {
+        return Ok(RemoveOne::OutOfScope(action));
+    }
+    entries.remove(pos);
+    let in_scope_remaining = entries.iter().filter(|entry| allow(entry)).count();
+    rewrite_all_unlocked(&entries)?;
+    Ok(RemoveOne::Removed {
+        action,
+        in_scope_remaining,
     })
+}
+
+/// Remove every row `remove` accepts. An empty match leaves the file untouched.
+pub(crate) fn remove_matching(
+    remove: impl Fn(&ActionEntry) -> bool,
+    stamp: impl Fn(&ActionEntry) -> ActionRef,
+) -> Result<Vec<ActionRef>, String> {
+    let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;
+    let entries = read_all_unlocked();
+    let mut kept = Vec::with_capacity(entries.len());
+    let mut removed = Vec::new();
+    for entry in entries {
+        if remove(&entry) {
+            removed.push(stamp(&entry));
+        } else {
+            kept.push(entry);
+        }
+    }
+    if !removed.is_empty() {
+        rewrite_all_unlocked(&kept)?;
+    }
+    Ok(removed)
 }
 
 #[cfg(test)]
@@ -304,6 +357,18 @@ mod tests {
     use std::sync::Mutex;
 
     static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn stamp(entry: &ActionEntry) -> ActionRef {
+        ActionRef {
+            id: entry.id.clone(),
+            tenant_id: entry.tenant_id.clone(),
+            building_id: entry.building_id.clone(),
+        }
+    }
+
+    fn listed(limit: usize) -> Vec<ActionEntry> {
+        list_visible(limit, |_| true).expect("list")
+    }
 
     #[test]
     fn start_finish_list_roundtrip() {
@@ -315,10 +380,9 @@ mod tests {
 
         let id =
             start_action("fdd_run_all", "Run all", Some(json!({"building": "B1"}))).expect("start");
-        let listed = list_actions(10);
-        assert_eq!(listed["ok"], true);
-        assert_eq!(listed["actions"][0]["id"], id);
-        assert_eq!(listed["actions"][0]["status"], "running");
+        let rows = listed(10);
+        assert_eq!(rows[0].id, id);
+        assert_eq!(rows[0].status, "running");
 
         let done = finish_action(&id, "ok", Some(json!({"rules_ok": 3}))).expect("finish");
         assert_eq!(done.status, "ok");
@@ -326,18 +390,16 @@ mod tests {
         assert_eq!(done.detail.as_ref().unwrap()["building"], "B1");
         assert_eq!(done.detail.as_ref().unwrap()["rules_ok"], 3);
 
-        let listed2 = list_actions(10);
-        assert_eq!(listed2["actions"][0]["status"], "ok");
+        let rows = listed(10);
+        assert_eq!(rows[0].status, "ok");
 
-        delete_action(&id).expect("delete one");
-        let listed3 = list_actions(10);
-        assert_eq!(listed3["actions"].as_array().unwrap().len(), 0);
+        remove_one(&id, |_| true, stamp).expect("delete one");
+        assert!(listed(10).is_empty());
 
         let id2 = start_action("fdd_run_all", "Run all 2", None).expect("start2");
         assert!(!id2.is_empty());
-        clear_actions().expect("clear");
-        let listed4 = list_actions(10);
-        assert_eq!(listed4["actions"].as_array().unwrap().len(), 0);
+        remove_matching(|_| true, stamp).expect("clear");
+        assert!(listed(10).is_empty());
 
         for i in 0..55 {
             start_action("prune", &format!("n{i}"), None).expect("prune start");
@@ -389,15 +451,12 @@ mod tests {
         // Next heavy start must reclaim and succeed (not busy).
         let id2 = start_action("fdd_run_all", "After reclaim", None).expect("reclaim start");
         assert_ne!(id2, id);
-        let listed = list_actions(10);
-        let orphan = listed["actions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|a| a["id"] == id)
+        let orphan = listed(10)
+            .into_iter()
+            .find(|row| row.id == id)
             .expect("orphan listed");
-        assert_eq!(orphan["status"], "fail");
-        assert_eq!(orphan["detail"]["reclaimed"], true);
+        assert_eq!(orphan.status, "fail");
+        assert_eq!(orphan.detail.as_ref().expect("detail")["reclaimed"], true);
 
         let _ = fs::remove_dir_all(&dir);
     }
