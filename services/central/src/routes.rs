@@ -2672,28 +2672,24 @@ pub struct ActionsQuery {
     pub limit: Option<usize>,
 }
 
-pub async fn list_actions(Query(q): Query<ActionsQuery>) -> Json<Value> {
-    Json(actions::list_actions(q.limit.unwrap_or(10)))
+pub async fn list_actions(
+    Extension(user): Extension<auth::AuthUser>,
+    Query(q): Query<ActionsQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::actions_scope::list_actions(&user, q.limit).await
 }
 
-pub async fn delete_one_action(Path(id): Path<String>) -> (StatusCode, Json<Value>) {
-    match actions::delete_action(&id) {
-        Ok(v) => (StatusCode::OK, Json(v)),
-        Err(e) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "ok": false, "error": e })),
-        ),
-    }
+pub async fn delete_one_action(
+    Extension(user): Extension<auth::AuthUser>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::actions_scope::delete_action(&user, &id).await
 }
 
-pub async fn clear_actions() -> (StatusCode, Json<Value>) {
-    match actions::clear_actions() {
-        Ok(v) => (StatusCode::OK, Json(v)),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "ok": false, "error": e })),
-        ),
-    }
+pub async fn clear_actions(
+    Extension(user): Extension<auth::AuthUser>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::actions_scope::clear_actions(&user).await
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,6 +1,7 @@
 //! Open-FDD Central — Normal Framework portal and CSV ingest, Timescale, REST.
 
 mod actions;
+mod actions_scope;
 mod admin_cp;
 mod afdd_scheduler;
 mod analytics;
