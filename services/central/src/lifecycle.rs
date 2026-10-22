@@ -68,7 +68,7 @@ impl PartialCascade {
 pub enum UserCascadeError {
     NotFound(String),
     Store(String),
-    Partial(PartialCascade),
+    Partial(Box<PartialCascade>),
 }
 
 /// Purge one site from Timescale, the workspace dataset, and linked jobs.
@@ -149,11 +149,11 @@ pub async fn delete_user_cascade(
         }
     }
     if !errors.is_empty() {
-        return Err(UserCascadeError::Partial(PartialCascade {
+        return Err(UserCascadeError::Partial(Box::new(PartialCascade {
             plan,
             purged,
             errors,
-        }));
+        })));
     }
     store.remove(username).map_err(UserCascadeError::NotFound)?;
     store.save(workspace).map_err(UserCascadeError::Store)?;
