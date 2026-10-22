@@ -3422,6 +3422,7 @@ pub async fn csv_import_package_roles(
             );
         }
     }
+    crate::mapping_revision::annotate_role_save(&mut result);
     Ok(Json(result))
 }
 
@@ -3429,6 +3430,16 @@ pub async fn csv_import_package_roles(
 pub struct PackageMappingQuery {
     building_id: Option<String>,
     equipment_id: Option<String>,
+}
+
+impl PackageMappingQuery {
+    #[cfg(test)]
+    pub(crate) fn for_test(building_id: &str) -> Self {
+        Self {
+            building_id: Some(building_id.to_string()),
+            equipment_id: None,
+        }
+    }
 }
 
 /// Inventory + validation for ingested package column→role maps (P1-M4-03).
@@ -3491,6 +3502,12 @@ pub async fn csv_import_package_mapping(
             }
         }
     }
+    let active_ingest = crate::mapping_revision::copy_active_ingest_revision(
+        &state.providers.models,
+        ctx.tenant_id.as_deref(),
+        &building_id,
+    );
+    crate::mapping_revision::annotate_mapping_response(&mut result, active_ingest.as_deref());
     Ok(Json(result))
 }
 

@@ -33,10 +33,29 @@ export interface MappingEquipment {
   warnings?: string[];
 }
 
+export interface MappingValidationCheck {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail" | "incomplete" | "not_evaluated" | string;
+  detail?: string;
+}
+
 export interface MappingValidation {
   blocker_count: number;
   warning_count: number;
   equipment_count: number;
+  status?: "validated" | "incomplete" | "not_evaluated" | string;
+  source_label?: string;
+  provenance?: string;
+  checks?: MappingValidationCheck[];
+}
+
+export interface MappingRevisions {
+  saved?: { authority?: string; label?: string };
+  active_ingest?: {
+    revision_id?: string | null;
+    activated_by_mapping_save?: boolean;
+  };
 }
 
 export interface PackageMappingResponse {
@@ -50,6 +69,8 @@ export interface PackageMappingResponse {
   session_role_map?: Record<string, Record<string, string>>;
   validation?: MappingValidation;
   warnings?: string[];
+  source?: string;
+  revisions?: MappingRevisions;
 }
 
 export interface PackageBuildingsResponse {
@@ -68,6 +89,9 @@ export interface UpdatePackageRolesResponse {
   ignored_columns?: string[];
   equipment_written?: number;
   total_rows?: number;
+  /** False when this save wrote the column map and did not activate ingest. */
+  ingest_plan_activated?: boolean;
+  saved_authority?: string;
 }
 
 export interface SessionConfigResponse {
