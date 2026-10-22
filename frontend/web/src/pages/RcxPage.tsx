@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { SeriesPreview } from "../components/SeriesPreview";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
@@ -14,6 +14,13 @@ import {
   plotDownloadStem,
 } from "../components/widgets/PlotlyHost";
 import { useSessionQuery } from "../session";
+import {
+  beginScopedRequest,
+  cancelScopedRequest,
+  createScopeHolder,
+  isAbortError,
+  useScopedLoad,
+} from "../session/scopedLoad";
 import { getPackageMapping } from "../api/mappingApi";
 import {
   listRcxPresets,
@@ -47,6 +54,42 @@ import {
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+type RcxPresetRow = {
+  id: string;
+  title: string;
+  family: string;
+  chart: string;
+  role_col?: string;
+  frozen?: boolean;
+};
+
+const EMPTY_PRESETS: RcxPresetRow[] = [];
+const EMPTY_ROLES: string[] = [];
+
+async function loadPresetRows(site: string, signal: AbortSignal): Promise<RcxPresetRow[]> {
+  const listed = await listRcxPresets(site, { signal });
+  return listed.filter((row) => row.id);
+}
+
+async function loadMappedRoles(site: string, signal: AbortSignal): Promise<string[]> {
+  try {
+    const inv = await getPackageMapping(site, undefined, { signal });
+    const roles = new Set<string>();
+    for (const eq of inv.equipment ?? []) {
+      for (const role of Object.values(eq.roles ?? {})) {
+        if (role) roles.add(String(role));
+      }
+      for (const col of eq.columns ?? []) {
+        if (col.role) roles.add(String(col.role));
+      }
+    }
+    return [...roles];
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+    return [];
+  }
 }
 
 function rcxYTitle(roleCol: string | undefined, fallback: string): string {
@@ -93,17 +136,14 @@ function fanSummaryTables(
 export function RcxPage() {
   const { query } = useSessionQuery();
   const buildingId = query.siteId ?? "";
-  const [mappedRoles, setMappedRoles] = useState<Set<string>>(new Set());
-  const [presets, setPresets] = useState<
-    Array<{
-      id: string;
-      title: string;
-      family: string;
-      chart: string;
-      role_col?: string;
-      frozen?: boolean;
-    }>
-  >([]);
+  const presetLoad = useScopedLoad(buildingId, loadPresetRows, EMPTY_PRESETS);
+  const roleLoad = useScopedLoad(buildingId, loadMappedRoles, EMPTY_ROLES);
+  const presets =
+    presetLoad.committedKey === buildingId ? presetLoad.value : EMPTY_PRESETS;
+  const mappedRoles = useMemo(() => {
+    if (roleLoad.committedKey !== buildingId) return new Set<string>();
+    return new Set(roleLoad.value);
+  }, [buildingId, roleLoad.committedKey, roleLoad.value]);
   const [family, setFamily] = useState("Zones / VAV");
   const [presetId, setPresetId] = useState("");
   const [env, setEnv] = useState<AnalyticsEnvelope | null>(null);
@@ -117,51 +157,36 @@ export function RcxPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
+  const [chartSite, setChartSite] = useState(buildingId);
+  if (chartSite !== buildingId) {
+    setChartSite(buildingId);
+    setEnv(null);
+    setFigure(null);
+    setCompanionFigure(null);
+    setDonutFigure(null);
+    setCompanionNote(null);
+    setPresetTables([]);
+    setError(null);
+  }
 
   useEffect(() => {
-    if (!buildingId) {
-      setPresets([]);
-      return;
-    }
-    void listRcxPresets(buildingId)
-      .then((p) => {
-        const ok = p.filter((x) => x.id);
-        setPresets(ok);
-        setFamily((prev) => {
-          if (prev && (prev === "Heat pump" || prev === "Weather" || ok.some((x) => x.family === prev))) {
-            return prev;
-          }
-          return "Zones / VAV";
-        });
-        setPresetId((prev) => {
-          if (prev && ok.some((x) => x.id === prev)) return prev;
-          const first = ok.find((x) => x.family === "Zones / VAV") ?? ok[0];
-          return first?.id || "";
-        });
-      })
-      .catch(() => setPresets([]));
-  }, [buildingId]);
-
-  useEffect(() => {
-    if (!buildingId) {
-      setMappedRoles(new Set());
-      return;
-    }
-    void getPackageMapping(buildingId)
-      .then((inv) => {
-        const roles = new Set<string>();
-        for (const eq of inv.equipment ?? []) {
-          for (const role of Object.values(eq.roles ?? {})) {
-            if (role) roles.add(String(role));
-          }
-          for (const col of eq.columns ?? []) {
-            if (col.role) roles.add(String(col.role));
-          }
-        }
-        setMappedRoles(roles);
-      })
-      .catch(() => setMappedRoles(new Set()));
-  }, [buildingId]);
+    if (!buildingId || presetLoad.committedKey !== buildingId) return;
+    const ok = presetLoad.value;
+    setFamily((prev) => {
+      if (
+        prev &&
+        (prev === "Heat pump" || prev === "Weather" || ok.some((x) => x.family === prev))
+      ) {
+        return prev;
+      }
+      return "Zones / VAV";
+    });
+    setPresetId((prev) => {
+      if (prev && ok.some((x) => x.id === prev)) return prev;
+      const first = ok.find((x) => x.family === "Zones / VAV") ?? ok[0];
+      return first?.id || "";
+    });
+  }, [buildingId, presetLoad.committedKey, presetLoad.value]);
 
   const families = useMemo(
     () => familyPickerOptions(presets.map((p) => p.family)),
@@ -253,8 +278,14 @@ export function RcxPage() {
     ];
   }, [env, presets, presetId]);
 
+  const runHolder = useRef(createScopeHolder());
+  const familyPresetsRef = useRef(familyPresets);
+  familyPresetsRef.current = familyPresets;
+
   const run = useCallback(async (opts?: { refresh?: boolean }) => {
     if (!buildingId || !presetId) return;
+    const ticket = beginScopedRequest(runHolder.current);
+    const live = () => ticket.isCurrent();
     setLoading(true);
     setError(null);
     setCompanionFigure(null);
@@ -268,7 +299,9 @@ export function RcxPage() {
           presetId,
           undefined,
           opts?.refresh,
+          ticket.signal,
         );
+        if (!live()) return;
         setEnv(loaded.env);
         setFigure(loaded.figure);
         setCompanionFigure(loaded.companion);
@@ -276,20 +309,25 @@ export function RcxPage() {
         if (loaded.error && !loaded.figure) setError(loaded.error);
         return;
       }
-      const res = await postRcxPreset({
-        building_id: buildingId,
-        max_points: 8000,
-        series: { preset_id: presetId },
-        ...(opts?.refresh ? { refresh: true } : {}),
-      });
+      const res = await postRcxPreset(
+        {
+          building_id: buildingId,
+          max_points: 8000,
+          series: { preset_id: presetId },
+          ...(opts?.refresh ? { refresh: true } : {}),
+        },
+        { signal: ticket.signal },
+      );
+      if (!live()) return;
       setEnv(res);
+      const listed = familyPresetsRef.current;
       const title =
         String(res.coverage?.title ?? presetId) ||
-        familyPresets.find((p) => p.id === presetId)?.title ||
+        listed.find((p) => p.id === presetId)?.title ||
         presetId;
       const kind = String(
         res.coverage?.chart_kind ??
-          familyPresets.find((p) => p.id === presetId)?.chart ??
+          listed.find((p) => p.id === presetId)?.chart ??
           "",
       );
       const schema = String(res.coverage?.schema_version ?? "");
@@ -405,18 +443,22 @@ export function RcxPage() {
         }
       }
     } catch (err) {
+      if (!live() || isAbortError(err)) return;
       setError(formatErr(err));
       setFigure(null);
     } finally {
-      setLoading(false);
+      if (live()) setLoading(false);
     }
-  }, [buildingId, presetId, familyPresets]);
+  }, [buildingId, presetId]);
 
+  const presetsReady = Boolean(buildingId) && presetLoad.committedKey === buildingId;
   useEffect(() => {
-    if (!buildingId || !presetId) return;
-    if (familyPresets.length === 0) return;
+    const runScope = runHolder.current;
+    if (!presetsReady || !presetId) return;
+    if (!presets.some((preset) => preset.id === presetId)) return;
     void run();
-  }, [buildingId, presetId, family, familyPresets.length, run]);
+    return () => cancelScopedRequest(runScope);
+  }, [presetsReady, presetId, presets, run]);
 
   const emptyFamily = familyPresets.length === 0;
   const fanTables = fanSummaryTables(env);
@@ -455,8 +497,12 @@ export function RcxPage() {
           <Select
             id="rcx-preset"
             label="Preset"
-            value={presetId}
-            options={presetOptions}
+            value={presetOptions.some((opt) => opt.value === presetId) ? presetId : ""}
+            options={
+              presetOptions.some((opt) => opt.value === presetId)
+                ? presetOptions
+                : [{ value: "", label: "— preset —" }, ...presetOptions]
+            }
             onChange={setPresetId}
             testId="rcx-preset"
           />

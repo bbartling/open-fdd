@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   credentialRefLabel,
   illustratedNfHistoryRead,
-  interpretBindings,
-  interpretWindowLedger,
+  interpretIngestLedger,
+  jobIdentityBindings,
   mergeProviderRows,
   providerStatusView,
   safeRequestPreview,
@@ -70,28 +70,87 @@ describe("provider display", () => {
     ).toEqual(["CSV package", "NF"]);
   });
 
-  it("treats a missing or shapeless ledger as unavailable", () => {
-    expect(interpretWindowLedger(null, true).available).toBe(false);
-    expect(interpretWindowLedger({}, false).available).toBe(false);
-    const present = interpretWindowLedger(
+  it("reads the ingest jobs and gaps contract and refuses a gap-free claim", () => {
+    const refused = interpretIngestLedger(
+      { jobs: [], coverage: "not_assessed", gapless: true },
       {
-        windows: [
+        gaps: [],
+        coverage: "not_assessed",
+        guarantee: "bounded_windows_only",
+        update_log: "not_claimed",
+      },
+    );
+    expect(refused.status).toBe("unavailable");
+    const legacy = interpretIngestLedger({ windows: [] }, { gaps: [] });
+    expect(legacy.status).toBe("unavailable");
+    const present = interpretIngestLedger(
+      {
+        coverage: "not_assessed",
+        jobs: [
           {
             job_id: "job-1",
-            device_id: "AHU_1",
-            window_start: "2026-10-19T09:00:00Z",
-            window_end: "2026-10-19T10:00:00Z",
-            state: "partial",
-            recoverable: false,
-            reason: "retention expired",
+            device_id: "device-a",
+            provider_instance_id: "portal-a",
+            model_revision: "rev-1",
+            logical_window_start: "2026-10-19T09:00:00Z",
+            logical_window_end: "2026-10-19T10:00:00Z",
+            state: "committed",
+            attempt: 1,
+            coverage: "not_assessed",
+            counts: { fetched: 1, accepted: 1, rejected: 0, inserted: 1 },
           },
         ],
       },
-      false,
+      {
+        coverage: "not_assessed",
+        guarantee: "bounded_windows_only",
+        update_log: "not_claimed",
+        gaps: [
+          {
+            recoverable: false,
+            job: {
+              job_id: "job-2",
+              device_id: "device-a",
+              provider_instance_id: "portal-a",
+              model_revision: "rev-1",
+              logical_window_start: "2026-10-19T08:00:00Z",
+              logical_window_end: "2026-10-19T09:00:00Z",
+              state: "permanent_failure",
+              safe_error_code: "retention_exceeded",
+              coverage: "not_assessed",
+              counts: { fetched: 0, accepted: 0, rejected: 0, inserted: 0 },
+            },
+          },
+        ],
+      },
     );
-    expect(present.available).toBe(true);
-    if (present.available) {
-      expect(windowStateLabel(present.windows[0]!)).toBe("Unrecoverable");
+    expect(present.status).toBe("ready");
+    if (present.status === "ready") {
+      expect(present.coverageLabel).toMatch(/Bounded-window coverage/);
+      expect(present.coverageLabel).toMatch(/not a gap-free ingest claim/);
+      expect(windowStateLabel(present.gaps[0]!)).toBe("Unrecoverable");
+      expect(jobIdentityBindings(present.jobs)).toEqual([
+        {
+          key: "portal-a\u0000device-a\u0000rev-1",
+          providerInstanceId: "portal-a",
+          deviceId: "device-a",
+          modelRevision: "rev-1",
+          windowCount: 1,
+        },
+      ]);
+    }
+    const clear = interpretIngestLedger(
+      { coverage: "not_assessed", jobs: [] },
+      {
+        coverage: "not_assessed",
+        guarantee: "bounded_windows_only",
+        update_log: "not_claimed",
+        gaps: [],
+      },
+    );
+    expect(clear.status).toBe("ready");
+    if (clear.status === "ready") {
+      expect(clear.gapsNote).toMatch(/not gap-free ingest/);
     }
   });
 
@@ -115,35 +174,7 @@ describe("provider display", () => {
     ).toBeNull();
   });
 
-  it("keeps bindings honest when the route is missing", () => {
-    const missing = interpretBindings(null, true);
-    expect(missing.available).toBe(false);
-    const ready = interpretBindings(
-      {
-        provider: "nf",
-        model_revision: "rev-1",
-        bindings: [
-          {
-            provider_point_id: "uuid-1",
-            equipment_id: "AHU_1",
-            role: "oa_t",
-            selection_status: "approved",
-          },
-        ],
-        request_preview: {
-          method: "GET",
-          path: "/api/v1/point/data?uuids=uuid-1",
-          note: "server plan",
-          point_count: 1,
-        },
-      },
-      false,
-    );
-    expect(ready.available).toBe(true);
-    if (ready.available) {
-      expect(ready.preview?.method).toBe("GET");
-      expect(ready.bindings[0]?.role).toBe("oa_t");
-    }
+  it("keeps the documented history read as a GET", () => {
     expect(illustratedNfHistoryRead(2)).toContain("GET /api/v1/point/data");
     expect(illustratedNfHistoryRead(2)).not.toMatch(/POST/);
   });
