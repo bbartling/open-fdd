@@ -6408,14 +6408,35 @@ async fn analytics_sensor_health(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    cached_analytics!(
-        "sensor-health",
-        analytics::QV_SENSOR_HEALTH,
-        &state,
-        &headers,
-        req,
-        analytics::sensor_health::handle_async(&req)
-    )
+    gate_analytics(&state, &headers, &mut req)?;
+    if crate::timescale_historian::historian_is_timescale() {
+        return crate::timescale_analytics::respond_query(
+            "sensor-health",
+            analytics::QV_SENSOR_HEALTH,
+            &req,
+        )
+        .await
+        .map(Json);
+    }
+    match analytics::sensor_health::handle_async(&req).await {
+        Ok(env) => {
+            crate::analytics::result_cache::respond(
+                "sensor-health",
+                analytics::QV_SENSOR_HEALTH,
+                &req,
+                async move || env,
+            )
+            .await
+        }
+        Err(err) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "ok": false,
+                "error": err.to_string(),
+                "engine": "timescale-sql",
+            })),
+        )),
+    }
 }
 
 async fn analytics_schedule(

@@ -1024,9 +1024,9 @@ pub async fn respond_query(
         "vav-health" => Ok(crate::analytics::vav_health::handle_async(req)
             .await
             .to_json()),
-        "sensor-health" => Ok(crate::analytics::sensor_health::handle_async(req)
+        "sensor-health" => crate::analytics::sensor_health::handle_async(req)
             .await
-            .to_json()),
+            .map(|env| env.to_json()),
         "economizer" | "rcx-ahu" => {
             economizer_deltas(&tsdb, &building, &scope, economizer_dt_min(req.dt_min_f)).await
         }
