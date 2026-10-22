@@ -48,8 +48,8 @@ vi.mock("../api/fddApi", () => ({
 vi.mock("../api/providersApi", () => ({
   listProviderBuildingIds: vi.fn(async () => []),
   fetchOptionalJson: vi.fn(async () => ({ http: "missing" })),
-  providerBindingsPath: (buildingId: string) =>
-    `/api/providers/bindings?building_id=${encodeURIComponent(buildingId)}`,
+  ingestJobsPath: (siteId: string) => `/api/ingest/jobs?site_id=${encodeURIComponent(siteId)}`,
+  ingestGapsPath: (siteId: string) => `/api/ingest/gaps?site_id=${encodeURIComponent(siteId)}`,
 }));
 
 import { listFddRules } from "../api/fddApi";

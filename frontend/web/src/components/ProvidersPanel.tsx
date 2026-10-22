@@ -4,7 +4,8 @@ import {
   fetchOptionalJson,
   fetchProviderSites,
   fetchProvidersHealth,
-  providerWindowsPath,
+  ingestGapsPath,
+  ingestJobsPath,
   type CoverageLedgerView,
   type ProviderRegistrationView,
   type ProviderSiteConfig,
@@ -12,8 +13,9 @@ import {
 } from "../api/providersApi";
 import {
   credentialRefLabel,
-  interpretWindowLedger,
+  ledgerFromFetches,
   mergeProviderRows,
+  POLL_LEDGER_COVERAGE_LABEL,
   providerLabel,
   providerStatusView,
   sanitizeProviderOrigin,
@@ -33,6 +35,17 @@ function formatPoll(seconds: number | undefined): string {
   if (seconds % 3600 === 0) return `${seconds / 3600} h`;
   if (seconds % 60 === 0) return `${seconds / 60} min`;
   return `${seconds} s`;
+}
+
+function filterWindows(rows: ProviderWindowRow[], query: string): ProviderWindowRow[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter((row) =>
+    [row.deviceId, row.state, row.jobId, row.reason, row.providerInstanceId, windowStateLabel(row)]
+      .join(" ")
+      .toLowerCase()
+      .includes(q),
+  );
 }
 
 function inspectHref(buildingId: string, row: ProviderWindowRow): string {
@@ -121,51 +134,51 @@ export function ProvidersPanel() {
       return;
     }
     const buildingId = selectedBuildingId;
-    let cancelled = false;
+    const controller = new AbortController();
     setLedger(null);
     setLedgerError(null);
     setPage(0);
     void (async () => {
-      const result = await fetchOptionalJson(providerWindowsPath(buildingId));
-      if (cancelled) return;
-      if (result.http === "error") {
-        setLedgerError(result.message);
-        setLedger({
-          available: false,
-          reason: "Window ledger could not be loaded. Poll health above is unchanged.",
-        });
-        return;
-      }
-      setLedger(interpretWindowLedger(result.http === "ok" ? result.body : null, result.http === "missing"));
+      const [jobs, gaps] = await Promise.all([
+        fetchOptionalJson(ingestJobsPath(buildingId), controller.signal),
+        fetchOptionalJson(ingestGapsPath(buildingId), controller.signal),
+      ]);
+      if (controller.signal.aborted) return;
+      const message =
+        jobs.http === "error" && jobs.message !== "aborted"
+          ? jobs.message
+          : gaps.http === "error" && gaps.message !== "aborted"
+            ? gaps.message
+            : null;
+      if (message) setLedgerError(message);
+      setLedger(ledgerFromFetches(jobs, gaps));
     })();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [selectedBuildingId]);
 
-  const filteredWindows = useMemo(() => {
-    if (!ledger || !ledger.available) return [];
-    const q = query.trim().toLowerCase();
-    if (!q) return ledger.windows;
-    return ledger.windows.filter((row) =>
-      [row.deviceId, row.state, row.jobId, row.reason, windowStateLabel(row)]
-        .join(" ")
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [ledger, query]);
+  const readyLedger = ledger?.status === "ready" ? ledger : null;
+  const filteredJobs = useMemo(() => {
+    if (!readyLedger) return [];
+    return filterWindows(readyLedger.jobs, query);
+  }, [readyLedger, query]);
+  const filteredGaps = useMemo(() => {
+    if (!readyLedger) return [];
+    return filterWindows(readyLedger.gaps, query);
+  }, [readyLedger, query]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredWindows.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filteredJobs.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
-  const pageRows = filteredWindows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageRows = filteredJobs.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
   const stateCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const row of filteredWindows) {
+    for (const row of filteredGaps) {
       const label = windowStateLabel(row);
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filteredWindows]);
+  }, [filteredGaps]);
 
   return (
     <section aria-labelledby="providers-heading" data-testid="providers-health-panel">
@@ -217,7 +230,7 @@ export function ProvidersPanel() {
         return (
           <div key={site.key} data-testid="coverage-ledger">
             <p data-testid="coverage-guarantee">{ledger.guarantee?.statement}</p>
-            <p data-testid="coverage-gapless">Gapless: {ledger.gapless ? "yes" : "no"}</p>
+            <p data-testid="coverage-gapless">{POLL_LEDGER_COVERAGE_LABEL}</p>
             <table>
               <thead>
                 <tr>
@@ -351,14 +364,20 @@ export function ProvidersPanel() {
           </ul>
 
           <h3 id="provider-ledger-heading">Window ledger</h3>
-          {ledgerError ? <p className="error">{ledgerError}</p> : null}
+          {ledgerError ? (
+            <p className="error" data-testid="provider-ledger-error">
+              {ledgerError}
+            </p>
+          ) : null}
           {!ledger ? <p data-testid="provider-ledger-loading">Loading window ledger…</p> : null}
-          {ledger && !ledger.available ? (
+          {ledger && ledger.status === "unavailable" ? (
             <p data-testid="provider-ledger-empty">{ledger.reason}</p>
           ) : null}
-          {ledger && ledger.available ? (
+          {ledger && ledger.status === "ready" ? (
             <div data-testid="provider-ledger">
-              {ledger.note ? <p>{ledger.note}</p> : null}
+              <p data-testid="provider-ledger-coverage">{ledger.coverageLabel}</p>
+              <p data-testid="provider-ledger-jobs-note">{ledger.jobsNote}</p>
+              <p data-testid="provider-ledger-gaps-note">{ledger.gapsNote}</p>
               <p data-testid="provider-backfill-note">
                 Bounded backfill and retry are not submitted from this screen. Progress and cancel
                 appear when the server publishes them. An expired upstream window stays
@@ -380,20 +399,19 @@ export function ProvidersPanel() {
                   {stateCounts.map(([label, count]) => `${label}: ${count}`).join(" · ")}
                 </p>
               ) : (
-                <p>No windows match this search.</p>
+                <p>No gap windows match this search.</p>
               )}
+              <h4>Durable job windows</h4>
               {pageRows.length > 0 ? (
                 <div className="widget-table-wrap">
-                  <table data-testid="provider-ledger-table">
+                  <table data-testid="provider-ledger-jobs">
                     <thead>
                       <tr>
                         <th>Device</th>
                         <th>Window</th>
                         <th>State</th>
                         <th>Points</th>
-                        <th>Retry</th>
-                        <th>Bytes</th>
-                        <th>Duration</th>
+                        <th>Attempt</th>
                         <th>Job</th>
                         <th>Links</th>
                       </tr>
@@ -412,12 +430,10 @@ export function ProvidersPanel() {
                             {row.reason ? ` — ${row.reason}` : ""}
                           </td>
                           <td>
-                            requested {row.requestedPoints ?? "—"} · accepted {row.accepted ?? "—"} ·
-                            rejected {row.rejected ?? "—"} · committed {row.committed ?? "—"}
+                            fetched {row.fetched ?? "—"} · accepted {row.accepted ?? "—"} · rejected{" "}
+                            {row.rejected ?? "—"} · inserted {row.inserted ?? "—"}
                           </td>
-                          <td>{row.retryCount ?? "—"}</td>
-                          <td>{row.bytes ?? "—"}</td>
-                          <td>{row.durationMs != null ? `${row.durationMs} ms` : "—"}</td>
+                          <td>{row.attempt ?? "—"}</td>
                           <td>
                             <code>{row.jobId}</code>
                           </td>
@@ -432,7 +448,42 @@ export function ProvidersPanel() {
                   </table>
                 </div>
               ) : null}
-              {filteredWindows.length > PAGE_SIZE ? (
+              <h4>Gaps in returned windows</h4>
+              {filteredGaps.length > 0 ? (
+                <div className="widget-table-wrap">
+                  <table data-testid="provider-ledger-gaps">
+                    <thead>
+                      <tr>
+                        <th>Device</th>
+                        <th>Window</th>
+                        <th>State</th>
+                        <th>Reason</th>
+                        <th>Job</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredGaps.map((row) => (
+                        <tr key={row.id}>
+                          <td>{row.deviceId || "—"}</td>
+                          <td>
+                            {row.windowStart || "—"} → {row.windowEnd || "—"}
+                          </td>
+                          <td>
+                            <span className={`provider-status provider-status--${windowTone(row)}`}>
+                              {windowStateLabel(row)}
+                            </span>
+                          </td>
+                          <td>{row.reason || "—"}</td>
+                          <td>
+                            <code>{row.jobId}</code>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              {filteredJobs.length > PAGE_SIZE ? (
                 <div className="button-row">
                   <Button
                     id="provider-ledger-prev"

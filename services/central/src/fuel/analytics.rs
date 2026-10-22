@@ -51,24 +51,88 @@ fn envelope(query_version: &str, warnings: Vec<String>) -> Value {
     })
 }
 
-fn resolve_campus(req: &FuelRequest) -> Result<Campus, String> {
-    let root = fuel_root();
-    let id = match &req.campus_id {
-        Some(id) => id.clone(),
-        None => {
-            // Prefer sole campus, else first alphabetically.
-            let list = super::import::list_campuses().map_err(|e| e.to_string())?;
-            let campuses = list["campuses"].as_array().cloned().unwrap_or_default();
-            if campuses.is_empty() {
-                return Err("no fuel campus imported; POST /api/fuel/campus/import first".into());
-            }
-            campuses[0]["campus_id"]
-                .as_str()
-                .unwrap_or("unknown")
-                .to_string()
+pub fn is_campus_query_version(query_version: &str) -> bool {
+    matches!(
+        query_version,
+        QV_SUMMARY | QV_MONTHLY | QV_STACKED | QV_INTENSITY | QV_DEMAND | QV_QUALITY | QV_WEATHER
+    )
+}
+
+fn trimmed_id(value: &Option<String>) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+}
+
+fn fuel_status(
+    query_version: &str,
+    status: &str,
+    ok: bool,
+    message: &str,
+    building_id: Option<&str>,
+) -> Value {
+    let mut env = envelope(query_version, vec![message.to_string()]);
+    env["ok"] = json!(ok);
+    env["status"] = json!(status);
+    if ok {
+        env["reason"] = json!(message);
+    } else {
+        env["error"] = json!(message);
+    }
+    if let Some(id) = building_id {
+        env["building_id"] = json!(id);
+        env["campus_id"] = json!(id);
+    }
+    env
+}
+
+fn resolve_campus(req: &FuelRequest) -> Result<Campus, Value> {
+    let qv = req.query_version.as_deref().unwrap_or(QV_SUMMARY);
+    let building = trimmed_id(&req.building_id);
+    let campus_id = trimmed_id(&req.campus_id);
+    if let (Some(building_id), Some(requested)) = (building.as_deref(), campus_id.as_deref()) {
+        if building_id != requested {
+            return Err(fuel_status(
+                qv,
+                "scope_mismatch",
+                false,
+                "campus_id does not match the selected site",
+                Some(building_id),
+            ));
         }
-    };
-    load_campus(&root.join(id)).map_err(|e| e.to_string())
+    }
+    if let Some(building_id) = building.as_deref() {
+        return match super::import::load_scoped_campus(building_id) {
+            super::import::ScopedCampus::Found(campus) => Ok(campus),
+            super::import::ScopedCampus::NoMeters { building_id } => Err(fuel_status(
+                qv,
+                "no_meters",
+                true,
+                "selected site has no meters",
+                Some(&building_id),
+            )),
+            super::import::ScopedCampus::Unavailable { message } => Err(fuel_status(
+                qv,
+                "unavailable",
+                false,
+                &message,
+                Some(building_id),
+            )),
+        };
+    }
+    if let Some(campus_id) = campus_id.as_deref() {
+        return load_campus(&fuel_root().join(campus_id))
+            .map_err(|err| fuel_status(qv, "unavailable", false, &err.to_string(), None));
+    }
+    Err(fuel_status(
+        qv,
+        "scope_required",
+        false,
+        "building_id is required; refusing to select another campus",
+        None,
+    ))
 }
 
 /// Dispatch fuel analytics by `query_version`.
@@ -80,12 +144,8 @@ pub fn handle_fuel(req: &FuelRequest) -> Value {
         .to_string();
     let mut warnings = Vec::new();
     let campus = match resolve_campus(req) {
-        Ok(c) => c,
-        Err(e) => {
-            let mut env = envelope(&qv, vec![e]);
-            env["ok"] = json!(false);
-            return env;
-        }
+        Ok(campus) => campus,
+        Err(env) => return env,
     };
     let allocation = req
         .allocation
@@ -714,6 +774,7 @@ mod tests {
     use super::*;
     use crate::jobs::lock_workspace_env;
     use crate::test_env_lock::WorkspaceEnv;
+    use serde_json::json;
     use std::path::PathBuf;
 
     fn fixture_campus() -> Campus {
@@ -779,5 +840,115 @@ mod tests {
         let mut warnings = Vec::new();
         let env = fuel_monthly(&campus, true, &mut warnings);
         assert!(!env["rows"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn selected_site_without_meters_hides_other_campus() {
+        let _guard = lock_workspace_env();
+        let dir = tempfile::tempdir().expect("workspace");
+        let _ws = WorkspaceEnv::set(dir.path());
+        write_campus(dir.path(), "w5f-other", "OTHER_METER", 9999);
+        write_campus(dir.path(), "w5f-metered", "SITE_METER", 111);
+
+        let unscoped = super::super::import::campus_catalog(None, None).expect("catalog");
+        let unscoped_body = unscoped.to_string();
+        assert!(
+            unscoped_body.contains("OTHER_METER"),
+            "residual campus must exist for the control: {unscoped}"
+        );
+        assert_eq!(unscoped["scope"], "unscoped");
+
+        let empty = super::super::import::campus_catalog(Some("w5f-empty"), None).expect("empty");
+        let empty_body = empty.to_string();
+        assert_eq!(empty["status"], "no_meters");
+        assert_eq!(empty["campuses"].as_array().expect("campuses").len(), 0);
+        assert!(
+            !empty_body.contains("OTHER_METER"),
+            "empty site catalog leaked the other campus: {empty}"
+        );
+        assert!(
+            !empty_body.contains("SITE_METER"),
+            "empty site catalog leaked the metered campus: {empty}"
+        );
+
+        let monthly = handle_fuel(&FuelRequest {
+            query_version: Some(QV_MONTHLY.into()),
+            building_id: Some("w5f-empty".into()),
+            campus_id: Some("w5f-empty".into()),
+            ..Default::default()
+        });
+        let monthly_body = monthly.to_string();
+        assert_eq!(monthly["status"], "no_meters");
+        assert_eq!(monthly["ok"], true);
+        assert!(monthly["rows"].as_array().expect("rows").is_empty());
+        assert!(
+            !monthly_body.contains("OTHER_METER") && !monthly_body.contains("9999"),
+            "empty site analytics leaked residual bills: {monthly}"
+        );
+
+        let mismatch = handle_fuel(&FuelRequest {
+            query_version: Some(QV_MONTHLY.into()),
+            building_id: Some("w5f-empty".into()),
+            campus_id: Some("w5f-other".into()),
+            ..Default::default()
+        });
+        assert_eq!(mismatch["status"], "scope_mismatch");
+        assert_eq!(mismatch["ok"], false);
+        assert!(
+            !mismatch.to_string().contains("OTHER_METER"),
+            "mismatch returned the other campus: {mismatch}"
+        );
+
+        let own = handle_fuel(&FuelRequest {
+            query_version: Some(QV_MONTHLY.into()),
+            building_id: Some("w5f-metered".into()),
+            campus_id: Some("w5f-metered".into()),
+            ..Default::default()
+        });
+        let own_body = own.to_string();
+        assert_eq!(own["ok"], true, "{own}");
+        assert_eq!(own["campus_id"], "w5f-metered");
+        assert!(own_body.contains("SITE_METER"), "{own}");
+        assert!(!own_body.contains("OTHER_METER"), "{own}");
+
+        let unscoped_query = handle_fuel(&FuelRequest {
+            query_version: Some(QV_MONTHLY.into()),
+            ..Default::default()
+        });
+        assert_eq!(unscoped_query["status"], "scope_required");
+        assert_eq!(unscoped_query["ok"], false);
+        assert!(!unscoped_query.to_string().contains("OTHER_METER"));
+    }
+
+    fn write_campus(root: &std::path::Path, id: &str, meter_id: &str, kwh: i64) {
+        let dir = root.join("data").join("fuel").join(id);
+        std::fs::create_dir_all(&dir).expect("campus dir");
+        std::fs::write(
+            dir.join("bills.csv"),
+            format!("month,kwh,cost\n2024-01,{kwh},12\n"),
+        )
+        .expect("bills");
+        let doc = json!({
+            "campus_id": id,
+            "label": id,
+            "buildings": [{
+                "building_id": id,
+                "label": id,
+                "floor_area_ft2": 1000.0,
+                "property_type": "office"
+            }],
+            "meters": [{
+                "meter_id": meter_id,
+                "fuel": "electricity",
+                "unit": "kwh",
+                "file": "bills.csv",
+                "serves": [id]
+            }]
+        });
+        std::fs::write(
+            dir.join("campus.json"),
+            serde_json::to_string_pretty(&doc).expect("campus json"),
+        )
+        .expect("write campus");
     }
 }

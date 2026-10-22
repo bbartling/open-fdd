@@ -78,13 +78,13 @@ function coolSeasonFromWeather(
 export type FuelDashboardProps = {
   /** When this value changes, re-fetch the campus list (e.g. after import). */
   reloadToken?: number;
-  /** Prefer campus matching active site / package building id when present. */
-  preferredCampusId?: string;
+  /** Active site. Utilities are loaded for this id only. */
+  siteId?: string;
 };
 
 export function FuelDashboard({
   reloadToken,
-  preferredCampusId,
+  siteId,
 }: FuelDashboardProps = {}) {
   const [campuses, setCampuses] = useState<FuelCampusMeta[]>([]);
   const [campusId, setCampusId] = useState("");
@@ -97,40 +97,57 @@ export function FuelDashboard({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [weatherNotice, setWeatherNotice] = useState<string | null>(null);
 
-  const refreshCampuses = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
     setLoadingCampuses(true);
     setError(null);
-    try {
-      const res = await listFuelCampuses();
-      const list = Array.isArray(res.campuses) ? res.campuses : [];
-      setCampuses(list.filter((c) => c.campus_id && !c.error));
-      setCampusId((prev) => {
-        if (prev && list.some((c) => c.campus_id === prev)) return prev;
-        if (
-          preferredCampusId &&
-          list.some((c) => c.campus_id === preferredCampusId)
-        ) {
-          return preferredCampusId;
-        }
-        const active = res.active?.campus_id;
-        if (active && list.some((c) => c.campus_id === active)) return active;
-        return list[0]?.campus_id ?? "";
-      });
-    } catch (err) {
+    setCampusId("");
+    setBundle({});
+    setWarnings([]);
+    if (!siteId) {
       setCampuses([]);
-      setCampusId("");
-      setError(formatErr(err));
-    } finally {
       setLoadingCampuses(false);
+      return;
     }
-  }, [preferredCampusId]);
+    const requestedSite = siteId;
+    void (async () => {
+      try {
+        const res = await listFuelCampuses(requestedSite);
+        if (cancelled) return;
+        const list = Array.isArray(res.campuses) ? res.campuses : [];
+        const blocked =
+          res.status === "no_meters" ||
+          res.status === "unavailable" ||
+          res.status === "scope_mismatch";
+        const match = blocked
+          ? undefined
+          : list.find((c) => c.campus_id === requestedSite && !c.error);
+        if (!match) {
+          setCampuses([]);
+          setCampusId("");
+          if (res.status === "unavailable" && res.error) {
+            setError(res.error);
+          }
+          return;
+        }
+        setCampuses([match]);
+        setCampusId(match.campus_id);
+      } catch (err) {
+        if (cancelled) return;
+        setCampuses([]);
+        setCampusId("");
+        setError(formatErr(err));
+      } finally {
+        if (!cancelled) setLoadingCampuses(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [siteId, reloadToken]);
 
   useEffect(() => {
-    void refreshCampuses();
-  }, [refreshCampuses, reloadToken]);
-
-  useEffect(() => {
-    if (!campusId) {
+    if (!campusId || campusId !== siteId) {
       setBundle({});
       setWarnings([]);
       return;
@@ -145,12 +162,19 @@ export function FuelDashboard({
             const env = await postFuelAnalytics({
               query_version: qv,
               campus_id: campusId,
+              building_id: siteId,
               allocation: "area_weighted",
             });
             return [qv, env] as const;
           }),
         );
         if (cancelled) return;
+        if (results.some(([, env]) => env.status === "no_meters")) {
+          setBundle({});
+          setCampusId("");
+          setWarnings([]);
+          return;
+        }
         const next: FuelBundle = {};
         const warns: string[] = [];
         for (const [qv, env] of results) {
@@ -173,13 +197,14 @@ export function FuelDashboard({
     return () => {
       cancelled = true;
     };
-  }, [campusId]);
+  }, [campusId, siteId]);
 
   const reloadWeatherAnalytics = useCallback(async () => {
-    if (!campusId) return;
+    if (!campusId || !siteId || campusId !== siteId) return;
     const env = await postFuelAnalytics({
       query_version: "fuel-weather-v1",
       campus_id: campusId,
+      building_id: siteId,
       allocation: "area_weighted",
     });
     setBundle((prev) => ({ ...prev, "fuel-weather-v1": env }));
@@ -187,7 +212,7 @@ export function FuelDashboard({
       const rest = prev.filter((w) => !w.startsWith("fuel-weather-v1:"));
       return [...rest, ...(env.warnings ?? []).map((w) => `fuel-weather-v1: ${w}`)];
     });
-  }, [campusId]);
+  }, [campusId, siteId]);
 
   const onFetchOpenMeteo = async () => {
     if (!campusId) return;
@@ -333,17 +358,34 @@ export function FuelDashboard({
     [weather],
   );
 
-  if (!loadingCampuses && campuses.length === 0) {
+  if (!siteId) {
     return (
       <div data-testid="fuel-dashboard" className="page-stack">
-        <InlineAlert id="fuel-empty" variant="info" testId="fuel-upload-prompt">
-          No fuel campuses available yet. Import a building package with{" "}
-          <code>utilities_v1</code> (or wrapper <code>utility_bills_monthly.csv</code>)
-          on Upload / Sites, then return here. Legacy fuel campus ZIP is not the
-          primary Metering path.
+        <InlineAlert id="fuel-site-required" variant="info" testId="fuel-site-required">
+          Lock a site to view utilities.
+        </InlineAlert>
+      </div>
+    );
+  }
+
+  if (loadingCampuses && !campusId) {
+    return (
+      <div data-testid="fuel-dashboard" className="page-stack">
+        <InlineAlert id="fuel-loading" variant="info" testId="fuel-loading">
+          Loading utilities.
+        </InlineAlert>
+      </div>
+    );
+  }
+
+  if (!loadingCampuses && !campusId) {
+    return (
+      <div data-testid="fuel-dashboard" className="page-stack">
+        <InlineAlert id="fuel-no-meters" variant="info" testId="fuel-no-meters">
+          This site has no meters.
         </InlineAlert>
         {error ? (
-          <InlineAlert id="fuel-error" variant="danger">
+          <InlineAlert id="fuel-error" variant="danger" testId="fuel-error">
             {error}
           </InlineAlert>
         ) : null}
@@ -356,19 +398,16 @@ export function FuelDashboard({
       <Select
         id="fuel-campus"
         label="Fuel campus"
-        description="Campuses from package utilities / residual fuel data"
+        description="Utilities for the active site"
         value={campusId}
-        options={[
-          { value: "", label: "— select campus —" },
-          ...campuses.map((c) => ({
-            value: c.campus_id,
-            label: campusLabel(c),
-          })),
-        ]}
+        options={campuses.map((c) => ({
+          value: c.campus_id,
+          label: campusLabel(c),
+        }))}
         onChange={setCampusId}
         loading={loadingCampuses}
-        disabled={loadingCampuses}
-        testId="fuel-campus-select"
+        disabled
+        testId="fuel-campus-locked"
       />
 
       {error ? (

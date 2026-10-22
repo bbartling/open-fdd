@@ -15,11 +15,8 @@ vi.mock("../session", () => ({
 }));
 
 vi.mock("../components/FuelDashboard", () => ({
-  FuelDashboard: ({ preferredCampusId }: { preferredCampusId?: string }) => (
-    <div
-      data-testid="fuel-dashboard"
-      data-preferred-campus={preferredCampusId ?? ""}
-    >
+  FuelDashboard: ({ siteId }: { siteId?: string }) => (
+    <div data-testid="fuel-dashboard" data-site-id={siteId ?? ""}>
       FuelDashboard stub
     </div>
   ),
@@ -57,7 +54,7 @@ describe("MeteringPage", () => {
       /utilities_v1/,
     );
     expect(
-      screen.getByTestId("fuel-dashboard").getAttribute("data-preferred-campus"),
+      screen.getByTestId("fuel-dashboard").getAttribute("data-site-id"),
     ).toBe("LAKESIDE_ES");
     expect(screen.getByTestId("metering-section")).toBeTruthy();
   });
