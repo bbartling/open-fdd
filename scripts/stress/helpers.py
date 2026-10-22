@@ -645,3 +645,58 @@ def ensure_repo_on_path() -> Path:
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
     return REPO
+
+
+# Child ↔ run_gate.py verdict protocol. Exit 0 is PASS only when the child also
+# wrote a PASS result file; 2 is BLOCKED (fixture / precondition missing); any
+# other code is FAIL.
+EXIT_PASS = 0
+EXIT_FAIL = 1
+EXIT_BLOCKED = 2
+RESULT_FILE_ENV = "OPENFDD_STRESS_RESULT_FILE"
+
+
+def status_for_exit(code: int) -> str:
+    if code == EXIT_PASS:
+        return "PASS"
+    if code == EXIT_BLOCKED:
+        return "BLOCKED"
+    return "FAIL"
+
+
+def _exit_code(value: Any) -> int:
+    if value is None:
+        return EXIT_PASS
+    if isinstance(value, bool):
+        return EXIT_FAIL if value else EXIT_PASS
+    if isinstance(value, int):
+        return value
+    safe_print(str(value), file=sys.stderr)
+    return EXIT_FAIL
+
+
+def write_result(script: str, code: int, *, path: str | None = None) -> None:
+    target = path or os.environ.get(RESULT_FILE_ENV)
+    if not target:
+        return
+    out = Path(target)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps({"script": script, "exit_code": code, "status": status_for_exit(code)}),
+        encoding="utf-8",
+    )
+
+
+def run_child(main: Any, script: str) -> int:
+    """Run a gate ``main`` and record its verdict for ``run_gate.py``.
+
+    An uncaught exception records FAIL and propagates (non-zero exit).
+    """
+    code = EXIT_FAIL
+    try:
+        code = _exit_code(main())
+    except SystemExit as exc:
+        code = _exit_code(exc.code)
+    finally:
+        write_result(script, code)
+    return code
