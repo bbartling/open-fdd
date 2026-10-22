@@ -7,7 +7,8 @@ import { useSessionQuery } from "../session";
 import { postInspect } from "../api/analyticsApi";
 import { getPackageMapping } from "../api/mappingApi";
 import { equipmentInspectionChart } from "../api/inspectChart";
-import { downloadRowsCsv } from "../api/csvDownload";
+import { buildInspectSampleExport, downloadJson } from "../api/inspectExport";
+import { resolveRoleUnit } from "../api/roleUnits";
 import { naturalCompare } from "../lib/naturalSort";
 import type { PlotlyFigure } from "../api/plotDataset";
 
@@ -25,9 +26,12 @@ export function InspectPage() {
   const [cols, setCols] = useState<string[]>([]);
   const [selectedCols, setSelectedCols] = useState<string[]>([]);
   const [fig, setFig] = useState<PlotlyFigure | null>(null);
-  const [meta, setMeta] = useState<{ row_count: number; span: string } | null>(
-    null,
-  );
+  const [meta, setMeta] = useState<{
+    row_count: number;
+    span: string;
+    first: string | null;
+    last: string | null;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const seq = useRef(0);
@@ -98,6 +102,8 @@ export function InspectPage() {
         setMeta({
           row_count: Number.isFinite(sampleN) ? sampleN : 0,
           span: first && last ? `${first} → ${last}` : "—",
+          first,
+          last,
         });
         if (
           !requested.length &&
@@ -199,15 +205,18 @@ export function InspectPage() {
             variant="secondary"
             disabled={!fig?.data?.length}
             onClick={() => {
-              const rows = fig?.data?.[0] as
-                | { x?: unknown[]; y?: unknown[] }
-                | undefined;
-              if (!rows?.x?.length) return;
-              const preview = rows.x.map((x, i) => ({
-                timestamp: x,
-                value: rows.y?.[i] ?? null,
-              }));
-              downloadRowsCsv(`${pick || "equipment"}_series.csv`, preview);
+              if (!fig?.data?.length) return;
+              const payload = buildInspectSampleExport({
+                equipmentId: pick || "equipment",
+                source: "POST /api/analytics/inspect",
+                window: { first: meta?.first ?? null, last: meta?.last ?? null },
+                traces: fig.data,
+                unitFor: (name) => {
+                  const unit = resolveRoleUnit(name);
+                  return unit ? unit : null;
+                },
+              });
+              downloadJson(`${pick || "equipment"}_inspect.json`, payload);
             }}
             testId="overview-dl-inspect"
           />

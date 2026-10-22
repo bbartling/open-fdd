@@ -194,6 +194,10 @@ export function RcxPage() {
 
   const coverageRows = useMemo(() => {
     const cov = env?.coverage;
+    const observed =
+      figure?.meta?.weekly_observations != null
+        ? String(figure.meta.weekly_observations)
+        : String(figure?.meta?.point_count ?? env?.points?.length ?? 0);
     if (!cov || typeof cov !== "object") {
       return presets.map((p) => ({
         preset_id: p.id,
@@ -215,7 +219,7 @@ export function RcxPage() {
         chart: String(cov.chart_kind ?? cov.chart ?? ""),
         frozen: presets.find((p) => p.id === runId)?.frozen ? "yes" : "no",
         status: cov.empty ? "empty" : "ok",
-        points: String(env?.points?.length ?? 0),
+        points: observed,
         note: [
           cov.role_col != null ? `role=${cov.role_col}` : "",
           cov.y_col != null ? `y=${cov.y_col}` : "",
@@ -251,7 +255,7 @@ export function RcxPage() {
           note: "",
         })),
     ];
-  }, [env, presets, presetId]);
+  }, [env, figure, presets, presetId]);
 
   const run = useCallback(async (opts?: { refresh?: boolean }) => {
     if (!buildingId || !presetId) return;
@@ -482,8 +486,10 @@ export function RcxPage() {
         ) : null}
         {env ? (
           <p className="oracle-sidebar__caption" data-testid="rcx-provenance">
-            engine={env.engine} · {env.query_version} · points=
-            {env.points?.length ?? 0}
+            engine={env.engine} · {env.query_version}
+            {figure?.meta?.weekly_observations != null && figure.meta.provenance
+              ? ` · ${figure.meta.provenance}`
+              : ` · points=${figure?.meta?.point_count ?? env.points?.length ?? 0}`}
             {env.warnings?.[0] ? ` · ${env.warnings[0]}` : ""}
           </p>
         ) : null}

@@ -19,12 +19,16 @@ import type {
   OverviewPlantFig,
   OverviewVibe19Response,
 } from "./overviewTypes";
+import { overviewChartLayout, rainbowColor } from "./plotlyTheme";
+import { getPackageMapping, getSessionConfig } from "./mappingApi";
 import {
-  AIR_BARE_MIN_OCC_HOURS_WEEK,
-  overviewChartLayout,
-  rainbowColor,
-} from "./plotlyTheme";
-import { getPackageMapping } from "./mappingApi";
+  formatWeeklyRuntimeProvenance,
+  partialWeekLabel,
+  scheduleReferenceClause,
+  scheduleReferenceFromSession,
+  weekBucketIsPartial,
+  type ScheduleReference,
+} from "./occupancySchedule";
 import {
   analyticsWindowFromSampling,
   datasetTimeSpan,
@@ -70,10 +74,29 @@ function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null 
   });
 }
 
+export interface WeeklyChartOptions {
+  schedule?: ScheduleReference;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+}
+
+function finiteSampleCount(rows: Array<Record<string, unknown>>): number | null {
+  let total = 0;
+  for (const row of rows) {
+    const count = num(row.n_observations);
+    if (count == null) return null;
+    total += count;
+  }
+  return total;
+}
+
 /** Weekly plant bars + optional avg OAT on y2 (vibe19 motor_weekly_runtime_chart). */
 export function weeklyPlantFigures(
   rows: Array<Record<string, unknown>>,
+  options?: WeeklyChartOptions,
 ): OverviewPlantFig[] {
+  const schedule =
+    options?.schedule ?? scheduleReferenceFromSession(null, "UTC");
   const weekly = rows.filter((r) => {
     if (r.kind !== "weekly_equipment" && r.kind !== "weekly_plant") return false;
     if (isZoneTerminalEquipment(r)) return false;
@@ -106,6 +129,16 @@ export function weeklyPlantFigures(
       const weeks = [
         ...new Set(sorted.map((r) => String(r.week_label ?? ""))),
       ].sort((a, b) => a.localeCompare(b));
+      const partialWeeks = new Set(
+        sorted
+          .filter((row) =>
+            weekBucketIsPartial(row, options?.windowStart, options?.windowEnd),
+          )
+          .map((row) => String(row.week_label ?? "")),
+      );
+      const weekLabels = weeks.map((week) =>
+        partialWeekLabel(week, partialWeeks.has(week)),
+      );
 
       const perEq = new Map<string, Array<Record<string, unknown>>>();
       for (const r of sorted) {
@@ -127,7 +160,7 @@ export function weeklyPlantFigures(
         data.push({
           type: "bar",
           name: lab,
-          x: weeks,
+          x: weekLabels,
           y: weeks.map((w) => byWeek.get(w) ?? null),
           marker: { color: rainbowColor(colorIdx) },
         });
@@ -155,7 +188,7 @@ export function weeklyPlantFigures(
           type: "scatter",
           mode: "lines+markers",
           name: "Avg OAT °F (while on)",
-          x: weeks,
+          x: weekLabels,
           y: oat,
           yaxis: "y2",
           line: { width: 2, color: "#333333", dash: "dot" },
@@ -164,7 +197,10 @@ export function weeklyPlantFigures(
       }
 
       const isAir = plant_group === "air";
-      const shapes = isAir
+      const weeklyObservations = sorted.filter((row) => num(row.run_hours) != null).length;
+      const sampleCount = finiteSampleCount(sorted);
+      const reference = isAir ? schedule : null;
+      const shapes = reference
         ? [
             {
               type: "line",
@@ -172,20 +208,20 @@ export function weeklyPlantFigures(
               x0: 0,
               x1: 1,
               yref: "y",
-              y0: AIR_BARE_MIN_OCC_HOURS_WEEK,
-              y1: AIR_BARE_MIN_OCC_HOURS_WEEK,
+              y0: reference.hours,
+              y1: reference.hours,
               line: { color: "#c45c26", width: 1.5, dash: "dash" },
             },
           ]
         : undefined;
-      const annotations = isAir
+      const annotations = reference
         ? [
             {
               xref: "paper",
               x: 1,
-              y: AIR_BARE_MIN_OCC_HOURS_WEEK,
+              y: reference.hours,
               yref: "y",
-              text: `Bare-min occupied hours/week (${AIR_BARE_MIN_OCC_HOURS_WEEK}h)`,
+              text: scheduleReferenceClause(reference),
               showarrow: false,
               xanchor: "right",
               yanchor: "bottom",
@@ -209,8 +245,17 @@ export function weeklyPlantFigures(
           },
         }),
         meta: {
-          point_count: sorted.length,
-          provenance: "POST /api/analytics/runtime (runtime-weekly-v2)",
+          point_count: weeklyObservations,
+          weekly_observations: weeklyObservations,
+          sample_count: sampleCount ?? undefined,
+          schedule_hours: reference?.hours,
+          schedule_timezone: reference?.source === "session" ? reference.timezone : undefined,
+          schedule_source: reference?.source,
+          provenance: formatWeeklyRuntimeProvenance({
+            weeklyObservations,
+            sampleCount,
+            schedule: reference,
+          }),
         },
       };
       return {
@@ -712,6 +757,10 @@ export async function fetchCentralOverview(opts: {
     ? await getPackageMapping(building_id).catch(() => null)
     : null;
   const window = analyticsWindowFromSampling(mapping?.equipment ?? []);
+  const session = building_id
+    ? await getSessionConfig(building_id).catch(() => null)
+    : null;
+  const schedule = scheduleReferenceFromSession(session?.config, "UTC");
   const body = {
     building_id,
     max_points: 4000,
@@ -779,7 +828,11 @@ export async function fetchCentralOverview(opts: {
         equipmentTotals.filter((r) => !isWeatherEquipment(r)),
       );
 
-  const weeklyPlants = weeklyPlantFigures(runtimeRows);
+  const weeklyPlants = weeklyPlantFigures(runtimeRows, {
+    schedule,
+    windowStart: window.start ?? null,
+    windowEnd: window.end ?? null,
+  });
   const plantMotorTotals = equipmentTotals.filter(
     (r) =>
       r.kind !== "weekly_plant" &&

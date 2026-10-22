@@ -35,6 +35,8 @@ mod rcx_row_fixtures;
 mod routes;
 #[cfg(test)]
 mod rule_catalog_fixtures;
+#[cfg(test)]
+mod runtime_weekly_fixtures;
 mod sql_anomaly;
 mod starter_seed;
 mod state;

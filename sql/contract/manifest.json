@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 107,
-  "pack_sha256": "0b8430ae1154a854c9733f68c2afaad342bbaf1cde3aa948bcc1a12e39b3f968",
+  "pack_sha256": "3f1c4b91a7f0ec154fc7b3e9f2ccc63bdd4a8b62bd2f5f311f94aafee318a215",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -467,8 +467,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/motor_weekly_runtime.sql",
-      "sha256": "66dc3c9bffdc1624799dd5ad7038ad6470a0a7703ec3ceb3569aed6f5bfd7aea",
-      "bytes": 3114
+      "sha256": "999ba55a9c239cc039e7f442d9b9ed27cd010996bf74b18e8f8d2f5981b8fe7a",
+      "bytes": 3461
     },
     {
       "path": "sql/analytics/postgres/queries/mv_change_point_daily.sql",

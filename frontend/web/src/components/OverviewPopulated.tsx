@@ -42,6 +42,13 @@ import {
   isWeatherEquipment,
   spanHoursBetween,
 } from "../lib/overviewMetrics";
+import {
+  DAY_NAMES as DAYS,
+  defaultOccupancyWeek,
+  occupiedHoursPerWeek,
+  scheduleReferenceFromSession,
+  type DaySched,
+} from "../api/occupancySchedule";
 
 /** Under-hood per-site Overview paint (Wave O7). No UI chrome. */
 type OverviewSiteCache = {
@@ -60,83 +67,11 @@ import {
   SESSION_SCHEMA,
 } from "../lib/ruleParams";
 
-const DAYS = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-] as const;
-
-type DaySched = { occupied: boolean; start: string; end: string };
-
-const DEFAULT_WEEK: Record<(typeof DAYS)[number], DaySched> = {
-  Monday: { occupied: true, start: "07:00", end: "17:00" },
-  Tuesday: { occupied: true, start: "07:00", end: "17:00" },
-  Wednesday: { occupied: true, start: "07:00", end: "17:00" },
-  Thursday: { occupied: true, start: "07:00", end: "17:00" },
-  Friday: { occupied: true, start: "07:00", end: "17:00" },
-  Saturday: { occupied: false, start: "07:00", end: "17:00" },
-  Sunday: { occupied: false, start: "07:00", end: "17:00" },
-};
-
-/** v2 defaults: M–F 07:00–17:00 occupied; weekends unoccupied. */
-const SCHEDULE_KEY = "openfdd.ui.occupancy_schedule.v2";
-
 export function detectedTimeZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   } catch {
     return "UTC";
-  }
-}
-
-function loadStoredSchedule(): {
-  week: Record<(typeof DAYS)[number], DaySched>;
-  tz: string;
-} {
-  try {
-    const raw = localStorage.getItem(SCHEDULE_KEY);
-    if (!raw) return { week: DEFAULT_WEEK, tz: detectedTimeZone() };
-    const parsed = JSON.parse(raw) as {
-      week?: Record<string, DaySched>;
-      tz?: string;
-    };
-    const week = { ...DEFAULT_WEEK };
-    if (parsed.week && typeof parsed.week === "object") {
-      for (const d of DAYS) {
-        const s = parsed.week[d];
-        if (s && typeof s.start === "string" && typeof s.end === "string") {
-          week[d] = {
-            occupied: Boolean(s.occupied),
-            start: s.start,
-            end: s.end,
-          };
-        }
-      }
-    }
-    return {
-      week,
-      tz:
-        typeof parsed.tz === "string" && parsed.tz.trim()
-          ? parsed.tz
-          : detectedTimeZone(),
-    };
-  } catch {
-    return { week: DEFAULT_WEEK, tz: detectedTimeZone() };
-  }
-}
-
-function saveStoredSchedule(
-  week: Record<string, DaySched>,
-  tz: string,
-): void {
-  try {
-    localStorage.setItem(SCHEDULE_KEY, JSON.stringify({ week, tz }));
-  } catch {
-    /* ignore */
   }
 }
 
@@ -149,18 +84,6 @@ function comfortDisplay(fahrenheit: number, unitSystem: "imperial" | "metric"): 
   const shown = displayScalar(fahrenheit, "degF", unitSystem);
   if (unitSystem !== "metric") return shown;
   return Math.round(shown * 10) / 10;
-}
-
-function hoursPerWeek(week: Record<string, DaySched>): number {
-  let h = 0;
-  for (const d of DAYS) {
-    const s = week[d];
-    if (!s?.occupied) continue;
-    const [sh, sm] = s.start.split(":").map(Number);
-    const [eh, em] = s.end.split(":").map(Number);
-    h += Math.max(0, eh + em / 60 - (sh + sm / 60));
-  }
-  return Math.round(h * 10) / 10;
 }
 
 export interface OverviewPopulatedProps {
@@ -190,8 +113,8 @@ export function OverviewPopulated({
   const [vavHealthToken, setVavHealthToken] = useState(0);
   const [zoneLow, setZoneLow] = useState(70);
   const [zoneHigh, setZoneHigh] = useState(75);
-  const [week, setWeek] = useState(() => loadStoredSchedule().week);
-  const [tz, setTz] = useState(() => loadStoredSchedule().tz);
+  const [week, setWeek] = useState(defaultOccupancyWeek);
+  const [tz, setTz] = useState(detectedTimeZone);
   const [schedOpen, setSchedOpen] = useState(true);
   const [scheduleBusy, setScheduleBusy] = useState(false);
   const [scheduleNote, setScheduleNote] = useState<string | null>(null);
@@ -234,7 +157,7 @@ export function OverviewPopulated({
   const zoneLowDisplay = comfortDisplay(zoneLow, unitSystem);
   const zoneHighDisplay = comfortDisplay(zoneHigh, unitSystem);
   const comfortStep = unitSystem === "metric" ? 0.3 : 0.5;
-  const bareMin = hoursPerWeek(week);
+  const bareMin = occupiedHoursPerWeek(week);
   const spanH =
     overview?.span?.span_hours != null
       ? Math.round(Number(overview.span.span_hours) * 10) / 10
@@ -390,6 +313,34 @@ export function OverviewPopulated({
   );
 
   useEffect(() => {
+    let cancelled = false;
+    if (!buildingId) {
+      setWeek(defaultOccupancyWeek());
+      setTz(detectedTimeZone());
+      return;
+    }
+    // Drop the previous site's calendar immediately. The saved schedule is the
+    // site session config, not a browser-global draft.
+    setWeek(defaultOccupancyWeek());
+    setTz(detectedTimeZone());
+    void getSessionConfig(buildingId)
+      .then((res) => {
+        if (cancelled) return;
+        const ref = scheduleReferenceFromSession(res.config, detectedTimeZone());
+        setWeek(ref.week);
+        setTz(ref.timezone);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWeek(defaultOccupancyWeek());
+        setTz(detectedTimeZone());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [buildingId]);
+
+  useEffect(() => {
     if (!buildingId) return;
     // Results-first + readiness, then analytics (cache hit paints instantly).
     void refreshReadiness();
@@ -483,7 +434,6 @@ export function OverviewPopulated({
     setScheduleBusy(true);
     setScheduleNote(null);
     try {
-      saveStoredSchedule(week, tz);
       const prev = await getSessionConfig(buildingId).catch(() => null);
       const dayKey: Record<string, string> = {
         Monday: "mon",
