@@ -189,7 +189,10 @@ describe("Operations Sites panel", () => {
     expect(screen.getByTestId("sites-sources-NF_EDGE").textContent).toMatch(/NF/);
     expect(screen.getByTestId("sites-sources-NF_EDGE").textContent).not.toMatch(/secret/);
     expect(screen.queryByLabelText(/Ingest mode/i)).toBeNull();
-    expect(screen.getByTestId("sites-active-hint").textContent).toMatch(/NF_EDGE/);
+    // Auto-select writes siteId through navigate, which commits after the row.
+    await waitFor(() => {
+      expect(screen.getByTestId("sites-active-hint").textContent).toMatch(/NF_EDGE/);
+    });
     const del = await waitFor(() =>
       screen.getByTestId("sites-delete-NF_EDGE").querySelector("button"),
     );

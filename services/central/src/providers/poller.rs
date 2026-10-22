@@ -136,12 +136,6 @@ pub fn accept_device_window(
     WindowAccept { samples }
 }
 
-/// Live plan wins. The site file is the fallback only when the live plan has
-/// no mapped points. An empty result schedules nothing.
-pub fn schedule_equipment_ids(live: &RoleResolver, site: &RoleResolver) -> Vec<String> {
-    chosen_resolver(live, site).equipment_ids()
-}
-
 fn chosen_resolver<'a>(live: &'a RoleResolver, site: &'a RoleResolver) -> &'a RoleResolver {
     if live.mapped_count() == 0 && site.mapped_count() > 0 {
         site
@@ -916,35 +910,5 @@ mod tests {
         assert!(site.health.last_success_at.is_some());
         assert_eq!(site.last_ingested_points, 60);
         assert_eq!(site.health.status, ProviderHealthStatus::Ok);
-    }
-
-    fn point(id: &str, equipment: &str, role: &str) -> crate::providers::map::PointMapEntry {
-        crate::providers::map::PointMapEntry {
-            provider_point_id: id.into(),
-            semantic_point_id: None,
-            equipment_id: equipment.into(),
-            role: role.into(),
-            equip_type: Some("ahu".into()),
-            unit: None,
-            kind: None,
-            provisional: false,
-        }
-    }
-
-    #[test]
-    fn schedule_uses_the_same_resolver_as_execution() {
-        let live = RoleResolver::from_point_map(&[point("live-point", "LIVE_EQ", "sat")]).unwrap();
-        let site = RoleResolver::from_point_map(&[point("site-point", "SITE_EQ", "mat")]).unwrap();
-        assert_eq!(
-            schedule_equipment_ids(&live, &site),
-            vec!["LIVE_EQ".to_string()]
-        );
-        assert_eq!(
-            schedule_equipment_ids(&RoleResolver::default(), &site),
-            vec!["SITE_EQ".to_string()]
-        );
-        assert!(
-            schedule_equipment_ids(&RoleResolver::default(), &RoleResolver::default()).is_empty()
-        );
     }
 }

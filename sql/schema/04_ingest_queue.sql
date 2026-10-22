@@ -70,11 +70,18 @@ CREATE TABLE IF NOT EXISTS ingest_receipt (
   job_id text NOT NULL,
   tenant_id text NOT NULL,
   canonical_site text NOT NULL,
+  provider_instance_id text NOT NULL DEFAULT '',
+  device_id text NOT NULL DEFAULT '',
+  model_revision text NOT NULL DEFAULT '',
   fencing_token bigint NOT NULL,
   committed_at timestamptz NOT NULL,
   counts jsonb NOT NULL,
   safe_error_code text
 );
+
+ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS provider_instance_id text NOT NULL DEFAULT '';
+ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS device_id text NOT NULL DEFAULT '';
+ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS model_revision text NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS ingest_receipt_site_idx
   ON ingest_receipt (canonical_site, committed_at DESC);
@@ -96,13 +103,24 @@ CREATE TABLE IF NOT EXISTS ingest_portal_budget (
   cap_override integer
 );
 
+-- One client key may be reused by different actors or tenants. The row is
+-- unique for actor + tenant + action + client key, and stores the object and
+-- payload hash from the request that reserved it.
 CREATE TABLE IF NOT EXISTS ingest_idempotency (
-  idempotency_key text PRIMARY KEY,
+  idempotency_key text NOT NULL,
   actor text NOT NULL,
+  tenant_id text NOT NULL,
   action text NOT NULL,
+  object_id text NOT NULL,
+  payload_hash text NOT NULL,
   job_ids jsonb NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (actor, tenant_id, action, idempotency_key)
 );
+
+ALTER TABLE ingest_idempotency ADD COLUMN IF NOT EXISTS tenant_id text;
+ALTER TABLE ingest_idempotency ADD COLUMN IF NOT EXISTS object_id text;
+ALTER TABLE ingest_idempotency ADD COLUMN IF NOT EXISTS payload_hash text;
 
 CREATE TABLE IF NOT EXISTS ingest_audit (
   audit_id bigserial PRIMARY KEY,
