@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { ReportsPage } from "./ReportsPage";
 
 vi.mock("../api/mappingApi", () => ({
@@ -103,8 +103,26 @@ vi.mock("../api/analyticsApi", () => ({
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
 import { getFddSeries, getFddResults, listFddRules } from "../api/fddApi";
-import { getPackageMapping } from "../api/mappingApi";
+import { getPackageMapping, listPackageBuildings } from "../api/mappingApi";
 import { listFddEquipment, postSensorHealth } from "../api/analyticsApi";
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="loc">{location.search}</span>;
+}
+
+function equipmentOptionValues(): string[] {
+  const select = screen.getByTestId("plots-equipment-select").querySelector("select");
+  return [...(select?.options ?? [])].map((option) => option.value);
+}
 
 function renderPlots(entry = "/reports?site=B1&eq=VAV_1") {
   return render(
@@ -331,6 +349,171 @@ describe("ReportsPage FDD Plots", () => {
   });
 });
 
+describe("ReportsPage site scope", () => {
+  beforeEach(() => {
+    vi.mocked(listFddRules).mockReset();
+    vi.mocked(listFddRules).mockResolvedValue([
+      {
+        rule_id: "VAV-1",
+        description: "Comfort",
+        equipment_kinds: ["vav"],
+        required_roles: ["zone_t"],
+        optional_roles: [],
+        applicability: "typed",
+        parameter_count: 0,
+      },
+    ]);
+    vi.mocked(getFddResults).mockReset();
+    vi.mocked(getFddResults).mockResolvedValue([
+      { rule_id: "VAV-1", equipment_id: "VAV_1", status: "FAULT" },
+    ]);
+    vi.mocked(getFddSeries).mockReset();
+    vi.mocked(getFddSeries).mockResolvedValue({
+      ok: true,
+      equipment_id: "VAV_1",
+      rule_id: "VAV-1",
+      roles: ["zone_t"],
+      rows: [
+        { timestamp_utc: "2024-01-01T00:00:00Z", zone_t: 70, confirmed_fault: 0 },
+        { timestamp_utc: "2024-01-01T00:05:00Z", zone_t: 71, confirmed_fault: 1 },
+      ],
+      downsampled: false,
+      max_points: 5000,
+      has_confirmed_fault: true,
+    });
+    vi.mocked(getPackageMapping).mockReset();
+    vi.mocked(listFddEquipment).mockReset();
+  });
+
+  const equipment = (
+    id: string,
+    type = "VAV",
+  ) => ({
+    equipment_id: id,
+    equipment_type: type,
+    ok: true,
+    roles: { zone_t: "zone_t" },
+    columns: [{ column: "zone_air_temp", role: "zone_t", status: "mapped" }],
+  });
+
+  it("does not query equipment that is absent from the new site", async () => {
+    vi.mocked(getPackageMapping).mockResolvedValue({
+      ok: true,
+      building_id: "SITE_B",
+      equipment: [equipment("EQ_B")],
+    });
+    vi.mocked(listFddEquipment).mockResolvedValue([
+      { equipment_id: "EQ_B", equipment_type: "VAV" },
+    ]);
+    vi.mocked(getFddSeries).mockClear();
+    render(
+      <MemoryRouter initialEntries={["/reports?site=SITE_B&eq=EQ_A"]}>
+        <ReportsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("plots-equipment-select").querySelector("select")?.value).toBe(
+        "EQ_B",
+      );
+    });
+    await waitFor(() => {
+      expect(vi.mocked(getFddSeries).mock.calls.map((call) => call[0])).toContain("EQ_B");
+    });
+    const requested = vi.mocked(getFddSeries).mock.calls.map((call) => call[0]);
+    expect(requested).not.toContain("EQ_A");
+    expect(requested).toContain("EQ_B");
+  });
+
+  it("loads series once per equipment selection", async () => {
+    vi.mocked(getPackageMapping).mockResolvedValue({
+      ok: true,
+      building_id: "B1",
+      equipment: [equipment("VAV_1"), equipment("VAV_2")],
+    });
+    vi.mocked(listFddEquipment).mockResolvedValue([
+      { equipment_id: "VAV_1", equipment_type: "VAV" },
+      { equipment_id: "VAV_2", equipment_type: "VAV" },
+    ]);
+    vi.mocked(getFddSeries).mockClear();
+    renderPlots();
+    await waitFor(() => {
+      expect(vi.mocked(getFddSeries).mock.calls.length).toBe(1);
+    });
+    const select = screen.getByTestId("plots-equipment-select").querySelector("select");
+    fireEvent.change(select!, { target: { value: "VAV_2" } });
+    await waitFor(() => {
+      expect(vi.mocked(getFddSeries).mock.calls.length).toBe(2);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(vi.mocked(getFddSeries).mock.calls.length).toBe(2);
+    expect(vi.mocked(getFddSeries).mock.calls.map((call) => call[0])).toEqual([
+      "VAV_1",
+      "VAV_2",
+    ]);
+  });
+
+  it("commits only the latest site when a previous inventory response arrives late", async () => {
+    const maps = new Map<string, ReturnType<typeof deferred<unknown>>>();
+    const lists = new Map<string, ReturnType<typeof deferred<unknown>>>();
+    vi.mocked(listPackageBuildings).mockResolvedValue(["SITE_A", "SITE_B"]);
+    vi.mocked(getPackageMapping).mockImplementation(async (site: string) => {
+      const slot = deferred<unknown>();
+      maps.set(site, slot);
+      return slot.promise as Promise<Awaited<ReturnType<typeof getPackageMapping>>>;
+    });
+    vi.mocked(listFddEquipment).mockImplementation(async (site?: string) => {
+      const slot = deferred<unknown>();
+      lists.set(String(site), slot);
+      return slot.promise as Promise<Awaited<ReturnType<typeof listFddEquipment>>>;
+    });
+    vi.mocked(getFddSeries).mockClear();
+
+    render(
+      <MemoryRouter initialEntries={["/reports?site=SITE_A&eq=EQ_A"]}>
+        <LocationProbe />
+        <ReportsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(maps.has("SITE_A")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar-active-site")).toBeTruthy();
+    });
+    fireEvent.change(screen.getByTestId("sidebar-active-site"), {
+      target: { value: "SITE_B" },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("loc").textContent).toContain("site=SITE_B");
+    });
+    expect(screen.getByTestId("loc").textContent ?? "").not.toContain("EQ_A");
+    await waitFor(() => {
+      expect(maps.has("SITE_B")).toBe(true);
+    });
+    maps.get("SITE_B")!.resolve({
+      ok: true,
+      building_id: "SITE_B",
+      equipment: [equipment("EQ_B")],
+    });
+    lists.get("SITE_B")!.resolve([{ equipment_id: "EQ_B", equipment_type: "VAV" }]);
+    await waitFor(() => {
+      expect(equipmentOptionValues()).toContain("EQ_B");
+    });
+    maps.get("SITE_A")!.resolve({
+      ok: true,
+      building_id: "SITE_A",
+      equipment: [equipment("EQ_A", "AHU")],
+    });
+    lists.get("SITE_A")!.resolve([{ equipment_id: "EQ_A", equipment_type: "AHU" }]);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(equipmentOptionValues()).toContain("EQ_B");
+    expect(equipmentOptionValues()).not.toContain("EQ_A");
+    expect(screen.getByTestId("loc").textContent ?? "").not.toContain("EQ_A");
+    const requested = vi.mocked(getFddSeries).mock.calls.map((call) => String(call[0]));
+    expect(requested).not.toContain("EQ_A");
+  });
+});
+
 const FAMILY_CATALOG = [
   {
     rule_id: "FC5",
@@ -503,6 +686,24 @@ async function openSensorHealth() {
 describe("ReportsPage sensor health", () => {
   beforeEach(() => {
     vi.mocked(postSensorHealth).mockReset();
+    vi.mocked(listFddEquipment).mockReset();
+    vi.mocked(listFddEquipment).mockResolvedValue([
+      { equipment_id: "VAV_1", equipment_type: "VAV" },
+    ]);
+    vi.mocked(getPackageMapping).mockReset();
+    vi.mocked(getPackageMapping).mockResolvedValue({
+      ok: true,
+      building_id: "B1",
+      equipment: [
+        {
+          equipment_id: "VAV_1",
+          equipment_type: "VAV",
+          ok: true,
+          roles: { zone_t: "zone_t" },
+          columns: [{ column: "zone_air_temp", role: "zone_t", status: "mapped" }],
+        },
+      ],
+    });
   });
 
   it("shows historian rows for the locked site and equipment", async () => {

@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from "react-router";
 import { leaveBuildingSession } from "../api/sessionsApi";
 import {
   buildSessionSearch,
+  clearEquipmentOnSiteChange,
   parseSessionSearch,
   siteIdLeftBehind,
   type SessionQuery,
@@ -24,9 +25,13 @@ export function useSessionQuery(): {
 
   const setQuery = useCallback(
     (patch: Partial<SessionQuery>, replace = false) => {
-      const left = siteIdLeftBehind(parseSessionSearch(location.search), patch);
+      const current = parseSessionSearch(location.search);
+      const left = siteIdLeftBehind(current, patch);
       if (left) leaveBuildingSession(left);
-      const next = buildSessionSearch(location.search, patch);
+      const next = buildSessionSearch(
+        location.search,
+        clearEquipmentOnSiteChange(current, patch),
+      );
       navigate({ pathname: location.pathname, search: next }, { replace });
     },
     [location.pathname, location.search, navigate],

@@ -222,8 +222,9 @@ export async function postBasVsWebOat(
 
 export async function postInspect(
   body: AnalyticsRequest & { series?: { columns?: string[] } },
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/inspect", body);
+  return postAnalytics("/api/analytics/inspect", body, init);
 }
 
 export async function postEconomizer(
@@ -305,11 +306,15 @@ export async function postRcxBoiler(
 
 export async function postRcxPreset(
   body: AnalyticsRequest & { series?: { preset_id?: string } },
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/rcx/preset", body);
+  return postAnalytics("/api/analytics/rcx/preset", body, init);
 }
 
-export async function listRcxPresets(buildingId?: string): Promise<
+export async function listRcxPresets(
+  buildingId?: string,
+  init?: { signal?: AbortSignal },
+): Promise<
   Array<{
     id: string;
     title: string;
@@ -322,10 +327,16 @@ export async function listRcxPresets(buildingId?: string): Promise<
   const q = buildingId
     ? `?building_id=${encodeURIComponent(buildingId)}`
     : "";
-  const body = await apiFetch<{
-    ok?: boolean;
-    presets?: Array<Record<string, unknown>>;
-  }>(`/api/analytics/rcx/presets${q}`);
+  const path = `/api/analytics/rcx/presets${q}`;
+  const body = await (init?.signal
+    ? apiFetch<{
+        ok?: boolean;
+        presets?: Array<Record<string, unknown>>;
+      }>(path, { signal: init.signal })
+    : apiFetch<{
+        ok?: boolean;
+        presets?: Array<Record<string, unknown>>;
+      }>(path));
   const raw = Array.isArray(body.presets) ? body.presets : [];
   return raw.map((p) => ({
     id: String(p.id ?? ""),
@@ -339,11 +350,15 @@ export async function listRcxPresets(buildingId?: string): Promise<
 
 export async function listFddEquipment(
   buildingId?: string,
+  init?: { signal?: AbortSignal },
 ): Promise<FddEquipmentItem[]> {
   const q = buildingId
     ? `?building_id=${encodeURIComponent(buildingId)}`
     : "";
-  const body = await apiFetch<FddEquipmentResponse>(`/api/fdd/equipment${q}`);
+  const path = `/api/fdd/equipment${q}`;
+  const body = await (init?.signal
+    ? apiFetch<FddEquipmentResponse>(path, { signal: init.signal })
+    : apiFetch<FddEquipmentResponse>(path));
   return Array.isArray(body.equipment) ? body.equipment : [];
 }
 
