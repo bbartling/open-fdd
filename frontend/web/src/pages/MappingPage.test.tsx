@@ -28,6 +28,11 @@ vi.mock("../api/fddApi", () => ({
     { rule_id: "FC1", required_roles: ["duct_static"], optional_roles: ["fan_cmd"] },
     { rule_id: "CMD-1", required_roles: ["fan_cmd", "fan_status"], optional_roles: [] },
   ]),
+  getFddResultsDocument: vi.fn(async () => ({
+    ok: true,
+    count: 0,
+    results: [],
+  })),
 }));
 
 vi.mock("../api/providersApi", () => ({

@@ -44,11 +44,25 @@ vi.mock("../api/fddApi", () => ({
 
 import { clearActions, deleteAction, listActions } from "../api/actionsApi";
 
+const passedAction = {
+  id: "act-1",
+  kind: "fdd_run_all",
+  label: "Run all",
+  started_at: "2026-08-11T12:00:00Z",
+  finished_at: "2026-08-11T12:00:02Z",
+  duration_ms: 2000,
+  status: "ok" as const,
+  detail: {},
+};
+
 describe("ActionsPage housekeeping", () => {
   beforeEach(() => {
-    vi.mocked(listActions).mockClear();
-    vi.mocked(deleteAction).mockClear();
-    vi.mocked(clearActions).mockClear();
+    vi.mocked(listActions).mockReset();
+    vi.mocked(listActions).mockResolvedValue([passedAction]);
+    vi.mocked(deleteAction).mockReset();
+    vi.mocked(deleteAction).mockResolvedValue(undefined);
+    vi.mocked(clearActions).mockReset();
+    vi.mocked(clearActions).mockResolvedValue(undefined);
   });
 
   it("requests last 10 and can delete / clear", async () => {
@@ -71,5 +85,37 @@ describe("ActionsPage housekeeping", () => {
       expect(clearActions).toHaveBeenCalled();
     });
     vi.unstubAllGlobals();
+  });
+
+  it("shows Partial when a passed log still records runtime errors", async () => {
+    vi.mocked(listActions).mockResolvedValue([
+      {
+        id: "act-partial",
+        kind: "fdd_run_all",
+        label: "Run all",
+        started_at: "2026-08-11T12:00:00Z",
+        finished_at: "2026-08-11T12:00:02Z",
+        duration_ms: 2000,
+        status: "ok",
+        detail: {
+          run_status: "partial",
+          rules_succeeded: 9,
+          rules_failed: 2,
+          rules_skipped: 21,
+        },
+      },
+    ]);
+    render(
+      <MemoryRouter>
+        <ActionsPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("actions-detail-status").textContent).toMatch(/Partial/);
+      expect(screen.getByText("Runtime errors")).toBeTruthy();
+      expect(screen.getByText("Ineligible skips")).toBeTruthy();
+      expect(screen.getByText("21")).toBeTruthy();
+    });
+    expect(screen.queryByText("Passed")).toBeNull();
   });
 });

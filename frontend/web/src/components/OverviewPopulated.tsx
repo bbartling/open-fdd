@@ -12,7 +12,6 @@ import { SectionTabs } from "./SectionTabs";
 import {
   getFddStatus,
   listFddRules,
-  getFddResults,
   getFddReadiness,
   runFdd,
   type FddReadiness,
@@ -196,6 +195,7 @@ export function OverviewPopulated({
     null,
   );
   const [fddReadiness, setFddReadiness] = useState<FddReadiness | null>(null);
+  const [readinessSite, setReadinessSite] = useState(buildingId);
   const [analyticsClean, setAnalyticsClean] = useState(false);
   const [afddOwnsRefresh, setAfddOwnsRefresh] = useState(false);
   const [forceRules, setForceRules] = useState(false);
@@ -204,6 +204,14 @@ export function OverviewPopulated({
   const hasOverview = useRef(false);
   const lastBuildingId = useRef(buildingId);
   const overviewAbort = useRef<AbortController | null>(null);
+  const readinessSiteRef = useRef(buildingId);
+  readinessSiteRef.current = buildingId;
+  if (readinessSite !== buildingId) {
+    setReadinessSite(buildingId);
+    setFddReadiness(null);
+    setLastRuleResultCount(null);
+    setRulesNote(null);
+  }
 
   const sortedEquipment = useMemo(
     () =>
@@ -296,18 +304,22 @@ export function OverviewPopulated({
   equipmentRef.current = equipment;
 
   const refreshReadiness = useCallback(async () => {
-    if (!buildingId) {
+    const site = buildingId;
+    if (!site) {
       setFddReadiness(null);
-      return;
+      setLastRuleResultCount(null);
+      return null;
     }
     try {
-      const ready = await getFddReadiness(buildingId);
+      const ready = await getFddReadiness(site);
+      if (readinessSiteRef.current !== site) return null;
       setFddReadiness(ready);
-      if (ready.has_results) {
-        setLastRuleResultCount(ready.result_count);
-      }
+      setLastRuleResultCount(ready.result_count);
+      return ready;
     } catch {
+      if (readinessSiteRef.current !== site) return null;
       setFddReadiness(null);
+      return null;
     }
   }, [buildingId]);
 
@@ -347,16 +359,11 @@ export function OverviewPopulated({
         }
         setOverview(body);
         hasOverview.current = true;
-        const [results] = await Promise.all([
-          getFddResults(buildingId).catch(() => null),
-          refreshReadiness(),
-        ]);
-        if (ac.signal.aborted) return;
-        const count = results ? results.length : null;
-        if (results) setLastRuleResultCount(results.length);
+        const ready = await refreshReadiness();
+        if (ac.signal.aborted || readinessSiteRef.current !== buildingId) return;
         overviewSiteCache.set(buildingId, {
           body,
-          lastRuleResultCount: count,
+          lastRuleResultCount: ready?.result_count ?? null,
         });
         setAnalyticsClean(true);
       } catch (err) {
@@ -448,7 +455,6 @@ export function OverviewPopulated({
       };
       const n = detail?.count;
       const single = detail?.mode === "single";
-      if (typeof n === "number") setLastRuleResultCount(n);
       setRulesNote(
         single
           ? `Rule ${detail.rule_id} updated · ${n ?? "—"} result row(s)`
@@ -456,9 +462,6 @@ export function OverviewPopulated({
       );
       // Matrices join FDD results — bump refresh so health cells leave stale/unknown.
       setVavHealthToken((t) => t + 1);
-      void getFddResults(buildingId)
-        .then((rows) => setLastRuleResultCount(rows.length))
-        .catch(() => undefined);
       void refreshReadiness();
       // Lab single-rule: keep Run-all grey if meta still clean; still refresh analytics.
       if (buildingId) overviewSiteCache.delete(buildingId);
@@ -561,14 +564,15 @@ export function OverviewPopulated({
         params,
         force_new_data: force || undefined,
       });
-      const n = result.results?.length ?? 0;
+      const n = result.result_count ?? result.results?.length ?? 0;
       setLastRuleResultCount(n);
       setForceRules(false);
+      const runStatus = result.run_status ?? "complete";
       setRulesNote(
         result.skipped_recompute
           ? result.message ||
               "Results current — use Lab single-rule for tuning, or Force after fresh samples"
-          : `Ran all rules · ${n} result row(s) · ${String(result.total_ms ?? "—")} ms`,
+          : `Ran all rules · ${n} result row(s) · ${runStatus} · ${String(result.total_ms ?? "—")} ms`,
       );
       await refreshReadiness();
       try {
@@ -599,6 +603,13 @@ export function OverviewPopulated({
   const readinessLabel = (() => {
     if (rulesBusy) return "Running all rules…";
     if (busy || loadingOverview) return "Updating analytics…";
+    const runStatus = fddReadiness?.run_status;
+    if (runStatus === "failed") {
+      return `Run failed (${resultRows} result rows)`;
+    }
+    if (runStatus === "partial") {
+      return `Partial (${resultRows} result rows)`;
+    }
     if (afddOwnsRefresh && resultRows > 0) {
       return `AFDD owns refresh (${resultRows} result rows)`;
     }
@@ -830,11 +841,11 @@ export function OverviewPopulated({
             {rulesErr}
           </InlineAlert>
         ) : null}
-        {lastRuleResultCount != null ? (
+        {fddReadiness || lastRuleResultCount != null ? (
           <Metric
             id="ov-rule-results"
             label="Latest FDD result rows"
-            value={String(lastRuleResultCount)}
+            value={String(resultRows)}
             testId="overview-rule-result-count"
           />
         ) : null}

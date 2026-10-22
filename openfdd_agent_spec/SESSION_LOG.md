@@ -1,3 +1,11 @@
+## 2026-10-22 — FDD run generation and metric results
+
+- Each Timescale registry run commits an immutable generation (run id, site, model, rules, config hash, window, watermark) and switches the active pointer with a rename. Older generations stay on disk.
+- A rule with no targets writes a current skip. A scoped rule keeps the parent run id and the rest of the cohort. Readiness `result_count` is the active generation's row count. Error, skip, and fault stay distinct. Partial and failed runs are not current.
+- Metric rows keep a typed value, unit, window, and coverage through the results API. Missing measurements stay null.
+- Overview uses that one count. Actions records `partial` from `run_status`. No VERSION bump. Not an ops pin.
+- Merged master `8cd5a629` (diagnostic matrix). The generation fixture adds `sample` source columns when another contract test created that table first.
+
 ## 2026-10-20 — Platform patch 4.0.2
 
 - Workspace `VERSION` and Cargo crate versions **4.0.1 → 4.0.2**. PyPI `open-fdd` stays **4.4.9**.

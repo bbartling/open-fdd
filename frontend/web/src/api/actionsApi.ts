@@ -1,6 +1,6 @@
 import { apiFetch } from "./client";
 
-export type ActionStatus = "running" | "ok" | "fail" | string;
+export type ActionStatus = "running" | "ok" | "partial" | "fail" | string;
 
 export interface ActionEntry {
   id: string;
@@ -66,6 +66,8 @@ export function statusIndicator(status: ActionStatus): string {
       return "⏳";
     case "ok":
       return "✅";
+    case "partial":
+      return "◐";
     case "fail":
       return "❌";
     default:
@@ -73,16 +75,41 @@ export function statusIndicator(status: ActionStatus): string {
   }
 }
 
-/** Operator-facing status label (ok → Passed, fail → Failed). */
+/** Operator-facing status label (ok → Passed, partial → Partial, fail → Failed). */
 export function statusLabel(status: ActionStatus): string {
   switch (status) {
     case "running":
       return "Running";
     case "ok":
       return "Passed";
+    case "partial":
+      return "Partial";
     case "fail":
       return "Failed";
     default:
       return String(status);
   }
+}
+
+function detailObject(
+  detail: ActionEntry["detail"],
+): Record<string, unknown> | null {
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    return detail;
+  }
+  return null;
+}
+
+/** Prefer the committed run status. A legacy ok row with runtime errors is Partial. */
+export function actionDisplayStatus(action: ActionEntry): ActionStatus {
+  const detail = detailObject(action.detail);
+  const runStatus = detail?.run_status;
+  if (runStatus === "partial" || action.status === "partial") return "partial";
+  if (runStatus === "failed") return "fail";
+  if (runStatus === "complete") return "ok";
+  const failed = Number(detail?.rules_failed ?? 0);
+  if (action.status === "ok" && Number.isFinite(failed) && failed > 0) {
+    return "partial";
+  }
+  return action.status;
 }
