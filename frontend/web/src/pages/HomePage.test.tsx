@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { HomePage } from "./HomePage";
 
@@ -293,18 +293,24 @@ describe("HomePage overview", () => {
     await waitFor(() => {
       expect(lists.has("SITE_B")).toBe(true);
     });
-    lists.get("SITE_B")!.resolve([
-      { equipment_id: "EQ_B", equipment_type: "VAV" },
-    ]);
+    await act(async () => {
+      lists.get("SITE_B")!.resolve([
+        { equipment_id: "EQ_B", equipment_type: "VAV" },
+      ]);
+    });
     await waitFor(() => {
       expect(deviceTypeCount("VAV")).toBe("1");
+      expect(screen.getByTestId("loc").textContent).toContain("EQ_B");
     });
-    lists.get("SITE_A")!.resolve([
-      { equipment_id: "EQ_A", equipment_type: "AHU" },
-    ]);
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    expect(deviceTypeCount("VAV")).toBe("1");
-    expect(deviceTypeCount("AHU")).toBe("0");
+    await act(async () => {
+      lists.get("SITE_A")!.resolve([
+        { equipment_id: "EQ_A", equipment_type: "AHU" },
+      ]);
+    });
+    await waitFor(() => {
+      expect(deviceTypeCount("VAV")).toBe("1");
+      expect(deviceTypeCount("AHU")).toBe("0");
+    });
     expect(screen.getByTestId("loc").textContent ?? "").not.toContain("EQ_A");
     expect(screen.getByTestId("loc").textContent).toContain("EQ_B");
   });
