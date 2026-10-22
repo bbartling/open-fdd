@@ -83,7 +83,8 @@ def test_ahu_satdev_quality_off_is_sql_contract_surface():
     )
 
     assert off_meta["fault_samples"] == 24
-    assert off_h == 2.0  # 24 × 300 s
+    # 23 forward intervals. The last sample does not invent another 300s.
+    assert abs(off_h - (23 * POLL_S / 3600.0)) < 1e-9
     assert on_meta["quality"]["reason_counts"].get(REASON_OUT_OF_RANGE) == 12
     assert on_meta["fault_samples"] == 12
     assert on_h == 1.0

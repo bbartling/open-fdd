@@ -44,14 +44,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -63,13 +92,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -81,10 +114,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;

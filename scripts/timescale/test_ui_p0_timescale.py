@@ -146,6 +146,7 @@ def render_sql(rule: dict) -> str:
         "MODE_DELAY_MIN": "0",
         "MODE_DELAY_ROWS": "0",
         "MODE_DELAY_ROWS_PRECEDING": "0",
+        "MAX_GAP_HOURS": "1",
     }
     for spec in (rule.get("parameters") or {}).values():
         key = spec.get("sql_placeholder")
@@ -316,7 +317,7 @@ def check_motor(cur) -> None:
     if len(ahu) != 1:
         die(f"expected one AHU_1 motor row (status preferred), got {rows}")
     hours = float(ahu[0][hours_idx])
-    expected = SAMPLES * POLL / 3600.0
+    expected = (SAMPLES - 1) * POLL / 3600.0
     if abs(hours - expected) > 1e-6:
         die(f"motor hours {hours} != {expected} (status+cmd would be {expected * 2})")
     if ahu[0][group_idx] != "air" or ahu[0][signal_idx] != "fan_status":

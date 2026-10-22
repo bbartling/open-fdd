@@ -1,18 +1,32 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- util_monthly_fault.sql — BAS monthly kWh vs utility monthly bills (% deviation)
-WITH bas_monthly AS (
+WITH bas_raw AS (
+  SELECT
+    timestamp_utc,
+    kwh,
+    electric_kw,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) - timestamp_utc
+    )) AS dt_seconds
+  FROM history
+  WHERE kwh IS NOT NULL OR electric_kw IS NOT NULL
+),
+bas_monthly AS (
   SELECT
     to_char(timestamp_utc AT TIME ZONE 'UTC', 'YYYY-MM') AS billing_period,
     SUM(
       COALESCE(
         CAST(kwh AS DOUBLE PRECISION),
-        CAST(electric_kw AS DOUBLE PRECISION) * {{POLL_SECONDS}} / 3600.0,
+        CASE
+          WHEN dt_seconds > 0.0 AND dt_seconds <= ({{MAX_GAP_HOURS}} * 3600.0)
+          THEN CAST(electric_kw AS DOUBLE PRECISION) * dt_seconds / 3600.0
+          ELSE 0.0
+        END,
         0.0
       )
     ) AS bas_kwh
-  FROM history
-  WHERE kwh IS NOT NULL OR electric_kw IS NOT NULL
+  FROM bas_raw
   GROUP BY 1
 ),
 util AS (
@@ -38,5 +52,7 @@ joined AS (
 )
 SELECT
   '__UTIL_MONTHLY__' AS equipment_id,
-  CAST(SUM(raw_fault) AS DOUBLE PRECISION) * 720.0 AS fault_hours
+  CAST(SUM(raw_fault) AS DOUBLE PRECISION) * 720.0 AS fault_hours,
+  NULL::double precision AS covered_hours,
+  NULL::double precision AS fault_pct
 FROM joined;

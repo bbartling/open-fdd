@@ -56,6 +56,18 @@ chosen AS (
     ON p.equipment_id = t.equipment_id
    AND p.motor_family = t.motor_family
    AND p.signal_rank = t.signal_rank
+),
+ordered AS (
+  SELECT
+    equipment_id,
+    ts,
+    val,
+    signal,
+    equip_type,
+    EXTRACT(EPOCH FROM (
+      LEAD(ts) OVER (PARTITION BY equipment_id, signal ORDER BY ts) - ts
+    )) AS dt_seconds
+  FROM chosen
 )
 SELECT
   equipment_id,
@@ -69,11 +81,20 @@ SELECT
   END AS plant_group,
   date_trunc('week', ts) AS week_start,
   to_char(date_trunc('week', ts), 'IYYY-"W"IW') AS week_label,
-  (COUNT(*) FILTER (WHERE COALESCE(val, 0) > 0.05)::double precision * 300.0 / 3600.0)
-    AS run_hours,
-  (COUNT(*) FILTER (WHERE COALESCE(val, 0) > 0.05)::double precision * 300.0 / 3600.0)
-    AS runtime_hours
-FROM chosen
+  -- On-time is the forward delta. Gaps longer than 1 hour are unknown.
+  (SUM(CASE
+     WHEN COALESCE(val, 0) > 0.05
+      AND dt_seconds > 0.0
+      AND dt_seconds <= 3600.0
+     THEN dt_seconds ELSE 0.0::double precision
+   END) / 3600.0) AS run_hours,
+  (SUM(CASE
+     WHEN COALESCE(val, 0) > 0.05
+      AND dt_seconds > 0.0
+      AND dt_seconds <= 3600.0
+     THEN dt_seconds ELSE 0.0::double precision
+   END) / 3600.0) AS runtime_hours
+FROM ordered
 GROUP BY 1, 3, 4, 5, 6
 ORDER BY 1, 5
 LIMIT 500;
