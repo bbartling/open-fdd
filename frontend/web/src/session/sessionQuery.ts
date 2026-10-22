@@ -118,3 +118,17 @@ export function saveFormDraft(key: string, draft: FormDraftStore): void {
 export function clearFormDraft(key: string): void {
   sessionStorage.removeItem(DRAFT_PREFIX + key);
 }
+
+/** Drop every form draft. Tenant switches use this so one tenant's edits do not remain. */
+export function clearAllFormDrafts(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith(DRAFT_PREFIX)) keys.push(key);
+    }
+    for (const key of keys) sessionStorage.removeItem(key);
+  } catch {
+    // sessionStorage can be unavailable.
+  }
+}

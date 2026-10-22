@@ -63,10 +63,21 @@ impl TenantContext {
                 multi_tenant: true,
             });
         }
-        if user.tenant_ids.is_empty() {
-            return Err("multi-tenant mode requires tenant membership claims".into());
-        }
-        let tenant_id = user.tenant_ids[0].clone();
+        let tenant_id = match user
+            .active_tenant_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        {
+            Some(id) if user.tenant_ids.iter().any(|have| have.as_str() == id) => id.to_string(),
+            Some(_) => return Err("active tenant is not in membership".into()),
+            None => match user.tenant_ids.first() {
+                Some(id) => id.clone(),
+                None => {
+                    return Err("multi-tenant mode requires tenant membership claims".into());
+                }
+            },
+        };
         let building_ids = plane.buildings_for_tenant(&tenant_id);
         Ok(Self {
             tenant_id: Some(tenant_id),
@@ -354,6 +365,7 @@ mod tests {
             sub: "admin".into(),
             role: Role::Admin,
             tenant_ids: vec![],
+            active_tenant_id: None,
         };
         let plane = ControlPlane::legacy_default();
         let ctx = TenantContext::resolve(&user, &plane).expect("resolve");
@@ -370,6 +382,7 @@ mod tests {
             sub: "operator".into(),
             role: Role::Operator,
             tenant_ids: vec![],
+            active_tenant_id: None,
         };
         let plane = ControlPlane::legacy_default();
         let err = TenantContext::resolve(&user, &plane).expect_err("deny");
@@ -385,6 +398,7 @@ mod tests {
             sub: "eng".into(),
             role: Role::Operator,
             tenant_ids: vec!["acme".into()],
+            active_tenant_id: None,
         };
         let plane = ControlPlane {
             tenants: vec![TenantRecord {
@@ -401,6 +415,45 @@ mod tests {
     }
 
     #[test]
+    fn resolve_active_tenant_scopes_buildings_inside_membership() {
+        let _g = lock_env();
+        std::env::set_var("OPENFDD_MULTI_TENANT", "1");
+        let user = AuthUser {
+            sub: "eng".into(),
+            role: Role::Operator,
+            tenant_ids: vec!["tenant_a".into(), "tenant_b".into()],
+            active_tenant_id: Some("tenant_b".into()),
+        };
+        let plane = ControlPlane {
+            tenants: vec![
+                TenantRecord {
+                    id: "tenant_a".into(),
+                    name: "A".into(),
+                    building_ids: vec!["site_a".into()],
+                },
+                TenantRecord {
+                    id: "tenant_b".into(),
+                    name: "B".into(),
+                    building_ids: vec!["site_b".into()],
+                },
+            ],
+        };
+        let ctx = TenantContext::resolve(&user, &plane).expect("resolve");
+        assert_eq!(ctx.tenant_id.as_deref(), Some("tenant_b"));
+        assert!(ctx.allow_building("site_b"));
+        assert!(!ctx.allow_building("site_a"));
+        let foreign = AuthUser {
+            sub: "eng".into(),
+            role: Role::Operator,
+            tenant_ids: vec!["tenant_a".into(), "tenant_b".into()],
+            active_tenant_id: Some("tenant_c".into()),
+        };
+        let err = TenantContext::resolve(&foreign, &plane).expect_err("foreign active");
+        assert!(err.contains("membership"), "{err}");
+        std::env::remove_var("OPENFDD_MULTI_TENANT");
+    }
+
+    #[test]
     fn historian_root_off_is_hub_base() {
         let _g = lock_env();
         std::env::remove_var("OPENFDD_MULTI_TENANT");
@@ -408,6 +461,7 @@ mod tests {
             sub: "admin".into(),
             role: Role::Admin,
             tenant_ids: vec![],
+            active_tenant_id: None,
         };
         let plane = ControlPlane::legacy_default();
         let ctx = TenantContext::resolve(&user, &plane).expect("resolve");
@@ -424,6 +478,7 @@ mod tests {
             sub: "eng".into(),
             role: Role::Operator,
             tenant_ids: vec!["acme".into()],
+            active_tenant_id: None,
         };
         let plane = ControlPlane {
             tenants: vec![TenantRecord {
@@ -465,11 +520,13 @@ mod tests {
             sub: "a".into(),
             role: Role::Operator,
             tenant_ids: vec!["tenant_a".into()],
+            active_tenant_id: None,
         };
         let user_b = AuthUser {
             sub: "b".into(),
             role: Role::Operator,
             tenant_ids: vec!["tenant_b".into()],
+            active_tenant_id: None,
         };
         let ctx_a = TenantContext::resolve(&user_a, &plane).expect("a");
         let ctx_b = TenantContext::resolve(&user_b, &plane).expect("b");
@@ -517,6 +574,7 @@ mod tests {
             sub: "acme-ops".into(),
             role: Role::Operator,
             tenant_ids: vec!["acme".into()],
+            active_tenant_id: None,
         };
         let ctx = TenantContext::resolve(&acme_ops, &plane).expect("acme");
         assert!(ctx.allow_building("ACME"));
@@ -527,6 +585,7 @@ mod tests {
             sub: "admin".into(),
             role: Role::Admin,
             tenant_ids: vec![],
+            active_tenant_id: None,
         };
         let admin = TenantContext::resolve(&hub, &plane).expect("hub");
         assert!(admin.hub_admin);
@@ -571,6 +630,7 @@ mod tests {
             sub: "joel_demo".into(),
             role: Role::Operator,
             tenant_ids: vec!["joels_space".into()],
+            active_tenant_id: None,
         };
         let ctx = TenantContext::resolve(&user, &plane).expect("joel");
         let mut buildings = vec![
@@ -609,6 +669,7 @@ mod tests {
             sub: "eng".into(),
             role: Role::Operator,
             tenant_ids: vec!["tenant_a".into()],
+            active_tenant_id: None,
         };
         let ctx = TenantContext::resolve(&user, &plane).expect("resolve");
         let bldg_a = ctx

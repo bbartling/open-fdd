@@ -1703,6 +1703,7 @@ pub async fn auth_login(
         sub: sub.clone(),
         role,
         tenant_ids: tenant_ids.clone(),
+        active_tenant_id: tenant_ids.first().cloned(),
     };
     let ctx = crate::tenant::TenantContext::resolve_fail_closed(&auth_user, &plane);
     open_fdd_edge_prototype::auth::audit::log_event(

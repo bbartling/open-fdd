@@ -5,6 +5,7 @@ import { listProviderBuildingIds } from "../api/providersApi";
 import { uploadPackage } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
 import { useDatasetWriteAllowed } from "../hooks/useDatasetWriteAllowed";
+import { TENANT_CHANGED_EVENT } from "../api/tenantApi";
 import { RuleTuningPanel } from "./RuleTuningPanel";
 
 const UNITS_KEY = "openfdd.ui.unit_system";
@@ -101,6 +102,18 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
       window.removeEventListener("openfdd:package-deleted", onDeleted);
       window.removeEventListener("openfdd:package-loaded", onDeleted);
     };
+  }, [refreshSites]);
+
+  useEffect(() => {
+    const onTenantChanged = () => {
+      setStatus("");
+      setError(null);
+      setZipFiles([]);
+      if (zipInputRef.current) zipInputRef.current.value = "";
+      void refreshSites();
+    };
+    window.addEventListener(TENANT_CHANGED_EVENT, onTenantChanged);
+    return () => window.removeEventListener(TENANT_CHANGED_EVENT, onTenantChanged);
   }, [refreshSites]);
 
   useEffect(() => {

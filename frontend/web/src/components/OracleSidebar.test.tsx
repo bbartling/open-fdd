@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { OracleSidebar } from "./OracleSidebar";
 import { getAuthMe } from "../api/authApi";
+import { listPackageBuildings } from "../api/mappingApi";
+import { TENANT_CHANGED_EVENT } from "../api/tenantApi";
 
 vi.mock("../api/authApi", () => ({
   getAuthMe: vi.fn(),
@@ -68,5 +70,23 @@ describe("sidebar package load", () => {
     expect(screen.queryByTestId("sidebar-load-zips")).toBeNull();
     expect(screen.queryByTestId("sidebar-zip-input")).toBeNull();
     expect(screen.queryByTestId("sidebar-building-data")).toBeNull();
+  });
+
+  it("reloads sites when the active tenant changes", async () => {
+    vi.mocked(getAuthMe).mockResolvedValue({
+      ok: true,
+      username: "operator",
+      role: "operator",
+      auth_required: true,
+    });
+    renderSidebar();
+    await waitFor(() => {
+      expect(listPackageBuildings).toHaveBeenCalled();
+    });
+    const before = vi.mocked(listPackageBuildings).mock.calls.length;
+    window.dispatchEvent(new Event(TENANT_CHANGED_EVENT));
+    await waitFor(() => {
+      expect(vi.mocked(listPackageBuildings).mock.calls.length).toBeGreaterThan(before);
+    });
   });
 });
