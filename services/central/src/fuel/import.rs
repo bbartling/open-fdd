@@ -78,23 +78,13 @@ pub fn sync_campuses_from_package_utilities() -> Result<Vec<String>> {
     let mut synced = Vec::new();
     for entry in fs::read_dir(&csv_root).with_context(|| format!("read {}", csv_root.display()))? {
         let entry = entry?;
-        let building_root = entry.path();
-        if !building_root.is_dir() {
+        if !entry.path().is_dir() {
             continue;
         }
         let building_id = entry.file_name().to_string_lossy().to_string();
-        if building_id.contains('/') || building_id.contains("..") {
-            continue;
-        }
-        let bills = building_root
-            .join("utilities")
-            .join("electric")
-            .join("monthly_bills.csv");
-        if !bills.is_file() {
-            continue;
-        }
-        match materialize_fuel_campus_from_utilities(&building_id, &bills) {
-            Ok(()) => synced.push(building_id),
+        match sync_building_utilities(&building_id) {
+            Ok(true) => synced.push(building_id),
+            Ok(false) => {}
             Err(e) => tracing::warn!(
                 building_id = %building_id,
                 error = %e,
@@ -103,6 +93,167 @@ pub fn sync_campuses_from_package_utilities() -> Result<Vec<String>> {
         }
     }
     Ok(synced)
+}
+
+fn acceptable_site_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 200
+        && !id.contains('/')
+        && !id.contains('\\')
+        && !id.contains('\0')
+        && !id.contains("..")
+        && id != "."
+}
+
+fn normalize_site_id(raw: Option<&str>) -> std::result::Result<Option<String>, String> {
+    let Some(id) = raw.map(str::trim).filter(|id| !id.is_empty()) else {
+        return Ok(None);
+    };
+    if !acceptable_site_id(id) {
+        return Err("invalid site id".into());
+    }
+    Ok(Some(id.to_string()))
+}
+
+/// Promote one building's package utilities. Does not scan other buildings.
+fn sync_building_utilities(building_id: &str) -> Result<bool> {
+    if !acceptable_site_id(building_id) {
+        return Ok(false);
+    }
+    let bills = workspace_root()
+        .join("data")
+        .join("csv_buildings")
+        .join(building_id)
+        .join("utilities")
+        .join("electric")
+        .join("monthly_bills.csv");
+    if !bills.is_file() {
+        return Ok(false);
+    }
+    materialize_fuel_campus_from_utilities(building_id, &bills)?;
+    Ok(true)
+}
+
+/// A selected site's own campus, or an explicit reason it cannot be shown.
+pub enum ScopedCampus {
+    Found(super::campus::Campus),
+    NoMeters { building_id: String },
+    Unavailable { message: String },
+}
+
+/// Load `data/fuel/<building_id>` only. Never substitutes another campus.
+pub fn load_scoped_campus(building_id: &str) -> ScopedCampus {
+    let id = building_id.trim();
+    if !acceptable_site_id(id) {
+        return ScopedCampus::Unavailable {
+            message: "invalid site id".into(),
+        };
+    }
+    if let Err(err) = sync_building_utilities(id) {
+        tracing::warn!(
+            building_id = %id,
+            error = %err,
+            "package utilities sync failed for selected site"
+        );
+    }
+    let dir = fuel_root().join(id);
+    if !dir.join("campus.json").is_file() {
+        return ScopedCampus::NoMeters {
+            building_id: id.to_string(),
+        };
+    }
+    match load_campus(&dir) {
+        Ok(campus) if campus.meters.is_empty() => ScopedCampus::NoMeters {
+            building_id: id.to_string(),
+        },
+        Ok(campus) if campus.campus_id != id => ScopedCampus::Unavailable {
+            message: "campus identity does not match the selected site".into(),
+        },
+        Ok(campus) => ScopedCampus::Found(campus),
+        Err(err) => ScopedCampus::Unavailable {
+            message: err.to_string(),
+        },
+    }
+}
+
+fn scoped_campus_json(building_id: &str) -> Value {
+    match load_scoped_campus(building_id) {
+        ScopedCampus::Found(campus) => {
+            let meta = campus.meta_json();
+            json!({
+                "ok": true,
+                "status": "ok",
+                "scope": "site",
+                "building_id": building_id,
+                "count": 1,
+                "campuses": [&meta],
+                "active": &meta,
+            })
+        }
+        ScopedCampus::NoMeters { building_id } => json!({
+            "ok": true,
+            "status": "no_meters",
+            "scope": "site",
+            "building_id": building_id,
+            "count": 0,
+            "campuses": [],
+            "active": Value::Null,
+            "reason": "selected site has no meters",
+        }),
+        ScopedCampus::Unavailable { message } => json!({
+            "ok": false,
+            "status": "unavailable",
+            "scope": "site",
+            "building_id": building_id,
+            "count": 0,
+            "campuses": [],
+            "active": Value::Null,
+            "error": message,
+        }),
+    }
+}
+
+fn catalog_status(status: &str, message: &str) -> Value {
+    json!({
+        "ok": false,
+        "status": status,
+        "scope": "site",
+        "count": 0,
+        "campuses": [],
+        "active": Value::Null,
+        "error": message,
+    })
+}
+
+/// Campus list for Metering.
+///
+/// A `building_id` is an exact site scope: the response is that campus or
+/// `no_meters`. It does not fall back to another directory. Omitting both ids
+/// is the explicit unscoped catalog (`scope: unscoped`), not an active-site view.
+pub fn campus_catalog(building_id: Option<&str>, campus_id: Option<&str>) -> Result<Value> {
+    let building = match normalize_site_id(building_id) {
+        Ok(id) => id,
+        Err(message) => return Ok(catalog_status("unavailable", &message)),
+    };
+    let campus = match normalize_site_id(campus_id) {
+        Ok(id) => id,
+        Err(message) => return Ok(catalog_status("unavailable", &message)),
+    };
+    match (building, campus) {
+        (Some(building_id), Some(campus_id)) if building_id != campus_id => Ok(catalog_status(
+            "scope_mismatch",
+            "campus_id does not match the selected site",
+        )),
+        (Some(building_id), _) => Ok(scoped_campus_json(&building_id)),
+        (None, Some(campus_id)) => get_campus_meta(Some(&campus_id)),
+        (None, None) => {
+            let mut list = list_campuses()?;
+            if let Some(obj) = list.as_object_mut() {
+                obj.insert("scope".into(), json!("unscoped"));
+            }
+            Ok(list)
+        }
+    }
 }
 
 fn materialize_fuel_campus_from_utilities(building_id: &str, bills_src: &Path) -> Result<()> {
