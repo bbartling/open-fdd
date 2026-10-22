@@ -3510,6 +3510,18 @@ rules:
                 .await
                 .expect("fixture schema");
         }
+        // Contract tests share one database. A narrower fixture can create
+        // `sample` first, and CREATE TABLE IF NOT EXISTS will not add columns.
+        for statement in [
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS haystack_id text",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS unit text",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS quality text",
+        ] {
+            sqlx::query(statement)
+                .execute(pool)
+                .await
+                .expect("fixture sample columns");
+        }
     }
 
     async fn seed_site(pool: &sqlx::PgPool, site: &str, equipment: &[(&str, &str)]) {
