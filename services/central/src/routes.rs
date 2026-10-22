@@ -1041,7 +1041,7 @@ pub async fn admin_delete_user(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let admin = require_hub_admin(&state, &headers)?;
     let ws = workspace_path();
-    let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    let store = crate::user_store::UserStore::load_or_empty(&ws);
     let plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
     let plan =
         crate::admin_cp::plan_user_cascade_delete(&store, &plane, &username).map_err(|e| {
@@ -1060,68 +1060,47 @@ pub async fn admin_delete_user(
         })));
     }
 
-    let mut purged = Vec::new();
-    let mut purge_errors = Vec::new();
-    for bid in &plan.buildings_to_purge {
-        let id_for_task = bid.clone();
-        let outcome = tokio::task::spawn_blocking(move || {
-            open_fdd_edge_prototype::csv_ingest::delete_dataset(&id_for_task)
-        })
-        .await
-        .unwrap_or_else(|e| Err(format!("dataset delete task failed: {e}")));
-        match outcome {
-            Ok(()) => {
-                let (n, errs) = crate::jobs::delete_jobs_for_site(bid);
-                if !errs.is_empty() {
-                    purge_errors.push(format!(
-                        "{bid}: jobs partial ({n} deleted): {}",
-                        errs.join("; ")
-                    ));
-                } else {
-                    purged.push(json!({ "building_id": bid, "jobs_deleted": n }));
-                }
-            }
-            Err(e) => purge_errors.push(format!("{bid}: {e}")),
+    let outcome = match crate::lifecycle::delete_user_cascade(&ws, &username).await {
+        Ok(outcome) => outcome,
+        Err(crate::lifecycle::UserCascadeError::NotFound(error)) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({"ok": false, "error": error})),
+            ));
         }
-    }
-    if !purge_errors.is_empty() {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "ok": false,
-                "error": "cascade purge failed; user not removed",
-                "plan": plan,
-                "purged": purged,
-                "purge_errors": purge_errors,
-            })),
-        ));
-    }
-
-    store.remove(&username).map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
-    store.save(&ws).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
+        Err(crate::lifecycle::UserCascadeError::Store(error)) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": error})),
+            ));
+        }
+        Err(crate::lifecycle::UserCascadeError::Partial(partial)) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "ok": false,
+                    "error": "cascade purge failed; user not removed",
+                    "plan": partial.plan,
+                    "purged": partial.purged_json(),
+                    "purge_errors": partial.errors,
+                })),
+            ));
+        }
+    };
+    let store = crate::user_store::UserStore::load_or_empty(&ws);
     tracing::info!(
         target: "security_audit",
         event = "admin_user_delete",
         actor = %admin.sub,
         username = %username,
-        purged = purged.len(),
-        skipped_shared = plan.buildings_shared_skipped.len(),
+        purged = outcome.purged.len(),
+        skipped_shared = outcome.plan.buildings_shared_skipped.len(),
         "control-plane user deleted with cascade"
     );
     Ok(Json(json!({
         "ok": true,
-        "plan": plan,
-        "purged": purged,
+        "plan": outcome.plan,
+        "purged": outcome.purged_json(),
         "users": store.public_list(),
     })))
 }
@@ -5225,47 +5204,23 @@ pub async fn csv_delete_dataset(
         Some(json!({ "building_id": id, "dataset_id": id })),
     )
     .ok();
-    let id_for_task = id.clone();
-    let outcome = tokio::task::spawn_blocking(move || {
-        open_fdd_edge_prototype::csv_ingest::delete_dataset(&id_for_task)
-    })
-    .await
-    .unwrap_or_else(|e| Err(format!("dataset delete task failed: {e}")));
-    let mut timescale_rows = 0u64;
-    let mut timescale_error: Option<String> = None;
-    match fdd_tsdb::Tsdb::connect_from_env().await {
-        Ok(tsdb) => match tsdb.purge_building(&id).await {
-            Ok(n) => timescale_rows = n,
-            Err(err) => timescale_error = Some(err.to_string()),
-        },
-        Err(fdd_tsdb::TsdbError::MissingDatabaseUrl) => {}
-        Err(err) => timescale_error = Some(err.to_string()),
-    }
-    let mut jobs_deleted = 0usize;
-    let mut job_errors: Vec<String> = Vec::new();
-    if outcome.is_ok() {
-        let (n, errs) = crate::jobs::delete_jobs_for_site(&id);
-        jobs_deleted = n;
-        job_errors = errs;
-    }
-    let jobs_ok = job_errors.is_empty();
-    let (ok, error) = match (&outcome, &timescale_error) {
-        (Ok(()), None) if jobs_ok => (true, None),
-        (Ok(()), Some(ts_err)) => (
-            false,
-            Some(format!(
-                "workspace dataset removed but Timescale purge failed: {ts_err}"
-            )),
-        ),
-        (Ok(()), None) => (
-            false,
-            Some(format!(
-                "site data purged but job delete failed: {}",
-                job_errors.join("; ")
-            )),
-        ),
-        (Err(e), _) => (false, Some(e.clone())),
-    };
+    let (ok, error, jobs_deleted, job_errors, timescale_rows) =
+        match crate::lifecycle::purge_site(&id).await {
+            Ok(report) => (
+                true,
+                None,
+                report.jobs_deleted,
+                Vec::new(),
+                report.timescale_rows_deleted,
+            ),
+            Err(err) => (
+                false,
+                Some(err.message),
+                err.jobs_deleted,
+                err.job_errors,
+                err.timescale_rows_deleted,
+            ),
+        };
     if let Some(ref aid) = action_id {
         let status = if ok { "ok" } else { "fail" };
         let _ = actions::finish_action(

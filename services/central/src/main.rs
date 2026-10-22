@@ -22,6 +22,7 @@ mod historian_limits;
 mod ingest;
 mod ingest_queue;
 mod jobs;
+mod lifecycle;
 mod live_historian;
 mod logging;
 mod models;
