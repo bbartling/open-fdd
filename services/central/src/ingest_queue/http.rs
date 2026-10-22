@@ -83,7 +83,7 @@ pub async fn get_job(
     let request_id = contract::ensure_request_id(&headers);
     let ctx = tenant_ctx(&state, &user).await;
     match state.ingest_queue.get_job(job_id).await {
-        Ok(Some(job)) if ctx.allow_building(&job.canonical_site) => Json(json!({
+        Ok(Some(job)) if job_in_scope(&ctx, &job) => Json(json!({
             "ok": true,
             "request_id": request_id,
             "scope": scope_json(&ctx),
@@ -133,7 +133,7 @@ pub async fn get_receipt(
     let request_id = contract::ensure_request_id(&headers);
     let ctx = tenant_ctx(&state, &user).await;
     match state.ingest_queue.get_receipt(receipt_id).await {
-        Ok(Some(receipt)) if ctx.allow_building(&receipt.canonical_site) => Json(json!({
+        Ok(Some(receipt)) if receipt_in_scope(&ctx, &receipt) => Json(json!({
             "ok": true,
             "request_id": request_id,
             "scope": scope_json(&ctx),
@@ -196,7 +196,7 @@ pub async fn queue_metrics(
 ) -> Response {
     let request_id = contract::ensure_request_id(&headers);
     let ctx = tenant_ctx(&state, &user).await;
-    if ctx.multi_tenant && !ctx.hub_admin && ctx.building_ids.is_empty() {
+    let Some(scope) = metrics_scope_for(&ctx) else {
         return json_error(
             StatusCode::FORBIDDEN,
             "forbidden",
@@ -204,24 +204,19 @@ pub async fn queue_metrics(
             &request_id,
             false,
         );
-    }
-    match state.ingest_queue.metrics(Utc::now()).await {
-        Ok(mut metrics) => {
-            if ctx.multi_tenant && !ctx.hub_admin {
-                metrics.portal_in_flight.clear();
-            }
-            Json(json!({
-                "ok": true,
-                "request_id": request_id,
-                "scope": scope_json(&ctx),
-                "coordination": coordination_name(),
-                "kubernetes_required": false,
-                "live_autoscaler": false,
-                "stage3": scale::stage3_status(),
-                "metrics": metrics,
-            }))
-            .into_response()
-        }
+    };
+    match state.ingest_queue.metrics(Utc::now(), &scope).await {
+        Ok(metrics) => Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "coordination": coordination_name(),
+            "kubernetes_required": false,
+            "live_autoscaler": false,
+            "stage3": scale::stage3_status(),
+            "metrics": metrics,
+        }))
+        .into_response(),
         Err(err) => queue_err(&err, &request_id),
     }
 }
@@ -233,7 +228,16 @@ pub async fn scale_preview(
 ) -> Response {
     let request_id = contract::ensure_request_id(&headers);
     let ctx = tenant_ctx(&state, &user).await;
-    let metrics = match state.ingest_queue.metrics(Utc::now()).await {
+    let Some(scope) = metrics_scope_for(&ctx) else {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "no site scope",
+            &request_id,
+            false,
+        );
+    };
+    let metrics = match state.ingest_queue.metrics(Utc::now(), &scope).await {
         Ok(metrics) => metrics,
         Err(err) => return queue_err(&err, &request_id),
     };
@@ -297,7 +301,7 @@ pub async fn retry_job(
     }
     let ctx = tenant_ctx(&state, &user).await;
     let existing = match state.ingest_queue.get_job(job_id).await {
-        Ok(Some(job)) if ctx.allow_building(&job.canonical_site) => job,
+        Ok(Some(job)) if job_in_scope(&ctx, &job) => job,
         Ok(_) => {
             return json_error(
                 StatusCode::NOT_FOUND,
@@ -309,17 +313,33 @@ pub async fn retry_job(
         }
         Err(err) => return queue_err(&err, &request_id),
     };
+    let tenant_id = if ctx.multi_tenant && !ctx.hub_admin {
+        ctx.tenant_id.clone().unwrap_or_default()
+    } else {
+        existing.tenant_id.clone()
+    };
+    if tenant_id != existing.tenant_id {
+        return json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "job not found",
+            &request_id,
+            false,
+        );
+    }
+    let claim = IdempotencyClaim {
+        actor: user.sub.clone(),
+        tenant_id: tenant_id.clone(),
+        client_key: body.idempotency_key.clone(),
+        object_id: retry_object_id(existing.job_id),
+        payload_hash: retry_payload_hash(&tenant_id, existing.job_id),
+    };
     match state
         .ingest_queue
-        .retry_job(
-            existing.job_id,
-            Utc::now(),
-            &user.sub,
-            &body.idempotency_key,
-        )
+        .retry_job(existing.job_id, Utc::now(), &claim)
         .await
     {
-        Ok(job) => Json(json!({
+        Ok(job) if job_in_scope(&ctx, &job) && job.tenant_id == tenant_id => Json(json!({
             "ok": true,
             "request_id": request_id,
             "scope": scope_json(&ctx),
@@ -327,6 +347,13 @@ pub async fn retry_job(
             "job": job,
         }))
         .into_response(),
+        Ok(_) => json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "job not found",
+            &request_id,
+            false,
+        ),
         Err(QueueError::Invalid(msg)) => json_error(
             StatusCode::CONFLICT,
             "not_retryable",
@@ -382,11 +409,64 @@ pub async fn backfill(
             false,
         );
     }
-    let tenant_id = body
-        .tenant_id
-        .clone()
-        .or_else(|| ctx.tenant_id.clone())
-        .unwrap_or_else(|| "legacy".into());
+    let plane = state.control_plane.read().await.clone();
+    let tenant_id = match derive_backfill_tenant(
+        &ctx,
+        &plane,
+        body.tenant_id.as_deref(),
+        &body.canonical_site,
+    ) {
+        Ok(tenant_id) => tenant_id,
+        Err(IdentityError::TenantRequired) => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "tenant_required",
+                "hub admin must name the tenant",
+                &request_id,
+                false,
+            )
+        }
+        Err(IdentityError::Mismatch | IdentityError::PlanMissing) => {
+            return json_error(
+                StatusCode::CONFLICT,
+                "identity_mismatch",
+                "backfill identity does not match the caller",
+                &request_id,
+                false,
+            )
+        }
+    };
+    let plan = {
+        let models = state
+            .providers
+            .models
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        models
+            .active_plan(&tenant_id, &body.canonical_site)
+            .cloned()
+    };
+    let identity = match resolve_plan_identity(&tenant_id, &body, plan.as_ref()) {
+        Ok(identity) => identity,
+        Err(IdentityError::PlanMissing) => {
+            return json_error(
+                StatusCode::CONFLICT,
+                "plan_not_committed",
+                "no committed ingest plan for this site",
+                &request_id,
+                false,
+            )
+        }
+        Err(_) => {
+            return json_error(
+                StatusCode::CONFLICT,
+                "identity_mismatch",
+                "backfill identity does not match the committed plan",
+                &request_id,
+                false,
+            )
+        }
+    };
     let mut jobs = Vec::new();
     for window in &body.windows {
         if !is_hour_window(window.start, window.end) {
@@ -399,14 +479,11 @@ pub async fn backfill(
             );
         }
         jobs.push(super::model::NewJob {
-            tenant_id: tenant_id.clone(),
+            tenant_id: identity.tenant_id.clone(),
             canonical_site: body.canonical_site.clone(),
-            provider_instance_id: body.provider_instance_id.clone(),
-            device_id: body.device_id.clone(),
-            model_revision: body
-                .model_revision
-                .clone()
-                .unwrap_or_else(|| MODEL_REVISION_BOOTSTRAP.into()),
+            provider_instance_id: identity.provider_instance_id.clone(),
+            device_id: identity.device_id.clone(),
+            model_revision: identity.model_revision.clone(),
             logical_window_start: window.start,
             logical_window_end: window.end,
             shard: String::new(),
@@ -415,22 +492,35 @@ pub async fn backfill(
             requested_points_digest: None,
         });
     }
-    match state
-        .ingest_queue
-        .backfill(jobs, Utc::now(), &user.sub, &body.idempotency_key)
-        .await
-    {
-        Ok(created) => (
-            StatusCode::ACCEPTED,
-            Json(json!({
-                "ok": true,
-                "request_id": request_id,
-                "scope": scope_json(&ctx),
-                "idempotency_key": body.idempotency_key,
-                "jobs": created,
-            })),
-        )
-            .into_response(),
+    let claim = match backfill_claim(&user.sub, &body.idempotency_key, &jobs) {
+        Ok(claim) => claim,
+        Err(err) => return queue_err(&err, &request_id),
+    };
+    match state.ingest_queue.backfill(jobs, Utc::now(), &claim).await {
+        Ok(created)
+            if created
+                .iter()
+                .all(|job| job_in_scope(&ctx, job) && job.tenant_id == identity.tenant_id) =>
+        {
+            (
+                StatusCode::ACCEPTED,
+                Json(json!({
+                    "ok": true,
+                    "request_id": request_id,
+                    "scope": scope_json(&ctx),
+                    "idempotency_key": body.idempotency_key,
+                    "jobs": created,
+                })),
+            )
+                .into_response()
+        }
+        Ok(_) => json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "job not found",
+            &request_id,
+            false,
+        ),
         Err(QueueError::Invalid(msg)) => json_error(
             StatusCode::BAD_REQUEST,
             "invalid_job",
@@ -508,8 +598,17 @@ fn scoped_filter(ctx: &TenantContext, query: &ListQuery, request_id: &str) -> Op
         .state
         .clone()
         .filter(|value| JobState::parse(value).is_some());
+    let tenant_id = if ctx.multi_tenant && !ctx.hub_admin {
+        match ctx.tenant_id.clone() {
+            Some(tenant_id) => Some(tenant_id),
+            None => return None,
+        }
+    } else {
+        None
+    };
     Some(ListFilter {
         sites,
+        tenant_id,
         state,
         limit: query.limit.unwrap_or(50).clamp(1, MAX_LIST),
     })
@@ -547,6 +646,13 @@ fn coordination_name() -> &'static str {
 
 fn queue_err(err: &super::model::QueueError, request_id: &str) -> Response {
     match err {
+        QueueError::Conflict(msg) => json_error(
+            StatusCode::CONFLICT,
+            "idempotency_conflict",
+            msg,
+            request_id,
+            false,
+        ),
         QueueError::NotFound => json_error(
             StatusCode::NOT_FOUND,
             "not_found",
@@ -591,6 +697,148 @@ fn valid_idempotency(value: &str) -> bool {
 
 pub fn viewer_cannot_mutate(role: Role) -> bool {
     !role.can_issue_commands()
+}
+
+struct PlanIdentity {
+    tenant_id: String,
+    provider_instance_id: String,
+    device_id: String,
+    model_revision: String,
+}
+
+enum IdentityError {
+    TenantRequired,
+    Mismatch,
+    PlanMissing,
+}
+
+fn derive_backfill_tenant(
+    ctx: &TenantContext,
+    plane: &crate::tenant::ControlPlane,
+    requested: Option<&str>,
+    site: &str,
+) -> Result<String, IdentityError> {
+    if !ctx.multi_tenant {
+        let tenant = ctx
+            .tenant_id
+            .clone()
+            .filter(|id| !id.is_empty())
+            .unwrap_or_else(|| "legacy".into());
+        if requested.is_some_and(|id| id != tenant) {
+            return Err(IdentityError::Mismatch);
+        }
+        return Ok(tenant);
+    }
+    if ctx.hub_admin {
+        let Some(requested) = requested.filter(|id| !id.is_empty()) else {
+            return Err(IdentityError::TenantRequired);
+        };
+        if !plane.tenants.iter().any(|tenant| tenant.id == requested) {
+            return Err(IdentityError::Mismatch);
+        }
+        if !plane
+            .buildings_for_tenant(requested)
+            .iter()
+            .any(|building| building == site)
+        {
+            return Err(IdentityError::Mismatch);
+        }
+        return Ok(requested.to_string());
+    }
+    let Some(tenant) = ctx.tenant_id.clone().filter(|id| !id.is_empty()) else {
+        return Err(IdentityError::Mismatch);
+    };
+    if requested.is_some_and(|id| id != tenant) {
+        return Err(IdentityError::Mismatch);
+    }
+    Ok(tenant)
+}
+
+fn resolve_plan_identity(
+    tenant_id: &str,
+    body: &BackfillBody,
+    plan: Option<&crate::providers::committed_model::IngestPlan>,
+) -> Result<PlanIdentity, IdentityError> {
+    let Some(plan) = plan else {
+        return Err(IdentityError::PlanMissing);
+    };
+    if plan.tenant_id != tenant_id || plan.site_id != body.canonical_site {
+        return Err(IdentityError::Mismatch);
+    }
+    let Some(group) = plan.groups.iter().find(|group| {
+        group.equipment_id == body.device_id
+            && group.provider_instance_id == body.provider_instance_id
+    }) else {
+        return Err(IdentityError::Mismatch);
+    };
+    if body
+        .model_revision
+        .as_deref()
+        .is_some_and(|revision| revision != plan.revision_id)
+    {
+        return Err(IdentityError::Mismatch);
+    }
+    Ok(PlanIdentity {
+        tenant_id: tenant_id.to_string(),
+        provider_instance_id: group.provider_instance_id.clone(),
+        device_id: group.equipment_id.clone(),
+        model_revision: plan.revision_id.clone(),
+    })
+}
+
+fn backfill_claim(
+    actor: &str,
+    client_key: &str,
+    jobs: &[NewJob],
+) -> Result<IdempotencyClaim, QueueError> {
+    let Some(first) = jobs.first() else {
+        return Err(QueueError::Invalid(
+            "backfill requires 1 to 48 hourly windows".into(),
+        ));
+    };
+    Ok(IdempotencyClaim {
+        actor: actor.to_string(),
+        tenant_id: first.tenant_id.clone(),
+        client_key: client_key.to_string(),
+        object_id: backfill_object_id(first),
+        payload_hash: backfill_payload_hash(jobs)?,
+    })
+}
+
+fn metrics_scope_for(ctx: &TenantContext) -> Option<MetricsScope> {
+    if !ctx.multi_tenant || ctx.hub_admin {
+        return Some(MetricsScope::global());
+    }
+    match &ctx.tenant_id {
+        Some(tenant_id) if !tenant_id.is_empty() && !ctx.building_ids.is_empty() => {
+            Some(MetricsScope {
+                tenant_id: Some(tenant_id.clone()),
+                sites: Some(ctx.building_ids.clone()),
+                include_scheduler: false,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn job_in_scope(ctx: &TenantContext, job: &JobView) -> bool {
+    if !ctx.allow_building(&job.canonical_site) {
+        return false;
+    }
+    if ctx.multi_tenant && !ctx.hub_admin {
+        return ctx.tenant_id.as_deref() == Some(job.tenant_id.as_str());
+    }
+    true
+}
+
+fn receipt_in_scope(ctx: &TenantContext, receipt: &ReceiptView) -> bool {
+    if !ctx.allow_building(&receipt.canonical_site) {
+        return false;
+    }
+    if ctx.multi_tenant && !ctx.hub_admin {
+        return ctx.tenant_id.as_deref() == Some(receipt.tenant_id.as_str());
+    }
+    true
 }
 
 #[cfg(test)]

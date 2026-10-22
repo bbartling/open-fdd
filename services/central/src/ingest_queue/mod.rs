@@ -9,5 +9,8 @@ mod scale;
 mod schedule;
 mod worker;
 
+#[cfg(test)]
+mod scope_acceptance;
+
 pub use client::QueueClient;
 pub use worker::spawn_with_shutdown;
