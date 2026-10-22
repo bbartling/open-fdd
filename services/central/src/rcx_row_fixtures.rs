@@ -94,6 +94,11 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     let _database = EnvGuard::set("OPENFDD_DATABASE_URL", &url);
     let _jwt = EnvGuard::unset("OPENFDD_JWT_SECRET");
     let _mt = EnvGuard::unset("OPENFDD_MULTI_TENANT");
+    // The duct-static preset recomputes through analytics admission. A busy
+    // CI host above the default 0.75 shed line must not turn a row fixture
+    // into a memory deferral.
+    let _shed = EnvGuard::set("OPENFDD_MEMORY_SHED_FRACTION", "0.99");
+    let _abort = EnvGuard::set("OPENFDD_MEMORY_ABORT_FRACTION", "1.0");
     // Each tokio test has its own runtime. A shared Timescale pool left behind
     // never yields a connection to the next test.
     let _shared_pool = SharedPoolReset::arm();
