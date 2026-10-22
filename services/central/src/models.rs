@@ -217,7 +217,7 @@ pub struct TenantSelectResponse {
     pub ok: bool,
     pub multi_tenant: bool,
     pub active_tenant_id: String,
-    /// New JWT when mode ON and selection changes membership claims; absent when OFF no-op.
+    /// New JWT when mode ON. It keeps durable membership and names the active tenant.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

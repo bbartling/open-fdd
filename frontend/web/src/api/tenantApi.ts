@@ -1,7 +1,12 @@
 import { apiFetch } from "./client";
 import { setStoredToken } from "./authApi";
+import { RULE_PARAMS_STORAGE_KEY } from "../lib/ruleParams";
+import { clearAllFormDrafts } from "../session/sessionQuery";
 
 const ACTIVE_TENANT_KEY = "openfdd.tenant.active";
+
+/** Fired after a successful tenant switch so open views drop the previous site. */
+export const TENANT_CHANGED_EVENT = "openfdd:tenant-changed";
 
 export interface TenantsListResponse {
   ok: boolean;
@@ -36,6 +41,21 @@ export function setStoredActiveTenant(tenantId: string | null): void {
   } catch {
     // ignore
   }
+}
+
+/**
+ * Drop client state that belongs to the previous active tenant.
+ * The session token and the stored active-tenant id stay; the caller
+ * replaces those from the select response.
+ */
+export function clearTenantScopedClientState(): void {
+  clearAllFormDrafts();
+  try {
+    localStorage.removeItem(RULE_PARAMS_STORAGE_KEY);
+  } catch {
+    // localStorage can be unavailable.
+  }
+  window.dispatchEvent(new CustomEvent(TENANT_CHANGED_EVENT));
 }
 
 export async function listTenants(): Promise<TenantsListResponse> {

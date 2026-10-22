@@ -1,5 +1,5 @@
 use std::env;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
@@ -47,16 +47,31 @@ fn pool_max_connections() -> u32 {
 }
 
 /// Process-wide shared pool (Wave-X C3). Do not open a new pool per HTTP request.
-static SHARED: OnceLock<Arc<Tsdb>> = OnceLock::new();
+/// A test can clear it: each `tokio::test` has its own runtime, and a pool
+/// created on a finished runtime never yields a connection.
+static SHARED: Mutex<Option<Arc<Tsdb>>> = Mutex::new(None);
+
+fn shared_slot() -> std::sync::MutexGuard<'static, Option<Arc<Tsdb>>> {
+    SHARED.lock().unwrap_or_else(|err| err.into_inner())
+}
+
+/// Drop the cached pool so the next caller connects on the current runtime.
+pub fn clear_shared_pool() {
+    *shared_slot() = None;
+}
 
 impl Tsdb {
     pub async fn shared() -> Result<Arc<Self>, TsdbError> {
-        if let Some(existing) = SHARED.get() {
-            return Ok(Arc::clone(existing));
+        if let Some(existing) = shared_slot().clone() {
+            return Ok(existing);
         }
         let created = Arc::new(Self::connect(&database_url_from_env()?).await?);
-        let _ = SHARED.set(Arc::clone(&created));
-        Ok(SHARED.get().cloned().unwrap_or(created))
+        let mut slot = shared_slot();
+        if let Some(existing) = slot.clone() {
+            return Ok(existing);
+        }
+        *slot = Some(Arc::clone(&created));
+        Ok(created)
     }
 
     pub async fn connect_from_env() -> Result<Self, TsdbError> {

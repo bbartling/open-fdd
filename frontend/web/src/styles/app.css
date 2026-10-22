@@ -173,6 +173,30 @@ body {
   margin-top: 0.1rem;
 }
 
+.app-sidebar__tenant-select {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.15rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-sidebar__tenant-select .oracle-sidebar__label {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+}
+
+.app-sidebar__tenant-select .oracle-sidebar__control {
+  width: 100%;
+}
+
+.app-sidebar__tenant-error {
+  font-size: 0.65rem;
+  color: var(--color-danger, #991b1b);
+  margin-top: 0.15rem;
+}
+
 .app-sidebar__session {
   font-size: 0.65rem;
   color: var(--color-text);
