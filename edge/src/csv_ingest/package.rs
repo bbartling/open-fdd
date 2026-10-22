@@ -33,6 +33,105 @@ pub fn timescale_historian_active() -> bool {
     }
 }
 
+fn is_incoming_root(root: &Path) -> bool {
+    root.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(".incoming"))
+}
+
+/// Delete a staged package tree. Live `csv_buildings/<id>` is left in place.
+pub fn abort_staged_package(staging_root: &Path) {
+    if is_incoming_root(staging_root) {
+        let _ = std::fs::remove_dir_all(staging_root);
+    }
+}
+
+/// Publish a staged package after its historian writes have committed.
+///
+/// The live tree is replaced only here. A rename failure puts the previous
+/// tree back and leaves the staged directory for the caller to abort.
+pub fn commit_staged_package(
+    staging_root: &Path,
+    samples: u64,
+    equipment_count: usize,
+) -> Result<PathBuf, String> {
+    if !is_incoming_root(staging_root) {
+        return Err("package commit requires a staged .incoming directory".into());
+    }
+    if !staging_root.is_dir() {
+        return Err(format!(
+            "staged package is missing: {}",
+            staging_root.display()
+        ));
+    }
+    let file_name = staging_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "staged package name is not utf-8".to_string())?;
+    let building_id = file_name
+        .strip_suffix(".incoming")
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| "staged package name is missing its building id".to_string())?;
+    let parent = staging_root
+        .parent()
+        .ok_or_else(|| "staged package has no parent directory".to_string())?;
+    let live = parent.join(building_id);
+    let backup = parent.join(format!("{building_id}.previous"));
+    if backup.exists() {
+        std::fs::remove_dir_all(&backup)
+            .map_err(|e| format!("remove previous package backup: {e}"))?;
+    }
+    if live.exists() {
+        std::fs::rename(&live, &backup).map_err(|e| {
+            format!(
+                "move live package aside: {e} (live {} left in place)",
+                live.display()
+            )
+        })?;
+    }
+    if let Err(e) = std::fs::rename(staging_root, &live) {
+        if backup.exists() {
+            let _ = std::fs::rename(&backup, &live);
+        }
+        return Err(format!("publish staged package: {e}"));
+    }
+    if backup.exists() {
+        let _ = std::fs::remove_dir_all(&backup);
+    }
+    activate_staged_session(&live, building_id);
+    if let Err(e) = crate::csv_ingest::dataset::register_package_dataset(
+        building_id,
+        samples,
+        equipment_count,
+        &json!({
+            "package_root": live.display().to_string(),
+            "historian": "timescale",
+        }),
+    ) {
+        tracing::warn!(%e, "dataset registry not updated after package commit");
+    }
+    Ok(live)
+}
+
+fn activate_staged_session(live: &Path, building_id: &str) {
+    let path = live.join("session_config.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return;
+    };
+    let Ok(cfg) = serde_json::from_str::<Value>(&text) else {
+        return;
+    };
+    let Ok((normalized, _)) = crate::fdd::session_config::normalize_session_config(&cfg) else {
+        return;
+    };
+    let scope = crate::fdd::session_config::SessionConfigScope::new(None, Some(building_id));
+    if crate::fdd::session_config::save_session_config_scoped(&scope, &normalized).is_ok()
+        && scope.tenant_id.is_none()
+    {
+        let _ = crate::fdd::session_config::save_session_config(&normalized);
+    }
+}
+
 fn env_cap_mb(name: &str, default_mb: u64) -> u64 {
     std::env::var(name)
         .ok()
@@ -464,21 +563,27 @@ fn csv_headers(bytes: &[u8]) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Convert map-file points (point/role name → CSV column) to column → cookbook role,
-/// keeping only columns that exist in the CSV header.
+/// Convert map-file points (point/role name → CSV column) to column → cookbook role.
+///
+/// Every referenced column must exist in the history header. An empty result is
+/// a preflight failure: the importer does not install a package and then discover
+/// the gap during historian seeding.
 fn roles_for_equipment(
     points: &BTreeMap<String, String>,
     headers: &[String],
-    warnings: &mut Vec<String>,
     equip_id: &str,
-) -> BTreeMap<String, String> {
+) -> Result<BTreeMap<String, String>, Vec<String>> {
     let mut out = BTreeMap::new();
+    let mut problems = Vec::new();
     for (point, column) in points {
         if point.trim().is_empty() || column.trim().is_empty() {
+            problems.push(format!(
+                "{equip_id}: map entry has an empty point or column"
+            ));
             continue;
         }
         if !headers.iter().any(|h| h == column.trim()) {
-            warnings.push(format!(
+            problems.push(format!(
                 "{equip_id}: map references column {column:?} not present in history_wide.csv"
             ));
             continue;
@@ -489,7 +594,13 @@ fn roles_for_equipment(
         }
         out.entry(column.trim().to_string()).or_insert(role);
     }
-    out
+    if !problems.is_empty() {
+        return Err(problems);
+    }
+    if out.is_empty() {
+        return Err(vec![format!("{equip_id}: column map resolved no roles")]);
+    }
+    Ok(out)
 }
 
 fn write_columns_csv(
@@ -607,6 +718,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
 
     let mut plans: Vec<EquipmentPlan> = Vec::new();
     let mut missing_maps: Vec<String> = Vec::new();
+    let mut bad_references: Vec<String> = Vec::new();
     let mut seen_leaf_ids: BTreeSet<String> = BTreeSet::new();
     for dir in &equip_dirs {
         let equip_id = dir
@@ -630,7 +742,6 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                 "hint": "rename equipment folders so each leaf directory name is unique",
             });
         }
-        let is_weather = equip_id.eq_ignore_ascii_case("weather");
         let history = in_building
             .get(&dir.join("history_wide.csv"))
             .expect("discovered via history_wide.csv");
@@ -705,8 +816,13 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }
 
         let roles = match &points {
-            Some(p) => roles_for_equipment(p, &headers, &mut warnings, &equip_id),
-            None if is_weather => BTreeMap::new(), // weather map is optional
+            Some(p) => match roles_for_equipment(p, &headers, &equip_id) {
+                Ok(roles) => roles,
+                Err(problems) => {
+                    bad_references.extend(problems);
+                    continue;
+                }
+            },
             None => {
                 missing_maps.push(format!("{}/history_wide.csv", dir.display()));
                 continue;
@@ -723,12 +839,13 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         });
     }
 
-    if !missing_maps.is_empty() {
+    if !missing_maps.is_empty() || !bad_references.is_empty() {
         return json!({
             "ok": false,
-            "error": "package rejected — equipment history_wide.csv files missing sibling column maps",
+            "error": "package rejected before install — column maps are missing or reference columns that are not in the history file",
             "missing_maps": missing_maps,
-            "hint": "each equipment folder needs history_wide.json / history_wide.column_map.json / column_map.json (weather/ is exempt)",
+            "bad_references": bad_references,
+            "hint": "each equipment folder, including weather, needs a column map whose columns exist in history_wide.csv. Nothing is written until every map resolves.",
         });
     }
     if plans.is_empty() {
@@ -747,9 +864,17 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }
     };
     let data_root = workspace_dir().join("data").join("csv_buildings");
-    let building_root = data_root.join(&building_id);
+    // Timescale imports land in `<id>.incoming` until the historian transaction
+    // commits. The live tree is not removed on a rejected or failed package.
+    let stage_for_seed = timescale_historian_active();
+    let building_root = if stage_for_seed {
+        data_root.join(format!("{building_id}.incoming"))
+    } else {
+        data_root.join(&building_id)
+    };
     let _ = std::fs::remove_dir_all(&building_root);
     if let Err(e) = std::fs::create_dir_all(&building_root) {
+        abort_staged_package(&building_root);
         return json!({"ok": false, "error": format!("mkdir {}: {e}", building_root.display())});
     }
     let manifest_out = json!({
@@ -766,6 +891,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         building_root.join("manifest.json"),
         serde_json::to_string_pretty(&manifest_out).unwrap_or_default(),
     ) {
+        abort_staged_package(&building_root);
         return json!({"ok": false, "error": format!("manifest write: {e}")});
     }
     if let Some(cfg) = &session_config {
@@ -775,21 +901,24 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         );
         // Honor packaged session config (#515): persist workspace-wide so the
         // Lab sliders pick it up. Invalid configs only warn — never block ingest.
+        // A staged Timescale import activates this only after the historian commit.
         match crate::fdd::session_config::normalize_session_config(cfg) {
             Ok((normalized, mut cfg_warnings)) => {
-                // Persist under building scope (tenant when provided by import caller).
-                let scope = crate::fdd::session_config::SessionConfigScope::new(
-                    None,
-                    Some(manifest.building_id.as_str()),
-                );
-                if let Err(e) =
-                    crate::fdd::session_config::save_session_config_scoped(&scope, &normalized)
-                {
-                    warnings.push(format!("session_config.json not persisted: {e}"));
-                } else if scope.tenant_id.is_none() {
-                    // #515: unscoped Lab GET reads hub-global bytes on single-tenant hubs.
-                    if let Err(e) = crate::fdd::session_config::save_session_config(&normalized) {
-                        warnings.push(format!("session_config hub mirror not persisted: {e}"));
+                if !stage_for_seed {
+                    let scope = crate::fdd::session_config::SessionConfigScope::new(
+                        None,
+                        Some(manifest.building_id.as_str()),
+                    );
+                    if let Err(e) =
+                        crate::fdd::session_config::save_session_config_scoped(&scope, &normalized)
+                    {
+                        warnings.push(format!("session_config.json not persisted: {e}"));
+                    } else if scope.tenant_id.is_none() {
+                        // #515: unscoped Lab GET reads hub-global bytes on single-tenant hubs.
+                        if let Err(e) = crate::fdd::session_config::save_session_config(&normalized)
+                        {
+                            warnings.push(format!("session_config hub mirror not persisted: {e}"));
+                        }
                     }
                 }
                 warnings.append(&mut cfg_warnings);
@@ -845,15 +974,25 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     for plan in &plans {
         let eq_dir = building_root.join(plan.dir.file_name().unwrap_or_default());
         if let Err(e) = std::fs::create_dir_all(&eq_dir) {
+            abort_staged_package(&building_root);
             return json!({"ok": false, "error": format!("mkdir {}: {e}", eq_dir.display())});
         }
-        let history = in_building
-            .get(&plan.dir.join("history_wide.csv"))
-            .expect("history bytes");
+        let history = match in_building.get(&plan.dir.join("history_wide.csv")) {
+            Some(bytes) => bytes,
+            None => {
+                abort_staged_package(&building_root);
+                return json!({
+                    "ok": false,
+                    "error": format!("history bytes missing for {}", plan.equipment_id),
+                });
+            }
+        };
         if let Err(e) = std::fs::write(eq_dir.join("history_wide.csv"), history) {
+            abort_staged_package(&building_root);
             return json!({"ok": false, "error": format!("history write: {e}")});
         }
         if let Err(e) = write_columns_csv(&eq_dir.join("columns.csv"), &plan.headers, &plan.roles) {
+            abort_staged_package(&building_root);
             return json!({"ok": false, "error": e});
         }
         let parent = plan
@@ -911,21 +1050,12 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     }
 
     // Wave-X: Timescale sole historian — never dual-write Parquet.
-    if timescale_historian_active() {
+    // Files stay under `<id>.incoming` until central commits the seed transaction.
+    if stage_for_seed {
         let equipment_written = equipment_report.len();
-        if let Err(e) = crate::csv_ingest::dataset::register_package_dataset(
-            &building_id,
-            0,
-            equipment_written,
-            &json!({
-                "package_root": building_root.display().to_string(),
-                "historian": "timescale",
-            }),
-        ) {
-            warnings.push(format!("dataset registry: {e}"));
-        }
         warnings.push(
-            "Wave-X: Parquet ingest skipped; central seeds Timescale from package_root".into(),
+            "Wave-X: Parquet ingest skipped; central seeds Timescale from the staged package"
+                .into(),
         );
         return json!({
             "ok": true,
@@ -946,6 +1076,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             "warnings": warnings,
             "historian": "timescale",
             "needs_timescale_seed": true,
+            "staged": true,
             "dual_write": false,
         });
     }
@@ -2608,5 +2739,94 @@ mod tests {
             json!("bldg2-zone-loopback")
         );
         assert_eq!(via_env["ok"], json!(false), "{via_env}");
+    }
+
+    #[test]
+    fn rejects_unmapped_weather_before_any_package_write() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_w5g_preflight_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let prev_db = std::env::var("OPENFDD_DATABASE_URL").ok();
+        let prev_hist = std::env::var("OPENFDD_HISTORIAN").ok();
+        let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
+        std::env::remove_var("OPENFDD_DATABASE_URL");
+        std::env::remove_var("OPENFDD_HISTORIAN");
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+
+        let history = "timestamp_utc,SF_SPD\n2026-06-01T00:00:00Z,1\n";
+        let weather = "timestamp_utc,OAT\n2026-06-01T00:00:00Z,55\n";
+        let missing = build_zip(&[
+            (
+                "manifest.json",
+                r#"{"schema_version":"openfdd_package_v1","building_id":"w5g-edge-badwx","grid_minutes":5}"#,
+            ),
+            ("AHU_1/history_wide.csv", history),
+            (
+                "AHU_1/column_map.json",
+                r#"{"equipType":"ahu","points":{"fan-cmd":"SF_SPD"}}"#,
+            ),
+            ("weather/history_wide.csv", weather),
+            ("weather/columns.csv", "column,point_role\nOAT,oa_t\n"),
+        ]);
+        let out = import_package_zip(&missing);
+        let root = tmp.join("data").join("csv_buildings");
+        assert_eq!(out["ok"], json!(false), "{out}");
+        assert!(
+            out["missing_maps"]
+                .as_array()
+                .is_some_and(|rows| !rows.is_empty()),
+            "{out}"
+        );
+        assert!(!root.join("w5g-edge-badwx").exists(), "{out}");
+        assert!(!root.join("w5g-edge-badwx.incoming").exists(), "{out}");
+
+        let bad_ref = build_zip(&[
+            (
+                "manifest.json",
+                r#"{"schema_version":"openfdd_package_v1","building_id":"w5g-edge-badref","grid_minutes":5}"#,
+            ),
+            ("AHU_1/history_wide.csv", history),
+            (
+                "AHU_1/column_map.json",
+                r#"{"equipType":"ahu","points":{"fan-cmd":"SF_SPD"}}"#,
+            ),
+            ("weather/history_wide.csv", weather),
+            (
+                "weather/column_map.json",
+                r#"{"equipType":"weather","points":{"outside-air-temp":"NOT_A_COLUMN"}}"#,
+            ),
+        ]);
+        let out = import_package_zip(&bad_ref);
+        assert_eq!(out["ok"], json!(false), "{out}");
+        assert!(
+            out["bad_references"]
+                .as_array()
+                .is_some_and(|rows| !rows.is_empty()),
+            "{out}"
+        );
+        assert!(!root.join("w5g-edge-badref").exists(), "{out}");
+        assert!(!root.join("w5g-edge-badref.incoming").exists(), "{out}");
+
+        match prev_db {
+            Some(value) => std::env::set_var("OPENFDD_DATABASE_URL", value),
+            None => std::env::remove_var("OPENFDD_DATABASE_URL"),
+        }
+        match prev_hist {
+            Some(value) => std::env::set_var("OPENFDD_HISTORIAN", value),
+            None => std::env::remove_var("OPENFDD_HISTORIAN"),
+        }
+        match prev_ws {
+            Some(value) => std::env::set_var("OPENFDD_WORKSPACE", value),
+            None => std::env::remove_var("OPENFDD_WORKSPACE"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

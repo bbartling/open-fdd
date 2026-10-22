@@ -32,6 +32,7 @@ import {
 import {
   analyticsWindowFromSampling,
   datasetTimeSpan,
+  groupEquipmentByType,
   isWeatherEquipment,
   isZoneTerminalEquipment,
 } from "../lib/overviewMetrics";
@@ -47,14 +48,7 @@ function num(v: unknown): number | null {
 function groupByType(
   rows: Array<Record<string, unknown>>,
 ): Array<{ type: string; count: number }> {
-  const map = new Map<string, number>();
-  for (const r of rows) {
-    const t = String(r.equipment_type || r.type || "unknown");
-    map.set(t, (map.get(t) ?? 0) + 1);
-  }
-  return [...map.entries()]
-    .map(([type, count]) => ({ type, count }))
-    .sort((a, b) => a.type.localeCompare(b.type));
+  return groupEquipmentByType(rows);
 }
 
 function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null {

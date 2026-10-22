@@ -1,19 +1,108 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { AppShell } from "../components/AppShell";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import { Button, InlineAlert, Select } from "../components/widgets";
 import { PlotlyHost } from "../components/widgets/PlotlyHost";
 import { useSessionQuery } from "../session";
-import { postInspect } from "../api/analyticsApi";
-import { getPackageMapping } from "../api/mappingApi";
+import { postInspect, type AnalyticsEnvelope } from "../api/analyticsApi";
+import { getPackageMapping, type MappingEquipment } from "../api/mappingApi";
 import { equipmentInspectionChart } from "../api/inspectChart";
 import { buildInspectSampleExport, downloadJson } from "../api/inspectExport";
 import { resolveRoleUnit } from "../api/roleUnits";
 import { naturalCompare } from "../lib/naturalSort";
 import type { PlotlyFigure } from "../api/plotDataset";
+import { useScopedLoad } from "../session/scopedLoad";
 
-function formatErr(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+type InspectChoice = { id: string; columns: string[] };
+
+type InspectSnapshot = {
+  columns: string[];
+  selected: string[];
+  figure: PlotlyFigure | null;
+  rowCount: number;
+  span: string;
+  first: string | null;
+  last: string | null;
+  error: string | null;
+};
+
+const EMPTY_CHOICES: InspectChoice[] = [];
+
+const EMPTY_SNAPSHOT: InspectSnapshot = {
+  columns: [],
+  selected: [],
+  figure: null,
+  rowCount: 0,
+  span: "",
+  first: null,
+  last: null,
+  error: null,
+};
+
+function choiceColumns(eq: MappingEquipment): string[] {
+  const columns = new Set<string>();
+  for (const role of Object.values(eq.roles ?? {})) {
+    if (role) columns.add(String(role));
+  }
+  for (const col of eq.columns ?? []) {
+    if (col.role) columns.add(String(col.role));
+  }
+  return [...columns];
+}
+
+function choicesFromEquipment(equipment: MappingEquipment[] | undefined): InspectChoice[] {
+  const byId = new Map<string, InspectChoice>();
+  for (const eq of equipment ?? []) {
+    const id = String(eq.equipment_id ?? "");
+    if (!id || byId.has(id)) continue;
+    byId.set(id, { id, columns: choiceColumns(eq) });
+  }
+  return [...byId.values()].sort((a, b) => naturalCompare(a.id, b.id));
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
+}
+
+/** One historian read. Mapped roles are requested up front so a second query is not required. */
+function snapshotFromInspect(env: AnalyticsEnvelope, equipmentId: string): InspectSnapshot {
+  const cov = (env.coverage ?? {}) as Record<string, unknown>;
+  const plottable = stringList(cov.plottable_columns);
+  const plotted = stringList(cov.columns_plotted);
+  const columns = plottable.length ? plottable : plotted;
+  const sampleN = Number(env.points?.length ?? cov.point_count ?? 0);
+  const first = cov.first_timestamp != null ? String(cov.first_timestamp) : null;
+  const last = cov.last_timestamp != null ? String(cov.last_timestamp) : null;
+  const span = first && last ? `${first} → ${last}` : "";
+  const rowCount = Number.isFinite(sampleN) ? sampleN : 0;
+  if (env.warnings?.length && !env.points?.length) {
+    return {
+      columns,
+      selected: [],
+      figure: null,
+      rowCount,
+      span,
+      first,
+      last,
+      error: env.warnings[0] ?? "Inspection unavailable",
+    };
+  }
+  const selected = plotted.filter((col) => plottable.includes(col) || !plottable.length);
+  const chartColumns = selected.length ? selected : plotted;
+  const figure = equipmentInspectionChart(env.points ?? [], {
+    equipmentId,
+    columns: chartColumns,
+  });
+  return {
+    columns,
+    selected: chartColumns,
+    figure,
+    rowCount,
+    span,
+    first,
+    last,
+    error: figure ? null : "No plottable numeric columns for this equipment in Timescale.",
+  };
 }
 
 /** CSV / equipment overlay plot (moved off Overview). */
@@ -21,132 +110,60 @@ export function InspectPage() {
   const { query, setQuery } = useSessionQuery();
   const buildingId = query.siteId ?? "";
   const equipmentId = query.equipment ?? "";
-  const [options, setOptions] = useState<string[]>([]);
-  const [pick, setPick] = useState(equipmentId);
-  const [cols, setCols] = useState<string[]>([]);
-  const [selectedCols, setSelectedCols] = useState<string[]>([]);
-  const [fig, setFig] = useState<PlotlyFigure | null>(null);
-  const [meta, setMeta] = useState<{
-    row_count: number;
-    span: string;
-    first: string | null;
-    last: string | null;
-  } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const seq = useRef(0);
+  const columnsById = useRef(new Map<string, string[]>());
 
-  useEffect(() => {
-    if (!buildingId) {
-      setOptions([]);
-      setPick("");
-      return;
-    }
-    void getPackageMapping(buildingId)
-      .then((inv) => {
-        const ids = [
-          ...new Set(
-            (inv.equipment ?? [])
-              .map((e) => String(e.equipment_id ?? ""))
-              .filter(Boolean)
-              .sort(naturalCompare),
-          ),
-        ];
-        // Always replace options for the active site — never keep prior building's list.
-        setOptions(ids);
-        setPick((prev) => {
-          if (equipmentId && ids.includes(equipmentId)) return equipmentId;
-          if (prev && ids.includes(prev)) return prev;
-          return ids[0] || "";
-        });
-      })
-      .catch(() => {
-        setOptions([]);
-        setPick("");
-        setErr(`No historian mapping for site ${buildingId}`);
-      });
-  }, [buildingId, equipmentId]);
-
-  const refresh = useCallback(
-    async (opts?: { pick?: string; cols?: string[] }) => {
-      const usePick = opts?.pick ?? pick;
-      if (!buildingId || !usePick || usePick === "(weather)") return;
-      const n = ++seq.current;
-      setBusy(true);
-      setErr(null);
-      try {
-        const requested = opts?.cols ?? [];
-        const env = await postInspect({
-          building_id: buildingId,
-          equipment_ids: [usePick],
-          max_points: 8000,
-          series: {
-            columns: requested.length > 0 ? requested : undefined,
-          },
-        });
-        if (n !== seq.current) return;
-        const cov = (env.coverage ?? {}) as Record<string, unknown>;
-        const plottable = Array.isArray(cov.plottable_columns)
-          ? (cov.plottable_columns as string[])
-          : [];
-        const plotted = Array.isArray(cov.columns_plotted)
-          ? (cov.columns_plotted as string[])
-          : [];
-        const allCols = plottable.length ? plottable : plotted;
-        setCols(allCols);
-        const sampleN = Number(env.points?.length ?? cov.point_count ?? 0);
-        const first =
-          cov.first_timestamp != null ? String(cov.first_timestamp) : null;
-        const last =
-          cov.last_timestamp != null ? String(cov.last_timestamp) : null;
-        setMeta({
-          row_count: Number.isFinite(sampleN) ? sampleN : 0,
-          span: first && last ? `${first} → ${last}` : "—",
-          first,
-          last,
-        });
-        if (
-          !requested.length &&
-          plottable.length &&
-          plotted.length < plottable.length
-        ) {
-          void refresh({ pick: usePick, cols: plottable });
-          return;
-        }
-        if (env.warnings?.length && !env.points?.length) {
-          setFig(null);
-          setErr(env.warnings[0] ?? "Inspection unavailable");
-          return;
-        }
-        const colsForChart = (requested.length ? requested : plotted).filter(
-          (c) =>
-            plottable.includes(c) || plotted.includes(c) || !plottable.length,
-        );
-        setSelectedCols(colsForChart.length ? colsForChart : plotted);
-        const next = equipmentInspectionChart(env.points ?? [], {
-          equipmentId: usePick,
-          columns: colsForChart.length ? colsForChart : plotted,
-        });
-        setFig(next);
-        setErr(
-          next
-            ? null
-            : "No plottable numeric columns for this equipment in Timescale.",
-        );
-      } catch (e) {
-        if (n !== seq.current) return;
-        setErr(formatErr(e));
-        setFig(null);
-      } finally {
-        if (n === seq.current) setBusy(false);
-      }
+  const choiceLoad = useScopedLoad(
+    buildingId,
+    async (site, signal) => {
+      const inv = await getPackageMapping(site, undefined, { signal });
+      return choicesFromEquipment(inv.equipment);
     },
-    [buildingId, pick],
+    EMPTY_CHOICES,
   );
 
+  const choices =
+    choiceLoad.committedKey === buildingId ? choiceLoad.value : EMPTY_CHOICES;
+  columnsById.current = new Map(choices.map((choice) => [choice.id, choice.columns]));
+
   useEffect(() => {
-    if (buildingId && pick) void refresh({ pick });
-  }, [buildingId, pick, refresh]);
+    if (!buildingId || choiceLoad.committedKey !== buildingId) return;
+    const ids = choiceLoad.value.map((choice) => choice.id);
+    if (equipmentId && ids.includes(equipmentId)) return;
+    const next = ids[0] ?? "";
+    if (next !== equipmentId) setQuery({ equipment: next }, true);
+  }, [buildingId, choiceLoad.committedKey, choiceLoad.value, equipmentId, setQuery]);
+
+  const selected = choices.find((choice) => choice.id === equipmentId) ?? null;
+  const inspectKey = selected ? `${buildingId}\u0000${equipmentId}` : "";
+  const chartLoad = useScopedLoad(
+    inspectKey,
+    async (key, signal) => {
+      const split = key.indexOf("\u0000");
+      const site = key.slice(0, split);
+      const eq = key.slice(split + 1);
+      const columns = columnsById.current.get(eq) ?? [];
+      const env = await postInspect(
+        {
+          building_id: site,
+          equipment_ids: [eq],
+          max_points: 8000,
+          ...(columns.length ? { series: { columns } } : {}),
+        },
+        { signal },
+      );
+      return snapshotFromInspect(env, eq);
+    },
+    EMPTY_SNAPSHOT,
+  );
+
+  const snap = chartLoad.committedKey === inspectKey ? chartLoad.value : EMPTY_SNAPSHOT;
+  const err = snap.error ?? chartLoad.error ?? choiceLoad.error;
+  const selectValue = selected ? equipmentId : "";
+  const options = useMemo(() => {
+    const rows = choices.map((choice) => ({ value: choice.id, label: choice.id }));
+    if (selectValue) return rows;
+    return [{ value: "", label: "— equipment —" }, ...rows];
+  }, [choices, selectValue]);
 
   return (
     <AppShell
@@ -165,22 +182,15 @@ export function InspectPage() {
           <Select
             id="inspect-eq"
             label="CSV / equipment"
-            value={pick}
-            options={(options.length ? options : pick ? [pick] : []).map((id) => ({
-              value: id,
-              label: id,
-            }))}
-            onChange={(v) => {
-              setPick(v);
-              setQuery({ equipment: v }, true);
-              void refresh({ pick: v });
-            }}
+            value={selectValue}
+            options={options}
+            onChange={(value) => setQuery({ equipment: value }, true)}
             testId="overview-inspect-eq"
           />
           <p className="oracle-sidebar__caption" data-testid="overview-inspect-meta">
-            {pick || "—"} · chart sample {meta?.row_count ?? 0} points ·{" "}
-            {cols.length} plottable columns
-            {meta?.span ? ` · ${meta.span}` : ""}
+            {selectValue || "—"} · chart sample {snap.rowCount} points ·{" "}
+            {snap.columns.length} plottable columns
+            {snap.span ? ` · ${snap.span}` : ""}
           </p>
           {err ? (
             <InlineAlert id="inspect-err" variant="danger" testId="inspect-err">
@@ -190,33 +200,33 @@ export function InspectPage() {
           <PlotlyHost
             id="data-inspect"
             label="Inspection chart"
-            figure={fig}
-            loading={busy}
+            figure={snap.figure}
+            loading={chartLoad.loading}
             height={Math.min(
               4000,
-              Math.max(280, (selectedCols.length || cols.length || 1) * 160),
+              Math.max(280, (snap.selected.length || snap.columns.length || 1) * 160),
             )}
-            downloadFilename={`${pick || "equipment"}_inspect`}
+            downloadFilename={`${selectValue || "equipment"}_inspect`}
             testId="overview-inspect-plot"
           />
           <Button
             id="dl-inspect"
-            label={`Download \`${pick || "csv"}\` JSON sample`}
+            label={`Download \`${selectValue || "csv"}\` JSON sample`}
             variant="secondary"
-            disabled={!fig?.data?.length}
+            disabled={!snap.figure?.data?.length}
             onClick={() => {
-              if (!fig?.data?.length) return;
+              if (!snap.figure?.data?.length) return;
               const payload = buildInspectSampleExport({
-                equipmentId: pick || "equipment",
+                equipmentId: selectValue || "equipment",
                 source: "POST /api/analytics/inspect",
-                window: { first: meta?.first ?? null, last: meta?.last ?? null },
-                traces: fig.data,
+                window: { first: snap.first, last: snap.last },
+                traces: snap.figure.data,
                 unitFor: (name) => {
                   const unit = resolveRoleUnit(name);
                   return unit ? unit : null;
                 },
               });
-              downloadJson(`${pick || "equipment"}_inspect.json`, payload);
+              downloadJson(`${selectValue || "equipment"}_inspect.json`, payload);
             }}
             testId="overview-dl-inspect"
           />

@@ -5,7 +5,9 @@ import {
   datasetTimeSpan,
   analyticsWindowFromSampling,
   ANALYTICS_WINDOW_MAX_DAYS,
+  equipmentTypeCountLabel,
   formatOverviewTs,
+  groupEquipmentByType,
   inventoryWithoutWeather,
   isWeatherEquipment,
   isZoneTerminalEquipment,
@@ -157,6 +159,25 @@ describe("overviewMetrics", () => {
       (Date.parse(w.end!) - Date.parse(w.start!)) / 86_400_000;
     expect(spanDays).toBeLessThanOrEqual(ANALYTICS_WINDOW_MAX_DAYS + 1 / 24 + 0.01);
     expect(Date.parse(w.start!)).toBeGreaterThan(Date.parse("2024-01-01T00:00:00Z"));
+  });
+
+  it("counts vav and VAV as one VAV total", () => {
+    expect(equipmentTypeCountLabel("vav")).toBe("VAV");
+    expect(equipmentTypeCountLabel("VAV")).toBe("VAV");
+    expect(
+      groupEquipmentByType([
+        { equipment_type: "vav" },
+        { equipment_type: "VAV" },
+        { equipment_type: "AHU" },
+        { equipment_type: "chiller" },
+        { equipment_type: "boiler" },
+      ]),
+    ).toEqual([
+      { type: "AHU", count: 1 },
+      { type: "Boiler", count: 1 },
+      { type: "Chiller", count: 1 },
+      { type: "VAV", count: 2 },
+    ]);
   });
 
   it("counts 59 cookbook rules and leaves 4 SQL rollups out", () => {

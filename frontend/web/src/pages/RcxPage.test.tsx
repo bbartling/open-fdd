@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { RcxPage } from "./RcxPage";
 import {
   RCX_FAMILY_MIN_COUNTS,
@@ -79,7 +79,25 @@ vi.mock("../api/fddApi", () => ({
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
 import { listRcxPresets, postRcxPreset, postRuntime } from "../api/analyticsApi";
-import { getSessionConfig } from "../api/mappingApi";
+import { getSessionConfig, listPackageBuildings } from "../api/mappingApi";
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="loc">{location.search}</span>;
+}
+
+function presetValues(): string[] {
+  const select = screen.getByTestId("rcx-preset").querySelector("select");
+  return [...(select?.options ?? [])].map((option) => option.value);
+}
 
 describe("RcxPage vibe19 catalog", () => {
   beforeEach(() => {
@@ -118,7 +136,10 @@ describe("RcxPage vibe19 catalog", () => {
     await waitFor(() => {
       expect(postRcxPreset).toHaveBeenCalled();
     });
-    expect(listRcxPresets).toHaveBeenCalledWith("BUILDING_100");
+    expect(listRcxPresets).toHaveBeenCalledWith(
+      "BUILDING_100",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(screen.getByTestId("rcx-comfort-donut")).toBeTruthy();
     expect(screen.getByTestId("rcx-companion-note").textContent).toMatch(
       /Worst-zones timeseries/,
@@ -210,6 +231,7 @@ describe("RcxPage vibe19 catalog", () => {
         expect.objectContaining({
           series: expect.objectContaining({ preset_id: "vav_health_matrix" }),
         }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
     await waitFor(() => {
@@ -363,7 +385,6 @@ describe("RcxPage vibe19 catalog", () => {
       points: [],
       skipped: [],
     } as Awaited<ReturnType<typeof postRuntime>>);
-
     render(
       <MemoryRouter initialEntries={["/rcx?site=BUILDING_100"]}>
         <RcxPage />
@@ -387,5 +408,166 @@ describe("RcxPage vibe19 catalog", () => {
     );
     expect(provenance).not.toContain("points=0");
     expect(provenance).not.toContain("60 h/week");
+  });
+
+  it("runs one preset query per selection", async () => {
+    render(
+      <MemoryRouter initialEntries={["/rcx?site=BUILDING_100"]}>
+        <RcxPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(vi.mocked(postRcxPreset).mock.calls.length).toBe(1);
+    });
+    const select = screen.getByTestId("rcx-preset").querySelector("select");
+    fireEvent.change(select!, { target: { value: "zone_temps" } });
+    await waitFor(() => {
+      expect(vi.mocked(postRcxPreset).mock.calls.length).toBe(2);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(vi.mocked(postRcxPreset).mock.calls.length).toBe(2);
+    const ids = vi.mocked(postRcxPreset).mock.calls.map(
+      (call) =>
+        (call[0] as { series?: { preset_id?: string } }).series?.preset_id,
+    );
+    expect(ids).toEqual(["zone_comfort_rank", "zone_temps"]);
+  });
+
+  it("commits only the latest site when a previous preset response arrives late", async () => {
+    const lists = new Map<string, ReturnType<typeof deferred<typeof ALL_PRESETS>>>();
+    const runs = new Map<string, ReturnType<typeof deferred<Awaited<ReturnType<typeof postRcxPreset>>>>>();
+    vi.mocked(listPackageBuildings).mockResolvedValue(["SITE_A", "SITE_B"]);
+    vi.mocked(listRcxPresets).mockImplementation(async (site?: string) => {
+      const slot = deferred<typeof ALL_PRESETS>();
+      lists.set(String(site), slot);
+      return slot.promise;
+    });
+    vi.mocked(postRcxPreset).mockImplementation(async (body: { building_id?: string }) => {
+      const slot = deferred<Awaited<ReturnType<typeof postRcxPreset>>>();
+      runs.set(String(body.building_id), slot);
+      return slot.promise;
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/rcx?site=SITE_A"]}>
+        <LocationProbe />
+        <RcxPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(lists.has("SITE_A")).toBe(true);
+    });
+    lists.get("SITE_A")!.resolve([
+      {
+        id: "only_a",
+        title: "Only A",
+        family: "Zones / VAV",
+        chart: "timeseries",
+        frozen: true,
+      },
+    ]);
+    await waitFor(() => {
+      expect(runs.has("SITE_A")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("sidebar-active-site")).toBeTruthy();
+    });
+    fireEvent.change(screen.getByTestId("sidebar-active-site"), {
+      target: { value: "SITE_B" },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("loc").textContent).toContain("site=SITE_B");
+    });
+    await waitFor(() => {
+      expect(lists.has("SITE_B")).toBe(true);
+    });
+    lists.get("SITE_B")!.resolve([
+      {
+        id: "only_b",
+        title: "Only B",
+        family: "Zones / VAV",
+        chart: "timeseries",
+        frozen: true,
+      },
+    ]);
+    await waitFor(() => {
+      expect(runs.has("SITE_B")).toBe(true);
+    });
+    runs.get("SITE_B")!.resolve({
+      schema_version: "1",
+      query_version: "rcx-b",
+      generated_at: "",
+      engine: "timescale",
+      warnings: ["SITE_B_MARKER"],
+      coverage: {
+        chart_kind: "timeseries",
+        title: "Only B",
+        family: "Zones / VAV",
+        preset_id: "only_b",
+      },
+      rows: [],
+      equipment: [],
+      points: [
+        {
+          equipment_id: "EQ_B",
+          timestamp_utc: "2024-01-01T00:00:00Z",
+          value_f: 2,
+          series: "primary",
+        },
+      ],
+      skipped: [],
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("rcx-provenance").textContent).toContain(
+        "SITE_B_MARKER",
+      );
+    });
+    runs.get("SITE_A")!.resolve({
+      schema_version: "1",
+      query_version: "rcx-a",
+      generated_at: "",
+      engine: "timescale",
+      warnings: ["SITE_A_MARKER"],
+      coverage: {
+        chart_kind: "timeseries",
+        title: "Only A",
+        family: "Zones / VAV",
+        preset_id: "only_a",
+      },
+      rows: [],
+      equipment: [],
+      points: [
+        {
+          equipment_id: "EQ_A",
+          timestamp_utc: "2024-01-01T00:00:00Z",
+          value_f: 9,
+          series: "primary",
+        },
+      ],
+      skipped: [],
+    });
+    lists.get("SITE_A")!.resolve([
+      {
+        id: "only_a",
+        title: "Only A",
+        family: "Zones / VAV",
+        chart: "timeseries",
+        frozen: true,
+      },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(screen.getByTestId("rcx-provenance").textContent).toContain("SITE_B_MARKER");
+    expect(screen.getByTestId("rcx-provenance").textContent).not.toContain(
+      "SITE_A_MARKER",
+    );
+    expect(presetValues()).toContain("only_b");
+    expect(presetValues()).not.toContain("only_a");
+    const siteB = vi.mocked(postRcxPreset).mock.calls.filter(
+      (call) => (call[0] as { building_id?: string }).building_id === "SITE_B",
+    );
+    expect(siteB).toHaveLength(1);
+    expect(
+      (siteB[0]?.[0] as { series?: { preset_id?: string } }).series?.preset_id,
+    ).toBe("only_b");
   });
 });

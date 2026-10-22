@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { apiFetch } from "../api/client";
 import type { CapabilitiesResponse } from "../api/contract";
@@ -11,6 +11,7 @@ import { OverviewHero } from "../components/OverviewHero";
 import { OverviewPopulated } from "../components/OverviewPopulated";
 import { SectionTabs } from "../components/SectionTabs";
 import { useSessionQuery } from "../session";
+import { isAbortError, useScopedLoad } from "../session/scopedLoad";
 import { listPackageBuildings } from "../api/mappingApi";
 import {
   listFddEquipment,
@@ -21,8 +22,57 @@ import { inventoryWithoutWeather } from "../lib/overviewMetrics";
 
 const PACKAGE_LOADED = "openfdd:package-loaded";
 
-function formatErr(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+type ShellSnapshot = {
+  contractVersion: string | null;
+  reactUi: boolean | null;
+  uiGeneration: string | null;
+  buildings: string[];
+  error: string | null;
+};
+
+const EMPTY_SHELL: ShellSnapshot = {
+  contractVersion: null,
+  reactUi: null,
+  uiGeneration: null,
+  buildings: [],
+  error: null,
+};
+
+const EMPTY_EQUIPMENT: FddEquipmentItem[] = [];
+
+async function loadShell(_key: string, signal: AbortSignal): Promise<ShellSnapshot> {
+  const [caps, gen, blds] = await Promise.all([
+    apiFetch<CapabilitiesResponse>("/api/capabilities", { signal }),
+    getUiGeneration().catch((err: unknown) => {
+      if (isAbortError(err)) throw err;
+      return null;
+    }),
+    listPackageBuildings({ signal }).then(
+      (buildings) => ({ ok: true as const, buildings, error: "" }),
+      (err: unknown) => {
+        if (isAbortError(err)) throw err;
+        return {
+          ok: false as const,
+          buildings: [] as string[],
+          error: err instanceof Error ? err.message : String(err),
+        };
+      },
+    ),
+  ]);
+  return {
+    contractVersion: caps.contract.contract_version,
+    reactUi: Boolean(caps.capabilities?.react_ui),
+    uiGeneration: gen?.generation ?? null,
+    buildings: blds.buildings,
+    error: blds.ok ? null : `buildings: ${blds.error}`,
+  };
+}
+
+async function loadEquipment(key: string, signal: AbortSignal): Promise<FddEquipmentItem[]> {
+  const site = key.split("\0")[0] ?? "";
+  if (!site) return EMPTY_EQUIPMENT;
+  const listed = await listFddEquipment(site, { signal });
+  return inventoryWithoutWeather(listed);
 }
 
 function readUnits(): "imperial" | "metric" {
@@ -41,86 +91,48 @@ export function HomePage() {
   const buildingId = query.siteId ?? "";
   const equipmentId = query.equipment ?? "";
 
-  const [contractVersion, setContractVersion] = useState<string | null>(null);
-  const [reactUi, setReactUi] = useState<boolean | null>(null);
-  const [uiGeneration, setUiGeneration] = useState<string | null>(null);
-  const [buildings, setBuildings] = useState<string[]>([]);
-  const [equipment, setEquipment] = useState<FddEquipmentItem[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [devOpen, setDevOpen] = useState(false);
   const [unitSystem, setUnitSystem] = useState(readUnits);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [caps, gen, blds, eq] = await Promise.all([
-        apiFetch<CapabilitiesResponse>("/api/capabilities"),
-        getUiGeneration().catch(() => null),
-        // Open mode allows these without a browser token; AuthGate blocks when
-        // auth_required and there is no session.
-        listPackageBuildings().then(
-          (b) => ({ ok: true as const, buildings: b }),
-          (err) => ({
-            ok: false as const,
-            error: err instanceof Error ? err.message : String(err),
-            buildings: [] as string[],
-          }),
-        ),
-        // Skip equipment until a site is selected — MT requires building_id.
-        buildingId
-          ? listFddEquipment(buildingId).then(
-              (eq) => ({ ok: true as const, equipment: eq }),
-              (err) => ({
-                ok: false as const,
-                error: err instanceof Error ? err.message : String(err),
-                equipment: [] as FddEquipmentItem[],
-              }),
-            )
-          : Promise.resolve({
-              ok: true as const,
-              equipment: [] as FddEquipmentItem[],
-            }),
-      ]);
-      const inventoryErrors: string[] = [];
-      if (!blds.ok) inventoryErrors.push(`buildings: ${blds.error}`);
-      // Only surface equipment errors when a site was requested.
-      if (buildingId && !eq.ok) inventoryErrors.push(`equipment: ${eq.error}`);
-      if (inventoryErrors.length) {
-        setError(inventoryErrors.join("; "));
-      }
-      const buildingList = blds.buildings;
-      const inventory = inventoryWithoutWeather(eq.equipment);
-      setContractVersion(caps.contract.contract_version);
-      setReactUi(Boolean(caps.capabilities?.react_ui));
-      setUiGeneration(gen?.generation ?? null);
-      setBuildings(buildingList);
-      setEquipment(inventory);
-      if (!buildingId && buildingList[0]) {
-        setQuery({ siteId: buildingList[0] }, true);
-      }
-      if (buildingId && !equipmentId && inventory[0]) {
-        setQuery({ equipment: String(inventory[0].equipment_id) }, true);
-      }
-    } catch (err) {
-      setError(formatErr(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [buildingId, equipmentId, setQuery]);
+  const shellKey = `shell\0${reloadNonce}`;
+  const shellLoad = useScopedLoad(shellKey, loadShell, EMPTY_SHELL);
+  const shellReady = shellLoad.committedKey === shellKey;
+  const shell = shellReady ? shellLoad.value : EMPTY_SHELL;
+  const buildings = shell.buildings;
+  const contractVersion = shell.contractVersion;
+  const reactUi = shell.reactUi;
+  const uiGeneration = shell.uiGeneration;
+  const equipmentKey = buildingId ? `${buildingId}\0${reloadNonce}` : "";
+  const equipmentLoad = useScopedLoad(equipmentKey, loadEquipment, EMPTY_EQUIPMENT);
+  const equipmentReady = equipmentKey !== "" && equipmentLoad.committedKey === equipmentKey;
+  const equipment = equipmentReady ? equipmentLoad.value : EMPTY_EQUIPMENT;
+  const errorParts = [
+    shell.error,
+    shellLoad.error ? `overview: ${shellLoad.error}` : null,
+    equipmentLoad.error ? `equipment: ${equipmentLoad.error}` : null,
+  ].filter((part): part is string => Boolean(part));
+  const error = errorParts.length ? errorParts.join("; ") : null;
+  const loading = shellLoad.loading || (equipmentKey !== "" && equipmentLoad.loading);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (!shellReady || buildingId || !buildings[0]) return;
+    setQuery({ siteId: buildings[0] }, true);
+  }, [shellReady, buildingId, buildings, setQuery]);
 
   useEffect(() => {
-    const onLoaded = () => {
-      void refresh();
-    };
+    if (!equipmentReady) return;
+    const ids = equipment.map((item) => String(item.equipment_id ?? ""));
+    if (equipmentId && ids.includes(equipmentId)) return;
+    const next = ids[0] ?? "";
+    if (next === equipmentId) return;
+    setQuery({ equipment: next }, true);
+  }, [equipmentReady, equipment, equipmentId, setQuery]);
+
+  useEffect(() => {
+    const onLoaded = () => setReloadNonce((nonce) => nonce + 1);
     window.addEventListener(PACKAGE_LOADED, onLoaded);
     return () => window.removeEventListener(PACKAGE_LOADED, onLoaded);
-  }, [refresh]);
+  }, []);
 
   useEffect(() => {
     const sync = () => setUnitSystem(readUnits());

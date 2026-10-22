@@ -74,6 +74,53 @@ export function canonicalEquipmentKind(
   }
 }
 
+/** Display label for a stamp. Aliases of one canonical kind share a label. */
+export function equipmentTypeCountLabel(raw: string | null | undefined): string {
+  switch (canonicalEquipmentKind(raw)) {
+    case "ahu":
+      return "AHU";
+    case "vav":
+      return "VAV";
+    case "zone_other":
+    case "baseboard":
+      return "Zone Other";
+    case "heatpump":
+      return "HEAT_PUMP";
+    case "weather":
+      return "WEATHER";
+    case "vrf":
+      return "VRF";
+    case "meter":
+      return "GENERAL";
+    case "chiller":
+      return "Chiller";
+    case "cooling_tower":
+      return "Cooling tower";
+    case "boiler":
+      return "Boiler";
+    default: {
+      const text = String(raw ?? "").trim();
+      return text || "unknown";
+    }
+  }
+}
+
+/** One count per canonical kind. `vav` and `VAV` are the same bucket. */
+export function groupEquipmentByType(
+  rows: Array<Record<string, unknown>>,
+): Array<{ type: string; count: number }> {
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    const label = equipmentTypeCountLabel(
+      String(row.equipment_type ?? row.type ?? "unknown"),
+    );
+    map.set(label, (map.get(label) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => a.type.localeCompare(b.type));
+}
+
 export function equipmentKind(e: {
   equipment_id?: unknown;
   equipment_type?: unknown;

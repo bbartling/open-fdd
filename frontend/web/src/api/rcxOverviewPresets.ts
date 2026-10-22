@@ -21,6 +21,7 @@ import { scheduleReferenceFromSession } from "./occupancySchedule";
 import type { PlotlyFigure } from "./plotDataset";
 import { rcxPresetTables, type RcxPresetTable } from "./rcxPresetTables";
 import { normalizeTipOverviewEnvelope } from "./tipAnalyticsNormalize";
+import { isAbortError } from "../session/scopedLoad";
 
 export const OVERVIEW_RCX_PRESET_IDS = [
   "ahu_motor_weekly",
@@ -64,6 +65,7 @@ export async function loadOverviewRcxPreset(
   presetId: string,
   overlayEq?: string | null,
   refresh?: boolean,
+  signal?: AbortSignal,
 ): Promise<{
   figure: PlotlyFigure | null;
   companion: PlotlyFigure | null;
@@ -71,7 +73,12 @@ export async function loadOverviewRcxPreset(
   tables: RcxPresetTable[];
   error?: string;
 }> {
-  const mapping = await getPackageMapping(buildingId).catch(() => null);
+  let mapping = null;
+  try {
+    mapping = await getPackageMapping(buildingId, undefined, { signal });
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+  }
   const window = analyticsWindowFromSampling(mapping?.equipment ?? []);
   const body = {
     building_id: buildingId,
@@ -81,8 +88,11 @@ export async function loadOverviewRcxPreset(
     ...(refresh ? { refresh: true } : {}),
   };
   if (presetId in PLANT_FOR) {
-    const raw = await postRuntime(body);
-    const session = await getSessionConfig(buildingId).catch(() => null);
+    const raw = await postRuntime(body, { signal });
+    const session = await getSessionConfig(buildingId).catch((err: unknown) => {
+      if (isAbortError(err)) throw err;
+      return null;
+    });
     const schedule = scheduleReferenceFromSession(session?.config, "UTC");
     // Tip SQL emits plant_group=ahu|motor; Overview bars need air|boiler|chiller.
     const env = normalizeTipOverviewEnvelope("runtime", raw);
@@ -105,7 +115,7 @@ export async function loadOverviewRcxPreset(
   if (presetId === "mech_cooling_oat_bins") {
     const env = normalizeTipOverviewEnvelope(
       "mechanical-cooling",
-      await postMechanicalCooling(body),
+      await postMechanicalCooling(body, { signal }),
     );
     const { figure } = mechFigure(env.rows ?? []);
     return {
@@ -124,7 +134,7 @@ export async function loadOverviewRcxPreset(
     presetId === "economizer_mat_resid" ||
     presetId === "economizer_temps_overlay"
   ) {
-    const env = normalizeTipOverviewEnvelope("economizer", await postEconomizer(body), {
+    const env = normalizeTipOverviewEnvelope("economizer", await postEconomizer(body, { signal }), {
       dtMinF: body.dt_min_f,
     });
     const points = env.points ?? [];
@@ -169,7 +179,7 @@ export async function loadOverviewRcxPreset(
   if (presetId === "bas_vs_web_oat") {
     const env = normalizeTipOverviewEnvelope(
       "bas-vs-web-oat",
-      await postBasVsWebOat(body),
+      await postBasVsWebOat(body, { signal }),
     );
     const overlay = basOverlay(env.points ?? [], 5);
     const hist = basHist(env.rows ?? []);
