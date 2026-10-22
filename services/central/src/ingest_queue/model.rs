@@ -2,10 +2,10 @@
 
 use chrono::{DateTime, Timelike, Utc};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub const COVERAGE_NOT_ASSESSED: &str = "not_assessed";
-pub const MODEL_REVISION_BOOTSTRAP: &str = "bootstrap";
 pub const MAX_CATCHUP_HOURS: u32 = 48;
 pub const MAX_LIST: u32 = 200;
 
@@ -129,6 +129,9 @@ pub struct ReceiptView {
     pub job_id: Uuid,
     pub tenant_id: String,
     pub canonical_site: String,
+    pub provider_instance_id: String,
+    pub device_id: String,
+    pub model_revision: String,
     pub fencing_token: u64,
     pub committed_at: DateTime<Utc>,
     pub counts: JobCounts,
@@ -214,8 +217,38 @@ pub struct SchedulerGrant {
 #[derive(Debug, Clone)]
 pub struct ListFilter {
     pub sites: Option<Vec<String>>,
+    pub tenant_id: Option<String>,
     pub state: Option<String>,
     pub limit: u32,
+}
+
+/// Counts for one caller. `None` tenant and sites means the hub-wide total.
+/// Scheduler identity is included only for that hub-wide read.
+#[derive(Debug, Clone)]
+pub struct MetricsScope {
+    pub tenant_id: Option<String>,
+    pub sites: Option<Vec<String>>,
+    pub include_scheduler: bool,
+}
+
+impl MetricsScope {
+    pub fn global() -> Self {
+        Self {
+            tenant_id: None,
+            sites: None,
+            include_scheduler: true,
+        }
+    }
+}
+
+/// Client key plus the authenticated binding that makes a replay safe.
+#[derive(Debug, Clone)]
+pub struct IdempotencyClaim {
+    pub actor: String,
+    pub tenant_id: String,
+    pub client_key: String,
+    pub object_id: String,
+    pub payload_hash: String,
 }
 
 #[derive(Debug)]
@@ -228,6 +261,7 @@ pub enum EnqueueOutcome {
 pub enum QueueError {
     StaleFence,
     NotFound,
+    Conflict(String),
     Invalid(String),
     Db(String),
 }
@@ -246,6 +280,7 @@ impl std::fmt::Display for QueueError {
         match self {
             Self::StaleFence => write!(f, "stale fence"),
             Self::NotFound => write!(f, "not found"),
+            Self::Conflict(msg) => write!(f, "{msg}"),
             Self::Invalid(msg) => write!(f, "{msg}"),
             Self::Db(_) => write!(f, "queue database unavailable"),
         }
@@ -292,6 +327,72 @@ pub fn operator_retry_allowed(state: &str, code: Option<&str>) -> bool {
 
 pub fn gap_recoverable(code: Option<&str>) -> bool {
     !matches!(code, Some("unrecoverable" | "retention_exceeded"))
+}
+
+pub fn scoped_digest(parts: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    for part in parts {
+        let len = u32::try_from(part.len()).unwrap_or(u32::MAX);
+        hasher.update(len.to_be_bytes());
+        hasher.update(part.as_bytes());
+    }
+    hex::encode(hasher.finalize())
+}
+
+pub fn retry_object_id(job_id: Uuid) -> String {
+    job_id.to_string()
+}
+
+pub fn retry_payload_hash(tenant_id: &str, job_id: Uuid) -> String {
+    scoped_digest(&["retry", tenant_id, &job_id.to_string()])
+}
+
+pub fn backfill_object_id(job: &NewJob) -> String {
+    [
+        job.canonical_site.as_str(),
+        job.provider_instance_id.as_str(),
+        job.device_id.as_str(),
+        job.model_revision.as_str(),
+    ]
+    .join("\n")
+}
+
+pub fn backfill_payload_hash(jobs: &[NewJob]) -> Result<String, QueueError> {
+    let Some(first) = jobs.first() else {
+        return Err(QueueError::Invalid(
+            "backfill requires 1 to 48 hourly windows".into(),
+        ));
+    };
+    let object = backfill_object_id(first);
+    if jobs
+        .iter()
+        .any(|job| job.tenant_id != first.tenant_id || backfill_object_id(job) != object)
+    {
+        return Err(QueueError::Conflict(
+            "backfill windows must share one tenant and object".into(),
+        ));
+    }
+    let mut windows: Vec<String> = jobs
+        .iter()
+        .map(|job| {
+            format!(
+                "{}|{}",
+                job.logical_window_start.to_rfc3339(),
+                job.logical_window_end.to_rfc3339()
+            )
+        })
+        .collect();
+    windows.sort();
+    let window_text = windows.join(",");
+    Ok(scoped_digest(&[
+        "backfill",
+        first.tenant_id.as_str(),
+        first.canonical_site.as_str(),
+        first.provider_instance_id.as_str(),
+        first.device_id.as_str(),
+        first.model_revision.as_str(),
+        window_text.as_str(),
+    ]))
 }
 
 pub fn truncate_chars(value: &str, max: usize) -> String {

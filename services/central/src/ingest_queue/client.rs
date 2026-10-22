@@ -153,62 +153,39 @@ impl QueueClient {
         Ok(self.memory.list_gaps(filter))
     }
 
-    pub async fn metrics(&self, now: DateTime<Utc>) -> Result<QueueMetrics, QueueError> {
+    pub async fn metrics(
+        &self,
+        now: DateTime<Utc>,
+        scope: &MetricsScope,
+    ) -> Result<QueueMetrics, QueueError> {
         if let Some(pool) = self.pool_if_configured().await? {
-            return postgres::metrics(&pool, now).await;
+            return postgres::metrics(&pool, now, scope).await;
         }
-        Ok(self.memory.metrics(now))
+        Ok(self.memory.metrics(now, scope))
     }
 
     pub async fn retry_job(
         &self,
         job_id: Uuid,
         now: DateTime<Utc>,
-        actor: &str,
-        idempotency_key: &str,
+        claim: &IdempotencyClaim,
     ) -> Result<JobView, QueueError> {
         if let Some(pool) = self.pool_if_configured().await? {
-            return postgres::retry_job(&pool, job_id, now, actor, idempotency_key).await;
+            return postgres::retry_job(&pool, job_id, now, claim).await;
         }
-        self.memory.retry_job(job_id, now, actor, idempotency_key)
+        self.memory.retry_job(job_id, now, claim)
     }
 
     pub async fn backfill(
         &self,
         jobs: Vec<NewJob>,
         now: DateTime<Utc>,
-        actor: &str,
-        idempotency_key: &str,
+        claim: &IdempotencyClaim,
     ) -> Result<Vec<JobView>, QueueError> {
         if let Some(pool) = self.pool_if_configured().await? {
-            if let Some(ids) = postgres::idempotent_jobs(&pool, idempotency_key, "backfill").await?
-            {
-                let mut views = Vec::new();
-                for id in ids {
-                    if let Some(job) = postgres::get_job(&pool, id).await? {
-                        views.push(job);
-                    }
-                }
-                return Ok(views);
-            }
-            if jobs.is_empty() || jobs.len() > MAX_CATCHUP_HOURS as usize {
-                return Err(QueueError::Invalid(
-                    "backfill requires 1 to 48 hourly windows".into(),
-                ));
-            }
-            let mut views = Vec::new();
-            for job in &jobs {
-                match postgres::enqueue(&pool, job).await? {
-                    EnqueueOutcome::Created(view) | EnqueueOutcome::Existing(view) => {
-                        views.push(view)
-                    }
-                }
-            }
-            let ids: Vec<Uuid> = views.iter().map(|job| job.job_id).collect();
-            postgres::remember_backfill(&pool, actor, idempotency_key, &ids).await?;
-            return Ok(views);
+            return postgres::backfill(&pool, &jobs, now, claim).await;
         }
-        self.memory.backfill(jobs, now, actor, idempotency_key)
+        self.memory.backfill(jobs, now, claim)
     }
 
     async fn pool_if_configured(&self) -> Result<Option<PgPool>, QueueError> {

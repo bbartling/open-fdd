@@ -14,7 +14,9 @@ use crate::providers::types::ProviderKind;
 use crate::state::AppState;
 
 use super::client::{Coordination, QueueClient};
-use super::model::{FinishOutcome, FinishRequest, JobCounts, JobView, MODEL_REVISION_BOOTSTRAP};
+use crate::providers::committed_model::IngestPlan;
+
+use super::model::{FinishOutcome, FinishRequest, JobCounts, JobView};
 use super::schedule::{self, ScheduleDevice};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,12 +175,27 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
 }
 
 async fn execute_job(state: &Arc<AppState>, job: &JobView) -> FinishOutcome {
-    let Some(site) = state
-        .providers
-        .sites
-        .iter()
-        .find(|site| site.building_id == job.canonical_site)
-    else {
+    let identity_ok = {
+        let models = state
+            .providers
+            .models
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match models.active_plan(&job.tenant_id, &job.canonical_site) {
+            Some(plan) => committed_tuple_matches(job, plan),
+            None => false,
+        }
+    };
+    if !identity_ok {
+        return FinishOutcome::Permanent {
+            code: "plan_identity_mismatch".into(),
+        };
+    }
+    let Some(site) = state.providers.sites.iter().find(|site| {
+        site.building_id == job.canonical_site
+            && site.tenant_id == job.tenant_id
+            && site.provider_instance_id == job.provider_instance_id
+    }) else {
         return FinishOutcome::Permanent {
             code: "site_not_configured".into(),
         };
@@ -264,33 +281,60 @@ fn portal_throttled(err: &str) -> bool {
 fn devices_from_state(state: &AppState) -> Vec<ScheduleDevice> {
     let mut devices = Vec::new();
     for site in &state.providers.sites {
-        let tenant_id = if site.tenant_id.is_empty() {
-            std::env::var("OPENFDD_INGEST_TENANT_ID").unwrap_or_else(|_| "legacy".into())
-        } else {
-            site.tenant_id.clone()
+        let plan = {
+            let models = state
+                .providers
+                .models
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            models
+                .active_plan(&site.tenant_id, &site.building_id)
+                .cloned()
         };
-        let provider_instance_id = site.provider_instance_id.clone();
-        let live = state
-            .providers
-            .resolver_for(&site.tenant_id, &site.building_id);
-        let equipment = poller::schedule_equipment_ids(&live, &site.resolver);
-        if equipment.is_empty() {
+        let Some(plan) = plan else {
             continue;
-        }
-        for device_id in equipment {
-            let estimated =
-                u32::try_from(site.resolver.point_count_for_equipment(&device_id)).unwrap_or(1);
-            devices.push(ScheduleDevice {
-                tenant_id: tenant_id.clone(),
-                canonical_site: site.building_id.clone(),
-                provider_instance_id: provider_instance_id.clone(),
-                device_id,
-                model_revision: MODEL_REVISION_BOOTSTRAP.into(),
-                estimated_cost: estimated.max(1),
-            });
-        }
+        };
+        devices.extend(schedule_devices(
+            &site.tenant_id,
+            &site.building_id,
+            &site.provider_instance_id,
+            &plan,
+        ));
     }
     devices
+}
+
+fn schedule_devices(
+    tenant_id: &str,
+    canonical_site: &str,
+    provider_instance_id: &str,
+    plan: &IngestPlan,
+) -> Vec<ScheduleDevice> {
+    if plan.tenant_id != tenant_id || plan.site_id != canonical_site {
+        return Vec::new();
+    }
+    plan.groups
+        .iter()
+        .filter(|group| group.provider_instance_id == provider_instance_id)
+        .map(|group| ScheduleDevice {
+            tenant_id: plan.tenant_id.clone(),
+            canonical_site: plan.site_id.clone(),
+            provider_instance_id: group.provider_instance_id.clone(),
+            device_id: group.equipment_id.clone(),
+            model_revision: plan.revision_id.clone(),
+            estimated_cost: u32::try_from(group.points.len()).unwrap_or(1).max(1),
+        })
+        .collect()
+}
+
+pub(crate) fn committed_tuple_matches(job: &JobView, plan: &IngestPlan) -> bool {
+    job.tenant_id == plan.tenant_id
+        && job.canonical_site == plan.site_id
+        && job.model_revision == plan.revision_id
+        && plan.groups.iter().any(|group| {
+            group.equipment_id == job.device_id
+                && group.provider_instance_id == job.provider_instance_id
+        })
 }
 
 fn worker_id() -> String {
@@ -411,5 +455,82 @@ mod tests {
             Some(value) => std::env::set_var(key, value),
             None => std::env::remove_var(key),
         }
+    }
+
+    #[test]
+    fn schedule_uses_the_committed_plan_tuple() {
+        let plan = crate::providers::committed_model::IngestPlan {
+            schema: "plan".into(),
+            revision_id: "rev-plan".into(),
+            tenant_id: "tenant-a".into(),
+            site_id: "site-a".into(),
+            groups: vec![crate::providers::committed_model::IngestDeviceGroup {
+                provider_instance_id: "portal-a".into(),
+                equipment_id: "device-a".into(),
+                equip_type: "ahu".into(),
+                points: vec![],
+            }],
+            withheld: Vec::new(),
+        };
+        let devices = schedule_devices("tenant-a", "site-a", "portal-a", &plan);
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].model_revision, "rev-plan");
+        assert_eq!(devices[0].device_id, "device-a");
+        assert!(schedule_devices("tenant-b", "site-a", "portal-a", &plan).is_empty());
+        let job = JobView {
+            job_id: Uuid::nil(),
+            tenant_id: "tenant-a".into(),
+            canonical_site: "site-a".into(),
+            provider_instance_id: "portal-b".into(),
+            device_id: "device-a".into(),
+            model_revision: "rev-plan".into(),
+            logical_window_start: Utc::now(),
+            logical_window_end: Utc::now(),
+            shard: String::new(),
+            state: "queued".into(),
+            attempt: 0,
+            not_before: Utc::now(),
+            lease_owner: None,
+            lease_expiry: None,
+            fencing_token: 0,
+            estimated_cost: 1,
+            safe_error_code: None,
+            receipt_id: None,
+            coverage: "not_assessed".into(),
+            counts: JobCounts::default(),
+        };
+        assert!(!committed_tuple_matches(&job, &plan));
+    }
+
+    #[tokio::test]
+    async fn execution_stops_when_the_committed_tuple_does_not_match() {
+        let state = Arc::new(crate::state::AppState::new());
+        let job = JobView {
+            job_id: Uuid::nil(),
+            tenant_id: "tenant-a".into(),
+            canonical_site: "site-a".into(),
+            provider_instance_id: "portal-a".into(),
+            device_id: "device-a".into(),
+            model_revision: "rev-plan".into(),
+            logical_window_start: Utc::now(),
+            logical_window_end: Utc::now(),
+            shard: String::new(),
+            state: "leased".into(),
+            attempt: 1,
+            not_before: Utc::now(),
+            lease_owner: Some("worker".into()),
+            lease_expiry: Some(Utc::now()),
+            fencing_token: 1,
+            estimated_cost: 1,
+            safe_error_code: None,
+            receipt_id: None,
+            coverage: "not_assessed".into(),
+            counts: JobCounts::default(),
+        };
+        let outcome = execute_job(&state, &job).await;
+        assert!(matches!(
+            outcome,
+            FinishOutcome::Permanent { code } if code == "plan_identity_mismatch"
+        ));
     }
 }

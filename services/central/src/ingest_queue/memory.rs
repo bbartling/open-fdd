@@ -26,8 +26,17 @@ struct StoredJob {
     view: JobView,
 }
 
-struct IdempotencyRecord {
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct IdempotencyKey {
+    actor: String,
+    tenant_id: String,
     action: String,
+    client_key: String,
+}
+
+struct IdempotencyRecord {
+    object_id: String,
+    payload_hash: String,
     job_ids: Vec<Uuid>,
 }
 
@@ -38,7 +47,7 @@ struct Inner {
     scheduler: Option<SchedulerGrant>,
     budgets: HashMap<String, PortalBudget>,
     defaults: BudgetDefaults,
-    idempotency: HashMap<String, IdempotencyRecord>,
+    idempotency: HashMap<IdempotencyKey, IdempotencyRecord>,
     audit: VecDeque<AuditEvent>,
 }
 
@@ -75,39 +84,8 @@ impl MemoryStore {
     }
 
     pub fn enqueue(&self, job: NewJob, now: DateTime<Utc>) -> Result<EnqueueOutcome, QueueError> {
-        validate_new(&job)?;
         let mut inner = self.lock();
-        let key = job.key();
-        if let Some(idx) = inner.by_key.get(&key).copied() {
-            return Ok(EnqueueOutcome::Existing(inner.jobs[idx].view.clone()));
-        }
-        let view = JobView {
-            job_id: Uuid::new_v4(),
-            tenant_id: job.tenant_id,
-            canonical_site: job.canonical_site,
-            provider_instance_id: job.provider_instance_id,
-            device_id: job.device_id,
-            model_revision: job.model_revision,
-            logical_window_start: job.logical_window_start,
-            logical_window_end: job.logical_window_end,
-            shard: job.shard,
-            state: JobState::Queued.as_str().to_string(),
-            attempt: 0,
-            not_before: job.not_before,
-            lease_owner: None,
-            lease_expiry: None,
-            fencing_token: 0,
-            estimated_cost: job.estimated_cost.max(1),
-            safe_error_code: None,
-            receipt_id: None,
-            coverage: COVERAGE_NOT_ASSESSED.to_string(),
-            counts: JobCounts::default(),
-        };
-        let idx = inner.jobs.len();
-        inner.by_key.insert(key, idx);
-        inner.jobs.push(StoredJob { view: view.clone() });
-        let _ = now;
-        Ok(EnqueueOutcome::Created(view))
+        enqueue_locked(&mut inner, job, now)
     }
 
     pub fn try_scheduler(
@@ -257,22 +235,31 @@ impl MemoryStore {
         &self,
         job_id: Uuid,
         now: DateTime<Utc>,
-        actor: &str,
-        idempotency_key: &str,
+        claim: &IdempotencyClaim,
     ) -> Result<JobView, QueueError> {
+        if claim.object_id != retry_object_id(job_id)
+            || claim.payload_hash != retry_payload_hash(&claim.tenant_id, job_id)
+        {
+            return Err(QueueError::Conflict(
+                "idempotency key does not match the original request".into(),
+            ));
+        }
         let mut inner = self.lock();
-        if let Some(prev) = inner.idempotency.get(idempotency_key) {
-            if prev.action == "retry" {
-                if let Some(id) = prev.job_ids.first() {
-                    if let Some(job) = inner.jobs.iter().find(|job| job.view.job_id == *id) {
-                        return Ok(job.view.clone());
-                    }
-                }
+        let key = idempotency_key(claim, "retry");
+        if let Some(record) = inner.idempotency.get(&key) {
+            if record.object_id != claim.object_id || record.payload_hash != claim.payload_hash {
+                return Err(QueueError::Conflict(
+                    "idempotency key does not match the original request".into(),
+                ));
             }
+            return replay_jobs(&inner, &record.job_ids, &claim.tenant_id);
         }
         let Some(job) = inner.jobs.iter_mut().find(|job| job.view.job_id == job_id) else {
             return Err(QueueError::NotFound);
         };
+        if job.view.tenant_id != claim.tenant_id {
+            return Err(QueueError::NotFound);
+        }
         if !operator_retry_allowed(&job.view.state, job.view.safe_error_code.as_deref()) {
             return Err(QueueError::Invalid(
                 "job is not eligible for operator retry".into(),
@@ -291,10 +278,9 @@ impl MemoryStore {
         let view = job.view.clone();
         remember_idempotency(
             &mut inner,
-            idempotency_key,
+            claim,
             "retry",
             vec![view.job_id],
-            actor,
             Some(view.job_id),
         );
         Ok(view)
@@ -304,43 +290,44 @@ impl MemoryStore {
         &self,
         jobs: Vec<NewJob>,
         now: DateTime<Utc>,
-        actor: &str,
-        idempotency_key: &str,
+        claim: &IdempotencyClaim,
     ) -> Result<Vec<JobView>, QueueError> {
         if jobs.is_empty() || jobs.len() > MAX_CATCHUP_HOURS as usize {
             return Err(QueueError::Invalid(
                 "backfill requires 1 to 48 hourly windows".into(),
             ));
         }
-        if inner_has_idempotency(&self.lock(), idempotency_key, "backfill") {
-            return self.replay_idempotency(idempotency_key);
+        let object_id = backfill_object_id(&jobs[0]);
+        let payload_hash = backfill_payload_hash(&jobs)?;
+        if claim.object_id != object_id
+            || claim.payload_hash != payload_hash
+            || jobs.iter().any(|job| job.tenant_id != claim.tenant_id)
+        {
+            return Err(QueueError::Conflict(
+                "idempotency key does not match the original request".into(),
+            ));
+        }
+        let mut inner = self.lock();
+        let key = idempotency_key(claim, "backfill");
+        if let Some(record) = inner.idempotency.get(&key) {
+            if record.object_id != claim.object_id || record.payload_hash != claim.payload_hash {
+                return Err(QueueError::Conflict(
+                    "idempotency key does not match the original request".into(),
+                ));
+            }
+            return replay_job_list(&inner, &record.job_ids, &claim.tenant_id);
         }
         let mut created = Vec::new();
         for job in jobs {
-            match self.enqueue(job, now)? {
+            match enqueue_locked(&mut inner, job, now)? {
                 EnqueueOutcome::Created(view) | EnqueueOutcome::Existing(view) => {
                     created.push(view)
                 }
             }
         }
         let ids: Vec<Uuid> = created.iter().map(|job| job.job_id).collect();
-        let mut inner = self.lock();
-        remember_idempotency(&mut inner, idempotency_key, "backfill", ids, actor, None);
+        remember_idempotency(&mut inner, claim, "backfill", ids, None);
         Ok(created)
-    }
-
-    fn replay_idempotency(&self, key: &str) -> Result<Vec<JobView>, QueueError> {
-        let inner = self.lock();
-        let Some(record) = inner.idempotency.get(key) else {
-            return Err(QueueError::NotFound);
-        };
-        let mut views = Vec::new();
-        for id in &record.job_ids {
-            if let Some(job) = inner.jobs.iter().find(|job| job.view.job_id == *id) {
-                views.push(job.view.clone());
-            }
-        }
-        Ok(views)
     }
 
     pub fn list_jobs(&self, filter: &ListFilter) -> Vec<JobView> {
@@ -361,7 +348,10 @@ impl MemoryStore {
         let mut rows: Vec<ReceiptView> = inner
             .receipts
             .iter()
-            .filter(|row| site_allowed(filter.sites.as_ref(), &row.canonical_site))
+            .filter(|row| {
+                site_allowed(filter.sites.as_ref(), &row.canonical_site)
+                    && tenant_allowed(filter.tenant_id.as_ref(), &row.tenant_id)
+            })
             .cloned()
             .collect();
         rows.sort_by_key(|row| Reverse(row.committed_at));
@@ -384,6 +374,7 @@ impl MemoryStore {
             .iter()
             .filter(|job| {
                 site_allowed(filter.sites.as_ref(), &job.view.canonical_site)
+                    && tenant_allowed(filter.tenant_id.as_ref(), &job.view.tenant_id)
                     && matches!(
                         job.view.state.as_str(),
                         "partial" | "permanent_failure" | "retry_wait"
@@ -396,7 +387,7 @@ impl MemoryStore {
         rows
     }
 
-    pub fn metrics(&self, now: DateTime<Utc>) -> QueueMetrics {
+    pub fn metrics(&self, now: DateTime<Utc>, scope: &MetricsScope) -> QueueMetrics {
         let inner = self.lock();
         let mut ready_times = Vec::new();
         let mut leased = 0u64;
@@ -406,6 +397,9 @@ impl MemoryStore {
         let mut committed = 0u64;
         let mut portals: HashMap<String, u32> = HashMap::new();
         for job in &inner.jobs {
+            if !metrics_job_in_scope(&job.view, scope) {
+                continue;
+            }
             match job.view.state.as_str() {
                 "queued" | "retry_wait" if job.view.not_before <= now => {
                     ready_times.push(job.view.not_before);
@@ -449,42 +443,137 @@ impl MemoryStore {
             partial,
             permanent_failure,
             committed,
-            scheduler_owner: inner
-                .scheduler
-                .as_ref()
-                .and_then(|lease| (lease.expires_at > now).then(|| lease.owner.clone())),
+            scheduler_owner: scope
+                .include_scheduler
+                .then(|| {
+                    inner
+                        .scheduler
+                        .as_ref()
+                        .and_then(|lease| (lease.expires_at > now).then(|| lease.owner.clone()))
+                })
+                .flatten(),
             portal_in_flight,
         }
     }
 }
 
-fn inner_has_idempotency(inner: &Inner, key: &str, action: &str) -> bool {
-    inner
-        .idempotency
-        .get(key)
-        .is_some_and(|row| row.action == action)
+fn enqueue_locked(
+    inner: &mut Inner,
+    job: NewJob,
+    now: DateTime<Utc>,
+) -> Result<EnqueueOutcome, QueueError> {
+    validate_new(&job)?;
+    let key = job.key();
+    if let Some(idx) = inner.by_key.get(&key).copied() {
+        return Ok(EnqueueOutcome::Existing(inner.jobs[idx].view.clone()));
+    }
+    let view = JobView {
+        job_id: Uuid::new_v4(),
+        tenant_id: job.tenant_id,
+        canonical_site: job.canonical_site,
+        provider_instance_id: job.provider_instance_id,
+        device_id: job.device_id,
+        model_revision: job.model_revision,
+        logical_window_start: job.logical_window_start,
+        logical_window_end: job.logical_window_end,
+        shard: job.shard,
+        state: JobState::Queued.as_str().to_string(),
+        attempt: 0,
+        not_before: job.not_before,
+        lease_owner: None,
+        lease_expiry: None,
+        fencing_token: 0,
+        estimated_cost: job.estimated_cost.max(1),
+        safe_error_code: None,
+        receipt_id: None,
+        coverage: COVERAGE_NOT_ASSESSED.to_string(),
+        counts: JobCounts::default(),
+    };
+    let idx = inner.jobs.len();
+    inner.by_key.insert(key, idx);
+    inner.jobs.push(StoredJob { view: view.clone() });
+    let _ = now;
+    Ok(EnqueueOutcome::Created(view))
+}
+
+fn metrics_job_in_scope(job: &JobView, scope: &MetricsScope) -> bool {
+    if let Some(tenant) = scope.tenant_id.as_deref() {
+        if job.tenant_id != tenant {
+            return false;
+        }
+    }
+    if let Some(sites) = scope.sites.as_ref() {
+        if !sites.iter().any(|site| site == &job.canonical_site) {
+            return false;
+        }
+    }
+    true
+}
+
+fn idempotency_key(claim: &IdempotencyClaim, action: &str) -> IdempotencyKey {
+    IdempotencyKey {
+        actor: claim.actor.clone(),
+        tenant_id: claim.tenant_id.clone(),
+        action: action.to_string(),
+        client_key: claim.client_key.clone(),
+    }
+}
+
+fn replay_jobs(inner: &Inner, ids: &[Uuid], tenant_id: &str) -> Result<JobView, QueueError> {
+    let mut matched = None;
+    for id in ids {
+        if let Some(job) = inner.jobs.iter().find(|job| job.view.job_id == *id) {
+            if job.view.tenant_id != tenant_id {
+                return Err(QueueError::NotFound);
+            }
+            if matched.is_none() {
+                matched = Some(job.view.clone());
+            }
+        }
+    }
+    matched.ok_or(QueueError::NotFound)
+}
+
+fn replay_job_list(
+    inner: &Inner,
+    ids: &[Uuid],
+    tenant_id: &str,
+) -> Result<Vec<JobView>, QueueError> {
+    let mut views = Vec::new();
+    for id in ids {
+        if let Some(job) = inner.jobs.iter().find(|job| job.view.job_id == *id) {
+            if job.view.tenant_id != tenant_id {
+                return Err(QueueError::NotFound);
+            }
+            views.push(job.view.clone());
+        }
+    }
+    if views.is_empty() {
+        return Err(QueueError::NotFound);
+    }
+    Ok(views)
 }
 
 fn remember_idempotency(
     inner: &mut Inner,
-    key: &str,
+    claim: &IdempotencyClaim,
     action: &str,
     job_ids: Vec<Uuid>,
-    actor: &str,
     job_id: Option<Uuid>,
 ) {
     inner.idempotency.insert(
-        key.to_string(),
+        idempotency_key(claim, action),
         IdempotencyRecord {
-            action: action.to_string(),
+            object_id: claim.object_id.clone(),
+            payload_hash: claim.payload_hash.clone(),
             job_ids,
         },
     );
     let event = AuditEvent {
-        actor: actor.to_string(),
+        actor: claim.actor.clone(),
         action: action.to_string(),
         job_id,
-        idempotency_key: Some(key.to_string()),
+        idempotency_key: Some(claim.client_key.clone()),
     };
     debug!(
         actor = %event.actor,
@@ -655,6 +744,9 @@ fn push_receipt(
         job_id: job.job_id,
         tenant_id: job.tenant_id.clone(),
         canonical_site: job.canonical_site.clone(),
+        provider_instance_id: job.provider_instance_id.clone(),
+        device_id: job.device_id.clone(),
+        model_revision: job.model_revision.clone(),
         fencing_token: job.fencing_token,
         committed_at: now,
         counts: job.counts,
@@ -671,10 +763,17 @@ fn site_allowed(sites: Option<&Vec<String>>, site: &str) -> bool {
     }
 }
 
+fn tenant_allowed(tenant: Option<&String>, job_tenant: &str) -> bool {
+    tenant.is_none_or(|expected| expected == job_tenant)
+}
+
 fn filtered_jobs(jobs: &[StoredJob], filter: &ListFilter) -> Vec<JobView> {
     let mut rows: Vec<JobView> = jobs
         .iter()
-        .filter(|job| site_allowed(filter.sites.as_ref(), &job.view.canonical_site))
+        .filter(|job| {
+            site_allowed(filter.sites.as_ref(), &job.view.canonical_site)
+                && tenant_allowed(filter.tenant_id.as_ref(), &job.view.tenant_id)
+        })
         .filter(|job| {
             filter
                 .state
@@ -929,14 +1028,55 @@ mod tests {
                 },
             })
             .unwrap();
-        let retried = store
-            .retry_job(created.job_id, at, "operator", "idem-1")
-            .unwrap();
+        let claim = IdempotencyClaim {
+            actor: "operator".into(),
+            tenant_id: "tenant-a".into(),
+            client_key: "idem-1".into(),
+            object_id: retry_object_id(created.job_id),
+            payload_hash: retry_payload_hash("tenant-a", created.job_id),
+        };
+        let retried = store.retry_job(created.job_id, at, &claim).unwrap();
         assert_eq!(retried.state, "queued");
-        let again = store
-            .retry_job(created.job_id, at, "operator", "idem-1")
-            .unwrap();
+        let again = store.retry_job(created.job_id, at, &claim).unwrap();
         assert_eq!(again.job_id, retried.job_id);
         assert_eq!(again.state, "queued");
+        let other = IdempotencyClaim {
+            actor: "other-operator".into(),
+            tenant_id: "tenant-b".into(),
+            client_key: "idem-1".into(),
+            object_id: retry_object_id(created.job_id),
+            payload_hash: retry_payload_hash("tenant-b", created.job_id),
+        };
+        let foreign = store.retry_job(created.job_id, at, &other);
+        assert!(matches!(foreign, Err(QueueError::NotFound)));
+        let mismatch = IdempotencyClaim {
+            client_key: "idem-1".into(),
+            object_id: retry_object_id(Uuid::new_v4()),
+            payload_hash: retry_payload_hash("tenant-a", Uuid::new_v4()),
+            ..claim
+        };
+        assert!(matches!(
+            store.retry_job(created.job_id, at, &mismatch),
+            Err(QueueError::Conflict(_))
+        ));
+    }
+
+    #[test]
+    fn metrics_ignore_another_tenants_jobs() {
+        let store = MemoryStore::new(BudgetDefaults::default());
+        let at = now();
+        let mut foreign = sample("site-b", "nf:site-b", "ahu-b", "2026-10-19T12:00:00Z");
+        foreign.tenant_id = "tenant-b".into();
+        store.enqueue(foreign, at).unwrap();
+        let scope = MetricsScope {
+            tenant_id: Some("tenant-a".into()),
+            sites: Some(vec!["site-a".into()]),
+            include_scheduler: false,
+        };
+        let metrics = store.metrics(at, &scope);
+        assert_eq!(metrics.ready_backlog, 0);
+        assert!(metrics.scheduler_owner.is_none());
+        let global = store.metrics(at, &MetricsScope::global());
+        assert_eq!(global.ready_backlog, 1);
     }
 }

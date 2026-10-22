@@ -76,7 +76,7 @@ pub async fn apply_schema(pool: &PgPool) -> Result<(), QueueError> {
     for stmt in statements(SCHEMA_SQL) {
         sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
     }
-    Ok(())
+    migrate_idempotency_scope(pool).await
 }
 
 pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, QueueError> {
@@ -365,28 +365,39 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
         return Err(QueueError::StaleFence);
     }
     let job = load_job_tx(&mut tx, &job_id).await?;
-    sqlx::query(
+    let inserted = sqlx::query(
         "INSERT INTO ingest_receipt (
-            receipt_id, job_id, tenant_id, canonical_site, fencing_token, committed_at, counts, safe_error_code
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            receipt_id, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
+            model_revision, fencing_token, committed_at, counts, safe_error_code
+         )
+         SELECT $1, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
+                model_revision, $2, $3, $4, $5
+         FROM ingest_job
+         WHERE job_id = $6",
     )
     .bind(&receipt_id)
-    .bind(&job_id)
-    .bind(&job.tenant_id)
-    .bind(&job.canonical_site)
     .bind(i64::try_from(req.fencing_token).unwrap_or(i64::MAX))
     .bind(req.now)
     .bind(serde_json::json!(counts))
     .bind(&code)
+    .bind(&job_id)
     .execute(&mut *tx)
     .await
     .map_err(db_err)?;
+    if inserted.rows_affected() != 1 {
+        return Err(QueueError::Invalid(
+            "receipt identity could not be copied from the job".into(),
+        ));
+    }
     tx.commit().await.map_err(db_err)?;
     Ok(Some(ReceiptView {
         receipt_id: parse_uuid(&receipt_id)?,
         job_id: req.job_id,
         tenant_id: job.tenant_id,
         canonical_site: job.canonical_site,
+        provider_instance_id: job.provider_instance_id,
+        device_id: job.device_id,
+        model_revision: job.model_revision,
         fencing_token: req.fencing_token,
         committed_at: req.now,
         counts,
@@ -399,11 +410,13 @@ pub async fn list_jobs(pool: &PgPool, filter: &ListFilter) -> Result<Vec<JobView
         "SELECT {JOB_COLUMNS} FROM ingest_job
          WHERE ($1::text[] IS NULL OR canonical_site = ANY($1))
            AND ($2::text IS NULL OR state = $2)
+           AND ($3::text IS NULL OR tenant_id = $3)
          ORDER BY logical_window_start DESC
-         LIMIT $3"
+         LIMIT $4"
     ))
     .bind(filter.sites.clone())
     .bind(filter.state.clone())
+    .bind(filter.tenant_id.clone())
     .bind(i64::from(filter.limit.min(MAX_LIST)))
     .fetch_all(pool)
     .await
@@ -429,119 +442,105 @@ pub async fn retry_job(
     pool: &PgPool,
     job_id: Uuid,
     now: DateTime<Utc>,
-    actor: &str,
-    idempotency_key: &str,
+    claim: &IdempotencyClaim,
 ) -> Result<JobView, QueueError> {
-    if let Some(existing) = idempotent_jobs(pool, idempotency_key, "retry").await? {
-        if let Some(id) = existing.first() {
-            if let Some(job) = get_job(pool, *id).await? {
-                return Ok(job);
-            }
-        }
+    if claim.object_id != retry_object_id(job_id)
+        || claim.payload_hash != retry_payload_hash(&claim.tenant_id, job_id)
+    {
+        return Err(QueueError::Conflict(
+            "idempotency key does not match the original request".into(),
+        ));
     }
-    let Some(job) = get_job(pool, job_id).await? else {
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    let reserved = lock_idempotency(&mut tx, "retry", claim).await?;
+    if !reserved.inserted {
+        if !binding_matches(&reserved, claim) {
+            return Err(QueueError::Conflict(
+                "idempotency key does not match the original request".into(),
+            ));
+        }
+        let views = load_jobs_for_replay(&mut tx, &reserved.job_ids, &claim.tenant_id).await?;
+        let Some(job) = views.into_iter().next() else {
+            return Err(QueueError::NotFound);
+        };
+        tx.commit().await.map_err(db_err)?;
+        return Ok(job);
+    }
+    let Some(job) = load_job_for_update(&mut tx, &job_id.to_string()).await? else {
         return Err(QueueError::NotFound);
     };
+    if job.tenant_id != claim.tenant_id {
+        return Err(QueueError::NotFound);
+    }
     if !operator_retry_allowed(&job.state, job.safe_error_code.as_deref()) {
         return Err(QueueError::Invalid(
             "job is not eligible for operator retry".into(),
         ));
     }
-    let updated = sqlx::query(
+    let updated = sqlx::query(&format!(
         "UPDATE ingest_job SET state = 'queued', not_before = $2, lease_owner = NULL,
             lease_expiry = NULL, safe_error_code = NULL, updated_at = $2
-         WHERE job_id = $1 AND state IN ('partial', 'permanent_failure', 'retry_wait', 'cancelled')",
-    )
+         WHERE job_id = $1 AND state IN ('partial', 'permanent_failure', 'retry_wait', 'cancelled')
+         RETURNING {JOB_COLUMNS}"
+    ))
     .bind(job_id.to_string())
     .bind(now)
-    .execute(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(db_err)?;
-    if updated.rows_affected() == 0 {
+    let Some(row) = updated else {
         return Err(QueueError::Invalid(
             "job is not eligible for operator retry".into(),
         ));
-    }
-    save_idempotency(
-        pool,
-        idempotency_key,
-        actor,
-        "retry",
-        &[job_id],
-        Some(job_id),
-    )
-    .await?;
-    get_job(pool, job_id).await?.ok_or(QueueError::NotFound)
-}
-
-pub async fn remember_backfill(
-    pool: &PgPool,
-    actor: &str,
-    idempotency_key: &str,
-    job_ids: &[Uuid],
-) -> Result<(), QueueError> {
-    save_idempotency(pool, idempotency_key, actor, "backfill", job_ids, None).await
-}
-
-pub async fn idempotent_jobs(
-    pool: &PgPool,
-    key: &str,
-    action: &str,
-) -> Result<Option<Vec<Uuid>>, QueueError> {
-    let raw: Option<serde_json::Value> = sqlx::query_scalar(
-        "SELECT job_ids FROM ingest_idempotency WHERE idempotency_key = $1 AND action = $2",
-    )
-    .bind(key)
-    .bind(action)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?;
-    let Some(raw) = raw else {
-        return Ok(None);
     };
-    let ids = raw
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|value| value.as_str())
-        .map(parse_uuid)
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(Some(ids))
+    let view = job_from_row(&row)?;
+    store_idempotency_result(&mut tx, "retry", claim, &[job_id], Some(job_id)).await?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(view)
 }
 
-async fn save_idempotency(
+pub async fn backfill(
     pool: &PgPool,
-    key: &str,
-    actor: &str,
-    action: &str,
-    job_ids: &[Uuid],
-    job_id: Option<Uuid>,
-) -> Result<(), QueueError> {
-    let ids: Vec<String> = job_ids.iter().map(ToString::to_string).collect();
-    sqlx::query(
-        "INSERT INTO ingest_idempotency (idempotency_key, actor, action, job_ids)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (idempotency_key) DO NOTHING",
-    )
-    .bind(key)
-    .bind(actor)
-    .bind(action)
-    .bind(serde_json::json!(ids))
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
-    sqlx::query(
-        "INSERT INTO ingest_audit (actor, action, job_id, idempotency_key, detail)
-         VALUES ($1, $2, $3, $4, '{}'::jsonb)",
-    )
-    .bind(actor)
-    .bind(action)
-    .bind(job_id.map(|id| id.to_string()))
-    .bind(key)
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
-    Ok(())
+    jobs: &[NewJob],
+    now: DateTime<Utc>,
+    claim: &IdempotencyClaim,
+) -> Result<Vec<JobView>, QueueError> {
+    if jobs.is_empty() || jobs.len() > MAX_CATCHUP_HOURS as usize {
+        return Err(QueueError::Invalid(
+            "backfill requires 1 to 48 hourly windows".into(),
+        ));
+    }
+    let object_id = backfill_object_id(&jobs[0]);
+    let payload_hash = backfill_payload_hash(jobs)?;
+    if claim.object_id != object_id
+        || claim.payload_hash != payload_hash
+        || jobs.iter().any(|job| job.tenant_id != claim.tenant_id)
+    {
+        return Err(QueueError::Conflict(
+            "idempotency key does not match the original request".into(),
+        ));
+    }
+    let _ = now;
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    let reserved = lock_idempotency(&mut tx, "backfill", claim).await?;
+    if !reserved.inserted {
+        if !binding_matches(&reserved, claim) {
+            return Err(QueueError::Conflict(
+                "idempotency key does not match the original request".into(),
+            ));
+        }
+        let views = load_jobs_for_replay(&mut tx, &reserved.job_ids, &claim.tenant_id).await?;
+        tx.commit().await.map_err(db_err)?;
+        return Ok(views);
+    }
+    let mut views = Vec::new();
+    for job in jobs {
+        views.push(enqueue_tx(&mut tx, job).await?);
+    }
+    let ids: Vec<Uuid> = views.iter().map(|job| job.job_id).collect();
+    store_idempotency_result(&mut tx, "backfill", claim, &ids, None).await?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(views)
 }
 
 pub async fn list_gaps(pool: &PgPool, filter: &ListFilter) -> Result<Vec<JobView>, QueueError> {
@@ -549,11 +548,13 @@ pub async fn list_gaps(pool: &PgPool, filter: &ListFilter) -> Result<Vec<JobView
         "SELECT {JOB_COLUMNS} FROM ingest_job
          WHERE state IN ('partial', 'permanent_failure', 'retry_wait')
            AND ($1::text[] IS NULL OR canonical_site = ANY($1))
+           AND ($3::text IS NULL OR tenant_id = $3)
          ORDER BY logical_window_start ASC
          LIMIT $2"
     ))
     .bind(filter.sites.clone())
     .bind(i64::from(filter.limit.min(MAX_LIST)))
+    .bind(filter.tenant_id.clone())
     .fetch_all(pool)
     .await
     .map_err(db_err)?;
@@ -565,14 +566,17 @@ pub async fn list_receipts(
     filter: &ListFilter,
 ) -> Result<Vec<ReceiptView>, QueueError> {
     let rows = sqlx::query(
-        "SELECT receipt_id, job_id, tenant_id, canonical_site, fencing_token, committed_at, counts, safe_error_code
+        "SELECT receipt_id, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
+                model_revision, fencing_token, committed_at, counts, safe_error_code
          FROM ingest_receipt
          WHERE ($1::text[] IS NULL OR canonical_site = ANY($1))
+           AND ($3::text IS NULL OR tenant_id = $3)
          ORDER BY committed_at DESC
          LIMIT $2",
     )
     .bind(filter.sites.clone())
     .bind(i64::from(filter.limit.min(MAX_LIST)))
+    .bind(filter.tenant_id.clone())
     .fetch_all(pool)
     .await
     .map_err(db_err)?;
@@ -584,7 +588,8 @@ pub async fn get_receipt(
     receipt_id: Uuid,
 ) -> Result<Option<ReceiptView>, QueueError> {
     let row = sqlx::query(
-        "SELECT receipt_id, job_id, tenant_id, canonical_site, fencing_token, committed_at, counts, safe_error_code
+        "SELECT receipt_id, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
+                model_revision, fencing_token, committed_at, counts, safe_error_code
          FROM ingest_receipt WHERE receipt_id = $1",
     )
     .bind(receipt_id.to_string())
@@ -597,62 +602,64 @@ pub async fn get_receipt(
     }
 }
 
-pub async fn metrics(pool: &PgPool, now: DateTime<Utc>) -> Result<QueueMetrics, QueueError> {
-    let ready: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM ingest_job
-         WHERE state IN ('queued', 'retry_wait') AND not_before <= $1",
+pub async fn metrics(
+    pool: &PgPool,
+    now: DateTime<Utc>,
+    scope: &MetricsScope,
+) -> Result<QueueMetrics, QueueError> {
+    let counts = sqlx::query(
+        "SELECT
+            COUNT(*) FILTER (
+                WHERE state IN ('queued', 'retry_wait') AND not_before <= $1
+            ) AS ready,
+            MIN(not_before) FILTER (
+                WHERE state IN ('queued', 'retry_wait') AND not_before <= $1
+            ) AS oldest,
+            COUNT(*) FILTER (WHERE state = 'leased') AS leased,
+            COUNT(*) FILTER (WHERE state = 'retry_wait') AS retry_wait,
+            COUNT(*) FILTER (WHERE state = 'partial') AS partial,
+            COUNT(*) FILTER (WHERE state = 'permanent_failure') AS permanent_failure,
+            COUNT(*) FILTER (WHERE state = 'committed') AS committed
+         FROM ingest_job
+         WHERE ($2::text IS NULL OR tenant_id = $2)
+           AND ($3::text[] IS NULL OR canonical_site = ANY($3))",
     )
     .bind(now)
+    .bind(scope.tenant_id.clone())
+    .bind(scope.sites.clone())
     .fetch_one(pool)
     .await
     .map_err(db_err)?;
-    let oldest: Option<DateTime<Utc>> = sqlx::query_scalar(
-        "SELECT MIN(not_before) FROM ingest_job
-         WHERE state IN ('queued', 'retry_wait') AND not_before <= $1",
-    )
-    .bind(now)
-    .fetch_one(pool)
-    .await
-    .map_err(db_err)?;
-    let leased: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM ingest_job WHERE state = 'leased'")
-        .fetch_one(pool)
+    let ready: i64 = counts.try_get("ready").map_err(db_err)?;
+    let oldest: Option<DateTime<Utc>> = counts.try_get("oldest").map_err(db_err)?;
+    let leased: i64 = counts.try_get("leased").map_err(db_err)?;
+    let retry_wait: i64 = counts.try_get("retry_wait").map_err(db_err)?;
+    let partial: i64 = counts.try_get("partial").map_err(db_err)?;
+    let permanent: i64 = counts.try_get("permanent_failure").map_err(db_err)?;
+    let committed: i64 = counts.try_get("committed").map_err(db_err)?;
+    let owner = if scope.include_scheduler {
+        sqlx::query_scalar(
+            "SELECT owner FROM ingest_scheduler_lease WHERE lease_name = 'scheduler' AND expires_at > $1",
+        )
+        .bind(now)
+        .fetch_optional(pool)
         .await
-        .map_err(db_err)?;
-    let retry_wait: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM ingest_job WHERE state = 'retry_wait'")
-            .fetch_one(pool)
-            .await
-            .map_err(db_err)?;
-    let partial: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM ingest_job WHERE state = 'partial'")
-            .fetch_one(pool)
-            .await
-            .map_err(db_err)?;
-    let permanent: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM ingest_job WHERE state = 'permanent_failure'")
-            .fetch_one(pool)
-            .await
-            .map_err(db_err)?;
-    let committed: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM ingest_job WHERE state = 'committed'")
-            .fetch_one(pool)
-            .await
-            .map_err(db_err)?;
-    let owner: Option<String> = sqlx::query_scalar(
-        "SELECT owner FROM ingest_scheduler_lease WHERE lease_name = 'scheduler' AND expires_at > $1",
-    )
-    .bind(now)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_err)?;
+        .map_err(db_err)?
+    } else {
+        None
+    };
     let portals = sqlx::query(
         "SELECT provider_instance_id, COUNT(*)::int AS in_flight
          FROM ingest_job
          WHERE state = 'leased' AND lease_expiry > $1
+           AND ($2::text IS NULL OR tenant_id = $2)
+           AND ($3::text[] IS NULL OR canonical_site = ANY($3))
          GROUP BY provider_instance_id
          ORDER BY provider_instance_id",
     )
     .bind(now)
+    .bind(scope.tenant_id.clone())
+    .bind(scope.sites.clone())
     .fetch_all(pool)
     .await
     .map_err(db_err)?;
@@ -792,6 +799,9 @@ fn receipt_from_row(row: &PgRow) -> Result<ReceiptView, QueueError> {
         job_id: parse_uuid(&row.try_get::<String, _>("job_id").map_err(db_err)?)?,
         tenant_id: row.try_get("tenant_id").map_err(db_err)?,
         canonical_site: row.try_get("canonical_site").map_err(db_err)?,
+        provider_instance_id: row.try_get("provider_instance_id").map_err(db_err)?,
+        device_id: row.try_get("device_id").map_err(db_err)?,
+        model_revision: row.try_get("model_revision").map_err(db_err)?,
         fencing_token: i64_to_u64(row.try_get("fencing_token").map_err(db_err)?),
         committed_at: row.try_get("committed_at").map_err(db_err)?,
         counts: JobCounts {
@@ -807,6 +817,271 @@ fn receipt_from_row(row: &PgRow) -> Result<ReceiptView, QueueError> {
         },
         safe_error_code: row.try_get("safe_error_code").map_err(db_err)?,
     })
+}
+
+struct IdempotencyRow {
+    object_id: String,
+    payload_hash: String,
+    job_ids: Vec<Uuid>,
+    inserted: bool,
+}
+
+fn binding_matches(row: &IdempotencyRow, claim: &IdempotencyClaim) -> bool {
+    row.object_id == claim.object_id && row.payload_hash == claim.payload_hash
+}
+
+async fn lock_idempotency(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    action: &str,
+    claim: &IdempotencyClaim,
+) -> Result<IdempotencyRow, QueueError> {
+    let inserted = sqlx::query(
+        "INSERT INTO ingest_idempotency (
+            idempotency_key, actor, tenant_id, action, object_id, payload_hash, job_ids
+         ) VALUES ($1, $2, $3, $4, $5, $6, '[]'::jsonb)
+         ON CONFLICT (actor, tenant_id, action, idempotency_key) DO NOTHING
+         RETURNING object_id, payload_hash, job_ids",
+    )
+    .bind(&claim.client_key)
+    .bind(&claim.actor)
+    .bind(&claim.tenant_id)
+    .bind(action)
+    .bind(&claim.object_id)
+    .bind(&claim.payload_hash)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    if let Some(row) = inserted {
+        return Ok(IdempotencyRow {
+            object_id: row.try_get("object_id").map_err(db_err)?,
+            payload_hash: row.try_get("payload_hash").map_err(db_err)?,
+            job_ids: Vec::new(),
+            inserted: true,
+        });
+    }
+    let row = sqlx::query(
+        "SELECT object_id, payload_hash, job_ids FROM ingest_idempotency
+         WHERE actor = $1 AND tenant_id = $2 AND action = $3 AND idempotency_key = $4
+         FOR UPDATE",
+    )
+    .bind(&claim.actor)
+    .bind(&claim.tenant_id)
+    .bind(action)
+    .bind(&claim.client_key)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    let Some(row) = row else {
+        return Err(QueueError::Db("idempotency reservation missing".into()));
+    };
+    Ok(IdempotencyRow {
+        object_id: row.try_get("object_id").map_err(db_err)?,
+        payload_hash: row.try_get("payload_hash").map_err(db_err)?,
+        job_ids: parse_job_ids(row.try_get("job_ids").map_err(db_err)?)?,
+        inserted: false,
+    })
+}
+
+async fn store_idempotency_result(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    action: &str,
+    claim: &IdempotencyClaim,
+    job_ids: &[Uuid],
+    job_id: Option<Uuid>,
+) -> Result<(), QueueError> {
+    let ids: Vec<String> = job_ids.iter().map(ToString::to_string).collect();
+    sqlx::query(
+        "UPDATE ingest_idempotency SET job_ids = $5
+         WHERE actor = $1 AND tenant_id = $2 AND action = $3 AND idempotency_key = $4",
+    )
+    .bind(&claim.actor)
+    .bind(&claim.tenant_id)
+    .bind(action)
+    .bind(&claim.client_key)
+    .bind(serde_json::json!(ids))
+    .execute(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    sqlx::query(
+        "INSERT INTO ingest_audit (actor, action, job_id, idempotency_key, detail)
+         VALUES ($1, $2, $3, $4, '{}'::jsonb)",
+    )
+    .bind(&claim.actor)
+    .bind(action)
+    .bind(job_id.map(|id| id.to_string()))
+    .bind(&claim.client_key)
+    .execute(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    Ok(())
+}
+
+async fn load_jobs_for_replay(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    ids: &[Uuid],
+    tenant_id: &str,
+) -> Result<Vec<JobView>, QueueError> {
+    let mut views = Vec::new();
+    for id in ids {
+        match load_job_for_update(tx, &id.to_string()).await? {
+            Some(job) if job.tenant_id == tenant_id => views.push(job),
+            Some(_) => return Err(QueueError::NotFound),
+            None => {}
+        }
+    }
+    if views.is_empty() {
+        return Err(QueueError::NotFound);
+    }
+    Ok(views)
+}
+
+async fn load_job_for_update(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    job_id: &str,
+) -> Result<Option<JobView>, QueueError> {
+    let row = sqlx::query(&format!(
+        "SELECT {JOB_COLUMNS} FROM ingest_job WHERE job_id = $1 FOR UPDATE"
+    ))
+    .bind(job_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    row.as_ref().map(job_from_row).transpose()
+}
+
+async fn enqueue_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    job: &NewJob,
+) -> Result<JobView, QueueError> {
+    let job_id = Uuid::new_v4().to_string();
+    let inserted: Option<String> = sqlx::query_scalar(
+        "INSERT INTO ingest_job (
+            job_id, tenant_id, canonical_site, provider_instance_id, device_id,
+            model_revision, logical_window_start, logical_window_end, shard,
+            state, attempt, not_before, fencing_token, estimated_cost, requested_points_digest
+        ) VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,'queued',0,$10,0,$11,$12
+        )
+        ON CONFLICT ON CONSTRAINT ingest_job_logical_key DO NOTHING
+        RETURNING job_id",
+    )
+    .bind(&job_id)
+    .bind(&job.tenant_id)
+    .bind(&job.canonical_site)
+    .bind(&job.provider_instance_id)
+    .bind(&job.device_id)
+    .bind(&job.model_revision)
+    .bind(job.logical_window_start)
+    .bind(job.logical_window_end)
+    .bind(&job.shard)
+    .bind(job.not_before)
+    .bind(i32::try_from(job.estimated_cost.max(1)).unwrap_or(1))
+    .bind(&job.requested_points_digest)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    let id = match inserted {
+        Some(id) => id,
+        None => sqlx::query_scalar(
+            "SELECT job_id FROM ingest_job
+             WHERE tenant_id = $1 AND canonical_site = $2 AND provider_instance_id = $3
+               AND device_id = $4 AND model_revision = $5
+               AND logical_window_start = $6 AND logical_window_end = $7 AND shard = $8",
+        )
+        .bind(&job.tenant_id)
+        .bind(&job.canonical_site)
+        .bind(&job.provider_instance_id)
+        .bind(&job.device_id)
+        .bind(&job.model_revision)
+        .bind(job.logical_window_start)
+        .bind(job.logical_window_end)
+        .bind(&job.shard)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(db_err)?,
+    };
+    load_job_tx(tx, &id).await
+}
+
+async fn migrate_idempotency_scope(pool: &PgPool) -> Result<(), QueueError> {
+    sqlx::query(
+        "DELETE FROM ingest_idempotency
+         WHERE tenant_id IS NULL OR object_id IS NULL OR payload_hash IS NULL
+            OR tenant_id = '' OR object_id = '' OR payload_hash = ''",
+    )
+    .execute(pool)
+    .await
+    .map_err(db_err)?;
+    for column in ["tenant_id", "object_id", "payload_hash"] {
+        let stmt = format!("ALTER TABLE ingest_idempotency ALTER COLUMN {column} SET NOT NULL");
+        sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
+    }
+    let current: Option<String> = sqlx::query_scalar(
+        "SELECT pg_get_constraintdef(oid) FROM pg_constraint
+         WHERE conrelid = 'ingest_idempotency'::regclass AND contype = 'p'",
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?;
+    let definition = current.unwrap_or_default();
+    if ["actor", "tenant_id", "action", "idempotency_key"]
+        .iter()
+        .all(|column| definition.contains(column))
+    {
+        return Ok(());
+    }
+    let name: Option<String> = sqlx::query_scalar(
+        "SELECT conname FROM pg_constraint
+         WHERE conrelid = 'ingest_idempotency'::regclass AND contype = 'p'",
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?;
+    if let Some(name) = name {
+        let Some(ident) = safe_pg_ident(&name) else {
+            return Err(QueueError::Db(
+                "unexpected idempotency primary key name".into(),
+            ));
+        };
+        let drop_sql = format!("ALTER TABLE ingest_idempotency DROP CONSTRAINT {ident}");
+        sqlx::query(&drop_sql).execute(pool).await.map_err(db_err)?;
+    }
+    sqlx::query(
+        "ALTER TABLE ingest_idempotency
+         ADD CONSTRAINT ingest_idempotency_pkey
+         PRIMARY KEY (actor, tenant_id, action, idempotency_key)",
+    )
+    .execute(pool)
+    .await
+    .map_err(db_err)?;
+    Ok(())
+}
+
+fn safe_pg_ident(name: &str) -> Option<&str> {
+    if (1..=63).contains(&name.len())
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+    {
+        Some(name)
+    } else {
+        None
+    }
+}
+
+fn parse_job_ids(raw: serde_json::Value) -> Result<Vec<Uuid>, QueueError> {
+    let items = raw
+        .as_array()
+        .ok_or_else(|| QueueError::Invalid("invalid idempotency record".into()))?;
+    items
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .ok_or_else(|| QueueError::Invalid("invalid idempotency record".into()))
+                .and_then(parse_uuid)
+        })
+        .collect()
 }
 
 fn parse_uuid(raw: &str) -> Result<Uuid, QueueError> {
