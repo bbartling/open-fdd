@@ -31,6 +31,14 @@ vi.mock("../api/client", () => ({
         tenants: [{ id: "legacy", name: "Legacy single-hub tenant" }],
       };
     }
+    if (path === "/api/auth/me") {
+      return {
+        ok: true,
+        username: "admin",
+        role: "admin",
+        auth_required: false,
+      };
+    }
     return {};
   }),
 }));
@@ -99,7 +107,7 @@ describe("AppShell layout parity", () => {
     expect(screen.getByTestId("sidebar-sites")).toBeTruthy();
     expect(screen.queryByTestId("nav-sites")).toBeNull();
     expect(screen.getAllByText("Sites").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByTestId("sidebar-building-data")).toBeTruthy();
+    expect(await screen.findByTestId("sidebar-building-data")).toBeTruthy();
     expect(screen.getByText("CSV Upload")).toBeTruthy();
     expect(screen.getByTestId("sidebar-rule-tuning")).toBeTruthy();
     expect(screen.getByText("Lab · rule thresholds")).toBeTruthy();

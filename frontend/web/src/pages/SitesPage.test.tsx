@@ -30,9 +30,19 @@ vi.mock("../api/providersApi", async () => {
   };
 });
 
+vi.mock("../api/authApi", () => ({
+  getAuthMe: vi.fn(async () => ({
+    ok: true,
+    username: "operator-1",
+    role: "operator",
+    auth_required: true,
+  })),
+}));
+
 import { listPackageBuildings } from "../api/mappingApi";
 import { deleteDataset } from "../api/datasetsApi";
 import { fetchProviderSites } from "../api/providersApi";
+import { getAuthMe } from "../api/authApi";
 
 function renderSites(entry = "/operations?view=sites&site=ZIP_BUILDING_1") {
   return render(
@@ -52,6 +62,12 @@ describe("Operations Sites panel", () => {
     ]);
     vi.mocked(deleteDataset).mockResolvedValue({ ok: true });
     vi.mocked(fetchProviderSites).mockResolvedValue({ ok: true, sites: [] });
+    vi.mocked(getAuthMe).mockResolvedValue({
+      ok: true,
+      username: "operator-1",
+      role: "operator",
+      auth_required: true,
+    });
   });
 
   it("lists loaded sites and marks active", async () => {
@@ -174,9 +190,30 @@ describe("Operations Sites panel", () => {
     expect(screen.getByTestId("sites-sources-NF_EDGE").textContent).not.toMatch(/secret/);
     expect(screen.queryByLabelText(/Ingest mode/i)).toBeNull();
     expect(screen.getByTestId("sites-active-hint").textContent).toMatch(/NF_EDGE/);
-    const del = screen.getByTestId("sites-delete-NF_EDGE").querySelector("button");
+    const del = await waitFor(() =>
+      screen.getByTestId("sites-delete-NF_EDGE").querySelector("button"),
+    );
     expect(del?.hasAttribute("disabled") || del?.getAttribute("aria-disabled") === "true").toBe(
       true,
     );
+  });
+
+  it("hides delete for a viewer", async () => {
+    vi.mocked(getAuthMe).mockResolvedValue({
+      ok: true,
+      username: "viewer-1",
+      role: "viewer",
+      auth_required: true,
+    });
+    renderSites();
+    await waitFor(() => {
+      expect(screen.getByTestId("sites-row-ZIP_BUILDING_1")).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(getAuthMe).toHaveBeenCalled();
+    });
+    expect(screen.queryByTestId("sites-delete-ZIP_BUILDING_1")).toBeNull();
+    expect(screen.queryByTestId("sites-delete-modal")).toBeNull();
+    expect(screen.getByTestId("sites-set-active-ZIP_BUILDING_1")).toBeTruthy();
   });
 });
