@@ -139,7 +139,31 @@ export const SQL_ANALYTICS_RULE_IDS = new Set([
 ]);
 
 function formatErr(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  const raw = err instanceof Error ? err.message : String(err);
+  try {
+    const body: unknown = JSON.parse(raw);
+    if (
+      body &&
+      typeof body === "object" &&
+      "error" in body &&
+      typeof body.error === "string" &&
+      body.error.length > 0
+    ) {
+      return body.error;
+    }
+  } catch {
+    // The message is already plain text.
+  }
+  return raw;
+}
+
+const NO_SAMPLES_IN_WINDOW = "no_samples_in_window";
+
+function coverageReason(
+  coverage: Record<string, unknown> | null | undefined,
+): string | null {
+  const reason = coverage?.reason;
+  return typeof reason === "string" ? reason : null;
 }
 
 const ZONE_COMFORT_GATE_KEY = "openfdd.ui.zone_comfort_fdd_gate.v1";
@@ -211,6 +235,8 @@ export function ReportsPage() {
   const [sensorLoading, setSensorLoading] = useState(false);
   const [sensorFaultLoading, setSensorFaultLoading] = useState(false);
   const [sensorError, setSensorError] = useState<string | null>(null);
+  const [sensorEmpty, setSensorEmpty] = useState<string | null>(null);
+  const sensorReq = useRef(0);
   const [sensorOpen, setSensorOpen] = useState(false);
   /** Soft-OPEN R4: lean_budget from GET /api/fdd/plots-by-rule. */
   const [leanBudget, setLeanBudget] = useState<FddPlotsByRuleLeanBudget | null>(
@@ -228,6 +254,8 @@ export function ReportsPage() {
     setSensorFaultFigure(null);
     setSensorKey("");
     setSensorError(null);
+    setSensorEmpty(null);
+    sensorReq.current += 1;
     setDeviceType("All");
   }
 
@@ -523,50 +551,81 @@ export function ReportsPage() {
   const loadSensorHealth = useCallback(async () => {
     if (!buildingId) {
       setSensorError("Lock a site on Overview first");
+      setSensorEmpty(null);
       return;
     }
+    const reqId = sensorReq.current + 1;
+    sensorReq.current = reqId;
     setSensorLoading(true);
     setSensorError(null);
+    setSensorEmpty(null);
     try {
       const env = await postSensorHealth({
         building_id: buildingId,
-        // Site-wide so weather web_oa_t stays visible beside AHU oa_t.
+        ...(equipmentId ? { equipment_ids: [equipmentId] } : {}),
       });
+      if (sensorReq.current !== reqId) return;
       const rows = (env.rows?.length ? env.rows : env.equipment) ?? [];
-      const normalized = rows.map((r) => ({
-        equipment_id: String(r.equipment_id ?? ""),
-        role: String(r.role ?? ""),
-        n: Number(r.n ?? 0),
-        n_finite: Number(r.n_finite ?? 0),
-        coverage_pct: Number(r.coverage_pct ?? 0),
-        missingness: Number(r.missingness ?? 0),
-        flatline_flag: Boolean(r.flatline_flag),
-        min: r.min != null ? Number(r.min) : "",
-        max: r.max != null ? Number(r.max) : "",
-        mean: r.mean != null ? Number(r.mean) : "",
-        std: r.std != null ? Number(r.std) : "",
-      }));
+      const normalized = rows.map((r) => {
+        const equipment = String(r.equipment_id ?? "");
+        const role = String(r.role ?? "");
+        return {
+          row_key: `${buildingId}\u001f${equipment}\u001f${role}`,
+          building_id: String(r.building_id ?? buildingId),
+          equipment_id: equipment,
+          role,
+          n: Number(r.n ?? 0),
+          n_finite: Number(r.n_finite ?? 0),
+          coverage_pct: Number(r.coverage_pct ?? 0),
+          missingness: Number(r.missingness ?? 0),
+          flatline_flag: Boolean(r.flatline_flag),
+          min: r.min != null ? Number(r.min) : "",
+          max: r.max != null ? Number(r.max) : "",
+          mean: r.mean != null ? Number(r.mean) : "",
+          std: r.std != null ? Number(r.std) : "",
+        };
+      });
+      if (!normalized.length) {
+        setSensorRows([]);
+        setSensorFigure(null);
+        setSensorKey("");
+        if (coverageReason(env.coverage) === NO_SAMPLES_IN_WINDOW) {
+          setSensorEmpty("No samples in the requested window.");
+        } else if (env.warnings?.[0]) {
+          setSensorError(env.warnings[0]);
+        } else {
+          setSensorEmpty("No samples in the requested window.");
+        }
+        return;
+      }
       setSensorRows(normalized);
       setSensorFigure(
-        sensorHealthHeatmap(normalized as Array<Record<string, unknown>>, {
-          title: `Sensor health — ${buildingId}`,
-        }),
+        sensorHealthHeatmap(
+          normalized.map((row) => {
+            const chartRow: Record<string, unknown> = {};
+            chartRow.equipment_id = row.equipment_id;
+            chartRow.role = row.role;
+            chartRow.coverage_pct = row.coverage_pct;
+            return chartRow;
+          }),
+          { title: `Sensor health — ${buildingId}` },
+        ),
       );
       setSensorKey((prev) => {
         if (prev || !normalized[0]) return prev;
         return `${normalized[0].equipment_id}::${normalized[0].role}`;
       });
-      if (!normalized.length && env.warnings?.[0]) {
-        setSensorError(env.warnings[0]);
-      }
     } catch (err) {
+      if (sensorReq.current !== reqId) return;
       setSensorRows([]);
       setSensorFigure(null);
+      setSensorKey("");
+      setSensorEmpty(null);
       setSensorError(formatErr(err));
     } finally {
-      setSensorLoading(false);
+      if (sensorReq.current === reqId) setSensorLoading(false);
     }
-  }, [buildingId]);
+  }, [buildingId, equipmentId]);
 
   const loadSensorFaultChart = useCallback(async () => {
     if (!buildingId || !sensorKey.includes("::")) {
@@ -783,6 +842,11 @@ export function ReportsPage() {
             {sensorError ? (
               <InlineAlert id="sensor-health-error" variant="danger">
                 {sensorError}
+              </InlineAlert>
+            ) : null}
+            {sensorEmpty ? (
+              <InlineAlert id="sensor-health-empty" variant="info">
+                {sensorEmpty}
               </InlineAlert>
             ) : null}
             <PlotlyHost

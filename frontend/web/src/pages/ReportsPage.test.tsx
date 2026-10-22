@@ -104,7 +104,7 @@ vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
 import { getFddSeries, getFddResults, listFddRules } from "../api/fddApi";
 import { getPackageMapping, listPackageBuildings } from "../api/mappingApi";
-import { listFddEquipment } from "../api/analyticsApi";
+import { listFddEquipment, postSensorHealth } from "../api/analyticsApi";
 
 function deferred<T>() {
   let resolve: (value: T) => void = () => undefined;
@@ -671,6 +671,121 @@ describe("ReportsPage rule eligibility", () => {
       }
       view.unmount();
     }
+  });
+});
+
+async function openSensorHealth() {
+  renderPlots();
+  await waitFor(() => {
+    expect(screen.getByTestId("sensor-health-expander")).toBeTruthy();
+  });
+  fireEvent.click(screen.getByRole("button", { name: /Sensor health/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Load sensor health" }));
+}
+
+describe("ReportsPage sensor health", () => {
+  beforeEach(() => {
+    vi.mocked(postSensorHealth).mockReset();
+    vi.mocked(listFddEquipment).mockReset();
+    vi.mocked(listFddEquipment).mockResolvedValue([
+      { equipment_id: "VAV_1", equipment_type: "VAV" },
+    ]);
+    vi.mocked(getPackageMapping).mockReset();
+    vi.mocked(getPackageMapping).mockResolvedValue({
+      ok: true,
+      building_id: "B1",
+      equipment: [
+        {
+          equipment_id: "VAV_1",
+          equipment_type: "VAV",
+          ok: true,
+          roles: { zone_t: "zone_t" },
+          columns: [{ column: "zone_air_temp", role: "zone_t", status: "mapped" }],
+        },
+      ],
+    });
+  });
+
+  it("shows historian rows for the locked site and equipment", async () => {
+    vi.mocked(postSensorHealth).mockResolvedValue({
+      schema_version: "analytics-envelope-v1",
+      query_version: "sensor-health-v1",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: [],
+      coverage: { source: "timescale_sample", series_count: 1, point_count: 8 },
+      rows: [
+        {
+          building_id: "B1",
+          equipment_id: "VAV_1",
+          role: "zone_t",
+          n: 8,
+          n_finite: 8,
+          coverage_pct: 100,
+          missingness: 0,
+          flatline_flag: false,
+          mean: 70.5,
+          std: 0.5,
+        },
+      ],
+      equipment: [],
+      points: [],
+      skipped: [],
+    });
+    await openSensorHealth();
+    await waitFor(() => {
+      expect(screen.getByTestId("sensor-health-table").textContent).toMatch(/VAV_1/);
+    });
+    expect(screen.getByTestId("sensor-health-table").textContent).toMatch(/zone_t/);
+    expect(screen.getByTestId("sensor-health-table").textContent).toMatch(/100/);
+    expect(screen.queryByTestId("inline-alert-sensor-health-error")).toBeNull();
+    expect(screen.queryByTestId("inline-alert-sensor-health-empty")).toBeNull();
+    expect(screen.queryByText(/historian\/job sensor-health load is next/)).toBeNull();
+    const body = vi.mocked(postSensorHealth).mock.calls.at(-1)?.[0];
+    expect(body).toMatchObject({
+      building_id: "B1",
+      equipment_ids: ["VAV_1"],
+    });
+    expect(body?.series).toBeUndefined();
+  });
+
+  it("shows an empty window without a historian error", async () => {
+    vi.mocked(postSensorHealth).mockResolvedValue({
+      schema_version: "analytics-envelope-v1",
+      query_version: "sensor-health-v1",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: ["no samples in the requested window"],
+      coverage: { reason: "no_samples_in_window", series_count: 0, point_count: 0 },
+      rows: [],
+      equipment: [],
+      points: [],
+      skipped: [],
+    });
+    await openSensorHealth();
+    await waitFor(() => {
+      expect(screen.getByTestId("inline-alert-sensor-health-empty").textContent).toMatch(
+        /No samples in the requested window/,
+      );
+    });
+    expect(screen.queryByTestId("sensor-health-table")).toBeNull();
+    expect(screen.queryByTestId("inline-alert-sensor-health-error")).toBeNull();
+    expect(screen.queryByText(/historian\/job sensor-health load is next/)).toBeNull();
+  });
+
+  it("surfaces a historian failure instead of an empty success", async () => {
+    vi.mocked(postSensorHealth).mockRejectedValue(
+      new Error("sensor health historian query failed"),
+    );
+    await openSensorHealth();
+    await waitFor(() => {
+      expect(screen.getByTestId("inline-alert-sensor-health-error").textContent).toMatch(
+        /sensor health historian query failed/,
+      );
+    });
+    expect(screen.queryByTestId("sensor-health-table")).toBeNull();
+    expect(screen.queryByTestId("inline-alert-sensor-health-empty")).toBeNull();
+    expect(screen.queryByText(/historian\/job sensor-health load is next/)).toBeNull();
   });
 });
 

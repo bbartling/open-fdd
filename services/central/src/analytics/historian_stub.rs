@@ -119,8 +119,23 @@ pub async fn sensor_health_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let _ = (equipment_filter, building_id, start, end);
-    retired()
+    if !crate::timescale_historian::historian_is_timescale() {
+        let _ = (equipment_filter, building_id, start, end);
+        return retired();
+    }
+    let Some(building_id) = building_id.map(str::trim).filter(|id| !id.is_empty()) else {
+        bail!("building_id is required to load sensor health");
+    };
+    let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
+    let env = crate::analytics::sensor_health::load_from_history(
+        tsdb.pool(),
+        building_id,
+        equipment_filter,
+        start,
+        end,
+    )
+    .await?;
+    Ok(Some(env))
 }
 
 pub async fn sensor_stats_from_history(
