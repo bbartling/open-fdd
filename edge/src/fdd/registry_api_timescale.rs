@@ -1,8 +1,9 @@
 //! Wave-X Timescale registry API — no DataFusion SessionContext.
 //! Registry-backed FDD API - loads `sql_rules/registry.yaml` via `fdd_rules`.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use fdd_rules::{load_registry, RuleRegistry, RuleSpec};
 use serde_json::{json, Value};
@@ -131,8 +132,13 @@ fn results_dir(building_id: Option<&str>) -> PathBuf {
     }
 }
 
-const RUN_META_FILE: &str = "_run_meta.json";
 const DIRTY_FILE: &str = "_dirty.json";
+const ACTIVE_FILE: &str = "_active.json";
+const MANIFEST_NAME: &str = "manifest.json";
+const GENERATIONS_DIR: &str = "generations";
+const MANIFEST_SCHEMA: &str = "openfdd-fdd-run-manifest-v1";
+
+static RUN_SEQ: AtomicU64 = AtomicU64::new(1);
 
 /// Mark a building's FDD results dirty so Overview re-enables Run all rules.
 pub fn mark_building_results_dirty(building_id: &str, reason: &str) {
@@ -151,16 +157,45 @@ pub fn mark_building_results_dirty(building_id: &str, reason: &str) {
     let _ = std::fs::write(path, body.to_string());
 }
 
-#[cfg(test)]
-fn clear_building_dirty(building_id: Option<&str>) {
-    let path = results_dir(building_id).join(DIRTY_FILE);
-    let _ = std::fs::remove_file(path);
+/// Directory whose `registry.yaml` is the rule set a Timescale run actually executes.
+///
+/// The lab catalog may still load `sql_rules`. The manifest hash follows the
+/// product pack (`sql/fdd`, or `OPENFDD_SQL_ROOT` when set) so a catalog-only
+/// file cannot mark a finished run stale.
+fn manifest_registry_dir() -> PathBuf {
+    if let Ok(p) = std::env::var("OPENFDD_SQL_ROOT") {
+        let path = PathBuf::from(p.trim());
+        if path.join("registry.yaml").is_file() {
+            return path;
+        }
+    }
+    if let Ok(p) = std::env::var("OPENFDD_SQL_RULES_DIR") {
+        let path = PathBuf::from(p.trim());
+        if path.join("registry.yaml").is_file() {
+            return path;
+        }
+    }
+    for candidate in [
+        "sql/fdd",
+        "/app/sql/fdd",
+        "../sql/fdd",
+        "../../sql/fdd",
+        "sql_rules",
+        "/app/sql_rules",
+        "../sql_rules",
+    ] {
+        let path = PathBuf::from(candidate);
+        if path.join("registry.yaml").is_file() {
+            return path;
+        }
+    }
+    sql_rules_dir()
 }
 
 fn rule_set_hash() -> String {
     use sha2::{Digest, Sha256};
-    let mut ids: Vec<String> = load_reg()
-        .map(|r| r.rules.into_iter().map(|x| x.rule_id).collect())
+    let mut ids: Vec<String> = load_registry(&manifest_registry_dir())
+        .map(|reg| reg.rules.into_iter().map(|rule| rule.rule_id).collect())
         .unwrap_or_default();
     ids.sort();
     let mut hasher = Sha256::new();
@@ -168,76 +203,806 @@ fn rule_set_hash() -> String {
     format!("{:x}", hasher.finalize())
 }
 
-#[cfg(test)]
-fn write_run_meta(building_id: Option<&str>, mode: &str, result_count: usize) {
-    let dir = results_dir(building_id);
-    let _ = std::fs::create_dir_all(&dir);
-    let body = json!({
-        "completed_at": chrono::Utc::now().to_rfc3339(),
-        "mode": mode,
-        "rule_set_hash": rule_set_hash(),
-        "result_count": result_count,
-    });
-    let _ = std::fs::write(dir.join(RUN_META_FILE), body.to_string());
-    if mode == "registry" || mode == "afdd" {
-        clear_building_dirty(building_id);
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+fn new_run_id() -> String {
+    let seq = RUN_SEQ.fetch_add(1, Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or(0);
+    format!("run-{nanos:x}-{seq:x}")
+}
+
+fn safe_run_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 80
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn safe_rule_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 80
+        && !id.starts_with('_')
+        && !id.starts_with('.')
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn read_json_file(path: &Path) -> Option<Value> {
+    let text = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn row_status_token(row: &Value) -> String {
+    row.get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_ascii_uppercase()
+}
+
+fn row_equipment_id(row: &Value) -> Option<&str> {
+    row.get("equipment_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+}
+
+const METRIC_FIELDS: [&str; 4] = [
+    "avg_zone_temp",
+    "comfort_pct",
+    "fan_runtime_hours",
+    "total_hours",
+];
+
+fn object_has_metric_field(obj: &serde_json::Map<String, Value>) -> bool {
+    METRIC_FIELDS.iter().any(|key| obj.contains_key(*key))
+}
+
+fn is_metric_row(row: &Value) -> bool {
+    if row.get("output_kind").and_then(Value::as_str) == Some("metric") {
+        return true;
+    }
+    if row_status_token(row) == "METRIC" || row.get("metric").is_some() {
+        return true;
+    }
+    if row.as_object().is_some_and(object_has_metric_field) {
+        return true;
+    }
+    row.get("values")
+        .and_then(Value::as_object)
+        .is_some_and(object_has_metric_field)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RuleOutcome {
+    Succeeded,
+    Skipped,
+    Failed,
+}
+
+/// Runtime `ERROR` is a failure. Ineligible `SKIP_*` rows are not failures.
+/// A detected `FAULT` or a `METRIC` row is an evaluation, not an error.
+fn rule_outcome(rows: &[Value]) -> RuleOutcome {
+    if rows.is_empty() {
+        return RuleOutcome::Skipped;
+    }
+    let mut error = false;
+    let mut evaluated = false;
+    for row in rows {
+        let status = row_status_token(row);
+        if status == "ERROR" {
+            error = true;
+        } else if status.starts_with("SKIP") {
+            continue;
+        } else if is_metric_row(row)
+            || status.is_empty()
+            || status == "PASS"
+            || status == "FAULT"
+            || status == "METRIC"
+            || !status.contains("NOT_APPLICABLE")
+        {
+            evaluated = true;
+        }
+    }
+    if error {
+        RuleOutcome::Failed
+    } else if evaluated {
+        RuleOutcome::Succeeded
+    } else {
+        RuleOutcome::Skipped
     }
 }
 
-/// `GET /api/fdd/results/readiness` — clean/dirty for Overview one-shot grey-out.
-pub fn readiness_response(building_id: Option<&str>) -> Value {
-    let dir = results_dir(building_id);
-    let meta_path = dir.join(RUN_META_FILE);
-    let dirty_path = dir.join(DIRTY_FILE);
-    let mut result_count = 0usize;
-    if dir.is_dir() {
-        if let Ok(rd) = std::fs::read_dir(&dir) {
-            for ent in rd.flatten() {
-                let path = ent.path();
-                let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-                if !name.ends_with(".json") || name.starts_with('_') {
-                    continue;
-                }
-                result_count += 1;
+fn run_status_label(succeeded: u32, failed: u32) -> &'static str {
+    if failed == 0 {
+        "complete"
+    } else if succeeded > 0 {
+        "partial"
+    } else {
+        "failed"
+    }
+}
+
+fn retain_model_rows(body: &mut Value, model: &BTreeSet<String>) {
+    let Some(rows) = body.get_mut("rows").and_then(Value::as_array_mut) else {
+        return;
+    };
+    rows.retain(|row| match row_equipment_id(row) {
+        None => true,
+        Some(id) => model.contains(id),
+    });
+}
+
+fn merge_scoped_rows(parent: &Value, fresh: &Value) -> Vec<Value> {
+    let fresh_rows = fresh.get("rows").and_then(Value::as_array);
+    let replace_rule = fresh_rows.is_some_and(|rows| {
+        rows.iter().any(|row| {
+            let status = row_status_token(row);
+            status == "SKIP_NO_TARGETS" || (status == "ERROR" && row_equipment_id(row).is_none())
+        })
+    });
+    if replace_rule {
+        return fresh_rows.cloned().unwrap_or_default();
+    }
+    let replaced: BTreeSet<String> = fresh_rows
+        .into_iter()
+        .flatten()
+        .filter_map(row_equipment_id)
+        .map(str::to_string)
+        .collect();
+    let mut rows: Vec<Value> = parent
+        .get("rows")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|row| match row_equipment_id(row) {
+            Some(id) => !replaced.contains(id),
+            None => false,
+        })
+        .cloned()
+        .collect();
+    if let Some(fresh_rows) = fresh_rows {
+        rows.extend(fresh_rows.iter().cloned());
+    }
+    rows
+}
+
+fn sync_file(path: &Path) -> Result<(), String> {
+    let file = std::fs::File::open(path).map_err(|err| err.to_string())?;
+    file.sync_all().map_err(|err| err.to_string())
+}
+
+fn write_json_file(path: &Path, body: &Value) -> Result<(), String> {
+    let bytes = serde_json::to_vec_pretty(body).map_err(|err| err.to_string())?;
+    std::fs::write(path, bytes).map_err(|err| err.to_string())?;
+    sync_file(path)
+}
+
+/// One rule file inside a run generation. `body.rows` is the persisted cohort.
+pub struct RunRuleFile {
+    pub rule_id: String,
+    pub body: Value,
+}
+
+/// Equipment stamp captured with the run. Absence from this list drops a row
+/// from the active generation.
+pub struct RunModelEquipment {
+    pub equipment_id: String,
+    pub equip_type: Option<String>,
+}
+
+/// Immutable generation to publish. `full_cohort` replaces the active rule
+/// set. A scoped run keeps the parent generation's other rules and records
+/// `parent_run_id`.
+pub struct RunGenerationCommit {
+    pub building_id: String,
+    pub full_cohort: bool,
+    pub equipment: Vec<RunModelEquipment>,
+    pub rules: Vec<RunRuleFile>,
+    pub config_fingerprint: String,
+    pub window_start: Option<String>,
+    pub window_end: Option<String>,
+    pub watermark: Option<String>,
+    pub poll_seconds: f64,
+}
+
+struct PreparedRule {
+    rule_id: String,
+    body: Value,
+    outcome: RuleOutcome,
+}
+
+fn model_set(equipment: &[RunModelEquipment]) -> BTreeSet<String> {
+    equipment
+        .iter()
+        .map(|item| item.equipment_id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect()
+}
+
+fn model_hash(equipment: &[RunModelEquipment]) -> String {
+    let mut lines: Vec<String> = equipment
+        .iter()
+        .filter(|item| !item.equipment_id.trim().is_empty())
+        .map(|item| {
+            format!(
+                "{}\t{}",
+                item.equipment_id.trim(),
+                item.equip_type.as_deref().unwrap_or("").trim()
+            )
+        })
+        .collect();
+    lines.sort();
+    sha256_hex(lines.join("\n").as_bytes())
+}
+
+fn model_json(equipment: &[RunModelEquipment], hash: &str) -> Value {
+    let mut rows: Vec<Value> = equipment
+        .iter()
+        .filter(|item| !item.equipment_id.trim().is_empty())
+        .map(|item| {
+            json!({
+                "equipment_id": item.equipment_id.trim(),
+                "equip_type": item.equip_type.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+            })
+        })
+        .collect();
+    rows.sort_by(|left, right| {
+        left["equipment_id"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(right["equipment_id"].as_str().unwrap_or(""))
+    });
+    json!({
+        "equipment": rows,
+        "model_hash": hash,
+    })
+}
+
+fn parent_rule_body(gen: &Path, rule_id: &str) -> Option<Value> {
+    if !safe_rule_id(rule_id) {
+        return None;
+    }
+    read_json_file(&gen.join(format!("{rule_id}.json")))
+}
+
+fn prepare_rule_file(
+    rule_id: &str,
+    fresh: &Value,
+    parent: Option<&Value>,
+    full_cohort: bool,
+    model: &BTreeSet<String>,
+    run_id: &str,
+    building_id: &str,
+) -> Result<PreparedRule, String> {
+    if !safe_rule_id(rule_id) {
+        return Err("unsafe rule id".into());
+    }
+    let mut body = fresh.clone();
+    if !full_cohort {
+        if let Some(parent) = parent {
+            let rows = merge_scoped_rows(parent, fresh);
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("rows".into(), Value::Array(rows));
             }
         }
     }
-    let meta: Option<Value> = std::fs::read_to_string(&meta_path)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok());
-    let dirty_body: Option<Value> = std::fs::read_to_string(&dirty_path)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok());
+    retain_model_rows(&mut body, model);
+    let rows = body
+        .get("rows")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let outcome = rule_outcome(&rows);
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("rule_id".into(), json!(rule_id));
+        obj.insert("run_id".into(), json!(run_id));
+        obj.insert("building_id".into(), json!(building_id));
+        obj.insert(
+            "generated_at".into(),
+            json!(chrono::Utc::now().to_rfc3339()),
+        );
+        obj.insert("rows".into(), Value::Array(rows));
+    }
+    Ok(PreparedRule {
+        rule_id: rule_id.to_string(),
+        body,
+        outcome,
+    })
+}
+
+/// Write one immutable generation, then switch `_active.json` with a rename.
+///
+/// Older generations stay on disk. A rule omitted from a full cohort is not
+/// carried forward. A scoped run copies the parent's other rule files and
+/// merges equipment rows so one tuned rule does not erase the rest of the run.
+pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, String> {
+    let building_id = commit.building_id.trim();
+    if building_id.is_empty() {
+        return Err("building_id required".into());
+    }
+    let dir = results_dir(Some(building_id));
+    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
+    let parent = if commit.full_cohort {
+        None
+    } else {
+        active_manifest(Some(building_id))
+    };
+    let parent_run_id = parent
+        .as_ref()
+        .and_then(|(_, manifest)| manifest.get("run_id").and_then(Value::as_str))
+        .map(str::to_string);
+    let cohort = if commit.full_cohort {
+        "full"
+    } else if parent_run_id.is_some() {
+        "derived"
+    } else {
+        "scoped"
+    };
+    let run_id = new_run_id();
+    let gen = dir.join(GENERATIONS_DIR).join(&run_id);
+    std::fs::create_dir_all(&gen).map_err(|err| err.to_string())?;
+    let model = model_set(&commit.equipment);
+    let mut prepared: Vec<PreparedRule> = Vec::new();
+    let mut seen = BTreeSet::new();
+    for rule in &commit.rules {
+        let parent_body = parent
+            .as_ref()
+            .and_then(|(parent_gen, _)| parent_rule_body(parent_gen, &rule.rule_id));
+        let item = prepare_rule_file(
+            &rule.rule_id,
+            &rule.body,
+            parent_body.as_ref(),
+            commit.full_cohort,
+            &model,
+            &run_id,
+            building_id,
+        )?;
+        seen.insert(item.rule_id.clone());
+        prepared.push(item);
+    }
+    if let Some((parent_gen, parent_manifest)) = parent.as_ref() {
+        if let Some(rules) = parent_manifest.get("rules").and_then(Value::as_array) {
+            for rule in rules {
+                let Some(rule_id) = rule.as_str() else {
+                    continue;
+                };
+                if seen.contains(rule_id) || !safe_rule_id(rule_id) {
+                    continue;
+                }
+                let Some(parent_body) = parent_rule_body(parent_gen, rule_id) else {
+                    continue;
+                };
+                let item = prepare_rule_file(
+                    rule_id,
+                    &parent_body,
+                    None,
+                    true,
+                    &model,
+                    &run_id,
+                    building_id,
+                )?;
+                seen.insert(item.rule_id.clone());
+                prepared.push(item);
+            }
+        }
+    }
+    prepared.sort_by(|left, right| left.rule_id.cmp(&right.rule_id));
+    let mut rules_succeeded = 0u32;
+    let mut rules_failed = 0u32;
+    let mut rules_skipped = 0u32;
+    let mut result_count = 0usize;
+    let mut flat_results = Vec::new();
+    for item in &prepared {
+        match item.outcome {
+            RuleOutcome::Succeeded => rules_succeeded += 1,
+            RuleOutcome::Failed => rules_failed += 1,
+            RuleOutcome::Skipped => rules_skipped += 1,
+        }
+        write_json_file(&gen.join(format!("{}.json", item.rule_id)), &item.body)?;
+        if let Some(rows) = item.body.get("rows").and_then(Value::as_array) {
+            result_count += rows.len();
+            for row in rows {
+                let mut cloned = row.clone();
+                if let Some(obj) = cloned.as_object_mut() {
+                    obj.insert("rule_id".into(), json!(item.rule_id));
+                }
+                flat_results.push(cloned);
+            }
+        }
+    }
+    let run_status = run_status_label(rules_succeeded, rules_failed);
+    let hash = model_hash(&commit.equipment);
+    let rule_ids: Vec<&str> = prepared.iter().map(|item| item.rule_id.as_str()).collect();
+    let manifest = json!({
+        "schema": MANIFEST_SCHEMA,
+        "run_id": run_id,
+        "building_id": building_id,
+        "parent_run_id": parent_run_id,
+        "cohort": cohort,
+        "mode": if commit.full_cohort { "registry" } else { "single_rule" },
+        "run_status": run_status,
+        "ok": true,
+        "model": model_json(&commit.equipment, &hash),
+        "rules": rule_ids,
+        "config_hash": sha256_hex(commit.config_fingerprint.as_bytes()),
+        "rule_set_hash": rule_set_hash(),
+        "window": {
+            "start": commit.window_start,
+            "end": commit.window_end,
+        },
+        "watermark": commit.watermark,
+        "poll_seconds": commit.poll_seconds,
+        "completed_at": chrono::Utc::now().to_rfc3339(),
+        "result_count": result_count,
+        "rules_run": prepared.len(),
+        "rules_succeeded": rules_succeeded,
+        "rules_failed": rules_failed,
+        "rules_skipped": rules_skipped,
+    });
+    write_json_file(&gen.join(MANIFEST_NAME), &manifest)?;
+    let gen_dir = std::fs::File::open(&gen).map_err(|err| err.to_string())?;
+    gen_dir.sync_all().map_err(|err| err.to_string())?;
+    let pointer = json!({
+        "run_id": run_id,
+        "schema": MANIFEST_SCHEMA,
+    });
+    let pointer_bytes = serde_json::to_vec_pretty(&pointer).map_err(|err| err.to_string())?;
+    let tmp = dir.join(".active.json.tmp");
+    std::fs::write(&tmp, &pointer_bytes).map_err(|err| err.to_string())?;
+    sync_file(&tmp)?;
+    std::fs::rename(&tmp, dir.join(ACTIVE_FILE)).map_err(|err| err.to_string())?;
+    if run_status == "complete" && cohort != "scoped" {
+        let _ = std::fs::remove_file(dir.join(DIRTY_FILE));
+    } else {
+        let reason = if run_status == "partial" {
+            "run_partial"
+        } else if run_status == "failed" {
+            "run_failed"
+        } else {
+            "scoped_run"
+        };
+        mark_building_results_dirty(building_id, reason);
+    }
+    let mut summary = manifest;
+    if let Some(obj) = summary.as_object_mut() {
+        obj.insert("results".into(), Value::Array(flat_results));
+    }
+    Ok(summary)
+}
+
+fn active_manifest(building_id: Option<&str>) -> Option<(PathBuf, Value)> {
+    let dir = results_dir(building_id);
+    let pointer = read_json_file(&dir.join(ACTIVE_FILE))?;
+    let run_id = pointer.get("run_id").and_then(Value::as_str)?;
+    if !safe_run_id(run_id) {
+        return None;
+    }
+    let gen = dir.join(GENERATIONS_DIR).join(run_id);
+    let manifest = read_json_file(&gen.join(MANIFEST_NAME))?;
+    if manifest.get("run_id").and_then(Value::as_str) != Some(run_id) {
+        return None;
+    }
+    Some((gen, manifest))
+}
+
+/// Active generation's rule file, addressed by exact rule id.
+pub fn active_rule_result_body(building_id: &str, rule_id: &str) -> Option<Value> {
+    if !safe_rule_id(rule_id) {
+        return None;
+    }
+    let (gen, manifest) = active_manifest(Some(building_id))?;
+    let listed = manifest
+        .get("rules")
+        .and_then(Value::as_array)
+        .is_some_and(|rules| rules.iter().any(|rule| rule.as_str() == Some(rule_id)));
+    if !listed {
+        return None;
+    }
+    read_json_file(&gen.join(format!("{rule_id}.json")))
+}
+
+fn loose_rule_file_count(dir: &Path) -> usize {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    rd.flatten()
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            entry.path().is_file() && name.ends_with(".json") && !name.starts_with('_')
+        })
+        .count()
+}
+
+fn generation_history(dir: &Path, active_id: Option<&str>) -> Vec<Value> {
+    let gens = dir.join(GENERATIONS_DIR);
+    let Ok(rd) = std::fs::read_dir(&gens) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in rd.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let Some(manifest) = read_json_file(&entry.path().join(MANIFEST_NAME)) else {
+            continue;
+        };
+        let run_id = manifest
+            .get("run_id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let active = active_id == Some(run_id.as_str());
+        out.push(json!({
+            "run_id": run_id,
+            "run_status": manifest.get("run_status").cloned().unwrap_or(Value::Null),
+            "result_count": manifest.get("result_count").cloned().unwrap_or(Value::Null),
+            "completed_at": manifest.get("completed_at").cloned().unwrap_or(Value::Null),
+            "cohort": manifest.get("cohort").cloned().unwrap_or(Value::Null),
+            "active": active,
+        }));
+    }
+    out.sort_by(|left, right| {
+        left["completed_at"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(right["completed_at"].as_str().unwrap_or(""))
+    });
+    out
+}
+
+struct ActiveGeneration {
+    gen: PathBuf,
+    manifest: Value,
+}
+
+fn load_active(building_id: Option<&str>) -> Option<ActiveGeneration> {
+    let (gen, manifest) = active_manifest(building_id)?;
+    Some(ActiveGeneration { gen, manifest })
+}
+
+/// Prior complete full (or derived) run that still matches the rule pack and
+/// has no dirty marker. Anything else must run again.
+pub fn reusable_complete_run(building_id: &str) -> Option<Value> {
+    let active = load_active(Some(building_id))?;
+    if active.manifest.get("run_status").and_then(Value::as_str) != Some("complete") {
+        return None;
+    }
+    let cohort = active
+        .manifest
+        .get("cohort")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if cohort == "scoped" {
+        return None;
+    }
+    let stored = active
+        .manifest
+        .get("rule_set_hash")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if stored.is_empty() || stored != rule_set_hash() {
+        return None;
+    }
+    if results_dir(Some(building_id)).join(DIRTY_FILE).is_file() {
+        return None;
+    }
+    let rows = collect_generation_rows(&active);
+    let stored_count = active
+        .manifest
+        .get("result_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if stored_count != rows.len() as u64 {
+        return None;
+    }
+    let mut summary = active.manifest;
+    if let Some(obj) = summary.as_object_mut() {
+        obj.insert("result_count".into(), json!(rows.len()));
+    }
+    Some(summary)
+}
+
+fn listed_rule_ids(manifest: &Value) -> Vec<String> {
+    manifest
+        .get("rules")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|rule| rule.as_str().map(str::to_string))
+        .filter(|rule| safe_rule_id(rule))
+        .collect()
+}
+
+fn manifest_type_map(manifest: &Value) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
+    let Some(equipment) = manifest
+        .get("model")
+        .and_then(|model| model.get("equipment"))
+        .and_then(Value::as_array)
+    else {
+        return map;
+    };
+    for item in equipment {
+        let Some(id) = item
+            .get("equipment_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        else {
+            continue;
+        };
+        let Some(kind) = item
+            .get("equip_type")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|kind| !kind.is_empty())
+        else {
+            continue;
+        };
+        map.insert(id.to_string(), kind.to_string());
+    }
+    map
+}
+
+fn manifest_model_ids(manifest: &Value) -> Option<BTreeSet<String>> {
+    let equipment = manifest
+        .get("model")
+        .and_then(|model| model.get("equipment"))
+        .and_then(Value::as_array)?;
+    let mut ids = BTreeSet::new();
+    for item in equipment {
+        if let Some(id) = item
+            .get("equipment_id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        {
+            ids.insert(id.to_string());
+        }
+    }
+    Some(ids)
+}
+
+fn collect_generation_rows(active: &ActiveGeneration) -> Vec<(String, Value)> {
+    let model = manifest_model_ids(&active.manifest);
+    let mut out = Vec::new();
+    for rule_id in listed_rule_ids(&active.manifest) {
+        let Some(body) = read_json_file(&active.gen.join(format!("{rule_id}.json"))) else {
+            continue;
+        };
+        let Some(rows) = body.get("rows").and_then(Value::as_array) else {
+            continue;
+        };
+        for row in rows {
+            if let Some(model) = &model {
+                if let Some(id) = row_equipment_id(row) {
+                    if !model.contains(id) {
+                        continue;
+                    }
+                }
+            }
+            out.push((rule_id.clone(), row.clone()));
+        }
+    }
+    out
+}
+
+fn loose_legacy_count(building_id: Option<&str>) -> usize {
+    loose_rule_file_count(&results_dir(building_id))
+}
+
+/// `GET /api/fdd/results/readiness` — clean only for one complete active generation.
+///
+/// `result_count` is the validated row count of that generation. Loose rule
+/// files from older layouts are withheld and do not count as current.
+pub fn readiness_response(building_id: Option<&str>) -> Value {
+    let dir = results_dir(building_id);
+    let dirty_body = read_json_file(&dir.join(DIRTY_FILE));
     let mut dirty_reasons: Vec<String> = Vec::new();
-    if let Some(d) = &dirty_body {
-        if let Some(r) = d.get("reason").and_then(Value::as_str) {
-            dirty_reasons.push(r.to_string());
+    if let Some(reason) = dirty_body
+        .as_ref()
+        .and_then(|body| body.get("reason"))
+        .and_then(Value::as_str)
+    {
+        dirty_reasons.push(reason.to_string());
+    }
+    let active = load_active(building_id);
+    let legacy_files = loose_legacy_count(building_id);
+    let Some(active) = active else {
+        if legacy_files > 0 {
+            dirty_reasons.push("legacy_unmanifested".into());
+        } else {
+            dirty_reasons.push("never_run".into());
         }
+        return json!({
+            "ok": true,
+            "has_results": false,
+            "clean": false,
+            "dirty_reasons": dirty_reasons,
+            "completed_at": Value::Null,
+            "result_count": 0,
+            "run_id": Value::Null,
+            "run_status": Value::Null,
+            "mode": Value::Null,
+            "legacy_file_count": legacy_files,
+            "history": generation_history(&dir, None),
+        });
+    };
+    let rows = collect_generation_rows(&active);
+    let result_count = rows.len() as u64;
+    let stored_count = active
+        .manifest
+        .get("result_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if stored_count != result_count {
+        dirty_reasons.push("result_count_mismatch".into());
     }
-    if meta.is_none() && result_count == 0 {
-        dirty_reasons.push("never_run".into());
-    } else if meta.is_none() && result_count > 0 {
-        dirty_reasons.push("missing_meta".into());
+    let stored_hash = active
+        .manifest
+        .get("rule_set_hash")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !stored_hash.is_empty() && stored_hash != rule_set_hash() {
+        dirty_reasons.push("rule_set_changed".into());
     }
-    if let Some(m) = &meta {
-        let stored = m.get("rule_set_hash").and_then(Value::as_str).unwrap_or("");
-        if !stored.is_empty() && stored != rule_set_hash() {
-            dirty_reasons.push("rule_set_changed".into());
-        }
+    let run_status = active
+        .manifest
+        .get("run_status")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let cohort = active
+        .manifest
+        .get("cohort")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if run_status == "partial" && !dirty_reasons.iter().any(|reason| reason == "run_partial") {
+        dirty_reasons.push("run_partial".into());
     }
-    let has_results = result_count > 0;
-    let clean = has_results && meta.is_some() && dirty_reasons.is_empty();
+    if run_status == "failed" && !dirty_reasons.iter().any(|reason| reason == "run_failed") {
+        dirty_reasons.push("run_failed".into());
+    }
+    if cohort == "scoped" && !dirty_reasons.iter().any(|reason| reason == "scoped_run") {
+        dirty_reasons.push("scoped_run".into());
+    }
+    let run_id = active
+        .manifest
+        .get("run_id")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let clean = result_count > 0
+        && run_status == "complete"
+        && cohort != "scoped"
+        && dirty_reasons.is_empty();
     json!({
         "ok": true,
-        "has_results": has_results,
+        "has_results": result_count > 0,
         "clean": clean,
         "dirty_reasons": dirty_reasons,
-        "completed_at": meta.as_ref().and_then(|m| m.get("completed_at").cloned()),
-        "result_count": meta
-            .as_ref()
-            .and_then(|m| m.get("result_count").and_then(Value::as_u64))
-            .unwrap_or(result_count as u64),
-        "mode": meta.as_ref().and_then(|m| m.get("mode").cloned()),
+        "completed_at": active.manifest.get("completed_at").cloned().unwrap_or(Value::Null),
+        "result_count": result_count,
+        "run_id": run_id,
+        "run_status": run_status,
+        "parent_run_id": active.manifest.get("parent_run_id").cloned().unwrap_or(Value::Null),
+        "cohort": cohort,
+        "mode": active.manifest.get("mode").cloned().unwrap_or(Value::Null),
+        "rules_succeeded": active.manifest.get("rules_succeeded").cloned().unwrap_or(Value::Null),
+        "rules_failed": active.manifest.get("rules_failed").cloned().unwrap_or(Value::Null),
+        "rules_skipped": active.manifest.get("rules_skipped").cloned().unwrap_or(Value::Null),
+        "legacy_file_count": legacy_files,
+        "history": generation_history(&dir, Some(run_id)),
     })
 }
 
@@ -516,7 +1281,7 @@ pub fn equipment_response_scoped(building_id: Option<&str>, tenant_id: Option<&s
 pub fn derive_fault_pct(row: &Value) -> Option<f64> {
     if let Some(value) = row.get("fault_pct").and_then(Value::as_f64) {
         if value.is_finite() {
-            return Some(value.clamp(0.0, 100.0));
+            return Some(value);
         }
     }
     let hours = row.get("fault_hours").and_then(Value::as_f64)?;
@@ -546,10 +1311,83 @@ fn json_f64(value: Option<&Value>) -> Option<f64> {
         .or_else(|| value.as_u64().map(|n| n as f64))
 }
 
-/// `GET /api/fdd/results` - normalized rows from the most recent registry run.
+fn metric_unit_name(column: &str) -> &'static str {
+    match column {
+        "avg_zone_temp" | "min_zone_temp" | "max_zone_temp" => "degF",
+        "comfort_pct" => "pct",
+        "fan_runtime_hours" | "total_hours" => "h",
+        _ => "",
+    }
+}
+
+fn finite_number(value: &Value) -> Option<f64> {
+    value.as_f64().filter(|number| number.is_finite())
+}
+
+fn first_metric_number(row: &Value) -> Option<(&'static str, f64)> {
+    let values = row.get("values").and_then(Value::as_object);
+    let stored = row.as_object();
+    for key in METRIC_FIELDS {
+        if let Some(value) = stored.and_then(|obj| obj.get(key)).and_then(finite_number) {
+            return Some((key, value));
+        }
+        if let Some(value) = values.and_then(|obj| obj.get(key)).and_then(finite_number) {
+            return Some((key, value));
+        }
+    }
+    None
+}
+
+/// Metric document for one result row. A missing measurement stays null.
+/// It is never rewritten into a diagnostic PASS with fault hours of zero.
+fn metric_document(row: &Value, manifest: &Value) -> Value {
+    if let Some(metric) = row.get("metric").filter(|metric| !metric.is_null()) {
+        let mut doc = metric.clone();
+        if let Some(obj) = doc.as_object_mut() {
+            let window = obj
+                .entry("window")
+                .or_insert_with(|| manifest.get("window").cloned().unwrap_or(json!({})));
+            if let Some(window) = window.as_object_mut() {
+                if !window.contains_key("watermark") {
+                    window.insert(
+                        "watermark".into(),
+                        manifest.get("watermark").cloned().unwrap_or(Value::Null),
+                    );
+                }
+            }
+            if !obj.contains_key("coverage") {
+                obj.insert(
+                    "coverage".into(),
+                    json!({
+                        "sample_rows": row.get("sample_rows").cloned().unwrap_or(Value::Null),
+                    }),
+                );
+            }
+        }
+        return doc;
+    }
+    let Some((name, value)) = first_metric_number(row) else {
+        return Value::Null;
+    };
+    json!({
+        "name": name,
+        "value": value,
+        "unit": metric_unit_name(name),
+        "window": {
+            "start": manifest.get("window").and_then(|window| window.get("start")).cloned().unwrap_or(Value::Null),
+            "end": manifest.get("window").and_then(|window| window.get("end")).cloned().unwrap_or(Value::Null),
+            "watermark": manifest.get("watermark").cloned().unwrap_or(Value::Null),
+        },
+        "coverage": {
+            "sample_rows": row.get("sample_rows").cloned().unwrap_or(Value::Null),
+        },
+    })
+}
+
+/// `GET /api/fdd/results` - rows from the active run generation only.
 ///
-/// `building_id` reads from the site-scoped results dir so two buildings' runs
-/// do not clobber one another.
+/// `building_id` reads that site's generation so two buildings do not share a
+/// result folder. Loose rule files without a manifest are not current.
 ///
 /// Soft-OPEN P0-2: prefer [`results_response_with_types`] with Timescale
 /// `equipment.equip_type` stamps. This Parquet-era fallback stays for
@@ -566,7 +1404,6 @@ pub fn results_response_with_types(
     stamped_types: &BTreeMap<String, String>,
     type_source_label: &str,
 ) -> Value {
-    let dir = results_dir(building_id);
     let reg = load_reg().ok();
     let mut metadata = HashMap::new();
     let mut kinds_by_rule: HashMap<String, Vec<String>> = HashMap::new();
@@ -579,96 +1416,133 @@ pub fn results_response_with_types(
             }
         }
     }
+    let Some(active) = load_active(building_id) else {
+        return json!({
+            "ok": true,
+            "count": 0,
+            "results": [],
+            "run_id": Value::Null,
+            "run_status": Value::Null,
+            "legacy_withheld": loose_legacy_count(building_id) > 0,
+        });
+    };
+    let manifest_types = manifest_type_map(&active.manifest);
     let mut rows = Vec::new();
-    if dir.is_dir() {
-        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
-            .into_iter()
-            .flatten()
-            .filter_map(Result::ok)
-            .map(|e| e.path())
-            .filter(|p| {
-                p.extension().and_then(|x| x.to_str()) == Some("json")
-                    && p.file_name()
-                        .and_then(|x| x.to_str())
-                        .is_some_and(|n| !n.starts_with('_'))
-            })
-            .collect();
-        files.sort();
-        for path in files {
-            let Some(rule_id) = path.file_stem().and_then(|x| x.to_str()) else {
-                continue;
-            };
-            if rule_id.starts_with('_') {
-                continue;
+    for (rule_id, row) in collect_generation_rows(&active) {
+        let equipment_id = row_equipment_id(&row).unwrap_or("");
+        let rule_level = equipment_id.is_empty();
+        let stamped = if rule_level {
+            None
+        } else {
+            stamped_types
+                .get(equipment_id)
+                .map(String::as_str)
+                .or_else(|| manifest_types.get(equipment_id).map(String::as_str))
+        };
+        let kind = crate::equipment_types::kind_for(equipment_id, stamped);
+        let applies = if rule_level {
+            true
+        } else if stamped
+            .map(str::trim)
+            .is_some_and(|stamp| !stamp.is_empty())
+        {
+            kinds_by_rule
+                .get(&rule_id)
+                .map(|kinds| rule_applies_to_kind(kinds, kind))
+                .unwrap_or(true)
+        } else {
+            kinds_by_rule
+                .get(&rule_id)
+                .map(|kinds| kinds.is_empty())
+                .unwrap_or(true)
+        };
+        let metric = is_metric_row(&row);
+        let stored_status = row_status_token(&row);
+        let withheld = stored_status == "ERROR" || stored_status.starts_with("SKIP");
+        let stored_fault = row.get("fault_hours").filter(|value| !value.is_null());
+        let fault_hours_num = stored_fault.and_then(Value::as_f64).unwrap_or(0.0);
+        let status = if rule_level {
+            if stored_status.is_empty() {
+                "SKIP".to_string()
+            } else {
+                stored_status.clone()
             }
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            let Ok(body) = serde_json::from_str::<Value>(&text) else {
-                continue;
-            };
-            for row in body
-                .get("rows")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-            {
-                let equipment_id = row
-                    .get("equipment_id")
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown");
-                let fault_hours = row
-                    .get("fault_hours")
-                    .and_then(Value::as_f64)
-                    .unwrap_or(0.0);
-                // Emit status directly from the row when present (skip markers),
-                // otherwise derive FAULT/PASS from fault_hours (OFDD-066).
-                let stamped = stamped_types.get(equipment_id).map(String::as_str);
-                let kind = crate::equipment_types::kind_for(equipment_id, stamped);
-                let applies = if stamped.map(str::trim).is_some_and(|s| !s.is_empty()) {
-                    kinds_by_rule
-                        .get(rule_id)
-                        .map(|k| rule_applies_to_kind(k, kind))
-                        .unwrap_or(true)
-                } else {
-                    kinds_by_rule
-                        .get(rule_id)
-                        .map(|k| k.is_empty())
-                        .unwrap_or(true)
-                };
-                let status = displayed_result_status(
-                    row.get("status").and_then(Value::as_str),
-                    fault_hours,
-                    kinds_by_rule.get(rule_id).map(Vec::as_slice),
-                    stamped,
-                );
-                let fault_hours = if applies { fault_hours } else { 0.0 };
-                let missing_roles = row
-                    .get("missing_roles")
-                    .cloned()
-                    .unwrap_or_else(|| json!([]));
-                let type_source = if stamped.is_some() {
-                    type_source_label
-                } else {
-                    "missing"
-                };
-                rows.push(json!({
-                    "rule_id": rule_id,
-                    "title": metadata.get(rule_id).cloned().unwrap_or_default(),
-                    "equipment_id": equipment_id,
-                    "equipment_type": crate::equipment_types::api_equipment_type_for(equipment_id, stamped),
-                    "equipment_type_raw": stamped,
-                    "equipment_type_source": type_source,
-                    "status": status,
-                    "fault_hours": fault_hours,
-                    "fault_pct": derive_fault_pct(row),
-                    "missing_roles": missing_roles,
-                    "notes": row.get("notes").cloned().unwrap_or(Value::Null),
-                }));
+        } else if withheld {
+            stored_status.clone()
+        } else if metric {
+            if applies {
+                "METRIC".to_string()
+            } else {
+                "NOT_APPLICABLE_EQUIPMENT_TYPE".to_string()
             }
-        }
+        } else {
+            displayed_result_status(
+                row.get("status").and_then(Value::as_str),
+                fault_hours_num,
+                kinds_by_rule.get(&rule_id).map(Vec::as_slice),
+                stamped,
+            )
+        };
+        let fault_hours = if metric || withheld {
+            Value::Null
+        } else if !applies {
+            json!(0.0)
+        } else if stored_fault.is_some() {
+            json!(fault_hours_num)
+        } else {
+            Value::Null
+        };
+        let missing_roles = row
+            .get("missing_roles")
+            .cloned()
+            .unwrap_or_else(|| json!([]));
+        let type_source = if stamped.is_some() {
+            type_source_label
+        } else if rule_level {
+            "rule"
+        } else {
+            "missing"
+        };
+        let metric_doc = if metric {
+            metric_document(&row, &active.manifest)
+        } else {
+            Value::Null
+        };
+        rows.push(json!({
+            "rule_id": rule_id,
+            "title": metadata.get(&rule_id).cloned().unwrap_or_default(),
+            "equipment_id": equipment_id,
+            "equipment_type": if rule_level {
+                Value::Null
+            } else {
+                json!(crate::equipment_types::api_equipment_type_for(equipment_id, stamped))
+            },
+            "equipment_type_raw": stamped,
+            "equipment_type_source": type_source,
+            "status": status,
+            "output_kind": if metric { "metric" } else { "diagnostic" },
+            "fault_hours": fault_hours,
+            "fault_pct": if metric || withheld {
+                Value::Null
+            } else {
+                json!(derive_fault_pct(&row))
+            },
+            "metric": metric_doc,
+            "values": row.get("values").cloned().unwrap_or(Value::Null),
+            "missing_roles": missing_roles,
+            "notes": row.get("notes").cloned().unwrap_or(Value::Null),
+            "run_id": active.manifest.get("run_id").cloned().unwrap_or(Value::Null),
+        }));
     }
-    json!({"ok": true, "count": rows.len(), "results": rows})
+    json!({
+        "ok": true,
+        "count": rows.len(),
+        "results": rows,
+        "run_id": active.manifest.get("run_id").cloned().unwrap_or(Value::Null),
+        "run_status": active.manifest.get("run_status").cloned().unwrap_or(Value::Null),
+        "parent_run_id": active.manifest.get("parent_run_id").cloned().unwrap_or(Value::Null),
+        "legacy_withheld": false,
+    })
 }
 
 /// `GET /api/afdd/scheduler/result-slices` — per-rule window hashes.
@@ -677,34 +1551,10 @@ pub fn results_response_with_types(
 /// a lookback upsert. The display `rows` array is not this proof: a full-file
 /// rewrite would still publish a fresh `rows` list.
 pub fn result_slice_report(building_id: Option<&str>) -> Value {
-    let dir = results_dir(building_id);
     let mut rules = Vec::new();
-    if dir.is_dir() {
-        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
-            .into_iter()
-            .flatten()
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| {
-                path.extension().and_then(|ext| ext.to_str()) == Some("json")
-                    && path
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .is_some_and(|name| !name.starts_with('_'))
-            })
-            .collect();
-        files.sort();
-        for path in files {
-            let Some(rule_id) = path.file_stem().and_then(|name| name.to_str()) else {
-                continue;
-            };
-            if rule_id.starts_with('_') {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-            let Ok(body) = serde_json::from_str::<Value>(&text) else {
+    let run_id = if let Some(active) = load_active(building_id) {
+        for rule_id in listed_rule_ids(&active.manifest) {
+            let Some(body) = read_json_file(&active.gen.join(format!("{rule_id}.json"))) else {
                 continue;
             };
             rules.push(json!({
@@ -713,10 +1563,18 @@ pub fn result_slice_report(building_id: Option<&str>) -> Value {
                 "windows": fdd_store::rule_result_window_fingerprints(&body),
             }));
         }
-    }
+        active
+            .manifest
+            .get("run_id")
+            .cloned()
+            .unwrap_or(Value::Null)
+    } else {
+        Value::Null
+    };
     json!({
         "ok": true,
         "building_id": building_id,
+        "run_id": run_id,
         "rules": rules,
     })
 }
@@ -1033,28 +1891,62 @@ mod tests {
         assert_eq!(missing, "NOT_APPLICABLE_EQUIPMENT_TYPE");
     }
 
+    fn sample_commit(
+        building: &str,
+        full_cohort: bool,
+        equipment: &[(&str, &str)],
+        rules: &[(&str, Value)],
+    ) -> Value {
+        commit_run_generation(&RunGenerationCommit {
+            building_id: building.to_string(),
+            full_cohort,
+            equipment: equipment
+                .iter()
+                .map(|(id, kind)| RunModelEquipment {
+                    equipment_id: (*id).to_string(),
+                    equip_type: Some((*kind).to_string()),
+                })
+                .collect(),
+            rules: rules
+                .iter()
+                .map(|(id, body)| RunRuleFile {
+                    rule_id: (*id).to_string(),
+                    body: body.clone(),
+                })
+                .collect(),
+            config_fingerprint: "test-config".into(),
+            window_start: Some("2026-07-01T00:00:00Z".into()),
+            window_end: Some("2026-07-02T00:00:00Z".into()),
+            watermark: Some("2026-07-01T12:00:00Z".into()),
+            poll_seconds: 300.0,
+        })
+        .expect("commit generation")
+    }
+
     #[test]
     fn building50_result_files_are_not_all_not_applicable() {
         let _env = crate::test_support::workspace_env_lock();
         let _dir = RuleResultsDirGuard::new();
         let building = "BUILDING_50";
-        let dir = results_dir(Some(building));
-        std::fs::create_dir_all(&dir).expect("mkdir");
-        std::fs::write(
-            dir.join("FC1.json"),
-            r#"{"rows":[{"equipment_id":"AHU_1","fault_hours":1.5,"status":"NOT_APPLICABLE"}]}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            dir.join("CHW-1.json"),
-            r#"{"rows":[{"equipment_id":"CHILLER_1","fault_hours":2.0,"status":"NOT_APPLICABLE_EQUIPMENT_TYPE"}]}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            dir.join("AHU-SATDEV.json"),
-            r#"{"rows":[{"equipment_id":"AHU_1","fault_hours":0.0,"status":"PASS"}]}"#,
-        )
-        .unwrap();
+        sample_commit(
+            building,
+            true,
+            &[("AHU_1", "ahu"), ("CHILLER_1", "chwPlant")],
+            &[
+                (
+                    "FC1",
+                    json!({"rows":[{"equipment_id":"AHU_1","fault_hours":1.5,"status":"NOT_APPLICABLE"}]}),
+                ),
+                (
+                    "CHW-1",
+                    json!({"rows":[{"equipment_id":"CHILLER_1","fault_hours":2.0,"status":"NOT_APPLICABLE_EQUIPMENT_TYPE"}]}),
+                ),
+                (
+                    "AHU-SATDEV",
+                    json!({"rows":[{"equipment_id":"AHU_1","fault_hours":0.0,"status":"PASS"}]}),
+                ),
+            ],
+        );
         let mut types = BTreeMap::new();
         types.insert("AHU_1".into(), "ahu".into());
         types.insert("CHILLER_1".into(), "chwPlant".into());
@@ -1085,6 +1977,8 @@ mod tests {
             .find(|row| row["rule_id"] == "CHW-1")
             .expect("CHW-1");
         assert_eq!(chw["status"], "FAULT");
+        let ready = readiness_response(Some(building));
+        assert_eq!(ready["result_count"], body["count"], "{ready} {body}");
     }
 
     #[test]
@@ -1108,22 +2002,33 @@ mod tests {
     }
 
     #[test]
-    fn readiness_after_run_meta_and_result_is_clean() {
+    fn readiness_after_committed_generation_is_clean() {
         let _env = crate::test_support::workspace_env_lock();
         let _dir = RuleResultsDirGuard::new();
         let building = "READINESS_CLEAN";
-        let scoped = results_dir(Some(building));
-        std::fs::create_dir_all(&scoped).expect("mkdir results");
-        std::fs::write(scoped.join("FC1.json"), b"{}").expect("write result");
-        write_run_meta(Some(building), "registry", 1);
+        sample_commit(
+            building,
+            true,
+            &[("AHU_1", "ahu"), ("AHU_2", "ahu")],
+            &[(
+                "FC1",
+                json!({"rows":[
+                    {"equipment_id":"AHU_1","fault_hours":0.0,"status":"PASS"},
+                    {"equipment_id":"AHU_2","fault_hours":1.0,"status":"FAULT"}
+                ]}),
+            )],
+        );
         let v = readiness_response(Some(building));
         assert_eq!(v["ok"], true, "{v}");
         assert_eq!(v["clean"], true, "{v}");
+        assert_eq!(v["run_status"], "complete", "{v}");
+        assert_eq!(v["result_count"], 2, "row count, not file count: {v}");
+        let body = results_response(Some(building));
+        assert_eq!(body["count"], v["result_count"], "{body}");
         assert!(
             v["dirty_reasons"].as_array().is_some_and(|a| a.is_empty()),
             "{v}"
         );
-        assert_eq!(v["has_results"], true, "{v}");
     }
 
     #[test]
@@ -1131,10 +2036,15 @@ mod tests {
         let _env = crate::test_support::workspace_env_lock();
         let _dir = RuleResultsDirGuard::new();
         let building = "READINESS_DIRTY";
-        let scoped = results_dir(Some(building));
-        std::fs::create_dir_all(&scoped).expect("mkdir results");
-        std::fs::write(scoped.join("FC1.json"), b"{}").expect("write result");
-        write_run_meta(Some(building), "registry", 1);
+        sample_commit(
+            building,
+            true,
+            &[("AHU_1", "ahu")],
+            &[(
+                "FC1",
+                json!({"rows":[{"equipment_id":"AHU_1","fault_hours":0.0,"status":"PASS"}]}),
+            )],
+        );
         mark_building_results_dirty(building, "package_reimport");
         let v = readiness_response(Some(building));
         assert_eq!(v["ok"], true, "{v}");
@@ -1149,5 +2059,330 @@ mod tests {
             reasons.iter().any(|r| r == "package_reimport"),
             "expected package_reimport in {reasons:?}, full={v}"
         );
+    }
+
+    #[test]
+    fn partial_run_is_not_current_and_skip_is_not_a_failure() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "RUN_PARTIAL";
+        let committed = sample_commit(
+            building,
+            true,
+            &[("AHU_1", "ahu")],
+            &[
+                (
+                    "FC1",
+                    json!({"rows":[{"equipment_id":"AHU_1","fault_hours":2.0,"status":"FAULT"}]}),
+                ),
+                (
+                    "OAT-METEO",
+                    json!({"rows":[{"equipment_id":"AHU_1","status":"ERROR","notes":"sql failed"}]}),
+                ),
+                (
+                    "VAV-1",
+                    json!({"rows":[{"status":"SKIP_NO_TARGETS","notes":"no vav in model"}]}),
+                ),
+            ],
+        );
+        assert_eq!(committed["run_status"], "partial", "{committed}");
+        assert_eq!(committed["rules_succeeded"], 1, "{committed}");
+        assert_eq!(committed["rules_failed"], 1, "{committed}");
+        assert_eq!(committed["rules_skipped"], 1, "{committed}");
+        assert_eq!(
+            committed["rules_succeeded"].as_u64().unwrap()
+                + committed["rules_failed"].as_u64().unwrap()
+                + committed["rules_skipped"].as_u64().unwrap(),
+            committed["rules_run"].as_u64().unwrap()
+        );
+        let ready = readiness_response(Some(building));
+        assert_eq!(ready["clean"], false, "{ready}");
+        assert_eq!(ready["run_status"], "partial", "{ready}");
+        assert_ne!(ready["run_status"], "failed");
+        let body = results_response(Some(building));
+        assert_eq!(body["count"], ready["result_count"], "{body} {ready}");
+        let error = body["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["rule_id"] == "OAT-METEO")
+            .expect("error row");
+        assert_eq!(error["status"], "ERROR");
+        assert_ne!(error["status"], "PASS");
+    }
+
+    #[test]
+    fn failed_run_is_distinct_from_partial() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "RUN_FAILED";
+        let committed = sample_commit(
+            building,
+            true,
+            &[("AHU_1", "ahu")],
+            &[(
+                "FC1",
+                json!({"rows":[{"equipment_id":"AHU_1","status":"ERROR","notes":"render"}]}),
+            )],
+        );
+        assert_eq!(committed["run_status"], "failed", "{committed}");
+        assert_eq!(committed["rules_succeeded"], 0);
+        let ready = readiness_response(Some(building));
+        assert_eq!(ready["clean"], false, "{ready}");
+        assert_eq!(ready["run_status"], "failed", "{ready}");
+        assert_eq!(
+            ready["result_count"],
+            results_response(Some(building))["count"]
+        );
+    }
+
+    #[test]
+    fn legacy_files_are_withheld_and_counts_agree() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "LEGACY_LOOSE";
+        let dir = results_dir(Some(building));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("VAV-1.json"),
+            r#"{"rows":[{"equipment_id":"VAV_111","fault_hours":4.0,"status":"FAULT"}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("_run_meta.json"),
+            r#"{"ok":true,"result_count":99}"#,
+        )
+        .unwrap();
+        let body = results_response(Some(building));
+        let ready = readiness_response(Some(building));
+        assert_eq!(body["count"], 0, "{body}");
+        assert_eq!(ready["result_count"], 0, "{ready}");
+        assert_eq!(body["count"], ready["result_count"]);
+        assert_eq!(ready["clean"], false, "{ready}");
+        assert!(ready["dirty_reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "legacy_unmanifested"));
+        assert!(dir.join("VAV-1.json").is_file(), "history file stays");
+    }
+
+    #[test]
+    fn model_change_drops_obsolete_equipment_and_keeps_history() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "MODEL_SHIFT";
+        let first = sample_commit(
+            building,
+            true,
+            &[("AHU_1", "ahu"), ("VAV_111", "vav")],
+            &[
+                (
+                    "FC1",
+                    json!({"rows":[{"equipment_id":"AHU_1","fault_hours":1.0,"status":"FAULT"}]}),
+                ),
+                (
+                    "VAV-1",
+                    json!({"rows":[{"equipment_id":"VAV_111","fault_hours":3.0,"status":"FAULT"}]}),
+                ),
+            ],
+        );
+        let first_id = first["run_id"].as_str().unwrap().to_string();
+        let second = sample_commit(
+            building,
+            true,
+            &[("AHU_1", "ahu")],
+            &[
+                (
+                    "FC1",
+                    json!({"rows":[{"equipment_id":"AHU_1","fault_hours":1.0,"status":"PASS"}]}),
+                ),
+                ("VAV-1", json!({"rows":[{"status":"SKIP_NO_TARGETS"}]})),
+            ],
+        );
+        assert_ne!(second["run_id"], first["run_id"]);
+        let body = results_response(Some(building));
+        assert!(
+            body["results"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|row| row["equipment_id"] != "VAV_111"),
+            "{body}"
+        );
+        let skip = body["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["rule_id"] == "VAV-1")
+            .expect("skip replaces vav");
+        assert_eq!(skip["status"], "SKIP_NO_TARGETS");
+        let ready = readiness_response(Some(building));
+        assert_eq!(ready["result_count"], body["count"], "{ready}");
+        let old = results_dir(Some(building))
+            .join("generations")
+            .join(&first_id)
+            .join("VAV-1.json");
+        let old_body: Value = serde_json::from_str(&std::fs::read_to_string(old).unwrap()).unwrap();
+        assert_eq!(old_body["rows"][0]["equipment_id"], "VAV_111");
+        assert!(ready["history"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["run_id"] == first_id && item["active"] == false));
+    }
+
+    #[test]
+    fn single_rule_keeps_parent_provenance() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "SINGLE_RULE";
+        let first = sample_commit(
+            building,
+            true,
+            &[("AHU_1", "ahu"), ("AHU_2", "ahu")],
+            &[
+                (
+                    "FC1",
+                    json!({"rows":[
+                        {"equipment_id":"AHU_1","fault_hours":1.0,"status":"FAULT"},
+                        {"equipment_id":"AHU_2","fault_hours":0.0,"status":"PASS"}
+                    ]}),
+                ),
+                (
+                    "AHU-SATDEV",
+                    json!({"rows":[{"equipment_id":"AHU_1","fault_hours":0.0,"status":"PASS"}]}),
+                ),
+            ],
+        );
+        let tuned = sample_commit(
+            building,
+            false,
+            &[("AHU_1", "ahu"), ("AHU_2", "ahu")],
+            &[(
+                "FC1",
+                json!({"rows":[{"equipment_id":"AHU_1","fault_hours":0.0,"status":"PASS"}]}),
+            )],
+        );
+        assert_eq!(tuned["parent_run_id"], first["run_id"]);
+        assert_eq!(tuned["cohort"], "derived");
+        let body = results_response(Some(building));
+        let rows = body["results"].as_array().unwrap();
+        assert!(rows.iter().any(|row| row["rule_id"] == "AHU-SATDEV"));
+        assert!(rows.iter().any(|row| {
+            row["rule_id"] == "FC1" && row["equipment_id"] == "AHU_2" && row["status"] == "PASS"
+        }));
+        let ahu1 = rows
+            .iter()
+            .find(|row| row["rule_id"] == "FC1" && row["equipment_id"] == "AHU_1")
+            .unwrap();
+        assert_eq!(ahu1["fault_hours"], 0.0);
+        let ready = readiness_response(Some(building));
+        assert_eq!(ready["result_count"], body["count"]);
+        assert_eq!(ready["clean"], true, "{ready}");
+    }
+
+    #[test]
+    fn sites_do_not_share_a_generation() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        sample_commit(
+            "SITE_A",
+            true,
+            &[("AHU_A", "ahu")],
+            &[(
+                "FC1",
+                json!({"rows":[{"equipment_id":"AHU_A","fault_hours":1.0,"status":"FAULT"}]}),
+            )],
+        );
+        sample_commit(
+            "SITE_B",
+            true,
+            &[("AHU_B", "ahu")],
+            &[(
+                "FC1",
+                json!({"rows":[{"equipment_id":"AHU_B","fault_hours":0.0,"status":"PASS"}]}),
+            )],
+        );
+        let a = results_response(Some("SITE_A"));
+        let b = results_response(Some("SITE_B"));
+        assert!(a["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["equipment_id"] == "AHU_A"));
+        assert!(b["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["equipment_id"] == "AHU_B"));
+        assert_eq!(
+            readiness_response(Some("SITE_A"))["result_count"],
+            a["count"]
+        );
+    }
+
+    #[test]
+    fn metric_rows_keep_value_and_do_not_become_pass_zero() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "METRIC_ROWS";
+        sample_commit(
+            building,
+            true,
+            &[("ZONE_1", "zone_other")],
+            &[
+                (
+                    "AVG-ZONE-TEMP",
+                    json!({"rows":[{
+                        "equipment_id":"ZONE_1",
+                        "status":"METRIC",
+                        "output_kind":"metric",
+                        "sample_rows": 4,
+                        "metric": {
+                            "name": "avg_zone_temp",
+                            "value": 72.5,
+                            "unit": "degF",
+                            "window": {"start": "2026-07-01T00:00:00Z", "end": "2026-07-02T00:00:00Z"},
+                            "coverage": {"sample_rows": 4}
+                        },
+                        "values": {"avg_zone_temp": 72.5, "min_zone_temp": 70.0, "max_zone_temp": 75.0}
+                    }]}),
+                ),
+                (
+                    "ZONE-COMFORT-PCT",
+                    json!({"rows":[{
+                        "equipment_id":"ZONE_1",
+                        "output_kind":"metric",
+                        "comfort_pct": 88.0,
+                        "sample_rows": 4
+                    }]}),
+                ),
+            ],
+        );
+        let body = results_response(Some(building));
+        let rows = body["results"].as_array().unwrap();
+        let avg = rows
+            .iter()
+            .find(|row| row["rule_id"] == "AVG-ZONE-TEMP")
+            .unwrap();
+        assert_eq!(avg["status"], "METRIC");
+        assert!(avg["fault_hours"].is_null(), "{avg}");
+        assert_eq!(avg["metric"]["value"], 72.5);
+        assert_eq!(avg["metric"]["unit"], "degF");
+        assert_eq!(avg["metric"]["coverage"]["sample_rows"], 4);
+        assert_eq!(avg["values"]["min_zone_temp"], 70.0);
+        let comfort = rows
+            .iter()
+            .find(|row| row["rule_id"] == "ZONE-COMFORT-PCT")
+            .unwrap();
+        assert_eq!(comfort["status"], "METRIC", "{comfort}");
+        assert_ne!(comfort["status"], "PASS");
+        assert!(comfort["fault_hours"].is_null());
+        assert_eq!(comfort["metric"]["value"], 88.0);
+        assert_eq!(comfort["metric"]["unit"], "pct");
+        let ready = readiness_response(Some(building));
+        assert_eq!(ready["result_count"], 2);
+        assert_eq!(ready["result_count"], body["count"]);
     }
 }

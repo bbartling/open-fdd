@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   DataTable,
@@ -8,7 +8,10 @@ import {
 } from "./widgets";
 import { useSessionQuery } from "../session";
 import { LockedSiteCaption } from "./LockedSiteCaption";
-import { getFddResults, type FddResultRow } from "../api/fddApi";
+import {
+  getFddResultsDocument,
+  type FddResultRow,
+} from "../api/fddApi";
 import { listJobs, type JobMeta } from "../api/jobsApi";
 import {
   getJobDispositions,
@@ -31,6 +34,34 @@ function familyOf(ruleId: string): string {
   return i > 0 ? ruleId.slice(0, i) : ruleId || "other";
 }
 
+function metricCell(row: FddResultRow): string {
+  const metric = row.metric;
+  if (!metric || metric.value == null || !Number.isFinite(metric.value)) return "—";
+  const unit = metric.unit ? ` ${metric.unit}` : "";
+  return `${metric.value}${unit}`;
+}
+
+type ResultTableRow = Record<string, unknown> & {
+  category: string;
+  rule_id: string;
+  equipment_id: string;
+  status: string;
+  fault_hours: string;
+  fault_pct: string;
+  metric: string;
+  metric_window: string;
+};
+
+function metricWindow(row: FddResultRow): string {
+  const window = row.metric?.window;
+  if (!window) return "—";
+  const start = window.start || "—";
+  const end = window.end || "—";
+  const samples = row.metric?.coverage?.sample_rows;
+  const coverage = samples == null ? "" : ` · ${samples} samples`;
+  return `${start} → ${end}${coverage}`;
+}
+
 /** FDD results grouped by rule family — embedded under Data Model. */
 export function ResultsByCategoryPanel() {
   const { query, setQuery } = useSessionQuery();
@@ -38,6 +69,8 @@ export function ResultsByCategoryPanel() {
   const jobId = query.jobId ?? "";
 
   const [results, setResults] = useState<FddResultRow[]>([]);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState<string | null>(null);
   const [category, setCategory] = useState("(all)");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,20 +86,34 @@ export function ResultsByCategoryPanel() {
   });
   const [hitlOpen, setHitlOpen] = useState(false);
 
+  const requestGen = useRef(0);
+
   const refreshResults = useCallback(async () => {
-    if (!buildingId) {
+    const site = buildingId;
+    const gen = requestGen.current + 1;
+    requestGen.current = gen;
+    if (!site) {
       setResults([]);
+      setRunId(null);
+      setRunStatus(null);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      setResults(await getFddResults(buildingId));
+      const doc = await getFddResultsDocument(site);
+      if (requestGen.current !== gen) return;
+      setResults(doc.results);
+      setRunId(doc.run_id ?? null);
+      setRunStatus(doc.run_status ?? null);
     } catch (err) {
+      if (requestGen.current !== gen) return;
       setError(formatErr(err));
       setResults([]);
+      setRunId(null);
+      setRunStatus(null);
     } finally {
-      setLoading(false);
+      if (requestGen.current === gen) setLoading(false);
     }
   }, [buildingId]);
 
@@ -78,6 +125,9 @@ export function ResultsByCategoryPanel() {
 
   useEffect(() => {
     void refreshResults();
+    return () => {
+      requestGen.current += 1;
+    };
   }, [refreshResults]);
 
   useEffect(() => {
@@ -118,14 +168,35 @@ export function ResultsByCategoryPanel() {
     );
   }, [results, category]);
 
-  const tableRows = filtered.map((r) => ({
-    category: familyOf(String(r.rule_id ?? "")),
-    rule_id: String(r.rule_id ?? ""),
-    equipment_id: String(r.equipment_id ?? ""),
-    status: String(r.status ?? "—"),
-    fault_hours: r.fault_hours != null ? String(r.fault_hours) : "—",
-    fault_pct: r.fault_pct != null ? String(r.fault_pct) : "—",
-  }));
+  const tableRows = useMemo((): ResultTableRow[] =>
+    filtered.map((r) => ({
+      category: familyOf(String(r.rule_id ?? "")),
+      rule_id: String(r.rule_id ?? ""),
+      equipment_id: String(r.equipment_id ?? ""),
+      status: String(r.status ?? "—"),
+      fault_hours:
+        r.output_kind === "metric" || r.fault_hours == null
+          ? "—"
+          : String(r.fault_hours),
+      fault_pct: r.fault_pct != null ? String(r.fault_pct) : "—",
+      metric: metricCell(r),
+      metric_window: metricWindow(r),
+    })),
+  [filtered]);
+
+  const resultColumns = useMemo(
+    (): Array<{ key: keyof ResultTableRow & string; header: string }> => [
+      { key: "category", header: "category" },
+      { key: "rule_id", header: "rule_id" },
+      { key: "equipment_id", header: "equipment_id" },
+      { key: "status", header: "status" },
+      { key: "metric", header: "metric" },
+      { key: "metric_window", header: "window" },
+      { key: "fault_hours", header: "fault_hours" },
+      { key: "fault_pct", header: "fault_pct" },
+    ],
+    [],
+  );
 
   const dispByKey = useMemo(() => {
     const m = new Map<string, Disposition>();
@@ -168,17 +239,16 @@ export function ResultsByCategoryPanel() {
           No site locked — pick a building on Overview, then run FDD from Lab.
         </InlineAlert>
       ) : null}
+      {runId ? (
+        <p className="oracle-sidebar__caption" data-testid="results-run-caption">
+          Run {runId}
+          {runStatus ? ` · ${runStatus}` : ""} · {results.length} rows
+        </p>
+      ) : null}
       <DataTable
         id="results-by-category"
         label="Results by category"
-        columns={[
-          { key: "category", header: "category" },
-          { key: "rule_id", header: "rule_id" },
-          { key: "equipment_id", header: "equipment_id" },
-          { key: "status", header: "status" },
-          { key: "fault_hours", header: "fault_hours" },
-          { key: "fault_pct", header: "fault_pct" },
-        ]}
+        columns={resultColumns}
         rows={tableRows}
         loading={loading}
         testId="results-table"

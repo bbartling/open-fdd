@@ -51,16 +51,38 @@ export interface FddRunTiming {
   [key: string]: unknown;
 }
 
+export interface FddMetricWindow {
+  start?: string | null;
+  end?: string | null;
+  watermark?: string | null;
+}
+
+export interface FddMetricCoverage {
+  sample_rows?: number | null;
+}
+
+export interface FddMetricValue {
+  name?: string;
+  value?: number | null;
+  unit?: string;
+  window?: FddMetricWindow;
+  coverage?: FddMetricCoverage;
+}
+
 export interface FddResultRow {
   rule_id: string;
   title?: string;
   equipment_id: string;
   equipment_type?: string;
   status: string;
-  fault_hours?: number;
+  output_kind?: string;
+  fault_hours?: number | null;
   fault_pct?: number | null;
+  metric?: FddMetricValue | null;
+  values?: Record<string, number | null> | null;
   missing_roles?: string[];
   notes?: unknown;
+  run_id?: string | null;
 }
 
 export interface FddRunResponse {
@@ -76,6 +98,10 @@ export interface FddRunResponse {
   rules_skipped?: number;
   poll_seconds?: number;
   total_ms?: number;
+  run_id?: string | null;
+  run_status?: string | null;
+  result_count?: number;
+  parent_run_id?: string | null;
   timings?: FddRunTiming[];
   results_dir?: string;
   results?: FddResultRow[];
@@ -89,6 +115,9 @@ export interface FddResultsResponse {
   ok: boolean;
   count: number;
   results: FddResultRow[];
+  run_id?: string | null;
+  run_status?: string | null;
+  parent_run_id?: string | null;
   error?: string;
 }
 
@@ -206,12 +235,23 @@ export async function runFdd(
   return body;
 }
 
-export async function getFddResults(buildingId?: string): Promise<FddResultRow[]> {
+export async function getFddResultsDocument(
+  buildingId?: string,
+): Promise<FddResultsResponse> {
   const body = await apiFetch<FddResultsResponse>(buildFddResultsPath(buildingId));
   if (!body.ok) {
     throw new Error(body.error || "Failed to load FDD results");
   }
-  return body.results ?? [];
+  return {
+    ...body,
+    count: Number(body.count ?? body.results?.length ?? 0),
+    results: body.results ?? [],
+  };
+}
+
+export async function getFddResults(buildingId?: string): Promise<FddResultRow[]> {
+  const body = await getFddResultsDocument(buildingId);
+  return body.results;
 }
 
 export interface FddReadiness {
@@ -221,6 +261,13 @@ export interface FddReadiness {
   dirty_reasons: string[];
   completed_at?: string | null;
   result_count: number;
+  run_id?: string | null;
+  run_status?: string | null;
+  parent_run_id?: string | null;
+  cohort?: string | null;
+  rules_succeeded?: number | null;
+  rules_failed?: number | null;
+  rules_skipped?: number | null;
   mode?: string | null;
   error?: string;
 }
@@ -332,6 +379,14 @@ export function resultsToCsvArtifact(rows: FddResultRow[]): string {
     "fault_pct",
     "missing_roles",
     "title",
+    "output_kind",
+    "metric_name",
+    "metric_value",
+    "metric_unit",
+    "metric_window_start",
+    "metric_window_end",
+    "metric_watermark",
+    "metric_sample_rows",
   ];
   const escape = (v: unknown) => {
     const s = v == null ? "" : String(v);
@@ -350,6 +405,14 @@ export function resultsToCsvArtifact(rows: FddResultRow[]): string {
         r.fault_pct ?? "",
         (r.missing_roles ?? []).join("|"),
         r.title ?? "",
+        r.output_kind ?? "",
+        r.metric?.name ?? "",
+        r.metric?.value ?? "",
+        r.metric?.unit ?? "",
+        r.metric?.window?.start ?? "",
+        r.metric?.window?.end ?? "",
+        r.metric?.window?.watermark ?? "",
+        r.metric?.coverage?.sample_rows ?? "",
       ]
         .map(escape)
         .join(","),

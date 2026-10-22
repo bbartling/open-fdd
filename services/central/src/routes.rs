@@ -2194,9 +2194,24 @@ pub async fn fdd_run(
         }
         if let Some(ref aid) = action_id {
             let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-            let status = if ok { "ok" } else { "fail" };
+            let run_status = result.get("run_status").and_then(|v| v.as_str());
+            let status = match run_status {
+                Some("complete") => "ok",
+                Some("partial") => "partial",
+                Some("failed") => "fail",
+                _ => {
+                    if ok {
+                        "ok"
+                    } else {
+                        "fail"
+                    }
+                }
+            };
             let detail = json!({
                 "ok": ok,
+                "run_status": result.get("run_status"),
+                "run_id": result.get("run_id"),
+                "result_count": result.get("result_count"),
                 "rules_succeeded": result.get("rules_succeeded"),
                 "rules_failed": result.get("rules_failed"),
                 "rules_skipped": result.get("rules_skipped"),

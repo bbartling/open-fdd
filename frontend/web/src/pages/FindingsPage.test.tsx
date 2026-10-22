@@ -43,15 +43,38 @@ vi.mock("../api/dataModelTurtle", () => ({
 }));
 
 vi.mock("../api/fddApi", () => ({
-  getFddResults: vi.fn(async () => [
-    {
-      rule_id: "AHU-SATDEV",
-      equipment_id: "AHU_1",
-      status: "FAULT",
-      fault_hours: 12,
-      fault_pct: 5,
-    },
-  ]),
+  getFddResults: vi.fn(async () => []),
+  getFddResultsDocument: vi.fn(async () => ({
+    ok: true,
+    count: 2,
+    run_id: "run-active",
+    run_status: "complete",
+    results: [
+      {
+        rule_id: "AHU-SATDEV",
+        equipment_id: "AHU_1",
+        status: "FAULT",
+        output_kind: "diagnostic",
+        fault_hours: 12,
+        fault_pct: 5,
+      },
+      {
+        rule_id: "AVG-ZONE-TEMP",
+        equipment_id: "AHU_1",
+        status: "METRIC",
+        output_kind: "metric",
+        fault_hours: null,
+        fault_pct: null,
+        metric: {
+          name: "avg_zone_temp",
+          value: 72.4,
+          unit: "degF",
+          window: { start: "2026-06-01T00:00:00Z", end: "2026-06-02T00:00:00Z" },
+          coverage: { sample_rows: 4 },
+        },
+      },
+    ],
+  })),
   listFddRules: vi.fn(async () => []),
   getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
 }));
@@ -105,6 +128,11 @@ describe("Data Model Results by Category", () => {
       expect(screen.getByTestId("data-model-subnav")).toBeTruthy();
       expect(screen.getByTestId("results-table")).toBeTruthy();
       expect(screen.getByText("AHU-SATDEV")).toBeTruthy();
+      expect(screen.getByText("72.4 degF")).toBeTruthy();
+      expect(screen.getByTestId("results-run-caption").textContent).toMatch(
+        /run-active/,
+      );
+      expect(screen.queryByText("PASS")).toBeNull();
       const hitlTrigger = screen.getByRole("button", {
         name: "Engineering findings HITL (job dispositions)",
       });
