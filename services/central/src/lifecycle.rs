@@ -722,6 +722,7 @@ mod tests {
             vec![
                 UserRecord {
                     username: owner.clone(),
+                    user_id: String::new(),
                     role: "operator".into(),
                     tenant_ids: vec![solo_tenant.clone(), shared_tenant.clone()],
                     password_env: None,
@@ -731,6 +732,7 @@ mod tests {
                 },
                 UserRecord {
                     username: peer.clone(),
+                    user_id: String::new(),
                     role: "operator".into(),
                     tenant_ids: vec![shared_tenant.clone()],
                     password_env: None,
@@ -941,6 +943,7 @@ mod tests {
             vec![
                 UserRecord {
                     username: owner.clone(),
+                    user_id: String::new(),
                     role: "operator".into(),
                     tenant_ids: vec![solo_tenant.clone(), shared_tenant.clone()],
                     password_env: None,
@@ -950,6 +953,7 @@ mod tests {
                 },
                 UserRecord {
                     username: peer,
+                    user_id: String::new(),
                     role: "operator".into(),
                     tenant_ids: vec![shared_tenant.clone()],
                     password_env: None,
