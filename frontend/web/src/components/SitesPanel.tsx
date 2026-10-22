@@ -8,6 +8,7 @@ import { deleteDataset } from "../api/datasetsApi";
 import { listPackageBuildings } from "../api/mappingApi";
 import { fetchProviderSites, type ProviderSiteConfig } from "../api/providersApi";
 import { siteSourceLabels } from "../lib/providerDisplay";
+import { useDatasetWriteAllowed } from "../hooks/useDatasetWriteAllowed";
 import { useSessionQuery } from "../session";
 
 function formatErr(err: unknown): string {
@@ -21,6 +22,7 @@ function formatErr(err: unknown): string {
  */
 export function SitesPanel() {
   const { query, setQuery } = useSessionQuery();
+  const canWrite = useDatasetWriteAllowed();
   const activeSite = query.siteId ?? "";
 
   const [sites, setSites] = useState<string[]>([]);
@@ -209,15 +211,17 @@ export function SitesPanel() {
                           onClick={() => onSetActive(id)}
                           testId={`sites-set-active-${id}`}
                         />
-                        <Button
-                          id={`sites-delete-${id}`}
-                          label="Delete site…"
-                          variant="danger"
-                          density="compact"
-                          disabled={actionLoading || !sites.includes(id)}
-                          onClick={() => setDeleteTarget(id)}
-                          testId={`sites-delete-${id}`}
-                        />
+                        {canWrite ? (
+                          <Button
+                            id={`sites-delete-${id}`}
+                            label="Delete site…"
+                            variant="danger"
+                            density="compact"
+                            disabled={actionLoading || !sites.includes(id)}
+                            onClick={() => setDeleteTarget(id)}
+                            testId={`sites-delete-${id}`}
+                          />
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -228,6 +232,7 @@ export function SitesPanel() {
         </div>
       )}
 
+      {canWrite ? (
       <ConfirmModal
         id="sites-delete-modal"
         open={deleteTarget != null}
@@ -243,6 +248,7 @@ export function SitesPanel() {
         onCancel={() => setDeleteTarget(null)}
         testId="sites-delete-modal"
       />
+      ) : null}
     </div>
   );
 }

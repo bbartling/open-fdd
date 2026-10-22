@@ -4,6 +4,7 @@ import { listPackageBuildings } from "../api/mappingApi";
 import { listProviderBuildingIds } from "../api/providersApi";
 import { uploadPackage } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
+import { useDatasetWriteAllowed } from "../hooks/useDatasetWriteAllowed";
 import { RuleTuningPanel } from "./RuleTuningPanel";
 
 const UNITS_KEY = "openfdd.ui.unit_system";
@@ -40,6 +41,7 @@ function packageLoadError(err: unknown): string {
  */
 export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
   const { query, setQuery } = useSessionQuery();
+  const canWrite = useDatasetWriteAllowed();
   const activeSite = query.siteId ?? "";
 
   const [sites, setSites] = useState<string[]>([]);
@@ -240,6 +242,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
         ) : null}
       </section>
 
+      {canWrite ? (
       <section className="oracle-sidebar__block" data-testid="sidebar-building-data">
         <h3 className="oracle-sidebar__h3">CSV Upload</h3>
         <label className="oracle-sidebar__field">
@@ -293,6 +296,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
           </p>
         ) : null}
       </section>
+      ) : null}
 
       <hr className="oracle-sidebar__divider" />
 

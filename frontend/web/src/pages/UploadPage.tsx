@@ -10,9 +10,11 @@ import {
 } from "../api/uploadApi";
 import { ApiClientError } from "../api/client";
 import { getJob, type JobMeta } from "../api/jobsApi";
+import { useDatasetWriteAllowed } from "../hooks/useDatasetWriteAllowed";
 
 export function UploadPage() {
   const { query, setQuery } = useSessionQuery();
+  const canWrite = useDatasetWriteAllowed();
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -122,27 +124,31 @@ export function UploadPage() {
           </p>
         )}
 
-        <FileUpload
-          id="package-zip"
-          label="Building package zip"
-          description="One openfdd_package_v1 zip. Traversal/absolute/symlink members are rejected by Rust."
-          accept=".zip,application/zip"
-          files={files.slice(0, 1)}
-          onChange={(next) => setFiles(next.slice(0, 1))}
-          loading={loading}
-          testId="upload-file"
-        />
+        {canWrite ? (
+          <>
+            <FileUpload
+              id="package-zip"
+              label="Building package zip"
+              description="One openfdd_package_v1 zip. Traversal/absolute/symlink members are rejected by Rust."
+              accept=".zip,application/zip"
+              files={files.slice(0, 1)}
+              onChange={(next) => setFiles(next.slice(0, 1))}
+              loading={loading}
+              testId="upload-file"
+            />
 
-        <div style={{ marginTop: "1rem" }}>
-          <Button
-            id="upload-submit"
-            label={loading ? `Importing… ${elapsedSec}s` : "Import package"}
-            loading={loading}
-            disabled={files.length === 0}
-            onClick={() => void onUpload()}
-            testId="upload-submit"
-          />
-        </div>
+            <div style={{ marginTop: "1rem" }}>
+              <Button
+                id="upload-submit"
+                label={loading ? `Importing… ${elapsedSec}s` : "Import package"}
+                loading={loading}
+                disabled={files.length === 0}
+                onClick={() => void onUpload()}
+                testId="upload-submit"
+              />
+            </div>
+          </>
+        ) : null}
 
         {loading ? (
           <p

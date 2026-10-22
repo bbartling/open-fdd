@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::auth::Role;
 use crate::tenant::{ControlPlane, TenantRecord};
 use crate::user_store::{UserRecord, UserStore};
+use uuid::Uuid;
 
 fn atomic_write(path: &Path, body: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
@@ -58,10 +59,7 @@ impl UserStore {
         if name.is_empty() {
             return Err("username required".into());
         }
-        if name.eq_ignore_ascii_case("admin")
-            || name.eq_ignore_ascii_case("agent")
-            || name.eq_ignore_ascii_case("viewer")
-        {
+        if crate::auth::is_env_identity(&name) {
             return Err("username reserved for env identities".into());
         }
         let role = Role::parse(rec.role.trim())
@@ -121,12 +119,21 @@ impl UserStore {
             if role_changed || tenants_changed || disabled_changed || password_changed {
                 next.session_version = prev_sv.saturating_add(1);
             }
+            next.user_id = if prev.user_id.trim().is_empty() {
+                Uuid::new_v4().to_string()
+            } else {
+                prev.user_id.clone()
+            };
             self.users[idx] = next;
         } else {
             if has_env {
                 next.password = None;
             }
-            next.session_version = 0;
+            next.user_id = Uuid::new_v4().to_string();
+            next.session_version = self
+                .retired_session_floor(&name)
+                .map(|sv| sv.saturating_add(1))
+                .unwrap_or(0);
             self.users.push(next);
         }
         Ok(())
@@ -146,12 +153,13 @@ impl UserStore {
     }
 
     pub fn remove(&mut self, username: &str) -> Result<(), String> {
-        let before = self.users.len();
-        self.users
-            .retain(|u| !u.username.eq_ignore_ascii_case(username.trim()));
-        if self.users.len() == before {
-            return Err("user not found".into());
-        }
+        let idx = self
+            .users
+            .iter()
+            .position(|u| u.username.eq_ignore_ascii_case(username.trim()))
+            .ok_or_else(|| "user not found".to_string())?;
+        let rec = self.users.remove(idx);
+        self.note_retired(rec.username, rec.user_id, rec.session_version);
         Ok(())
     }
 
@@ -304,6 +312,7 @@ mod tests {
         store
             .upsert(UserRecord {
                 username: "acme-ops".into(),
+                user_id: String::new(),
                 role: "operator".into(),
                 tenant_ids: vec!["acme".into()],
                 password_env: None,
@@ -317,6 +326,7 @@ mod tests {
         assert_eq!(loaded.users.len(), 1);
         assert!(loaded.authenticate("acme-ops", "secret").is_some());
         assert_eq!(loaded.users[0].session_version, 0);
+        assert!(!loaded.users[0].user_id.is_empty());
 
         let mut store = loaded;
         store.set_disabled("acme-ops", true).unwrap();
@@ -326,9 +336,28 @@ mod tests {
         assert!(loaded.authenticate("acme-ops", "secret").is_none());
 
         let mut store = loaded;
+        let removed_id = store.users[0].user_id.clone();
         store.remove("acme-ops").unwrap();
         store.save(dir.path()).unwrap();
-        assert!(UserStore::load_or_empty(dir.path()).users.is_empty());
+        let loaded = UserStore::load_or_empty(dir.path());
+        assert!(loaded.users.is_empty());
+        assert!(loaded.is_retired("acme-ops"));
+        assert_eq!(loaded.retired_session_floor("acme-ops"), Some(1));
+        store = loaded;
+        store
+            .upsert(UserRecord {
+                username: "acme-ops".into(),
+                user_id: removed_id.clone(),
+                role: "operator".into(),
+                tenant_ids: vec!["acme".into()],
+                password_env: None,
+                password: Some("secret".into()),
+                disabled: false,
+                session_version: 0,
+            })
+            .unwrap();
+        assert_ne!(store.users[0].user_id, removed_id);
+        assert_eq!(store.users[0].session_version, 2);
     }
 
     #[test]
@@ -337,6 +366,7 @@ mod tests {
         assert!(store
             .upsert(UserRecord {
                 username: "admin".into(),
+                user_id: String::new(),
                 role: "operator".into(),
                 tenant_ids: vec!["acme".into()],
                 password_env: None,
@@ -348,7 +378,20 @@ mod tests {
         assert!(store
             .upsert(UserRecord {
                 username: "bob".into(),
+                user_id: String::new(),
                 role: "admin".into(),
+                tenant_ids: vec!["acme".into()],
+                password_env: None,
+                password: Some("x".into()),
+                disabled: false,
+                session_version: 0,
+            })
+            .is_err());
+        assert!(store
+            .upsert(UserRecord {
+                username: "dev".into(),
+                user_id: String::new(),
+                role: "operator".into(),
                 tenant_ids: vec!["acme".into()],
                 password_env: None,
                 password: Some("x".into()),
@@ -399,6 +442,7 @@ mod tests {
         store
             .upsert(UserRecord {
                 username: "alice".into(),
+                user_id: String::new(),
                 role: "operator".into(),
                 tenant_ids: vec!["solo".into(), "shared".into()],
                 password_env: None,
@@ -410,6 +454,7 @@ mod tests {
         store
             .upsert(UserRecord {
                 username: "bob".into(),
+                user_id: String::new(),
                 role: "operator".into(),
                 tenant_ids: vec!["shared".into()],
                 password_env: None,

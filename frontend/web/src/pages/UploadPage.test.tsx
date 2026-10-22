@@ -26,8 +26,20 @@ vi.mock("../api/fddApi", () => ({
   getFddRuleParams: vi.fn(async () => ({ ok: true, params: {} })),
 }));
 
+vi.mock("../api/authApi", () => ({
+  getAuthMe: vi.fn(async () => ({
+    ok: true,
+    username: "operator-1",
+    role: "operator",
+    auth_required: true,
+  })),
+  getStoredToken: vi.fn(() => null),
+  logout: vi.fn(),
+}));
+
 import { getJob } from "../api/jobsApi";
 import { uploadPackage } from "../api/uploadApi";
+import { getAuthMe } from "../api/authApi";
 
 function renderUpload(initialEntry = "/upload") {
   return render(
@@ -41,13 +53,21 @@ describe("UploadPage", () => {
   beforeEach(() => {
     vi.mocked(getJob).mockReset();
     vi.mocked(uploadPackage).mockReset();
+    vi.mocked(getAuthMe).mockResolvedValue({
+      ok: true,
+      username: "operator-1",
+      role: "operator",
+      auth_required: true,
+    });
   });
 
-  it("renders file upload and import button", () => {
+  it("renders file upload and import button for an operator", async () => {
     renderUpload();
-    expect(screen.getByTestId("upload-file").textContent).toMatch(
-      /Building package zip/,
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId("upload-file").textContent).toMatch(
+        /Building package zip/,
+      );
+    });
     const btn = screen.getByTestId("upload-submit").querySelector("button");
     expect(btn?.disabled).toBe(true);
   });
@@ -83,6 +103,9 @@ describe("UploadPage", () => {
     });
 
     renderUpload();
+    await waitFor(() => {
+      expect(screen.getByTestId("upload-file")).toBeTruthy();
+    });
     const uploadRoot = screen.getByTestId("upload-page");
     const input = uploadRoot.querySelector(
       'input[type="file"]',
@@ -103,5 +126,21 @@ describe("UploadPage", () => {
     );
     const link = screen.getByRole("link", { name: /continue to mapping/i });
     expect(link.getAttribute("href")).toBe("/mapping?site=BUILDING_9");
+  });
+
+  it("hides import controls for a viewer", async () => {
+    vi.mocked(getAuthMe).mockResolvedValue({
+      ok: true,
+      username: "viewer-1",
+      role: "viewer",
+      auth_required: true,
+    });
+    renderUpload();
+    await waitFor(() => {
+      expect(getAuthMe).toHaveBeenCalled();
+    });
+    expect(screen.queryByTestId("upload-submit")).toBeNull();
+    expect(screen.queryByTestId("upload-file")).toBeNull();
+    expect(screen.getByTestId("upload-page")).toBeTruthy();
   });
 });
