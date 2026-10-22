@@ -27,6 +27,7 @@ mod jobs;
 mod lifecycle;
 mod live_historian;
 mod logging;
+mod mapping_revision;
 mod models;
 mod openapi;
 mod providers;
