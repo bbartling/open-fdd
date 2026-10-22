@@ -6,6 +6,8 @@ import type { AnalyticsEnvelope } from "../api/analyticsApi";
 import { healthColumnHeader } from "../lib/cookbookRuleCatalog";
 import { naturalCompare } from "../lib/naturalSort";
 
+const DIAGNOSTIC_SCHEMA = "diagnostic_matrix_v1";
+
 /** Display flag cell. Pending = FDD not run yet (avoid raw "unknown"). */
 export function tri(v: unknown, opts?: { pending?: boolean }): string {
   if (v === true) return "true";
@@ -19,6 +21,78 @@ function fmtHours(v: unknown): string {
   const n = typeof v === "number" ? v : Number(v);
   if (!Number.isFinite(n)) return "—";
   return n.toFixed(1);
+}
+
+function fmtCount(v: unknown): string {
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  if (typeof v === "string" && v.trim() && Number.isFinite(Number(v))) return v.trim();
+  return "—";
+}
+
+function rowText(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  return typeof value === "string" ? value : "";
+}
+
+function proxyFlag(row: Record<string, unknown>): string | null {
+  for (const key of ["flag", "fault_flag", "hunt_flag"]) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError")
+  );
+}
+
+function envelopeSite(env: AnalyticsEnvelope): string {
+  if (env.site_id && env.site_id.trim()) return env.site_id;
+  if (env.building_id && env.building_id.trim()) return env.building_id;
+  for (const row of env.rows) {
+    const site = rowText(row, "site_id") || rowText(row, "building_id");
+    if (site) return site;
+  }
+  return "";
+}
+
+export function isDiagnosticMatrix(env: AnalyticsEnvelope | null): boolean {
+  if (!env) return false;
+  if (env.schema_version === DIAGNOSTIC_SCHEMA) return true;
+  return env.rows.some(
+    (row) => typeof row.role === "string" && proxyFlag(row) !== null,
+  );
+}
+
+export function healthMatrixRowKey(
+  buildingId: string,
+  row: Record<string, unknown>,
+): string {
+  const explicit = rowText(row, "row_key");
+  if (explicit) return explicit;
+  const site = rowText(row, "site_id") || rowText(row, "building_id") || buildingId;
+  return [site, rowText(row, "equipment_id"), rowText(row, "role")].join("\u001f");
+}
+
+function diagnosticFlagHeader(
+  env: AnalyticsEnvelope,
+  rows: Record<string, unknown>[],
+): string {
+  if (env.query_id === "pid-hunting") return "hunt";
+  if (env.query_id === "sensor-faults") return "fault";
+  let fault = false;
+  let hunt = false;
+  for (const row of rows) {
+    const kind = rowText(row, "flag_kind");
+    if (kind === "fault" || typeof row.fault_flag === "string") fault = true;
+    if (kind === "hunt" || typeof row.hunt_flag === "string") hunt = true;
+  }
+  if (fault && !hunt) return "fault";
+  if (hunt && !fault) return "hunt";
+  return "flag";
 }
 
 export function healthRowClassFullyBroken(score: unknown): string | undefined {
@@ -54,6 +128,11 @@ export interface HealthFlagColumn {
   faultHoursKey?: string;
 }
 
+export interface HealthFetchOptions {
+  refresh?: boolean;
+  signal?: AbortSignal;
+}
+
 export interface HealthMatrixSectionProps {
   family: string;
   title: string;
@@ -63,7 +142,7 @@ export interface HealthMatrixSectionProps {
   refreshToken: number;
   fetchHealth: (
     buildingId: string,
-    opts?: { refresh?: boolean },
+    opts?: HealthFetchOptions,
   ) => Promise<AnalyticsEnvelope>;
   flagColumns: HealthFlagColumn[];
   /** Custom clean/empty state copy. */
@@ -91,45 +170,81 @@ export function HealthMatrixSection({
   const [env, setEnv] = useState<AnalyticsEnvelope | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [scopeId, setScopeId] = useState(buildingId);
+  if (scopeId !== buildingId) {
+    setScopeId(buildingId);
+    setEnv(null);
+    setErr(null);
+    setLoading(true);
+  }
 
   const test = (suffix: string) => `${family}-health-${suffix}`;
   const sectionId = `overview-${family}-health`;
   const refresh = useExplicitAnalyticsRefresh(buildingId, refreshToken);
 
   useEffect(() => {
-    if (!buildingId) return;
-    let cancelled = false;
+    if (!buildingId) {
+      setEnv(null);
+      setErr(null);
+      setLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    let active = true;
     setLoading(true);
     setErr(null);
-    void fetchHealth(buildingId, refresh ? { refresh: true } : undefined)
-      .then((e) => {
-        if (!cancelled) setEnv(e);
+    const opts: HealthFetchOptions = { signal: controller.signal };
+    if (refresh) opts.refresh = true;
+    void fetchHealth(buildingId, opts)
+      .then((envelope) => {
+        if (!active || controller.signal.aborted) return;
+        const claimed = envelopeSite(envelope);
+        if (claimed && claimed !== buildingId) return;
+        setEnv(envelope);
       })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setEnv(null);
-          setErr(e instanceof Error ? e.message : String(e));
-        }
+      .catch((error: unknown) => {
+        if (!active || controller.signal.aborted || isAbortError(error)) return;
+        setEnv(null);
+        setErr(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (active && !controller.signal.aborted) setLoading(false);
       });
     return () => {
-      cancelled = true;
+      active = false;
+      controller.abort();
     };
   }, [buildingId, refreshToken, fetchHealth, refresh]);
 
-  const rows = useMemo(
-    () =>
-      [...(env?.rows ?? [])].sort((a, b) =>
-        naturalCompare(String(a.equipment_id ?? ""), String(b.equipment_id ?? "")),
-      ),
-    [env?.rows],
-  );
+  const rows = useMemo(() => {
+    const kept = (env?.rows ?? []).filter((row) => {
+      const site = rowText(row, "site_id") || rowText(row, "building_id");
+      return !site || site === buildingId;
+    });
+    kept.sort((a, b) => {
+      const byEquip = naturalCompare(
+        rowText(a, "equipment_id"),
+        rowText(b, "equipment_id"),
+      );
+      if (byEquip !== 0) return byEquip;
+      return naturalCompare(rowText(a, "role"), rowText(b, "role"));
+    });
+    return kept;
+  }, [env?.rows, buildingId]);
 
+  const diagnostic = isDiagnosticMatrix(env);
   const empty = !loading && !err && env !== null && rows.length === 0;
 
   const tableColumns = useMemo((): DataTableColumn<Record<string, unknown>>[] => {
+    if (diagnostic && env) {
+      const header = diagnosticFlagHeader(env, rows);
+      return [
+        { key: "equipment_id", header: "equip" },
+        { key: "role", header: "role" },
+        { key: "flag", header },
+        { key: "n", header: "n" },
+      ];
+    }
     const cols: DataTableColumn<Record<string, unknown>>[] = [
       { key: "equipment_id", header: "equip" },
     ];
@@ -148,21 +263,55 @@ export function HealthMatrixSection({
     }
     cols.push({ key: "total_fault_h", header: "total fault_h" });
     return cols;
-  }, [flagColumns]);
+  }, [diagnostic, env, rows, flagColumns]);
 
-  const matrixRows = rows.slice(0, 400).map((r) => {
-    const out: Record<string, unknown> = {
-      score_label: String(r.score_label ?? ""),
-      equipment_id: String(r.equipment_id ?? ""),
-      total_fault_h: fmtHours(r.total_fault_h),
-    };
-    for (const col of flagColumns) {
-      out[col.key] = tri(r[col.key], { pending: pendingFlags });
-      const fhKey = col.faultHoursKey ?? `${col.key}_fault_h`;
-      out[`${col.key}_fault_h`] = fmtHours(r[fhKey]);
+  const matrixRows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Record<string, unknown>[] = [];
+    for (const row of rows) {
+      const rowKey = healthMatrixRowKey(buildingId, row);
+      if (seen.has(rowKey)) {
+        if (diagnostic) {
+          const incoming = proxyFlag(row);
+          const existing = out.find((item) => item.row_key === rowKey);
+          if (
+            existing &&
+            incoming &&
+            incoming.toUpperCase() !== "OK" &&
+            String(existing.flag).toUpperCase() === "OK"
+          ) {
+            existing.flag = incoming;
+          }
+        }
+        continue;
+      }
+      seen.add(rowKey);
+      if (diagnostic) {
+        out.push({
+          row_key: rowKey,
+          equipment_id: rowText(row, "equipment_id"),
+          role: rowText(row, "role"),
+          flag: proxyFlag(row) ?? "unknown",
+          n: fmtCount(row.n),
+        });
+      } else {
+        const record: Record<string, unknown> = {
+          row_key: rowKey,
+          score_label: String(row.score_label ?? ""),
+          equipment_id: rowText(row, "equipment_id"),
+          total_fault_h: fmtHours(row.total_fault_h),
+        };
+        for (const col of flagColumns) {
+          record[col.key] = tri(row[col.key], { pending: pendingFlags });
+          const fhKey = col.faultHoursKey ?? `${col.key}_fault_h`;
+          record[`${col.key}_fault_h`] = fmtHours(row[fhKey]);
+        }
+        out.push(record);
+      }
+      if (out.length >= 400) break;
     }
     return out;
-  });
+  }, [rows, buildingId, diagnostic, flagColumns, pendingFlags]);
 
   const showTable = matrixRows.length > 0 || (empty && renderEmptyTable);
 
@@ -188,7 +337,7 @@ export function HealthMatrixSection({
           {emptyMessage ?? <>No {family.toUpperCase()} equipment in this data model.</>}
         </InlineAlert>
       ) : null}
-      {pendingFlags && matrixRows.length > 0 ? (
+      {pendingFlags && !diagnostic && matrixRows.length > 0 ? (
         <InlineAlert
           id={`${family}-health-pending`}
           variant="info"

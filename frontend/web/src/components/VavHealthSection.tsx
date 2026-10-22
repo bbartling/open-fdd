@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { HealthMatrixSection } from "./HealthMatrixSection";
+import { HealthMatrixSection, type HealthFetchOptions } from "./HealthMatrixSection";
 import { postVavHealth } from "../api/analyticsApi";
 
 export function VavHealthSection({
@@ -12,9 +12,10 @@ export function VavHealthSection({
   pendingFlags?: boolean;
 }) {
   const fetchHealth = useCallback(
-    (id: string, opts?: { refresh?: boolean }) =>
+    (id: string, opts?: HealthFetchOptions) =>
       postVavHealth(
         opts?.refresh ? { building_id: id, refresh: true } : { building_id: id },
+        { signal: opts?.signal },
       ),
     [],
   );
