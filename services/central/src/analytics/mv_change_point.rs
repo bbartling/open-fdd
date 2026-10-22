@@ -342,6 +342,33 @@ fn rows_from_metering_wrap(series: &serde_json::Value) -> Option<Vec<MvMonthRow>
     Some(out)
 }
 
+/// True when the body carries the demo/inline monthly series.
+///
+/// An empty object is not a series: the historian path must not treat it as a
+/// successful demo with no rows.
+pub fn has_inline_series(req: &AnalyticsRequest) -> bool {
+    let Some(series) = req.series.as_ref().filter(|value| !value.is_null()) else {
+        return false;
+    };
+    if parse_mv_rows(series).is_some_and(|rows| !rows.is_empty()) {
+        return true;
+    }
+    series
+        .get("meter_rows")
+        .and_then(|value| value.as_array())
+        .is_some_and(|rows| !rows.is_empty())
+}
+
+/// Response for the inline IPMVP twin. This is not a site historian result.
+pub fn demo_response(req: &AnalyticsRequest) -> serde_json::Value {
+    let env = handle(req);
+    json!({
+        "ok": true,
+        "scope": "inline_series",
+        "analytics": env.to_json(),
+    })
+}
+
 pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     let (qv, mut warnings) = resolve_query_version(req, QV_MV_CHANGE_POINT);
     let mut env = envelope(&qv, &req.query, warnings.clone());
@@ -447,6 +474,8 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
         "savings_reporting_total": round4(savings_reporting),
         "reporting_energy_total": round4(reporting_energy),
         "predicted_reporting_total": round4(predicted_reporting),
+        "provenance": "inline_series",
+        "site_performance_claim": false,
     }));
     env.warnings = warnings;
     env

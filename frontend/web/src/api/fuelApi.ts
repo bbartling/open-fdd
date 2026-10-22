@@ -43,6 +43,10 @@ export interface FuelCampusMeta {
 
 export interface FuelCampusListResponse {
   ok?: boolean;
+  status?: string;
+  scope?: string;
+  building_id?: string;
+  reason?: string;
   fuel_root?: string;
   count?: number;
   campuses?: FuelCampusMeta[];
@@ -79,6 +83,8 @@ export interface FuelAnalyticsEnvelope {
   fits?: Record<string, unknown>[];
   summary?: Record<string, unknown>;
   campus_id?: string;
+  status?: string;
+  reason?: string;
   error?: string;
   generated_at?: string;
 }
@@ -166,8 +172,10 @@ export async function importFuelCampus(
   return body;
 }
 
-export async function listFuelCampuses(): Promise<FuelCampusListResponse> {
-  return apiFetch<FuelCampusListResponse>(FUEL_CAMPUS_LIST_PATH);
+export async function listFuelCampuses(
+  buildingId: string,
+): Promise<FuelCampusListResponse> {
+  return apiFetch<FuelCampusListResponse>(fuelCampusListPath(buildingId));
 }
 
 function emptyFuelEnvelope(queryVersion: string): FuelAnalyticsEnvelope {
@@ -203,9 +211,20 @@ export function unwrapFuelEnvelope(
     summary:
       body.summary && typeof body.summary === "object" ? body.summary : undefined,
     campus_id: body.campus_id != null ? String(body.campus_id) : undefined,
+    status: body.status != null ? String(body.status) : undefined,
+    reason: body.reason != null ? String(body.reason) : undefined,
     error: body.error,
     generated_at: body.generated_at,
   };
+}
+
+/** Site-scoped campus list. An empty id is not an unscoped catalog request. */
+export function fuelCampusListPath(buildingId: string): string {
+  const id = buildingId.trim();
+  if (!id) {
+    throw new Error("building_id is required to list site meters");
+  }
+  return `${FUEL_CAMPUS_LIST_PATH}?building_id=${encodeURIComponent(id)}`;
 }
 
 export async function postFuelAnalytics(

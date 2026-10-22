@@ -6820,6 +6820,29 @@ async fn analytics_mv_change_point(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // The Metering demo posts inline monthly rows. Product Timescale dispatch
+    // (`respond_query`) ignores that series and answers `building_id is required`
+    // from the historian daily-change query. Serve the inline twin directly.
+    if analytics::mv_change_point::has_inline_series(&req) {
+        return Ok(Json(analytics::mv_change_point::demo_response(&req)));
+    }
+    let building = req
+        .query
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty());
+    if building.is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "code": "mv.scope_required",
+                "error": "building_id is required for historian M&V, or provide inline series for the demo twin",
+                "engine": "mv-change-point",
+            })),
+        ));
+    }
     cached_analytics!(
         "mv-change-point",
         analytics::QV_MV_CHANGE_POINT,
@@ -7000,9 +7023,14 @@ async fn analytics_fuel(
     {
         return Err(deny);
     }
-    // Soft-OPEN: Timescale historian fuel daily SQL when building_id is present.
-    // Campus bill/EUI path stays rust-fuel (separate Soft-OPEN surface).
-    if crate::timescale_historian::historian_is_timescale() {
+    // Interval fuel SQL when the caller asks for the historian query.
+    // Campus bill versions stay on the scoped rust-fuel path so a selected
+    // site is not replaced by another campus or by an empty interval scan.
+    let campus_contract = req
+        .query_version
+        .as_deref()
+        .is_some_and(fuel::analytics::is_campus_query_version);
+    if !campus_contract && crate::timescale_historian::historian_is_timescale() {
         if let Some(building) = req
             .building_id
             .as_deref()
@@ -7019,9 +7047,24 @@ async fn analytics_fuel(
                         equipment_ids: Vec::new(),
                     };
                     match crate::timescale_analytics::fuel_daily(&tsdb, building, &scope).await {
-                        Ok(v) => {
+                        Ok(mut v) => {
+                            let empty = v
+                                .get("rows")
+                                .and_then(|rows| rows.as_array())
+                                .is_some_and(|rows| rows.is_empty());
+                            if empty {
+                                if let Some(obj) = v.as_object_mut() {
+                                    obj.insert("status".into(), json!("no_meters"));
+                                    obj.insert(
+                                        "reason".into(),
+                                        json!("selected site has no meter rows"),
+                                    );
+                                }
+                            }
+                            let status = if empty { "no_meters" } else { "ok" };
                             return Ok(Json(json!({
                                 "ok": true,
+                                "status": status,
                                 "analytics": v,
                                 "engine": "timescale-sql",
                                 "soft_open_neq_fq": true,
@@ -7089,10 +7132,19 @@ async fn analytics_fuel(
             obj.insert("action_id".into(), json!(aid));
         }
     }
-    Ok(Json(json!({
-        "ok": result.get("ok").and_then(|v| v.as_bool()).unwrap_or(true),
+    let http_ok = result
+        .get("ok")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(true);
+    let status = result.get("status").cloned();
+    let mut body = json!({
+        "ok": http_ok,
         "analytics": result,
-    })))
+    });
+    if let Some(status) = status {
+        body["status"] = status;
+    }
+    Ok(Json(body))
 }
 
 /// Fuel campus ZIP import (campus.json + bill CSVs, or Liberty_* CSV layout).
@@ -7129,17 +7181,46 @@ pub async fn fuel_campus_import(headers: HeaderMap, body: Bytes) -> Json<Value> 
 pub struct FuelCampusQuery {
     #[serde(default)]
     pub campus_id: Option<String>,
+    #[serde(default)]
+    pub building_id: Option<String>,
 }
 
-pub async fn fuel_campus_list(Query(q): Query<FuelCampusQuery>) -> Json<Value> {
-    let id = q.campus_id.clone();
+pub async fn fuel_campus_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<FuelCampusQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
+        return Err(deny);
+    }
+    let campus_id = q.campus_id.clone();
+    let building_id = q.building_id.clone();
     let result = tokio::task::spawn_blocking(move || {
-        fuel::import::get_campus_meta(id.as_deref())
-            .unwrap_or_else(|e| json!({"ok": false, "error": e.to_string()}))
+        fuel::import::campus_catalog(building_id.as_deref(), campus_id.as_deref()).unwrap_or_else(
+            |err| {
+                json!({
+                    "ok": false,
+                    "status": "unavailable",
+                    "error": err.to_string(),
+                    "campuses": [],
+                    "count": 0,
+                    "active": null,
+                })
+            },
+        )
     })
     .await
-    .unwrap_or_else(|e| json!({"ok": false, "error": format!("fuel campus list task: {e}")}));
-    Json(result)
+    .unwrap_or_else(|err| {
+        json!({
+            "ok": false,
+            "status": "unavailable",
+            "error": format!("fuel campus list task: {err}"),
+            "campuses": [],
+            "count": 0,
+            "active": null,
+        })
+    });
+    Ok(Json(result))
 }
 
 #[derive(Debug, Deserialize)]
