@@ -599,10 +599,7 @@ fn scoped_filter(ctx: &TenantContext, query: &ListQuery, request_id: &str) -> Op
         .clone()
         .filter(|value| JobState::parse(value).is_some());
     let tenant_id = if ctx.multi_tenant && !ctx.hub_admin {
-        match ctx.tenant_id.clone() {
-            Some(tenant_id) => Some(tenant_id),
-            None => return None,
-        }
+        Some(ctx.tenant_id.clone()?)
     } else {
         None
     };
