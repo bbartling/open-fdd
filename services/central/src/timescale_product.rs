@@ -12,7 +12,7 @@ use fdd_rules::{
 };
 use fdd_tsdb::Tsdb;
 use serde_json::{json, Value};
-use sqlx::{PgConnection, Row};
+use sqlx::{Column, PgConnection, Row};
 
 use crate::analytics::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest};
 
@@ -1288,67 +1288,25 @@ pub async fn schema_contract_softopen() -> Result<Value> {
     }))
 }
 
-fn results_dir(building_id: &str) -> PathBuf {
-    let base = if let Ok(p) = std::env::var("OPENFDD_RULE_RESULTS_DIR") {
-        PathBuf::from(p)
-    } else if let Ok(url) = std::env::var("OPENFDD_STORAGE_URL") {
-        PathBuf::from(url.trim_start_matches("file://")).join("rule_results")
-    } else if let Ok(ws) = std::env::var("OPENFDD_WORKSPACE") {
-        PathBuf::from(ws).join("openfdd").join("rule_results")
-    } else {
-        PathBuf::from(".cache/rule_results")
-    };
-    base.join(format!("building={building_id}"))
-}
-
-/// Soft-OPEN write-once (R8f / BPS parity): if a prior run-all left `_run_meta.json`
-/// (or any rule result JSON), return it with `skipped_recompute` instead of re-running
-/// the full cohort. Callers pass `force_new_data` to bypass.
+/// Soft-OPEN write-once: reuse a complete active generation. A partial, failed,
+/// scoped, dirty, or legacy folder is not a cache hit.
 pub fn cached_run_all_if_present(building_id: &str) -> Option<Value> {
-    let dir = results_dir(building_id);
-    let meta_path = dir.join("_run_meta.json");
-    if meta_path.is_file() {
-        if let Ok(text) = std::fs::read_to_string(&meta_path) {
-            if let Ok(mut body) = serde_json::from_str::<Value>(&text) {
-                if let Some(obj) = body.as_object_mut() {
-                    obj.insert("skipped_recompute".into(), json!(true));
-                    obj.insert(
-                        "message".into(),
-                        json!(
-                            "FDD results already on file for this site — UI should read records. \
-                             Use force_new_data=true only after new historian samples, \
-                             or run a single rule_id from Lab / rule tuning."
-                        ),
-                    );
-                    obj.insert("ok".into(), json!(true));
-                }
-                return Some(body);
-            }
-        }
+    let mut body = open_fdd_edge_prototype::fdd::registry_api::reusable_complete_run(building_id)?;
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("engine".into(), json!(TS_ENGINE));
+        obj.insert("historian".into(), json!("timescale"));
+        obj.insert("skipped_recompute".into(), json!(true));
+        obj.insert("ok".into(), json!(true));
+        obj.insert(
+            "message".into(),
+            json!(
+                "FDD results already on file for this site — UI should read records. \
+                 Use force_new_data=true only after new historian samples, \
+                 or run a single rule_id from Lab / rule tuning."
+            ),
+        );
     }
-    // Any persisted rule JSON counts as "cohort has been run".
-    let has_rule = std::fs::read_dir(&dir).ok()?.any(|e| {
-        e.ok()
-            .map(|e| {
-                let name = e.file_name();
-                let s = name.to_string_lossy();
-                s.ends_with(".json") && !s.starts_with('_')
-            })
-            .unwrap_or(false)
-    });
-    if !has_rule {
-        return None;
-    }
-    Some(json!({
-        "ok": true,
-        "engine": TS_ENGINE,
-        "building_id": building_id,
-        "historian": "timescale",
-        "skipped_recompute": true,
-        "message": "FDD results already on file for this site — UI should read records. \
-                    Use force_new_data=true only after new historian samples, \
-                    or run a single rule_id from Lab / rule tuning.",
-    }))
+    Some(body)
 }
 
 /// Rewrite aggregated cookbook SQL into a per-timestamp confirmed_fault series.
@@ -1510,9 +1468,11 @@ fn load_confirmed_fault_hint(
     equipment_id: &str,
     rule_id: &str,
 ) -> Result<HashMap<String, bool>> {
-    let path = results_dir(building_id).join(format!("{rule_id}.json"));
-    let text = std::fs::read_to_string(path)?;
-    let body: Value = serde_json::from_str(&text)?;
+    let Some(body) =
+        open_fdd_edge_prototype::fdd::registry_api::active_rule_result_body(building_id, rule_id)
+    else {
+        return Ok(HashMap::new());
+    };
     let mut map = HashMap::new();
     // Preferred: top-level per-sample series.
     if let Some(series) = body.get("fault_series").and_then(|v| v.as_array()) {
@@ -1542,9 +1502,8 @@ fn load_confirmed_fault_hint(
 
 /// Soft-OPEN P0-3: fill plot `fault_hours` from the on-file rule result row.
 fn load_result_fault_hours(building_id: &str, equipment_id: &str, rule_id: &str) -> Option<f64> {
-    let path = results_dir(building_id).join(format!("{rule_id}.json"));
-    let text = std::fs::read_to_string(path).ok()?;
-    let body: Value = serde_json::from_str(&text).ok()?;
+    let body =
+        open_fdd_edge_prototype::fdd::registry_api::active_rule_result_body(building_id, rule_id)?;
     body.get("rows")
         .and_then(Value::as_array)?
         .iter()
@@ -1934,6 +1893,122 @@ fn safe_rfc3339(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | ':' | 'T' | 'Z' | '+' | '.'))
 }
 
+fn targets_for_rule(
+    equipment: &[(String, Option<String>)],
+    kinds: &[&str],
+    equipment_filter: Option<&str>,
+) -> Vec<(String, Option<String>)> {
+    equipment
+        .iter()
+        .filter(|(id, equip_type)| {
+            if kinds.is_empty() {
+                return true;
+            }
+            if equip_matches_kinds(equip_type.as_deref(), kinds) {
+                return true;
+            }
+            equipment_filter == Some(id.as_str()) && equip_type.is_none()
+        })
+        .cloned()
+        .collect()
+}
+
+fn rule_file(
+    rule_id: &str,
+    building_id: &str,
+    rows: Vec<Value>,
+) -> open_fdd_edge_prototype::fdd::registry_api::RunRuleFile {
+    open_fdd_edge_prototype::fdd::registry_api::RunRuleFile {
+        rule_id: rule_id.to_string(),
+        body: json!({
+            "rule_id": rule_id,
+            "engine": TS_ENGINE,
+            "building_id": building_id,
+            "rows": rows,
+        }),
+    }
+}
+
+fn metric_unit_for_column(column: &str) -> &'static str {
+    match column {
+        "avg_zone_temp" | "min_zone_temp" | "max_zone_temp" => "degF",
+        "comfort_pct" => "pct",
+        "fan_runtime_hours" | "total_hours" => "h",
+        _ => "",
+    }
+}
+
+fn numeric_column_map(row: &sqlx::postgres::PgRow) -> serde_json::Map<String, Value> {
+    let mut values = serde_json::Map::new();
+    for column in row.columns() {
+        let name = column.name();
+        if name == "equipment_id" || !safe_ident(name) {
+            continue;
+        }
+        if let Some(number) = row_optional_f64(row, name) {
+            values.insert(name.to_string(), json!(number));
+        }
+    }
+    values
+}
+
+fn metric_payload(
+    rule: &RuleSpec,
+    values: &serde_json::Map<String, Value>,
+    window_start: Option<&str>,
+    window_end: Option<&str>,
+    watermark: Option<&str>,
+    sample_rows: i64,
+) -> Value {
+    let name = rule
+        .output_columns
+        .iter()
+        .find(|column| column.as_str() != "equipment_id")
+        .map(String::as_str)
+        .unwrap_or("");
+    let value = if name.is_empty() {
+        Value::Null
+    } else {
+        values.get(name).cloned().unwrap_or(Value::Null)
+    };
+    json!({
+        "name": name,
+        "value": value,
+        "unit": metric_unit_for_column(name),
+        "window": {
+            "start": window_start,
+            "end": window_end,
+            "watermark": watermark,
+        },
+        "coverage": { "sample_rows": sample_rows },
+    })
+}
+
+fn config_fingerprint(payload: &Value, poll: f64) -> String {
+    json!({
+        "poll_seconds": poll,
+        "confirmation_seconds": payload.get("confirmation_seconds"),
+        "params": payload.get("params"),
+        "start": payload.get("start").or_else(|| payload.get("window_start")),
+        "end": payload.get("end").or_else(|| payload.get("window_end")),
+        "rule_ids": payload.get("rule_ids"),
+        "equipment_id": payload.get("equipment_id"),
+    })
+    .to_string()
+}
+
+async fn historian_watermark(tsdb: &Tsdb, building_id: &str) -> Option<String> {
+    let row = sqlx::query("SELECT max(ts) AS watermark FROM sample WHERE site_id = $1")
+        .bind(building_id)
+        .fetch_optional(tsdb.pool())
+        .await
+        .ok()??;
+    row.try_get::<Option<DateTime<Utc>>, _>("watermark")
+        .ok()
+        .flatten()
+        .map(|ts| ts.to_rfc3339())
+}
+
 /// Timescale postgres-sql registry run-now (Soft-OPEN).
 pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
     let building_id = payload
@@ -1968,7 +2043,11 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         }
     }
     let tsdb = Tsdb::connect_from_env().await?;
-    let mut equipment = list_equipment(&tsdb, &building_id).await?;
+    let inventory = list_equipment(&tsdb, &building_id).await?;
+    // The committed model is the site inventory. An equipment filter narrows
+    // the rows this call evaluates and must not drop the rest of the model.
+    let mut site_model = inventory.clone();
+    let mut equipment = inventory;
     if let Some(eq) = &equipment_filter {
         // Soft-OPEN R6: never broaden an exact equipment_id miss into all equipment.
         equipment.retain(|(id, _)| id == eq);
@@ -2006,6 +2085,9 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 "results": [],
             }));
         }
+        if site_model.is_empty() {
+            site_model.clone_from(&equipment);
+        }
     } else if equipment.is_empty() {
         // No selector: inventory from sample keys (site-scoped).
         let rows = sqlx::query(
@@ -2022,6 +2104,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
             .into_iter()
             .map(|r| (r.get::<String, _>("equipment_id"), None))
             .collect();
+        site_model.clone_from(&equipment);
     }
 
     let window_start = payload
@@ -2033,45 +2116,41 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         .or_else(|| payload.get("window_end"))
         .and_then(|v| v.as_str());
 
-    let out_dir = results_dir(&building_id);
-    std::fs::create_dir_all(&out_dir)?;
-    let _ = std::fs::remove_file(out_dir.join("_dirty.json"));
-
+    let full_cohort = equipment_filter.is_none()
+        && rule_filter
+            .as_ref()
+            .map(|ids| ids.is_empty())
+            .unwrap_or(true);
     let poll = poll_seconds_from_payload(payload);
     let t0 = std::time::Instant::now();
-    let mut rules_run = 0u32;
-    let mut rules_succeeded = 0u32;
-    let mut rules_failed = 0u32;
-    let mut rules_skipped = 0u32;
-    let mut all_results = Vec::new();
+    let watermark = historian_watermark(&tsdb, &building_id).await;
+    let mut rule_files = Vec::new();
 
     for rule in rules {
-        rules_run += 1;
         let kinds: Vec<&str> = rule.equipment_kinds.iter().map(String::as_str).collect();
-        // Soft-OPEN R6: type-first always. Exact id is allowed only after type filter
-        // when a stamp is present; missing/unrecognized stamp stays unclassified.
-        let targets: Vec<(String, Option<String>)> = equipment
-            .iter()
-            .filter(|(id, t)| {
-                if kinds.is_empty() {
-                    return true;
-                }
-                if equip_matches_kinds(t.as_deref(), &kinds) {
-                    return true;
-                }
-                // Exact id with no stamp: still allow (inventory from samples).
-                equipment_filter.as_deref() == Some(id.as_str()) && t.is_none()
-            })
-            .cloned()
-            .collect();
-        if targets.is_empty() {
-            rules_skipped += 1;
+        // Type-first. An exact id is allowed only after the type filter, and only
+        // when the caller named that id and it has no stamp yet.
+        let site_targets = targets_for_rule(&site_model, &kinds, None);
+        let run_targets = targets_for_rule(&equipment, &kinds, equipment_filter.as_deref());
+        let metric = rule_is_metric(rule);
+        if site_targets.is_empty() {
+            rule_files.push(rule_file(
+                &rule.rule_id,
+                &building_id,
+                vec![json!({
+                    "status": "SKIP_NO_TARGETS",
+                    "output_kind": if metric { "metric" } else { "diagnostic" },
+                    "notes": "no equipment of this rule's type is on the site model",
+                })],
+            ));
+            continue;
+        }
+        if run_targets.is_empty() {
             continue;
         }
 
         let confirm = confirm_seconds_from_payload(payload, rule);
         let session_override = session_override_for_rule(payload, &rule.rule_id);
-        let metric = rule_is_metric(rule);
         let sql_body = match render_rule_sql(
             &reg,
             rule,
@@ -2083,8 +2162,16 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         ) {
             Ok(s) => wrap_rule_sql(&s, rule),
             Err(e) => {
-                rules_failed += 1;
                 tracing::warn!(rule = %rule.rule_id, error = %e, "render rule sql failed");
+                rule_files.push(rule_file(
+                    &rule.rule_id,
+                    &building_id,
+                    vec![json!({
+                        "status": "ERROR",
+                        "output_kind": if metric { "metric" } else { "diagnostic" },
+                        "notes": e.to_string(),
+                    })],
+                ));
                 continue;
             }
         };
@@ -2093,11 +2180,9 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         for r in &rule.optional_roles {
             role_set.insert(r.clone());
         }
-        // Common gate roles
         for extra in ["fan_status", "fan_cmd", "occ_mode"] {
             role_set.insert(extra.into());
         }
-        // Soft-OPEN R6: weather/CHW relation roles when SQL may need them.
         for extra in [
             "oa_t",
             "web_oa_t",
@@ -2115,14 +2200,16 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         let roles: Vec<String> = role_set.into_iter().filter(|r| safe_ident(r)).collect();
 
         let mut rule_rows = Vec::new();
-        let mut ok_any = false;
-        let mut err_any = false;
-        for (eq_id, _) in &targets {
+        for (eq_id, _) in &run_targets {
             let mut tx = tsdb.pool().begin().await?;
             if let Err(e) = ensure_history_table(&mut tx, &roles).await {
-                rules_failed += 1;
-                err_any = true;
                 tracing::warn!(rule = %rule.rule_id, error = %e, "temp history");
+                rule_rows.push(json!({
+                    "status": "ERROR",
+                    "output_kind": if metric { "metric" } else { "diagnostic" },
+                    "notes": e.to_string(),
+                }));
+                let _ = tx.rollback().await;
                 break;
             }
             let n = fill_history_for_equipment(
@@ -2137,20 +2224,18 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
             if n == 0 {
                 rule_rows.push(json!({
                     "equipment_id": eq_id,
-                    "fault_hours": 0.0,
                     "status": "SKIP_NO_HISTORY",
                     "missing_roles": rule.required_roles,
                     "output_kind": if metric { "metric" } else { "diagnostic" },
+                    "sample_rows": n,
                 }));
                 let _ = tx.rollback().await;
                 continue;
             }
-            // Soft-OPEN R6: required-role eligibility before SQL execute.
             let missing = missing_required_roles(&mut tx, &rule.required_roles).await?;
             if !missing.is_empty() {
                 rule_rows.push(json!({
                     "equipment_id": eq_id,
-                    "fault_hours": 0.0,
                     "status": "SKIP_MISSING_ROLES",
                     "missing_roles": missing,
                     "sample_rows": n,
@@ -2162,7 +2247,15 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
             match sqlx::query(&sql_body).fetch_all(&mut *tx).await {
                 Ok(rows) => {
                     if metric {
-                        // Preserve first row metrics; do not invent FAULT/PASS.
+                        let values = rows.first().map(numeric_column_map).unwrap_or_default();
+                        let metric_doc = metric_payload(
+                            rule,
+                            &values,
+                            window_start,
+                            window_end,
+                            watermark.as_deref(),
+                            n,
+                        );
                         let mut row_json = json!({
                             "equipment_id": eq_id,
                             "status": "METRIC",
@@ -2170,19 +2263,16 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                             "sample_rows": n,
                             "confirm_seconds": confirm,
                             "poll_seconds": poll,
+                            "metric": metric_doc,
                         });
-                        if let Some(first) = rows.first() {
-                            if let Ok(v) = first.try_get::<f64, _>("fan_runtime_hours") {
-                                row_json["fan_runtime_hours"] = json!(v);
+                        if let Some(obj) = row_json.as_object_mut() {
+                            let mut stored = serde_json::Map::new();
+                            for (key, value) in &values {
+                                stored.insert(key.clone(), value.clone());
                             }
-                            if let Ok(v) = first.try_get::<f64, _>("total_hours") {
-                                row_json["total_hours"] = json!(v);
-                            }
-                            if let Ok(v) = first.try_get::<f64, _>("avg_zone_temp") {
-                                row_json["avg_zone_temp"] = json!(v);
-                            }
-                            if let Ok(v) = first.try_get::<f64, _>("comfort_pct") {
-                                row_json["comfort_pct"] = json!(v);
+                            obj.insert("values".into(), Value::Object(stored));
+                            for (key, value) in values {
+                                obj.insert(key, value);
                             }
                         }
                         rule_rows.push(row_json);
@@ -2209,8 +2299,6 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                             }
                             _ => Value::Null,
                         };
-                        // Percent uses eligible covered time. Do not clamp: a value
-                        // above 100 is a contract failure, not a display problem.
                         let status = if hours > 0.0 { "FAULT" } else { "PASS" };
                         let fault_pct = match sql_pct {
                             Some(value) => json!(value),
@@ -2234,18 +2322,15 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                                 "confirm_seconds": confirm,
                                 "poll_seconds": poll,
                                 "status": status,
-                                "note": "Soft-OPEN confirm aggregate; per-sample series Soft-OPEN later"
+                                "note": "confirm aggregate from eligible elapsed time"
                             },
                         }));
                     }
-                    ok_any = true;
                     let _ = tx.commit().await;
                 }
                 Err(e) => {
-                    err_any = true;
                     rule_rows.push(json!({
                         "equipment_id": eq_id,
-                        "fault_hours": 0.0,
                         "status": "ERROR",
                         "output_kind": if metric { "metric" } else { "diagnostic" },
                         "notes": e.to_string(),
@@ -2254,49 +2339,37 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 }
             }
         }
-        // Soft-OPEN: partial ERROR ≠ clean success.
-        if ok_any && !err_any {
-            rules_succeeded += 1;
-        } else if err_any || !ok_any {
-            rules_failed += 1;
-        }
-        let body = json!({
-            "rule_id": rule.rule_id,
-            "engine": TS_ENGINE,
-            "building_id": building_id,
-            "rows": rule_rows,
-            "generated_at": Utc::now().to_rfc3339(),
-        });
-        let path = out_dir.join(format!("{}.json", rule.rule_id));
-        std::fs::write(&path, serde_json::to_vec_pretty(&body)?)?;
-        all_results.extend(rule_rows.into_iter().map(|mut row| {
-            if let Some(obj) = row.as_object_mut() {
-                obj.insert("rule_id".into(), json!(rule.rule_id));
-            }
-            row
-        }));
+        rule_files.push(rule_file(&rule.rule_id, &building_id, rule_rows));
     }
 
-    let meta = json!({
-        "ok": true,
-        "engine": TS_ENGINE,
-        "building_id": building_id,
-        "historian": "timescale",
-        "dual_write": false,
-        "rules_run": rules_run,
-        "rules_succeeded": rules_succeeded,
-        "rules_failed": rules_failed,
-        "rules_skipped": rules_skipped,
-        "total_ms": t0.elapsed().as_millis() as u64,
-        "results_dir": out_dir.display().to_string(),
-        "results": all_results,
-        "note": "Wave-X Soft-OPEN Timescale postgres-sql run-now; Soft-OPEN ≠ FQ",
-    });
-    std::fs::write(
-        out_dir.join("_run_meta.json"),
-        serde_json::to_vec_pretty(&meta)?,
-    )?;
-    Ok(meta)
+    let commit = open_fdd_edge_prototype::fdd::registry_api::RunGenerationCommit {
+        building_id: building_id.clone(),
+        full_cohort,
+        equipment: site_model
+            .iter()
+            .map(
+                |(id, equip_type)| open_fdd_edge_prototype::fdd::registry_api::RunModelEquipment {
+                    equipment_id: id.clone(),
+                    equip_type: equip_type.clone(),
+                },
+            )
+            .collect(),
+        rules: rule_files,
+        config_fingerprint: config_fingerprint(payload, poll),
+        window_start: window_start.map(str::to_string),
+        window_end: window_end.map(str::to_string),
+        watermark,
+        poll_seconds: poll,
+    };
+    let mut summary = open_fdd_edge_prototype::fdd::registry_api::commit_run_generation(&commit)
+        .map_err(anyhow::Error::msg)?;
+    if let Some(obj) = summary.as_object_mut() {
+        obj.insert("engine".into(), json!(TS_ENGINE));
+        obj.insert("historian".into(), json!("timescale"));
+        obj.insert("dual_write".into(), json!(false));
+        obj.insert("total_ms".into(), json!(t0.elapsed().as_millis() as u64));
+    }
+    Ok(summary)
 }
 
 #[derive(Clone, Copy)]
@@ -3286,5 +3359,543 @@ mod elapsed_time_contract {
             hours < 120.0 / 3600.0,
             "duplicate timestamp doubled the interval"
         );
+    }
+}
+
+/// Active generation: partial versus complete, metric values, obsolete equipment,
+/// and two sites that do not share a result folder.
+#[cfg(test)]
+mod run_generation_contract {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn disposable(id: &str) {
+        let upper = id.to_ascii_uppercase();
+        assert!(
+            upper != "BUILDING_50"
+                && upper != "BOSSPI"
+                && !upper.contains("BUILDING_50")
+                && !upper.contains("BOSSPI"),
+            "refusing protected site id"
+        );
+    }
+
+    struct EnvRestore {
+        saved: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvRestore {
+        fn capture(keys: &[&'static str]) -> Self {
+            Self {
+                saved: keys
+                    .iter()
+                    .map(|key| (*key, std::env::var(key).ok()))
+                    .collect(),
+            }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            for (key, value) in self.saved.drain(..) {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+            fdd_tsdb::clear_shared_pool();
+        }
+    }
+
+    fn write_registry(dir: &std::path::Path) {
+        let rules = dir.join("postgres").join("rules");
+        std::fs::create_dir_all(&rules).expect("rules dir");
+        std::fs::write(
+            dir.join("registry.yaml"),
+            r#"
+rules:
+  - rule_id: AVG-ZONE-TEMP
+    sql_file: avg_zone_temp.sql
+    description: Average zone temperature
+    equipment_kinds: [ahu]
+    required_roles: [zone_t]
+    output_columns: [equipment_id, avg_zone_temp]
+    confirm_seconds: 0
+  - rule_id: VAV-ONLY
+    sql_file: vav_only.sql
+    description: VAV fault hours
+    equipment_kinds: [vav]
+    required_roles: [zone_t]
+    output_columns: [equipment_id, fault_hours, fault_pct]
+    confirm_seconds: 0
+  - rule_id: BOILER-ONLY
+    sql_file: boiler_only.sql
+    description: Boiler fault hours
+    equipment_kinds: [boiler]
+    required_roles: [zone_t]
+    output_columns: [equipment_id, fault_hours, fault_pct]
+    confirm_seconds: 0
+  - rule_id: BROKEN-RULE
+    sql_file: broken_rule.sql
+    description: Render failure until the file exists
+    equipment_kinds: [ahu]
+    required_roles: [zone_t]
+    output_columns: [equipment_id, fault_hours, fault_pct]
+    confirm_seconds: 0
+"#,
+        )
+        .expect("registry");
+        std::fs::write(
+            rules.join("avg_zone_temp.sql"),
+            "SELECT equipment_id, AVG(zone_t) AS avg_zone_temp FROM history WHERE zone_t IS NOT NULL GROUP BY equipment_id;\n",
+        )
+        .expect("avg sql");
+        std::fs::write(
+            rules.join("vav_only.sql"),
+            "SELECT equipment_id, 1.25::float8 AS fault_hours, 1.25::float8 AS covered_hours, 50.0::float8 AS fault_pct FROM history WHERE zone_t IS NOT NULL GROUP BY equipment_id;\n",
+        )
+        .expect("vav sql");
+        std::fs::write(
+            rules.join("boiler_only.sql"),
+            "SELECT equipment_id, 0.0::float8 AS fault_hours, 1.0::float8 AS covered_hours, 0.0::float8 AS fault_pct FROM history GROUP BY equipment_id;\n",
+        )
+        .expect("boiler sql");
+    }
+
+    fn repair_broken(dir: &std::path::Path) {
+        std::fs::write(
+            dir.join("postgres").join("rules").join("broken_rule.sql"),
+            "SELECT equipment_id, 0.0::float8 AS fault_hours, 1.0::float8 AS covered_hours, 0.0::float8 AS fault_pct FROM history GROUP BY equipment_id;\n",
+        )
+        .expect("repair sql");
+    }
+
+    async fn ensure_schema(pool: &sqlx::PgPool) {
+        for statement in [
+            "CREATE TABLE IF NOT EXISTS site (
+                site_id text PRIMARY KEY,
+                dis text,
+                timezone text NOT NULL DEFAULT 'UTC',
+                enabled boolean NOT NULL DEFAULT true,
+                created_at timestamptz NOT NULL DEFAULT now()
+            )",
+            "CREATE TABLE IF NOT EXISTS building (
+                building_id text PRIMARY KEY,
+                site_id text REFERENCES site(site_id),
+                dis text,
+                timezone text NOT NULL DEFAULT 'UTC',
+                created_at timestamptz NOT NULL DEFAULT now()
+            )",
+            "CREATE TABLE IF NOT EXISTS equipment (
+                building_id text NOT NULL REFERENCES building(building_id),
+                equipment_id text NOT NULL,
+                equip_type text,
+                parent_equipment_id text,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (building_id, equipment_id)
+            )",
+            "CREATE TABLE IF NOT EXISTS sample (
+                ts timestamptz NOT NULL,
+                site_id text NOT NULL,
+                openfdd_key text NOT NULL,
+                haystack_id text,
+                val double precision,
+                unit text,
+                quality text,
+                PRIMARY KEY (site_id, openfdd_key, ts)
+            )",
+        ] {
+            sqlx::query(statement)
+                .execute(pool)
+                .await
+                .expect("fixture schema");
+        }
+        // Contract tests share one database. A narrower fixture can create
+        // `sample` first, and CREATE TABLE IF NOT EXISTS will not add columns.
+        for statement in [
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS haystack_id text",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS unit text",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS quality text",
+        ] {
+            sqlx::query(statement)
+                .execute(pool)
+                .await
+                .expect("fixture sample columns");
+        }
+    }
+
+    async fn seed_site(pool: &sqlx::PgPool, site: &str, equipment: &[(&str, &str)]) {
+        sqlx::query(
+            "INSERT INTO site(site_id, dis) VALUES ($1, $1) ON CONFLICT (site_id) DO NOTHING",
+        )
+        .bind(site)
+        .execute(pool)
+        .await
+        .expect("site");
+        sqlx::query(
+            "INSERT INTO building(building_id, site_id, dis) VALUES ($1, $1, $1) ON CONFLICT (building_id) DO NOTHING",
+        )
+        .bind(site)
+        .execute(pool)
+        .await
+        .expect("building");
+        for (id, kind) in equipment {
+            sqlx::query(
+                "INSERT INTO equipment(building_id, equipment_id, equip_type) VALUES ($1, $2, $3)
+                 ON CONFLICT (building_id, equipment_id) DO UPDATE SET equip_type = EXCLUDED.equip_type",
+            )
+            .bind(site)
+            .bind(id)
+            .bind(kind)
+            .execute(pool)
+            .await
+            .expect("equipment");
+        }
+    }
+
+    async fn seed_zone(
+        pool: &sqlx::PgPool,
+        site: &str,
+        equipment_id: &str,
+        values: &[(&str, f64)],
+    ) {
+        for (ts, val) in values {
+            sqlx::query(
+                "INSERT INTO sample(ts, site_id, openfdd_key, val, unit)
+                 VALUES ($1::timestamptz, $2, $3, $4, 'degF')
+                 ON CONFLICT (site_id, openfdd_key, ts) DO UPDATE SET val = EXCLUDED.val",
+            )
+            .bind(ts)
+            .bind(site)
+            .bind(format!("{equipment_id}.zone_t"))
+            .bind(val)
+            .execute(pool)
+            .await
+            .expect("sample");
+        }
+    }
+
+    async fn delete_site(pool: &sqlx::PgPool, site: &str) {
+        let _ = sqlx::query("DELETE FROM sample WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM equipment WHERE building_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM building WHERE building_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM site WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+    }
+
+    fn row_for<'a>(body: &'a Value, rule_id: &str, equipment_id: &str) -> &'a Value {
+        body.get("results")
+            .and_then(Value::as_array)
+            .and_then(|rows| {
+                rows.iter().find(|row| {
+                    row.get("rule_id").and_then(Value::as_str) == Some(rule_id)
+                        && row.get("equipment_id").and_then(Value::as_str) == Some(equipment_id)
+                })
+            })
+            .unwrap_or_else(|| panic!("missing {rule_id}/{equipment_id} in {body}"))
+    }
+
+    fn rest_rows(building_id: &str, types: &BTreeMap<String, String>) -> Value {
+        open_fdd_edge_prototype::fdd::registry_api::results_response_with_types(
+            Some(building_id),
+            types,
+            "fixture",
+        )
+    }
+
+    fn readiness(building_id: &str) -> Value {
+        open_fdd_edge_prototype::fdd::registry_api::readiness_response(Some(building_id))
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "OPENFDD_* env is process-global while this historian fixture is connected"
+    )]
+    #[tokio::test]
+    async fn generation_manifest_metric_and_site_contract() {
+        let explicit = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let url = explicit
+            .clone()
+            .unwrap_or_else(|| "postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".into());
+        let pool = match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&url)
+            .await
+        {
+            Ok(pool) => pool,
+            Err(err) if explicit.is_some() => {
+                panic!("OPENFDD_TEST_DATABASE_URL connect failed: {err}")
+            }
+            Err(err) => {
+                eprintln!("skip: postgres fixture unavailable: {err}");
+                return;
+            }
+        };
+        let _lock = crate::test_env_lock::lock_env();
+        let registry = tempfile::tempdir().expect("registry");
+        let results = tempfile::tempdir().expect("results");
+        write_registry(registry.path());
+        let _env = EnvRestore::capture(&[
+            "OPENFDD_DATABASE_URL",
+            "OPENFDD_HISTORIAN",
+            "OPENFDD_SQL_ROOT",
+            "OPENFDD_SQL_RULES_DIR",
+            "OPENFDD_RULE_RESULTS_DIR",
+            "OPENFDD_RESET_DB",
+            "OPENFDD_ALLOW_DESTRUCTIVE_DB",
+        ]);
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        std::env::set_var("OPENFDD_SQL_ROOT", registry.path());
+        std::env::set_var("OPENFDD_SQL_RULES_DIR", registry.path());
+        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", results.path());
+        std::env::remove_var("OPENFDD_RESET_DB");
+        std::env::remove_var("OPENFDD_ALLOW_DESTRUCTIVE_DB");
+        fdd_tsdb::clear_shared_pool();
+
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        let suffix = &token[..8];
+        let site_a = format!("w3gena{suffix}");
+        let site_b = format!("w3genb{suffix}");
+        let site_fail = format!("w3genf{suffix}");
+        let site_legacy = format!("w3genl{suffix}");
+        for id in [&site_a, &site_b, &site_fail, &site_legacy] {
+            disposable(id);
+        }
+        ensure_schema(&pool).await;
+        for id in [&site_a, &site_b, &site_fail, &site_legacy] {
+            delete_site(&pool, id).await;
+        }
+        seed_site(&pool, &site_a, &[("AHU_A", "ahu"), ("VAV_1", "vav")]).await;
+        seed_zone(
+            &pool,
+            &site_a,
+            "AHU_A",
+            &[
+                ("2026-06-01T00:00:00Z", 70.0),
+                ("2026-06-01T01:00:00Z", 74.0),
+            ],
+        )
+        .await;
+        seed_zone(
+            &pool,
+            &site_a,
+            "VAV_1",
+            &[
+                ("2026-06-01T00:00:00Z", 71.0),
+                ("2026-06-01T01:00:00Z", 73.0),
+            ],
+        )
+        .await;
+        seed_site(&pool, &site_b, &[("AHU_B", "ahu")]).await;
+        seed_zone(
+            &pool,
+            &site_b,
+            "AHU_B",
+            &[
+                ("2026-06-01T00:00:00Z", 50.0),
+                ("2026-06-01T01:00:00Z", 50.0),
+            ],
+        )
+        .await;
+        seed_site(&pool, &site_fail, &[("AHU_F", "ahu")]).await;
+
+        let window = json!({
+            "building_id": site_a,
+            "start": "2026-06-01T00:00:00Z",
+            "end": "2026-06-02T00:00:00Z",
+        });
+        let partial = run_fdd_registry(&window).await.expect("partial run");
+        assert_eq!(partial["ok"], json!(true), "{partial}");
+        assert_eq!(partial["run_status"], json!("partial"), "{partial}");
+        assert_eq!(partial["rules_failed"], json!(1), "{partial}");
+        assert_eq!(partial["rules_skipped"], json!(1), "{partial}");
+        assert_eq!(partial["rules_succeeded"], json!(2), "{partial}");
+        assert!(partial["run_id"].as_str().unwrap_or("").starts_with("run-"));
+        assert!(partial["watermark"]
+            .as_str()
+            .unwrap_or("")
+            .contains("2026-06-01"));
+        assert_eq!(partial["window"]["start"], json!("2026-06-01T00:00:00Z"));
+        let metric = row_for(&partial, "AVG-ZONE-TEMP", "AHU_A");
+        let value = metric["metric"]["value"].as_f64().expect("metric value");
+        assert!((value - 72.0).abs() < 1e-6, "{metric}");
+        assert_eq!(metric["metric"]["unit"], json!("degF"));
+        assert_eq!(metric["status"], json!("METRIC"));
+        assert_ne!(metric["status"], json!("PASS"));
+        assert!(metric.get("fault_hours").is_none());
+        let vav = row_for(&partial, "VAV-ONLY", "VAV_1");
+        assert_eq!(vav["status"], json!("FAULT"));
+        let first_run = partial["run_id"].as_str().unwrap().to_string();
+        let first_vav = results.path().join(format!(
+            "building={site_a}/generations/{first_run}/VAV-ONLY.json"
+        ));
+        let first_vav_bytes = std::fs::read(&first_vav).expect("history vav");
+        assert!(std::str::from_utf8(&first_vav_bytes)
+            .unwrap()
+            .contains("VAV_1"));
+
+        let mut stale_types = BTreeMap::new();
+        stale_types.insert("AHU_A".into(), "ahu".into());
+        stale_types.insert("VAV_1".into(), "vav".into());
+        let partial_rest = rest_rows(&site_a, &stale_types);
+        let partial_ready = readiness(&site_a);
+        assert_eq!(partial_ready["clean"], json!(false), "{partial_ready}");
+        assert_eq!(partial_ready["run_status"], json!("partial"));
+        assert_eq!(
+            partial_ready["result_count"],
+            json!(partial_rest["results"].as_array().unwrap().len())
+        );
+        assert!(partial_rest["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["equipment_id"] == "VAV_1"));
+
+        let failed = run_fdd_registry(&json!({ "building_id": site_fail }))
+            .await
+            .expect("failed run");
+        assert_eq!(failed["run_status"], json!("failed"), "{failed}");
+        assert_eq!(failed["rules_failed"], json!(1), "{failed}");
+        assert!(failed["rules_skipped"].as_u64().unwrap_or(0) >= 1);
+        let failed_ready = readiness(&site_fail);
+        assert_eq!(failed_ready["clean"], json!(false), "{failed_ready}");
+        assert_eq!(failed_ready["run_status"], json!("failed"));
+        let failed_rest = rest_rows(&site_fail, &BTreeMap::new());
+        assert_eq!(
+            failed_ready["result_count"].as_u64().unwrap(),
+            failed_rest["results"].as_array().unwrap().len() as u64
+        );
+
+        sqlx::query("DELETE FROM equipment WHERE building_id = $1 AND equipment_id = 'VAV_1'")
+            .bind(&site_a)
+            .execute(&pool)
+            .await
+            .expect("drop vav");
+        repair_broken(registry.path());
+        let complete = run_fdd_registry(&window).await.expect("complete run");
+        assert_eq!(complete["ok"], json!(true), "{complete}");
+        assert_eq!(complete["run_status"], json!("complete"), "{complete}");
+        assert_eq!(complete["rules_failed"], json!(0), "{complete}");
+        assert_eq!(complete["rules_skipped"], json!(2), "{complete}");
+        assert!(complete["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["equipment_id"] != "VAV_1"));
+        assert_eq!(
+            std::fs::read(&first_vav).expect("history kept"),
+            first_vav_bytes
+        );
+        let second_run = complete["run_id"].as_str().unwrap().to_string();
+        assert_ne!(second_run, first_run);
+
+        let current = rest_rows(&site_a, &stale_types);
+        let current_ready = readiness(&site_a);
+        assert_eq!(current_ready["clean"], json!(true), "{current_ready}");
+        assert_eq!(current_ready["run_status"], json!("complete"));
+        assert_eq!(
+            current_ready["result_count"].as_u64().unwrap(),
+            current["results"].as_array().unwrap().len() as u64
+        );
+        assert_eq!(current["count"], current_ready["result_count"]);
+        assert!(current["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| { row["equipment_id"] != "VAV_1" && row["equipment_id"] != "AHU_B" }));
+        let metric_rest = current["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["rule_id"] == "AVG-ZONE-TEMP" && row["equipment_id"] == "AHU_A")
+            .expect("rest metric");
+        assert_eq!(metric_rest["status"], json!("METRIC"));
+        assert!(metric_rest["fault_hours"].is_null());
+        assert!((metric_rest["metric"]["value"].as_f64().unwrap() - 72.0).abs() < 1e-6);
+        assert_eq!(metric_rest["metric"]["unit"], json!("degF"));
+        assert!(metric_rest["metric"]["window"]["watermark"]
+            .as_str()
+            .unwrap_or("")
+            .contains("2026-06-01"));
+
+        let parent_manifest = std::fs::read_to_string(results.path().join(format!(
+            "building={site_a}/generations/{second_run}/manifest.json"
+        )))
+        .expect("parent manifest");
+        let tuned = run_fdd_registry(&json!({
+            "building_id": site_a,
+            "rule_ids": ["AVG-ZONE-TEMP"],
+        }))
+        .await
+        .expect("single rule");
+        assert_eq!(tuned["parent_run_id"], json!(second_run), "{tuned}");
+        assert_eq!(tuned["cohort"], json!("derived"));
+        assert_eq!(tuned["run_status"], json!("complete"), "{tuned}");
+        assert!(tuned["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["rule_id"] == "BOILER-ONLY"));
+        assert_eq!(
+            std::fs::read_to_string(results.path().join(format!(
+                "building={site_a}/generations/{second_run}/manifest.json"
+            )))
+            .expect("parent still there"),
+            parent_manifest
+        );
+
+        let other = run_fdd_registry(&json!({ "building_id": site_b }))
+            .await
+            .expect("other site");
+        assert_eq!(other["run_status"], json!("complete"), "{other}");
+        let other_metric = row_for(&other, "AVG-ZONE-TEMP", "AHU_B");
+        assert!((other_metric["metric"]["value"].as_f64().unwrap() - 50.0).abs() < 1e-6);
+        let site_a_after = rest_rows(&site_a, &stale_types);
+        assert!(site_a_after["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["equipment_id"] != "AHU_B"));
+        assert_ne!(site_a_after["run_id"], other["run_id"]);
+
+        let legacy_dir = results.path().join(format!("building={site_legacy}"));
+        std::fs::create_dir_all(&legacy_dir).expect("legacy dir");
+        let legacy_file = legacy_dir.join("FC1.json");
+        std::fs::write(
+            &legacy_file,
+            br#"{"rule_id":"FC1","rows":[{"equipment_id":"OLD","status":"PASS","fault_hours":0}]}"#,
+        )
+        .expect("legacy");
+        let legacy_ready = readiness(&site_legacy);
+        assert_eq!(legacy_ready["result_count"], json!(0), "{legacy_ready}");
+        assert_eq!(legacy_ready["clean"], json!(false));
+        assert!(legacy_ready["dirty_reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|reason| reason == "legacy_unmanifested"));
+        assert!(legacy_file.is_file(), "legacy history is kept");
+        let legacy_rest = rest_rows(&site_legacy, &BTreeMap::new());
+        assert_eq!(legacy_rest["count"], json!(0));
+        assert_eq!(legacy_rest["legacy_withheld"], json!(true));
+
+        for id in [&site_a, &site_b, &site_fail, &site_legacy] {
+            delete_site(&pool, id).await;
+        }
     }
 }

@@ -229,13 +229,13 @@ pub fn start_action(kind: &str, label: &str, detail: Option<Value>) -> Result<St
     Ok(id)
 }
 
-/// Finish an action with `ok` or `fail` and optional detail merge.
+/// Finish an action with `ok`, `partial`, or `fail` and optional detail merge.
 pub fn finish_action(id: &str, status: &str, detail: Option<Value>) -> Result<ActionEntry, String> {
     let status = match status {
-        "ok" | "fail" => status,
+        "ok" | "partial" | "fail" => status,
         other => {
             return Err(format!(
-                "invalid finish status '{other}' (expected ok|fail)"
+                "invalid finish status '{other}' (expected ok|partial|fail)"
             ));
         }
     };
@@ -424,7 +424,21 @@ mod tests {
         let err2 = start_action("fdd_run_rule", "One rule", None).expect_err("busy rule");
         assert!(err2.starts_with("busy:"), "{err2}");
         finish_action(&id, "ok", None).expect("finish");
-        start_action("fdd_run_rule", "One rule after", None).expect("after finish");
+        let partial = start_action("fdd_run_rule", "One rule after", None).expect("after finish");
+        let finished = finish_action(
+            &partial,
+            "partial",
+            Some(json!({"run_status": "partial", "rules_failed": 1, "rules_skipped": 2})),
+        )
+        .expect("partial finish");
+        assert_eq!(finished.status, "partial");
+        assert_eq!(
+            finished
+                .detail
+                .as_ref()
+                .and_then(|d| d.get("rules_skipped")),
+            Some(&json!(2))
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
