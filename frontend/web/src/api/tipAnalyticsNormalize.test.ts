@@ -114,6 +114,7 @@ describe("C4 tip Overview known answers", () => {
       oa_damper_pct: 35 + i,
       delta_or_f: 50 + i - 72,
       delta_mr_f: 65 + i * 0.4 - 72,
+      fan_on: true,
     }));
     const env = normalizeTipOverviewEnvelope("economizer", {
       schema_version: "analytics-envelope-v1",
@@ -129,8 +130,13 @@ describe("C4 tip Overview known answers", () => {
     });
     expect(env.points).toHaveLength(6);
     expect(env.points[0]?.identifiable).toBe(true);
+    expect(env.points[0]?.fan_on).toBe(true);
     expect(env.points[0]?.oat_f).toBe(50);
     expect(env.points[0]?.damper_fb_pct).toBe(35);
+    expect(env.points[0]?.mat_resid_f).toBeCloseTo(
+      65 - (72 + (35 / 100) * (50 - 72)),
+      6,
+    );
     const scatter = econDeltaScatter(env.points, 10);
     expect(scatter).toBeTruthy();
     expect(scatter?.layout?.xaxis?.title).toMatch(/OAT − RAT/);
@@ -180,6 +186,98 @@ describe("C4 tip Overview known answers", () => {
     expect(overlay?.data?.some((t) => t.name === "BAS oa_t")).toBe(true);
     expect(overlay?.data?.some((t) => t.name === "Web OAT")).toBe(true);
     expect(overlay?.meta?.provenance).toMatch(/bas-vs-web-oat/);
+  });
+
+  it("does not qualify off-fan, low-delta, or missing-MAT rows", () => {
+    const env = normalizeTipOverviewEnvelope(
+      "economizer",
+      {
+        schema_version: "analytics-envelope-v1",
+        query_version: "economizer-diagnostics-v1",
+        generated_at: "2026-04-08T00:00:00Z",
+        engine: "timescale-sql",
+        warnings: [],
+        rows: [
+          {
+            ts: "2026-04-01T01:00:00Z",
+            equipment_id: "SYN_AHU_E",
+            oa_t: 50,
+            rat: 72,
+            mat: 60,
+            delta_or_f: -22,
+            delta_mr_f: -12,
+            fan_on: false,
+          },
+          {
+            ts: "2026-04-01T02:00:00Z",
+            equipment_id: "SYN_AHU_E",
+            oa_t: 70,
+            rat: 72,
+            mat: 71,
+            delta_or_f: -2,
+            delta_mr_f: -1,
+            fan_on: true,
+          },
+          {
+            ts: "2026-04-01T03:00:00Z",
+            equipment_id: "SYN_AHU_E",
+            oa_t: 50,
+            rat: 72,
+            delta_or_f: -22,
+            fan_on: true,
+          },
+          {
+            ts: "2026-04-01T04:00:00Z",
+            equipment_id: "SYN_AHU_E",
+            oa_t: 50,
+            rat: 72,
+            mat: 60,
+            delta_or_f: -22,
+            delta_mr_f: -12,
+          },
+        ],
+        equipment: [],
+        points: [],
+        skipped: [],
+        query_id: "economizer",
+      },
+      { dtMinF: 10 },
+    );
+    expect(env.points.every((p) => p.identifiable !== true)).toBe(true);
+    expect(env.points.every((p) => p.fan_on !== true || p.identifiable !== true)).toBe(
+      true,
+    );
+    expect(env.points.find((p) => p.timestamp_utc === "2026-04-01T04:00:00Z")?.fan_on).toBe(
+      false,
+    );
+    expect(env.warnings[0]).toMatch(/not qualified/);
+    expect(econDeltaScatter(env.points, 10)).toBeNull();
+  });
+
+  it("explains an empty economizer, runtime, mechanical-cooling, and BAS envelope", () => {
+    const empty = {
+      schema_version: "analytics-envelope-v1",
+      query_version: "v",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: [],
+      rows: [],
+      equipment: [],
+      points: [],
+      skipped: [],
+    };
+    expect(normalizeTipOverviewEnvelope("economizer", empty).warnings[0]).toMatch(
+      /Fan-on proof/,
+    );
+    expect(normalizeTipOverviewEnvelope("runtime", empty).warnings[0]).toMatch(
+      /motor weekly/,
+    );
+    expect(
+      normalizeTipOverviewEnvelope("mechanical-cooling", empty).warnings[0],
+    ).toMatch(/outdoor-air bins/);
+    expect(normalizeTipOverviewEnvelope("bas-vs-web-oat", empty).warnings[0]).toMatch(
+      /BAS and web/,
+    );
   });
 
   it("does not clobber legacy DataFusion points already present", () => {

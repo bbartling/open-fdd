@@ -28,6 +28,8 @@ mod logging;
 mod models;
 mod openapi;
 mod providers;
+#[cfg(test)]
+mod rcx_row_fixtures;
 mod routes;
 mod sql_anomaly;
 mod starter_seed;

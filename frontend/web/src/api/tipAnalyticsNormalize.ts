@@ -117,37 +117,114 @@ export function normalizeTipMechRows(
   });
 }
 
+/** Default |OAT−RAT| gate (°F), matching the economizer request default. */
+export const ECONOMIZER_DT_MIN_F = 10;
+
+/** Fan-on is qualified only when the row proves it. Missing is not on. */
+export function explicitFanOn(v: unknown): boolean {
+  if (v === true || v === 1) return true;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1";
+  }
+  return false;
+}
+
+function mixingResidualF(
+  oat: number | null,
+  rat: number | null,
+  mat: number | null,
+  damperPct: number | null,
+): number | null {
+  if (oat == null || rat == null || mat == null || damperPct == null) return null;
+  return mat - (rat + (damperPct / 100) * (oat - rat));
+}
+
+function pushWarning(env: AnalyticsEnvelope, message: string) {
+  if (!env.warnings.includes(message)) env.warnings.push(message);
+}
+
+function rowDeltaOrF(r: Record<string, unknown>): number | null {
+  const direct = num(r.delta_or_f);
+  if (direct != null) return direct;
+  const oat = num(r.oat_f) ?? num(r.oa_t);
+  const rat = num(r.rat_f) ?? num(r.rat);
+  return oat != null && rat != null ? oat - rat : null;
+}
+
+function economizerUnqualifiedReason(
+  rows: Array<Record<string, unknown>>,
+  dtMinF: number,
+): string {
+  if (!rows.length) {
+    return `No economizer rows. Fan-on proof, |OAT−RAT| ≥ ${dtMinF}°F, and a measured MAT are required.`;
+  }
+  const parts: string[] = [];
+  if (!rows.some((r) => explicitFanOn(r.fan_on))) {
+    parts.push("fan status is not proven on");
+  }
+  const deltas = rows
+    .map((r) => rowDeltaOrF(r))
+    .filter((d): d is number => d != null);
+  if (deltas.length > 0 && deltas.every((d) => Math.abs(d) < dtMinF)) {
+    parts.push(`|OAT−RAT| is below ${dtMinF}°F`);
+  }
+  if (!rows.some((r) => (num(r.mat_f) ?? num(r.mat)) != null)) {
+    parts.push("MAT is missing");
+  }
+  if (!parts.length) {
+    parts.push(
+      "fan-on, minimum |OAT−RAT|, and measured MAT are not all present on the same row",
+    );
+  }
+  return `Economizer rows are not qualified: ${parts.join("; ")}.`;
+}
+
 /** Tip economizer rows → vibe19 economizer points (scatter / temps overlay). */
 export function normalizeTipEconomizerPoints(
   rows: Array<Record<string, unknown>>,
   existingPoints: Array<Record<string, unknown>>,
+  dtMinF: number = ECONOMIZER_DT_MIN_F,
 ): Array<Record<string, unknown>> {
   if (existingPoints.length) return existingPoints;
   return rows
     .map((r) => {
-      const delta_or_f = num(r.delta_or_f);
-      const delta_mr_f = num(r.delta_mr_f);
+      const oat_f = num(r.oat_f) ?? num(r.oa_t);
+      const rat_f = num(r.rat_f) ?? num(r.rat);
+      const mat_f = num(r.mat_f) ?? num(r.mat);
+      const damper_fb_pct =
+        num(r.damper_fb_pct) ?? num(r.oa_damper_pct) ?? num(r.damper_pct);
+      const delta_or_f =
+        num(r.delta_or_f) ??
+        (oat_f != null && rat_f != null ? oat_f - rat_f : null);
+      const delta_mr_f =
+        num(r.delta_mr_f) ??
+        (mat_f != null && rat_f != null ? mat_f - rat_f : null);
+      const fan_on = explicitFanOn(r.fan_on);
       const identifiable =
-        r.identifiable === true ||
-        r.identifiable === "true" ||
-        (delta_or_f != null && delta_mr_f != null);
+        fan_on &&
+        mat_f != null &&
+        delta_or_f != null &&
+        delta_mr_f != null &&
+        Math.abs(delta_or_f) >= dtMinF;
       const timestamp_utc =
         str(r.timestamp_utc) || str(r.ts) || str(r.time_utc);
       return {
         ...r,
         timestamp_utc,
         equipment_id: str(r.equipment_id) || "AHU",
-        oat_f: num(r.oat_f) ?? num(r.oa_t),
-        rat_f: num(r.rat_f) ?? num(r.rat),
-        mat_f: num(r.mat_f) ?? num(r.mat),
+        oat_f,
+        rat_f,
+        mat_f,
         sat_f: num(r.sat_f) ?? num(r.sat),
-        damper_fb_pct:
-          num(r.damper_fb_pct) ?? num(r.oa_damper_pct) ?? num(r.damper_pct),
+        damper_fb_pct,
         delta_or_f,
         delta_mr_f,
-        mat_resid_f: num(r.mat_resid_f),
+        mat_resid_f:
+          num(r.mat_resid_f) ??
+          mixingResidualF(oat_f, rat_f, mat_f, damper_fb_pct),
         identifiable,
-        fan_on: r.fan_on ?? true,
+        fan_on,
       };
     })
     .filter((p) => p.timestamp_utc || p.delta_or_f != null);
@@ -183,6 +260,7 @@ export function normalizeTipOverviewEnvelope(
     | "economizer"
     | "bas-vs-web-oat",
   env: AnalyticsEnvelope,
+  opts?: { dtMinF?: number },
 ): AnalyticsEnvelope {
   const out = cloneEnv(env);
   if (query === "runtime") {
@@ -192,17 +270,39 @@ export function normalizeTipOverviewEnvelope(
         (r) => str(r.kind) !== "weekly_equipment" && str(r.kind) !== "weekly_plant",
       );
     }
+    if (!out.rows.some((r) => str(r.kind) === "weekly_equipment")) {
+      pushWarning(out, "No motor weekly runtime rows for this site and window.");
+    }
     return out;
   }
   if (query === "mechanical-cooling") {
     out.rows = normalizeTipMechRows(out.rows);
+    if (!out.rows.some((r) => str(r.kind) === "oat_bin")) {
+      pushWarning(
+        out,
+        "No mechanical-cooling outdoor-air bins. Compressor or chiller status with outdoor air is required.",
+      );
+    }
     return out;
   }
   if (query === "economizer") {
-    out.points = normalizeTipEconomizerPoints(out.rows, out.points);
+    const dtMinF = opts?.dtMinF ?? ECONOMIZER_DT_MIN_F;
+    out.points = normalizeTipEconomizerPoints(out.rows, out.points, dtMinF);
+    const qualified = out.points.some(
+      (p) => p.identifiable === true || p.identifiable === "true",
+    );
+    if (!qualified) {
+      pushWarning(out, economizerUnqualifiedReason(out.rows, dtMinF));
+    }
     return out;
   }
   // bas-vs-web-oat
   out.points = normalizeTipBasPoints(out.rows, out.points);
+  if (!out.points.length) {
+    pushWarning(
+      out,
+      "No coincident BAS and web outdoor-air samples for this site and window.",
+    );
+  }
   return out;
 }

@@ -457,6 +457,7 @@ describe("fetchCentralOverview", () => {
         oa_damper_pct: 40,
         delta_or_f: 48 + i - 72,
         delta_mr_f: 64 - 72,
+        fan_on: true,
       })),
       equipment: [],
       points: [],

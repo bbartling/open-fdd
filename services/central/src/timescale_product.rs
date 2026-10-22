@@ -65,6 +65,35 @@ fn safe_ident(name: &str) -> bool {
     !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+/// Quantity and display unit for an RCx companion role. Unknown roles stay unlabeled.
+fn role_measure(role: &str) -> (&'static str, &'static str) {
+    match role {
+        "duct_static" | "duct_static_sp" | "duct_sp" | "static_sp" => ("air_pressure", "in. w.c."),
+        "chw_supply_t" | "chw_return_t" | "cw_supply_t" | "cw_return_t" | "hw_supply_t"
+        | "hw_return_t" => ("absolute_temperature", "°F"),
+        _ => ("other", ""),
+    }
+}
+
+fn delta_measure(primary: &str, companion: &str) -> Option<(&'static str, &'static str)> {
+    let temperature = |role: &str| {
+        matches!(
+            role,
+            "chw_supply_t"
+                | "chw_return_t"
+                | "cw_supply_t"
+                | "cw_return_t"
+                | "hw_supply_t"
+                | "hw_return_t"
+        )
+    };
+    if temperature(primary) && temperature(companion) {
+        Some(("temperature_difference", "°F"))
+    } else {
+        None
+    }
+}
+
 fn kind_aliases(kind: &str) -> Vec<&'static str> {
     match kind.to_ascii_lowercase().as_str() {
         "ahu" | "rtu" | "mau" | "doas" => vec!["ahu", "rtu", "mau", "doas"],
@@ -371,6 +400,28 @@ pub async fn rcx_timeseries(
     }
     let limit = max_points.clamp(200, 20000) as i64;
     let pattern = format!("%.{role_col}");
+    let mut warnings =
+        vec!["RCx role timeseries from Timescale sample (Wave-X Soft-OPEN)".to_string()];
+    let overlay_role = match overlay_col {
+        Some(role) if safe_ident(role) => role,
+        Some(role) => {
+            warnings.push(format!(
+                "companion role '{role}' is not a safe identifier and was not queried"
+            ));
+            ""
+        }
+        None => "",
+    };
+    let return_role = match pair_return_col {
+        Some(role) if safe_ident(role) => role,
+        Some(role) => {
+            warnings.push(format!(
+                "return role '{role}' is not a safe identifier and was not queried"
+            ));
+            ""
+        }
+        None => "",
+    };
     let fan_join = if filter_fan_on {
         "AND EXISTS (
             SELECT 1 FROM sample f
@@ -381,10 +432,11 @@ pub async fn rcx_timeseries(
     } else {
         ""
     };
-    // Bound equipment via ANY($3)
+    // Bound equipment via ANY($3). Companion roles are exact key suffixes ($5, $6),
+    // aligned to the same site, timestamp, and equipment as the primary sample.
     let sql = format!(
         r#"
-SELECT timestamp_utc, equipment_id, value_f, motor_f
+SELECT timestamp_utc, equipment_id, value_f, motor_f, overlay_f, return_f
 FROM (
   SELECT
     s.ts AS timestamp_utc,
@@ -397,6 +449,24 @@ FROM (
         AND m.openfdd_key = split_part(s.openfdd_key, '.', 1) || '.fan_status'
       LIMIT 1
     ) AS motor_f,
+    (
+      SELECT o.val
+      FROM sample o
+      WHERE $5::text <> ''
+        AND o.site_id = s.site_id
+        AND o.ts = s.ts
+        AND o.openfdd_key = split_part(s.openfdd_key, '.', 1) || '.' || $5::text
+      LIMIT 1
+    ) AS overlay_f,
+    (
+      SELECT ret.val
+      FROM sample ret
+      WHERE $6::text <> ''
+        AND ret.site_id = s.site_id
+        AND ret.ts = s.ts
+        AND ret.openfdd_key = split_part(s.openfdd_key, '.', 1) || '.' || $6::text
+      LIMIT 1
+    ) AS return_f,
     ROW_NUMBER() OVER (ORDER BY s.ts, s.openfdd_key) AS _rn,
     COUNT(*) OVER () AS _cnt
   FROM sample s
@@ -417,13 +487,19 @@ LIMIT $4
         .bind(&pattern)
         .bind(&ids)
         .bind(limit)
+        .bind(overlay_role)
+        .bind(return_role)
         .fetch_all(tsdb.pool())
         .await
         .context("rcx_timeseries")?;
     if rows.is_empty() {
         return Ok(None);
     }
+    let (primary_quantity, primary_unit) = role_measure(role_col);
     let mut points = Vec::new();
+    let mut overlay_n = 0usize;
+    let mut return_n = 0usize;
+    let mut delta_n = 0usize;
     for r in &rows {
         let ts = r
             .try_get::<DateTime<Utc>, _>("timestamp_utc")
@@ -433,21 +509,115 @@ LIMIT $4
         let eq = r.try_get::<String, _>("equipment_id").unwrap_or_default();
         let value_f = r.try_get::<Option<f64>, _>("value_f").ok().flatten();
         let motor_f = r.try_get::<Option<f64>, _>("motor_f").ok().flatten();
+        let overlay_f = r.try_get::<Option<f64>, _>("overlay_f").ok().flatten();
+        let return_f = r.try_get::<Option<f64>, _>("return_f").ok().flatten();
         points.push(json!({
-            "timestamp_utc": ts,
-            "equipment_id": eq,
+            "timestamp_utc": &ts,
+            "equipment_id": &eq,
             "value_f": value_f,
             "series": "primary",
+            "role": role_col,
+            "quantity": primary_quantity,
+            "unit": primary_unit,
         }));
         if let Some(m) = motor_f {
             points.push(json!({
-                "timestamp_utc": ts,
-                "equipment_id": eq,
+                "timestamp_utc": &ts,
+                "equipment_id": &eq,
                 "value_f": if m > 0.05 { 1.0 } else { 0.0 },
                 "series": "motor",
+                "role": "fan_status",
             }));
         }
-        let _ = (overlay_col, pair_return_col); // Soft-OPEN: primary + motor first
+        if !overlay_role.is_empty() {
+            if let Some(value) = overlay_f {
+                let (quantity, unit) = role_measure(overlay_role);
+                overlay_n += 1;
+                points.push(json!({
+                    "timestamp_utc": &ts,
+                    "equipment_id": &eq,
+                    "value_f": value,
+                    "series": "overlay",
+                    "role": overlay_role,
+                    "quantity": quantity,
+                    "unit": unit,
+                }));
+            }
+        }
+        if !return_role.is_empty() {
+            if let Some(value) = return_f {
+                let (quantity, unit) = role_measure(return_role);
+                return_n += 1;
+                points.push(json!({
+                    "timestamp_utc": &ts,
+                    "equipment_id": &eq,
+                    "value_f": value,
+                    "series": "return",
+                    "role": return_role,
+                    "quantity": quantity,
+                    "unit": unit,
+                }));
+                if let (Some(primary), Some((delta_quantity, delta_unit))) =
+                    (value_f, delta_measure(role_col, return_role))
+                {
+                    delta_n += 1;
+                    points.push(json!({
+                        "timestamp_utc": &ts,
+                        "equipment_id": &eq,
+                        "value_f": value - primary,
+                        "series": "delta_t",
+                        "role": return_role,
+                        "quantity": delta_quantity,
+                        "unit": delta_unit,
+                    }));
+                }
+            }
+        }
+    }
+    if !overlay_role.is_empty() && overlay_n == 0 {
+        warnings.push(format!(
+            "{overlay_role} was queried but no samples aligned to {role_col} timestamps"
+        ));
+    }
+    if !return_role.is_empty() && return_n == 0 {
+        warnings.push(format!(
+            "{return_role} was queried but no samples aligned to {role_col} timestamps"
+        ));
+    }
+    let mut traces = vec![json!({
+        "series": "primary",
+        "role": role_col,
+        "quantity": primary_quantity,
+        "unit": primary_unit,
+    })];
+    if !overlay_role.is_empty() {
+        let (quantity, unit) = role_measure(overlay_role);
+        traces.push(json!({
+            "series": "overlay",
+            "role": overlay_role,
+            "quantity": quantity,
+            "unit": unit,
+            "aligned_points": overlay_n,
+        }));
+    }
+    if !return_role.is_empty() {
+        let (quantity, unit) = role_measure(return_role);
+        traces.push(json!({
+            "series": "return",
+            "role": return_role,
+            "quantity": quantity,
+            "unit": unit,
+            "aligned_points": return_n,
+        }));
+        if let Some((quantity, unit)) = delta_measure(role_col, return_role) {
+            traces.push(json!({
+                "series": "delta_t",
+                "role": return_role,
+                "quantity": quantity,
+                "unit": unit,
+                "aligned_points": delta_n,
+            }));
+        }
     }
     let mut env = envelope_with_engine(
         "rcx-timeseries-v1",
@@ -455,7 +625,7 @@ LIMIT $4
             building_id: Some(building_id.to_string()),
             ..Default::default()
         },
-        vec!["RCx role timeseries from Timescale sample (Wave-X Soft-OPEN)".into()],
+        warnings,
         TS_ENGINE,
     );
     let n = points.len();
@@ -463,6 +633,9 @@ LIMIT $4
     env.coverage = Some(json!({
         "point_count": n,
         "role_col": role_col,
+        "overlay_col": overlay_col,
+        "pair_return_col": pair_return_col,
+        "traces": traces,
         "chart_kind": "timeseries",
         "source": "timescale_sample",
         "building_id": building_id,
