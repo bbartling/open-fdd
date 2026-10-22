@@ -156,6 +156,26 @@ describe("fddApi", () => {
     expect(json.schema).toBe("openfdd_fdd_results_v1");
     expect(resultsToCsvArtifact(rows)).toMatch(/^rule_id,/);
     expect(resultsToCsvArtifact(rows)).toMatch(/FC1,AHU_1/);
+    const metricCsv = resultsToCsvArtifact([
+      {
+        rule_id: "AVG-ZONE-TEMP",
+        equipment_id: "AHU_1",
+        status: "METRIC",
+        output_kind: "metric",
+        fault_hours: null,
+        metric: {
+          name: "avg_zone_temp",
+          value: 72.4,
+          unit: "degF",
+          window: { start: "2026-06-01T00:00:00Z", end: null, watermark: "2026-06-01T01:00:00Z" },
+          coverage: { sample_rows: 2 },
+        },
+      },
+    ]);
+    expect(metricCsv.startsWith("rule_id,equipment_id")).toBe(true);
+    expect(metricCsv).toContain("avg_zone_temp");
+    expect(metricCsv).toContain("72.4");
+    expect(metricCsv).toContain("degF");
   });
 
   it("loads rule params and clamps payloads", async () => {

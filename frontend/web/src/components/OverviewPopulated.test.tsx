@@ -364,6 +364,41 @@ describe("OverviewPopulated metric isolation", () => {
     expect(screen.getByTestId("overview-force-analytics")).toBeTruthy();
   });
 
+  it("keeps the banner and latest count on the active generation", async () => {
+    const { getFddReadiness, getFddResults } = await import("../api/fddApi");
+    vi.mocked(getFddReadiness).mockResolvedValue({
+      ok: true,
+      has_results: true,
+      clean: false,
+      dirty_reasons: ["run_partial"],
+      result_count: 4,
+      run_status: "partial",
+      completed_at: "2026-09-17T00:00:00Z",
+    });
+    vi.mocked(getFddResults).mockResolvedValue(
+      Array.from({ length: 99 }, (_, i) => ({
+        rule_id: `R${i}`,
+        equipment_id: "AHU_1",
+        status: "PASS",
+        fault_hours: 0,
+      })),
+    );
+    renderOverview();
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-readiness-label").textContent).toMatch(
+        /Partial \(4 result rows\)/,
+      );
+    });
+    expect(screen.getByTestId("overview-rule-result-count").textContent).toContain("4");
+    expect(screen.getByTestId("overview-rule-result-count").textContent).not.toContain("99");
+    expect(screen.getByTestId("overview-readiness-label").textContent).not.toMatch(
+      /Results current/,
+    );
+    expect(
+      screen.getByTestId("overview-update-all-rules").querySelector("button")?.disabled,
+    ).toBe(false);
+  });
+
   it("bumps health refresh when RULES_UPDATED_EVENT fires", async () => {
     const { getFddResults, getFddReadiness } = await import("../api/fddApi");
     const { RULES_UPDATED_EVENT } = await import("./RuleTuningPanel");

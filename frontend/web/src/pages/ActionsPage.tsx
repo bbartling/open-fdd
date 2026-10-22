@@ -6,6 +6,7 @@ import {
   deleteAction,
   formatDurationMs,
   listActions,
+  actionDisplayStatus,
   statusIndicator,
   statusLabel,
   type ActionEntry,
@@ -51,11 +52,13 @@ function asString(v: unknown): string | null {
 function statusClass(status: string): string {
   if (status === "running") return "actions-status actions-status--running";
   if (status === "ok") return "actions-status actions-status--ok";
+  if (status === "partial") return "actions-status actions-status--partial";
   if (status === "fail") return "actions-status actions-status--fail";
   return "actions-status";
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ action }: { action: ActionEntry }) {
+  const status = actionDisplayStatus(action);
   return (
     <span className={statusClass(status)} data-testid="actions-status-badge">
       {statusIndicator(status)} {statusLabel(status)}
@@ -67,8 +70,9 @@ function rulesSummary(detail: ActionEntry["detail"]): string {
   const d = detailRecord(detail);
   const ok = asNumber(d.rules_succeeded);
   const fail = asNumber(d.rules_failed);
-  if (ok == null && fail == null) return "—";
-  return `${ok ?? 0}✓ / ${fail ?? 0}✗`;
+  const skip = asNumber(d.rules_skipped);
+  if (ok == null && fail == null && skip == null) return "—";
+  return `${ok ?? 0} evaluated / ${fail ?? 0} runtime errors / ${skip ?? 0} ineligible`;
 }
 
 function ActionDetailPanel({
@@ -81,6 +85,7 @@ function ActionDetailPanel({
   const detail = detailRecord(action.detail);
   const buildingId =
     asString(detail.building_id) ?? asString(detail.dataset_id);
+  const shown = actionDisplayStatus(action);
   const rulesOk = asNumber(detail.rules_succeeded);
   const rulesFail = asNumber(detail.rules_failed);
   const rulesSkip = asNumber(detail.rules_skipped);
@@ -94,9 +99,9 @@ function ActionDetailPanel({
   if (rulesOk != null)
     metricRows.push({ label: "Rules succeeded", value: String(rulesOk) });
   if (rulesFail != null)
-    metricRows.push({ label: "Rules failed", value: String(rulesFail) });
+    metricRows.push({ label: "Runtime errors", value: String(rulesFail) });
   if (rulesSkip != null)
-    metricRows.push({ label: "Rules skipped", value: String(rulesSkip) });
+    metricRows.push({ label: "Ineligible skips", value: String(rulesSkip) });
   if (asNumber(detail.equipment_written) != null) {
     metricRows.push({
       label: "Equipment written",
@@ -117,10 +122,10 @@ function ActionDetailPanel({
     <div className="actions-detail-panel" data-testid="actions-detail-panel">
       <div className="actions-detail-panel__header">
         <span
-          className={statusClass(action.status)}
+          className={statusClass(shown)}
           data-testid="actions-detail-status"
         >
-          {statusIndicator(action.status)} {statusLabel(action.status)}
+          {statusIndicator(shown)} {statusLabel(shown)}
         </span>
         <strong data-testid="actions-detail-label">{action.label}</strong>
       </div>
@@ -227,7 +232,7 @@ export function ActionsPage() {
     null;
 
   const rows: Array<Record<string, unknown>> = actions.map((a) => ({
-    status: (<StatusBadge status={a.status} />) as ReactNode,
+    status: (<StatusBadge action={a} />) as ReactNode,
     started_at: a.started_at,
     finished_at: a.finished_at ?? "—",
     duration: formatDurationMs(elapsedMs(a, now)),
@@ -253,6 +258,7 @@ export function ActionsPage() {
           .actions-status { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; }
           .actions-status--running { color: #b45309; animation: actions-pulse 1.4s ease-in-out infinite; }
           .actions-status--ok { color: #15803d; }
+          .actions-status--partial { color: #b45309; }
           .actions-status--fail { color: #b91c1c; }
           @keyframes actions-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
           .actions-detail-panel {
@@ -373,11 +379,14 @@ export function ActionsPage() {
               onChange={(e) => setSelectedId(e.target.value)}
               style={{ marginBottom: "0.75rem" }}
             >
-              {actions.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {statusIndicator(a.status)} {statusLabel(a.status)} · {a.label}
-                </option>
-              ))}
+              {actions.map((a) => {
+                const shown = actionDisplayStatus(a);
+                return (
+                  <option key={a.id} value={a.id}>
+                    {statusIndicator(shown)} {statusLabel(shown)} · {a.label}
+                  </option>
+                );
+              })}
             </select>
             <ActionDetailPanel action={selected} now={now} />
           </div>
