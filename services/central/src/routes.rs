@@ -1250,6 +1250,63 @@ pub async fn admin_put_historian_limits(
     Ok(Json(json!({"ok": true, "limits": lim})))
 }
 
+/// Operator or admin role. Checked before a dataset write reads an archive
+/// or touches files, the historian, or the audit log.
+fn require_dataset_writer(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<auth::AuthUser, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(headers).map_err(|detail| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": detail})),
+        )
+    })?;
+    if !user.role.can_issue_commands() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "operator or admin role required"
+            })),
+        ));
+    }
+    Ok(user)
+}
+
+/// Tenant building scope for a dataset write.
+///
+/// Denial returns 403 and does not append an audit record. Callers must run
+/// this before file, historian, or audit side effects.
+fn dataset_building_scope_denial(
+    user: &auth::AuthUser,
+    building_id: Option<&str>,
+) -> Option<(StatusCode, Json<Value>)> {
+    if !crate::tenant::multi_tenant_enabled() {
+        return None;
+    }
+    let ctx = resolve_tenant_context_for_user(user);
+    match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(bid) if ctx.allow_building(bid) => None,
+        Some(bid) => Some((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "building not in tenant scope",
+                "building_id": bid,
+            })),
+        )),
+        None if ctx.hub_admin => None,
+        None => Some((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "building_id required in multi-tenant mode",
+            })),
+        )),
+    }
+}
+
 /// Wave N: fail-closed building gate for historian/FDD/analytics when MT ON.
 fn deny_if_building_out_of_scope(
     state: &AppState,
@@ -2870,6 +2927,8 @@ pub async fn csv_import_package(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Role before admission, archive parse, files, historian, or audit.
+    let writer = require_dataset_writer(&state, &headers)?;
     // Admit before peek/decompress (#1127 P1). Body bytes are already buffered by
     // axum; do not start zip work until import + compute slots are held.
     let compute = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Import)
@@ -2894,7 +2953,7 @@ pub async fn csv_import_package(
     let peeked_building =
         match open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body) {
             Ok(bid) => {
-                if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&bid)) {
+                if let Some(deny) = dataset_building_scope_denial(&writer, Some(&bid)) {
                     return Err(deny);
                 }
                 if let Some(msg) =
@@ -3045,6 +3104,8 @@ pub async fn csv_import_package_append(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Role before archive parse, files, historian, or audit.
+    let writer = require_dataset_writer(&state, &headers)?;
     let ct = content_type(&headers);
     let building_id = if ct.to_ascii_lowercase().contains("application/json") {
         serde_json::from_slice::<Value>(&body).ok().and_then(|v| {
@@ -3055,7 +3116,7 @@ pub async fn csv_import_package_append(
     } else {
         open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body).ok()
     };
-    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
+    if let Some(deny) = dataset_building_scope_denial(&writer, building_id.as_deref()) {
         return Err(deny);
     }
     if let Some(bid) = building_id.as_deref() {
@@ -5146,6 +5207,8 @@ pub async fn csv_delete_dataset(
     headers: HeaderMap,
     Query(q): Query<DatasetIdQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Role and site scope before dataset files, historian purge, jobs, or actions.
+    let writer = require_dataset_writer(&state, &headers)?;
     let Some(id) =
         q.id.as_deref()
             .or(q.building_id.as_deref())
@@ -5157,9 +5220,9 @@ pub async fn csv_delete_dataset(
             Json(json!({"ok": false, "error": "id query required"})),
         ));
     };
-    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&id)) {
+    if let Some(deny) = dataset_building_scope_denial(&writer, Some(&id)) {
         return Err(deny);
-    };
+    }
     let action_id = actions::start_action(
         "dataset_delete",
         &format!("Delete site · {id}"),
@@ -8024,5 +8087,474 @@ mod version_tests {
         assert!(version.starts_with(env!("CARGO_PKG_VERSION")), "{version}");
         assert!(body.get("token").is_none());
         assert!(body.get("password").is_none());
+    }
+
+    /// Import, append, and dataset delete (workspace delete + historian purge)
+    /// require operator or admin and the caller's site. Denial leaves files,
+    /// the actions log, the audit log, and — when a test database is configured —
+    /// Timescale rows unchanged.
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE for the dataset write role matrix"
+    )]
+    async fn dataset_writes_require_role_and_site_scope() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let pg_url = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let parquet = workspace.path().join(".cache/parquet");
+        let audit_path = workspace.path().join("logs/security_audit.jsonl");
+        let _historian =
+            HistorianEnv::isolate(parquet.to_str().unwrap(), audit_path.to_str().unwrap());
+
+        let tenant_a = "w1b_tenant_a";
+        let plane = crate::tenant::ControlPlane {
+            tenants: vec![
+                crate::tenant::TenantRecord {
+                    id: tenant_a.into(),
+                    name: "A".into(),
+                    building_ids: vec![
+                        "W1B_VIEW".into(),
+                        "W1B_OWN".into(),
+                        "W1B_ADMIN".into(),
+                        "W1B_PG_VIEW".into(),
+                        "W1B_PG_OWN".into(),
+                    ],
+                },
+                crate::tenant::TenantRecord {
+                    id: "w1b_tenant_b".into(),
+                    name: "B".into(),
+                    building_ids: vec!["W1B_FOREIGN".into(), "W1B_PG_FOREIGN".into()],
+                },
+            ],
+        };
+        plane.save(workspace.path()).unwrap();
+        for id in ["W1B_VIEW", "W1B_FOREIGN", "W1B_PG_VIEW", "W1B_PG_FOREIGN"] {
+            write_sentinel(workspace.path(), id);
+        }
+
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("dataset-write-role-matrix-test-secret".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let membership = vec![tenant_a.to_string()];
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("w1b-viewer", crate::auth::Role::Viewer, 600, &membership)
+            .unwrap();
+        let operator = state
+            .auth
+            .issue_token_with_tenants(
+                "w1b-operator",
+                crate::auth::Role::Operator,
+                600,
+                &membership,
+            )
+            .unwrap();
+        let admin = state
+            .auth
+            .issue_token_with_tenants("w1b-admin", crate::auth::Role::Admin, 600, &membership)
+            .unwrap();
+
+        let before = workspace_fingerprint(workspace.path());
+        let denials = [
+            (crate::auth::Role::Viewer, &viewer, "W1B_VIEW", "own"),
+            (crate::auth::Role::Viewer, &viewer, "W1B_FOREIGN", "foreign"),
+            (
+                crate::auth::Role::Operator,
+                &operator,
+                "W1B_FOREIGN",
+                "foreign",
+            ),
+            (crate::auth::Role::Admin, &admin, "W1B_FOREIGN", "foreign"),
+        ];
+        for (role, token, building, scope) in denials {
+            for op in [WriteOp::Import, WriteOp::Append, WriteOp::Delete] {
+                let (status, body) = dispatch(&app, token, op, building).await;
+                assert_eq!(
+                    status,
+                    StatusCode::FORBIDDEN,
+                    "{role:?} {scope} {op:?} body={body}"
+                );
+                assert_eq!(body.get("ok").and_then(|v| v.as_bool()), Some(false));
+                let err = body.get("error").and_then(|v| v.as_str()).unwrap_or("");
+                if role == crate::auth::Role::Viewer {
+                    assert!(
+                        err.contains("operator or admin role required"),
+                        "{role:?} {scope} {op:?} error={err}"
+                    );
+                } else {
+                    assert!(
+                        err.contains("building not in tenant scope"),
+                        "{role:?} {scope} {op:?} error={err}"
+                    );
+                }
+                assert_eq!(
+                    workspace_fingerprint(workspace.path()),
+                    before,
+                    "{role:?} {scope} {op:?} wrote a file, action, or audit record"
+                );
+            }
+        }
+        assert_eq!(
+            std::fs::read_to_string(
+                workspace
+                    .path()
+                    .join("data/csv_buildings/W1B_VIEW/sentinel.txt")
+            )
+            .unwrap(),
+            "W1B_VIEW"
+        );
+        assert_eq!(
+            std::fs::read_to_string(
+                workspace
+                    .path()
+                    .join("data/csv_buildings/W1B_FOREIGN/sentinel.txt")
+            )
+            .unwrap(),
+            "W1B_FOREIGN"
+        );
+
+        let (status, body) = dispatch(&app, &operator, WriteOp::Import, "W1B_OWN").await;
+        assert_eq!(status, StatusCode::OK, "operator own import {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+        assert!(
+            workspace
+                .path()
+                .join("data/csv_buildings/W1B_OWN/AHU_1/history_wide.csv")
+                .is_file(),
+            "operator import did not materialize the package"
+        );
+
+        let (status, body) = dispatch(&app, &operator, WriteOp::Append, "W1B_OWN").await;
+        assert_eq!(status, StatusCode::OK, "operator own append {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+
+        let (status, body) = dispatch(&app, &admin, WriteOp::Import, "W1B_ADMIN").await;
+        assert_eq!(status, StatusCode::OK, "admin own import {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+
+        let (status, body) = dispatch(&app, &admin, WriteOp::Append, "W1B_ADMIN").await;
+        assert_eq!(status, StatusCode::OK, "admin own append {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+
+        // Delete is the purge entry point: workspace files and historian rows.
+        let (status, body) = dispatch(&app, &operator, WriteOp::Delete, "W1B_OWN").await;
+        assert_eq!(status, StatusCode::OK, "operator own delete {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+        assert!(
+            !workspace.path().join("data/csv_buildings/W1B_OWN").exists(),
+            "operator delete left the package directory"
+        );
+
+        let (status, body) = dispatch(&app, &admin, WriteOp::Delete, "W1B_ADMIN").await;
+        assert_eq!(status, StatusCode::OK, "admin own delete {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+        assert!(!workspace
+            .path()
+            .join("data/csv_buildings/W1B_ADMIN")
+            .exists());
+
+        assert_eq!(
+            std::fs::read_to_string(
+                workspace
+                    .path()
+                    .join("data/csv_buildings/W1B_VIEW/sentinel.txt")
+            )
+            .unwrap(),
+            "W1B_VIEW"
+        );
+        assert_eq!(
+            std::fs::read_to_string(
+                workspace
+                    .path()
+                    .join("data/csv_buildings/W1B_FOREIGN/sentinel.txt")
+            )
+            .unwrap(),
+            "W1B_FOREIGN"
+        );
+
+        let hub = state
+            .auth
+            .issue_token_with_tenants("admin", crate::auth::Role::Admin, 600, &[])
+            .unwrap();
+        let (status, body) = dispatch(&app, &hub, WriteOp::Import, "W1B_HUB").await;
+        assert_eq!(status, StatusCode::OK, "hub admin import {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+
+        if let Some(url) = pg_url {
+            assert_timescale_purge_gate(&app, &viewer, &operator, &url).await;
+        }
+    }
+
+    async fn dispatch(
+        app: &axum::Router,
+        token: &str,
+        op: WriteOp,
+        building: &str,
+    ) -> (StatusCode, serde_json::Value) {
+        let request = match op {
+            WriteOp::Import => Request::post("/api/csv/import/package")
+                .header("content-type", "application/zip")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(package_zip(building)))
+                .unwrap(),
+            WriteOp::Append => {
+                let payload = serde_json::json!({
+                    "confirm": true,
+                    "building_id": building,
+                    "equipment_id": "AHU_1",
+                    "csv": "timestamp_utc,SF_SPD,DA_P,DA_P_SP\n2024-01-01T01:00:00Z,80,1.1,1.0\n"
+                });
+                Request::post("/api/csv/import/package/append")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(payload.to_string()))
+                    .unwrap()
+            }
+            WriteOp::Delete => Request::delete(format!("/api/datasets?id={building}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        };
+        let response = app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = serde_json::from_slice(&bytes).unwrap_or_else(
+            |_| serde_json::json!({ "raw": String::from_utf8_lossy(&bytes).into_owned() }),
+        );
+        (status, body)
+    }
+
+    async fn assert_timescale_purge_gate(
+        app: &axum::Router,
+        viewer: &str,
+        operator: &str,
+        url: &str,
+    ) {
+        std::env::set_var("OPENFDD_DATABASE_URL", url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(url)
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS sample (
+                ts timestamptz NOT NULL,
+                site_id text NOT NULL,
+                openfdd_key text NOT NULL,
+                val double precision,
+                PRIMARY KEY (site_id, openfdd_key, ts)
+            )",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        for site in ["W1B_PG_OWN", "W1B_PG_VIEW", "W1B_PG_FOREIGN"] {
+            sqlx::query("DELETE FROM sample WHERE site_id = $1")
+                .bind(site)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                "INSERT INTO sample (ts, site_id, openfdd_key, val) VALUES ($1, $2, 'marker', 1.0)",
+            )
+            .bind(chrono::Utc::now())
+            .bind(site)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+
+        let cases = [
+            (viewer, "W1B_PG_VIEW", "viewer own"),
+            (viewer, "W1B_PG_FOREIGN", "viewer foreign"),
+            (operator, "W1B_PG_FOREIGN", "operator foreign"),
+        ];
+        for (token, building, label) in cases {
+            for op in [WriteOp::Import, WriteOp::Append, WriteOp::Delete] {
+                let before = sample_count(&pool, building).await;
+                assert_eq!(before, 1, "{label} seed");
+                let (status, body) = dispatch(app, token, op, building).await;
+                assert_eq!(status, StatusCode::FORBIDDEN, "{label} {op:?} {body}");
+                assert_eq!(
+                    sample_count(&pool, building).await,
+                    before,
+                    "{label} {op:?} changed historian rows"
+                );
+            }
+        }
+
+        let (status, body) = dispatch(app, operator, WriteOp::Delete, "W1B_PG_OWN").await;
+        assert_eq!(status, StatusCode::OK, "operator purge {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+        assert_eq!(sample_count(&pool, "W1B_PG_OWN").await, 0);
+        assert_eq!(sample_count(&pool, "W1B_PG_VIEW").await, 1);
+        assert_eq!(sample_count(&pool, "W1B_PG_FOREIGN").await, 1);
+
+        for site in ["W1B_PG_OWN", "W1B_PG_VIEW", "W1B_PG_FOREIGN"] {
+            sqlx::query("DELETE FROM sample WHERE site_id = $1")
+                .bind(site)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+    }
+
+    async fn sample_count(pool: &sqlx::PgPool, site: &str) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM sample WHERE site_id = $1")
+            .bind(site)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum WriteOp {
+        Import,
+        Append,
+        Delete,
+    }
+
+    struct HistorianEnv {
+        prev: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl HistorianEnv {
+        fn isolate(parquet: &str, audit: &str) -> Self {
+            let keys = [
+                ("OPENFDD_MULTI_TENANT", Some("1")),
+                ("OPENFDD_HISTORIAN", Some("parquet")),
+                ("OPENFDD_STORAGE_URL", None),
+                ("OPENFDD_DATABASE_URL", None),
+                ("OPENFDD_PARQUET_ROOT", Some(parquet)),
+                ("OPENFDD_AUDIT_LOG_PATH", Some(audit)),
+            ];
+            let prev = keys
+                .into_iter()
+                .map(|(key, value)| {
+                    let old = std::env::var(key).ok();
+                    match value {
+                        Some(v) => std::env::set_var(key, v),
+                        None => std::env::remove_var(key),
+                    }
+                    (key, old)
+                })
+                .collect();
+            Self { prev }
+        }
+    }
+
+    impl Drop for HistorianEnv {
+        fn drop(&mut self) {
+            for (key, old) in self.prev.drain(..) {
+                match old {
+                    Some(v) => std::env::set_var(key, v),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    fn write_sentinel(root: &std::path::Path, id: &str) {
+        let dir = root.join("data/csv_buildings").join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("sentinel.txt"), id).unwrap();
+    }
+
+    fn workspace_fingerprint(root: &std::path::Path) -> String {
+        let mut files = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                let Ok(meta) = entry.metadata() else {
+                    continue;
+                };
+                let rel = path.strip_prefix(root).unwrap_or(&path);
+                files.push(format!("{}:{}", rel.display(), meta.len()));
+            }
+        }
+        files.sort();
+        files.join("\n")
+    }
+
+    fn package_zip(building_id: &str) -> Vec<u8> {
+        use std::io::Write;
+        let manifest = format!(
+            r#"{{"schema_version":"openfdd_package_v1","building_id":"{building_id}","grid_minutes":5,"timezone":"UTC"}}"#
+        );
+        let map = r#"{"equipType":"ahu","points":{"fan-cmd":"SF_SPD","duct-static-pressure":"DA_P","duct-static-pressure-sp":"DA_P_SP"}}"#;
+        let mut history = String::from("timestamp_utc,SF_SPD,DA_P,DA_P_SP\n");
+        for minute in [0, 5, 10, 15, 20, 25] {
+            history.push_str(&format!("2024-01-01T00:{minute:02}:00Z,0.95,0.4,1.4\n"));
+        }
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut zw = zip::ZipWriter::new(&mut cursor);
+            let opts = zip::write::SimpleFileOptions::default();
+            for (name, content) in [
+                ("manifest.json", manifest.as_str()),
+                ("AHU_1/history_wide.json", map),
+                ("AHU_1/history_wide.csv", history.as_str()),
+            ] {
+                zw.start_file(name, opts).unwrap();
+                zw.write_all(content.as_bytes()).unwrap();
+            }
+            zw.finish().unwrap();
+        }
+        cursor.into_inner()
     }
 }
