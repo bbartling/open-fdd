@@ -957,6 +957,7 @@ pub async fn admin_upsert_user(
     let mut store = crate::user_store::UserStore::load_or_empty(&ws);
     let rec = crate::user_store::UserRecord {
         username: body.username,
+        user_id: String::new(),
         role: body.role,
         tenant_ids: body.tenant_ids,
         password_env: body.password_env,
@@ -7178,7 +7179,12 @@ mod version_tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE with file-plane token checks"
+    )]
     async fn package_roles_http_denies_viewer_before_mutation() {
+        let _env_lock = crate::test_env_lock::lock_env();
         let mut state = AppState::new();
         state.auth = crate::auth::AuthConfig {
             secret: Some("package-roles-viewer-deny-test-secret".into()),

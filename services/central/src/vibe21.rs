@@ -1072,7 +1072,12 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE with file-plane token checks"
+    )]
     async fn vibe21_import_denies_viewer_before_archive_work() {
+        let _env_lock = crate::test_env_lock::lock_env();
         let mut state = AppState::new();
         state.auth = crate::auth::AuthConfig {
             secret: Some("vibe21-s01-viewer-test-secret-32chars".into()),

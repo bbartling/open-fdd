@@ -13,6 +13,9 @@ use crate::auth::{constant_time_eq_bytes, Role};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRecord {
     pub username: String,
+    /// Server-minted id. A recreate allocates a new one; callers cannot choose it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub user_id: String,
     /// `operator` or `viewer` (hub `admin` stays env-only).
     pub role: String,
     #[serde(default)]
@@ -31,10 +34,33 @@ pub struct UserRecord {
     pub session_version: u64,
 }
 
+/// A control-plane username that was removed. The session epoch is kept so a
+/// later account with the same name cannot start again at zero.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RetiredUser {
+    pub username: String,
+    #[serde(default)]
+    pub user_id: String,
+    #[serde(default)]
+    pub session_version: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct UserStore {
     #[serde(default)]
     pub users: Vec<UserRecord>,
+    #[serde(default)]
+    pub retired: Vec<RetiredUser>,
+}
+
+/// Result of reading `users.json`. Auth must not treat a bad read as an empty plane.
+#[derive(Debug)]
+pub enum UserStoreLoad {
+    Ready(UserStore),
+    /// The file is not there. A deployment with only env identities looks like this.
+    Absent,
+    /// Present but unreadable, or JSON that is not this store.
+    Unreadable,
 }
 
 impl UserStore {
@@ -45,12 +71,67 @@ impl UserStore {
             .join("users.json")
     }
 
-    pub fn load_or_empty(workspace: &Path) -> Self {
+    pub fn load_status(workspace: &Path) -> UserStoreLoad {
         let path = Self::path_under_workspace(workspace);
         match fs::read_to_string(&path) {
-            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
-            Err(_) => Self::default(),
+            Ok(raw) => match serde_json::from_str::<Self>(&raw) {
+                Ok(store) => UserStoreLoad::Ready(store),
+                Err(_) => UserStoreLoad::Unreadable,
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => UserStoreLoad::Absent,
+            Err(_) => UserStoreLoad::Unreadable,
         }
+    }
+
+    /// Missing or unreadable files become an empty plane.
+    ///
+    /// Token checks must use [`Self::load_status`] instead. An empty plane is not
+    /// a successful revocation check.
+    pub fn load_or_empty(workspace: &Path) -> Self {
+        match Self::load_status(workspace) {
+            UserStoreLoad::Ready(store) => store,
+            UserStoreLoad::Absent | UserStoreLoad::Unreadable => Self::default(),
+        }
+    }
+
+    pub fn is_retired(&self, username: &str) -> bool {
+        let want = username.trim();
+        self.retired
+            .iter()
+            .any(|row| row.username.eq_ignore_ascii_case(want))
+    }
+
+    /// Highest session epoch recorded for a removed username, if any.
+    pub fn retired_session_floor(&self, username: &str) -> Option<u64> {
+        self.retired
+            .iter()
+            .filter(|row| row.username.eq_ignore_ascii_case(username.trim()))
+            .map(|row| row.session_version)
+            .max()
+    }
+
+    pub fn note_retired(&mut self, username: String, user_id: String, session_version: u64) {
+        let name = username.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        if let Some(existing) = self
+            .retired
+            .iter_mut()
+            .find(|row| row.username.eq_ignore_ascii_case(&name))
+        {
+            if session_version >= existing.session_version {
+                existing.username = name;
+                existing.user_id = user_id;
+                existing.session_version = session_version;
+            }
+            return;
+        }
+        self.retired.push(RetiredUser {
+            username: name,
+            user_id,
+            session_version,
+        });
     }
 
     /// Authenticate a control-plane user. Returns (subject, role, tenant_ids).
@@ -143,6 +224,7 @@ mod tests {
         let store = UserStore {
             users: vec![UserRecord {
                 username: "evil".into(),
+                user_id: String::new(),
                 role: "admin".into(),
                 tenant_ids: vec!["acme".into()],
                 password_env: None,
@@ -150,6 +232,7 @@ mod tests {
                 disabled: false,
                 session_version: 0,
             }],
+            ..UserStore::default()
         };
         assert!(store.authenticate("evil", "x").is_none());
     }
