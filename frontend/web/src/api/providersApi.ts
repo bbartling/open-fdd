@@ -73,35 +73,12 @@ export interface ProviderSitesBody {
   health?: ProviderSiteHealth[];
 }
 
-export interface ProviderBinding {
-  provider_point_id?: string;
-  equipment_id?: string;
-  role?: string;
-  equip_type?: string | null;
-  source_unit?: string | null;
-  canonical_unit?: string | null;
-  selection_status?: string | null;
-  kind?: string | null;
-  cadence?: string | null;
-}
-
 export interface ProviderRequestPreview {
   method?: string;
   path?: string;
   note?: string;
   point_count?: number;
   credentials_included?: boolean;
-}
-
-export interface ProviderBindingsBody {
-  ok?: boolean;
-  available?: boolean;
-  reason?: string;
-  building_id?: string;
-  provider?: string;
-  model_revision?: string | null;
-  bindings?: ProviderBinding[];
-  request_preview?: ProviderRequestPreview | null;
 }
 
 export type OptionalFetch =
@@ -139,11 +116,15 @@ export async function listProviderBuildingIds(): Promise<string[]> {
   }
 }
 
-export async function fetchOptionalJson(path: string): Promise<OptionalFetch> {
+export async function fetchOptionalJson(
+  path: string,
+  signal?: AbortSignal,
+): Promise<OptionalFetch> {
   try {
-    const body = await apiFetch<unknown>(path);
+    const body = await apiFetch<unknown>(path, { signal });
     return { http: "ok", body };
   } catch (err) {
+    if (signal?.aborted) return { http: "error", message: "aborted" };
     if (err instanceof ApiClientError && (err.status === 404 || err.status === 501)) {
       return { http: "missing" };
     }
@@ -152,14 +133,16 @@ export async function fetchOptionalJson(path: string): Promise<OptionalFetch> {
   }
 }
 
-export function providerWindowsPath(buildingId: string): string {
+/** Durable ingest windows. `site_id` is the canonical site, not a removed providers route. */
+export function ingestJobsPath(siteId: string): string {
   const q = new URLSearchParams();
-  q.set("building_id", buildingId);
-  return `/api/providers/windows?${q.toString()}`;
+  q.set("site_id", siteId);
+  return `/api/ingest/jobs?${q.toString()}`;
 }
 
-export function providerBindingsPath(buildingId: string): string {
+/** Partial, failed, and retry windows. Coverage stays unassessed. */
+export function ingestGapsPath(siteId: string): string {
   const q = new URLSearchParams();
-  q.set("building_id", buildingId);
-  return `/api/providers/bindings?${q.toString()}`;
+  q.set("site_id", siteId);
+  return `/api/ingest/gaps?${q.toString()}`;
 }

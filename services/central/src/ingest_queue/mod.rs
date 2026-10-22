@@ -10,6 +10,8 @@ mod schedule;
 mod worker;
 
 #[cfg(test)]
+mod ledger_contract;
+#[cfg(test)]
 mod scope_acceptance;
 
 pub use client::QueueClient;

@@ -239,8 +239,12 @@ export async function runFdd(
 
 export async function getFddResultsDocument(
   buildingId?: string,
+  init?: { signal?: AbortSignal },
 ): Promise<FddResultsResponse> {
-  const body = await apiFetch<FddResultsResponse>(buildFddResultsPath(buildingId));
+  const path = buildFddResultsPath(buildingId);
+  const body = await (init?.signal
+    ? apiFetch<FddResultsResponse>(path, { signal: init.signal })
+    : apiFetch<FddResultsResponse>(path));
   if (!body.ok) {
     throw new Error(body.error || "Failed to load FDD results");
   }
@@ -251,8 +255,11 @@ export async function getFddResultsDocument(
   };
 }
 
-export async function getFddResults(buildingId?: string): Promise<FddResultRow[]> {
-  const body = await getFddResultsDocument(buildingId);
+export async function getFddResults(
+  buildingId?: string,
+  init?: { signal?: AbortSignal },
+): Promise<FddResultRow[]> {
+  const body = await getFddResultsDocument(buildingId, init);
   return body.results;
 }
 

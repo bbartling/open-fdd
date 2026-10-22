@@ -60,6 +60,22 @@ export function buildSessionSearch(
 }
 
 /**
+ * Drop the previous equipment id when the site changes, unless the patch
+ * names the equipment that belongs on the new site.
+ */
+export function clearEquipmentOnSiteChange(
+  current: SessionQuery,
+  patch: Partial<SessionQuery>,
+): Partial<SessionQuery> {
+  if (!Object.prototype.hasOwnProperty.call(patch, "siteId")) return patch;
+  if (Object.prototype.hasOwnProperty.call(patch, "equipment")) return patch;
+  const prev = current.siteId?.trim() ?? "";
+  const next = patch.siteId?.trim() ?? "";
+  if (prev === next) return patch;
+  return { ...patch, equipment: "" };
+}
+
+/**
  * Building id a session patch navigates away from.
  * Omitted `siteId` does not leave. Clearing or switching site does.
  */

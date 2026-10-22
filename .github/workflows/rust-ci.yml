@@ -272,11 +272,13 @@ jobs:
         with:
           toolchain: 1.95.0
       - uses: Swatinem/rust-cache@v2
-      - name: Idempotency, backfill identity, and queue metrics
+      - name: Idempotency, backfill identity, queue metrics, and ingest ledger contract
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
           OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED: "1"
-        run: cargo test -p openfdd-central ingest_idempotency_backfill_and_metrics_are_tenant_scoped -- --test-threads=1
+        run: |
+          cargo test -p openfdd-central ingest_idempotency_backfill_and_metrics_are_tenant_scoped -- --test-threads=1
+          cargo test -p openfdd-central ingest_jobs_and_gaps_contract -- --test-threads=1
 
   synthetic-sql-parity:
     name: Synthetic pandas equals Timescale SQL

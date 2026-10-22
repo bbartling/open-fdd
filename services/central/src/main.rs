@@ -27,6 +27,8 @@ mod jobs;
 mod lifecycle;
 mod live_historian;
 mod logging;
+#[cfg(test)]
+mod metering_scope_fixtures;
 mod models;
 mod openapi;
 #[cfg(test)]

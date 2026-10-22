@@ -1,5 +1,5 @@
 import type {
-  ProviderBinding,
+  OptionalFetch,
   ProviderRequestPreview,
   ProviderSiteConfig,
   ProviderSiteHealth,
@@ -33,14 +33,16 @@ export interface ProviderRow {
 export interface ProviderWindowRow {
   id: string;
   deviceId: string;
+  providerInstanceId: string;
+  modelRevision: string;
   windowStart: string;
   windowEnd: string;
   state: string;
-  requestedPoints: number | null;
+  fetched: number | null;
   accepted: number | null;
   rejected: number | null;
-  committed: number | null;
-  retryCount: number | null;
+  inserted: number | null;
+  attempt: number | null;
   bytes: number | null;
   durationMs: number | null;
   jobId: string;
@@ -48,9 +50,36 @@ export interface ProviderWindowRow {
   reason: string;
 }
 
+export interface JobIdentityBinding {
+  key: string;
+  providerInstanceId: string;
+  deviceId: string;
+  modelRevision: string;
+  windowCount: number;
+}
+
+export const BOUNDED_WINDOW_COVERAGE_LABEL =
+  "Bounded-window coverage. Coverage is not assessed. Update-log replication is not claimed. This is not a gap-free ingest claim.";
+
+export const POLL_LEDGER_COVERAGE_LABEL =
+  "Bounded-window coverage. A poll snapshot does not establish gap-free ingest.";
+
+const MISSING_INGEST_ENDPOINT =
+  "The ingest jobs or gaps endpoint is not on this API. A missing endpoint is not coverage and is not a gap-free ingest.";
+
+const INGEST_LEDGER_ERROR =
+  "Ingest jobs or gaps could not be loaded. Poll health is unchanged, and this is not a gap-free result.";
+
 export type WindowLedgerView =
-  | { available: true; windows: ProviderWindowRow[]; note: string }
-  | { available: false; reason: string };
+  | {
+      status: "ready";
+      coverageLabel: string;
+      jobs: ProviderWindowRow[];
+      gaps: ProviderWindowRow[];
+      jobsNote: string;
+      gapsNote: string;
+    }
+  | { status: "unavailable"; reason: string };
 
 export interface SafeRequestPreview {
   method: "GET";
@@ -58,17 +87,6 @@ export interface SafeRequestPreview {
   note: string;
   pointCount: number | null;
 }
-
-export type BindingsView =
-  | {
-      available: true;
-      bindings: ProviderBinding[];
-      modelRevision: string | null;
-      provider: string | null;
-      preview: SafeRequestPreview | null;
-      previewRefusal: string | null;
-    }
-  | { available: false; reason: string };
 
 const SECRET_TEXT = /client_secret|authorization|bearer\s|access_token|refresh_token|token=/i;
 const SECRET_QUERY_KEY = /secret|token|authorization|password/i;
@@ -263,75 +281,132 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function windowFromRaw(raw: unknown, index: number): ProviderWindowRow | null {
+const COVERAGE_NOT_ASSESSED = "not_assessed";
+const GAPS_GUARANTEE = "bounded_windows_only";
+const UPDATE_LOG_NOT_CLAIMED = "not_claimed";
+
+function claimsGapFree(record: Record<string, unknown>): boolean {
+  if (record.gapless === true) return true;
+  const guarantee = asRecord(record.guarantee);
+  return guarantee?.gapless === true;
+}
+
+function coverageIsUnassessed(value: unknown): boolean {
+  return text(value) === COVERAGE_NOT_ASSESSED;
+}
+
+function windowFromJob(raw: unknown, recoverable: boolean | null): ProviderWindowRow | null {
   const row = asRecord(raw);
   if (!row) return null;
-  const deviceId = text(row.device_id) || text(row.equipment_id);
-  const windowStart = text(row.window_start) || text(row.from) || text(row.logical_window_start);
-  const windowEnd = text(row.window_end) || text(row.to) || text(row.logical_window_end);
-  const state = text(row.state) || text(row.status) || "unknown";
-  const jobId = text(row.job_id) || text(row.request_id) || text(row.id);
-  if (!deviceId && !windowStart && !jobId) return null;
-  const recoverable = boolOrNull(row.recoverable);
+  const jobId = text(row.job_id);
+  if (!jobId) return null;
+  const counts = asRecord(row.counts);
+  const coverage = text(row.coverage);
+  if (coverage && coverage !== COVERAGE_NOT_ASSESSED) return null;
   return {
-    id: jobId || `${deviceId}:${windowStart}:${index}`,
-    deviceId,
-    windowStart,
-    windowEnd,
-    state,
-    requestedPoints: num(row.requested_points),
-    accepted: num(row.accepted) ?? num(row.fetched),
-    rejected: num(row.rejected),
-    committed: num(row.committed) ?? num(row.upserted) ?? num(row.inserted),
-    retryCount: num(row.retry_count),
-    bytes: num(row.bytes) ?? num(row.response_bytes),
+    id: jobId,
+    deviceId: text(row.device_id),
+    providerInstanceId: text(row.provider_instance_id),
+    modelRevision: text(row.model_revision),
+    windowStart: text(row.logical_window_start),
+    windowEnd: text(row.logical_window_end),
+    state: text(row.state) || "unknown",
+    fetched: num(counts?.fetched),
+    accepted: num(counts?.accepted),
+    rejected: num(counts?.rejected),
+    inserted: num(counts?.inserted),
+    attempt: num(row.attempt),
+    bytes: num(row.bytes),
     durationMs: num(row.duration_ms),
-    jobId: jobId || "—",
+    jobId,
     recoverable,
-    reason: text(row.reason) || text(row.safe_error_code),
+    reason: text(row.safe_error_code),
   };
 }
 
-const LEDGER_ABSENT =
-  "Window and gap ledger is not on this API yet. Durable per-device hourly jobs (N5) have not landed. Last poll and ingested counts above are connectivity snapshots, not coverage. A successful poll does not mean the completed hour is gap-free. NF update-log replication is not claimed.";
-
-export function interpretWindowLedger(body: unknown, httpMissing: boolean): WindowLedgerView {
-  if (httpMissing) return { available: false, reason: LEDGER_ABSENT };
+function jobsFromEnvelope(body: unknown): ProviderWindowRow[] | null {
   const record = asRecord(body);
-  if (!record) {
+  if (!record || !coverageIsUnassessed(record.coverage) || claimsGapFree(record)) return null;
+  if (!Array.isArray(record.jobs)) return null;
+  const rows = record.jobs.slice(0, 500).map((row) => windowFromJob(row, null));
+  if (rows.some((row) => row == null)) return null;
+  return rows.filter((row): row is ProviderWindowRow => row != null);
+}
+
+function gapsFromEnvelope(body: unknown): ProviderWindowRow[] | null {
+  const record = asRecord(body);
+  if (!record || !coverageIsUnassessed(record.coverage) || claimsGapFree(record)) return null;
+  if (text(record.guarantee) !== GAPS_GUARANTEE) return null;
+  if (text(record.update_log) !== UPDATE_LOG_NOT_CLAIMED) return null;
+  if (!Array.isArray(record.gaps)) return null;
+  const rows = record.gaps.slice(0, 500).map((row) => {
+    const wrapper = asRecord(row);
+    if (!wrapper) return null;
+    const recoverable = boolOrNull(wrapper.recoverable);
+    if (recoverable == null) return null;
+    return windowFromJob(wrapper.job, recoverable);
+  });
+  if (rows.some((row) => row == null)) return null;
+  return rows.filter((row): row is ProviderWindowRow => row != null);
+}
+
+export function interpretIngestLedger(jobsBody: unknown, gapsBody: unknown): WindowLedgerView {
+  const jobs = jobsFromEnvelope(jobsBody);
+  const gaps = gapsFromEnvelope(gapsBody);
+  if (!jobs || !gaps) {
     return {
-      available: false,
-      reason: "This response is not a window ledger. Poll health is not coverage.",
+      status: "unavailable",
+      reason:
+        "This response is not the ingest jobs and gaps contract. Coverage was not assessed from it, and it is not shown as gap-free.",
     };
   }
-  if (record.available === false || record.implemented === false) {
-    return {
-      available: false,
-      reason: text(record.reason) || LEDGER_ABSENT,
-    };
+  const jobsNote =
+    jobs.length === 0
+      ? "No durable job windows were returned. That is not a green coverage result."
+      : "Durable job windows and retries. These rows are not a device-hour completeness proof.";
+  const gapsNote =
+    gaps.length === 0
+      ? "No gaps in the returned windows. An empty gap list is not gap-free ingest."
+      : "Partial, failed, and retry windows in the bounded list. These rows are not a device-hour completeness proof.";
+  return {
+    status: "ready",
+    coverageLabel: BOUNDED_WINDOW_COVERAGE_LABEL,
+    jobs,
+    gaps,
+    jobsNote,
+    gapsNote,
+  };
+}
+
+export function ledgerFromFetches(jobs: OptionalFetch, gaps: OptionalFetch): WindowLedgerView {
+  if (jobs.http === "error" || gaps.http === "error") {
+    return { status: "unavailable", reason: INGEST_LEDGER_ERROR };
   }
-  const rawRows = Array.isArray(record.windows)
-    ? record.windows
-    : Array.isArray(record.jobs)
-      ? record.jobs
-      : null;
-  if (!rawRows) {
-    return {
-      available: false,
-      reason: "This response is not a window ledger. Poll health is not coverage.",
-    };
+  if (jobs.http === "missing" || gaps.http === "missing") {
+    return { status: "unavailable", reason: MISSING_INGEST_ENDPOINT };
   }
-  const windows = rawRows
-    .slice(0, 500)
-    .map((row, index) => windowFromRaw(row, index))
-    .filter((row): row is ProviderWindowRow => row != null);
-  const note =
-    windows.length === 0
-      ? "Ledger is present and has no windows. That is not a green coverage result."
-      : rawRows.length > 500
-        ? "Showing the first 500 windows returned for this site."
-        : "";
-  return { available: true, windows, note };
+  return interpretIngestLedger(jobs.body, gaps.body);
+}
+
+export function jobIdentityBindings(jobs: ProviderWindowRow[]): JobIdentityBinding[] {
+  const map = new Map<string, JobIdentityBinding>();
+  for (const job of jobs) {
+    const key = `${job.providerInstanceId}\u0000${job.deviceId}\u0000${job.modelRevision}`;
+    const existing = map.get(key);
+    map.set(key, {
+      key,
+      providerInstanceId: job.providerInstanceId,
+      deviceId: job.deviceId,
+      modelRevision: job.modelRevision,
+      windowCount: (existing?.windowCount ?? 0) + 1,
+    });
+  }
+  return [...map.values()].sort(
+    (a, b) =>
+      a.providerInstanceId.localeCompare(b.providerInstanceId) ||
+      a.deviceId.localeCompare(b.deviceId) ||
+      a.modelRevision.localeCompare(b.modelRevision),
+  );
 }
 
 export function windowStateLabel(row: ProviderWindowRow): string {
@@ -413,69 +488,4 @@ export function safeRequestPreview(
 export function illustratedNfHistoryRead(pointCount: number | null): string {
   const n = pointCount == null ? "N" : String(pointCount);
   return `GET /api/v1/point/data?uuids=<${n} opaque ids>&from.seconds=<window>&to.seconds=<window>`;
-}
-
-export function interpretBindings(body: unknown, httpMissing: boolean): BindingsView {
-  if (httpMissing) {
-    return {
-      available: false,
-      reason:
-        "Typed bindings are not published by this API yet (N3). Mapped-point counts on Operations are not a point list, and this screen will not invent a request.",
-    };
-  }
-  const record = asRecord(body);
-  if (!record) {
-    return {
-      available: false,
-      reason: "Bindings response was empty. No request preview was generated in the browser.",
-    };
-  }
-  if (record.available === false || record.implemented === false) {
-    return {
-      available: false,
-      reason:
-        text(record.reason) ||
-        "Typed bindings are not published by this API yet (N3).",
-    };
-  }
-  if (!Array.isArray(record.bindings)) {
-    return {
-      available: false,
-      reason: "Bindings response had no binding list. No request preview was generated in the browser.",
-    };
-  }
-  const bindings = (record.bindings as unknown[])
-    .map((item) => asRecord(item))
-    .filter((item): item is Record<string, unknown> => item != null)
-    .slice(0, 500)
-    .map((item) => ({
-      provider_point_id: text(item.provider_point_id) || text(item.point_id),
-      equipment_id: text(item.equipment_id),
-      role: text(item.role) || text(item.canonical_role),
-      equip_type: text(item.equip_type) || null,
-      source_unit: text(item.source_unit) || null,
-      canonical_unit: text(item.canonical_unit) || null,
-      selection_status: text(item.selection_status) || text(item.approval_state) || null,
-      kind: text(item.kind) || null,
-      cadence: text(item.cadence) || null,
-    }));
-  const previewRaw = asRecord(record.request_preview);
-  const previewInput: ProviderRequestPreview | null = previewRaw
-    ? {
-        method: text(previewRaw.method),
-        path: text(previewRaw.path),
-        note: text(previewRaw.note),
-        point_count: num(previewRaw.point_count) ?? undefined,
-        credentials_included: previewRaw.credentials_included === true,
-      }
-    : null;
-  const safe = safeRequestPreview(previewInput);
-  return {
-    available: true,
-    bindings,
-    modelRevision: text(record.model_revision) || null,
-    provider: text(record.provider) || null,
-    preview: safe.preview,
-    previewRefusal: safe.refusal,
-  };
 }
