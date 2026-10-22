@@ -64,7 +64,7 @@ export function MeteringPage() {
               . Legacy fuel campus ZIP is not the primary ingest path.
             </InlineAlert>
 
-            <FuelDashboard preferredCampusId={siteId || undefined} />
+            <FuelDashboard siteId={siteId || undefined} />
           </>
         ) : (
           <MvChangePointPanel />
