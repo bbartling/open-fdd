@@ -1,4 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  beginScopedRequest,
+  cancelScopedRequest,
+  createScopeHolder,
+  isAbortError,
+  useScopedLoad,
+} from "../session/scopedLoad";
 import { AppShell } from "../components/AppShell";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import { ruleLabelStandard, mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
@@ -26,7 +33,14 @@ import {
   type FddResultRow,
   type FddRuleSummary,
 } from "../api/fddApi";
-import { listFddEquipment, postBasVsWebOat, postInspect, postSensorHealth } from "../api/analyticsApi";
+import {
+  listFddEquipment,
+  postBasVsWebOat,
+  postInspect,
+  postSensorHealth,
+  type FddEquipmentItem,
+} from "../api/analyticsApi";
+import type { MappingEquipment, PackageMappingResponse } from "../api/mappingApi";
 import {
   missingSegmentCount,
   type PlotlyFigure,
@@ -43,6 +57,79 @@ import { basOverlay } from "../api/centralOverview";
 import {
   preferredPlotRuleId,
 } from "../lib/fddPlotStatus";
+
+type InventoryRow = {
+  equipment_id: string;
+  equipment_type: string;
+  roles: string[];
+};
+
+type SiteInventory = {
+  equipment: InventoryRow[];
+  results: FddResultRow[];
+};
+
+const EMPTY_SITE_INVENTORY: SiteInventory = { equipment: [], results: [] };
+
+function mappedRolesFor(eq: MappingEquipment | undefined): string[] {
+  const roles = new Set<string>();
+  for (const role of Object.values(eq?.roles ?? {})) {
+    if (role) roles.add(String(role));
+  }
+  for (const col of eq?.columns ?? []) {
+    if (col.role) roles.add(String(col.role));
+  }
+  return [...roles];
+}
+
+function mergeSiteInventory(
+  inv: PackageMappingResponse | null,
+  listed: FddEquipmentItem[],
+): InventoryRow[] {
+  const byId = new Map<string, InventoryRow>();
+  for (const item of listed) {
+    const id = String(item.equipment_id ?? "");
+    if (!id) continue;
+    byId.set(id, {
+      equipment_id: id,
+      equipment_type: String(item.equipment_type ?? "unknown"),
+      roles: [],
+    });
+  }
+  for (const item of inv?.equipment ?? []) {
+    const id = String(item.equipment_id ?? "");
+    if (!id) continue;
+    const prev = byId.get(id);
+    const mappedType = String(item.equipment_type ?? "");
+    byId.set(id, {
+      equipment_id: id,
+      equipment_type:
+        prev && prev.equipment_type !== "unknown"
+          ? prev.equipment_type
+          : mappedType || prev?.equipment_type || "unknown",
+      roles: mappedRolesFor(item),
+    });
+  }
+  return [...byId.values()].sort((a, b) => a.equipment_id.localeCompare(b.equipment_id));
+}
+
+async function loadSiteInventory(site: string, signal: AbortSignal): Promise<SiteInventory> {
+  const [inv, listed, rows] = await Promise.all([
+    getPackageMapping(site, undefined, { signal }).catch((err: unknown) => {
+      if (isAbortError(err)) throw err;
+      return null;
+    }),
+    listFddEquipment(site, { signal }).catch((err: unknown) => {
+      if (isAbortError(err)) throw err;
+      return [] as FddEquipmentItem[];
+    }),
+    getFddResults(site, { signal }).catch((err: unknown) => {
+      if (isAbortError(err)) throw err;
+      return [] as FddResultRow[];
+    }),
+  ]);
+  return { equipment: mergeSiteInventory(inv, listed), results: rows };
+}
 
 export const SQL_ANALYTICS_RULE_IDS = new Set([
   "FAN-RUNTIME-HOURS",
@@ -100,16 +187,11 @@ export function ReportsPage() {
 
   const [ruleId, setRuleId] = useState("");
   const [rules, setRules] = useState<FddRuleSummary[]>([]);
-  const [roleScope, setRoleScope] = useState<{
-    buildingId: string;
-    equipmentId: string;
-    roles: Set<string>;
-  } | null>(null);
-  const [inventory, setInventory] = useState<
-    Array<{ equipment_id: string; equipment_type: string }>
-  >([]);
   const [deviceType, setDeviceType] = useState("All");
-  const [results, setResults] = useState<FddResultRow[]>([]);
+  const [resultsOverride, setResultsOverride] = useState<{
+    site: string;
+    rows: FddResultRow[];
+  } | null>(null);
   const [applyZoneComfortGate, setApplyZoneComfortGate] = useState(
     loadZoneComfortGateDefault,
   );
@@ -134,6 +216,20 @@ export function ReportsPage() {
   const [leanBudget, setLeanBudget] = useState<FddPlotsByRuleLeanBudget | null>(
     null,
   );
+  const [chartSite, setChartSite] = useState(buildingId);
+  if (chartSite !== buildingId) {
+    setChartSite(buildingId);
+    setFigure(null);
+    setError(null);
+    setNoFaultBanner(null);
+    setNoFaultIsError(false);
+    setSensorRows([]);
+    setSensorFigure(null);
+    setSensorFaultFigure(null);
+    setSensorKey("");
+    setSensorError(null);
+    setDeviceType("All");
+  }
 
   useEffect(() => {
     void listFddRules()
@@ -150,84 +246,41 @@ export function ReportsPage() {
       .catch(() => setLeanBudget(null));
   }, []);
 
-  useEffect(() => {
-    if (!buildingId) {
-      setInventory([]);
-      setResults([]);
-      return;
-    }
-    void Promise.all([
-      getPackageMapping(buildingId).catch(() => null),
-      listFddEquipment(buildingId).catch(() => []),
-      getFddResults(buildingId).catch(() => [] as FddResultRow[]),
-    ]).then(([inv, listed, rows]) => {
-      const fromMap = (inv?.equipment ?? []).map((e) => ({
-        equipment_id: String(e.equipment_id ?? ""),
-        equipment_type: String(e.equipment_type ?? "unknown"),
-      }));
-      const fromList = listed.map((e) => ({
-        equipment_id: String(e.equipment_id ?? ""),
-        equipment_type: String(e.equipment_type ?? "unknown"),
-      }));
-      const byId = new Map<string, { equipment_id: string; equipment_type: string }>();
-      for (const e of [...fromList, ...fromMap]) {
-        if (!e.equipment_id) continue;
-        const prev = byId.get(e.equipment_id);
-        if (!prev || prev.equipment_type === "unknown") byId.set(e.equipment_id, e);
-      }
-      const merged = [...byId.values()].sort((a, b) =>
-        a.equipment_id.localeCompare(b.equipment_id),
-      );
-      setInventory(merged);
-      setResults(rows);
-      if (!equipmentId && merged[0]) {
-        setQuery({ equipment: merged[0].equipment_id }, true);
-      }
-    });
-  }, [buildingId, equipmentId, setQuery]);
+  const inventoryLoad = useScopedLoad(
+    buildingId,
+    loadSiteInventory,
+    EMPTY_SITE_INVENTORY,
+  );
+  const inventoryReady = Boolean(buildingId) && inventoryLoad.committedKey === buildingId;
+  const inventory = inventoryReady
+    ? inventoryLoad.value.equipment
+    : EMPTY_SITE_INVENTORY.equipment;
+  const results =
+    resultsOverride?.site === buildingId
+      ? resultsOverride.rows
+      : inventoryReady
+        ? inventoryLoad.value.results
+        : EMPTY_SITE_INVENTORY.results;
 
   useEffect(() => {
-    if (!buildingId || !equipmentId) return;
-    let cancelled = false;
-    const site = buildingId;
-    const requested = equipmentId;
-    void getPackageMapping(site, requested)
-      .then((inv) => {
-        if (cancelled) return;
-        const roles = new Set<string>();
-        const eq = inv.equipment?.find((e) => e.equipment_id === requested);
-        for (const role of Object.values(eq?.roles ?? {})) {
-          if (role) roles.add(String(role));
-        }
-        for (const col of eq?.columns ?? []) {
-          if (col.role) roles.add(String(col.role));
-        }
-        setRoleScope({ buildingId: site, equipmentId: requested, roles });
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRoleScope({ buildingId: site, equipmentId: requested, roles: new Set() });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [buildingId, equipmentId]);
-
-  const mappedRoles =
-    roleScope &&
-    roleScope.buildingId === buildingId &&
-    roleScope.equipmentId === equipmentId
-      ? roleScope.roles
-      : null;
+    if (!inventoryReady) return;
+    const ids = inventory.map((item) => item.equipment_id);
+    if (equipmentId && ids.includes(equipmentId)) return;
+    const next = ids[0] ?? "";
+    if (next === equipmentId) return;
+    setQuery({ equipment: next }, true);
+  }, [inventoryReady, inventory, equipmentId, setQuery]);
 
   const selectedEquipment = useMemo(
     () => inventory.find((item) => item.equipment_id === equipmentId) ?? null,
     [inventory, equipmentId],
   );
   const selectedEquipmentType = selectedEquipment?.equipment_type ?? null;
-  const rolesForFilter =
-    mappedRoles != null && selectedEquipment != null ? mappedRoles : null;
+  const rolesForFilter = useMemo(() => {
+    if (!inventoryReady || selectedEquipment == null) return null;
+    return new Set(selectedEquipment.roles);
+  }, [inventoryReady, selectedEquipment]);
+  const equipmentKnown = inventoryReady && selectedEquipment != null;
 
   const deviceTypes = useMemo(() => {
     const types = [
@@ -297,7 +350,14 @@ export function ReportsPage() {
     [filteredInventory],
   );
 
-  const plotAbortRef = useRef<AbortController | null>(null);
+  const seriesHolder = useRef(createScopeHolder());
+  const resultsRef = useRef(results);
+  const rulesRef = useRef(rules);
+  const leanBudgetRef = useRef(leanBudget);
+  resultsRef.current = results;
+  rulesRef.current = rules;
+  leanBudgetRef.current = leanBudget;
+  const ruleReady = applicableRules.some((rule) => rule.rule_id === ruleId);
 
   const loadSeries = useCallback(async () => {
     if (!equipmentId || !ruleId) {
@@ -313,20 +373,20 @@ export function ReportsPage() {
       );
       return;
     }
-    plotAbortRef.current?.abort();
-    const ac = new AbortController();
-    plotAbortRef.current = ac;
+    const ticket = beginScopedRequest(seriesHolder.current);
+    const live = () => ticket.isCurrent();
     setLoading(true);
     setError(null);
     setNoFaultBanner(null);
     setNoFaultIsError(false);
     try {
       const series = await getFddSeries(equipmentId, ruleId, buildingId || undefined, {
-        signal: ac.signal,
-        maxPoints: leanPlotDefaultPoints(leanBudget),
+        signal: ticket.signal,
+        maxPoints: leanPlotDefaultPoints(leanBudgetRef.current),
       });
+      if (!live()) return;
       let rows = (series.rows ?? []) as Array<Record<string, unknown>>;
-      const zoneRule = isZoneTempRule(ruleId, rules);
+      const zoneRule = isZoneTempRule(ruleId, rulesRef.current);
       const gateOn = zoneRule && applyZoneComfortGate;
       if (gateOn && rows.some((r) => "occ_mode" in r || "occupied" in r)) {
         rows = rows.filter(rowIsOccupied);
@@ -345,10 +405,14 @@ export function ReportsPage() {
       if (isOatMeteoRule(ruleId) && buildingId) {
         try {
           // Web OAT is on weather equip — series alone is local oa_t only.
-          const basEnv = await postBasVsWebOat({
-            building_id: buildingId,
-            max_points: 4000,
-          });
+          const basEnv = await postBasVsWebOat(
+            {
+              building_id: buildingId,
+              max_points: 4000,
+            },
+            { signal: ticket.signal },
+          );
+          if (!live()) return;
           const overlay = basOverlay(basEnv.points ?? [], 5);
           if (overlay) {
             fig = withConfirmedFaultLane(overlay, {
@@ -360,10 +424,12 @@ export function ReportsPage() {
               confirmedFault: hasFaultOverlay ? fault : [],
             });
           }
-        } catch {
+        } catch (err) {
+          if (!live() || isAbortError(err)) return;
           // Fall through to ordinary series chart.
         }
       }
+      if (!live()) return;
       if (!fig) {
         fig = ruleResultChart(rows, {
           equipmentId: series.equipment_id ?? equipmentId,
@@ -373,7 +439,7 @@ export function ReportsPage() {
         });
       }
       setFigure(fig);
-      const resultRow = results.find(
+      const resultRow = resultsRef.current.find(
         (r) =>
           String(r.equipment_id) === equipmentId && String(r.rule_id) === ruleId,
       );
@@ -414,41 +480,44 @@ export function ReportsPage() {
         );
       }
     } catch (err) {
-      if (ac.signal.aborted) return;
+      if (!live() || isAbortError(err)) return;
       setFigure(null);
       setError(formatErr(err));
     } finally {
-      if (!ac.signal.aborted) setLoading(false);
+      if (live()) setLoading(false);
     }
-  }, [
-    buildingId,
-    equipmentId,
-    ruleId,
-    results,
-    rules,
-    applyZoneComfortGate,
-    leanBudget,
-  ]);
+  }, [buildingId, equipmentId, ruleId, applyZoneComfortGate]);
 
   useEffect(() => {
-    if (!buildingId || !equipmentId || !ruleId) return;
+    const series = seriesHolder.current;
+    if (!equipmentKnown || !ruleReady) return;
     void loadSeries();
-    return () => plotAbortRef.current?.abort();
-  }, [buildingId, equipmentId, ruleId, loadSeries]);
+    return () => cancelScopedRequest(series);
+  }, [equipmentKnown, ruleReady, loadSeries]);
 
+  const resultsHolder = useRef(createScopeHolder());
   // After Lab "Update this rule" / Overview run-all, refresh results + fault overlay.
   useEffect(() => {
     const onRules = () => {
       if (!buildingId) return;
-      void getFddResults(buildingId)
-        .then((rows) => setResults(rows))
-        .catch(() => undefined);
-      if (equipmentId && ruleId) {
-        void loadSeries();
-      }
+      const ticket = beginScopedRequest(resultsHolder.current);
+      void getFddResults(buildingId, { signal: ticket.signal })
+        .then((rows) => {
+          if (!ticket.isCurrent()) return;
+          resultsRef.current = rows;
+          setResultsOverride({ site: buildingId, rows });
+          if (equipmentId && ruleId) void loadSeries();
+        })
+        .catch((err: unknown) => {
+          if (isAbortError(err) || !ticket.isCurrent()) return;
+        });
     };
     window.addEventListener(RULES_UPDATED_EVENT, onRules);
-    return () => window.removeEventListener(RULES_UPDATED_EVENT, onRules);
+    const resultsScope = resultsHolder.current;
+    return () => {
+      window.removeEventListener(RULES_UPDATED_EVENT, onRules);
+      cancelScopedRequest(resultsScope);
+    };
   }, [buildingId, equipmentId, ruleId, loadSeries]);
 
   const loadSensorHealth = useCallback(async () => {
