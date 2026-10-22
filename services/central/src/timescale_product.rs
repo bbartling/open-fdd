@@ -3113,7 +3113,7 @@ mod elapsed_time_contract {
             assert_near(fault, 1.0, SECOND_HOURS, equipment_id);
             assert!(
                 fault < 1.5,
-                "{equipment_id} looks like a 300s poll count: {fault}"
+                "1-minute fault hours followed the 300s poll default: {fault}"
             );
             cadence_hours.push(fault);
             let runtime = result_row(&open, "FAN-RUNTIME-HOURS", equipment_id);
