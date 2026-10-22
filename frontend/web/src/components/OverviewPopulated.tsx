@@ -144,6 +144,13 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Comfort slider tick. Stored bounds stay °F until the slider moves. */
+function comfortDisplay(fahrenheit: number, unitSystem: "imperial" | "metric"): number {
+  const shown = displayScalar(fahrenheit, "degF", unitSystem);
+  if (unitSystem !== "metric") return shown;
+  return Math.round(shown * 10) / 10;
+}
+
 function hoursPerWeek(week: Record<string, DaySched>): number {
   let h = 0;
   for (const d of DAYS) {
@@ -224,8 +231,8 @@ export function OverviewPopulated({
     sortedEquipment.find((e) => e.equipment_id === equipmentId) ??
     sortedEquipment[0];
   const tempUnit = unitSystem === "metric" ? "°C" : "°F";
-  const zoneLowDisplay = displayScalar(zoneLow, "degF", unitSystem);
-  const zoneHighDisplay = displayScalar(zoneHigh, "degF", unitSystem);
+  const zoneLowDisplay = comfortDisplay(zoneLow, unitSystem);
+  const zoneHighDisplay = comfortDisplay(zoneHigh, unitSystem);
   const comfortStep = unitSystem === "metric" ? 0.3 : 0.5;
   const bareMin = hoursPerWeek(week);
   const spanH =
@@ -856,8 +863,8 @@ export function OverviewPopulated({
         <Slider
           id="zone-low"
           label={`Zone low ${tempUnit}`}
-          min={displayScalar(55, "degF", unitSystem)}
-          max={displayScalar(72, "degF", unitSystem)}
+          min={comfortDisplay(55, unitSystem)}
+          max={comfortDisplay(72, unitSystem)}
           step={comfortStep}
           value={zoneLowDisplay}
           onChange={(value) =>
@@ -868,8 +875,8 @@ export function OverviewPopulated({
         <Slider
           id="zone-high"
           label={`Zone high ${tempUnit}`}
-          min={displayScalar(70, "degF", unitSystem)}
-          max={displayScalar(85, "degF", unitSystem)}
+          min={comfortDisplay(70, unitSystem)}
+          max={comfortDisplay(85, unitSystem)}
           step={comfortStep}
           value={zoneHighDisplay}
           onChange={(value) =>
