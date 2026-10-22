@@ -10,6 +10,10 @@ use serde_json::{json, Value};
 use sqlx::Row;
 use std::sync::OnceLock;
 
+use crate::analytics::diagnostic_matrix::{
+    diagnostic_rows_json, DiagnosticFlagKind, DiagnosticObservation,
+    DIAGNOSTIC_MATRIX_QUERY_VERSION, DIAGNOSTIC_MATRIX_SCHEMA,
+};
 use crate::analytics::AnalyticsRequest;
 
 /// Validated window + equipment binds for Timescale analytics SQL (before aggregation).
@@ -346,23 +350,28 @@ pub async fn sensor_faults(
         .fetch_all(tsdb.pool())
         .await
         .context("sensor_faults")?;
-    let mut out = Vec::new();
+    let mut observations = Vec::with_capacity(rows.len());
     for r in rows {
-        out.push(json!({
-            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
-            "role": r.try_get::<String, _>("role").unwrap_or_default(),
-            "n": r.try_get::<i64, _>("n").ok(),
-            "last_ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("last_ts")
+        observations.push(DiagnosticObservation {
+            equipment_id: r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            role: r.try_get::<String, _>("role").unwrap_or_default(),
+            flag: r
+                .try_get::<String, _>("fault_flag")
+                .unwrap_or_else(|_| "OK".into()),
+            n: r.try_get::<i64, _>("n").ok(),
+            last_ts: r
+                .try_get::<chrono::DateTime<chrono::Utc>, _>("last_ts")
                 .ok()
                 .map(|t| t.to_rfc3339()),
-            "min_val": r.try_get::<f64, _>("min_val").ok(),
-            "max_val": r.try_get::<f64, _>("max_val").ok(),
-            "stddev_val": r.try_get::<f64, _>("stddev_val").ok(),
-            "fault_flag": r.try_get::<String, _>("fault_flag").unwrap_or_else(|_| "OK".into()),
-        }));
+            min_val: r.try_get::<f64, _>("min_val").ok(),
+            max_val: r.try_get::<f64, _>("max_val").ok(),
+            avg_val: None,
+            stddev_val: r.try_get::<f64, _>("stddev_val").ok(),
+        });
     }
+    let out = diagnostic_rows_json(building_id, DiagnosticFlagKind::Fault, observations);
     Ok(with_scope_meta(
-        envelope("sensor-faults", building_id, out),
+        diagnostic_envelope("sensor-faults", building_id, out),
         scope,
     ))
 }
@@ -509,19 +518,25 @@ pub async fn pid_hunting_proxy(
         .fetch_all(tsdb.pool())
         .await
         .context("pid_hunting_proxy")?;
-    let mut out = Vec::new();
+    let mut observations = Vec::with_capacity(rows.len());
     for r in rows {
-        out.push(json!({
-            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
-            "role": r.try_get::<String, _>("role").unwrap_or_default(),
-            "n": r.try_get::<i64, _>("n").ok(),
-            "avg_val": r.try_get::<f64, _>("avg_val").ok(),
-            "stddev_val": r.try_get::<f64, _>("stddev_val").ok(),
-            "hunt_flag": r.try_get::<String, _>("hunt_flag").unwrap_or_else(|_| "OK".into()),
-        }));
+        observations.push(DiagnosticObservation {
+            equipment_id: r.try_get::<String, _>("equipment_id").unwrap_or_default(),
+            role: r.try_get::<String, _>("role").unwrap_or_default(),
+            flag: r
+                .try_get::<String, _>("hunt_flag")
+                .unwrap_or_else(|_| "OK".into()),
+            n: r.try_get::<i64, _>("n").ok(),
+            last_ts: None,
+            min_val: None,
+            max_val: None,
+            avg_val: r.try_get::<f64, _>("avg_val").ok(),
+            stddev_val: r.try_get::<f64, _>("stddev_val").ok(),
+        });
     }
+    let out = diagnostic_rows_json(building_id, DiagnosticFlagKind::Hunt, observations);
     Ok(with_scope_meta(
-        envelope("pid-hunting", building_id, out),
+        diagnostic_envelope("pid-hunting", building_id, out),
         scope,
     ))
 }
@@ -773,6 +788,23 @@ fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
         "stale": false,
         "rows": rows,
     })
+}
+
+fn diagnostic_envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
+    let mut env = envelope(query_id, building_id, rows);
+    if let Some(obj) = env.as_object_mut() {
+        obj.insert(
+            "schema_version".to_string(),
+            json!(DIAGNOSTIC_MATRIX_SCHEMA),
+        );
+        obj.insert(
+            "query_version".to_string(),
+            json!(DIAGNOSTIC_MATRIX_QUERY_VERSION),
+        );
+        obj.insert("site_id".to_string(), json!(building_id));
+        obj.insert("warnings".to_string(), json!(Vec::<String>::new()));
+    }
+    env
 }
 
 fn building_from(

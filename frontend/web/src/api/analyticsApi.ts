@@ -38,6 +38,9 @@ export interface AnalyticsEnvelope {
   /** Pending / Soft-OPEN notes from Timescale dispatch (must survive unwrap). */
   note?: string | null;
   query_id?: string | null;
+  /** Site stamped on diagnostic matrix envelopes. */
+  site_id?: string | null;
+  building_id?: string | null;
   sample_count?: number | null;
   stale?: boolean;
   cache?: Record<string, unknown> | null;
@@ -97,6 +100,9 @@ export function unwrapAnalyticsEnvelope(
     note,
     query_id:
       (typeof nested.query_id === "string" && nested.query_id) || null,
+    site_id: (typeof nested.site_id === "string" && nested.site_id) || null,
+    building_id:
+      (typeof nested.building_id === "string" && nested.building_id) || null,
     sample_count:
       typeof nested.sample_count === "number" ? nested.sample_count : null,
     stale:
@@ -254,8 +260,9 @@ export async function postSqlAnomaly(
 
 export async function postVavHealth(
   body: AnalyticsRequest,
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/vav-health", body);
+  return postAnalytics("/api/analytics/vav-health", body, init);
 }
 
 export async function postAhuHealth(
@@ -266,8 +273,9 @@ export async function postAhuHealth(
 
 export async function postChillerHealth(
   body: AnalyticsRequest,
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/chiller-health", body);
+  return postAnalytics("/api/analytics/chiller-health", body, init);
 }
 
 export async function postBoilerHealth(
@@ -278,8 +286,9 @@ export async function postBoilerHealth(
 
 export async function postHpHealth(
   body: AnalyticsRequest,
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/hp-health", body);
+  return postAnalytics("/api/analytics/hp-health", body, init);
 }
 
 export async function postRcxChiller(
