@@ -116,8 +116,12 @@ export function buildPackageMappingPath(
   return `${PACKAGE_MAPPING_PATH}?${q.toString()}`;
 }
 
-export async function listPackageBuildings(): Promise<string[]> {
-  const body = await apiFetch<PackageBuildingsResponse>(PACKAGE_BUILDINGS_PATH);
+export async function listPackageBuildings(init?: {
+  signal?: AbortSignal;
+}): Promise<string[]> {
+  const body = await (init?.signal
+    ? apiFetch<PackageBuildingsResponse>(PACKAGE_BUILDINGS_PATH, { signal: init.signal })
+    : apiFetch<PackageBuildingsResponse>(PACKAGE_BUILDINGS_PATH));
   if (!body.ok) {
     throw new Error(body.error || "Failed to list package buildings");
   }
@@ -127,10 +131,12 @@ export async function listPackageBuildings(): Promise<string[]> {
 export async function getPackageMapping(
   buildingId: string,
   equipmentId?: string,
+  init?: { signal?: AbortSignal },
 ): Promise<PackageMappingResponse> {
-  const body = await apiFetch<PackageMappingResponse>(
-    buildPackageMappingPath(buildingId, equipmentId),
-  );
+  const path = buildPackageMappingPath(buildingId, equipmentId);
+  const body = await (init?.signal
+    ? apiFetch<PackageMappingResponse>(path, { signal: init.signal })
+    : apiFetch<PackageMappingResponse>(path));
   if (!body.ok) {
     throw new Error(body.error || "Failed to load package mapping");
   }

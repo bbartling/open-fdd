@@ -20,8 +20,14 @@ import {
   getPackageMapping,
   getSessionConfig,
   putSessionConfig,
+  type MappingEquipment,
   type SessionConfig,
 } from "../api/mappingApi";
+import {
+  beginScopedRequest,
+  createScopeHolder,
+  isAbortError,
+} from "../session/scopedLoad";
 import type { OverviewVibe19Response } from "../api/overviewTypes";
 import { fetchCentralOverview } from "../api/centralOverview";
 import type { FddEquipmentItem } from "../api/analyticsApi";
@@ -212,6 +218,9 @@ export function OverviewPopulated({
   const lastBuildingId = useRef(buildingId);
   const overviewAbort = useRef<AbortController | null>(null);
   const readinessSiteRef = useRef(buildingId);
+  const metaHolder = useRef(createScopeHolder());
+  const metaSiteRef = useRef(buildingId);
+  const framesRef = useRef<MappingEquipment[]>([]);
   readinessSiteRef.current = buildingId;
   if (readinessSite !== buildingId) {
     setReadinessSite(buildingId);
@@ -277,35 +286,62 @@ export function OverviewPopulated({
       .sort((a, b) => a.equipment_type.localeCompare(b.equipment_type));
   }, [equipment, overview?.devices_by_type]);
 
-  const refreshMeta = useCallback(async () => {
-    try {
-      const [status, rules] = await Promise.all([
-        getFddStatus().catch(() => null),
-        listFddRules().catch(() => []),
-      ]);
-      setRuleCount(cookbookRuleCount(rules, status?.rule_count));
-      mergeRuleDescriptionsFromApi(rules);
-      if (!buildingId) return;
-      const map = await getPackageMapping(buildingId).catch(() => null);
-      const frames = map?.equipment ?? [];
+  const equipmentIdRef = useRef(equipmentId);
+  const selectedTypeRef = useRef(selected?.equipment_type);
+  equipmentIdRef.current = equipmentId;
+  selectedTypeRef.current = selected?.equipment_type;
+
+  const paintFrames = useCallback(
+    (frames: MappingEquipment[], eqId: string, fallbackType: string | undefined) => {
       const span = datasetTimeSpan(frames);
       setFirstTs(span.start);
       setLastTs(span.end);
       const eq =
-        frames.find(
-          (e) =>
-            e.equipment_id === equipmentId &&
-            !isWeatherEquipment(e),
-        ) ??
-        frames.find((e) => !isWeatherEquipment(e));
+        frames.find((item) => item.equipment_id === eqId && !isWeatherEquipment(item)) ??
+        frames.find((item) => !isWeatherEquipment(item));
       setRowCount(eq?.sampling?.row_count ?? 0);
-      setEqKind(
-        cookbookKind(eq?.equipment_type || selected?.equipment_type || "—"),
-      );
-    } catch {
-      /* mapping / registry optional for first paint */
+      setEqKind(cookbookKind(eq?.equipment_type || fallbackType || "—"));
+    },
+    [],
+  );
+
+  const refreshMeta = useCallback(async () => {
+    const ticket = beginScopedRequest(metaHolder.current);
+    const siteChanged = metaSiteRef.current !== buildingId;
+    metaSiteRef.current = buildingId;
+    if (siteChanged) {
+      framesRef.current = [];
+      paintFrames([], equipmentIdRef.current, selectedTypeRef.current);
     }
-  }, [buildingId, equipmentId, selected?.equipment_type]);
+    try {
+      const [status, rules] = await Promise.all([
+        getFddStatus().catch((err: unknown) => {
+          if (isAbortError(err)) throw err;
+          return null;
+        }),
+        listFddRules().catch((err: unknown) => {
+          if (isAbortError(err)) throw err;
+          return [];
+        }),
+      ]);
+      if (!ticket.isCurrent()) return;
+      setRuleCount(cookbookRuleCount(rules, status?.rule_count));
+      mergeRuleDescriptionsFromApi(rules);
+      if (!buildingId) return;
+      let map: Awaited<ReturnType<typeof getPackageMapping>> | null = null;
+      try {
+        map = await getPackageMapping(buildingId, undefined, { signal: ticket.signal });
+      } catch (err) {
+        if (isAbortError(err)) throw err;
+      }
+      if (!ticket.isCurrent()) return;
+      const frames = map?.equipment ?? [];
+      framesRef.current = frames;
+      paintFrames(frames, equipmentIdRef.current, selectedTypeRef.current);
+    } catch (err) {
+      if (isAbortError(err) || !ticket.isCurrent()) return;
+    }
+  }, [buildingId, paintFrames]);
 
   const equipmentRef = useRef(equipment);
   equipmentRef.current = equipment;
@@ -414,6 +450,10 @@ export function OverviewPopulated({
   }, [refreshMeta]);
 
   useEffect(() => {
+    paintFrames(framesRef.current, equipmentId, selected?.equipment_type);
+  }, [equipmentId, selected?.equipment_type, paintFrames]);
+
+  useEffect(() => {
     if (lastBuildingId.current !== buildingId) {
       lastBuildingId.current = buildingId;
       setAnalyticsClean(false);
@@ -434,12 +474,6 @@ export function OverviewPopulated({
         setOverviewErr(null);
       }
     }
-  }, [buildingId]);
-
-  useEffect(() => {
-    if (!buildingId) return;
-    void refreshMeta();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingId]);
 
   useEffect(() => {
