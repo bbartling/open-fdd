@@ -13,9 +13,9 @@ const SEED_DESCRIPTIONS: Record<string, string> = {
   "CHW-2": "DP below SP at max pump speed",
   "CHW-3": "Condenser water ΔT low",
   "HP-1": "Discharge cold when heating",
-  FC5: "Boiler short cycling",
-  FC6: "Boiler lockout / failure",
-  FC8: "Boiler efficiency degradation",
+  FC5: "SAT cold when heating commanded (GL36 D)",
+  FC6: "Estimated OA fraction mismatch",
+  FC8: "SAT vs MAT while economizing",
   "VAV-3": "Excessive reheat during warm weather",
   "VAV-4": "Damper hunting / oscillation",
   "VAV-5": "Simultaneous heating and cooling",
@@ -24,6 +24,8 @@ const SEED_DESCRIPTIONS: Record<string, string> = {
   "WX-1": "OA temperature spike",
   FC1: "Duct static below SP at full fan",
 };
+
+const requiredRoles = new Map<string, string[]>();
 
 for (const [id, description] of Object.entries(SEED_DESCRIPTIONS)) {
   descriptions.set(id, description);
@@ -35,13 +37,38 @@ export function mergeRuleDescriptionsFromApi(rules: FddRuleSummary[]): void {
     if (!id) continue;
     const desc = String(r.description ?? "").trim();
     if (desc) descriptions.set(id, desc);
+    if (r.applicability === "unknown") {
+      requiredRoles.delete(id);
+      continue;
+    }
+    if (Array.isArray(r.required_roles)) {
+      requiredRoles.set(
+        id,
+        r.required_roles.map((role) => String(role).trim()).filter(Boolean),
+      );
+    }
   }
+}
+
+/** Required roles last merged from the registry. Null means the registry has not said. */
+export function mergedRequiredRoles(ruleId: string): string[] | null {
+  const roles = requiredRoles.get(ruleId.trim());
+  if (roles === undefined) return null;
+  return [...roles];
+}
+
+export function formatRequiredRoles(roles: string[] | null | undefined): string {
+  if (!Array.isArray(roles)) return "unknown";
+  const names = roles.map((role) => role.trim()).filter(Boolean);
+  return names.length ? names.join(", ") : "—";
 }
 
 export function ruleDescription(ruleId: string, fallback?: string): string {
   const id = ruleId.trim();
   if (!id) return "";
-  return descriptions.get(id) ?? fallback?.trim() ?? id;
+  const explicit = fallback?.trim();
+  if (explicit) return explicit;
+  return descriptions.get(id) ?? id;
 }
 
 /** Machine key only — matrix column headers, compact badges. */

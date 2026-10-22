@@ -34,6 +34,12 @@ import {
   latestRunningAction,
   listActions,
 } from "../api/actionsApi";
+import {
+  formatRequiredRoles,
+  mergeRuleDescriptionsFromApi,
+  ruleDescription,
+  ruleLabelStandard,
+} from "../lib/ruleLabels";
 
 type RuleRow = {
   rule_id: string;
@@ -93,6 +99,7 @@ export function RulesPage() {
         })),
       ]);
       setStatus(st);
+      mergeRuleDescriptionsFromApi(ruleList);
       setRules(ruleList);
       setBuildings(blds);
       setSessionConfig(sess.config ?? null);
@@ -272,7 +279,7 @@ export function RulesPage() {
 
   const ruleRows: RuleRow[] = rules.map((r) => ({
     rule_id: r.rule_id,
-    description: String(r.description ?? ""),
+    description: ruleDescription(r.rule_id, r.description),
     parity: String(r.parity_status ?? ""),
     params: String(r.parameter_count ?? 0),
     selected: selected[r.rule_id] ? "yes" : "no",
@@ -390,7 +397,7 @@ export function RulesPage() {
             <p data-testid="fdd-tune-meta">
               <code>{tuneRule.rule_id}</code> · parity{" "}
               <code>{tuneRule.parity_status || "—"}</code> · roles{" "}
-              {(tuneRule.required_roles ?? []).join(", ") || "—"}
+              {formatRequiredRoles(tuneRule.required_roles)}
               {tuneRule.aliases?.length
                 ? ` · aliases ${tuneRule.aliases.join(", ")}`
                 : ""}
@@ -492,7 +499,7 @@ export function RulesPage() {
               <Checkbox
                 key={r.rule_id}
                 id={`rule-${r.rule_id}`}
-                label={`${r.rule_id} — ${r.description ?? ""}`}
+                label={ruleLabelStandard(r.rule_id, r.description)}
                 checked={Boolean(selected[r.rule_id])}
                 onChange={(v) =>
                   setSelected((prev) => ({ ...prev, [r.rule_id]: v }))

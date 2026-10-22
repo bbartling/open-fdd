@@ -1,6 +1,7 @@
 import type { FddRuleSummary } from "../api/fddApi";
 import {
   mergeRuleDescriptionsFromApi,
+  mergedRequiredRoles,
   ruleDescription,
   ruleLabelStandard,
 } from "./ruleLabels";
@@ -15,9 +16,6 @@ const HAYSTACK_TAGS: Record<string, string[]> = {
   "CHW-2": ["chilledWaterDiffPressure", "chilledWaterDiffPressureSp"],
   "CHW-3": ["condenserWaterSupply", "condenserWaterReturn"],
   "HP-1": ["dischargeAir", "zoneAir", "fan"],
-  FC5: ["hotWaterSupply"],
-  FC6: ["hotWaterSupply"],
-  FC8: ["hotWaterSupply"],
   "VAV-3": ["outsideAir", "reheatValve", "zoneAirflow"],
   "VAV-4": ["damper", "zoneAirflow"],
   "VAV-5": ["reheatValve", "coolingValve"],
@@ -47,6 +45,10 @@ export function healthColumnHeader(
   ruleId: string,
   haystackFallback?: string[],
 ): string {
+  const roles = mergedRequiredRoles(ruleId);
+  if (roles && roles.length) {
+    return `${ruleLabelStandard(ruleId)} · ${roles.join(", ")}`;
+  }
   const { haystackTags } = ruleCatalogEntry(ruleId);
   const tags = haystackTags.length ? haystackTags : (haystackFallback ?? []);
   const tagPart = tags.length ? ` · ${tags.join(", ")}` : "";

@@ -12,9 +12,11 @@ export interface FddRuleSummary {
   rule_id: string;
   description?: string;
   aliases?: string[];
-  equipment_kinds?: string[];
-  required_roles?: string[];
-  optional_roles?: string[];
+  equipment_kinds?: string[] | null;
+  required_roles?: string[] | null;
+  optional_roles?: string[] | null;
+  /** `all` is an explicit empty kind list. `unknown` is missing metadata, not every type. */
+  applicability?: "all" | "typed" | "unknown";
   confirm_seconds?: number;
   confirm_min?: number;
   parity_status?: string;

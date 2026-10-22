@@ -786,10 +786,62 @@ pub async fn economizer_deltas(
     ))
 }
 
+struct CatalogFields {
+    description: Option<String>,
+    equipment_kinds: Option<Vec<String>>,
+    required_roles: Option<Vec<String>>,
+    optional_roles: Option<Vec<String>>,
+    applicability: &'static str,
+}
+
+fn catalog_fields_from_spec(spec: &fdd_rules::RuleSpec) -> CatalogFields {
+    let applicability = if spec.equipment_kinds.is_empty() {
+        "all"
+    } else {
+        "typed"
+    };
+    CatalogFields {
+        description: Some(spec.description.clone()),
+        equipment_kinds: Some(spec.equipment_kinds.clone()),
+        required_roles: Some(spec.required_roles.clone()),
+        optional_roles: Some(spec.optional_roles.clone()),
+        applicability,
+    }
+}
+
+/// Null columns are unknown. An explicit empty kind list applies to every type.
+fn catalog_fields_from_columns(
+    kinds: Option<Vec<String>>,
+    required: Option<Vec<String>>,
+    optional: Option<Vec<String>>,
+) -> CatalogFields {
+    match (kinds, required, optional) {
+        (Some(kinds), Some(required), Some(optional)) => CatalogFields {
+            applicability: if kinds.is_empty() { "all" } else { "typed" },
+            description: None,
+            equipment_kinds: Some(kinds),
+            required_roles: Some(required),
+            optional_roles: Some(optional),
+        },
+        _ => CatalogFields {
+            description: None,
+            equipment_kinds: None,
+            required_roles: None,
+            optional_roles: None,
+            applicability: "unknown",
+        },
+    }
+}
+
+fn text_array(row: &sqlx::postgres::PgRow, column: &str) -> Option<Vec<String>> {
+    row.try_get::<Option<Vec<String>>, _>(column).ok().flatten()
+}
+
 pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
     let rows = sqlx::query(
         r#"
-        SELECT rule_id, sql_file, title, enabled
+        SELECT rule_id, sql_file, title, enabled,
+               equipment_kinds, required_roles, optional_roles
         FROM fdd_rule_registry
         ORDER BY rule_id
         "#,
@@ -798,19 +850,19 @@ pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
     .await
     .context("fdd_registry")?;
 
-    // Wave-X C7: warehouse cases.json uses cookbook ids (e.g. FC13) while the
-    // product primary id may be FC13-SAT-HIGH. Surface yaml aliases so catalog
-    // presence matches /api/fdd/run + /api/fdd/plot resolution.
-    let aliases_by_id: std::collections::HashMap<String, Vec<String>> = {
+    // Canonical pack (`sql/fdd/registry.yaml`) supplies description, kinds, and
+    // roles. Warehouse rows often store only id/sql/title; null columns stay
+    // unknown instead of meaning "applies to every equipment type".
+    let specs: std::collections::HashMap<String, fdd_rules::RuleSpec> = {
         let root = crate::timescale_product::sql_root_for_registry();
         match fdd_rules::load_registry(&root) {
             Ok(reg) => reg
                 .rules
                 .into_iter()
-                .map(|r| (r.rule_id, r.aliases))
+                .map(|rule| (rule.rule_id.clone(), rule))
                 .collect(),
             Err(e) => {
-                tracing::warn!(error = %e, "fdd_registry: yaml aliases unavailable");
+                tracing::warn!(error = %e, "fdd_registry: canonical pack unavailable");
                 std::collections::HashMap::new()
             }
         }
@@ -820,13 +872,27 @@ pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
     let mut alias_count = 0usize;
     for r in rows {
         let rule_id = r.try_get::<String, _>("rule_id").unwrap_or_default();
-        let aliases = aliases_by_id.get(&rule_id).cloned().unwrap_or_default();
+        let spec = specs.get(&rule_id);
+        let aliases = spec.map(|rule| rule.aliases.clone()).unwrap_or_default();
         alias_count += aliases.len();
+        let fields = match spec {
+            Some(rule) => catalog_fields_from_spec(rule),
+            None => catalog_fields_from_columns(
+                text_array(&r, "equipment_kinds"),
+                text_array(&r, "required_roles"),
+                text_array(&r, "optional_roles"),
+            ),
+        };
         out.push(json!({
             "rule_id": rule_id,
             "aliases": aliases,
             "sql_file": r.try_get::<String, _>("sql_file").unwrap_or_default(),
             "title": r.try_get::<Option<String>, _>("title").ok().flatten(),
+            "description": fields.description,
+            "equipment_kinds": fields.equipment_kinds,
+            "required_roles": fields.required_roles,
+            "optional_roles": fields.optional_roles,
+            "applicability": fields.applicability,
             "enabled": r.try_get::<bool, _>("enabled").unwrap_or(true),
             "engine": "postgres-sql",
         }));
