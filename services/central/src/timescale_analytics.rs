@@ -1060,5 +1060,21 @@ mod pack_version_tests {
             !MOTOR_WEEKLY_SQL.contains("GROUP BY 1, 3, 4\n"),
             "the old group-by counted fan_status and fan_cmd in one plant_group"
         );
+        assert!(
+            MOTOR_WEEKLY_SQL.contains("dt_seconds <= 3600.0"),
+            "motor hours must integrate eligible deltas, not a fixed poll"
+        );
+        assert!(
+            !MOTOR_WEEKLY_SQL.contains("* 300.0"),
+            "motor hours must not multiply sample counts by 300s"
+        );
+        assert!(
+            MECH_COOLING_SQL.contains("dt_seconds <= 3600.0"),
+            "mechanical cooling hours must integrate eligible deltas"
+        );
+        assert!(
+            !MECH_COOLING_SQL.contains("* 300.0"),
+            "mechanical cooling hours must not multiply sample counts by 300s"
+        );
     }
 }

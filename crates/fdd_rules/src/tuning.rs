@@ -142,6 +142,7 @@ pub fn assert_sql_placeholders(sql: &str, rule: &RuleSpec) -> Result<()> {
             "POLL_SECONDS".into(),
             "CONFIRM_ROWS".into(),
             "CONFIRM_SECONDS".into(),
+            "MAX_GAP_HOURS".into(),
             // Wave G substitutes may inject these even when only MIX_TOL is declared
             "EPS_MAT".into(),
             "EPS_OAT".into(),

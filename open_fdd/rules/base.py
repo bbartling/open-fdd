@@ -10,7 +10,7 @@ from typing import Any, Literal
 import numpy as np
 import pandas as pd
 
-from open_fdd.analytics.runtime_intervals import UNLIMITED_GAP_SECONDS, interval_durations
+from open_fdd.analytics.runtime_intervals import ELAPSED_MAX_GAP_SECONDS
 
 RuleStatus = Literal[
     "PASS",
@@ -22,45 +22,41 @@ RuleStatus = Literal[
 ]
 
 
-def _sample_deltas_seconds(index: pd.Index, poll_seconds: float) -> pd.Series | None:
-    """Per-sample duration (seconds) until the next timestamp; last uses median/poll."""
+def _eligible_hold_seconds(index: pd.Index) -> pd.Series | None:
+    """Forward seconds until the next timestamp.
+
+    The last sample is 0. A gap longer than one hour is 0 (unknown), not a
+    clipped hold and not a median fill. Duplicate timestamps contribute 0.
+    """
     if not isinstance(index, pd.DatetimeIndex) or len(index) == 0:
         return None
-    if len(index) == 1:
-        return pd.Series([float(poll_seconds)], index=index)
-    durations = interval_durations(
-        index,
-        nominal_seconds=poll_seconds,
-        max_gap_seconds=UNLIMITED_GAP_SECONDS,
-        final_duration_seconds=0.0,
-        preserve_row_order=True,
-    )
-    med = (
-        float(durations.iloc[:-1].median())
-        if len(durations) > 1 and durations.iloc[:-1].notna().any()
-        else float(poll_seconds)
-    )
-    if not np.isfinite(med) or med < 0:
-        med = float(max(poll_seconds, 0.0))
-    durations = durations.copy()
-    durations.iloc[-1] = med
-    return durations
+    current = index.to_series()
+    delta = current.shift(-1).sub(current).dt.total_seconds()
+    held = delta.where((delta > 0.0) & (delta <= ELAPSED_MAX_GAP_SECONDS), 0.0)
+    return held.fillna(0.0)
 
 
 def confirm_fault(raw: pd.Series, *, poll_seconds: float, confirm_seconds: float = 300.0) -> pd.Series:
-    """Require the raw fault to persist for ``confirm_seconds`` before confirming.
+    """Require the raw fault to persist for ``confirm_seconds`` of eligible time.
 
-    When the series has a DatetimeIndex, accumulate actual sample gaps within each
-    True run. Otherwise fall back to row-count math using ``poll_seconds``.
+    Eligible time is the forward delta when it is positive and at most one hour.
+    A longer gap is unknown: it is not fault time and it starts a new streak.
+    The last sample has no forward interval. A non-datetime index falls back to
+    row counts using ``poll_seconds``.
     """
     raw = raw.fillna(False).astype(bool)
     if confirm_seconds <= 0:
         return raw
 
-    deltas = _sample_deltas_seconds(raw.index, poll_seconds)
-    if deltas is not None:
-        groups = (raw != raw.shift()).cumsum()
-        contrib = deltas.where(raw, 0.0)
+    held = _eligible_hold_seconds(raw.index)
+    if held is not None:
+        current = raw.index.to_series()
+        delta = current.shift(-1).sub(current).dt.total_seconds()
+        gap_after = (delta > ELAPSED_MAX_GAP_SECONDS).fillna(False)
+        prev_gap = gap_after.shift(1, fill_value=False).astype(bool)
+        new_streak = raw.ne(raw.shift()) | prev_gap
+        groups = new_streak.cumsum()
+        contrib = held.where(raw, 0.0)
         cum = contrib.groupby(groups).cumsum()
         return raw & (cum >= float(confirm_seconds))
 
@@ -71,11 +67,16 @@ def confirm_fault(raw: pd.Series, *, poll_seconds: float, confirm_seconds: float
 
 
 def hours_true(mask: pd.Series, poll_seconds: float) -> float:
-    """Hours under a boolean mask using actual timestamp deltas when available."""
+    """Hours under a boolean mask.
+
+    A datetime index sums eligible forward holds. The last sample adds nothing,
+    and a gap longer than one hour adds nothing. A non-datetime index uses
+    ``poll_seconds`` per true row.
+    """
     m = mask.fillna(False).astype(bool)
-    deltas = _sample_deltas_seconds(m.index, poll_seconds)
-    if deltas is not None:
-        return float((m.astype(float) * (deltas / 3600.0)).sum())
+    held = _eligible_hold_seconds(m.index)
+    if held is not None:
+        return float((m.astype(float) * (held / 3600.0)).sum())
     return float(m.sum()) * poll_seconds / 3600.0
 
 

@@ -1446,6 +1446,8 @@ async fn load_live_confirmed_fault(
     if rule_is_metric(rule) || !safe_ident(equipment_id) {
         return Ok(HashMap::new());
     }
+    // Poll sizes row-framed detection windows only. Confirmation is
+    // CONFIRM_SECONDS of eligible elapsed time inside the rendered SQL.
     let rendered = render_rule_sql(
         reg,
         rule,
@@ -1627,24 +1629,39 @@ fn rule_is_metric(rule: &RuleSpec) -> bool {
 /// Rule SQL often yields `fault_hours` as PostgreSQL `numeric` (CASE with `0.0`).
 /// sqlx `try_get::<f64>` fails on numeric → Soft-OPEN run-now reported 0h.
 /// Cast through a wrapper SELECT so the product path always gets float8.
+/// Diagnostic rows also carry covered hours and the elapsed percent so the
+/// denominator is eligible time, not a sample count times an assumed poll.
 /// Metric rules keep `SELECT *` so fan_runtime_hours / avg_zone_temp survive.
 fn wrap_rule_sql(sql_body: &str, rule: &RuleSpec) -> String {
     let inner = sql_body.trim().trim_end_matches(';').trim();
     if rule_is_metric(rule) {
-        format!("SELECT * FROM ({inner}) AS _fdd_rule_q")
-    } else {
-        let fault_pct_sql = if rule
+        // CASE expressions with a numeric `0.0` literal come back as PostgreSQL
+        // numeric. sqlx `try_get::<f64>` then drops the metric, so cast each
+        // declared output the same way diagnostic fault_hours is cast.
+        let casts: Vec<String> = rule
             .output_columns
             .iter()
-            .any(|column| column == "fault_pct")
-        {
-            ", fault_pct::double precision AS fault_pct"
+            .filter(|column| safe_ident(column))
+            .map(|column| {
+                if column == "equipment_id" {
+                    "equipment_id::text AS equipment_id".to_string()
+                } else {
+                    format!("\"{column}\"::double precision AS \"{column}\"")
+                }
+            })
+            .collect();
+        if casts.is_empty() {
+            format!("SELECT * FROM ({inner}) AS _fdd_rule_q")
         } else {
-            ""
-        };
+            let list = casts.join(", ");
+            format!("SELECT {list} FROM ({inner}) AS _fdd_rule_q")
+        }
+    } else {
         format!(
             "SELECT equipment_id::text AS equipment_id, \
-             fault_hours::double precision AS fault_hours{fault_pct_sql} \
+             fault_hours::double precision AS fault_hours, \
+             covered_hours::double precision AS covered_hours, \
+             fault_pct::double precision AS fault_pct \
              FROM ({inner}) AS _fdd_rule_q"
         )
     }
@@ -1695,7 +1712,9 @@ fn confirm_seconds_from_payload(payload: &Value, rule: &RuleSpec) -> u32 {
     rule.confirm_seconds
 }
 
-/// Soft-OPEN R6: cadence from payload / session params; default 300 (no parquet poll cache).
+/// Nominal interval for row-framed detection windows (flatline, mode delay, PID).
+/// Fault duration and confirmation integrate eligible timestamp deltas and do
+/// not multiply a sample count by this value. An omitted payload stays at 300s.
 fn poll_seconds_from_payload(payload: &Value) -> f64 {
     if let Some(ps) = payload
         .get("poll_seconds")
@@ -2169,25 +2188,40 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                         rule_rows.push(row_json);
                     } else {
                         let mut hours = 0.0_f64;
+                        let mut covered_sum = 0.0_f64;
+                        let mut saw_covered = false;
                         let mut sql_pct: Option<f64> = None;
                         for r in &rows {
                             hours += row_fault_hours(r);
+                            if let Some(value) = row_optional_f64(r, "covered_hours") {
+                                covered_sum += value;
+                                saw_covered = true;
+                            }
                             if sql_pct.is_none() {
-                                if let Ok(value) = r.try_get::<f64, _>("fault_pct") {
-                                    if value.is_finite() {
-                                        sql_pct = Some(value.clamp(0.0, 100.0));
-                                    }
-                                }
+                                sql_pct = row_optional_f64(r, "fault_pct");
                             }
                         }
-                        // Soft-OPEN R6: publish confirm detail / fault_series stub.
+                        let covered = saw_covered.then_some(covered_sum);
+                        let span = history_span_hours(&mut tx).await.ok().flatten();
+                        let unknown = match (span, covered) {
+                            (Some(span_h), Some(covered_h)) => {
+                                json!((span_h - covered_h).max(0.0))
+                            }
+                            _ => Value::Null,
+                        };
+                        // Percent uses eligible covered time. Do not clamp: a value
+                        // above 100 is a contract failure, not a display problem.
                         let status = if hours > 0.0 { "FAULT" } else { "PASS" };
-                        let fault_pct = sql_pct
-                            .map(|value| json!(value))
-                            .unwrap_or_else(|| fault_pct_value(hours, n, poll));
+                        let fault_pct = match sql_pct {
+                            Some(value) => json!(value),
+                            None => fault_pct_from_covered(hours, covered),
+                        };
                         rule_rows.push(json!({
                             "equipment_id": eq_id,
                             "fault_hours": hours,
+                            "covered_hours": json_finite(covered),
+                            "span_hours": json_finite(span),
+                            "unknown_hours": unknown,
                             "fault_pct": fault_pct,
                             "status": status,
                             "output_kind": "diagnostic",
@@ -2286,15 +2320,52 @@ fn sampling_json(
     })
 }
 
-fn fault_pct_value(hours: f64, sample_rows: i64, poll_seconds: f64) -> Value {
-    if !hours.is_finite() || sample_rows <= 0 || !poll_seconds.is_finite() || poll_seconds <= 0.0 {
+fn json_finite(hours: Option<f64>) -> Value {
+    match hours {
+        Some(hours) if hours.is_finite() => json!(hours),
+        _ => Value::Null,
+    }
+}
+
+fn row_optional_f64(row: &sqlx::postgres::PgRow, column: &str) -> Option<f64> {
+    if let Ok(value) = row.try_get::<f64, _>(column) {
+        return value.is_finite().then_some(value);
+    }
+    if let Ok(Some(value)) = row.try_get::<Option<f64>, _>(column) {
+        return value.is_finite().then_some(value);
+    }
+    if let Ok(value) = row.try_get::<i64, _>(column) {
+        return Some(value as f64);
+    }
+    if let Ok(value) = row.try_get::<i32, _>(column) {
+        return Some(value as f64);
+    }
+    None
+}
+
+/// History span is first sample to last sample. Covered time is the sum of
+/// eligible forward holds; a single sample has no span and no covered time.
+async fn history_span_hours(conn: &mut PgConnection) -> Result<Option<f64>> {
+    let span: Option<f64> = sqlx::query_scalar(
+        "SELECT (EXTRACT(EPOCH FROM (MAX(timestamp_utc) - MIN(timestamp_utc))) / 3600.0)::float8 \
+         FROM history",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .context("history span")?;
+    Ok(span.filter(|hours| hours.is_finite() && *hours >= 0.0))
+}
+
+/// Percent of eligible covered hours. Missing or empty coverage stays null.
+/// Values above 100 are left visible so a duration bug is not hidden.
+fn fault_pct_from_covered(hours: f64, covered_hours: Option<f64>) -> Value {
+    let Some(covered) = covered_hours else {
+        return Value::Null;
+    };
+    if !hours.is_finite() || hours < 0.0 || !covered.is_finite() || covered <= 0.0 {
         return Value::Null;
     }
-    let window_hours = (sample_rows as f64) * poll_seconds / 3600.0;
-    if !window_hours.is_finite() || window_hours <= 0.0 {
-        return Value::Null;
-    }
-    json!(((100.0 * hours) / window_hours).clamp(0.0, 100.0))
+    json!((100.0 * hours) / covered)
 }
 
 fn safe_building_id(id: &str) -> bool {
@@ -2621,8 +2692,16 @@ mod plot_role_tests {
             "unfilled placeholder left in FC1 SQL: {sql}"
         );
         assert!(
-            sql.contains("streak_len >= 1"),
-            "confirm_min=0 must still render CONFIRM_ROWS=1: {sql}"
+            sql.contains("streak_elapsed >= 0"),
+            "confirm_min=0 must confirm on the first eligible interval: {sql}"
+        );
+        assert!(
+            sql.contains("held_seconds"),
+            "duration must use the forward hold: {sql}"
+        );
+        assert!(
+            !sql.contains("SUM(confirmed) *"),
+            "duration must not multiply confirmed rows by a poll: {sql}"
         );
     }
 
@@ -2682,16 +2761,530 @@ mod span_and_fault_pct_tests {
             .find(|rule| rule.rule_id == "FC1")
             .expect("FC1");
         let fc1_sql = wrap_rule_sql("SELECT 1", fc1);
-        assert!(!fc1_sql.contains("fault_pct"));
+        assert!(fc1_sql.contains("fault_pct::double precision AS fault_pct"));
+        assert!(fc1_sql.contains("covered_hours::double precision AS covered_hours"));
         assert!(fc1_sql.contains("fault_hours::double precision AS fault_hours"));
     }
 
     #[test]
-    fn fault_pct_uses_sample_window_when_sql_omits_it() {
-        let pct = fault_pct_value(2.0, 120, 300.0);
-        let window_hours = 120.0 * 300.0 / 3600.0;
-        let expected = (100.0_f64 * 2.0 / window_hours).clamp(0.0, 100.0);
-        assert!((pct.as_f64().unwrap() - expected).abs() < 1e-9);
-        assert!(fault_pct_value(1.0, 0, 300.0).is_null());
+    fn fault_pct_uses_covered_hours_without_clamping() {
+        let pct = fault_pct_from_covered(2.0, Some(4.0));
+        assert!((pct.as_f64().expect("pct") - 50.0).abs() < 1e-9);
+        let over = fault_pct_from_covered(3.0, Some(2.0));
+        assert!(
+            (over.as_f64().expect("over") - 150.0).abs() < 1e-9,
+            "a percent above 100 stays visible"
+        );
+        assert!(fault_pct_from_covered(1.0, None).is_null());
+        assert!(fault_pct_from_covered(1.0, Some(0.0)).is_null());
+        assert!(fault_pct_from_covered(f64::NAN, Some(1.0)).is_null());
+    }
+
+    #[test]
+    fn duct_high_sql_integrates_elapsed_hold() {
+        let reg = load_reg().expect("load sql/fdd registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|item| item.rule_id == "AHU-DUCTHI")
+            .expect("AHU-DUCTHI");
+        let sql = render_rule_sql(&reg, rule, 300.0, 0, "SYNTH", Some("AHU_1"), None)
+            .expect("render AHU-DUCTHI");
+        assert!(sql.contains("held_seconds"));
+        assert!(sql.contains("streak_elapsed >= 0"));
+        assert!(!sql.contains("{{"));
+        assert!(!sql.contains("SUM(confirmed) *"));
+        let series = rewrite_rule_sql_to_fault_series(&sql, "AHU_1").expect("overlay");
+        assert!(series.contains("confirmed AS confirmed_fault"));
+    }
+
+    #[test]
+    fn metric_wrapper_casts_runtime_hours_to_float8() {
+        let reg = load_reg().expect("load sql/fdd registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|item| item.rule_id == "FAN-RUNTIME-HOURS")
+            .expect("FAN-RUNTIME-HOURS");
+        let wrapped = wrap_rule_sql("SELECT 1", rule);
+        assert!(wrapped.contains("fan_runtime_hours\"::double precision"));
+        assert!(wrapped.contains("total_hours\"::double precision"));
+    }
+}
+
+/// Same physical hour at 1, 5, and 15 minute cadence.
+///
+/// Immediate confirmation agrees within one second. A fixed confirmation delay
+/// may differ by one sample of the coarsest grid (15 minutes). A gap longer
+/// than one hour is unknown: fault hours stay within the eligible covered
+/// duration and do not reach the first-to-last span.
+#[cfg(test)]
+mod elapsed_time_contract {
+    use super::*;
+    use chrono::Duration as ChronoDuration;
+    use chrono::TimeZone;
+    use fdd_tsdb::{SampleRow, UpsertBatch};
+
+    const SECOND_HOURS: f64 = 1.0 / 3600.0;
+    const CADENCE_TOLERANCE_HOURS: f64 = 15.0 / 60.0;
+
+    fn fixture_database_url() -> Option<String> {
+        let url = std::env::var("OPENFDD_LIFECYCLE_DATABASE_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        if url.is_none()
+            && std::env::var("OPENFDD_LIFECYCLE_DATABASE_REQUIRED")
+                .ok()
+                .is_some_and(|value| matches!(value.trim(), "1" | "true" | "yes"))
+        {
+            panic!("OPENFDD_LIFECYCLE_DATABASE_URL is required for this run");
+        }
+        url
+    }
+
+    fn assert_disposable(id: &str) {
+        let upper = id.to_ascii_uppercase();
+        assert!(
+            upper != "BUILDING_50"
+                && upper != "BOSSPI"
+                && !upper.contains("BUILDING_50")
+                && !upper.contains("BOSSPI"),
+            "refusing protected site id"
+        );
+    }
+
+    struct EnvRestore {
+        saved: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvRestore {
+        fn capture(keys: &[&'static str]) -> Self {
+            Self {
+                saved: keys
+                    .iter()
+                    .map(|key| (*key, std::env::var(key).ok()))
+                    .collect(),
+            }
+        }
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            for (key, value) in self.saved.drain(..) {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    struct DbCleanup {
+        url: String,
+        ids: Vec<String>,
+    }
+
+    impl Drop for DbCleanup {
+        fn drop(&mut self) {
+            let url = self.url.clone();
+            let ids: Vec<String> = self
+                .ids
+                .drain(..)
+                .filter(|id| {
+                    let upper = id.to_ascii_uppercase();
+                    upper != "BUILDING_50"
+                        && upper != "BOSSPI"
+                        && !upper.contains("BUILDING_50")
+                        && !upper.contains("BOSSPI")
+                })
+                .collect();
+            if ids.is_empty() {
+                return;
+            }
+            let _ = std::thread::spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("cleanup runtime");
+                runtime.block_on(async move {
+                    let Ok(tsdb) = Tsdb::connect(&url).await else {
+                        return;
+                    };
+                    for id in ids {
+                        let _ = tsdb.purge_building(&id).await;
+                    }
+                });
+            })
+            .join();
+        }
+    }
+
+    fn origin() -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap()
+    }
+
+    fn push_sample(
+        batch: &mut UpsertBatch,
+        site: &str,
+        equipment_id: &str,
+        minutes: i64,
+        fan: f64,
+    ) {
+        let ts = origin() + ChronoDuration::minutes(minutes);
+        for (role, val) in [
+            ("duct_static", 2.0),
+            ("duct_static_sp", 1.0),
+            ("fan_status", fan),
+            ("fan_cmd", fan),
+        ] {
+            let mut row = SampleRow::new(ts, site, format!("{equipment_id}.{role}"), Some(val));
+            row.equipment_id = Some(equipment_id.to_string());
+            row.role = Some(role.to_string());
+            batch.push(row);
+        }
+    }
+
+    fn seed_regular(batch: &mut UpsertBatch, site: &str, equipment_id: &str, step: i64, fan: f64) {
+        let mut minute = 0;
+        while minute <= 60 {
+            push_sample(batch, site, equipment_id, minute, fan);
+            minute += step;
+        }
+    }
+
+    fn result_row<'a>(meta: &'a Value, rule_id: &str, equipment_id: &str) -> &'a Value {
+        meta.get("results")
+            .and_then(Value::as_array)
+            .and_then(|rows| {
+                rows.iter().find(|row| {
+                    row.get("rule_id").and_then(Value::as_str) == Some(rule_id)
+                        && row.get("equipment_id").and_then(Value::as_str) == Some(equipment_id)
+                })
+            })
+            .unwrap_or_else(|| panic!("missing {rule_id}/{equipment_id} in {meta}"))
+    }
+
+    fn hours_of(row: &Value, key: &str) -> f64 {
+        row.get(key)
+            .and_then(Value::as_f64)
+            .unwrap_or_else(|| panic!("{key} missing on {row}"))
+    }
+
+    fn assert_near(actual: f64, expected: f64, tolerance: f64, label: &str) {
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "{label}: {actual} vs {expected} (tolerance {tolerance})"
+        );
+    }
+
+    fn assert_bounded(row: &Value, label: &str) {
+        let fault = hours_of(row, "fault_hours");
+        let covered = hours_of(row, "covered_hours");
+        let span = hours_of(row, "span_hours");
+        assert!(
+            fault <= covered + 1e-9 && covered <= span + 1e-9,
+            "{label}: fault {fault} covered {covered} span {span}"
+        );
+        let status = row.get("status").and_then(Value::as_str).unwrap_or("");
+        assert!(
+            status == "FAULT" || status == "PASS",
+            "{label} status {status} row {row}"
+        );
+    }
+
+    async fn ensure_schema(tsdb: &Tsdb) {
+        for stmt in crate::db_lifecycle::forward_statements() {
+            sqlx::query(&stmt)
+                .execute(tsdb.pool())
+                .await
+                .unwrap_or_else(|err| {
+                    let preview: String = stmt.chars().take(80).collect();
+                    panic!("schema statement failed ({preview}): {err}");
+                });
+        }
+    }
+
+    async fn run_rules(site: &str, confirm_seconds: u32) -> Value {
+        let payload = json!({
+            "building_id": site,
+            "rule_ids": ["AHU-DUCTHI", "FAN-RUNTIME-HOURS"],
+            "confirmation_seconds": confirm_seconds,
+        });
+        assert!(payload.get("poll_seconds").is_none());
+        run_fdd_registry(&payload)
+            .await
+            .unwrap_or_else(|err| panic!("run_fdd_registry: {err}"))
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
+    )]
+    #[tokio::test]
+    async fn elapsed_time_cadence_and_gap_contract() {
+        let Some(url) = fixture_database_url() else {
+            eprintln!("skip: OPENFDD_LIFECYCLE_DATABASE_URL unset");
+            return;
+        };
+        let _lock = crate::test_env_lock::lock_env();
+        let results_dir = tempfile::tempdir().expect("results dir");
+        let _env = EnvRestore::capture(&[
+            "OPENFDD_DATABASE_URL",
+            "OPENFDD_HISTORIAN",
+            "OPENFDD_RULE_RESULTS_DIR",
+            "OPENFDD_RESET_DB",
+            "OPENFDD_ALLOW_DESTRUCTIVE_DB",
+        ]);
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", results_dir.path());
+        std::env::remove_var("OPENFDD_RESET_DB");
+        std::env::remove_var("OPENFDD_ALLOW_DESTRUCTIVE_DB");
+
+        let cadence_site = format!("et{}", uuid::Uuid::new_v4().simple());
+        let confirm_site = format!("ec{}", uuid::Uuid::new_v4().simple());
+        assert_disposable(&cadence_site);
+        assert_disposable(&confirm_site);
+        let tsdb = Tsdb::connect(&url).await.expect("connect timescale");
+        let cleanup = DbCleanup {
+            url: url.clone(),
+            ids: vec![cadence_site.clone(), confirm_site.clone()],
+        };
+        ensure_schema(&tsdb).await;
+
+        let mut batch = UpsertBatch::default();
+        seed_regular(&mut batch, &cadence_site, "AHU_M1", 1, 1.0);
+        seed_regular(&mut batch, &cadence_site, "AHU_M5", 5, 1.0);
+        seed_regular(&mut batch, &cadence_site, "AHU_M15", 15, 1.0);
+        seed_regular(&mut batch, &cadence_site, "AHU_OFF", 1, 0.0);
+        let mut minute = 0;
+        while minute <= 30 {
+            push_sample(&mut batch, &cadence_site, "AHU_GAP", minute, 1.0);
+            minute += 1;
+        }
+        minute = 210;
+        while minute <= 240 {
+            push_sample(&mut batch, &cadence_site, "AHU_GAP", minute, 1.0);
+            minute += 1;
+        }
+        let mut minute = 0;
+        while minute <= 9 {
+            push_sample(&mut batch, &confirm_site, "AHU_C9", minute, 1.0);
+            minute += 1;
+        }
+        minute = 0;
+        while minute <= 10 {
+            push_sample(&mut batch, &confirm_site, "AHU_C10", minute, 1.0);
+            minute += 1;
+        }
+        seed_regular(&mut batch, &confirm_site, "AHU_C60", 1, 1.0);
+        seed_regular(&mut batch, &confirm_site, "AHU_C15", 15, 1.0);
+
+        for site in [&cadence_site, &confirm_site] {
+            tsdb.ensure_site_building(site)
+                .await
+                .expect("site building");
+        }
+        for (site, equipment_id) in [
+            (cadence_site.as_str(), "AHU_M1"),
+            (cadence_site.as_str(), "AHU_M5"),
+            (cadence_site.as_str(), "AHU_M15"),
+            (cadence_site.as_str(), "AHU_GAP"),
+            (cadence_site.as_str(), "AHU_OFF"),
+            (confirm_site.as_str(), "AHU_C9"),
+            (confirm_site.as_str(), "AHU_C10"),
+            (confirm_site.as_str(), "AHU_C60"),
+            (confirm_site.as_str(), "AHU_C15"),
+        ] {
+            tsdb.upsert_equipment(site, equipment_id, Some("ahu"))
+                .await
+                .expect("equipment");
+        }
+        tsdb.upsert_samples(&batch).await.expect("samples");
+
+        let open = run_rules(&cadence_site, 0).await;
+        assert_eq!(open["rules_failed"], json!(0), "{open}");
+        let mut cadence_hours = Vec::new();
+        for equipment_id in ["AHU_M1", "AHU_M5", "AHU_M15"] {
+            let row = result_row(&open, "AHU-DUCTHI", equipment_id);
+            assert_bounded(row, equipment_id);
+            let fault = hours_of(row, "fault_hours");
+            assert_near(fault, 1.0, SECOND_HOURS, equipment_id);
+            assert!(
+                fault < 1.5,
+                "{equipment_id} looks like a 300s poll count: {fault}"
+            );
+            cadence_hours.push(fault);
+            let runtime = result_row(&open, "FAN-RUNTIME-HOURS", equipment_id);
+            assert_near(
+                hours_of(runtime, "fan_runtime_hours"),
+                1.0,
+                SECOND_HOURS,
+                "fan runtime",
+            );
+        }
+        let spread = cadence_hours.iter().copied().fold(f64::MIN, f64::max)
+            - cadence_hours.iter().copied().fold(f64::MAX, f64::min);
+        assert!(
+            spread <= CADENCE_TOLERANCE_HOURS,
+            "1/5/15 cadence spread {spread} hours exceeds 15 minutes: {cadence_hours:?}"
+        );
+
+        let gap = result_row(&open, "AHU-DUCTHI", "AHU_GAP");
+        assert_bounded(gap, "AHU_GAP");
+        assert_near(hours_of(gap, "fault_hours"), 1.0, SECOND_HOURS, "gap fault");
+        assert_near(
+            hours_of(gap, "covered_hours"),
+            1.0,
+            SECOND_HOURS,
+            "gap covered",
+        );
+        assert_near(hours_of(gap, "span_hours"), 4.0, SECOND_HOURS, "gap span");
+        assert_near(
+            hours_of(gap, "unknown_hours"),
+            3.0,
+            SECOND_HOURS,
+            "gap unknown",
+        );
+        assert!(
+            hours_of(gap, "fault_hours") + 1.0 < hours_of(gap, "span_hours"),
+            "gap fault must stay inside the covered hour, not the 4h span"
+        );
+        let gap_runtime = result_row(&open, "FAN-RUNTIME-HOURS", "AHU_GAP");
+        assert_near(
+            hours_of(gap_runtime, "fan_runtime_hours"),
+            1.0,
+            SECOND_HOURS,
+            "gap fan runtime",
+        );
+
+        let off = result_row(&open, "AHU-DUCTHI", "AHU_OFF");
+        assert_bounded(off, "AHU_OFF");
+        assert_near(hours_of(off, "fault_hours"), 0.0, SECOND_HOURS, "fan off");
+        let off_runtime = result_row(&open, "FAN-RUNTIME-HOURS", "AHU_OFF");
+        assert_near(
+            hours_of(off_runtime, "fan_runtime_hours"),
+            0.0,
+            SECOND_HOURS,
+            "fan off runtime",
+        );
+
+        let scope = crate::timescale_analytics::AnalyticsSqlScope {
+            start: None,
+            end: None,
+            equipment_ids: Vec::new(),
+        };
+        let motor = crate::timescale_analytics::motor_weekly_runtime(&tsdb, &cadence_site, &scope)
+            .await
+            .expect("motor weekly");
+        for (equipment_id, expected) in [
+            ("AHU_M1", 1.0),
+            ("AHU_M5", 1.0),
+            ("AHU_M15", 1.0),
+            ("AHU_GAP", 1.0),
+            ("AHU_OFF", 0.0),
+        ] {
+            let hours: f64 = motor
+                .get("rows")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter(|row| row.get("equipment_id").and_then(Value::as_str) == Some(equipment_id))
+                .filter_map(|row| row.get("runtime_hours").and_then(Value::as_f64))
+                .sum();
+            assert_near(hours, expected, SECOND_HOURS, equipment_id);
+        }
+
+        let confirmed = run_rules(&confirm_site, 600).await;
+        assert_eq!(confirmed["rules_failed"], json!(0), "{confirmed}");
+        let short = result_row(&confirmed, "AHU-DUCTHI", "AHU_C9");
+        assert_bounded(short, "AHU_C9");
+        assert_near(
+            hours_of(short, "fault_hours"),
+            0.0,
+            SECOND_HOURS,
+            "nine minutes is short of ten",
+        );
+        let exact = result_row(&confirmed, "AHU-DUCTHI", "AHU_C10");
+        assert_bounded(exact, "AHU_C10");
+        assert_near(
+            hours_of(exact, "fault_hours"),
+            SECOND_HOURS * 60.0,
+            SECOND_HOURS,
+            "the tenth minute is the crossing interval",
+        );
+        let fine = result_row(&confirmed, "AHU-DUCTHI", "AHU_C60");
+        let coarse = result_row(&confirmed, "AHU-DUCTHI", "AHU_C15");
+        assert_bounded(fine, "AHU_C60");
+        assert_bounded(coarse, "AHU_C15");
+        assert_near(
+            hours_of(fine, "fault_hours"),
+            51.0 / 60.0,
+            SECOND_HOURS,
+            "1-min confirm",
+        );
+        assert_near(
+            hours_of(coarse, "fault_hours"),
+            1.0,
+            SECOND_HOURS,
+            "15-min confirm",
+        );
+        assert!(
+            (hours_of(fine, "fault_hours") - hours_of(coarse, "fault_hours")).abs()
+                <= CADENCE_TOLERANCE_HOURS,
+            "confirm cadence spread exceeds 15 minutes"
+        );
+
+        duplicate_timestamp_does_not_double_count().await;
+        drop(cleanup);
+    }
+
+    async fn duplicate_timestamp_does_not_double_count() {
+        let reg = load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|item| item.rule_id == "AHU-DUCTHI")
+            .expect("AHU-DUCTHI");
+        let sql = wrap_rule_sql(
+            &render_rule_sql(&reg, rule, 300.0, 0, "SYNTH", Some("AHU_DUP"), None).expect("render"),
+            rule,
+        );
+        let tsdb = Tsdb::connect_from_env().await.expect("connect");
+        let mut tx = tsdb.pool().begin().await.expect("begin");
+        sqlx::query(
+            "CREATE TEMP TABLE history (
+                equipment_id text,
+                timestamp_utc timestamptz,
+                duct_static double precision,
+                duct_static_sp double precision,
+                fan_status double precision,
+                fan_cmd double precision
+            ) ON COMMIT DROP",
+        )
+        .execute(&mut *tx)
+        .await
+        .expect("temp history");
+        sqlx::query(
+            "INSERT INTO history VALUES
+                ('AHU_DUP', '2026-06-01 00:00:00+00', 2, 1, 1, 1),
+                ('AHU_DUP', '2026-06-01 00:00:00+00', 2, 1, 1, 1),
+                ('AHU_DUP', '2026-06-01 00:01:00+00', 2, 1, 1, 1)",
+        )
+        .execute(&mut *tx)
+        .await
+        .expect("duplicate rows");
+        let rows = sqlx::query(&sql).fetch_all(&mut *tx).await.expect("rule");
+        let _ = tx.rollback().await;
+        let hours = rows
+            .first()
+            .and_then(|row| row_optional_f64(row, "fault_hours"))
+            .expect("fault hours");
+        assert_near(hours, 60.0 / 3600.0, SECOND_HOURS, "duplicate timestamps");
+        assert!(
+            hours < 120.0 / 3600.0,
+            "duplicate timestamp doubled the interval"
+        );
     }
 }

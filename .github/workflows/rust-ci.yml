@@ -226,6 +226,11 @@ jobs:
           OPENFDD_LIFECYCLE_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
           OPENFDD_LIFECYCLE_DATABASE_REQUIRED: "1"
         run: cargo test -p openfdd-central site_lifecycle_purges_owned_sites -- --test-threads=1
+      - name: Elapsed-time cadence and gap contract
+        env:
+          OPENFDD_LIFECYCLE_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+          OPENFDD_LIFECYCLE_DATABASE_REQUIRED: "1"
+        run: cargo test -p openfdd-central elapsed_time_cadence_and_gap_contract -- --test-threads=1
 
   synthetic-sql-parity:
     name: Synthetic pandas equals Timescale SQL

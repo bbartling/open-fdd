@@ -33,34 +33,68 @@ base AS (
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM joined
 ),
+elapsed_hold AS (
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
-    LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_raw_fault
-  FROM base
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
     *,
-    SUM(CASE WHEN raw_fault IS DISTINCT FROM prev_raw_fault THEN 1 ELSE 0 END)
+    SUM(is_new_streak)
       OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
   FROM lagged
 ),
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours,
-  100.0 * SUM(confirmed) / NULLIF(COUNT(*), 0) AS fault_pct
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;

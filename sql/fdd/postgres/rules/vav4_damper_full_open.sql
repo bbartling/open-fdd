@@ -1,8 +1,9 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- vav4_damper_full_open.sql — sequential sustain then confirm (pandas vav4).
--- Stage 1: air-on and damper > FULL_OPEN for SUSTAIN_ROWS consecutive samples.
--- Stage 2: confirm that sustained mask for CONFIRM_ROWS (not max of the two).
+-- Stage 1: air-on and damper > FULL_OPEN for SUSTAIN_HOURS of eligible elapsed time.
+-- Stage 2: confirm that sustained mask for CONFIRM_SECONDS (not the max of the two).
+-- Gaps longer than MAX_GAP_HOURS are unknown and break both streaks.
 WITH h AS (
   SELECT
     equipment_id,
@@ -31,14 +32,40 @@ cond AS (
     END AS INT) AS cond_fault
   FROM h
 ),
+elapsed_hold AS (
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM cond src
+  ) stepped
+),
 lagged1 AS (
   SELECT
     *,
     CASE
       WHEN cond_fault = LAG(cond_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new1
-  FROM cond
+  FROM elapsed_hold
 ),
 grp1 AS (
   SELECT
@@ -48,12 +75,13 @@ grp1 AS (
 ),
 sustained AS (
   SELECT
-    equipment_id,
-    timestamp_utc,
+    *,
     CAST(CASE
       WHEN cond_fault = 1
-       AND ROW_NUMBER() OVER (PARTITION BY equipment_id, streak1 ORDER BY timestamp_utc)
-           >= CAST(CEIL({{SUSTAIN_HOURS}} * 3600.0 / {{POLL_SECONDS}}) AS INT)
+       AND SUM(held_seconds) OVER (
+         PARTITION BY equipment_id, streak1 ORDER BY timestamp_utc
+         ROWS UNBOUNDED PRECEDING
+       ) >= ({{SUSTAIN_HOURS}} * 3600.0)
       THEN 1 ELSE 0
     END AS INT) AS sustained_fault
   FROM grp1
@@ -63,6 +91,7 @@ lagged2 AS (
     *,
     CASE
       WHEN sustained_fault = LAG(sustained_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new2
   FROM sustained
@@ -76,15 +105,21 @@ grp2 AS (
 final AS (
   SELECT
     equipment_id,
+    held_seconds,
     CAST(CASE
       WHEN sustained_fault = 1
-       AND ROW_NUMBER() OVER (PARTITION BY equipment_id, streak2 ORDER BY timestamp_utc) >= {{CONFIRM_ROWS}}
+       AND SUM(held_seconds) OVER (
+         PARTITION BY equipment_id, streak2 ORDER BY timestamp_utc
+         ROWS UNBOUNDED PRECEDING
+       ) >= {{CONFIRM_SECONDS}}
       THEN 1 ELSE 0
     END AS INT) AS confirmed
   FROM grp2
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
