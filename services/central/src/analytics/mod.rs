@@ -4,6 +4,7 @@
 //! - [`CENTRAL_ENGINE`] — pure Rust / Arrow-ready algorithms (inline samples)
 //! - [`DF_ENGINE`] — DataFusion SQL over historian Parquet (see `historian`)
 
+pub mod diagnostic_matrix;
 pub mod economizer;
 pub mod historian;
 pub mod mechanical_cooling;
