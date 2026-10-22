@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { SectionTabs } from "./SectionTabs";
 import { OracleSidebar } from "./OracleSidebar";
+import { TenantSwitcher, type TenantOption } from "./TenantSwitcher";
 import { SIDEBAR_NAV } from "../nav/sections";
-import { hrefWithSession } from "../session/sessionQuery";
+import { buildSessionSearch, hrefWithSession, parseSessionSearch } from "../session/sessionQuery";
+import { leaveBuildingSession } from "../api/sessionsApi";
 import { apiFetch, isCentralUnavailable } from "../api/client";
 import {
   getAuthMe,
@@ -12,7 +14,9 @@ import {
   type AuthMe,
 } from "../api/authApi";
 import {
+  clearTenantScopedClientState,
   getStoredActiveTenant,
+  selectTenant,
   setStoredActiveTenant,
   type TenantsListResponse,
 } from "../api/tenantApi";
@@ -104,9 +108,14 @@ export function AppShell({
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
   const [centralNotice, setCentralNotice] = useState<string | null>(null);
   const [timescaleOk, setTimescaleOk] = useState(false);
-  const [tenantLabel, setTenantLabel] = useState<string | null>(() => {
+  const [activeTenantId, setActiveTenantId] = useState<string | null>(() => {
     return getStoredActiveTenant();
   });
+  const [memberships, setMemberships] = useState<TenantOption[]>([]);
+  const [multiTenant, setMultiTenant] = useState(false);
+  const [hubAdmin, setHubAdmin] = useState(false);
+  const [tenantSwitching, setTenantSwitching] = useState(false);
+  const [tenantSwitchError, setTenantSwitchError] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -119,10 +128,15 @@ export function AppShell({
     }
     void getAuthMe()
       .then((me: AuthMe) => {
-        if (!cancelled && me.username) setSessionUser(me.username);
+        if (cancelled) return;
+        setHubAdmin(me.hub_admin === true);
+        if (me.username) setSessionUser(me.username);
       })
       .catch(() => {
-        if (!cancelled) setSessionUser(null);
+        if (!cancelled) {
+          setSessionUser(null);
+          setHubAdmin(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -284,8 +298,15 @@ export function AppShell({
       .then((t) => {
         if (cancelled) return;
         const id = (t.active_tenant_id || "legacy").trim();
-        setTenantLabel(id);
+        setActiveTenantId(id);
         setStoredActiveTenant(id);
+        setMultiTenant(t.multi_tenant === true);
+        setMemberships(
+          (t.tenants ?? []).map((row) => ({
+            id: row.id,
+            name: row.name || row.id,
+          })),
+        );
       })
       .catch(() => {
         /* keep stored / null */
@@ -294,6 +315,63 @@ export function AppShell({
       cancelled = true;
     };
   }, []);
+
+  const onTenantSelect = useCallback(
+    (tenantId: string) => {
+      if (!tenantId || tenantId === activeTenantId || tenantSwitching) return;
+      setTenantSwitching(true);
+      setTenantSwitchError(null);
+      const currentSite = parseSessionSearch(location.search).siteId ?? "";
+      void selectTenant(tenantId)
+        .then(async (body) => {
+          if (!body.ok || !body.active_tenant_id) {
+            setTenantSwitchError(body.error || "Could not switch tenant");
+            return;
+          }
+          if (currentSite) leaveBuildingSession(currentSite);
+          clearTenantScopedClientState();
+          const next = body.active_tenant_id.trim();
+          setActiveTenantId(next);
+          navigate(
+            {
+              pathname: location.pathname,
+              search: buildSessionSearch(location.search, {
+                siteId: "",
+                equipment: "",
+                jobId: "",
+              }),
+            },
+            { replace: true },
+          );
+          try {
+            const listed = await apiFetch<TenantsListResponse>("/api/tenants");
+            setMultiTenant(listed.multi_tenant === true);
+            setMemberships(
+              (listed.tenants ?? []).map((row) => ({
+                id: row.id,
+                name: row.name || row.id,
+              })),
+            );
+            const listedId = (listed.active_tenant_id || next).trim();
+            if (listedId) setActiveTenantId(listedId);
+          } catch {
+            // A list refresh is not the switch. Membership stays as last known.
+          }
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : "Could not switch tenant";
+          setTenantSwitchError(msg);
+        })
+        .finally(() => {
+          setTenantSwitching(false);
+        });
+    },
+    [activeTenantId, location.pathname, location.search, navigate, tenantSwitching],
+  );
+
+  const showTenantLabel = Boolean(activeTenantId && activeTenantId !== "legacy");
+  const showTenantSwitcher =
+    !collapsed && multiTenant && !hubAdmin && memberships.length > 1;
 
   return (
     <div
@@ -377,13 +455,29 @@ export function AppShell({
                 Timescale connected
               </div>
             ) : null}
-            {tenantLabel && tenantLabel !== "legacy" ? (
+            {showTenantSwitcher && activeTenantId ? (
+              <TenantSwitcher
+                tenants={memberships}
+                activeTenantId={activeTenantId}
+                disabled={tenantSwitching}
+                onSelect={onTenantSelect}
+              />
+            ) : showTenantLabel && activeTenantId ? (
               <div
                 className="app-sidebar__tenant"
                 data-testid="app-tenant"
-                title={`Active tenant: ${tenantLabel}`}
+                title={`Active tenant: ${activeTenantId}`}
               >
-                {collapsed ? tenantLabel.slice(0, 3) : `tenant:${tenantLabel}`}
+                {collapsed ? activeTenantId.slice(0, 3) : `tenant:${activeTenantId}`}
+              </div>
+            ) : null}
+            {tenantSwitchError ? (
+              <div
+                className="app-sidebar__tenant-error"
+                role="alert"
+                data-testid="app-tenant-switch-error"
+              >
+                {tenantSwitchError}
               </div>
             ) : null}
             {sessionUser ? (

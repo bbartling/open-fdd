@@ -77,9 +77,14 @@ pub struct JwtClaims {
     pub exp: i64,
     #[serde(default)]
     pub iat: i64,
-    /// Wave L — tenant memberships when multi-tenant mode is on (empty = hub-wide admin or single-tenant).
+    /// Durable tenant membership when multi-tenant mode is on.
+    /// Empty means a hub-wide admin or an unbound identity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tenant_ids: Vec<String>,
+    /// Active tenant for this session. Membership stays in `tenant_ids`.
+    /// Tokens minted before this field use the first membership as the active tenant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_tenant_id: Option<String>,
     /// File-plane session epoch (S09). Env identities always mint/verify as 0.
     #[serde(default, rename = "sv")]
     pub session_version: u64,
@@ -105,16 +110,31 @@ fn bound_uid(uid: &Option<String>) -> Option<&str> {
     uid.as_deref().map(str::trim).filter(|s| !s.is_empty())
 }
 
-/// Session epoch and record id to embed. Env identities stay unbound.
-/// A subject that is not in the store and was never retired stays unbound so
-/// direct-mint callers keep working. A retired name is refused.
-fn file_plane_binding(sub: &str) -> Result<(u64, Option<String>), String> {
+struct FilePlaneBinding {
+    session_version: u64,
+    uid: Option<String>,
+    /// Live file-plane membership. Absent for env identities and unbound subjects.
+    durable_tenant_ids: Option<Vec<String>>,
+}
+
+/// Session epoch, record id, and durable membership to embed.
+/// Env identities stay unbound. A subject that is not in the store and was never
+/// retired stays unbound so direct-mint callers keep working. A retired name is refused.
+fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
     if is_env_identity(sub) {
-        return Ok((0, None));
+        return Ok(FilePlaneBinding {
+            session_version: 0,
+            uid: None,
+            durable_tenant_ids: None,
+        });
     }
     let workspace = workspace_dir();
     match UserStore::load_status(&workspace) {
-        UserStoreLoad::Absent => Ok((0, None)),
+        UserStoreLoad::Absent => Ok(FilePlaneBinding {
+            session_version: 0,
+            uid: None,
+            durable_tenant_ids: None,
+        }),
         UserStoreLoad::Unreadable => {
             warn!("control-plane user store is unreadable; refusing to mint a file token");
             Err(IDENTITY_STORE_UNAVAILABLE.into())
@@ -128,7 +148,11 @@ fn file_plane_binding(sub: &str) -> Result<(u64, Option<String>), String> {
                 if store.is_retired(sub) {
                     return Err("identity unknown".into());
                 }
-                return Ok((0, None));
+                return Ok(FilePlaneBinding {
+                    session_version: 0,
+                    uid: None,
+                    durable_tenant_ids: None,
+                });
             };
             if store.users[idx].disabled {
                 return Err("identity disabled".into());
@@ -137,18 +161,59 @@ fn file_plane_binding(sub: &str) -> Result<(u64, Option<String>), String> {
                 store.users[idx].user_id = uuid::Uuid::new_v4().to_string();
                 store.save(&workspace)?;
             }
-            let session_version = store.users[idx].session_version;
-            let uid = store.users[idx].user_id.clone();
-            Ok((session_version, Some(uid)))
+            Ok(FilePlaneBinding {
+                session_version: store.users[idx].session_version,
+                uid: Some(store.users[idx].user_id.clone()),
+                durable_tenant_ids: Some(store.users[idx].tenant_ids.clone()),
+            })
         }
     }
+}
+
+/// Membership claim plus the active tenant for a newly minted session.
+///
+/// A single requested id that belongs to the stored membership selects that
+/// tenant and keeps the stored list. A longer requested list (login) keeps the
+/// stored list and activates its first id. Requests that are not a subset of
+/// the stored membership are left unchanged so verification can reject them.
+fn minted_session(
+    requested: &[String],
+    durable: Option<&[String]>,
+) -> (Vec<String>, Option<String>) {
+    let requested_clean: Vec<String> = requested
+        .iter()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .collect();
+    let Some(durable) = durable else {
+        let active = requested_clean.first().cloned();
+        return (requested_clean, active);
+    };
+    let subset = !requested_clean.is_empty()
+        && requested_clean
+            .iter()
+            .all(|id| durable.iter().any(|have| have == id));
+    if !subset {
+        let active = requested_clean.first().cloned();
+        return (requested_clean, active);
+    }
+    let active = if requested_clean.len() == 1 {
+        requested_clean.first().cloned()
+    } else {
+        durable.first().cloned()
+    };
+    (durable.to_vec(), active)
 }
 
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub sub: String,
     pub role: Role,
+    /// Durable membership. A file-plane user carries the stored list.
     pub tenant_ids: Vec<String>,
+    /// Active tenant for this session, when the token names one.
+    pub active_tenant_id: Option<String>,
 }
 
 impl AuthUser {
@@ -157,6 +222,7 @@ impl AuthUser {
             sub: "dev".into(),
             role: Role::Admin,
             tenant_ids: vec![],
+            active_tenant_id: None,
         }
     }
 }
@@ -290,12 +356,13 @@ impl AuthConfig {
         self.secret.is_some()
     }
 
-    /// Mint a JWT with optional tenant membership claims (Wave L L4+).
+    /// Mint a JWT with durable membership and a separate active tenant.
     ///
     /// File-plane subjects embed `uid` plus the current `session_version`, so a
     /// disabled, removed, or recreated account no longer matches. Env identities
     /// (`admin` / `agent` / `viewer` / `dev`) stay unbound and always use
-    /// session_version 0.
+    /// session_version 0. Passing one stored membership id selects that tenant
+    /// and keeps the rest of the stored membership on the token.
     pub fn issue_token_with_tenants(
         &self,
         sub: &str,
@@ -309,15 +376,18 @@ impl AuthConfig {
             .as_ref()
             .ok_or_else(|| "auth not configured".to_string())?;
         let now = chrono::Utc::now().timestamp();
-        let (session_version, uid) = file_plane_binding(sub)?;
+        let binding = file_plane_binding(sub)?;
+        let (membership, active_tenant_id) =
+            minted_session(tenant_ids, binding.durable_tenant_ids.as_deref());
         let claims = JwtClaims {
             sub: sub.to_string(),
             role: role.as_str().to_string(),
             exp: now + ttl_secs.max(60),
             iat: now,
-            tenant_ids: tenant_ids.to_vec(),
-            session_version,
-            uid,
+            tenant_ids: membership,
+            active_tenant_id,
+            session_version: binding.session_version,
+            uid: binding.uid,
         };
         encode(
             &Header::default(),
@@ -410,11 +480,12 @@ impl AuthConfig {
         // File-issued tokens carry `uid` and must match a live enabled record.
         // Env identities are explicit and do not consult the file. An unreadable
         // store fails closed for every other subject.
-        authorize_file_plane(&claims, role)?;
+        let scope = authorize_file_plane(&claims, role)?;
         Ok(AuthUser {
             sub: claims.sub,
             role,
-            tenant_ids: claims.tenant_ids,
+            tenant_ids: scope.tenant_ids,
+            active_tenant_id: scope.active_tenant_id,
         })
     }
 
@@ -434,9 +505,14 @@ impl AuthConfig {
     }
 }
 
-fn authorize_file_plane(claims: &JwtClaims, role: Role) -> Result<(), String> {
+struct SessionScope {
+    tenant_ids: Vec<String>,
+    active_tenant_id: Option<String>,
+}
+
+fn authorize_file_plane(claims: &JwtClaims, role: Role) -> Result<SessionScope, String> {
     if is_env_identity(&claims.sub) {
-        return Ok(());
+        return Ok(scope_from_claims(claims));
     }
     let workspace = workspace_dir();
     match UserStore::load_status(&workspace) {
@@ -449,14 +525,18 @@ fn authorize_file_plane(claims: &JwtClaims, role: Role) -> Result<(), String> {
                 warn!("control-plane user store is missing; rejecting bound token");
                 Err(IDENTITY_STORE_UNAVAILABLE.into())
             } else {
-                Ok(())
+                Ok(scope_from_claims(claims))
             }
         }
         UserStoreLoad::Ready(store) => authorize_loaded(&store, claims, role),
     }
 }
 
-fn authorize_loaded(store: &UserStore, claims: &JwtClaims, role: Role) -> Result<(), String> {
+fn authorize_loaded(
+    store: &UserStore,
+    claims: &JwtClaims,
+    role: Role,
+) -> Result<SessionScope, String> {
     let uid = bound_uid(&claims.uid);
     match store.get(&claims.sub) {
         Some(rec) => {
@@ -465,10 +545,11 @@ fn authorize_loaded(store: &UserStore, claims: &JwtClaims, role: Role) -> Result
                     return Err("identity unknown".into());
                 }
             }
-            live_record_ok(rec, claims, role)
+            live_record_ok(rec, claims, role)?;
+            Ok(scope_for_live_record(rec, claims))
         }
         None if uid.is_some() || store.is_retired(&claims.sub) => Err("identity unknown".into()),
-        None => Ok(()),
+        None => Ok(scope_from_claims(claims)),
     }
 }
 
@@ -491,7 +572,54 @@ fn live_record_ok(rec: &UserRecord, claims: &JwtClaims, role: Role) -> Result<()
     {
         return Err("session revoked".into());
     }
+    if let Some(active) = claims
+        .active_tenant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        if !rec.tenant_ids.iter().any(|have| have == active) {
+            return Err("session revoked".into());
+        }
+    }
     Ok(())
+}
+
+fn nonempty_active(raw: Option<&str>) -> Option<&str> {
+    raw.map(str::trim).filter(|id| !id.is_empty())
+}
+
+/// Scope taken from the token itself. Used for env identities and unbound subjects.
+fn scope_from_claims(claims: &JwtClaims) -> SessionScope {
+    let active = nonempty_active(claims.active_tenant_id.as_deref())
+        .map(str::to_string)
+        .or_else(|| claims.tenant_ids.first().cloned());
+    SessionScope {
+        tenant_ids: claims.tenant_ids.clone(),
+        active_tenant_id: active,
+    }
+}
+
+/// File-plane scope. A token that names at least one stored tenant keeps that
+/// active tenant and returns the stored membership. A token with no stored
+/// tenant id keeps its own claims.
+fn scope_for_live_record(rec: &UserRecord, claims: &JwtClaims) -> SessionScope {
+    let claimed: Vec<&String> = claims
+        .tenant_ids
+        .iter()
+        .filter(|id| rec.tenant_ids.iter().any(|have| have == *id))
+        .collect();
+    if claimed.is_empty() {
+        return scope_from_claims(claims);
+    }
+    let active = nonempty_active(claims.active_tenant_id.as_deref())
+        .filter(|id| rec.tenant_ids.iter().any(|have| have == id))
+        .map(str::to_string)
+        .or_else(|| claimed.first().map(|id| (*id).clone()));
+    SessionScope {
+        tenant_ids: rec.tenant_ids.clone(),
+        active_tenant_id: active,
+    }
 }
 
 /// Identity rejection is 401. A missing or unreadable user store is 503.
@@ -547,6 +675,7 @@ mod tests {
             exp: chrono::Utc::now().timestamp() + 3600,
             iat: chrono::Utc::now().timestamp(),
             tenant_ids: vec![],
+            active_tenant_id: None,
             session_version: 0,
             uid: None,
         };
@@ -576,6 +705,7 @@ mod tests {
             exp: chrono::Utc::now().timestamp() + 3600,
             iat: chrono::Utc::now().timestamp(),
             tenant_ids: vec![],
+            active_tenant_id: None,
             session_version: 0,
             uid: None,
         };
@@ -701,6 +831,7 @@ mod tests {
             exp,
             iat,
             tenant_ids,
+            active_tenant_id: None,
             session_version: 0,
             uid: None,
         };
@@ -977,6 +1108,7 @@ mod tests {
                 exp: now + 3600,
                 iat: now,
                 tenant_ids: vec!["acme".into()],
+                active_tenant_id: None,
                 session_version: 0,
                 uid: None,
             },
