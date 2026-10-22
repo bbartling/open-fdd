@@ -23,6 +23,21 @@ const EXTRA: &str = "W4C_AHU_EXTRA";
 const CHILLER: &str = "W4C_CH";
 const WEATHER: &str = "W4C_WX";
 
+struct SharedPoolReset;
+
+impl SharedPoolReset {
+    fn arm() -> Self {
+        fdd_tsdb::clear_shared_pool();
+        Self
+    }
+}
+
+impl Drop for SharedPoolReset {
+    fn drop(&mut self) {
+        fdd_tsdb::clear_shared_pool();
+    }
+}
+
 struct EnvGuard {
     key: &'static str,
     prev: Option<String>,
@@ -79,6 +94,9 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     let _database = EnvGuard::set("OPENFDD_DATABASE_URL", &url);
     let _jwt = EnvGuard::unset("OPENFDD_JWT_SECRET");
     let _mt = EnvGuard::unset("OPENFDD_MULTI_TENANT");
+    // Each tokio test has its own runtime. A shared Timescale pool left behind
+    // never yields a connection to the next test.
+    let _shared_pool = SharedPoolReset::arm();
 
     let pool = PgPoolOptions::new()
         .max_connections(2)
