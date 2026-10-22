@@ -2912,6 +2912,16 @@ pub async fn csv_preview(headers: HeaderMap, body: Bytes) -> Json<Value> {
     ))
 }
 
+fn abort_import_staging(result: &Value) {
+    if result.get("staged").and_then(|v| v.as_bool()) != Some(true) {
+        return;
+    }
+    let Some(root) = result.get("package_root").and_then(|v| v.as_str()) else {
+        return;
+    };
+    open_fdd_edge_prototype::csv_ingest::package::abort_staged_package(std::path::Path::new(root));
+}
+
 /// `openfdd_package_v1` zip upload (#514): multipart, JSON base64, or raw zip body.
 pub async fn csv_import_package(
     State(state): State<Arc<AppState>>,
@@ -3015,7 +3025,46 @@ pub async fn csv_import_package(
                         .await
                         {
                             Ok(n) => {
-                                if let Some(obj) = result.as_object_mut() {
+                                if result.get("staged").and_then(|v| v.as_bool()) == Some(true) {
+                                    let equipment_written = result
+                                        .get("equipment_written")
+                                        .and_then(|v| v.as_u64())
+                                        .and_then(|n| usize::try_from(n).ok())
+                                        .unwrap_or(0);
+                                    match open_fdd_edge_prototype::csv_ingest::package::commit_staged_package(
+                                        std::path::Path::new(&root),
+                                        n,
+                                        equipment_written,
+                                    ) {
+                                        Ok(live) => {
+                                            if let Some(obj) = result.as_object_mut() {
+                                                obj.insert(
+                                                    "package_root".into(),
+                                                    json!(live.display().to_string()),
+                                                );
+                                                obj.insert("staged".into(), json!(false));
+                                                obj.insert(
+                                                    "timescale_samples_upserted".into(),
+                                                    json!(n),
+                                                );
+                                                obj.insert("historian".into(), json!("timescale"));
+                                                obj.insert("dual_write".into(), json!(false));
+                                                obj.insert("total_rows".into(), json!(n));
+                                            }
+                                        }
+                                        Err(e) => {
+                                            abort_import_staging(&result);
+                                            return Err((
+                                                StatusCode::INTERNAL_SERVER_ERROR,
+                                                Json(json!({
+                                                    "ok": false,
+                                                    "error": format!("package commit: {e}"),
+                                                    "building_id": bid,
+                                                })),
+                                            ));
+                                        }
+                                    }
+                                } else if let Some(obj) = result.as_object_mut() {
                                     obj.insert("timescale_samples_upserted".into(), json!(n));
                                     obj.insert("historian".into(), json!("timescale"));
                                     obj.insert("dual_write".into(), json!(false));
@@ -3023,12 +3072,12 @@ pub async fn csv_import_package(
                                 }
                             }
                             Err(e) => {
+                                abort_import_staging(&result);
                                 return Err((
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     Json(json!({
                                         "ok": false,
                                         "error": format!("timescale package seed: {e:#}"),
-                                        "package_root": root,
                                         "building_id": bid,
                                     })),
                                 ));
@@ -3036,6 +3085,7 @@ pub async fn csv_import_package(
                         }
                     }
                     Err(e) => {
+                        abort_import_staging(&result);
                         return Err((
                             StatusCode::SERVICE_UNAVAILABLE,
                             Json(json!({
@@ -3046,6 +3096,8 @@ pub async fn csv_import_package(
                         ));
                     }
                 }
+            } else {
+                abort_import_staging(&result);
             }
         }
         // Promote package utilities_v1 → Metering fuel campus for the imported building.
@@ -6586,12 +6638,14 @@ async fn analytics_inspect(
                 })
             });
             let max_points = req.query.max_points.unwrap_or(2000);
+            let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
             match analytics::historian::inspect_from_history(
                 req.query.building_id.as_deref(),
                 eq,
                 columns.as_deref(),
                 max_points,
                 req.read_tenant_id.as_deref(),
+                &scope,
             )
             .await
             {
@@ -6737,6 +6791,7 @@ async fn analytics_rcx_preset(
                 .to_string();
             let building_id = req.query.building_id.clone();
             let max_points = req.query.max_points.unwrap_or(8000);
+            let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
             let action_id = actions::start_action(
                 "analytics_rcx",
                 &format!(
@@ -6762,6 +6817,7 @@ async fn analytics_rcx_preset(
                 building_id.as_deref(),
                 &preset_id,
                 max_points,
+                &scope,
             )
             .await
             {

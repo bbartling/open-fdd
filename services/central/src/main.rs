@@ -32,12 +32,16 @@ mod mapping_revision;
 mod metering_scope_fixtures;
 mod models;
 mod openapi;
+#[cfg(test)]
+mod package_preflight_fixtures;
 mod providers;
 #[cfg(test)]
 mod rcx_row_fixtures;
 mod routes;
 #[cfg(test)]
 mod rule_catalog_fixtures;
+#[cfg(test)]
+mod sat_pairing_fixtures;
 mod sql_anomaly;
 mod starter_seed;
 mod state;

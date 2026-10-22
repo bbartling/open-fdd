@@ -15,6 +15,7 @@ import {
   type PlotlyFigure,
   type PlotlyTrace,
 } from "./plotDataset";
+import { displayScalar, displayUnitLabel, type UnitSystem } from "./roleUnits";
 import type {
   OverviewPlantFig,
   OverviewVibe19Response,
@@ -28,6 +29,7 @@ import { getPackageMapping } from "./mappingApi";
 import {
   analyticsWindowFromSampling,
   datasetTimeSpan,
+  groupEquipmentByType,
   isWeatherEquipment,
   isZoneTerminalEquipment,
 } from "../lib/overviewMetrics";
@@ -40,17 +42,27 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function showQuantity(
+  value: number | null,
+  unitSystem: UnitSystem,
+  kind: "temperature" | "temperature_delta",
+): number | null {
+  if (value == null) return null;
+  return displayScalar(value, "°F", unitSystem, kind);
+}
+
+function tempAxis(unitSystem: UnitSystem): string {
+  return displayUnitLabel("°F", unitSystem, "temperature");
+}
+
+function deltaAxis(unitSystem: UnitSystem): string {
+  return displayUnitLabel("°F", unitSystem, "temperature_delta");
+}
+
 function groupByType(
   rows: Array<Record<string, unknown>>,
 ): Array<{ type: string; count: number }> {
-  const map = new Map<string, number>();
-  for (const r of rows) {
-    const t = String(r.equipment_type || r.type || "unknown");
-    map.set(t, (map.get(t) ?? 0) + 1);
-  }
-  return [...map.entries()]
-    .map(([type, count]) => ({ type, count }))
-    .sort((a, b) => a.type.localeCompare(b.type));
+  return groupEquipmentByType(rows);
 }
 
 function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
@@ -73,6 +85,7 @@ function motorFigure(rows: Array<Record<string, unknown>>): PlotlyFigure | null 
 /** Weekly plant bars + optional avg OAT on y2 (vibe19 motor_weekly_runtime_chart). */
 export function weeklyPlantFigures(
   rows: Array<Record<string, unknown>>,
+  unitSystem: UnitSystem = "imperial",
 ): OverviewPlantFig[] {
   const weekly = rows.filter((r) => {
     if (r.kind !== "weekly_equipment" && r.kind !== "weekly_plant") return false;
@@ -154,9 +167,9 @@ export function weeklyPlantFigures(
         data.push({
           type: "scatter",
           mode: "lines+markers",
-          name: "Avg OAT °F (while on)",
+          name: `Avg OAT ${tempAxis(unitSystem)} (while on)`,
           x: weeks,
-          y: oat,
+          y: oat.map((v) => showQuantity(v, unitSystem, "temperature")),
           yaxis: "y2",
           line: { width: 2, color: "#333333", dash: "dot" },
           marker: { size: 7, color: "#333333" },
@@ -223,7 +236,10 @@ export function weeklyPlantFigures(
     });
 }
 
-export function mechFigure(rows: Array<Record<string, unknown>>): {
+export function mechFigure(
+  rows: Array<Record<string, unknown>>,
+  unitSystem: UnitSystem = "imperial",
+): {
   figure: PlotlyFigure | null;
   bins: Array<Record<string, unknown>>;
   callout: string | null;
@@ -248,11 +264,22 @@ export function mechFigure(rows: Array<Record<string, unknown>>): {
     (r) => r.series_kind === "aggregate_active_hours",
   );
 
+  const binLabel = (row: Record<string, unknown>): string => {
+    const stored = String(row.bin_label ?? "");
+    if (unitSystem !== "metric") return stored;
+    const lo = num(row.bin_lo_f);
+    const hi = num(row.bin_hi_f);
+    if (lo == null) return stored;
+    const a = showQuantity(lo, "metric", "temperature");
+    const b = hi == null ? null : showQuantity(hi, "metric", "temperature");
+    if (a == null) return stored;
+    return b == null ? a.toFixed(1) : `${a.toFixed(1)}–${b.toFixed(1)}`;
+  };
   const binOrder = [
     ...new Set(
       oatBins
         .map((r) => ({
-          label: String(r.bin_label ?? ""),
+          label: binLabel(r),
           lo: num(r.bin_lo_f) ?? 0,
         }))
         .sort((a, b) => a.lo - b.lo)
@@ -273,9 +300,7 @@ export function mechFigure(rows: Array<Record<string, unknown>>): {
   const data: PlotlyTrace[] = [];
   devices.forEach((eq, i) => {
     const eqRows = byEq.get(eq) ?? [];
-    const byBin = new Map(
-      eqRows.map((r) => [String(r.bin_label ?? ""), num(r.hours)]),
-    );
+    const byBin = new Map(eqRows.map((r) => [binLabel(r), num(r.hours)]));
     data.push({
       type: "bar",
       name: eq,
@@ -286,9 +311,7 @@ export function mechFigure(rows: Array<Record<string, unknown>>): {
   });
 
   if (totals.length) {
-    const byBin = new Map(
-      totals.map((r) => [String(r.bin_label ?? ""), num(r.hours)]),
-    );
+    const byBin = new Map(totals.map((r) => [binLabel(r), num(r.hours)]));
     data.push({
       type: "scatter",
       mode: "lines+markers",
@@ -300,9 +323,7 @@ export function mechFigure(rows: Array<Record<string, unknown>>): {
     });
   }
   if (anyActive.length) {
-    const byBin = new Map(
-      anyActive.map((r) => [String(r.bin_label ?? ""), num(r.hours)]),
-    );
+    const byBin = new Map(anyActive.map((r) => [binLabel(r), num(r.hours)]));
     data.push({
       type: "scatter",
       mode: "lines+markers",
@@ -323,7 +344,11 @@ export function mechFigure(rows: Array<Record<string, unknown>>): {
       figure: rowsToBarFigure(sorted, {
         xKey: "bin_label",
         yKeys: ["hours"],
-        title: "Mechanical cooling run hours by outdoor-air temperature (5°F bins)",
+        title: `Mechanical cooling run hours by outdoor-air temperature (${
+          unitSystem === "metric"
+            ? (showQuantity(5, "metric", "temperature_delta") ?? 5).toFixed(1)
+            : "5"
+        }${tempAxis(unitSystem)} bins)`,
         yAxisTitle: "Run hours",
         maxBars: 40,
         provenance: "POST /api/analytics/mechanical-cooling (OAT bins)",
@@ -341,7 +366,7 @@ export function mechFigure(rows: Array<Record<string, unknown>>): {
   const figure: PlotlyFigure = {
     data,
     layout: overviewChartLayout({
-      xTitle: "OAT bin °F",
+      xTitle: `OAT bin ${tempAxis(unitSystem)}`,
       yTitle: "Run hours",
       height: 420,
       tickangle: 0,
@@ -368,6 +393,7 @@ export function mechFigure(rows: Array<Record<string, unknown>>): {
 export function econDeltaScatter(
   points: Array<Record<string, unknown>>,
   dtMinF: number,
+  unitSystem: UnitSystem = "imperial",
 ): PlotlyFigure | null {
   const usable = points.filter(
     (p) =>
@@ -377,7 +403,8 @@ export function econDeltaScatter(
   );
   if (usable.length < 5) return null;
 
-  const xs = usable.map((p) => num(p.delta_or_f) as number);
+  const showD = (v: number | null) => showQuantity(v, unitSystem, "temperature_delta");
+  const xs = usable.map((p) => showD(num(p.delta_or_f)) as number);
   const xLo = Math.min(...xs);
   const xHi = Math.max(...xs);
   const lo = Number.isFinite(xLo) ? xLo : -20;
@@ -421,8 +448,8 @@ export function econDeltaScatter(
       type: "scatter",
       mode: "markers",
       name: eq,
-      x: rows.map((r) => num(r.delta_or_f) as number),
-      y: rows.map((r) => num(r.delta_mr_f)),
+      x: rows.map((r) => showD(num(r.delta_or_f)) as number),
+      y: rows.map((r) => showD(num(r.delta_mr_f))),
       marker: hasDamper
         ? {
             size: 7,
@@ -444,9 +471,13 @@ export function econDeltaScatter(
   return {
     data,
     layout: {
-      title: `Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥${dtMinF.toFixed(0)}°F)`,
-      xaxis: { title: "OAT − RAT (°F)", autorange: true },
-      yaxis: { title: "MAT − RAT (°F)", autorange: true },
+      title: `Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥${
+        unitSystem === "metric"
+          ? (showD(dtMinF) ?? dtMinF).toFixed(1)
+          : dtMinF.toFixed(0)
+      }${deltaAxis(unitSystem)})`,
+      xaxis: { title: `OAT − RAT (${deltaAxis(unitSystem)})`, autorange: true },
+      yaxis: { title: `MAT − RAT (${deltaAxis(unitSystem)})`, autorange: true },
       legend: { orientation: "h" },
       height: 420,
       uirevision: `econ-delta:${fingerprintJson(usable.slice(0, 200))}`,
@@ -461,6 +492,7 @@ export function econDeltaScatter(
 /** vibe19 economizer_mat_residual_chart. */
 export function econMatResidual(
   points: Array<Record<string, unknown>>,
+  unitSystem: UnitSystem = "imperial",
 ): PlotlyFigure | null {
   const usable = points.filter(
     (p) =>
@@ -483,7 +515,7 @@ export function econMatResidual(
       mode: "lines",
       name: eq,
       x: rows.map((r) => String(r.timestamp_utc ?? "")),
-      y: rows.map((r) => num(r.mat_resid_f)),
+      y: rows.map((r) => showQuantity(num(r.mat_resid_f), unitSystem, "temperature_delta")),
       line: { width: 1.4, color: rainbowColor(colorIdx) },
     });
     colorIdx += 1;
@@ -493,7 +525,7 @@ export function econMatResidual(
     layout: {
       title: "MAT residual (meas − mixing model from OA damper) — fan on, identifiable",
       xaxis: { title: "time", autorange: true },
-      yaxis: { title: "MAT residual °F", autorange: true },
+      yaxis: { title: `MAT residual ${deltaAxis(unitSystem)}`, autorange: true },
       legend: { orientation: "h" },
       height: 320,
       uirevision: `econ-mat:${fingerprintJson(usable.slice(0, 200))}`,
@@ -509,6 +541,7 @@ export function econMatResidual(
 export function econTempsOverlay(
   points: Array<Record<string, unknown>>,
   equipmentId: string | null,
+  unitSystem: UnitSystem = "imperial",
 ): { figure: PlotlyFigure | null; equipmentId: string | null } {
   if (!points.length) return { figure: null, equipmentId: null };
   const eq =
@@ -527,7 +560,7 @@ export function econTempsOverlay(
       mode: "lines",
       name: "OAT",
       x,
-      y: rows.map((r) => num(r.oat_f)),
+      y: rows.map((r) => showQuantity(num(r.oat_f), unitSystem, "temperature")),
       line: { width: 1.5, color: rainbowColor(0) },
     },
     {
@@ -535,7 +568,7 @@ export function econTempsOverlay(
       mode: "lines",
       name: "RAT",
       x,
-      y: rows.map((r) => num(r.rat_f)),
+      y: rows.map((r) => showQuantity(num(r.rat_f), unitSystem, "temperature")),
       line: { width: 1.5, color: rainbowColor(5) },
     },
     {
@@ -543,7 +576,7 @@ export function econTempsOverlay(
       mode: "lines",
       name: "MAT",
       x,
-      y: rows.map((r) => num(r.mat_f)),
+      y: rows.map((r) => showQuantity(num(r.mat_f), unitSystem, "temperature")),
       line: { width: 1.5, color: rainbowColor(3) },
     },
   ];
@@ -553,7 +586,7 @@ export function econTempsOverlay(
       mode: "lines",
       name: "SAT",
       x,
-      y: rows.map((r) => num(r.sat_f)),
+      y: rows.map((r) => showQuantity(num(r.sat_f), unitSystem, "temperature")),
       line: { width: 1.5, color: rainbowColor(6) },
     });
   }
@@ -575,7 +608,7 @@ export function econTempsOverlay(
       layout: {
         title: `Free-cooling temps + OA damper (fan on) — ${eq}`,
         xaxis: { title: "time", autorange: true },
-        yaxis: { title: "°F", autorange: true },
+        yaxis: { title: tempAxis(unitSystem), autorange: true },
         yaxis2: {
           title: "damper %",
           overlaying: "y",
@@ -600,18 +633,23 @@ export function econTempsOverlay(
 export function basOverlay(
   points: Array<Record<string, unknown>>,
   oatErr: number,
+  unitSystem: UnitSystem = "imperial",
 ): PlotlyFigure | null {
   if (!points.length) return null;
   const x = points.map((p) => String(p.timestamp_utc ?? ""));
-  const bas = points.map((p) => num(p.bas_oat_f));
-  const web = points.map((p) => num(p.web_oat_f));
-  const hi = web.map((v) => (v == null ? null : v + oatErr));
-  const lo = web.map((v) => (v == null ? null : v - oatErr));
+  const showT = (v: number | null) => showQuantity(v, unitSystem, "temperature");
+  const bas = points.map((p) => showT(num(p.bas_oat_f)));
+  const web = points.map((p) => showT(num(p.web_oat_f)));
+  const errShown = showQuantity(oatErr, unitSystem, "temperature_delta") ?? oatErr;
+  const errLabel =
+    unitSystem === "metric" ? errShown.toFixed(1) : String(oatErr);
+  const hi = points.map((p) => showT(num(p.web_oat_f) == null ? null : (num(p.web_oat_f) as number) + oatErr));
+  const lo = points.map((p) => showT(num(p.web_oat_f) == null ? null : (num(p.web_oat_f) as number) - oatErr));
   const data: PlotlyTrace[] = [
     {
       type: "scatter",
       mode: "lines",
-      name: `web +${oatErr}°F`,
+      name: `web +${errLabel}${deltaAxis(unitSystem)}`,
       x,
       y: hi,
       line: { width: 0 },
@@ -620,7 +658,7 @@ export function basOverlay(
     {
       type: "scatter",
       mode: "lines",
-      name: `±${oatErr}°F band`,
+      name: `±${errLabel}${deltaAxis(unitSystem)} band`,
       x,
       y: lo,
       fill: "tonexty",
@@ -647,9 +685,9 @@ export function basOverlay(
   return {
     data,
     layout: {
-      title: `BAS vs web outdoor-air temperature (±${oatErr}°F band)`,
+      title: `BAS vs web outdoor-air temperature (±${errLabel}${deltaAxis(unitSystem)} band)`,
       xaxis: { title: "time", autorange: true },
-      yaxis: { title: "°F", autorange: true },
+      yaxis: { title: tempAxis(unitSystem), autorange: true },
       legend: { orientation: "h" },
       uirevision: `bas-overlay:${fingerprintJson(points.slice(0, 100))}`,
     },
@@ -660,7 +698,10 @@ export function basOverlay(
   };
 }
 
-export function basHist(rows: Array<Record<string, unknown>>): PlotlyFigure | null {
+export function basHist(
+  rows: Array<Record<string, unknown>>,
+  unitSystem: UnitSystem = "imperial",
+): PlotlyFigure | null {
   const usable = rows.filter((r) => r.kind === "delta_hist" || num(r.count) != null);
   if (!usable.length) return null;
   const sorted = [...usable].sort(
@@ -669,12 +710,12 @@ export function basHist(rows: Array<Record<string, unknown>>): PlotlyFigure | nu
   return rowsToBarFigure(
     sorted.map((r) => ({
       ...r,
-      bin_label: `${num(r.bin_lo_f) ?? 0}`,
+      bin_label: `${showQuantity(num(r.bin_lo_f) ?? 0, unitSystem, "temperature_delta") ?? 0}`,
     })),
     {
       xKey: "bin_label",
       yKeys: ["count"],
-      title: "BAS vs web outdoor-air temperature deviation (°F)",
+      title: `BAS vs web outdoor-air temperature deviation (${deltaAxis(unitSystem)})`,
       yAxisTitle: "count",
       maxBars: 60,
       provenance: "POST /api/analytics/bas-vs-web-oat",

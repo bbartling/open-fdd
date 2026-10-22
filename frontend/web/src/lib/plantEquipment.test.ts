@@ -69,7 +69,7 @@ describe("plantEquipmentFamilies", () => {
     expect(f.hasAhu).toBe(true);
   });
 
-  it("recognizes Zone Other stamps for MQTT / generic zone section", () => {
+  it("recognizes Zone Other stamps for the generic zone section", () => {
     const f = plantEquipmentFamilies([
       { equipment_id: "hosted-weather", equipment_type: "Zone Other" },
       { equipment_id: "FEC_1", equipment_type: "zone_other" },

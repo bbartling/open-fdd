@@ -23,6 +23,13 @@ function fmtHours(v: unknown): string {
   return n.toFixed(1);
 }
 
+function coverageField(env: AnalyticsEnvelope | null, key: string): string {
+  const coverage = env?.coverage;
+  if (!coverage || typeof coverage !== "object") return "";
+  const value = coverage[key];
+  return typeof value === "string" ? value : "";
+}
+
 function fmtCount(v: unknown): string {
   if (typeof v === "number" && Number.isFinite(v)) return String(v);
   if (typeof v === "string" && v.trim() && Number.isFinite(Number(v))) return v.trim();
@@ -233,7 +240,13 @@ export function HealthMatrixSection({
   }, [env?.rows, buildingId]);
 
   const diagnostic = isDiagnosticMatrix(env);
-  const empty = !loading && !err && env !== null && rows.length === 0;
+  const availability = coverageField(env, "availability");
+  const availabilityMessage = coverageField(env, "message");
+  const distinctEmpty =
+    availability === "error" ||
+    availability === "unsupported" ||
+    availability === "no_history";
+  const empty = !loading && !err && env !== null && rows.length === 0 && !distinctEmpty;
 
   const tableColumns = useMemo((): DataTableColumn<Record<string, unknown>>[] => {
     if (diagnostic && env) {
@@ -330,6 +343,26 @@ export function HealthMatrixSection({
       {err ? (
         <InlineAlert id={`${family}-health-err`} variant="danger" testId={test("err")}>
           {err}
+        </InlineAlert>
+      ) : null}
+      {availability === "error" ? (
+        <InlineAlert id={`${family}-health-error`} variant="danger" testId={test("error")}>
+          {availabilityMessage || "Health could not be loaded."}
+        </InlineAlert>
+      ) : null}
+      {availability === "unsupported" ? (
+        <InlineAlert
+          id={`${family}-health-unsupported`}
+          variant="warning"
+          testId={test("unsupported")}
+        >
+          {availabilityMessage ||
+            "Equipment is present, but the points for this matrix are not mapped."}
+        </InlineAlert>
+      ) : null}
+      {availability === "no_history" ? (
+        <InlineAlert id={`${family}-health-no-history`} variant="info" testId={test("no-history")}>
+          {availabilityMessage || "Equipment is mapped, but this window has no samples."}
         </InlineAlert>
       ) : null}
       {empty ? (
