@@ -50,6 +50,21 @@ impl Drop for EnvSet {
     }
 }
 
+struct SharedPoolReset;
+
+impl SharedPoolReset {
+    fn arm() -> Self {
+        fdd_tsdb::clear_shared_pool();
+        Self
+    }
+}
+
+impl Drop for SharedPoolReset {
+    fn drop(&mut self) {
+        fdd_tsdb::clear_shared_pool();
+    }
+}
+
 fn postgres_url() -> String {
     std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
@@ -272,6 +287,9 @@ async fn switch_active_tenant_keeps_membership_and_denies_foreign_reads() {
         ("OPENFDD_HISTORIAN", Some("timescale")),
         ("OPENFDD_DATABASE_URL", Some(&url)),
     ]);
+    // A previous test may have cached the shared pool on a runtime that has
+    // already ended. Drop it, and drop ours when this test ends.
+    let _shared_pool = SharedPoolReset::arm();
     let state = Arc::new(state);
     let app = crate::routes::router(Arc::clone(&state));
 
