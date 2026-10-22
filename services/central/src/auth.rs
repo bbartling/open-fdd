@@ -12,8 +12,10 @@ use tracing::warn;
 use utoipa::ToSchema;
 
 use crate::state::AppState;
+use crate::user_store::{UserRecord, UserStore, UserStoreLoad};
 
 const VALID_ROLES: &[&str] = &["viewer", "operator", "admin"];
+const IDENTITY_STORE_UNAVAILABLE: &str = "identity store unavailable";
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     constant_time_eq_bytes(a, b)
@@ -81,24 +83,65 @@ pub struct JwtClaims {
     /// File-plane session epoch (S09). Env identities always mint/verify as 0.
     #[serde(default, rename = "sv")]
     pub session_version: u64,
+    /// File-plane record id. Absent on env identities and on tokens that were never file-issued.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uid: Option<String>,
 }
 
-fn is_env_identity(sub: &str) -> bool {
+pub(crate) fn is_env_identity(sub: &str) -> bool {
     matches!(
         sub.trim().to_ascii_lowercase().as_str(),
         "admin" | "agent" | "viewer" | "dev"
     )
 }
 
-fn file_plane_session_version(sub: &str) -> Option<u64> {
+fn workspace_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
+    )
+}
+
+fn bound_uid(uid: &Option<String>) -> Option<&str> {
+    uid.as_deref().map(str::trim).filter(|s| !s.is_empty())
+}
+
+/// Session epoch and record id to embed. Env identities stay unbound.
+/// A subject that is not in the store and was never retired stays unbound so
+/// direct-mint callers keep working. A retired name is refused.
+fn file_plane_binding(sub: &str) -> Result<(u64, Option<String>), String> {
     if is_env_identity(sub) {
-        return Some(0);
+        return Ok((0, None));
     }
-    let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
-    crate::user_store::UserStore::load_or_empty(std::path::Path::new(&workspace))
-        .get(sub)
-        .filter(|r| !r.disabled)
-        .map(|r| r.session_version)
+    let workspace = workspace_dir();
+    match UserStore::load_status(&workspace) {
+        UserStoreLoad::Absent => Ok((0, None)),
+        UserStoreLoad::Unreadable => {
+            warn!("control-plane user store is unreadable; refusing to mint a file token");
+            Err(IDENTITY_STORE_UNAVAILABLE.into())
+        }
+        UserStoreLoad::Ready(mut store) => {
+            let Some(idx) = store
+                .users
+                .iter()
+                .position(|u| u.username.eq_ignore_ascii_case(sub))
+            else {
+                if store.is_retired(sub) {
+                    return Err("identity unknown".into());
+                }
+                return Ok((0, None));
+            };
+            if store.users[idx].disabled {
+                return Err("identity disabled".into());
+            }
+            if store.users[idx].user_id.trim().is_empty() {
+                store.users[idx].user_id = uuid::Uuid::new_v4().to_string();
+                store.save(&workspace)?;
+            }
+            let session_version = store.users[idx].session_version;
+            let uid = store.users[idx].user_id.clone();
+            Ok((session_version, Some(uid)))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -249,9 +292,10 @@ impl AuthConfig {
 
     /// Mint a JWT with optional tenant membership claims (Wave L L4+).
     ///
-    /// File-plane subjects embed the current `session_version` so disable/role/
-    /// membership/password changes revoke outstanding tokens (S09). Env identities
-    /// (`admin`/`agent`/`viewer`) always use session_version 0.
+    /// File-plane subjects embed `uid` plus the current `session_version`, so a
+    /// disabled, removed, or recreated account no longer matches. Env identities
+    /// (`admin` / `agent` / `viewer` / `dev`) stay unbound and always use
+    /// session_version 0.
     pub fn issue_token_with_tenants(
         &self,
         sub: &str,
@@ -265,11 +309,7 @@ impl AuthConfig {
             .as_ref()
             .ok_or_else(|| "auth not configured".to_string())?;
         let now = chrono::Utc::now().timestamp();
-        let session_version = if is_env_identity(sub) {
-            0
-        } else {
-            file_plane_session_version(sub).unwrap_or(0)
-        };
+        let (session_version, uid) = file_plane_binding(sub)?;
         let claims = JwtClaims {
             sub: sub.to_string(),
             role: role.as_str().to_string(),
@@ -277,6 +317,7 @@ impl AuthConfig {
             iat: now,
             tenant_ids: tenant_ids.to_vec(),
             session_version,
+            uid,
         };
         encode(
             &Header::default(),
@@ -366,32 +407,10 @@ impl AuthConfig {
                 claims.role
             )
         })?;
-        // S09: control-plane file users must still exist, be enabled, and match sv.
-        // Env identities and legacy JWT subjects not in users.json are unchanged.
-        if !is_env_identity(&claims.sub) {
-            let workspace =
-                std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
-            let store =
-                crate::user_store::UserStore::load_or_empty(std::path::Path::new(&workspace));
-            if let Some(rec) = store.get(&claims.sub) {
-                if rec.disabled {
-                    return Err("identity disabled".into());
-                }
-                if rec.session_version != claims.session_version {
-                    return Err("session revoked".into());
-                }
-                let store_role = Role::parse(rec.role.trim())
-                    .ok_or_else(|| "identity role invalid".to_string())?;
-                if store_role != role {
-                    return Err("session revoked".into());
-                }
-                for tid in &claims.tenant_ids {
-                    if !rec.tenant_ids.iter().any(|t| t == tid) {
-                        return Err("session revoked".into());
-                    }
-                }
-            }
-        }
+        // File-issued tokens carry `uid` and must match a live enabled record.
+        // Env identities are explicit and do not consult the file. An unreadable
+        // store fails closed for every other subject.
+        authorize_file_plane(&claims, role)?;
         Ok(AuthUser {
             sub: claims.sub,
             role,
@@ -415,6 +434,76 @@ impl AuthConfig {
     }
 }
 
+fn authorize_file_plane(claims: &JwtClaims, role: Role) -> Result<(), String> {
+    if is_env_identity(&claims.sub) {
+        return Ok(());
+    }
+    let workspace = workspace_dir();
+    match UserStore::load_status(&workspace) {
+        UserStoreLoad::Unreadable => {
+            warn!("control-plane user store is unreadable; rejecting token");
+            Err(IDENTITY_STORE_UNAVAILABLE.into())
+        }
+        UserStoreLoad::Absent => {
+            if bound_uid(&claims.uid).is_some() {
+                warn!("control-plane user store is missing; rejecting bound token");
+                Err(IDENTITY_STORE_UNAVAILABLE.into())
+            } else {
+                Ok(())
+            }
+        }
+        UserStoreLoad::Ready(store) => authorize_loaded(&store, claims, role),
+    }
+}
+
+fn authorize_loaded(store: &UserStore, claims: &JwtClaims, role: Role) -> Result<(), String> {
+    let uid = bound_uid(&claims.uid);
+    match store.get(&claims.sub) {
+        Some(rec) => {
+            if let Some(uid) = uid {
+                if rec.user_id != uid {
+                    return Err("identity unknown".into());
+                }
+            }
+            live_record_ok(rec, claims, role)
+        }
+        None if uid.is_some() || store.is_retired(&claims.sub) => Err("identity unknown".into()),
+        None => Ok(()),
+    }
+}
+
+fn live_record_ok(rec: &UserRecord, claims: &JwtClaims, role: Role) -> Result<(), String> {
+    if rec.disabled {
+        return Err("identity disabled".into());
+    }
+    if rec.session_version != claims.session_version {
+        return Err("session revoked".into());
+    }
+    let store_role =
+        Role::parse(rec.role.trim()).ok_or_else(|| "identity role invalid".to_string())?;
+    if store_role != role {
+        return Err("session revoked".into());
+    }
+    if claims
+        .tenant_ids
+        .iter()
+        .any(|tid| !rec.tenant_ids.iter().any(|have| have == tid))
+    {
+        return Err("session revoked".into());
+    }
+    Ok(())
+}
+
+/// Identity rejection is 401. A missing or unreadable user store is 503.
+/// Neither status accepts the token.
+pub(crate) fn auth_failure_status(detail: &str) -> StatusCode {
+    if detail == IDENTITY_STORE_UNAVAILABLE {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::UNAUTHORIZED
+    }
+}
+
 pub async fn jwt_middleware(
     State(state): State<Arc<AppState>>,
     mut req: Request,
@@ -425,21 +514,26 @@ pub async fn jwt_middleware(
             req.extensions_mut().insert(user);
             next.run(req).await
         }
-        Err(detail) => (
-            StatusCode::UNAUTHORIZED,
-            axum::Json(serde_json::json!({"ok": false, "error": detail})),
-        )
-            .into_response(),
+        Err(detail) => {
+            let status = auth_failure_status(&detail);
+            (
+                status,
+                axum::Json(serde_json::json!({"ok": false, "error": detail})),
+            )
+                .into_response()
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::user_store::{UserRecord, UserStore, UserStoreLoad};
     use jsonwebtoken::{encode, EncodingKey, Header};
 
     #[test]
     fn roundtrip_jwt() {
+        let _g = crate::test_env_lock::lock_env();
         let cfg = AuthConfig {
             secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
             admin_password: None,
@@ -454,6 +548,7 @@ mod tests {
             iat: chrono::Utc::now().timestamp(),
             tenant_ids: vec![],
             session_version: 0,
+            uid: None,
         };
         let token = encode(
             &Header::default(),
@@ -482,6 +577,7 @@ mod tests {
             iat: chrono::Utc::now().timestamp(),
             tenant_ids: vec![],
             session_version: 0,
+            uid: None,
         };
         let token = encode(
             &Header::default(),
@@ -606,6 +702,7 @@ mod tests {
             iat,
             tenant_ids,
             session_version: 0,
+            uid: None,
         };
         encode(
             &Header::default(),
@@ -617,6 +714,7 @@ mod tests {
 
     #[test]
     fn phase3_accepts_ephemeral_valid_token() {
+        let _g = crate::test_env_lock::lock_env();
         let cfg = harness_auth();
         let now = chrono::Utc::now().timestamp();
         let token = mint_with(
@@ -635,6 +733,7 @@ mod tests {
 
     #[test]
     fn phase3_rejects_identical_claims_with_past_exp() {
+        let _g = crate::test_env_lock::lock_env();
         let cfg = harness_auth();
         let now = chrono::Utc::now().timestamp();
         let secret = cfg.secret.as_ref().unwrap();
@@ -712,6 +811,7 @@ mod tests {
         store
             .upsert(UserRecord {
                 username: "acme-ops".into(),
+                user_id: String::new(),
                 role: "operator".into(),
                 tenant_ids: vec!["acme".into()],
                 password_env: None,
@@ -759,6 +859,7 @@ mod tests {
         store
             .upsert(UserRecord {
                 username: "acme-ops".into(),
+                user_id: String::new(),
                 role: "operator".into(),
                 tenant_ids: vec!["acme".into()],
                 password_env: None,
@@ -786,6 +887,7 @@ mod tests {
         store
             .upsert(UserRecord {
                 username: "acme-ops".into(),
+                user_id: String::new(),
                 role: "viewer".into(),
                 tenant_ids: vec!["acme".into()],
                 password_env: None,
@@ -799,5 +901,290 @@ mod tests {
         assert!(cfg.verify_bearer(&token).is_err());
 
         std::env::remove_var("OPENFDD_WORKSPACE");
+    }
+
+    fn file_cfg() -> AuthConfig {
+        AuthConfig {
+            secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: vec![],
+        }
+    }
+
+    fn operator_record(username: &str) -> UserRecord {
+        UserRecord {
+            username: username.into(),
+            user_id: String::new(),
+            role: "operator".into(),
+            tenant_ids: vec!["acme".into()],
+            password_env: None,
+            password: Some("secret".into()),
+            disabled: false,
+            session_version: 0,
+        }
+    }
+
+    fn save_operator(dir: &std::path::Path, username: &str) {
+        let mut store = match UserStore::load_status(dir) {
+            UserStoreLoad::Ready(store) => store,
+            UserStoreLoad::Absent => UserStore::default(),
+            UserStoreLoad::Unreadable => panic!("test setup saw an unreadable user store"),
+        };
+        store.upsert(operator_record(username)).unwrap();
+        store.save(dir).unwrap();
+    }
+
+    #[test]
+    fn file_token_dies_on_delete_disable_recreate_and_bad_store() {
+        use crate::test_env_lock::{lock_env, WorkspaceEnv};
+        use jsonwebtoken::{encode, EncodingKey, Header};
+
+        let _g = lock_env();
+        let dir = tempfile::tempdir().unwrap();
+        let _ws = WorkspaceEnv::set(dir.path());
+        save_operator(dir.path(), "acme-del");
+        save_operator(dir.path(), "acme-off");
+        save_operator(dir.path(), "acme-new");
+        save_operator(dir.path(), "acme-store");
+
+        let cfg = file_cfg();
+        let deleted = cfg
+            .issue_token_with_tenants("acme-del", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        let disabled = cfg
+            .issue_token_with_tenants("acme-off", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        let recreated = cfg
+            .issue_token_with_tenants("acme-new", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        let stored = cfg
+            .issue_token_with_tenants("acme-store", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        for token in [&deleted, &disabled, &recreated, &stored] {
+            assert!(cfg.verify_bearer(token).is_ok());
+        }
+        let old_uid = cfg.decode_claims(&recreated).unwrap().uid;
+        assert!(old_uid.as_ref().is_some_and(|id| !id.is_empty()));
+
+        let now = chrono::Utc::now().timestamp();
+        let unmarked = encode(
+            &Header::default(),
+            &JwtClaims {
+                sub: "acme-del".into(),
+                role: "operator".into(),
+                exp: now + 3600,
+                iat: now,
+                tenant_ids: vec!["acme".into()],
+                session_version: 0,
+                uid: None,
+            },
+            &EncodingKey::from_secret(cfg.secret.as_ref().unwrap().as_bytes()),
+        )
+        .unwrap();
+        assert!(cfg.verify_bearer(&unmarked).is_ok());
+
+        let direct = cfg
+            .issue_token_with_tenants("harness-user", Role::Viewer, 3600, &[])
+            .unwrap();
+        assert!(cfg.decode_claims(&direct).unwrap().uid.is_none());
+        assert!(cfg.verify_bearer(&direct).is_ok());
+
+        let mut store = UserStore::load_or_empty(dir.path());
+        store.remove("acme-del").unwrap();
+        store.save(dir.path()).unwrap();
+        assert_eq!(cfg.verify_bearer(&deleted).unwrap_err(), "identity unknown");
+        assert_eq!(
+            cfg.verify_bearer(&unmarked).unwrap_err(),
+            "identity unknown"
+        );
+        assert!(cfg
+            .issue_token_with_tenants("acme-del", Role::Operator, 3600, &["acme".into()])
+            .is_err());
+
+        let mut store = UserStore::load_or_empty(dir.path());
+        store.set_disabled("acme-off", true).unwrap();
+        store.save(dir.path()).unwrap();
+        assert_eq!(
+            cfg.verify_bearer(&disabled).unwrap_err(),
+            "identity disabled"
+        );
+
+        let mut store = UserStore::load_or_empty(dir.path());
+        let previous = store.get("acme-new").unwrap().user_id.clone();
+        store.remove("acme-new").unwrap();
+        store.upsert(operator_record("acme-new")).unwrap();
+        store.save(dir.path()).unwrap();
+        let revived = store.get("acme-new").unwrap();
+        assert_ne!(revived.user_id, previous);
+        assert_eq!(revived.session_version, 1);
+        assert_eq!(
+            cfg.verify_bearer(&recreated).unwrap_err(),
+            "identity unknown"
+        );
+        let fresh = cfg
+            .issue_token_with_tenants("acme-new", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        assert_ne!(cfg.decode_claims(&fresh).unwrap().uid, old_uid);
+        assert!(cfg.verify_bearer(&fresh).is_ok());
+        assert_eq!(cfg.verify_bearer(&direct).unwrap().sub, "harness-user");
+
+        let path = UserStore::path_under_workspace(dir.path());
+        std::fs::write(&path, b"{").unwrap();
+        assert_eq!(
+            cfg.verify_bearer(&stored).unwrap_err(),
+            IDENTITY_STORE_UNAVAILABLE
+        );
+        assert_eq!(
+            auth_failure_status(IDENTITY_STORE_UNAVAILABLE),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        let admin = cfg
+            .issue_token_with_tenants("admin", Role::Admin, 3600, &[])
+            .unwrap();
+        assert_eq!(cfg.verify_bearer(&admin).unwrap().sub, "admin");
+        assert_eq!(
+            cfg.verify_bearer(&direct).unwrap_err(),
+            IDENTITY_STORE_UNAVAILABLE
+        );
+        assert!(cfg
+            .issue_token_with_tenants("acme-store", Role::Operator, 3600, &["acme".into()])
+            .is_err());
+
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(
+            cfg.verify_bearer(&stored).unwrap_err(),
+            IDENTITY_STORE_UNAVAILABLE
+        );
+        assert_eq!(
+            auth_failure_status("identity unknown"),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE while the auth middleware reads the user store"
+    )]
+    async fn middleware_and_auth_me_reject_removed_users() {
+        use crate::test_env_lock::{lock_env, WorkspaceEnv};
+        use axum::body::Body;
+        use axum::extract::{Request, State};
+        use axum::http::{header, HeaderMap, StatusCode};
+        use axum::middleware;
+        use axum::routing::get;
+        use axum::Router;
+        use std::sync::Arc;
+        use tower::ServiceExt;
+
+        let _g = lock_env();
+        let dir = tempfile::tempdir().unwrap();
+        let _ws = WorkspaceEnv::set(dir.path());
+        save_operator(dir.path(), "acme-http");
+
+        let mut state = crate::state::AppState::new();
+        state.auth = file_cfg();
+        let state = Arc::new(state);
+        let token = state
+            .auth
+            .issue_token_with_tenants("acme-http", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        let app = Router::new().route("/probe", get(|| async { "ok" })).layer(
+            middleware::from_fn_with_state(Arc::clone(&state), jwt_middleware),
+        );
+
+        let probe = |token: String| {
+            let app = app.clone();
+            async move {
+                let response = app
+                    .oneshot(
+                        Request::get("/probe")
+                            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                let status = response.status();
+                let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+                    .await
+                    .unwrap();
+                let json: serde_json::Value =
+                    serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+                (status, json)
+            }
+        };
+        let me = |token: String| {
+            let state = Arc::clone(&state);
+            async move {
+                let mut headers = HeaderMap::new();
+                headers.insert(
+                    header::AUTHORIZATION,
+                    format!("Bearer {token}").parse().unwrap(),
+                );
+                match crate::routes::auth_me(State(state), headers).await {
+                    Ok(body) => (
+                        StatusCode::OK,
+                        serde_json::to_value(body.0).unwrap_or_default(),
+                    ),
+                    Err((status, body)) => (status, body.0),
+                }
+            }
+        };
+
+        let (status, _) = probe(token.clone()).await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, body) = me(token.clone()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            body.get("username").and_then(|v| v.as_str()),
+            Some("acme-http")
+        );
+
+        let mut store = UserStore::load_or_empty(dir.path());
+        store.set_disabled("acme-http", true).unwrap();
+        store.save(dir.path()).unwrap();
+        let (status, body) = probe(token.clone()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body.get("ok").and_then(|v| v.as_bool()), Some(false));
+        let (status, _) = me(token.clone()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        let mut store = UserStore::load_or_empty(dir.path());
+        store.set_disabled("acme-http", false).unwrap();
+        store.remove("acme-http").unwrap();
+        store.upsert(operator_record("acme-http")).unwrap();
+        store.save(dir.path()).unwrap();
+        let (status, body) = probe(token.clone()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            body.get("error").and_then(|v| v.as_str()),
+            Some("identity unknown")
+        );
+        let (status, _) = me(token.clone()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        let fresh = state
+            .auth
+            .issue_token_with_tenants("acme-http", Role::Operator, 3600, &["acme".into()])
+            .unwrap();
+        let (status, _) = me(fresh).await;
+        assert_eq!(status, StatusCode::OK);
+
+        std::fs::write(UserStore::path_under_workspace(dir.path()), b"{").unwrap();
+        let (status, body) = probe(token.clone()).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(body.get("ok").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(
+            body.get("error").and_then(|v| v.as_str()),
+            Some(IDENTITY_STORE_UNAVAILABLE)
+        );
+        let (status, _) = me(token.clone()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        std::fs::remove_file(UserStore::path_under_workspace(dir.path())).unwrap();
+        let (status, _) = probe(token).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     }
 }
