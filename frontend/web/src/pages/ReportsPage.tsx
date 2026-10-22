@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { LockedSiteCaption } from "../components/LockedSiteCaption";
 import { ruleLabelStandard, mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
+import { ruleEligibility, ruleEligibilityNotice } from "../lib/ruleApplicability";
 import { RULES_UPDATED_EVENT } from "../components/RuleTuningPanel";
 import { SeriesPreview } from "../components/SeriesPreview";
 import {
@@ -99,7 +100,11 @@ export function ReportsPage() {
 
   const [ruleId, setRuleId] = useState("");
   const [rules, setRules] = useState<FddRuleSummary[]>([]);
-  const [mappedRoles, setMappedRoles] = useState<Set<string>>(new Set());
+  const [roleScope, setRoleScope] = useState<{
+    buildingId: string;
+    equipmentId: string;
+    roles: Set<string>;
+  } | null>(null);
   const [inventory, setInventory] = useState<
     Array<{ equipment_id: string; equipment_type: string }>
   >([]);
@@ -182,26 +187,47 @@ export function ReportsPage() {
   }, [buildingId, equipmentId, setQuery]);
 
   useEffect(() => {
-    if (!buildingId || !equipmentId) {
-      setMappedRoles(new Set());
-      return;
-    }
-    void getPackageMapping(buildingId, equipmentId)
+    if (!buildingId || !equipmentId) return;
+    let cancelled = false;
+    const site = buildingId;
+    const requested = equipmentId;
+    void getPackageMapping(site, requested)
       .then((inv) => {
+        if (cancelled) return;
         const roles = new Set<string>();
-        const eq =
-          inv.equipment?.find((e) => e.equipment_id === equipmentId) ??
-          inv.equipment?.[0];
+        const eq = inv.equipment?.find((e) => e.equipment_id === requested);
         for (const role of Object.values(eq?.roles ?? {})) {
           if (role) roles.add(String(role));
         }
         for (const col of eq?.columns ?? []) {
           if (col.role) roles.add(String(col.role));
         }
-        setMappedRoles(roles);
+        setRoleScope({ buildingId: site, equipmentId: requested, roles });
       })
-      .catch(() => setMappedRoles(new Set()));
+      .catch(() => {
+        if (!cancelled) {
+          setRoleScope({ buildingId: site, equipmentId: requested, roles: new Set() });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [buildingId, equipmentId]);
+
+  const mappedRoles =
+    roleScope &&
+    roleScope.buildingId === buildingId &&
+    roleScope.equipmentId === equipmentId
+      ? roleScope.roles
+      : null;
+
+  const selectedEquipment = useMemo(
+    () => inventory.find((item) => item.equipment_id === equipmentId) ?? null,
+    [inventory, equipmentId],
+  );
+  const selectedEquipmentType = selectedEquipment?.equipment_type ?? null;
+  const rolesForFilter =
+    mappedRoles != null && selectedEquipment != null ? mappedRoles : null;
 
   const deviceTypes = useMemo(() => {
     const types = [
@@ -225,15 +251,23 @@ export function ReportsPage() {
   }, [results, equipmentId]);
 
   const applicableRules = useMemo(() => {
-    return rules.filter((r) => {
-      if (SQL_ANALYTICS_RULE_IDS.has(r.rule_id)) return false;
-      const required = (r.required_roles ?? []).filter(Boolean);
-      if (mappedRoles.size > 0 && required.some((role) => !mappedRoles.has(role))) {
-        return false;
-      }
-      return true;
+    if (rolesForFilter == null) return [];
+    return rules.filter((rule) => {
+      if (SQL_ANALYTICS_RULE_IDS.has(rule.rule_id)) return false;
+      return ruleEligibility(rule, selectedEquipmentType, rolesForFilter).eligible;
     });
-  }, [rules, mappedRoles]);
+  }, [rules, rolesForFilter, selectedEquipmentType]);
+
+  const eligibilityNotice = useMemo(
+    () =>
+      ruleEligibilityNotice(
+        rules,
+        selectedEquipmentType,
+        rolesForFilter,
+        SQL_ANALYTICS_RULE_IDS,
+      ),
+    [rules, selectedEquipmentType, rolesForFilter],
+  );
 
   const ruleOptions = useMemo(
     () => [
@@ -595,6 +629,15 @@ export function ReportsPage() {
               testId="plots-rule-select"
             />
           </div>
+          {eligibilityNotice ? (
+            <InlineAlert
+              id="plots-rule-eligibility"
+              variant="info"
+              testId="plots-rule-eligibility"
+            >
+              {eligibilityNotice}
+            </InlineAlert>
+          ) : null}
 
           {isZoneTempRule(ruleId, rules) ? (
             <Checkbox

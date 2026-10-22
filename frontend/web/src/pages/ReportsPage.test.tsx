@@ -27,7 +27,10 @@ vi.mock("../api/fddApi", () => ({
     {
       rule_id: "VAV-1",
       description: "Comfort",
+      equipment_kinds: ["vav"],
       required_roles: ["zone_t"],
+      optional_roles: [],
+      applicability: "typed",
       parameter_count: 0,
     },
   ]),
@@ -99,7 +102,9 @@ vi.mock("../api/analyticsApi", () => ({
 
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
-import { getFddSeries, getFddResults } from "../api/fddApi";
+import { getFddSeries, getFddResults, listFddRules } from "../api/fddApi";
+import { getPackageMapping } from "../api/mappingApi";
+import { listFddEquipment } from "../api/analyticsApi";
 
 function renderPlots(entry = "/reports?site=B1&eq=VAV_1") {
   return render(
@@ -274,8 +279,10 @@ describe("ReportsPage FDD Plots", () => {
       {
         rule_id: "OAT-METEO",
         description: "Equipment OAT vs weather",
+        equipment_kinds: ["ahu"],
         required_roles: ["oa_t"],
         optional_roles: ["web_oa_t"],
+        applicability: "typed",
         parameter_count: 0,
       },
     ]);
@@ -321,6 +328,166 @@ describe("ReportsPage FDD Plots", () => {
       building_id?: string;
     };
     expect(call?.building_id).toBe("B1");
+  });
+});
+
+const FAMILY_CATALOG = [
+  {
+    rule_id: "FC5",
+    description: "SAT cold when heating commanded (GL36 D)",
+    equipment_kinds: ["ahu"],
+    required_roles: ["sat", "mat", "htg_valve_pct", "fan_cmd"],
+    optional_roles: ["fan_status", "fan_cmd"],
+    applicability: "typed" as const,
+  },
+  {
+    rule_id: "FC6",
+    description: "Estimated OA fraction mismatch",
+    equipment_kinds: ["ahu"],
+    required_roles: ["mat", "rat", "oa_t", "fan_cmd", "vav_total_flow"],
+    optional_roles: ["fan_status", "fan_cmd"],
+    applicability: "typed" as const,
+  },
+  {
+    rule_id: "VAV-3",
+    description: "Excessive reheat during warm weather",
+    equipment_kinds: ["vav"],
+    required_roles: ["oa_t", "reheat_valve_pct", "zone_flow"],
+    optional_roles: ["fan_status", "fan_cmd"],
+    applicability: "typed" as const,
+  },
+  {
+    rule_id: "TRIM-3",
+    description: "HWST trim advisory",
+    equipment_kinds: ["boiler"],
+    required_roles: ["hw_supply_t"],
+    optional_roles: ["pump_status"],
+    applicability: "typed" as const,
+  },
+  {
+    rule_id: "SITE-ROLLUP",
+    description: "Applies to every equipment type",
+    equipment_kinds: [],
+    required_roles: [],
+    optional_roles: [],
+    applicability: "all" as const,
+  },
+  {
+    rule_id: "W4A-UNKNOWN",
+    description: "Must not be offered",
+    equipment_kinds: ["ahu", "vav", "boiler"],
+    required_roles: ["sat", "fan_status", "hw_supply_t"],
+    optional_roles: ["fan_cmd"],
+    applicability: "unknown" as const,
+  },
+];
+
+function optionValues(testId: string): string[] {
+  const select = screen.getByTestId(testId).querySelector("select");
+  return [...(select?.options ?? [])].map((option) => option.value);
+}
+
+describe("ReportsPage rule eligibility", () => {
+  beforeEach(() => {
+    vi.mocked(listFddRules).mockResolvedValue(FAMILY_CATALOG);
+    vi.mocked(getFddResults).mockResolvedValue([]);
+    vi.mocked(getFddSeries).mockClear();
+  });
+
+  it("offers AHU, VAV, and boiler rules only when type and roles match", async () => {
+    const cases = [
+      {
+        id: "AHU_1",
+        type: "AHU",
+        roles: ["sat", "mat", "htg_valve_pct", "fan_cmd", "fan_status"],
+        offered: ["FC5", "SITE-ROLLUP"],
+        withheld: ["FC6", "VAV-3", "TRIM-3", "W4A-UNKNOWN"],
+        series: "FC5",
+        notice: /FC6 is not eligible: missing mapped roles .*vav_total_flow/,
+      },
+      {
+        id: "RTU_2",
+        type: "RTU",
+        roles: ["sat", "mat", "htg_valve_pct", "fan_cmd", "fan_status"],
+        offered: ["FC5", "SITE-ROLLUP"],
+        withheld: ["VAV-3", "TRIM-3", "W4A-UNKNOWN"],
+        series: "FC5",
+        notice: /unknown applicability/,
+      },
+      {
+        id: "VAV_1",
+        type: "VAV",
+        roles: ["oa_t", "reheat_valve_pct", "zone_flow", "fan_status"],
+        offered: ["VAV-3", "SITE-ROLLUP"],
+        withheld: ["FC5", "FC6", "TRIM-3", "W4A-UNKNOWN"],
+        series: "VAV-3",
+        notice: /unknown applicability/,
+      },
+      {
+        id: "BLR_1",
+        type: "boiler",
+        roles: ["hw_supply_t"],
+        offered: ["TRIM-3", "SITE-ROLLUP"],
+        withheld: ["FC5", "FC6", "VAV-3", "W4A-UNKNOWN"],
+        series: "TRIM-3",
+        notice: /unknown applicability/,
+      },
+    ];
+
+    for (const sample of cases) {
+      vi.mocked(getFddSeries).mockClear();
+      vi.mocked(getPackageMapping).mockResolvedValue({
+        ok: true,
+        building_id: "B1",
+        equipment: [
+          {
+            equipment_id: sample.id,
+            equipment_type: sample.type,
+            ok: true,
+            roles: Object.fromEntries(sample.roles.map((role) => [role, role])),
+            columns: sample.roles.map((role) => ({
+              column: role,
+              role,
+              status: "mapped",
+            })),
+          },
+        ],
+      } as never);
+      vi.mocked(listFddEquipment).mockResolvedValue([
+        { equipment_id: sample.id, equipment_type: sample.type },
+      ]);
+      const view = renderPlots(`/reports?site=B1&eq=${sample.id}`);
+      await waitFor(() => {
+        expect(optionValues("plots-rule-select")).toEqual(["", ...sample.offered]);
+      });
+      for (const withheld of sample.withheld) {
+        expect(optionValues("plots-rule-select")).not.toContain(withheld);
+      }
+      expect(screen.getByTestId("plots-rule-eligibility").textContent).toMatch(
+        sample.notice,
+      );
+      await waitFor(() => {
+        expect(getFddSeries).toHaveBeenCalledWith(
+          sample.id,
+          sample.series,
+          "B1",
+          expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        );
+      });
+      const requested = vi.mocked(getFddSeries).mock.calls.map((call) => call[1]);
+      for (const withheld of sample.withheld) {
+        expect(requested).not.toContain(withheld);
+      }
+      if (sample.id === "AHU_1") {
+        expect(screen.getByTestId("plots-rule-select").textContent).toMatch(
+          /SAT cold when heating commanded/,
+        );
+        expect(screen.getByTestId("plots-rule-select").textContent).not.toMatch(
+          /Boiler/,
+        );
+      }
+      view.unmount();
+    }
   });
 });
 
