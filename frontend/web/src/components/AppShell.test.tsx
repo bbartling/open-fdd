@@ -1,11 +1,12 @@
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { AppShell } from "./AppShell";
 import { MAIN_SECTIONS } from "../nav/sections";
+import { apiFetch } from "../api/client";
 
 const appCss = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../styles/app.css"),
@@ -84,9 +85,31 @@ vi.mock("../api/fddApi", () => ({
   })),
 }));
 
+const originalFetch = vi.mocked(apiFetch).getMockImplementation();
+
+function membershipResponse(active: string) {
+  return {
+    ok: true,
+    multi_tenant: true,
+    active_tenant_id: active,
+    tenants: [
+      { id: "tenant_a", name: "Tenant A" },
+      { id: "tenant_b", name: "Tenant B" },
+    ],
+  };
+}
+
 describe("AppShell layout parity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    if (originalFetch) vi.mocked(apiFetch).mockImplementation(originalFetch);
+  });
+
+  afterEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
   });
 
   it("renders main section order, brand, and Lab rule thresholds", async () => {
@@ -151,6 +174,149 @@ describe("AppShell layout parity", () => {
     fireEvent.click(screen.getByTestId("sidebar-collapse"));
     expect(shell.getAttribute("data-sidebar-collapsed")).toBe("true");
     expect(screen.getByTestId("app-revision").textContent).toBe("+abcdef1");
+  });
+
+  it("switches the active tenant and clears tenant-scoped client state", async () => {
+    sessionStorage.setItem("openfdd.auth.token", "tok-a");
+    sessionStorage.setItem("openfdd.formDraft.lab", "{\"note\":\"a\"}");
+    localStorage.setItem("openfdd.ui.rule_params", "{\"confirm_min\":10}");
+    let active = "tenant_a";
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/health") {
+        return {
+          ok: true,
+          version: "3.3.2+abcdef123456",
+          historian: "timescale",
+          timescale_ok: true,
+        };
+      }
+      if (path === "/api/auth/me") {
+        return {
+          ok: true,
+          username: "operator",
+          role: "operator",
+          auth_required: true,
+          hub_admin: false,
+          multi_tenant: true,
+        };
+      }
+      if (path === "/api/tenants") return membershipResponse(active);
+      if (path === "/api/tenants/select") {
+        active = "tenant_b";
+        return {
+          ok: true,
+          multi_tenant: true,
+          active_tenant_id: "tenant_b",
+          token: "tok-b",
+          access_token: "tok-b",
+        };
+      }
+      if (path === "/api/sessions/building/leave") return { ok: true };
+      return {};
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/?site=site_a&eq=AHU_1&job=job1"]}>
+        <AppShell title="Home">
+          <div>body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const select = (await screen.findByTestId("app-tenant-select")) as HTMLSelectElement;
+    expect(select.value).toBe("tenant_a");
+    fireEvent.change(select, { target: { value: "tenant_b" } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("nav-home").getAttribute("href")).not.toContain("site=");
+    });
+    const href = screen.getByTestId("nav-home").getAttribute("href") ?? "";
+    expect(href).not.toContain("eq=");
+    expect(href).not.toContain("job=");
+    expect(sessionStorage.getItem("openfdd.formDraft.lab")).toBeNull();
+    const ruleBag = localStorage.getItem("openfdd.ui.rule_params");
+    expect(ruleBag == null || ruleBag === "{}").toBe(true);
+    const selectCall = vi
+      .mocked(apiFetch)
+      .mock.calls.find((call) => call[0] === "/api/tenants/select");
+    expect(selectCall).toBeTruthy();
+    const leaveCall = vi
+      .mocked(apiFetch)
+      .mock.calls.find((call) => call[0] === "/api/sessions/building/leave");
+    expect(leaveCall?.[1]?.body).toContain("site_a");
+    expect(sessionStorage.getItem("openfdd.auth.token")).toBe("tok-b");
+  });
+
+  it("keeps the current site when tenant select fails", async () => {
+    sessionStorage.setItem("openfdd.auth.token", "tok-a");
+    sessionStorage.setItem("openfdd.formDraft.lab", "{\"note\":\"a\"}");
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/health") {
+        return { ok: true, version: "3.3.2+abcdef123456", historian: "timescale", timescale_ok: true };
+      }
+      if (path === "/api/auth/me") {
+        return {
+          ok: true,
+          username: "operator",
+          role: "operator",
+          auth_required: true,
+          hub_admin: false,
+        };
+      }
+      if (path === "/api/tenants") return membershipResponse("tenant_a");
+      if (path === "/api/tenants/select") {
+        throw new Error("not in membership");
+      }
+      return {};
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/?site=site_a"]}>
+        <AppShell title="Home">
+          <div>body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(await screen.findByTestId("app-tenant-select"), {
+      target: { value: "tenant_b" },
+    });
+    expect(await screen.findByTestId("app-tenant-switch-error")).toBeTruthy();
+    expect(screen.getByTestId("nav-home").getAttribute("href")).toContain("site=site_a");
+    expect(sessionStorage.getItem("openfdd.formDraft.lab")).toBe("{\"note\":\"a\"}");
+    expect(sessionStorage.getItem("openfdd.auth.token")).toBe("tok-a");
+  });
+
+  it("does not offer a tenant selector to a hub admin", async () => {
+    sessionStorage.setItem("openfdd.auth.token", "hub");
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/health") {
+        return { ok: true, version: "3.3.2+abcdef123456", historian: "timescale", timescale_ok: true };
+      }
+      if (path === "/api/auth/me") {
+        return {
+          ok: true,
+          username: "admin",
+          role: "admin",
+          auth_required: true,
+          hub_admin: true,
+          multi_tenant: true,
+        };
+      }
+      if (path === "/api/tenants") return membershipResponse("tenant_a");
+      return {};
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell title="Home">
+          <div>body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId("app-tenant")).toBeTruthy();
+    expect(screen.queryByTestId("app-tenant-select")).toBeNull();
   });
 
   it("keeps Streamlit-like full-width layout contract markers", () => {
