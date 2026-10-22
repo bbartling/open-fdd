@@ -87,6 +87,8 @@ export interface SessionConfig {
   chw_leave_max_f?: number;
   role_map?: Record<string, Record<string, string>>;
   params?: Record<string, Record<string, number>>;
+  /** When set, FDD runs honor `require_operational_gate` on rules that declare it. */
+  require_operational_proof?: boolean;
   /** Weekly occupancy calendar (Overview / WattLab parity Gate 0). */
   occupancy_schedule?: {
     timezone?: string;

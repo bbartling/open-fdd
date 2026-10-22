@@ -206,6 +206,7 @@ mod tests {
                     max: 72.0,
                     step: 0.5,
                     unit: "degF".into(),
+                    quantity: None,
                     frontend_control: "slider".into(),
                     sql_placeholder: "ZONE_T_LO".into(),
                 },
@@ -233,5 +234,53 @@ mod tests {
             effective_param_strings(&rule, &TuningLayers::default(), None, None, Some(&bad))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn operational_gate_changes_rendered_fc1_sql() {
+        use crate::params::substitute_sql;
+        use crate::registry::load_registry;
+        use std::path::PathBuf;
+
+        let rules_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../sql_rules");
+        let reg = load_registry(&rules_dir).expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|rule| rule.rule_id == "FC1")
+            .expect("FC1");
+        let sql = std::fs::read_to_string(rules_dir.join(&rule.sql_file)).expect("fc1 sql");
+        let layers = TuningLayers::default();
+        let off = HashMap::from([("require_operational_gate".into(), 0.0)]);
+        let on = HashMap::from([("require_operational_gate".into(), 1.0)]);
+        let rendered_off =
+            effective_param_strings(rule, &layers, None, None, Some(&off)).expect("gate off");
+        let rendered_on =
+            effective_param_strings(rule, &layers, None, None, Some(&on)).expect("gate on");
+        assert_eq!(
+            rendered_off
+                .get("REQUIRE_OPERATIONAL_GATE")
+                .map(String::as_str),
+            Some("0")
+        );
+        assert_eq!(
+            rendered_on
+                .get("REQUIRE_OPERATIONAL_GATE")
+                .map(String::as_str),
+            Some("1")
+        );
+        let sql_off = substitute_sql(&sql, &rendered_off);
+        let sql_on = substitute_sql(&sql, &rendered_on);
+        assert!(
+            sql_off.contains("WHEN 0 < 0.5"),
+            "gate off must open the fan-on predicate: {sql_off}"
+        );
+        assert!(
+            sql_on.contains("WHEN 1 < 0.5"),
+            "gate on must keep the fan-on predicate: {sql_on}"
+        );
+        assert_ne!(sql_off, sql_on);
+        assert!(!sql_off.contains("{{REQUIRE_OPERATIONAL_GATE}}"));
+        assert!(!sql_on.contains("{{REQUIRE_OPERATIONAL_GATE}}"));
     }
 }
