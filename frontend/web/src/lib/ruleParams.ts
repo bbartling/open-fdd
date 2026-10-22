@@ -93,6 +93,47 @@ export function numericParamsFromSession(
   return out;
 }
 
+/** Catalog key substituted into `REQUIRE_OPERATIONAL_GATE`. */
+export const OPERATIONAL_GATE_KEY = "require_operational_gate";
+
+const VALUE_EPS = 1e-9;
+
+/** Draft differs from the last successful run, including a return to the catalog default. */
+export function ruleNeedsRun(
+  entries: Array<[string, { default: number }]>,
+  draft: Record<string, number>,
+  applied: Record<string, number>,
+  opsGate: boolean,
+): boolean {
+  return entries.some(([key, def]) => {
+    const draftValue =
+      key === OPERATIONAL_GATE_KEY ? (opsGate ? 1 : 0) : (draft[key] ?? def.default);
+    const appliedValue = applied[key] ?? def.default;
+    return Math.abs(draftValue - appliedValue) > VALUE_EPS;
+  });
+}
+
+/**
+ * Attach the operational-proof checkbox to one rule when that rule declares
+ * the parameter. Rules without the parameter are unchanged so the SQL binder
+ * does not reject the rest of the bag.
+ */
+export function stampOperationalGate(
+  params: RuleParamMap,
+  ruleId: string,
+  declaresGate: boolean,
+  proof: boolean,
+): RuleParamMap {
+  if (!declaresGate) return params;
+  return {
+    ...params,
+    [ruleId]: {
+      ...(params[ruleId] ?? {}),
+      [OPERATIONAL_GATE_KEY]: proof ? 1 : 0,
+    },
+  };
+}
+
 /** Deep-merge per-rule bags; overlay wins on shared keys. */
 export function mergeRuleParams(base: RuleParamMap, overlay: RuleParamMap): RuleParamMap {
   const out: RuleParamMap = { ...base };

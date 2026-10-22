@@ -439,6 +439,8 @@ export interface FddRuleParamDef {
   max: number;
   step: number;
   unit: string;
+  /** Catalog quantity: pressure, fraction, temperature, temperature_delta, minutes, … */
+  quantity?: string;
   control: string;
   sql_placeholder: string;
 }

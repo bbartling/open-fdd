@@ -2356,7 +2356,7 @@ pub async fn fdd_registry_rules() -> Json<Value> {
 }
 
 pub async fn fdd_rule_params(Path(rule_id): Path<String>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::fdd::registry_api::rule_params_response(&rule_id))
+    Json(open_fdd_edge_prototype::fdd::registry_api::rule_params_with_quantity(&rule_id))
 }
 
 pub async fn fdd_cache_status() -> Json<Value> {

@@ -11,16 +11,21 @@ import { ruleLabelStandard, mergeRuleDescriptionsFromApi } from "../lib/ruleLabe
 import {
   effectiveRunParams,
   loadLocalRuleParams,
+  OPERATIONAL_GATE_KEY,
+  ruleNeedsRun,
   saveLocalRuleParams,
   SESSION_SCHEMA,
+  stampOperationalGate,
   type RuleParamMap,
 } from "../lib/ruleParams";
 import { useSessionQuery } from "../session";
 import {
   displayScalar,
+  displayStep,
   displayUnitLabel,
+  formatTunerCaption,
+  resolveQuantityKind,
   storeScalar,
-  isTempUnit,
 } from "../api/roleUnits";
 import { naturalCompare } from "../lib/naturalSort";
 
@@ -49,10 +54,14 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+const VALUE_EPS = 1e-9;
+
 function RuleExpander({
   rule,
   values,
   onChange,
+  applied,
+  opsGate,
   onUpdateRule,
   updating,
   buildingId,
@@ -60,8 +69,10 @@ function RuleExpander({
 }: {
   rule: FddRuleSummary;
   values: Record<string, number>;
+  applied: Record<string, number>;
+  opsGate: boolean;
   onChange: (ruleId: string, key: string, value: number) => void;
-  onUpdateRule: (ruleId: string) => void;
+  onUpdateRule: (ruleId: string, declaresGate: boolean) => void;
   updating: boolean;
   buildingId: string;
   unitSystem: "imperial" | "metric";
@@ -99,9 +110,12 @@ function RuleExpander({
   }, [defs]);
 
   const modified = entries.some(([key, def]) => {
+    if (key === OPERATIONAL_GATE_KEY) return false;
     const v = values[key];
-    return v != null && Math.abs(v - def.default) > 1e-9;
+    return v != null && Math.abs(v - def.default) > VALUE_EPS;
   });
+  const needsRun = ruleNeedsRun(entries, values, applied, opsGate);
+  const declaresGate = entries.some(([key]) => key === OPERATIONAL_GATE_KEY);
 
   return (
     <details
@@ -120,26 +134,17 @@ function RuleExpander({
         {!loading && defs && entries.length === 0 ? (
           <p className="oracle-sidebar__caption">No tunable params.</p>
         ) : null}
-        {entries.map(([key, def]) => {
+        {entries.filter(([key]) => key !== OPERATIONAL_GATE_KEY).map(([key, def]) => {
+          const quantity = resolveQuantityKind(def.unit, key, def.quantity);
           const stored = values[key] ?? def.default;
-          const val = displayScalar(stored, def.unit, unitSystem, null, key);
-          const min = displayScalar(def.min, def.unit, unitSystem, null, key);
-          const max = displayScalar(def.max, def.unit, unitSystem, null, key);
-          const step =
-            unitSystem === "metric" &&
-            (isTempUnit(def.unit) ||
-              key.includes("eps_") ||
-              key.includes("tol") ||
-              key.includes("deadband") ||
-              key.includes("err") ||
-              key.includes("flatline") ||
-              key.includes("margin"))
-              ? Math.max(0.01, (def.step || 0.1) * (5 / 9))
-              : def.step || 0.1;
-          const unitLabel = displayUnitLabel(def.unit, unitSystem, null, key);
+          const val = displayScalar(stored, def.unit, unitSystem, quantity, key);
+          const min = displayScalar(def.min, def.unit, unitSystem, quantity, key);
+          const max = displayScalar(def.max, def.unit, unitSystem, quantity, key);
+          const step = displayStep(def.step, def.unit, unitSystem, quantity, key);
+          const unitLabel = displayUnitLabel(def.unit, unitSystem, quantity, key);
           return (
             <label key={key} className="oracle-sidebar__field">
-              <span className="oracle-sidebar__label">
+              <span className="oracle-sidebar__label" data-testid={`tune-label-${key}`}>
                 {def.label || key}
                 {unitLabel ? ` (${unitLabel})` : ""}
               </span>
@@ -154,12 +159,13 @@ function RuleExpander({
                   onChange(
                     rule.rule_id,
                     key,
-                    storeScalar(Number(e.target.value), def.unit, unitSystem, null, key),
+                    storeScalar(Number(e.target.value), def.unit, unitSystem, quantity, key),
                   )
                 }
                 title={def.label}
+                data-testid={`tune-slider-${key}`}
               />
-              <span className="oracle-sidebar__caption">{val}</span>
+              <span className="oracle-sidebar__caption">{formatTunerCaption(val, quantity)}</span>
             </label>
           );
         })}
@@ -168,15 +174,15 @@ function RuleExpander({
             <button
               type="button"
               className="oracle-sidebar__btn oracle-sidebar__btn--primary"
-              disabled={!buildingId || updating || !modified}
+              disabled={!buildingId || updating || !needsRun}
               title={
                 !buildingId
                   ? "Select an active site first"
-                  : !modified
-                    ? "Move a slider to enable Update this rule"
+                  : !needsRun
+                    ? "Draft matches the last successful update"
                     : `Re-run ${rule.rule_id} with tuned params`
               }
-              onClick={() => onUpdateRule(rule.rule_id)}
+              onClick={() => onUpdateRule(rule.rule_id, declaresGate)}
               data-testid={`sidebar-update-rule-${rule.rule_id}`}
             >
               {updating ? "Updating…" : "Update this rule"}
@@ -209,13 +215,17 @@ export function RuleTuningPanel() {
   const [params, setParams] = useState<RuleParamMap>(() =>
     loadLocalRuleParams(buildingId),
   );
+  const [lastApplied, setLastApplied] = useState<RuleParamMap>({});
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [runMsg, setRunMsg] = useState<string | null>(null);
+  const [staleNote, setStaleNote] = useState<string | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
   const [updatingRuleId, setUpdatingRuleId] = useState<string | null>(null);
   const [persistErr, setPersistErr] = useState<string | null>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistGen = useRef(0);
+  const opsTouched = useRef(false);
+  const appliedSeeded = useRef(false);
   const [unitSystem, setUnitSystem] = useState<"imperial" | "metric">(() =>
     localStorage.getItem(UNITS_KEY) === "metric" ? "metric" : "imperial",
   );
@@ -231,6 +241,9 @@ export function RuleTuningPanel() {
 
   useEffect(() => {
     let cancelled = false;
+    opsTouched.current = false;
+    appliedSeeded.current = false;
+    setStaleNote(null);
     listFddRules()
       .then((list) => {
         if (!cancelled) {
@@ -260,6 +273,16 @@ export function RuleTuningPanel() {
         );
         setParams(merged);
         saveLocalRuleParams(merged, buildingId);
+        if (!appliedSeeded.current) {
+          setLastApplied(merged);
+          appliedSeeded.current = true;
+        }
+        if (
+          !opsTouched.current &&
+          typeof body.config?.require_operational_proof === "boolean"
+        ) {
+          setOpsGate(body.config.require_operational_proof);
+        }
       })
       .catch(() => {
         /* keep localStorage seed */
@@ -281,42 +304,47 @@ export function RuleTuningPanel() {
   );
 
   const persistSession = useCallback(
-    async (nextParams: RuleParamMap) => {
+    async (nextParams: RuleParamMap, proof: boolean): Promise<boolean> => {
       const gen = ++persistGen.current;
       try {
         const prev = await getSessionConfig(buildingId);
-        if (gen !== persistGen.current) return;
-        await putSessionConfig(
+        if (gen !== persistGen.current) return false;
+        const saved = await putSessionConfig(
           {
             ...(prev.config ?? {}),
             schema_version: prev.config?.schema_version ?? SESSION_SCHEMA,
-            params: {
-              ...nextParams,
-              _ui: {
-                require_operational_proof: opsGate ? 1 : 0,
-              },
-            },
+            require_operational_proof: proof,
+            params: nextParams,
           },
           buildingId,
         );
-        if (gen === persistGen.current) setPersistErr(null);
+        if (gen !== persistGen.current) return false;
+        if (!saved.ok) {
+          setPersistErr(
+            `Session save failed (local sliders kept): ${saved.error || "rejected"}`,
+          );
+          return false;
+        }
+        setPersistErr(null);
+        return true;
       } catch (err) {
         if (gen === persistGen.current) {
           setPersistErr(
             `Session save failed (local sliders kept): ${formatErr(err)}`,
           );
         }
+        return false;
       }
     },
-    [buildingId, opsGate],
+    [buildingId],
   );
 
   const schedulePersist = useCallback(
-    (nextParams: Record<string, Record<string, number>>) => {
+    (nextParams: RuleParamMap, proof: boolean) => {
       if (persistTimer.current) clearTimeout(persistTimer.current);
       persistTimer.current = setTimeout(() => {
         persistTimer.current = null;
-        void persistSession(nextParams);
+        void persistSession(nextParams, proof);
       }, 350);
     },
     [persistSession],
@@ -330,11 +358,20 @@ export function RuleTuningPanel() {
           [ruleId]: { ...(prev[ruleId] ?? {}), [key]: value },
         };
         saveLocalRuleParams(next, buildingId);
-        schedulePersist(next);
+        schedulePersist(next, opsGate);
         return next;
       });
     },
-    [schedulePersist, buildingId],
+    [schedulePersist, buildingId, opsGate],
+  );
+
+  const onOpsGate = useCallback(
+    (checked: boolean) => {
+      opsTouched.current = true;
+      setOpsGate(checked);
+      schedulePersist(params, checked);
+    },
+    [params, schedulePersist],
   );
 
   const emitUpdated = (detail: Record<string, unknown>) => {
@@ -346,26 +383,44 @@ export function RuleTuningPanel() {
   };
 
   const onUpdateRule = useCallback(
-    async (ruleId: string) => {
+    async (ruleId: string, declaresGate: boolean) => {
       if (!buildingId) {
         setRunErr("Select an active site first");
         return;
       }
+      if (persistTimer.current) {
+        clearTimeout(persistTimer.current);
+        persistTimer.current = null;
+      }
+      const nextParams = stampOperationalGate(params, ruleId, declaresGate, opsGate);
       setUpdatingRuleId(ruleId);
       setRunErr(null);
+      setRunMsg(null);
+      setStaleNote(null);
+      const saved = await persistSession(nextParams, opsGate);
+      if (!saved) {
+        setUpdatingRuleId(null);
+        return;
+      }
+      setParams(nextParams);
+      saveLocalRuleParams(nextParams, buildingId);
       setRunMsg(`Updating ${ruleId}…`);
       try {
-        await persistSession(params);
         const result = await runFdd({
           mode: "registry",
           building_id: buildingId,
           rule_ids: [ruleId],
-          params,
+          params: nextParams,
         });
         const n = result.results?.length ?? 0;
         setRunMsg(
           `Updated ${ruleId} · ${n} result row(s) · ${result.total_ms ?? "—"} ms`,
         );
+        appliedSeeded.current = true;
+        setLastApplied((prev) => ({
+          ...prev,
+          [ruleId]: nextParams[ruleId] ?? {},
+        }));
         emitUpdated({
           mode: "single",
           rule_id: ruleId,
@@ -379,14 +434,27 @@ export function RuleTuningPanel() {
         setUpdatingRuleId(null);
       }
     },
-    [buildingId, params, persistSession],
+    [buildingId, opsGate, params, persistSession],
   );
 
   const reset = () => {
-    setParams({});
-    saveLocalRuleParams({}, buildingId);
+    const cleared: RuleParamMap = {};
+    setParams(cleared);
+    opsTouched.current = true;
+    setOpsGate(true);
+    saveLocalRuleParams(cleared, buildingId);
     if (persistTimer.current) clearTimeout(persistTimer.current);
-    void persistSession({});
+    persistTimer.current = null;
+    setRunMsg(null);
+    setRunErr(null);
+    setStaleNote(null);
+    void persistSession(cleared, true).then((ok) => {
+      if (ok) {
+        setStaleNote(
+          "Thresholds reset to defaults. Last results are stale until you update.",
+        );
+      }
+    });
   };
 
   return (
@@ -396,7 +464,8 @@ export function RuleTuningPanel() {
         <input
           type="checkbox"
           checked={opsGate}
-          onChange={(e) => setOpsGate(e.target.checked)}
+          onChange={(e) => onOpsGate(e.target.checked)}
+          data-testid="sidebar-tune-ops-proof"
         />
         Require operational proof (fan/pump status)
       </label>
@@ -433,6 +502,11 @@ export function RuleTuningPanel() {
           {runMsg}
         </p>
       ) : null}
+      {staleNote ? (
+        <p className="oracle-sidebar__caption" data-testid="sidebar-tune-stale">
+          {staleNote}
+        </p>
+      ) : null}
       {runErr || loadErr || persistErr ? (
         <p className="oracle-sidebar__err" data-testid="sidebar-tune-error">
           {runErr || loadErr || persistErr}
@@ -444,8 +518,10 @@ export function RuleTuningPanel() {
             key={rule.rule_id}
             rule={rule}
             values={params[rule.rule_id] ?? {}}
+            applied={lastApplied[rule.rule_id] ?? {}}
+            opsGate={opsGate}
             onChange={onParam}
-            onUpdateRule={(id) => void onUpdateRule(id)}
+            onUpdateRule={(id, declaresGate) => void onUpdateRule(id, declaresGate)}
             updating={updatingRuleId === rule.rule_id}
             buildingId={buildingId}
             unitSystem={unitSystem}

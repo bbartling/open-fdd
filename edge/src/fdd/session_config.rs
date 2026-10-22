@@ -13,6 +13,7 @@
 
 use crate::historian::store::workspace_dir;
 use serde_json::{json, Map, Value};
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 pub const SESSION_SCHEMA: &str = "openfdd_session_v1";
@@ -168,6 +169,39 @@ pub fn unit_system_from_session() -> String {
         .to_string()
 }
 
+fn json_bool(value: &Value) -> Option<bool> {
+    if let Some(flag) = value.as_bool() {
+        return Some(flag);
+    }
+    value.as_f64().map(|n| n >= 0.5)
+}
+
+/// Copy the session operational-proof flag onto every rule that declares
+/// `require_operational_gate`. Rules without that parameter are left alone so
+/// a later SQL bind does not reject the whole override bag.
+fn stamp_operational_gate(
+    registry: &std::collections::HashMap<String, fdd_rules::RuleSpec>,
+    params: &mut Map<String, Value>,
+    on: bool,
+) {
+    let gate = if on { 1.0 } else { 0.0 };
+    let mut seen = HashSet::<&str>::new();
+    for spec in registry.values() {
+        if !seen.insert(spec.rule_id.as_str()) {
+            continue;
+        }
+        if !spec.parameters.contains_key("require_operational_gate") {
+            continue;
+        }
+        let bag = params
+            .entry(spec.rule_id.clone())
+            .or_insert_with(|| Value::Object(Map::new()));
+        if let Some(obj) = bag.as_object_mut() {
+            obj.insert("require_operational_gate".into(), json!(gate));
+        }
+    }
+}
+
 /// Normalize an incoming session config: keep known keys, warn on unknown ones,
 /// coerce the deprecated `include_ahu_chw_valve` off, validate value shapes.
 pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), String> {
@@ -202,6 +236,10 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
 
     if let Some(v) = obj.get("prefer_web_oat").and_then(|v| v.as_bool()) {
         out.insert("prefer_web_oat".into(), json!(v));
+    }
+    let operational_proof = obj.get("require_operational_proof").and_then(json_bool);
+    if let Some(on) = operational_proof {
+        out.insert("require_operational_proof".into(), json!(on));
     }
     if let Some(v) = obj.get("chw_leave_max_f").and_then(|v| v.as_f64()) {
         out.insert("chw_leave_max_f".into(), json!(v));
@@ -241,6 +279,9 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
     let mut params = Map::new();
     if let Some(pm) = obj.get("params").and_then(|v| v.as_object()) {
         for (rule_id, rule_params) in pm {
+            if rule_id == "_ui" {
+                continue;
+            }
             let Some(rule_params) = rule_params.as_object() else {
                 warnings.push(format!("params.{rule_id}: not an object — skipped"));
                 continue;
@@ -273,6 +314,9 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
             }
         }
     }
+    if let Some(on) = operational_proof {
+        stamp_operational_gate(&registry, &mut params, on);
+    }
     out.insert("params".into(), Value::Object(params));
 
     // Weekly occupancy calendar (Overview / WattLab parity). Exact shape:
@@ -295,6 +339,7 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
         "params",
         "occupancy_schedule",
         "use_mech_cooling_status_proof",
+        "require_operational_proof",
     ];
     for key in obj.keys() {
         if !known.contains(&key.as_str()) {
@@ -715,6 +760,96 @@ mod tests {
         let a2 = get_session_config_scoped(&scope_a);
         assert_eq!(a2["config"]["unit_system"], json!("metric"));
         assert_eq!(a2["legacy_fallback"], json!(false));
+
+        std::env::remove_var("OPENFDD_WORKSPACE");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn apply_default_reset_failed_save_keeps_prior_config() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_session_tuner_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("tmpdir");
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+
+        let applied = put_session_config(&json!({
+            "schema_version": SESSION_SCHEMA,
+            "unit_system": "imperial",
+            "require_operational_proof": false,
+            "params": {
+                "FC1": {"eps_dsp": 0.2, "confirm_min": 20.0},
+                "_ui": {"require_operational_proof": 1.0}
+            },
+        }));
+        assert_eq!(applied["ok"], json!(true), "{applied}");
+        assert_eq!(applied["config"]["require_operational_proof"], json!(false));
+        assert!(applied["config"]["params"].get("_ui").is_none());
+        assert_eq!(applied["config"]["params"]["FC1"]["eps_dsp"], json!(0.2));
+        assert_eq!(
+            applied["config"]["params"]["FC1"]["require_operational_gate"],
+            json!(0.0)
+        );
+        assert_eq!(
+            applied["config"]["params"]["VAV-1"]["require_operational_gate"],
+            json!(0.0)
+        );
+        assert!(applied["config"]["params"]
+            .get("FAN-RUNTIME-HOURS")
+            .is_none());
+
+        let back_to_default = put_session_config(&json!({
+            "schema_version": SESSION_SCHEMA,
+            "unit_system": "imperial",
+            "require_operational_proof": false,
+            "params": {"FC1": {"eps_dsp": 0.12}},
+        }));
+        assert_eq!(back_to_default["ok"], json!(true), "{back_to_default}");
+        assert_eq!(
+            back_to_default["config"]["params"]["FC1"]["eps_dsp"],
+            json!(0.12)
+        );
+        assert_eq!(
+            back_to_default["config"]["params"]["FC1"]["require_operational_gate"],
+            json!(0.0)
+        );
+
+        let reset = put_session_config(&json!({
+            "schema_version": SESSION_SCHEMA,
+            "unit_system": "imperial",
+            "require_operational_proof": true,
+            "params": {},
+        }));
+        assert_eq!(reset["ok"], json!(true), "{reset}");
+        assert_eq!(reset["config"]["require_operational_proof"], json!(true));
+        assert!(reset["config"]["params"]["FC1"].get("eps_dsp").is_none());
+        assert_eq!(
+            reset["config"]["params"]["FC1"]["require_operational_gate"],
+            json!(1.0)
+        );
+
+        let failed = put_session_config(&json!({
+            "schema_version": "not-a-schema",
+            "require_operational_proof": false,
+            "params": {"FC1": {"eps_dsp": 9.9}},
+        }));
+        assert_eq!(failed["ok"], json!(false), "{failed}");
+        assert!(failed.get("error").and_then(|v| v.as_str()).is_some());
+
+        let still = get_session_config();
+        assert_eq!(still["config"]["require_operational_proof"], json!(true));
+        assert!(still["config"]["params"]["FC1"].get("eps_dsp").is_none());
+        assert_eq!(
+            still["config"]["params"]["FC1"]["require_operational_gate"],
+            json!(1.0)
+        );
 
         std::env::remove_var("OPENFDD_WORKSPACE");
         let _ = std::fs::remove_dir_all(&tmp);
