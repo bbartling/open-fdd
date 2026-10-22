@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { HealthMatrixSection } from "./HealthMatrixSection";
+import { HealthMatrixSection, type HealthFetchOptions } from "./HealthMatrixSection";
 import { postChillerHealth, postHpHealth } from "../api/analyticsApi";
 import type { AnalyticsRequest } from "../api/analyticsApi";
 import {
@@ -32,46 +32,48 @@ export function PlantHealthSections({
   pendingFlags?: boolean;
 }) {
   const fetchAhuTemperature = useCallback(
-    (id: string, opts?: { refresh?: boolean }) =>
-      postAhuTemperatureHealth(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postAhuTemperatureHealth(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
   const fetchAhuPressure = useCallback(
-    (id: string, opts?: { refresh?: boolean }) =>
-      postAhuPressureHealth(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postAhuPressureHealth(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
   const fetchAhuEconomizer = useCallback(
-    (id: string, opts?: { refresh?: boolean }) =>
-      postAhuEconomizerHealth(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postAhuEconomizerHealth(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
   const fetchChiller = useCallback(
-    (id: string, opts?: { refresh?: boolean }) =>
-      postChillerHealth(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postChillerHealth(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
   const fetchCoolingTower = useCallback(
-    (id: string, opts?: { refresh?: boolean }) =>
-      postCoolingTowerHealth(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postCoolingTowerHealth(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
   const fetchHp = useCallback(
-    (id: string, opts?: { refresh?: boolean }) => postHpHealth(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postHpHealth(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
   const fetchPid = useCallback(
-    (id: string, opts?: { refresh?: boolean }) => postPidHunting(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postPidHunting(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
   const fetchSensors = useCallback(
-    (id: string, opts?: { refresh?: boolean }) =>
-      postSensorFaults(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postSensorFaults(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
   const fetchZoneOther = useCallback(
-    (id: string, opts?: { refresh?: boolean }) =>
-      postZoneOtherHealth(healthRequest(id, opts)),
+    (id: string, opts?: HealthFetchOptions) =>
+      postZoneOtherHealth(healthRequest(id, opts), { signal: opts?.signal }),
     [],
   );
 

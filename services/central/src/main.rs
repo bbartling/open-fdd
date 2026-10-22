@@ -13,6 +13,8 @@ mod contract;
 mod csv_site_export;
 mod cutover;
 mod db_lifecycle;
+#[cfg(test)]
+mod diagnostic_matrix_api;
 mod durable_storage;
 mod engineering_bundle;
 mod eplus_runner;
