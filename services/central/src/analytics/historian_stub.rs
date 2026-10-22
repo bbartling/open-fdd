@@ -222,14 +222,21 @@ pub async fn inspect_from_history(
     columns: Option<&[String]>,
     max_points: usize,
     preferred_tenant: Option<&str>,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let _ = preferred_tenant;
     if crate::timescale_historian::historian_is_timescale() {
         let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
             return Ok(None);
         };
-        return crate::timescale_product::inspect_equipment(bid, equipment_id, columns, max_points)
-            .await;
+        return crate::timescale_product::inspect_equipment(
+            bid,
+            equipment_id,
+            columns,
+            max_points,
+            scope,
+        )
+        .await;
     }
     retired()
 }
@@ -241,7 +248,7 @@ pub async fn rcx_timeseries_from_history(
     pair_return_col: Option<&str>,
     eq_kinds: &[&str],
     filter_fan_on: bool,
-    max_points: usize,
+    read: &crate::timescale_product::RcxQuery,
 ) -> Result<Option<AnalyticsEnvelope>> {
     if crate::timescale_historian::historian_is_timescale() {
         let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -254,7 +261,7 @@ pub async fn rcx_timeseries_from_history(
             pair_return_col,
             eq_kinds,
             filter_fan_on,
-            max_points,
+            read,
         )
         .await;
     }
@@ -266,7 +273,7 @@ pub async fn rcx_oat_scatter_from_history(
     y_col: &str,
     eq_kinds: &[&str],
     prefer_wetbulb: bool,
-    max_points: usize,
+    read: &crate::timescale_product::RcxQuery,
 ) -> Result<Option<AnalyticsEnvelope>> {
     if crate::timescale_historian::historian_is_timescale() {
         let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -277,7 +284,7 @@ pub async fn rcx_oat_scatter_from_history(
             y_col,
             eq_kinds,
             prefer_wetbulb,
-            max_points,
+            read,
         )
         .await;
     }
@@ -289,20 +296,14 @@ pub async fn rcx_box_from_history(
     role_col: &str,
     eq_kinds: &[&str],
     filter_fan_on: bool,
-    max_points: usize,
+    read: &crate::timescale_product::RcxQuery,
 ) -> Result<Option<AnalyticsEnvelope>> {
     if crate::timescale_historian::historian_is_timescale() {
         let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
             return Ok(None);
         };
-        return crate::timescale_product::rcx_box(
-            bid,
-            role_col,
-            eq_kinds,
-            filter_fan_on,
-            max_points,
-        )
-        .await;
+        return crate::timescale_product::rcx_box(bid, role_col, eq_kinds, filter_fan_on, read)
+            .await;
     }
     retired()
 }
@@ -312,6 +313,7 @@ pub async fn rcx_zone_comfort_rank_from_history(
     eq_kinds: &[&str],
     comfort_low_f: f64,
     comfort_high_f: f64,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
     if crate::timescale_historian::historian_is_timescale() {
         let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
@@ -322,6 +324,7 @@ pub async fn rcx_zone_comfort_rank_from_history(
             eq_kinds,
             comfort_low_f,
             comfort_high_f,
+            scope,
         )
         .await;
     }
