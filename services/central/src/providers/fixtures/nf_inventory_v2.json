@@ -1,0 +1,46 @@
+{
+  "points": [
+    {
+      "uuid": "6a1f0c2a-0001-4000-8000-00000000a001",
+      "name": "AHU-1 Supply Air Temp",
+      "units": "°F",
+      "attrs": {
+        "type": "OBJECT_ANALOG_INPUT",
+        "equipRef": "AHU_1",
+        "equipType": "ahu",
+        "equipDis": "Air Handler 1",
+        "equipMarkers": "ahu,equip",
+        "role": "discharge-air-temp",
+        "markers": "sensor,temp,discharge,air,cur"
+      }
+    },
+    {
+      "uuid": "6a1f0c2a-0001-4000-8000-00000000a002",
+      "name": "AHU-1 Duct Static",
+      "units": "inH₂O",
+      "attrs": {
+        "type": "OBJECT_ANALOG_INPUT",
+        "equipRef": "AHU_1",
+        "equipType": "ahu",
+        "role": "duct-static-pressure",
+        "markers": ["sensor", "pressure", "duct"]
+      }
+    },
+    {
+      "uuid": "6a1f0c2a-0001-4000-8000-00000000a003",
+      "name": "AHU-1 Supply Fan Status",
+      "attrs": {
+        "type": "OBJECT_BINARY_INPUT",
+        "equipRef": "AHU_1",
+        "equipType": "ahu",
+        "role": "fan-status",
+        "markers": "sensor fan"
+      }
+    },
+    {
+      "uuid": "6a1f0c2a-0001-4000-8000-00000000c001",
+      "name": "Untagged Spare AI",
+      "attrs": { "type": "OBJECT_ANALOG_INPUT" }
+    }
+  ]
+}

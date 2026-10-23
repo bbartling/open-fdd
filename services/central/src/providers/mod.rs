@@ -9,6 +9,7 @@ pub mod error;
 pub mod hourly;
 pub mod hourly_exec;
 pub mod http_policy;
+pub mod inventory_sync;
 pub mod ledger;
 pub mod map;
 pub mod meteo;

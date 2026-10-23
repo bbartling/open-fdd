@@ -34,6 +34,8 @@ mod models;
 mod openapi;
 #[cfg(test)]
 mod package_preflight_fixtures;
+#[cfg(test)]
+mod portal_inventory_fixtures;
 mod providers;
 #[cfg(test)]
 mod rcx_row_fixtures;

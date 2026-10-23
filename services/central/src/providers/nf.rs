@@ -194,6 +194,27 @@ impl NfPortalDriver {
         parse_point_query_json(text)
     }
 
+    /// Portal inventory through the same read-only point query. History stays
+    /// `GET /api/v1/point/data`.
+    pub async fn query_inventory(
+        &mut self,
+        page_size: u32,
+    ) -> Result<super::inventory_sync::InventorySnapshot, ProviderError> {
+        let page_size = page_size.clamp(1, 500);
+        let url = format!("{}/api/v1/point/query", self.endpoint);
+        let (status, bytes, retry_after) = self
+            .send(
+                &url,
+                Some(serde_json::json!({ "pageSize": page_size })),
+                true,
+                true,
+            )
+            .await?;
+        self.ensure_success(status, retry_after)?;
+        let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
+        parse_inventory_json(text, page_size)
+    }
+
     /// Read history via GetData (`GET /api/v1/point/data`).
     pub async fn fetch_history(
         &mut self,
@@ -574,6 +595,121 @@ pub fn parse_point_query_json(text: &str) -> Result<Vec<RawProviderPoint>, Provi
         }
     }
     Ok(out)
+}
+
+/// Point query response → inventory snapshot. Unlike the latest-value parser,
+/// a point needs no `latestValue`; identity and portal tags are enough.
+///
+/// A point joins the model when its attrs carry `equipRef` and `role`. Other
+/// tags: `equipType`, `equipDis`, `equipMarkers`, `markers` (comma or space
+/// separated string, or a string array). A full page may be truncated, so it
+/// is marked incomplete and sync does not remove anything from it.
+pub fn parse_inventory_json(
+    text: &str,
+    page_size: u32,
+) -> Result<super::inventory_sync::InventorySnapshot, ProviderError> {
+    use super::inventory_sync::{InventoryPoint, InventorySnapshot};
+    let parsed: PointQueryResponse =
+        serde_json::from_str(text).map_err(|_| ProviderError::contract())?;
+    let source_points = parsed.points.len();
+    if source_points > MAX_SAMPLES_PER_RESPONSE {
+        return Err(ProviderError::new(ProviderErrorCode::BodyTooLarge));
+    }
+    let mut points = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for pt in parsed.points {
+        let Some(portal_point_id) = pt.uuid.or(pt.id).map(|s| s.trim().to_string()) else {
+            continue;
+        };
+        if !valid_point_id(&portal_point_id) || !seen.insert(portal_point_id.clone()) {
+            continue;
+        }
+        let attrs = pt.attrs.unwrap_or_default();
+        let Some(equipment_id) = attr_str(&attrs, "equipRef").filter(|id| valid_equipment_id(id))
+        else {
+            continue;
+        };
+        let Some(role) = attr_str(&attrs, "role")
+            .map(|raw| fdd_core::columns::haystack_point_to_role(&raw))
+            .filter(|role| valid_tag(role))
+        else {
+            continue;
+        };
+        points.push(InventoryPoint {
+            portal_point_id,
+            display_name: pt
+                .name
+                .map(|n| n.trim().to_string())
+                .filter(|n| !n.is_empty()),
+            unit: pt.units.as_deref().and_then(acceptable_unit),
+            equipment_id,
+            equip_type: attr_str(&attrs, "equipType")
+                .map(|t| t.to_ascii_lowercase())
+                .filter(|t| valid_tag(t)),
+            equip_dis: attr_str(&attrs, "equipDis"),
+            equip_markers: attr_markers(&attrs, "equipMarkers"),
+            role,
+            markers: attr_markers(&attrs, "markers"),
+        });
+    }
+    Ok(InventorySnapshot {
+        points,
+        source_points,
+        complete: source_points > 0 && source_points < page_size as usize,
+    })
+}
+
+fn attr_str(attrs: &serde_json::Map<String, Value>, key: &str) -> Option<String> {
+    attrs
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && s.chars().count() <= 256 && !s.chars().any(char::is_control))
+        .map(str::to_string)
+}
+
+fn attr_markers(attrs: &serde_json::Map<String, Value>, key: &str) -> Vec<String> {
+    let raw: Vec<String> = match attrs.get(key) {
+        Some(Value::String(s)) => s.split([',', ' ', ';']).map(str::to_string).collect(),
+        Some(Value::Array(items)) => items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
+    };
+    let mut out: Vec<String> = raw
+        .into_iter()
+        .map(|m| m.trim().to_string())
+        .filter(|m| valid_marker(m))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn valid_equipment_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+fn valid_tag(tag: &str) -> bool {
+    !tag.is_empty()
+        && tag.len() <= 64
+        && tag
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+}
+
+fn valid_marker(marker: &str) -> bool {
+    !marker.is_empty()
+        && marker.len() <= 64
+        && marker
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
 }
 
 fn parse_source_ts(raw: &str) -> Option<DateTime<Utc>> {
