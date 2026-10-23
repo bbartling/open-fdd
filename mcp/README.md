@@ -134,6 +134,14 @@ docker run -i --rm --network host \
 | `openfdd_csv_import_execute` | Save to Arrow (write gate) |
 | `openfdd_csv_package_append` | Hourly package history append (write gate) |
 | `openfdd_historian_query` | Historian pivot query |
+| `openfdd_historian_points` | Historian series per equipment (referenced or orphaned) |
+| `openfdd_historian_orphans` | Samples whose point the model no longer references |
+| `openfdd_historian_purge` | Delete samples + `point_map` rows for one equipment or series (write gate, operator/admin, audited) |
+| `openfdd_model_agent_context` | Overlay revision + model edit recipes |
+| `openfdd_model_equip_upsert` / `_delete` | Building model equipment edit (write gate, operator/admin, audited) |
+| `openfdd_model_point_upsert` / `_delete` | Building model point edit (write gate, operator/admin, audited) |
+| `openfdd_model_overlay_put` / `openfdd_model_semantic_meta_put` | Replace overlay Turtle / semantic meta (write gate, audited) |
+| `openfdd_package_roles_update` | Remap CSV-package column roles (write gate, audited) |
 | `openfdd_fdd_rules_list` | Legacy wire/SQL FDD rule catalog |
 | `openfdd_fdd_registry` | Production DataFusion registry |
 | `openfdd_fdd_equipment` | Loaded equipment IDs/types |

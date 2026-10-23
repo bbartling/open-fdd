@@ -213,6 +213,78 @@ impl Server {
                 "equipment_id": {"type": "string"},
                 "csv": {"type": "string", "description": "history_wide.csv chunk including header"}
             })),
+            tool("openfdd_model_agent_context", "GET /api/model/agent-context — overlay revision + model edit recipes for one building", json!({
+                "building_id": {"type": "string"}
+            })),
+            tool("openfdd_model_semantic_meta_put", "PUT /api/model/semantic-meta — publish semantic_meta (operator/admin; write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1; audited)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "meta": {"type": "object"},
+                "expected_revision": {"type": "string"},
+                "dry_run": {"type": "boolean"}
+            })),
+            tool("openfdd_model_overlay_put", "PUT /api/model/overlay — replace the Turtle model overlay (operator/admin; write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1; audited)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "ttl": {"type": "string"},
+                "expected_revision": {"type": "integer"},
+                "dry_run": {"type": "boolean"}
+            })),
+            tool("openfdd_model_equip_upsert", "POST /api/model/equip — upsert one equipment in the model overlay (operator/admin; write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1; audited)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "equipment_id": {"type": "string"},
+                "dis": {"type": "string"},
+                "kind": {"type": "string", "description": "equipType, e.g. ahu, vav"},
+                "markers": {"type": "array", "items": {"type": "string"}},
+                "expected_revision": {"type": "integer"},
+                "dry_run": {"type": "boolean"}
+            })),
+            tool("openfdd_model_equip_delete", "DELETE /api/model/equip — remove one equipment from the model (tombstone; samples stay) (operator/admin; write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1; audited)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "equipment_id": {"type": "string"},
+                "expected_revision": {"type": "integer"},
+                "dry_run": {"type": "boolean"}
+            })),
+            tool("openfdd_model_point_upsert", "POST /api/model/point — upsert one point in the model overlay (operator/admin; write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1; audited)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "equipment_id": {"type": "string"},
+                "point_id": {"type": "string"},
+                "dis": {"type": "string"},
+                "openfdd_key": {"type": "string"},
+                "role": {"type": "string"},
+                "markers": {"type": "array", "items": {"type": "string"}},
+                "expected_revision": {"type": "integer"},
+                "dry_run": {"type": "boolean"}
+            })),
+            tool("openfdd_model_point_delete", "DELETE /api/model/point — remove one point from the model (tombstone; samples stay) (operator/admin; write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1; audited)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "point_id": {"type": "string"},
+                "also_exclude": {"type": "array", "items": {"type": "string"}},
+                "expected_revision": {"type": "integer"},
+                "dry_run": {"type": "boolean"}
+            })),
+            tool("openfdd_package_roles_update", "POST /api/csv/import/package/roles — remap CSV-package column roles for one equipment (operator/admin; write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1; audited)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "equipment_id": {"type": "string"},
+                "roles": {"type": "object", "description": "column → SQL role"}
+            })),
+            tool("openfdd_historian_points", "GET /api/historian/points — historian series per equipment (referenced or orphaned)", json!({
+                "building_id": {"type": "string"}
+            })),
+            tool("openfdd_historian_orphans", "GET /api/historian/orphans — samples whose point the model no longer references", json!({
+                "building_id": {"type": "string"}
+            })),
+            tool("openfdd_historian_purge", "POST /api/historian/purge — delete samples + point_map rows for one equipment or one series; RDF untouched (operator/admin; write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1; audited)", json!({
+                "confirm": {"type": "boolean", "description": "Must be true"},
+                "building_id": {"type": "string"},
+                "equipment_id": {"type": "string", "description": "exact equipment id"},
+                "openfdd_key": {"type": "string", "description": "one series key"}
+            })),
             tool("openfdd_datasets", "GET /api/datasets — list Feather/Arrow datasets in registry", json!({})),
             tool("openfdd_timeseries_series", "GET /api/timeseries/series — plot catalog after CSV save", json!({"site_id": {"type": "string"}})),
             tool("openfdd_auth_credentials_hint", "Where MCP/agents find Open-FDD login (workspace/bootstrap_credentials.once.txt, auth.env.local) — no secrets returned", json!({})),
@@ -454,6 +526,38 @@ impl Server {
                     }),
                 )
             }
+            "openfdd_model_agent_context" => {
+                let bid = building_arg(args)?;
+                self.bridge
+                    .get(&format!("/api/model/agent-context?building_id={bid}"))
+            }
+            "openfdd_historian_points" => {
+                let bid = building_arg(args)?;
+                self.bridge
+                    .get(&format!("/api/historian/points?building_id={bid}"))
+            }
+            "openfdd_historian_orphans" => {
+                let bid = building_arg(args)?;
+                self.bridge
+                    .get(&format!("/api/historian/orphans?building_id={bid}"))
+            }
+            "openfdd_model_semantic_meta_put"
+            | "openfdd_model_overlay_put"
+            | "openfdd_model_equip_upsert"
+            | "openfdd_model_equip_delete"
+            | "openfdd_model_point_upsert"
+            | "openfdd_model_point_delete"
+            | "openfdd_package_roles_update"
+            | "openfdd_historian_purge" => {
+                require_write_confirm(args, name)?;
+                building_arg(args)?;
+                let (method, path) = model_write_route(name).ok_or("unknown model write")?;
+                match method {
+                    "PUT" => self.bridge.put(path, args),
+                    "DELETE" => self.bridge.delete(path, args),
+                    _ => self.bridge.post(path, args),
+                }
+            }
             "openfdd_datasets" => self.bridge.get("/api/datasets"),
             "openfdd_timeseries_series" => {
                 let site = args.get("site_id").and_then(|v| v.as_str()).unwrap_or("");
@@ -534,6 +638,34 @@ fn safe_token(value: &str) -> bool {
         && value
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+}
+
+fn building_arg(args: &Value) -> Result<&str, String> {
+    let bid = args
+        .get("building_id")
+        .or_else(|| args.get("site_id"))
+        .and_then(Value::as_str)
+        .ok_or("building_id required")?;
+    if !safe_token(bid) {
+        return Err("building_id is not a safe token".into());
+    }
+    Ok(bid)
+}
+
+/// Central route for each model / historian write tool. Central re-checks
+/// role, tenant scope, and `confirm`, and audits the write.
+fn model_write_route(tool: &str) -> Option<(&'static str, &'static str)> {
+    Some(match tool {
+        "openfdd_model_semantic_meta_put" => ("PUT", "/api/model/semantic-meta"),
+        "openfdd_model_overlay_put" => ("PUT", "/api/model/overlay"),
+        "openfdd_model_equip_upsert" => ("POST", "/api/model/equip"),
+        "openfdd_model_equip_delete" => ("DELETE", "/api/model/equip"),
+        "openfdd_model_point_upsert" => ("POST", "/api/model/point"),
+        "openfdd_model_point_delete" => ("DELETE", "/api/model/point"),
+        "openfdd_package_roles_update" => ("POST", "/api/csv/import/package/roles"),
+        "openfdd_historian_purge" => ("POST", "/api/historian/purge"),
+        _ => return None,
+    })
 }
 
 fn ingest_query(path: &str, args: &Value) -> String {
@@ -682,6 +814,137 @@ mod tests {
         assert_eq!(retired["ok"], false);
         if let Some(value) = prev {
             std::env::set_var("OPENFDD_OT_TOOLS", value);
+        }
+    }
+}
+
+#[cfg(test)]
+mod model_write_tests {
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
+
+    use super::*;
+
+    /// One-shot central stand-in: records method, path, and JSON body.
+    fn fake_central() -> (String, mpsc::Receiver<(String, Value)>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let base = format!("http://{}", listener.local_addr().expect("addr"));
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let Ok((stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            let _ = reader.read_line(&mut line);
+            let mut length = 0usize;
+            loop {
+                let mut header = String::new();
+                if reader.read_line(&mut header).unwrap_or(0) == 0 || header == "\r\n" {
+                    break;
+                }
+                let lower = header.to_ascii_lowercase();
+                if let Some(v) = lower.strip_prefix("content-length:") {
+                    length = v.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0u8; length];
+            let _ = reader.read_exact(&mut body);
+            let request_line = line
+                .split_whitespace()
+                .take(2)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let _ = tx.send((
+                request_line,
+                serde_json::from_slice(&body).unwrap_or(Value::Null),
+            ));
+            let reply = r#"{"ok":true}"#;
+            let mut stream = reader.into_inner();
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+        });
+        (base, rx)
+    }
+
+    #[test]
+    fn model_write_tools_need_env_and_confirm_then_forward_to_central() {
+        let _lock = crate::gate::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prev = std::env::var("OPENFDD_MCP_ALLOW_WRITES").ok();
+
+        let names: Vec<String> = Server::new(BridgeClient::from_env())
+            .tools_list()
+            .iter()
+            .filter_map(|t| t.get("name").and_then(Value::as_str).map(str::to_string))
+            .collect();
+        for expected in [
+            "openfdd_model_semantic_meta_put",
+            "openfdd_model_overlay_put",
+            "openfdd_model_equip_upsert",
+            "openfdd_model_equip_delete",
+            "openfdd_model_point_upsert",
+            "openfdd_model_point_delete",
+            "openfdd_package_roles_update",
+            "openfdd_historian_orphans",
+            "openfdd_historian_points",
+            "openfdd_historian_purge",
+        ] {
+            assert!(names.iter().any(|n| n == expected), "missing {expected}");
+        }
+
+        let args = json!({
+            "confirm": true,
+            "building_id": "SITE_A",
+            "equipment_id": "AHU_1",
+            "kind": "ahu"
+        });
+        std::env::remove_var("OPENFDD_MCP_ALLOW_WRITES");
+        let server = Server::new(BridgeClient::for_base("http://127.0.0.1:9", "t"));
+        let err = server
+            .dispatch_tool("openfdd_model_equip_upsert", &args)
+            .expect_err("writes off");
+        assert!(err.contains("OPENFDD_MCP_ALLOW_WRITES"), "{err}");
+
+        std::env::set_var("OPENFDD_MCP_ALLOW_WRITES", "1");
+        let mut unconfirmed = args.clone();
+        unconfirmed["confirm"] = json!(false);
+        let err = server
+            .dispatch_tool("openfdd_model_equip_upsert", &unconfirmed)
+            .expect_err("no confirm");
+        assert!(err.contains("confirm:true"), "{err}");
+        let err = server
+            .dispatch_tool(
+                "openfdd_historian_purge",
+                &json!({"confirm": true, "building_id": "a b", "equipment_id": "AHU_1"}),
+            )
+            .expect_err("unsafe building id");
+        assert!(err.contains("safe token"), "{err}");
+
+        for (tool, expected_line) in [
+            ("openfdd_model_equip_upsert", "POST /api/model/equip"),
+            ("openfdd_model_point_delete", "DELETE /api/model/point"),
+            ("openfdd_model_overlay_put", "PUT /api/model/overlay"),
+            ("openfdd_historian_purge", "POST /api/historian/purge"),
+        ] {
+            let (base, seen) = fake_central();
+            let server = Server::new(BridgeClient::for_base(&base, "t"));
+            let out = server.dispatch_tool(tool, &args).expect("forwarded");
+            assert_eq!(out["ok"], true);
+            let (line, body) = seen.recv().expect("central saw the write");
+            assert_eq!(line, expected_line);
+            assert_eq!(body["confirm"], true, "central re-checks confirm");
+            assert_eq!(body["building_id"], "SITE_A");
+        }
+
+        match prev {
+            Some(v) => std::env::set_var("OPENFDD_MCP_ALLOW_WRITES", v),
+            None => std::env::remove_var("OPENFDD_MCP_ALLOW_WRITES"),
         }
     }
 }

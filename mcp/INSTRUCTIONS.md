@@ -121,6 +121,11 @@ Set **`OPENFDD_MCP_ALLOW_WRITES=1`** on the MCP server and pass **`confirm: true
 | `openfdd_reports_draft` | Create report draft |
 | `openfdd_reports_patch` | Update report sections |
 | `openfdd_reports_render_pdf` | Render PDF |
+| `openfdd_model_equip_upsert` / `openfdd_model_equip_delete` | Edit building model equipment (overlay + tombstone) |
+| `openfdd_model_point_upsert` / `openfdd_model_point_delete` | Edit building model points |
+| `openfdd_model_overlay_put` / `openfdd_model_semantic_meta_put` | Replace overlay Turtle / semantic meta |
+| `openfdd_package_roles_update` | Remap CSV-package column roles |
+| `openfdd_historian_purge` | Delete samples + `point_map` rows for one equipment or series (RDF untouched) |
 
 Read tools (preview, plan, preflight, contract, test-sql, fusion, historian query) do not require write gate.
 
@@ -141,6 +146,10 @@ Production BACnet throttling (agents): **300 s** default poll, **60 s** minimum,
 ## Model (Haystack RDF)
 
 Use `openfdd_model_sparql_catalog` then `openfdd_model_sparql` with a SELECT query. Assignments: `openfdd_model_assignments_save` with full points/bindings doc.
+
+The operator UI never edits the building model. Agents do: model writes need an operator/admin token, `confirm: true` (or `dry_run: true` to validate), and each applied write is audited in `security_audit`. Viewer tokens get 403.
+
+For a Normal Framework portal site the portal inventory is the source of truth: tag on the portal and the next poll updates the model. Equipment or points dropped from the portal leave the model (tombstoned) while their samples stay as orphaned historian data (`openfdd_historian_orphans`) until an operator purges them (`openfdd_historian_purge` or the Jobs page).
 
 ## FDD
 

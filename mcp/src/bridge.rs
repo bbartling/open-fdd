@@ -46,6 +46,16 @@ impl BridgeClient {
         }
     }
 
+    #[cfg(test)]
+    pub fn for_base(base: &str, token: &str) -> Self {
+        Self {
+            http: Client::new(),
+            http_long: Client::new(),
+            base: base.into(),
+            token: Some(token.into()),
+        }
+    }
+
     pub fn get(&self, path: &str) -> Result<Value, String> {
         self.request(self.http.get(self.url(path)))
     }
@@ -56,6 +66,14 @@ impl BridgeClient {
 
     pub fn patch(&self, path: &str, body: &Value) -> Result<Value, String> {
         self.request(self.http.patch(self.url(path)).json(body))
+    }
+
+    pub fn put(&self, path: &str, body: &Value) -> Result<Value, String> {
+        self.request(self.http.put(self.url(path)).json(body))
+    }
+
+    pub fn delete(&self, path: &str, body: &Value) -> Result<Value, String> {
+        self.request(self.http.delete(self.url(path)).json(body))
     }
 
     fn url(&self, path: &str) -> String {
