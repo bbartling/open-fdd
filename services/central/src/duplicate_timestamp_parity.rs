@@ -60,7 +60,7 @@ fn load_fixture(rule: &str) -> Fixture {
     .expect("expected json");
     let pandas_hours = meta["fault_hours"]
         .as_f64()
-        .unwrap_or_else(|| panic!("{rule}: expected.json must pin pandas fault_hours"));
+        .unwrap_or_else(|| panic!("{rule}: expected.json must pin oracle fault_hours"));
     let equipment_id = meta["equipment_id"]
         .as_str()
         .expect("equipment_id")
@@ -249,12 +249,12 @@ async fn duplicate_timestamp_fixtures_match_pandas_and_never_double_count() {
 
         let sql_hours = sql_fault_hours(&tsdb, &site, rule, &fx.equipment_id).await;
         report.push(format!(
-            "{rule}: sql {sql_hours:.4} h, pandas {:.4} h",
+            "{rule}: sql {sql_hours:.4} h, oracle {:.4} h",
             fx.pandas_hours
         ));
         assert!(
             (sql_hours - fx.pandas_hours).abs() <= TOLERANCE_HOURS,
-            "{rule}: SQL {sql_hours} h vs pandas {} h",
+            "{rule}: SQL {sql_hours} h vs oracle {} h",
             fx.pandas_hours
         );
         purge(&pool, &site).await;
