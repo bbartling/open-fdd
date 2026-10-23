@@ -156,6 +156,12 @@ What one run does:
    own project: `down --remove-orphans` (no `-v`), then removes volumes
    labelled with that project name. It never prunes.
 
+Exit codes: `0` PASS, `1` FAIL (any step FAIL/ERROR), `2` BLOCKED (no failures,
+but some checks unverified). Against `sha-c83ea9b` the harness reports 0 FAIL /
+0 ERROR and 14 BLOCKED `y.authz.a_own_*` positive controls: the canary package
+has one equipment row, so datasets mapping, FDD results/series and the plant
+analytics have no own content to prove a 200 against.
+
 Not covered by the local recipe: the profile's https origin and port-443
 listener evidence come from the deployed edge, not from this loopback run.
 
