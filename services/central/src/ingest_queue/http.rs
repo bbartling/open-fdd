@@ -551,6 +551,23 @@ pub fn discovery_tools(ot_enabled: bool) -> Vec<(&'static str, &'static str, &'s
             "/api/csv/import/package/append",
         ),
         ("datasets.list", "GET", "/api/datasets"),
+        ("model.agent_context", "GET", "/api/model/agent-context"),
+        ("model.sparql", "POST", "/api/model/sparql"),
+        // Model writes: operator/admin, `confirm: true` (or `dry_run`), audited.
+        ("model.semantic_meta.put", "PUT", "/api/model/semantic-meta"),
+        ("model.overlay.put", "PUT", "/api/model/overlay"),
+        ("model.equip.upsert", "POST", "/api/model/equip"),
+        ("model.equip.delete", "DELETE", "/api/model/equip"),
+        ("model.point.upsert", "POST", "/api/model/point"),
+        ("model.point.delete", "DELETE", "/api/model/point"),
+        (
+            "csv.import.package.roles",
+            "POST",
+            "/api/csv/import/package/roles",
+        ),
+        ("historian.points", "GET", "/api/historian/points"),
+        ("historian.orphans", "GET", "/api/historian/orphans"),
+        ("historian.purge", "POST", "/api/historian/purge"),
     ];
     if ot_enabled {
         tools.extend([

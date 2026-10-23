@@ -37,7 +37,7 @@ fn test_database_url() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-async fn apply_schema(pool: &PgPool) {
+pub(crate) async fn apply_schema(pool: &PgPool) {
     for statement in [
         "CREATE TABLE IF NOT EXISTS site (
             site_id text PRIMARY KEY,

@@ -30,6 +30,7 @@ mod logging;
 mod mapping_revision;
 #[cfg(test)]
 mod metering_scope_fixtures;
+mod model_agent_writes;
 mod models;
 mod openapi;
 #[cfg(test)]
