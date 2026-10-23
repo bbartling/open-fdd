@@ -145,6 +145,10 @@ class PortalQualHelpersTest(unittest.TestCase):
         self.assertEqual(portal_qual.verdict(steps, [], "s")["status"], "BLOCKED")
         dup = portal_qual.verdict(steps + [{"id": "a", "status": "PASS"}], ["a"], "s")
         self.assertEqual(dup["status"], "FAIL")
+        blk = portal_qual.verdict(steps + [{"id": "c", "status": "BLOCKED"}], ["a", "c"], "s")
+        self.assertEqual((blk["status"], blk["blocked_steps"], blk["pass"]), ("BLOCKED", ["c"], False))
+        mixed = steps + [{"id": "c", "status": "BLOCKED"}, {"id": "d", "status": "ERROR"}]
+        self.assertEqual(portal_qual.verdict(mixed, ["c", "d"], "s")["status"], "FAIL")
 
     def test_cli_secret_not_echoed_elsewhere(self):
         out = subprocess.run(

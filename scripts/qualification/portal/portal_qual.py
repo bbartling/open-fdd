@@ -265,9 +265,14 @@ def verdict(steps: list[dict[str, Any]], required: list[str], suite: str) -> dic
             problems.append(f"duplicate step {sid}")
         by_id[sid] = step
     missing = [sid for sid in required if sid not in by_id]
-    failed = [sid for sid in required if sid in by_id and by_id[sid]["status"] != "PASS"]
-    if problems or missing or failed or not required:
-        status = "FAIL" if failed or problems else "BLOCKED"
+    failed = [
+        sid for sid in required if sid in by_id and by_id[sid]["status"] not in ("PASS", "BLOCKED")
+    ]
+    blocked = [sid for sid in required if sid in by_id and by_id[sid]["status"] == "BLOCKED"]
+    if failed or problems:
+        status = "FAIL"
+    elif missing or blocked or not required:
+        status = "BLOCKED"
     else:
         status = "PASS"
     return {
@@ -277,6 +282,7 @@ def verdict(steps: list[dict[str, Any]], required: list[str], suite: str) -> dic
         "required_steps": required,
         "missing_steps": missing,
         "failed_steps": failed,
+        "blocked_steps": blocked,
         "problems": problems,
         "steps": [by_id[k] for k in sorted(by_id)],
     }
@@ -326,8 +332,8 @@ def _cmd_verdict(args: argparse.Namespace) -> int:
     result["image_tag"] = args.image_tag
     result["artifact_dir"] = str(args.steps.parent)
     args.out.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({k: result[k] for k in ("suite", "status", "missing_steps", "failed_steps")}))
-    return 0 if result["pass"] else 1
+    print(json.dumps({k: result[k] for k in ("suite", "status", "missing_steps", "failed_steps", "blocked_steps")}))
+    return {"PASS": 0, "BLOCKED": 2}.get(result["status"], 1)
 
 
 def main(argv: list[str] | None = None) -> int:

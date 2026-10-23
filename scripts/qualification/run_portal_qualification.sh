@@ -252,8 +252,14 @@ set +e
 PROBE_RC=$?
 set -e
 probe_status="$(jq -r '.overall_status // "MISSING"' "$ART/security/security_report.json" 2>/dev/null || echo MISSING)"
+probe_bad="$(jq -r '[.checks[] | select(.status == "FAIL" or .status == "ERROR")] | length' \
+  "$ART/security/security_report.json" 2>/dev/null || echo unknown)"
 if [[ "$PROBE_RC" -eq 0 && "$probe_status" == "PASS" ]]; then
   portal_step security.harness PASS "isolated_full X/Y/Z overall PASS"
+elif [[ "$probe_status" == "BLOCKED" && "$probe_bad" == "0" ]]; then
+  probe_blocked="$(jq -r '[.checks[] | select(.status == "BLOCKED") | .check_id] | join(" ")' \
+    "$ART/security/security_report.json")"
+  portal_step security.harness BLOCKED "no FAIL/ERROR; unverified: $probe_blocked"
 else
   portal_step security.harness FAIL "rc=$PROBE_RC overall_status=$probe_status"
 fi
@@ -291,6 +297,10 @@ portal_py verdict --steps "$PORTAL_STEPS" --suite portal_qualification_v1 \
   security.harness security.viewer_write_matrix security.no_historian_side_effect
 VERDICT_RC=$?
 set -e
+if [[ "$VERDICT_RC" -eq 2 ]]; then
+  echo "BLOCKED: portal qualification (no failures; some checks unverified) → $ART/verdict.json" >&2
+  exit 2
+fi
 if [[ "$VERDICT_RC" -ne 0 ]]; then
   echo "FAIL: portal qualification → $ART/verdict.json" >&2
   exit 1
