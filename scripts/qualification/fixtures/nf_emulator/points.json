@@ -1,0 +1,28 @@
+{
+  "schema": "openfdd_nf_emulator_fixture_v1",
+  "source": "Shape recorded from the NF portal point query contract exercised by services/central/src/providers/nf.rs tests. Values are synthetic; no site, host, or credential is recorded.",
+  "token": {"accessToken": "qa-emulator-token-not-a-secret", "expiresIn": 3600},
+  "points": [
+    {
+      "name": "QA-OA-T",
+      "uuid": "0a0a0a0a-1111-4111-8111-000000000001",
+      "units": "°F",
+      "attrs": {"type": "OBJECT_ANALOG_INPUT"},
+      "recorded": [61.2, 61.5, 61.9, 62.4, 62.8, 63.1]
+    },
+    {
+      "name": "QA-SF-SPD",
+      "uuid": "0a0a0a0a-1111-4111-8111-000000000002",
+      "units": "%",
+      "attrs": {"type": "OBJECT_ANALOG_OUTPUT"},
+      "recorded": [55.0, 56.0, 57.0, 58.0, 57.0, 56.0]
+    },
+    {
+      "name": "QA-DA-P",
+      "uuid": "0a0a0a0a-1111-4111-8111-000000000003",
+      "units": "inH2O",
+      "attrs": {"type": "OBJECT_ANALOG_INPUT"},
+      "recorded": [1.02, 1.04, 0.98, 1.01, 1.00, 0.99]
+    }
+  ]
+}
