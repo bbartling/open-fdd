@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Astra C-ZAP (A06–A07) — disposable authenticated ZAP AF wrapper.
 #
-# Mints a throwaway web+central candidate from GHCR, then delegates scan
-# evaluation to scripts/qualification/zap/run_af_disposable.py (single
-# evaluator). Compatibility entrypoint for Wave C / gate runners.
+# Mints a throwaway portal candidate (deployment profile `cloud_portal`:
+# openfdd-web + openfdd-central + Timescale from GHCR, OPENFDD_MULTI_TENANT=1,
+# per-run JWT secret, no open-bind escape hatch) through
+# lib/portal_stack.sh, then delegates scan evaluation to
+# scripts/qualification/zap/run_af_disposable.py (single evaluator).
+# Compatibility entrypoint for Wave C / gate runners.
 #
-# Never activeScans live Railway OT. Never persists JWT to the artifact dir.
-# Secrets reach containers by env name (-e NAME) or stdin, never argv. The
-# scanner credential is handed to the evaluator through a private 0600 file
+# Never activeScans live Railway or a site. Never persists JWT to the artifact dir.
+# The scanner credential is handed to the evaluator through a private 0600 file
 # outside the artifact dir. A negative control (broken scanner credential)
 # must be rejected before the real scan runs.
 # No fallback crawl or warning soft-pass paths.
@@ -15,17 +17,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+# shellcheck source-path=SCRIPTDIR source=lib/portal_stack.sh
+source "$ROOT/scripts/qualification/lib/portal_stack.sh"
 
-TAG="${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG to an immutable sha-<7> tag}"
-if [[ ! "$TAG" =~ ^sha-[0-9a-f]{7}$ ]]; then
-  echo "OPENFDD_IMAGE_TAG must match sha-<7 lowercase hex>, got: $TAG" >&2
-  exit 1
-fi
-
-for cmd in docker curl jq python3; do
-  command -v "$cmd" >/dev/null || { echo "missing required command: $cmd" >&2; exit 1; }
-done
-docker info >/dev/null
+portal_require_tag
+portal_preflight
 
 # Pin scanner digest (override only with another digest-pinned ref).
 ZAP_IMAGE="${OPENFDD_ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef}"
@@ -33,10 +29,9 @@ if [[ "$ZAP_IMAGE" != *@sha256:* ]]; then
   echo "FAIL: OPENFDD_ZAP_IMAGE must be digest-pinned (@sha256:…); got: $ZAP_IMAGE" >&2
   exit 1
 fi
-CENTRAL_IMAGE="ghcr.io/bbartling/openfdd-central:${TAG}"
-WEB_IMAGE="ghcr.io/bbartling/openfdd-web:${TAG}"
 ART="${ARTIFACT_DIR:-$ROOT/reports/waveC_zap_af_$(date -u +%Y%m%dT%H%M%SZ)}"
 mkdir -p "$ART"
+ART="$(cd "$ART" && pwd)"
 WRK="$ART/zap_wrk"
 mkdir -p "$WRK"
 # Restrict artifact tree (no JWT on disk). ZAP image often runs as uid 1000 —
@@ -45,96 +40,32 @@ chmod 700 "$ART"
 chmod 777 "$WRK"
 cp "$ROOT/docs/openapi.yaml" "$WRK/openapi.yaml"
 
-RUN_ID="$(python3 -c 'import secrets; print(secrets.token_hex(6))')"
-NET="openfdd-zap-af-${RUN_ID}"
-CTR_CENTRAL="openfdd-zap-central-${RUN_ID}"
-CTR_WEB="openfdd-zap-web-${RUN_ID}"
-VOL="${CTR_CENTRAL}-workspace"
-OPENFDD_ADMIN_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-OPENFDD_JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
-export OPENFDD_ADMIN_PASSWORD OPENFDD_JWT_SECRET
-SECRET_DIR="$(mktemp -d)"
-chmod 700 "$SECRET_DIR"
-AUTH_FILE="$SECRET_DIR/scanner_auth_header"
-# A07: scan through nginx+SPA (web), not bare central.
+portal_stack_init zap
+trap portal_stack_cleanup EXIT
+# A07: scan through nginx+SPA (openfdd-web, compose service `web`), not bare
+# central. The scanner joins this project's default network, where the
+# compose service name `web` resolves; central and Timescale stay on the
+# internal network and are not reachable from the scanner.
 TARGET_ORIGIN="http://web:8080"
+ZAP_NET="${PORTAL_PROJECT}_default"
 
-cleanup() {
-  rm -rf "$SECRET_DIR"
-  docker ps -aq --filter "label=openfdd.zap.owner=run_af_disposable" | xargs -r docker rm -f >/dev/null 2>&1 || true
-  docker rm -f "$CTR_WEB" "$CTR_CENTRAL" >/dev/null 2>&1 || true
-  docker volume rm -f "$VOL" >/dev/null 2>&1 || true
-  docker network rm "$NET" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
-trap 'exit 130' INT TERM
-
-echo "== Pull images =="
-docker pull "$CENTRAL_IMAGE" >/dev/null
-docker pull "$WEB_IMAGE" >/dev/null
+echo "== Pull images and start the disposable portal candidate =="
 docker pull "$ZAP_IMAGE" >/dev/null
+portal_stack_up 240
+echo "OK disposable portal candidate (web+central+timescale, project $PORTAL_PROJECT)"
 
-docker network create "$NET" >/dev/null
-docker volume create "$VOL" >/dev/null
-
-docker run -d --name "$CTR_CENTRAL" --network "$NET" --network-alias central \
-  -e OPENFDD_MQTT_ENABLED=0 \
-  -e OPENFDD_WORKSPACE=/workspace \
-  -e OPENFDD_STORAGE_URL=file:///workspace/openfdd \
-  -e OPENFDD_JWT_SECRET \
-  -e OPENFDD_ADMIN_PASSWORD \
-  -e OPENFDD_ALLOW_OPEN_BIND=1 \
-  -e OPENFDD_REACT_UI=1 \
-  -e OPENFDD_MULTI_TENANT="${OPENFDD_MULTI_TENANT:-0}" \
-  -v "${VOL}:/workspace" \
-  "$CENTRAL_IMAGE" >/dev/null
-
-# Wave N: optional MT-ON candidate seeds control plane before health wait.
-if [[ "${OPENFDD_MULTI_TENANT:-0}" == "1" || "${OPENFDD_MULTI_TENANT:-0}" == "true" ]]; then
-  docker run --rm -v "${VOL}:/workspace" alpine:3.20 \
-    sh -c 'mkdir -p /workspace/openfdd/control_plane && cat > /workspace/openfdd/control_plane/tenants.json <<EOF
-{"tenants":[
-  {"id":"acme","name":"ACME","building_ids":["ACME"]},
-  {"id":"building_100","name":"Building 100","building_ids":["BUILDING_100"]},
-  {"id":"lakeside_sd","name":"Lakeside SD","building_ids":["LAKESIDE_ES"]}
-]}
-EOF'
-fi
-
-docker run -d --name "$CTR_WEB" --network "$NET" --network-alias web \
-  -e OPENFDD_CENTRAL_UPSTREAM=central:8080 \
-  -e OPENFDD_NGINX_RESOLVER=127.0.0.11 \
-  "$WEB_IMAGE" >/dev/null
-
-deadline=$((SECONDS + 120))
-until docker run --rm --network "$NET" curlimages/curl:8.5.0 \
-    -fsS "${TARGET_ORIGIN}/api/health" >/dev/null 2>&1; do
-  if (( SECONDS >= deadline )); then
-    echo "FAIL: disposable web+central never healthy" >&2
-    docker logs "$CTR_CENTRAL" >&2 || true
-    docker logs "$CTR_WEB" >&2 || true
-    exit 1
-  fi
-  sleep 2
-done
-echo "OK disposable web+central"
-
-# Login body goes over stdin (never argv); the token lands in a private file.
-jq -n '{username:"admin",password:env.OPENFDD_ADMIN_PASSWORD}' \
-  | docker run --rm -i --network "$NET" curlimages/curl:8.5.0 -fsS --max-time 20 \
-      -X POST "${TARGET_ORIGIN}/api/auth/login" \
-      -H 'Content-Type: application/json' --data-binary @- \
-  | jq -r '"Bearer " + (.token // .access_token // "")' >"$AUTH_FILE"
+portal_login admin admin || { echo "FAIL: could not mint admin JWT for ZAP context" >&2; exit 1; }
+# UA-04: token stays in the private dir, never in the artifact tree or argv.
+AUTH_FILE="$PORTAL_PRIV/scanner_auth_header"
+printf 'Bearer %s' "$(cat "$PORTAL_PRIV/tok.admin")" >"$AUTH_FILE"
 chmod 600 "$AUTH_FILE"
 if [[ "$(wc -c <"$AUTH_FILE")" -lt 20 ]]; then
   echo "FAIL: could not mint admin JWT for ZAP context" >&2
   exit 1
 fi
-# UA-04: never persist JWT to artifact disk (ephemeral env only / private file).
 rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
 echo "OK admin JWT minted (ephemeral env only; private file outside artifacts)"
 
-# Copy OpenAPI into work dir for AF openapi job (served via central too).
 # Evaluator owns AF plan materialization + verdict; wrapper only mints candidate.
 export OPENFDD_ZAP_AF_EXECUTE=1
 export OPENFDD_ZAP_IMAGE="$ZAP_IMAGE"
@@ -142,7 +73,7 @@ export OPENFDD_ZAP_REQUIRE_DIGEST=1
 export ZAP_TARGET_ORIGIN="$TARGET_ORIGIN"
 export ZAP_AUTH_HEADER_FILE="$AUTH_FILE"
 export OPENFDD_ZAP_EXPECTED_USERNAME="admin"
-export ZAP_DOCKER_NETWORK="$NET"
+export ZAP_DOCKER_NETWORK="$ZAP_NET"
 unset OPENFDD_ADMIN_PASSWORD OPENFDD_JWT_SECRET
 VERDICT_OUT="$ART/verdict.json"
 
@@ -168,16 +99,17 @@ python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
 EVAL_RC=$?
 set -e
 
-# Redact any accidental secret leakage from logs copied beside verdict.
 chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
 rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
+while IFS= read -r -d '' f; do
+  portal_redact_file "$f"
+done < <(find "$ART" -type f \( -name '*.json' -o -name '*.log' -o -name '*.txt' -o -name '*.yaml' -o -name '*.html' \) -print0)
 
 if [[ ! -f "$VERDICT_OUT" ]]; then
   echo "FAIL: evaluator wrote no verdict" >&2
   exit 1
 fi
 
-# Surface evaluator summary without secrets.
 python3 -B - "$VERDICT_OUT" <<'PY'
 import json, sys
 from pathlib import Path
@@ -192,4 +124,4 @@ if [[ "$EVAL_RC" -ne 0 ]]; then
   echo "FAIL: isolated ZAP AF suite (evaluator rc=$EVAL_RC)" >&2
   exit "$EVAL_RC"
 fi
-echo "PASS: isolated ZAP AF (web+central via run_af_disposable.py) → $ART"
+echo "PASS: isolated ZAP AF (portal web via run_af_disposable.py) → $ART"

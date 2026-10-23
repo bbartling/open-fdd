@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -56,7 +57,26 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="permit allowlisted fixture mutations (isolated_full only)",
     )
+    p.add_argument(
+        "--isolated-jwt-secret-env",
+        metavar="VAR",
+        help=(
+            "name of an environment variable holding the disposable server's JWT "
+            "secret (isolated_full only; the value is never accepted on argv)"
+        ),
+    )
     return p
+
+
+def isolated_secret_from_env(var: str | None, profile: str | None) -> bytes | None:
+    if not var:
+        return None
+    if profile != "isolated_full":
+        raise ConfigError("--isolated-jwt-secret-env is only valid with isolated_full")
+    value = os.environ.get(var, "")
+    if len(value) < 32:
+        raise ConfigError(f"{var} must hold a JWT secret of at least 32 characters")
+    return value.encode("utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
+        isolated_secret = isolated_secret_from_env(args.isolated_jwt_secret_env, args.profile)
         report, meta = run_probe(
             config_path=args.config,
             base_url=args.base_url,
@@ -93,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
             rate=args.rate,
             output_dir=args.output_dir,
             allow_fixture_writes=bool(args.allow_fixture_writes),
+            isolated_jwt_secret=isolated_secret,
         )
     except ConfigError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

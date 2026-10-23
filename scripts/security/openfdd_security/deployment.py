@@ -31,6 +31,8 @@ EVIDENCE_SCHEMA_VERSION = "openfdd_deployment_exposure_evidence_v1"
 PROFILE_ALLOWED_KEYS = frozenset(
     {
         "profile_version",
+        "lifecycle",
+        "archive_reason",
         "deployment",
         "selected_capabilities",
         "selected_connector",
@@ -48,9 +50,33 @@ PROFILE_ALLOWED_KEYS = frozenset(
         "listeners",
         "evidence_max_age_seconds",
         "source_recipes",
+        "auth",
+        "egress",
         "notes",
     }
 )
+
+PROFILE_LIFECYCLES = frozenset({"active", "archived"})
+# Wire services retired from the 4.0 product. An active profile may forbid them,
+# never require or allow them.
+ARCHIVED_WIRE_SERVICES = frozenset(
+    {"openfdd-mqtt", "openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"}
+)
+PORTAL_REQUIRED_SERVICES = frozenset({"openfdd-web", "openfdd-central", "openfdd-timescale"})
+PORTAL_AUTH_KEYS = frozenset(
+    {"jwt_required", "multi_tenant", "min_jwt_secret_chars", "open_bind_escape_hatch", "tenant_fixture"}
+)
+PORTAL_NF_EGRESS_KEYS = frozenset(
+    {
+        "production_origin",
+        "qualification_mode",
+        "qualification_origins",
+        "real_portal_connections",
+        "allowed_methods",
+        "forbidden_methods",
+    }
+)
+MIN_JWT_SECRET_CHARS = 32
 
 EVIDENCE_ALLOWED_KEYS = frozenset(
     {
@@ -221,11 +247,21 @@ def validate_profile_registry(data: Any) -> list[str]:
         return errors + ["registry profiles must be a nonempty object"]
     for profile_id, profile in profiles.items():
         errors.extend(validate_deployment_profile(profile_id, profile))
+    if "cloud_portal" not in profiles:
+        errors.append("registry must define the active cloud_portal profile")
     return errors
 
 
 def profile_map(registry: dict[str, Any] | None = None) -> dict[str, Any]:
     return (registry or load_profile_registry()).get("profiles", {})
+
+
+def active_profile_ids(registry: dict[str, Any] | None = None) -> list[str]:
+    return sorted(
+        pid
+        for pid, prof in profile_map(registry).items()
+        if isinstance(prof, dict) and prof.get("lifecycle") == "active"
+    )
 
 
 def validate_deployment_profile(profile_id: str, profile: Any) -> list[str]:
@@ -240,6 +276,14 @@ def validate_deployment_profile(profile_id: str, profile: Any) -> list[str]:
 
     if not isinstance(profile.get("profile_version"), int) or profile["profile_version"] < 1:
         errors.append(f"{profile_id}: profile_version must be a positive integer")
+    lifecycle = profile.get("lifecycle")
+    if lifecycle not in PROFILE_LIFECYCLES:
+        errors.append(f"{profile_id}: lifecycle must be active or archived")
+    reason = profile.get("archive_reason")
+    if lifecycle == "archived" and (not isinstance(reason, str) or not reason.strip()):
+        errors.append(f"{profile_id}: archived profile needs archive_reason")
+    if lifecycle == "active" and reason is not None:
+        errors.append(f"{profile_id}: active profile cannot carry archive_reason")
     for field in (
         "deployment",
         "selected_connector",
@@ -278,7 +322,19 @@ def validate_deployment_profile(profile_id: str, profile: Any) -> list[str]:
     if len(suites) != len(profile.get("required_execution_suites") or []):
         errors.append(f"{profile_id}: duplicate execution suite")
 
-    if profile_id == "cloud_mqtt_hub":
+    if lifecycle == "active":
+        live_wire = (required_services | optional_services) & ARCHIVED_WIRE_SERVICES
+        if live_wire:
+            errors.append(
+                f"{profile_id}: active profile cannot require or allow archived wire service(s) "
+                + ", ".join(sorted(live_wire))
+            )
+        if "mqtt_acl" in suites:
+            errors.append(f"{profile_id}: active profile cannot require the archived mqtt_acl suite")
+
+    if profile_id == "cloud_portal":
+        errors.extend(_validate_cloud_portal(profile, required_services, forbidden_services, suites))
+    elif profile_id == "cloud_mqtt_hub":
         if required_services != {"openfdd-web", "openfdd-central", "openfdd-mqtt"}:
             errors.append("cloud_mqtt_hub: must require web + central + mqtt exactly")
         if profile.get("selected_connector") != "none":
@@ -355,6 +411,78 @@ def validate_deployment_profile(profile_id: str, profile: Any) -> list[str]:
     return errors
 
 
+def _validate_cloud_portal(
+    profile: dict[str, Any],
+    required_services: set[str],
+    forbidden_services: set[str],
+    suites: set[str],
+) -> list[str]:
+    errors: list[str] = []
+    if profile.get("lifecycle") != "active":
+        errors.append("cloud_portal: must be the active portal profile")
+    if required_services != PORTAL_REQUIRED_SERVICES:
+        errors.append("cloud_portal: must require web + central + timescale exactly")
+    if set(profile.get("optional_services") or []) - {"openfdd-mcp"}:
+        errors.append("cloud_portal: only openfdd-mcp may be optional")
+    if not ARCHIVED_WIRE_SERVICES <= forbidden_services:
+        errors.append("cloud_portal: MQTT, fieldbus, BACnet/Modbus, and Haystack must be forbidden")
+    if not {"X", "Y", "Z"} <= suites:
+        errors.append("cloud_portal: X, Y, and Z suites are required")
+    if profile.get("selected_connector") != "nf_portal":
+        errors.append("cloud_portal: selected_connector must be nf_portal")
+
+    auth = profile.get("auth")
+    if not isinstance(auth, dict):
+        errors.append("cloud_portal: auth must be an object")
+    else:
+        errors.extend(_unknown(auth, PORTAL_AUTH_KEYS, "cloud_portal.auth"))
+        if auth.get("jwt_required") is not True:
+            errors.append("cloud_portal: auth.jwt_required must be true")
+        if auth.get("multi_tenant") is not True:
+            errors.append("cloud_portal: auth.multi_tenant must be true")
+        min_chars = auth.get("min_jwt_secret_chars")
+        if not isinstance(min_chars, int) or isinstance(min_chars, bool) or min_chars < MIN_JWT_SECRET_CHARS:
+            errors.append(f"cloud_portal: auth.min_jwt_secret_chars must be >= {MIN_JWT_SECRET_CHARS}")
+        if auth.get("open_bind_escape_hatch") != "forbidden":
+            errors.append("cloud_portal: auth.open_bind_escape_hatch must be forbidden")
+
+    egress = profile.get("egress")
+    nf = egress.get("nf_portal") if isinstance(egress, dict) else None
+    if not isinstance(egress, dict) or set(egress) - {"nf_portal"}:
+        errors.append("cloud_portal: egress must declare only nf_portal")
+    if not isinstance(nf, dict):
+        errors.append("cloud_portal: egress.nf_portal must be an object")
+        return errors
+    errors.extend(_unknown(nf, PORTAL_NF_EGRESS_KEYS, "cloud_portal.egress.nf_portal"))
+    if nf.get("qualification_mode") != "emulator_only":
+        errors.append("cloud_portal: NF qualification must be emulator_only")
+    if nf.get("real_portal_connections") != "forbidden":
+        errors.append("cloud_portal: real NF portal connections must be forbidden")
+    origins = nf.get("qualification_origins")
+    if not _is_string_list(origins, nonempty=True):
+        errors.append("cloud_portal: NF qualification_origins must be a nonempty list")
+    else:
+        for origin in origins:
+            if not _is_loopback_origin(origin):
+                errors.append(f"cloud_portal: NF qualification origin {origin!r} is not a loopback emulator")
+    forbidden_methods = nf.get("forbidden_methods")
+    if not _is_string_list(forbidden_methods, nonempty=True) or "POST /api/v1/point/data" not in forbidden_methods:
+        errors.append("cloud_portal: NF point writes (POST /api/v1/point/data) must be forbidden")
+    allowed_methods = nf.get("allowed_methods")
+    if not _is_string_list(allowed_methods, nonempty=True):
+        errors.append("cloud_portal: NF allowed_methods must be a nonempty list")
+    elif set(allowed_methods) & set(forbidden_methods or []):
+        errors.append("cloud_portal: an NF method is both allowed and forbidden")
+    return errors
+
+
+def _is_loopback_origin(value: Any) -> bool:
+    if not _origin_is_safe(value):
+        return False
+    host = (urlsplit(value).hostname or "").lower()
+    return host in {"127.0.0.1", "::1", "localhost"}
+
+
 def _validate_profile_listener(profile_id: str, index: int, listener: Any) -> list[str]:
     errors: list[str] = []
     label = f"{profile_id}.listeners[{index}]"
@@ -410,6 +538,7 @@ def validate_deployment_evidence(
     registry: dict[str, Any] | None = None,
     now: dt.datetime | None = None,
     artifact_root: Path | None = None,
+    allow_archived: bool = False,
 ) -> list[str]:
     """Return all evidence contract violations.
 
@@ -454,6 +583,8 @@ def validate_deployment_evidence(
         errors.append(f"unknown deployment profile {profile_id!r}")
         return errors
     errors.extend(validate_deployment_profile(str(profile_id), profile))
+    if profile.get("lifecycle") == "archived" and not allow_archived:
+        errors.append(f"deployment profile {profile_id!r} is archived and cannot qualify a current candidate")
     if evidence.get("profile_version") != profile.get("profile_version"):
         errors.append("evidence profile_version mismatch")
     if not isinstance(evidence.get("run_id"), str) or not re.fullmatch(r"[A-Za-z0-9._-]{8,80}", evidence.get("run_id", "")):
@@ -781,6 +912,7 @@ def evaluate_deployment_evidence(
     registry: dict[str, Any] | None = None,
     now: dt.datetime | None = None,
     artifact_root: Path | None = None,
+    allow_archived: bool = False,
 ) -> tuple[bool, str]:
     errors = validate_deployment_evidence(
         evidence,
@@ -788,14 +920,17 @@ def evaluate_deployment_evidence(
         registry=registry,
         now=now,
         artifact_root=artifact_root,
+        allow_archived=allow_archived,
     )
     return (not errors, "; ".join(errors) if errors else "ok")
 
 
 __all__ = [
+    "ARCHIVED_WIRE_SERVICES",
     "EVIDENCE_SCHEMA_VERSION",
     "PROFILE_REGISTRY_PATH",
     "PROFILE_SCHEMA_VERSION",
+    "active_profile_ids",
     "evaluate_deployment_evidence",
     "load_profile_registry",
     "profile_map",

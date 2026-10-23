@@ -3,11 +3,124 @@
   "notes": [
     "Deployment profiles are topology policy, not permission to run an active scan.",
     "Every evidence record must observe required and forbidden services explicitly.",
-    "Image digests are supplied by the candidate evidence record, never by a moving tag."
+    "Image digests are supplied by the candidate evidence record, never by a moving tag.",
+    "Archived profiles document pre-4.0 topologies and cannot qualify a current candidate."
   ],
   "profiles": {
+    "cloud_portal": {
+      "profile_version": 1,
+      "lifecycle": "active",
+      "deployment": "cloud_portal",
+      "selected_capabilities": ["web", "central", "timescale", "nf_portal_ingest", "csv_ingest"],
+      "selected_connector": "nf_portal",
+      "required_services": ["openfdd-web", "openfdd-central", "openfdd-timescale"],
+      "optional_services": ["openfdd-mcp"],
+      "forbidden_services": ["openfdd-mqtt", "openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"],
+      "required_images": ["openfdd-web", "openfdd-central", "openfdd-timescale"],
+      "required_execution_suites": ["X", "Y", "Z"],
+      "required_checks": [
+        "deployment.services.web",
+        "deployment.services.central",
+        "deployment.services.timescale",
+        "deployment.cloud.zero_ot",
+        "deployment.auth.multi_tenant",
+        "deployment.egress.nf_emulator_only",
+        "deployment.images.immutable",
+        "deployment.exposure.listeners"
+      ],
+      "auth": {
+        "jwt_required": true,
+        "multi_tenant": true,
+        "min_jwt_secret_chars": 32,
+        "open_bind_escape_hatch": "forbidden",
+        "tenant_fixture": "two_tenants_viewer_operator_admin"
+      },
+      "egress": {
+        "nf_portal": {
+          "production_origin": "operator_configured_https",
+          "qualification_mode": "emulator_only",
+          "qualification_origins": ["http://127.0.0.1:18089"],
+          "real_portal_connections": "forbidden",
+          "allowed_methods": ["POST /api/v1/auth/token", "POST /api/v1/point/query", "GET /api/v1/point/data"],
+          "forbidden_methods": ["POST /api/v1/point/data"]
+        }
+      },
+      "origin": {
+        "required_scheme": "https",
+        "resolved_exposure": "portal_public_web"
+      },
+      "certificate": {
+        "modes": ["provider_managed", "operator_ca"],
+        "trusted_issuer_policy": "provider_chain_or_operator_ca",
+        "secret_references_only": true
+      },
+      "test_mode": "isolated_full",
+      "budgets": {
+        "max_requests": 200,
+        "timeout_s": 10.0,
+        "deadline_s": 300.0,
+        "cleanup_reserved": 10,
+        "max_body_bytes": 1048576
+      },
+      "prohibited_side_effects": [
+        "ot_protocol_requests",
+        "bas_writes",
+        "real_portal_requests",
+        "portal_point_writes",
+        "credential_rotation",
+        "public_management_bind"
+      ],
+      "listeners": [
+        {
+          "service": "openfdd-web",
+          "network_namespace": "portal_public_ingress",
+          "host_ipv4": "provider_public_or_loopback",
+          "host_ipv6": "provider_public_or_loopback",
+          "port": 443,
+          "protocol": "tcp",
+          "authenticated_transport": "tls+jwt",
+          "source_network_aliases": ["internet_client"],
+          "egress_aliases": ["openfdd-central"],
+          "expected_denied_paths": ["public_central", "public_timescale", "public_ot_listener", "plaintext_login"]
+        },
+        {
+          "service": "openfdd-central",
+          "network_namespace": "portal_private",
+          "host_ipv4": "private_only",
+          "host_ipv6": "private_only",
+          "port": 8080,
+          "protocol": "tcp",
+          "authenticated_transport": "jwt_private",
+          "source_network_aliases": ["openfdd-web", "openfdd-mcp"],
+          "egress_aliases": ["openfdd-timescale", "nf_portal_https", "workspace"],
+          "expected_denied_paths": ["public_bind", "open_bind_escape_hatch", "unauthenticated_rest"]
+        },
+        {
+          "service": "openfdd-timescale",
+          "network_namespace": "portal_private",
+          "host_ipv4": "private_only",
+          "host_ipv6": "private_only",
+          "port": 5432,
+          "protocol": "tcp",
+          "authenticated_transport": "postgres_password_private",
+          "source_network_aliases": ["openfdd-central"],
+          "egress_aliases": [],
+          "expected_denied_paths": ["public_bind", "default_password"]
+        }
+      ],
+      "evidence_max_age_seconds": 86400,
+      "source_recipes": [
+        "docker/compose.portal.yml",
+        "docker/compose.timescale.yml",
+        "docker/compose.portal-qual.yml",
+        "scripts/qualification/run_portal_qualification.sh"
+      ],
+      "notes": "Open-FDD 4.0 portal stack: web + private central + private Timescale. NF portal polling and CSV are the only ingest. Qualification talks only to the loopback NF emulator; MQTT, fieldbus, BACnet, Modbus, and Haystack processes are forbidden."
+    },
     "cloud_mqtt_hub": {
       "profile_version": 1,
+      "lifecycle": "archived",
+      "archive_reason": "Pre-4.0 MQTTS hub. MQTT is archived (archive/ot-edge/unqualified-cdaa4f15); use cloud_portal.",
       "deployment": "railway",
       "selected_capabilities": ["web", "central", "mqtt"],
       "selected_connector": "none",
@@ -41,12 +154,7 @@
         "cleanup_reserved": 10,
         "max_body_bytes": 1048576
       },
-      "prohibited_side_effects": [
-        "ot_protocol_requests",
-        "bas_writes",
-        "broker_acl_mutation",
-        "credential_rotation"
-      ],
+      "prohibited_side_effects": ["ot_protocol_requests", "bas_writes", "broker_acl_mutation", "credential_rotation"],
       "listeners": [
         {
           "service": "openfdd-web",
@@ -91,6 +199,8 @@
     },
     "ot_local_bacnet_modbus": {
       "profile_version": 1,
+      "lifecycle": "archived",
+      "archive_reason": "OT split connector profile. BACnet/Modbus wire is archived and not in the 4.0 product.",
       "deployment": "local_ot_lan",
       "selected_capabilities": ["web", "central", "bacnet_modbus"],
       "selected_connector": "bacnet_modbus",
@@ -199,6 +309,8 @@
     },
     "ot_local_haystack": {
       "profile_version": 1,
+      "lifecycle": "archived",
+      "archive_reason": "OT split connector profile. Haystack wire is archived and not in the 4.0 product.",
       "deployment": "local_ot_lan",
       "selected_capabilities": ["web", "central", "haystack"],
       "selected_connector": "haystack",
@@ -295,6 +407,7 @@
     },
     "local_development": {
       "profile_version": 1,
+      "lifecycle": "active",
       "deployment": "loopback_development",
       "selected_capabilities": ["web", "central"],
       "selected_connector": "none",

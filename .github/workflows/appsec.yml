@@ -98,6 +98,20 @@ jobs:
         run: python3 -B -m unittest discover -s tests/security -v
       - name: Qualification unittests
         run: python3 -B -m unittest discover -s tests/qualification -v
+      - name: Portal qualification recipe lint (no containers started)
+        env:
+          OPENFDD_IMAGE_TAG: sha-0000000
+          OPENFDD_DATABASE_URL: postgresql://openfdd@timescale:5432/openfdd
+          OPENFDD_TIMESCALE_PASSWORD: ci-render-only
+          PORTAL_QUAL_WEB_PORT: "18080"
+        run: |
+          for f in scripts/qualification/*.sh scripts/qualification/lib/*.sh; do bash -n "$f"; done
+          (cd scripts/qualification && shellcheck -x run_portal_qualification.sh restore_to_empty.sh \
+            run_isolated_zap_af.sh run_wave_c_isolated.sh lib/portal_stack.sh)
+          docker compose -p openfdd-qual-ci-render --profile nf \
+            -f docker/compose.portal.yml -f docker/compose.timescale.yml \
+            -f docker/compose.portal-qual.yml config --quiet
+          python3 -B scripts/security/deployment_profile_qualification.py --list-profiles
       - name: Protocol connector evaluator selftest
         run: |
           python3 scripts/qualification/protocol_connector_qualification.py --selftest

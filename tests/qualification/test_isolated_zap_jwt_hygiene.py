@@ -40,9 +40,21 @@ class IsolatedZapJwtHygieneTest(unittest.TestCase):
     def test_disposable_web_plus_central(self):
         text = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("openfdd-web", text)
-        self.assertIn("network-alias web", text)
         self.assertIn("http://web:8080", text)
         self.assertIn("@sha256:", text)
+
+    def test_candidate_is_cloud_portal_profile(self):
+        text = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("lib/portal_stack.sh", text)
+        self.assertIn("portal_stack_init zap", text)
+        self.assertIn("trap portal_stack_cleanup EXIT", text)
+        # Scanner joins the compose project's default network, where `web` resolves.
+        self.assertIn('ZAP_NET="${PORTAL_PROJECT}_default"', text)
+        # No short $RANDOM secrets, no open-bind escape hatch, no MQTT wiring.
+        self.assertNotIn("RANDOM", text)
+        self.assertNotIn("OPENFDD_ALLOW_OPEN_BIND=1", text)
+        self.assertNotIn("MQTT", text)
+        self.assertNotIn('ZAP_AUTH_HEADER_VALUE="Bearer ${TOKEN}"', text)
 
 
 if __name__ == "__main__":
