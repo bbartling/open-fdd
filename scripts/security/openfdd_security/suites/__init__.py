@@ -1400,17 +1400,13 @@ def viewer_probe_package(building_id: str) -> bytes:
 
     eq = VIEWER_PROBE_EQUIPMENT
     manifest = {
-        "schema": "openfdd_package_v1",
+        "schema_version": "openfdd_package_v1",
         "building_id": building_id,
         "grid_minutes": 5,
         "timezone": "UTC",
     }
-    mapping = {
-        "equipment_id": eq,
-        "equipType": "ahu",
-        "columns": {"oat": {"role": "outside-air-temp", "unit": "degF"}},
-    }
-    csv_text = "timestamp_utc,oat\n2024-01-01T00:00:00Z,50.0\n2024-01-01T00:05:00Z,50.5\n"
+    mapping = {"equipType": "ahu", "points": {"fan-cmd": "SF_SPD"}}
+    csv_text = "timestamp_utc,SF_SPD\n2024-01-01T00:00:00Z,50.0\n2024-01-01T00:05:00Z,50.5\n"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, data in (
@@ -1459,7 +1455,7 @@ def _viewer_write_request(ctx: SuiteContext, token: str, action: str, building_i
                 "confirm": True,
                 "building_id": building_id,
                 "equipment_id": equipment_id,
-                "csv": "timestamp_utc,oat\n2099-01-01T00:00:00Z,1.0\n",
+                "csv": "timestamp_utc,SF_SPD\n2099-01-01T00:00:00Z,1.0\n",
             },
         )
     if action == "purge":

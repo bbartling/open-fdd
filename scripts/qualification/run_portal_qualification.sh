@@ -15,7 +15,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-# shellcheck source=lib/portal_stack.sh
+# shellcheck source-path=SCRIPTDIR source=lib/portal_stack.sh
 source "$ROOT/scripts/qualification/lib/portal_stack.sh"
 
 portal_require_tag
@@ -86,9 +86,11 @@ else
   portal_step deployment.exposure.private_central_timescale FAIL "central=$central_ports timescale=$ts_ports"
 fi
 unauth_status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PORTAL_BASE/api/tenants" || echo 000)"
-[[ "$unauth_status" == "401" ]] \
-  && portal_step deployment.auth.jwt_required PASS "anonymous /api/tenants → 401" \
-  || portal_step deployment.auth.jwt_required FAIL "anonymous /api/tenants → $unauth_status"
+if [[ "$unauth_status" == "401" ]]; then
+  portal_step deployment.auth.jwt_required PASS "anonymous /api/tenants → 401"
+else
+  portal_step deployment.auth.jwt_required FAIL "anonymous /api/tenants → $unauth_status"
+fi
 
 echo "== Admin login + control plane fixtures via API =="
 portal_login admin admin || portal_die "admin login failed"
@@ -122,8 +124,11 @@ PY
   rm -f "$PORTAL_PRIV/user.$alias.json"
   [[ "$PORTAL_LAST_STATUS" == "200" ]] || { users_ok=0; echo "user $alias upsert → $PORTAL_LAST_STATUS" >&2; }
 done
-(( users_ok )) && portal_step control_plane.users PASS "viewer + operator per tenant via /api/admin/users" \
-  || portal_step control_plane.users FAIL "user upsert failed"
+if (( users_ok )); then
+  portal_step control_plane.users PASS "viewer + operator per tenant via /api/admin/users"
+else
+  portal_step control_plane.users FAIL "user upsert failed"
+fi
 
 jq -c '.tenant_admin_probe | {username, role, tenant_ids, password: "qa-rejected-placeholder-0000"}' \
   "$PORTAL_PLAN" >"$PORTAL_PRIV/tenant_admin.json"
@@ -152,8 +157,11 @@ for i in $(seq 0 $((user_count - 1))); do
     echo "identity mismatch for $alias" >&2
   fi
 done
-(( identity_ok )) && portal_step control_plane.identities PASS "each user logs in with its role and single tenant" \
-  || portal_step control_plane.identities FAIL "login or /api/auth/me mismatch"
+if (( identity_ok )); then
+  portal_step control_plane.identities PASS "each user logs in with its role and single tenant"
+else
+  portal_step control_plane.identities FAIL "login or /api/auth/me mismatch"
+fi
 
 echo "== Seed one canary package per tenant (operator imports) =="
 for side in a b; do

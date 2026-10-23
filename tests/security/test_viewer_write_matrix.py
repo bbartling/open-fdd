@@ -148,7 +148,7 @@ class ViewerWriteMatrixTest(unittest.TestCase):
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names = sorted(zf.namelist())
             manifest = json.loads(zf.read("manifest.json"))
-        self.assertEqual(manifest["schema"], "openfdd_package_v1")
+        self.assertEqual(manifest["schema_version"], "openfdd_package_v1")
         self.assertEqual(manifest["building_id"], "SITE_X")
         self.assertIn("QA_VIEWER_PROBE/history_wide.csv", names)
         self.assertEqual(raw, viewer_probe_package("SITE_X"))

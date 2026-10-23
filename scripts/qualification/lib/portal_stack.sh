@@ -11,6 +11,7 @@
 # with that project. It never calls `down -v` and never prunes.
 
 PORTAL_QUAL_COMPOSE_MIN="2.24.4"
+PORTAL_ALPINE_IMAGE="${OPENFDD_QUAL_ALPINE_IMAGE:-alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc}"
 PORTAL_COMPOSE_PROFILES=()
 PORTAL_LAST_STATUS=""
 PORTAL_QUAL_SECRET_VARS=(
@@ -152,20 +153,45 @@ portal_project_volumes() {
   docker volume ls -q --filter "label=com.docker.compose.project=${PORTAL_PROJECT}"
 }
 
+# portal_volume_name <compose volume key> → this project's docker volume name.
+portal_volume_name() {
+  printf '%s_%s' "$PORTAL_PROJECT" "$1"
+}
+
+portal_project_guard() {
+  [[ -n "${PORTAL_PROJECT:-}" && "$PORTAL_PROJECT" =~ ^openfdd-qual-[a-z0-9-]+$ ]]
+}
+
+# Stops this project and removes only volumes labelled with this project and
+# named with its prefix. Never `down -v`, never prune.
+portal_remove_project_volumes() {
+  local vol
+  portal_project_guard || portal_die "refusing volume removal outside an openfdd-qual-* project"
+  portal_compose down --remove-orphans --timeout 10 >/dev/null 2>&1 || true
+  while read -r vol; do
+    [[ -n "$vol" && "$vol" == "${PORTAL_PROJECT}_"* ]] || continue
+    docker volume rm "$vol" >/dev/null 2>&1 || true
+  done < <(portal_project_volumes 2>/dev/null)
+}
+
+# portal_volume_run <volume> <mode ro|rw> <cmd...> — pinned alpine with the
+# volume at /w (runs as root so it can read the service-owned files).
+portal_volume_run() {
+  local vol="$1" mode="$2"
+  shift 2
+  docker run --rm --network none -v "${vol}:/w:${mode}" "$PORTAL_ALPINE_IMAGE" "$@"
+}
+
 # Project-scoped teardown: this project's containers, networks, and labelled
 # volumes only.
 portal_stack_cleanup() {
-  local rc=$? vol
-  if [[ -n "${PORTAL_PROJECT:-}" && "$PORTAL_PROJECT" =~ ^openfdd-qual-[a-z0-9-]+$ ]]; then
+  local rc=$?
+  if portal_project_guard; then
     if [[ -n "${ART:-}" && -d "$ART" && "${PORTAL_KEEP_LOGS:-1}" == "1" ]]; then
       portal_compose logs --no-color --timestamps >"$ART/compose.log" 2>&1 || true
       portal_redact_file "$ART/compose.log"
     fi
-    portal_compose down --remove-orphans --timeout 10 >/dev/null 2>&1 || true
-    while read -r vol; do
-      [[ -n "$vol" && "$vol" == "${PORTAL_PROJECT}_"* ]] || continue
-      docker volume rm "$vol" >/dev/null 2>&1 || true
-    done < <(portal_project_volumes 2>/dev/null)
+    portal_remove_project_volumes
   fi
   if [[ -n "${PORTAL_PRIV:-}" && -d "$PORTAL_PRIV" ]]; then
     rm -rf "$PORTAL_PRIV"
@@ -187,10 +213,24 @@ for p in priv.iterdir():
         v = p.read_text(encoding="utf-8").strip()
         if len(v) >= 16:
             secrets.add(v)
-text = target.read_text(encoding="utf-8", errors="replace")
+try:
+    text = target.read_text(encoding="utf-8", errors="replace")
+except OSError:
+    try:
+        target.unlink()
+    except OSError:
+        pass
+    print(f"redact: removed unreadable artifact: {target}", file=sys.stderr)
+    sys.exit(0)
+redacted = text
 for v in sorted(secrets, key=len, reverse=True):
-    text = text.replace(v, "[REDACTED]")
-target.write_text(text, encoding="utf-8")
+    redacted = redacted.replace(v, "[REDACTED]")
+if redacted != text:
+    try:
+        target.write_text(redacted, encoding="utf-8")
+    except OSError:
+        target.unlink(missing_ok=True)
+        print(f"redact: removed unwritable artifact with secrets: {target}", file=sys.stderr)
 PY
 }
 
@@ -205,7 +245,8 @@ portal_step() {
 # Writes the body to stdout and the HTTP status to $PORTAL_LAST_STATUS.
 portal_api() {
   local ident="$1" method="$2" path="$3" body="${4:-}" ctype="${5:-application/json}"
-  local out="$PORTAL_PRIV/resp.$$" args=(-sS --max-time 30 -o "$out" -w '%{http_code}' -X "$method")
+  local out="$PORTAL_PRIV/resp.$$"
+  local args=(-sS --max-time 30 -o "$out" -w '%{http_code}' -X "$method")
   if [[ "$ident" != "-" ]]; then
     args+=(-H "@$PORTAL_PRIV/hdr.$ident")
   fi
@@ -238,6 +279,17 @@ PY
 portal_psql() {
   portal_compose exec -T timescale \
     psql -U openfdd -d "${PORTAL_PSQL_DB:-openfdd}" -At -v ON_ERROR_STOP=1 -c "$1"
+}
+
+# Waits for the real Timescale server; the entrypoint's init-time server only
+# listens on the unix socket, so probe TCP 127.0.0.1 inside the container.
+portal_wait_timescale() {
+  local deadline=$((SECONDS + ${1:-120}))
+  until portal_compose exec -T timescale pg_isready -q -h 127.0.0.1 -U openfdd -d openfdd >/dev/null 2>&1 \
+      && portal_psql "SELECT 1" >/dev/null 2>&1; do
+    (( SECONDS >= deadline )) && portal_die "timescale never became ready"
+    sleep 2
+  done
 }
 
 # Row count + md5 over a site's samples in a stable order.
