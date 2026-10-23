@@ -257,6 +257,8 @@ pub(crate) fn truncate_sql(tables: &[&str]) -> anyhow::Result<String> {
 
 /// Opt-in reset also drops the file-volume dataset list and job metadata.
 /// Tenant and user admin files under `openfdd/control_plane` stay.
+/// Security audit JSONL under `logs/` is intentionally preserved (not Timescale;
+/// not part of the historian wipe).
 pub(crate) fn clear_workspace_datasets_and_jobs(root: &std::path::Path) -> std::io::Result<()> {
     let jobs = root.join("jobs");
     if jobs.exists() {
@@ -601,6 +603,30 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(plane.join("users.json")).unwrap(),
             "{\"keep\":true}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn guarded_reset_leaves_security_audit_jsonl_in_place() {
+        let root = std::env::temp_dir().join(format!("openfdd-reset-audit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let logs = root.join("logs");
+        let jobs = root.join("jobs").join("job-1");
+        std::fs::create_dir_all(&logs).unwrap();
+        std::fs::create_dir_all(&jobs).unwrap();
+        let audit = logs.join("security_audit.jsonl");
+        std::fs::write(&audit, b"{\"channel\":\"security_audit\"}\n").unwrap();
+        std::fs::write(jobs.join("job.json"), b"{}").unwrap();
+        clear_workspace_datasets_and_jobs(&root).unwrap();
+        assert!(!root.join("jobs").exists());
+        assert!(
+            audit.exists(),
+            "DB/file reset must not delete logs/security_audit.jsonl"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&audit).unwrap(),
+            "{\"channel\":\"security_audit\"}\n"
         );
         let _ = std::fs::remove_dir_all(&root);
     }

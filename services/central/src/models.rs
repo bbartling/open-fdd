@@ -58,6 +58,21 @@ pub struct OkHealthResponse {
     /// Health stays HTTP 200 with shed_state when under memory pressure (capacity 24b).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_budget: Option<Value>,
+    /// Non-blocking security-audit file sink (LOG-02/03). Process-local; not Timescale.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audit_sink: Option<AuditSinkHealth>,
+}
+
+/// `/api/health.audit_sink` — file writer queue health (no paths or payloads).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuditSinkHealth {
+    /// True after a dropped enqueue or a writer I/O failure; clears on next successful write.
+    pub degraded: bool,
+    /// Events dropped because the bounded queue was full (lifetime until process restart).
+    pub dropped: u64,
+    /// Short stable code when the last write failed (`unwritable` | `io`), else null.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_write_error: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

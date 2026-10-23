@@ -70,8 +70,25 @@ impl BridgeClient {
         }
     }
 
+    /// MCP-generated correlation id for central (`x-request-id`). Metadata only:
+    /// a fresh UUID — never derived from tool arguments, tokens, or stdio.
+    fn correlation_id() -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
+
+    fn with_correlation(
+        &self,
+        req: reqwest::blocking::RequestBuilder,
+    ) -> reqwest::blocking::RequestBuilder {
+        self.auth(req)
+            .header("x-request-id", Self::correlation_id())
+    }
+
     fn request(&self, req: reqwest::blocking::RequestBuilder) -> Result<Value, String> {
-        let response = self.auth(req).send().map_err(|e| e.to_string())?;
+        let response = self
+            .with_correlation(req)
+            .send()
+            .map_err(|e| e.to_string())?;
         let status = response.status();
         let text = response.text().map_err(|e| e.to_string())?;
         let body: Value = serde_json::from_str(&text)
@@ -137,7 +154,7 @@ impl BridgeClient {
             .http_long
             .post(self.url("/api/csv/import/preview"))
             .multipart(form);
-        self.auth(req)
+        self.with_correlation(req)
             .send()
             .map_err(|e| e.to_string())?
             .json()
@@ -619,5 +636,58 @@ mod tests {
     #[test]
     fn rejects_path_traversal() {
         assert!(read_local_csv_path("../etc/passwd").is_err());
+    }
+
+    #[test]
+    fn outbound_request_carries_correlation_header_not_from_tool_body() {
+        let http = Client::builder()
+            .timeout(Duration::from_secs(1))
+            .build()
+            .expect("reqwest client");
+        let client = BridgeClient {
+            http: http.clone(),
+            http_long: http,
+            base: "http://127.0.0.1:9".into(),
+            token: None,
+        };
+        let tool_body = json!({
+            "password": "hunter2-canary",
+            "path": "/should-not-leak",
+            "token": "secret-token-value"
+        });
+        let built = client
+            .with_correlation(client.http.get("http://example.test/api/health"))
+            .build()
+            .expect("build request");
+        let header = built
+            .headers()
+            .get("x-request-id")
+            .expect("x-request-id present")
+            .to_str()
+            .expect("header utf8");
+        assert!(
+            uuid::Uuid::parse_str(header).is_ok(),
+            "correlation id must be a uuid, got {header}"
+        );
+        let body_text = tool_body.to_string();
+        assert!(!header.contains("hunter2"));
+        assert!(!header.contains("should-not-leak"));
+        assert!(!header.contains("secret-token"));
+        assert!(
+            !body_text.contains(header),
+            "header must not be derived from the tool body"
+        );
+        // A second call gets a different id (not a hash of a fixed body).
+        let header2 = client
+            .with_correlation(client.http.get("http://example.test/api/health"))
+            .build()
+            .expect("build request")
+            .headers()
+            .get("x-request-id")
+            .expect("x-request-id")
+            .to_str()
+            .expect("utf8")
+            .to_string();
+        assert_ne!(header, header2);
     }
 }

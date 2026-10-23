@@ -627,6 +627,14 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         fdd_engine: Some("postgres-sql".into()),
         dual_write: false,
         memory_budget: Some(fdd_resources::memory_budget_json()),
+        audit_sink: {
+            let s = open_fdd_edge_prototype::auth::audit::sink_status();
+            Some(crate::models::AuditSinkHealth {
+                degraded: s.degraded,
+                dropped: s.dropped,
+                last_write_error: s.last_write_error.map(str::to_string),
+            })
+        },
     })
 }
 
@@ -8880,6 +8888,7 @@ mod version_tests {
     }
 
     fn audit_events(path: &std::path::Path) -> Vec<serde_json::Value> {
+        open_fdd_edge_prototype::auth::audit::flush_sink();
         std::fs::read_to_string(path)
             .unwrap_or_default()
             .lines()
