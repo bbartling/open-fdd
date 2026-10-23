@@ -2075,6 +2075,32 @@ fn wrap_rule_sql(sql_body: &str, rule: &RuleSpec) -> String {
     }
 }
 
+/// Columns of the TEMP `history` pivot for one rule.
+fn rule_history_roles(rule: &RuleSpec) -> Vec<String> {
+    let mut role_set: BTreeSet<String> = rule.required_roles.iter().cloned().collect();
+    for r in &rule.optional_roles {
+        role_set.insert(r.clone());
+    }
+    for extra in ["fan_status", "fan_cmd", "occ_mode"] {
+        role_set.insert(extra.into());
+    }
+    for extra in [
+        "oa_t",
+        "web_oa_t",
+        "chw_supply_t",
+        "chw_return_t",
+        "chw_flow",
+        "chw_dp",
+    ] {
+        if rule.required_roles.iter().any(|r| r == extra)
+            || rule.optional_roles.iter().any(|r| r == extra)
+        {
+            role_set.insert(extra.into());
+        }
+    }
+    role_set.into_iter().filter(|r| safe_ident(r)).collect()
+}
+
 fn confirm_seconds_from_payload(payload: &Value, rule: &RuleSpec) -> u32 {
     if let Some(cs) = payload
         .get("confirmation_seconds")
@@ -2625,28 +2651,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
             }
         };
 
-        let mut role_set: BTreeSet<String> = rule.required_roles.iter().cloned().collect();
-        for r in &rule.optional_roles {
-            role_set.insert(r.clone());
-        }
-        for extra in ["fan_status", "fan_cmd", "occ_mode"] {
-            role_set.insert(extra.into());
-        }
-        for extra in [
-            "oa_t",
-            "web_oa_t",
-            "chw_supply_t",
-            "chw_return_t",
-            "chw_flow",
-            "chw_dp",
-        ] {
-            if rule.required_roles.iter().any(|r| r == extra)
-                || rule.optional_roles.iter().any(|r| r == extra)
-            {
-                role_set.insert(extra.into());
-            }
-        }
-        let roles: Vec<String> = role_set.into_iter().filter(|r| safe_ident(r)).collect();
+        let roles = rule_history_roles(rule);
 
         let mut rule_rows = Vec::new();
         for (eq_id, _) in &run_targets {
@@ -4355,3 +4360,7 @@ rules:
         }
     }
 }
+
+#[cfg(test)]
+#[path = "duplicate_timestamp_parity.rs"]
+mod duplicate_timestamp_parity;

@@ -830,14 +830,7 @@ mod tests {
             |pid: &str, equip: &str, kind: &str, role: &str| fdd_tsdb::PortalInventoryPoint {
                 portal_point_id: pid.into(),
                 equipment_id: equip.into(),
-                equip_type: Some(
-                    if equip.starts_with("AHU") {
-                        "ahu"
-                    } else {
-                        "vav"
-                    }
-                    .into(),
-                ),
+                equip_type: Some(kind.into()),
                 role: role.into(),
                 unit: None,
             };
