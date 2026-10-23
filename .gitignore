@@ -19,6 +19,7 @@ __pycache__/
 .pytest_cache/
 /.env
 edge/workspace/
+services/central/workspace/
 auth.env.local
 auth.env.local.*
 workspace/auth.env.local
