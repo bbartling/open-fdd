@@ -178,7 +178,7 @@ portal_remove_project_volumes() {
 portal_volume_run() {
   local vol="$1" mode="$2"
   shift 2
-  docker run --rm --network none -v "${vol}:/w:${mode}" "$PORTAL_ALPINE_IMAGE" "$@"
+  docker run --rm -i --network none -v "${vol}:/w:${mode}" "$PORTAL_ALPINE_IMAGE" "$@"
 }
 
 # Project-scoped teardown: this project's containers, networks, and labelled
