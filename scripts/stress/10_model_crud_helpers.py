@@ -136,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
                 json_body={
                     "building_id": building_id,
                     "meta": meta,
+                    "confirm": True,
                     "expected_revision": "stale-rev-not-current",
                 },
                 timeout=30.0,
