@@ -497,11 +497,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let fifo = dir.path().join("audit.fifo");
         // Writer blocks on open(append) until a reader appears — fills the queue.
-        let status = std::process::Command::new("mkfifo")
-            .arg(&fifo)
-            .status()
-            .expect("mkfifo available");
-        assert!(status.success());
+        let path =
+            std::ffi::CString::new(fifo.to_str().expect("fifo path is utf-8")).expect("fifo path");
+        let rc = unsafe { libc::mkfifo(path.as_ptr(), 0o600) };
+        assert_eq!(rc, 0, "mkfifo: {}", std::io::Error::last_os_error());
         std::env::set_var("OPENFDD_AUDIT_LOG_PATH", fifo.to_str().unwrap());
         // Clamp floor is 32; fill past that while the writer is stuck on the fifo.
         std::env::set_var("OPENFDD_AUDIT_QUEUE_CAP", "32");
