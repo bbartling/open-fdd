@@ -33,7 +33,6 @@ vi.mock("../api/mappingApi", () => ({
   })),
   putSessionConfig: vi.fn(async () => ({ ok: true })),
   listCookbookRoles: vi.fn(async () => []),
-  updatePackageRoles: vi.fn(async () => ({ ok: true })),
   buildMappingManifest: vi.fn(() => "{}"),
   invertRolesToSessionMap: vi.fn(() => ({})),
 }));

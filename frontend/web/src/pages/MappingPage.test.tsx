@@ -12,7 +12,6 @@ vi.mock("../api/mappingApi", async () => {
     listPackageBuildings: vi.fn(),
     getPackageMapping: vi.fn(),
     getSessionConfig: vi.fn(),
-    updatePackageRoles: vi.fn(),
     putSessionConfig: vi.fn(),
     listCookbookRoles: vi.fn(async () => [
       "fan_cmd",
@@ -84,7 +83,6 @@ import {
   getSessionConfig,
   listPackageBuildings,
   putSessionConfig,
-  updatePackageRoles,
 } from "../api/mappingApi";
 
 function renderMapping(entry = "/mapping?site=B1&eq=AHU_1") {
@@ -181,12 +179,6 @@ describe("MappingPage", () => {
       ],
       validation: { blocker_count: 0, warning_count: 1, equipment_count: 1 },
     });
-    vi.mocked(updatePackageRoles).mockResolvedValue({
-      ok: true,
-      building_id: "B1",
-      equipment_id: "AHU_1",
-      roles: { SF_SPD: "fan_status" },
-    });
     vi.mocked(putSessionConfig).mockResolvedValue({
       ok: true,
       config: {
@@ -261,7 +253,6 @@ describe("MappingPage", () => {
         /orphaned/,
       );
       expect(screen.queryByText(/Save mapping/)).toBeNull();
-      expect(updatePackageRoles).not.toHaveBeenCalled();
       expect(putSessionConfig).not.toHaveBeenCalled();
       expect(purgeHistorian).not.toHaveBeenCalled();
     },

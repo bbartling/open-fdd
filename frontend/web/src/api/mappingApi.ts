@@ -80,20 +80,6 @@ export interface PackageBuildingsResponse {
   error?: string;
 }
 
-export interface UpdatePackageRolesResponse {
-  ok: boolean;
-  error?: string;
-  building_id?: string;
-  equipment_id?: string;
-  roles?: Record<string, string>;
-  ignored_columns?: string[];
-  equipment_written?: number;
-  total_rows?: number;
-  /** False when this save wrote the column map and did not activate ingest. */
-  ingest_plan_activated?: boolean;
-  saved_authority?: string;
-}
-
 export interface SessionConfigResponse {
   ok: boolean;
   persisted?: boolean;
@@ -126,7 +112,6 @@ export interface SessionConfig {
 
 export const PACKAGE_MAPPING_PATH = "/api/csv/import/package/mapping";
 export const PACKAGE_BUILDINGS_PATH = "/api/csv/import/package/buildings";
-export const PACKAGE_ROLES_PATH = "/api/csv/import/package/roles";
 export const SESSION_CONFIG_PATH = "/api/fdd/session-config";
 export const FDD_ROLES_PATH = "/api/fdd/roles";
 
@@ -163,27 +148,6 @@ export async function getPackageMapping(
     : apiFetch<PackageMappingResponse>(path));
   if (!body.ok) {
     throw new Error(body.error || "Failed to load package mapping");
-  }
-  return body;
-}
-
-/** Persist column→role map for one equipment and re-ingest parquet. */
-export async function updatePackageRoles(
-  buildingId: string,
-  equipmentId: string,
-  roles: Record<string, string>,
-): Promise<UpdatePackageRolesResponse> {
-  const body = await apiFetch<UpdatePackageRolesResponse>(PACKAGE_ROLES_PATH, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      building_id: buildingId,
-      equipment_id: equipmentId,
-      roles,
-    }),
-  });
-  if (!body.ok) {
-    throw new Error(body.error || "Failed to update package roles");
   }
   return body;
 }
