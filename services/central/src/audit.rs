@@ -223,6 +223,8 @@ pub enum AuditAction {
     ActionDelete,
     #[serde(rename = "actions.clear")]
     ActionsClear,
+    #[serde(rename = "fdd.run")]
+    FddRun,
 }
 
 impl AuditAction {
@@ -249,6 +251,7 @@ impl AuditAction {
             Self::DatasetDelete => "dataset.delete",
             Self::ActionDelete => "actions.delete",
             Self::ActionsClear => "actions.clear",
+            Self::FddRun => "fdd.run",
         }
     }
 }

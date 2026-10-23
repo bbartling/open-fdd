@@ -235,10 +235,13 @@ pub async fn apply(
     }
     let entries = bootstrap_points(snapshot);
     if !entries.is_empty() && outcome.errors.is_empty() {
+        // The historian keeps the connection id (`nf:…`). The plan slug drops
+        // colons; using the connection id here fails validation and leaves
+        // the startup plan unmatched.
         let scope = ModelScope {
             tenant_id: site.tenant_id.clone(),
             site_id: site.building_id.clone(),
-            provider_instance_id: site.provider_instance_id.clone(),
+            provider_instance_id: site.model.provider_instance_id.clone(),
         };
         match model_from_point_map(&scope, &entries) {
             Ok(model) => {

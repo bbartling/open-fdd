@@ -248,12 +248,6 @@ impl Runtime {
         let poll_enabled = std::env::var("OPENFDD_PROVIDER_POLL")
             .ok()
             .is_some_and(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"));
-        let mut site_health: Vec<SiteProviderHealth> = loaded
-            .sites
-            .iter()
-            .map(|site| health_row(site, initial_status(site), None))
-            .collect();
-        site_health.extend(loaded.failures.iter().map(failure_row));
         let config_error = loaded.fatal.clone().or_else(|| {
             if loaded.failures.is_empty() {
                 None
@@ -286,11 +280,31 @@ impl Runtime {
         if compiled > 0 {
             tracing::info!(compiled, "committed ingest plans compiled");
         }
+        let mut site_health = Vec::with_capacity(loaded.sites.len() + loaded.failures.len());
         for site in &loaded.sites {
-            if let Some(rev) = models.active_revision(&site.tenant_id, &site.building_id) {
-                tracing::debug!(building_id = %site.building_id, %rev, "active ingest revision");
+            let (status, message) = opening_health(site, &models, poll_enabled);
+            if let Some(code) = message.as_deref().filter(|code| code.starts_with("plan_")) {
+                let plan_providers = models
+                    .active_plan(&site.tenant_id, &site.building_id)
+                    .map(|plan| {
+                        plan.groups
+                            .iter()
+                            .map(|group| group.provider_instance_id.as_str())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                warn!(
+                    building_id = %site.building_id,
+                    tenant_id = %site.tenant_id,
+                    provider_instance_id = %site.provider_instance_id,
+                    plan_providers = ?plan_providers,
+                    reason = code,
+                    "ingest site skipped; committed plan identity does not match the configured site"
+                );
             }
+            site_health.push(health_row(site, status, message));
         }
+        site_health.extend(loaded.failures.iter().map(failure_row));
         Arc::new(Self {
             sites: loaded.sites,
             models: StdMutex::new(models),
@@ -343,6 +357,19 @@ impl Runtime {
 
     pub async fn health_snapshot(&self) -> ProvidersHealthBody {
         self.health.lock().await.clone()
+    }
+
+    /// Record a plan-identity skip on the health row. Does not invent a poll time.
+    pub async fn note_plan_identity(&self, building_id: &str, code: &str) {
+        let mut guard = self.health.lock().await;
+        if let Some(site) = guard
+            .sites
+            .iter_mut()
+            .find(|site| site.building_id == building_id)
+        {
+            site.health.status = ProviderHealthStatus::Error;
+            site.health.message = Some(safe_operator_code(code));
+        }
     }
 
     /// Health row only. Used to assert `record_hourly` without loading sites.
@@ -449,11 +476,29 @@ pub async fn providers_sites(
     }))
 }
 
-fn initial_status(site: &SiteConfig) -> ProviderHealthStatus {
+fn opening_health(
+    site: &SiteConfig,
+    models: &CommittedModelStore,
+    poll_enabled: bool,
+) -> (ProviderHealthStatus, Option<String>) {
     if matches!(site.kind, ProviderKind::AceIot) {
-        ProviderHealthStatus::NotImplemented
-    } else {
-        ProviderHealthStatus::NotConfigured
+        return (ProviderHealthStatus::NotImplemented, None);
+    }
+    let Some(plan) = models.active_plan(&site.tenant_id, &site.building_id) else {
+        return (
+            ProviderHealthStatus::Error,
+            Some("plan_not_committed".into()),
+        );
+    };
+    match committed_model::schedule_plan_devices(
+        &site.tenant_id,
+        &site.building_id,
+        &site.provider_instance_id,
+        plan,
+    ) {
+        Err(code) => (ProviderHealthStatus::Error, Some(code.to_string())),
+        Ok(_) if poll_enabled => (ProviderHealthStatus::Degraded, Some("awaiting_poll".into())),
+        Ok(_) => (ProviderHealthStatus::NotConfigured, None),
     }
 }
 

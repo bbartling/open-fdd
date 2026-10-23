@@ -265,6 +265,30 @@ fn valid_explicit_id(id: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | ':' | '-'))
 }
 
+/// Connection id (`nf:nf-bosspi`, `nf:SITE:digest`) and the committed-plan slug
+/// (`nf-bosspi`, `nf-SITE-digest`) name one provider. The plan slug cannot
+/// contain `:`, so an exact string compare drops every env-configured site.
+pub fn provider_ids_equivalent(left: &str, right: &str) -> bool {
+    if left == right {
+        return true;
+    }
+    if !left.is_empty() && left.replace(':', "-") == right.replace(':', "-") {
+        return true;
+    }
+    explicit_connection_matches(left, right) || explicit_connection_matches(right, left)
+}
+
+/// `{kind}:{explicit}` where `explicit` is the plan slug (no further colon).
+fn explicit_connection_matches(connection: &str, model_slug: &str) -> bool {
+    let Some((kind, explicit)) = connection.split_once(':') else {
+        return false;
+    };
+    if explicit.is_empty() || explicit.contains(':') || model_slug.is_empty() {
+        return false;
+    }
+    matches!(kind, "nf" | "ace_iot" | "open_meteo") && explicit == model_slug
+}
+
 pub fn acceptable_unit(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() || trimmed.chars().count() > 32 {
@@ -376,6 +400,21 @@ mod tests {
         assert_ne!(a, "nf:SITE");
         let explicit = connection_id("nf", "SITE", "https://a.example", Some("portal-1")).unwrap();
         assert_eq!(explicit, "nf:portal-1");
+    }
+
+    #[test]
+    fn connection_id_matches_the_plan_slug() {
+        assert!(provider_ids_equivalent("nf:nf-bosspi", "nf-bosspi"));
+        assert!(provider_ids_equivalent("nf-bosspi", "nf:nf-bosspi"));
+        assert!(provider_ids_equivalent(
+            "nf:SITE:abc123def456",
+            "nf-SITE-abc123def456"
+        ));
+        assert!(provider_ids_equivalent("nf:portal-1", "portal-1"));
+        assert!(provider_ids_equivalent("ace_iot:edge-1", "edge-1"));
+        assert!(!provider_ids_equivalent("nf:nf-bosspi", "nf-other"));
+        assert!(!provider_ids_equivalent("nf:SITE:abc", "nf-SITE-def"));
+        assert!(!provider_ids_equivalent("nf:portal-1", "portal-2"));
     }
 
     #[test]

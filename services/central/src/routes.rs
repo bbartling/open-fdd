@@ -1342,6 +1342,42 @@ fn admin_put_historian_limits_inner(
     Ok(Json(json!({"ok": true, "limits": lim})))
 }
 
+/// Operator or admin before `/api/fdd/run` budgets, starts an action, or runs rules.
+fn require_fdd_operator(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<auth::AuthUser, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(headers).map_err(|detail| {
+        let mut audit = AuditEvent::new(AuditAction::FddRun);
+        audit
+            .target(TargetType::Route, "/api/fdd/run")
+            .deny(ReasonCode::from_auth_detail(&detail))
+            .status(StatusCode::UNAUTHORIZED)
+            .emit();
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": detail})),
+        )
+    })?;
+    if !user.role.can_issue_commands() {
+        let mut audit = AuditEvent::new(AuditAction::FddRun);
+        audit
+            .user(&user)
+            .target(TargetType::Route, "/api/fdd/run")
+            .deny(ReasonCode::RoleRequired)
+            .status(StatusCode::FORBIDDEN)
+            .emit();
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "ok": false,
+                "error": "operator or admin role required"
+            })),
+        ));
+    }
+    Ok(user)
+}
+
 /// Operator or admin role. Checked before a dataset write reads an archive
 /// or touches files, the historian, or the audit log.
 fn require_dataset_writer(
@@ -2105,13 +2141,31 @@ pub async fn agent_tools() -> Json<AgentToolsResponse> {
     tag = "central",
     security(("bearerAuth" = [])),
     request_body = FddRunRequest,
-    responses((status = 200, description = "FDD registry or ad-hoc SQL run result", body = Object))
+    responses(
+        (status = 200, description = "FDD registry or ad-hoc SQL run result", body = Object),
+        (status = 403, description = "Operator or admin role required, or site out of scope")
+    )
 )]
 pub async fn fdd_run(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<FddRunRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Role and site scope before budget, the actions log, or a registry run.
+    require_fdd_operator(&state, &headers)?;
+    // Resolve building_id from top-level field, or nested `params.building_id`
+    // (the hunt curl nests it inside params). Trim/blank guarded so an empty
+    // string never scopes to `building=/`.
+    let building_id = body
+        .building_id
+        .as_deref()
+        .or_else(|| body.params.get("building_id").and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
+        return Err(deny);
+    }
     if let Err(err) =
         enforce_tenant_budget(&state, &headers, crate::tenant_budget::BudgetKind::FddRun)
     {
@@ -2127,19 +2181,6 @@ pub async fn fdd_run(
             "ok": false,
             "error": "raw SQL rejected on /api/fdd/run; use mode=registry with typed params"
         })));
-    }
-    // Resolve building_id from top-level field, or nested `params.building_id`
-    // (the hunt curl nests it inside params). Trim/blank guarded so an empty
-    // string never scopes to `building=/`.
-    let building_id = body
-        .building_id
-        .as_deref()
-        .or_else(|| body.params.get("building_id").and_then(Value::as_str))
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, building_id.as_deref()) {
-        return Err(deny);
     }
     // Hunt / nightly bench may nest rule_ids under params; hoist so
     // run_registry's top-level filter applies (else all rules → timeout → {}).
@@ -8995,6 +9036,158 @@ mod version_tests {
         }
         files.sort();
         files.join("\n")
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE and historian mode for the run-trigger role matrix"
+    )]
+    async fn fdd_run_requires_operator_and_site_scope() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let audit_dir = tempfile::tempdir().unwrap();
+        let audit_path = audit_dir.path().join("security_audit.jsonl");
+        let _historian = HistorianEnv::isolate(
+            workspace.path().join("parquet").to_str().unwrap(),
+            audit_path.to_str().unwrap(),
+        );
+        struct BudgetEnv(Option<String>);
+        impl Drop for BudgetEnv {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var("OPENFDD_TENANT_BUDGETS", value),
+                    None => std::env::remove_var("OPENFDD_TENANT_BUDGETS"),
+                }
+            }
+        }
+        let _budget = BudgetEnv(std::env::var("OPENFDD_TENANT_BUDGETS").ok());
+        std::env::remove_var("OPENFDD_TENANT_BUDGETS");
+
+        let tenant_a = "w9run-a";
+        let plane = crate::tenant::ControlPlane {
+            tenants: vec![
+                crate::tenant::TenantRecord {
+                    id: tenant_a.into(),
+                    name: "A".into(),
+                    building_ids: vec!["W9_OWN".into()],
+                },
+                crate::tenant::TenantRecord {
+                    id: "w9run-b".into(),
+                    name: "B".into(),
+                    building_ids: vec!["W9_FOREIGN".into()],
+                },
+            ],
+        };
+        plane.save(workspace.path()).unwrap();
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("fdd-run-role-matrix-test-secret-not-a-credential".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let app = router(Arc::clone(&state));
+        let membership = vec![tenant_a.to_string()];
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("w9run-viewer", crate::auth::Role::Viewer, 600, &membership)
+            .unwrap();
+        let operator = state
+            .auth
+            .issue_token_with_tenants(
+                "w9run-operator",
+                crate::auth::Role::Operator,
+                600,
+                &membership,
+            )
+            .unwrap();
+
+        let actions_log = workspace.path().join("data/actions/log.jsonl");
+        let actions_before = std::fs::read_to_string(&actions_log).unwrap_or_default();
+
+        let (status, body) = post_fdd(&app, &viewer, "W9_OWN").await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        assert_eq!(body["ok"], false);
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap_or("")
+                .contains("operator or admin role required"),
+            "{body}"
+        );
+        let event = last_audit_event(&audit_path);
+        assert_eq!(event["schema"], "openfdd.audit.v1", "{event}");
+        assert_eq!(event["action"], "fdd.run", "{event}");
+        assert_eq!(event["decision"], "deny", "{event}");
+        assert_eq!(event["outcome"], "failed", "{event}");
+        assert_eq!(event["http_status"], 403, "{event}");
+        assert_eq!(event["reason"], "role_required", "{event}");
+        assert_eq!(event["role"], "viewer", "{event}");
+        assert_eq!(event["actor"], "w9run-viewer", "{event}");
+        assert_eq!(event["target_type"], "route", "{event}");
+        assert_eq!(event["target_id"], "/api/fdd/run", "{event}");
+        assert_eq!(
+            std::fs::read_to_string(&actions_log).unwrap_or_default(),
+            actions_before,
+            "viewer denial started a run"
+        );
+
+        let (status, body) = post_fdd(&app, &operator, "W9_FOREIGN").await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap_or("")
+                .contains("building not in tenant scope"),
+            "{body}"
+        );
+        let event = last_audit_event(&audit_path);
+        assert_eq!(event["action"], "site.access", "{event}");
+        assert_eq!(event["decision"], "deny", "{event}");
+        assert_eq!(event["reason"], "site_scope", "{event}");
+        assert_eq!(event["http_status"], 403, "{event}");
+        assert_eq!(event["target_id"], "W9_FOREIGN", "{event}");
+        assert_eq!(
+            std::fs::read_to_string(&actions_log).unwrap_or_default(),
+            actions_before,
+            "foreign-site denial started a run"
+        );
+
+        let (status, body) = post_fdd(&app, &operator, "W9_OWN").await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let actions_after = std::fs::read_to_string(&actions_log).unwrap_or_default();
+        assert!(
+            actions_after.contains("fdd_run"),
+            "operator run did not reach the actions log: {actions_after}"
+        );
+    }
+
+    async fn post_fdd(
+        app: &axum::Router,
+        token: &str,
+        building_id: &str,
+    ) -> (StatusCode, serde_json::Value) {
+        let body = serde_json::json!({
+            "building_id": building_id,
+            "mode": "registry",
+            "rule_ids": ["SAT"],
+        });
+        let request = Request::post("/api/fdd/run")
+            .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        (status, body)
     }
 
     fn package_zip(building_id: &str) -> Vec<u8> {

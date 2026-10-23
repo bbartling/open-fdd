@@ -122,21 +122,7 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
         if !still_owner {
             return Ok(());
         }
-        let planned = schedule::due_windows(
-            now,
-            chrono::Duration::seconds(publication_delay_secs() as i64),
-            catchup_hours(),
-            300,
-            crate::providers::hourly::HourlyPolicy::from_env().window_secs,
-            &devices_from_state(state),
-        );
-        for job in planned {
-            state
-                .ingest_queue
-                .enqueue(job, now)
-                .await
-                .map_err(|err| err.to_string())?;
-        }
+        enqueue_due_windows(state, now).await?;
     }
     let claimed = state
         .ingest_queue
@@ -194,7 +180,10 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> FinishOutcome {
     let Some(site) = state.providers.sites.iter().find(|site| {
         site.building_id == job.canonical_site
             && site.tenant_id == job.tenant_id
-            && site.provider_instance_id == job.provider_instance_id
+            && crate::providers::http_policy::provider_ids_equivalent(
+                &site.provider_instance_id,
+                &job.provider_instance_id,
+            )
     }) else {
         return FinishOutcome::Permanent {
             code: "site_not_configured".into(),
@@ -278,8 +267,38 @@ fn portal_throttled(err: &str) -> bool {
     lower.contains("429") || lower.contains("too many") || lower.contains("throttled")
 }
 
-fn devices_from_state(state: &AppState) -> Vec<ScheduleDevice> {
+/// Plan due windows and enqueue them. Identity mismatches are warned and
+/// written onto provider health; they are not dropped quietly.
+pub(crate) async fn enqueue_due_windows(
+    state: &Arc<AppState>,
+    now: chrono::DateTime<Utc>,
+) -> Result<usize, String> {
+    let (devices, mismatches) = devices_from_state(state);
+    for (building_id, code) in &mismatches {
+        state.providers.note_plan_identity(building_id, code).await;
+    }
+    let planned = schedule::due_windows(
+        now,
+        chrono::Duration::seconds(publication_delay_secs() as i64),
+        catchup_hours(),
+        300,
+        crate::providers::hourly::HourlyPolicy::from_env().window_secs,
+        &devices,
+    );
+    let count = planned.len();
+    for job in planned {
+        state
+            .ingest_queue
+            .enqueue(job, now)
+            .await
+            .map_err(|err| err.to_string())?;
+    }
+    Ok(count)
+}
+
+fn devices_from_state(state: &AppState) -> (Vec<ScheduleDevice>, Vec<(String, &'static str)>) {
     let mut devices = Vec::new();
+    let mut mismatches = Vec::new();
     for site in &state.providers.sites {
         let plan = {
             let models = state
@@ -292,48 +311,67 @@ fn devices_from_state(state: &AppState) -> Vec<ScheduleDevice> {
                 .cloned()
         };
         let Some(plan) = plan else {
+            warn!(
+                building_id = %site.building_id,
+                tenant_id = %site.tenant_id,
+                provider_instance_id = %site.provider_instance_id,
+                reason = "plan_not_committed",
+                "ingest site skipped; no committed ingest plan"
+            );
+            mismatches.push((site.building_id.clone(), "plan_not_committed"));
             continue;
         };
-        devices.extend(schedule_devices(
+        match crate::providers::committed_model::schedule_plan_devices(
             &site.tenant_id,
             &site.building_id,
             &site.provider_instance_id,
             &plan,
-        ));
+        ) {
+            Ok(planned) => {
+                devices.extend(planned.into_iter().map(|device| ScheduleDevice {
+                    tenant_id: site.tenant_id.clone(),
+                    canonical_site: site.building_id.clone(),
+                    provider_instance_id: device.provider_instance_id,
+                    device_id: device.equipment_id,
+                    model_revision: device.revision_id,
+                    estimated_cost: device.estimated_cost,
+                }));
+            }
+            Err(code) => {
+                let plan_providers: Vec<&str> = plan
+                    .groups
+                    .iter()
+                    .map(|group| group.provider_instance_id.as_str())
+                    .collect();
+                warn!(
+                    building_id = %site.building_id,
+                    tenant_id = %site.tenant_id,
+                    provider_instance_id = %site.provider_instance_id,
+                    plan_tenant_id = %plan.tenant_id,
+                    plan_site_id = %plan.site_id,
+                    plan_providers = ?plan_providers,
+                    reason = code,
+                    "ingest site skipped; committed plan identity does not match the configured site"
+                );
+                mismatches.push((site.building_id.clone(), code));
+            }
+        }
     }
-    devices
-}
-
-fn schedule_devices(
-    tenant_id: &str,
-    canonical_site: &str,
-    provider_instance_id: &str,
-    plan: &IngestPlan,
-) -> Vec<ScheduleDevice> {
-    if plan.tenant_id != tenant_id || plan.site_id != canonical_site {
-        return Vec::new();
-    }
-    plan.groups
-        .iter()
-        .filter(|group| group.provider_instance_id == provider_instance_id)
-        .map(|group| ScheduleDevice {
-            tenant_id: plan.tenant_id.clone(),
-            canonical_site: plan.site_id.clone(),
-            provider_instance_id: group.provider_instance_id.clone(),
-            device_id: group.equipment_id.clone(),
-            model_revision: plan.revision_id.clone(),
-            estimated_cost: u32::try_from(group.points.len()).unwrap_or(1).max(1),
-        })
-        .collect()
+    (devices, mismatches)
 }
 
 pub(crate) fn committed_tuple_matches(job: &JobView, plan: &IngestPlan) -> bool {
-    job.tenant_id == plan.tenant_id
+    let revision_ok = job.model_revision == plan.revision_id
+        || job.model_revision == super::model::MODEL_REVISION_BOOTSTRAP;
+    revision_ok
+        && job.tenant_id == plan.tenant_id
         && job.canonical_site == plan.site_id
-        && job.model_revision == plan.revision_id
         && plan.groups.iter().any(|group| {
             group.equipment_id == job.device_id
-                && group.provider_instance_id == job.provider_instance_id
+                && crate::providers::http_policy::provider_ids_equivalent(
+                    &group.provider_instance_id,
+                    &job.provider_instance_id,
+                )
         })
 }
 
@@ -472,11 +510,19 @@ mod tests {
             }],
             withheld: Vec::new(),
         };
-        let devices = schedule_devices("tenant-a", "site-a", "portal-a", &plan);
+        let devices = crate::providers::committed_model::schedule_plan_devices(
+            "tenant-a", "site-a", "portal-a", &plan,
+        )
+        .expect("matching plan");
         assert_eq!(devices.len(), 1);
-        assert_eq!(devices[0].model_revision, "rev-plan");
-        assert_eq!(devices[0].device_id, "device-a");
-        assert!(schedule_devices("tenant-b", "site-a", "portal-a", &plan).is_empty());
+        assert_eq!(devices[0].revision_id, "rev-plan");
+        assert_eq!(devices[0].equipment_id, "device-a");
+        assert_eq!(
+            crate::providers::committed_model::schedule_plan_devices(
+                "tenant-b", "site-a", "portal-a", &plan,
+            ),
+            Err("plan_tenant_mismatch")
+        );
         let job = JobView {
             job_id: Uuid::nil(),
             tenant_id: "tenant-a".into(),
