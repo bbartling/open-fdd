@@ -78,8 +78,8 @@ if jq -e 'to_entries | length >= 3 and all(.value | test("@sha256:[0-9a-f]{64}$"
 else
   portal_step deployment.images.immutable FAIL "missing repo digest (see images.json)"
 fi
-central_ports="$(portal_compose port central 8080 2>/dev/null || true)"
-ts_ports="$(portal_compose port timescale 5432 2>/dev/null || true)"
+central_ports="$(docker port "$(portal_compose ps -q central)" 2>/dev/null || true)"
+ts_ports="$(docker port "$(portal_compose ps -q timescale)" 2>/dev/null || true)"
 if [[ -z "$central_ports" && -z "$ts_ports" ]]; then
   portal_step deployment.exposure.private_central_timescale PASS "central and timescale publish no host port"
 else
@@ -97,7 +97,7 @@ portal_login admin admin || portal_die "admin login failed"
 for side in a b; do
   jq -c --arg s "$side" '.tenants[$s] | {id, name, building_ids}' "$PORTAL_PLAN" >"$PORTAL_PRIV/tenant.$side.json"
   portal_api admin PUT /api/admin/tenants "$PORTAL_PRIV/tenant.$side.json" >/dev/null
-  [[ "$PORTAL_LAST_STATUS" == "200" ]] || portal_die "tenant $side upsert → $PORTAL_LAST_STATUS"
+  [[ "$(portal_last_status)" == "200" ]] || portal_die "tenant $side upsert → $(portal_last_status)"
 done
 tenants_seen="$(portal_api admin GET /api/admin/tenants | jq -r '[.tenants[]?.id] | join(",")')"
 if [[ "$tenants_seen" == *"${PREFIX}_tenant_a"* && "$tenants_seen" == *"${PREFIX}_tenant_b"* ]]; then
@@ -122,7 +122,7 @@ print(json.dumps({"username": u["username"], "role": u["role"], "tenant_ids": u[
 PY
   portal_api admin PUT /api/admin/users "$PORTAL_PRIV/user.$alias.json" >/dev/null
   rm -f "$PORTAL_PRIV/user.$alias.json"
-  [[ "$PORTAL_LAST_STATUS" == "200" ]] || { users_ok=0; echo "user $alias upsert → $PORTAL_LAST_STATUS" >&2; }
+  [[ "$(portal_last_status)" == "200" ]] || { users_ok=0; echo "user $alias upsert → $(portal_last_status)" >&2; }
 done
 if (( users_ok )); then
   portal_step control_plane.users PASS "viewer + operator per tenant via /api/admin/users"
@@ -133,10 +133,10 @@ fi
 jq -c '.tenant_admin_probe | {username, role, tenant_ids, password: "qa-rejected-placeholder-0000"}' \
   "$PORTAL_PLAN" >"$PORTAL_PRIV/tenant_admin.json"
 portal_api admin PUT /api/admin/users "$PORTAL_PRIV/tenant_admin.json" >"$ART/tenant_admin_probe.json"
-if [[ "$PORTAL_LAST_STATUS" == "400" ]]; then
+if [[ "$(portal_last_status)" == "400" ]]; then
   portal_step control_plane.tenant_admin_rejected PASS "file users cannot be admin; admin identity is the env hub admin"
 else
-  portal_step control_plane.tenant_admin_rejected FAIL "tenant admin upsert → $PORTAL_LAST_STATUS"
+  portal_step control_plane.tenant_admin_rejected FAIL "tenant admin upsert → $(portal_last_status)"
 fi
 
 identity_ok=1
@@ -170,10 +170,10 @@ for side in a b; do
   portal_py package --building "$site" --equipment "$equip" --rows 48 --out "$ART/package_$side.zip"
   portal_api "operator_$side" POST /api/csv/import/package "$ART/package_$side.zip" application/zip \
     >"$ART/import_$side.json"
-  if [[ "$PORTAL_LAST_STATUS" == "200" ]] && jq -e '.ok == true' "$ART/import_$side.json" >/dev/null; then
+  if [[ "$(portal_last_status)" == "200" ]] && jq -e '.ok == true' "$ART/import_$side.json" >/dev/null; then
     portal_step "seed.import_$side" PASS "$site/$equip"
   else
-    portal_step "seed.import_$side" FAIL "import → $PORTAL_LAST_STATUS"
+    portal_step "seed.import_$side" FAIL "import → $(portal_last_status)"
   fi
 done
 for site in "$SITE_A" "$SITE_B"; do
@@ -199,9 +199,9 @@ else
   portal_step deployment.egress.nf_emulator_only FAIL "reads=${nf_reads:-0} writes=${nf_writes:-0}"
 fi
 portal_api operator_a GET /api/providers/sites >"$ART/providers_sites_a.json"
-a_status="$PORTAL_LAST_STATUS"
+a_status="$(portal_last_status)"
 portal_api operator_b GET /api/providers/sites >"$ART/providers_sites_b.json"
-b_status="$PORTAL_LAST_STATUS"
+b_status="$(portal_last_status)"
 if [[ "$a_status" == "200" ]] && grep -q "$NF_SITE" "$ART/providers_sites_a.json" \
     && ! grep -q "$NF_SITE" "$ART/providers_sites_b.json" && [[ "$b_status" =~ ^(200|403)$ ]]; then
   portal_step nf.provider_tenant_scope PASS "tenant A sees $NF_SITE; tenant B does not ($b_status)"

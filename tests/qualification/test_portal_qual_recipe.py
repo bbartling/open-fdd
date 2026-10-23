@@ -292,7 +292,9 @@ class RecipeStaticTest(unittest.TestCase):
         text = "\n".join(
             l for l in OVERLAY.read_text().splitlines() if not l.lstrip().startswith("#")
         )
-        self.assertNotRegex(text, r"(?m)^\s*build:", "overlay must not build images")
+        builds = re.findall(r"(?m)^\s*build:.*$", text)
+        self.assertEqual([b.strip() for b in builds], ["build: !reset null"] * 2,
+                         "overlay must drop the base build sections, never add one")
         self.assertIn("ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:?", text)
         self.assertIn("ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:?", text)
         self.assertIn('OPENFDD_MULTI_TENANT: "1"', text)

@@ -25,14 +25,15 @@ NF_FIXTURE = ROOT / "scripts" / "qualification" / "fixtures" / "nf_emulator" / "
 NF_EMULATOR_ORIGIN = "http://127.0.0.1:18089"
 PREFIX_RE = re.compile(r"^qa[0-9]{8}[a-z0-9]{4}$")
 PROJECT_RE = re.compile(r"^openfdd-qual-[a-z0-9-]{4,48}$")
-MIN_SECRET_CHARS = 48
+MIN_SECRET_CHARS = 32
+JWT_SECRET_BYTES = 48
 PACKAGE_START = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
 STEP_STATUSES = frozenset({"PASS", "FAIL", "ERROR", "BLOCKED", "SKIPPED", "NOT_APPLICABLE"})
 
 
-def new_secret(nbytes: int = 48) -> str:
-    if nbytes < 32:
-        raise ValueError("secrets need at least 32 random bytes")
+def new_secret(nbytes: int = JWT_SECRET_BYTES) -> str:
+    if nbytes < 24:
+        raise ValueError("secrets need at least 24 random bytes")
     value = secrets.token_urlsafe(nbytes)
     if len(value) < MIN_SECRET_CHARS:
         raise ValueError("generated secret too short")

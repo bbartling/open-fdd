@@ -13,7 +13,6 @@
 PORTAL_QUAL_COMPOSE_MIN="2.24.4"
 PORTAL_ALPINE_IMAGE="${OPENFDD_QUAL_ALPINE_IMAGE:-alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc}"
 PORTAL_COMPOSE_PROFILES=()
-PORTAL_LAST_STATUS=""
 PORTAL_QUAL_SECRET_VARS=(
   OPENFDD_JWT_SECRET OPENFDD_ADMIN_PASSWORD OPENFDD_AGENT_PASSWORD
   OPENFDD_TIMESCALE_PASSWORD OPENFDD_DATABASE_URL OPENFDD_PROVIDER_SITES
@@ -242,7 +241,8 @@ portal_step() {
 }
 
 # portal_api <identity|-> <METHOD> <PATH> [body-file|-] [content-type]
-# Writes the body to stdout and the HTTP status to $PORTAL_LAST_STATUS.
+# Writes the body to stdout and the HTTP status to a private file, so callers
+# may run it in $(...) or a pipeline and still read portal_last_status.
 portal_api() {
   local ident="$1" method="$2" path="$3" body="${4:-}" ctype="${5:-application/json}"
   local out="$PORTAL_PRIV/resp.$$"
@@ -253,9 +253,14 @@ portal_api() {
   if [[ -n "$body" ]]; then
     args+=(-H "Content-Type: $ctype" --data-binary "@$body")
   fi
-  PORTAL_LAST_STATUS="$(curl "${args[@]}" "$PORTAL_BASE$path" || echo 000)"
+  curl "${args[@]}" "$PORTAL_BASE$path" >"$PORTAL_PRIV/last_status" 2>/dev/null \
+    || echo 000 >"$PORTAL_PRIV/last_status"
   cat "$out" 2>/dev/null || true
   rm -f "$out"
+}
+
+portal_last_status() {
+  cat "$PORTAL_PRIV/last_status" 2>/dev/null || echo 000
 }
 
 # portal_login <identity> <username> — password read from $PORTAL_PRIV/pw.<identity>.
@@ -268,7 +273,7 @@ print(json.dumps({"username": sys.argv[1], "password": Path(sys.argv[2]).read_te
 PY
   token="$(portal_api - POST /api/auth/login "$PORTAL_PRIV/login.$ident.json" | jq -r '.token // .access_token // empty')"
   rm -f "$PORTAL_PRIV/login.$ident.json"
-  [[ "$PORTAL_LAST_STATUS" == "200" && -n "$token" ]] || return 1
+  [[ "$(portal_last_status)" == "200" && -n "$token" ]] || return 1
   umask 077
   printf 'Authorization: Bearer %s\n' "$token" >"$PORTAL_PRIV/hdr.$ident"
   printf '%s' "$token" >"$PORTAL_PRIV/tok.$ident"

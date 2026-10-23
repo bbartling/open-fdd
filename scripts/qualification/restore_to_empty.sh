@@ -45,7 +45,7 @@ portal_stack_up 240
 portal_login admin admin || portal_die "admin login failed"
 jq -c '.tenants.a | {id, name, building_ids}' "$PORTAL_PLAN" >"$PORTAL_PRIV/tenant.json"
 portal_api admin PUT /api/admin/tenants "$PORTAL_PRIV/tenant.json" >/dev/null
-[[ "$PORTAL_LAST_STATUS" == "200" ]] || portal_die "tenant upsert → $PORTAL_LAST_STATUS"
+[[ "$(portal_last_status)" == "200" ]] || portal_die "tenant upsert → $(portal_last_status)"
 portal_py secret --bytes 24 >"$PORTAL_PRIV/pw.$OP_ALIAS"
 chmod 600 "$PORTAL_PRIV/pw.$OP_ALIAS"
 python3 - "$PORTAL_PLAN" "$OP_ALIAS" "$PORTAL_PRIV/pw.$OP_ALIAS" >"$PORTAL_PRIV/user.json" <<'PY'
@@ -58,11 +58,11 @@ print(json.dumps({"username": u["username"], "role": u["role"], "tenant_ids": u[
 PY
 portal_api admin PUT /api/admin/users "$PORTAL_PRIV/user.json" >/dev/null
 rm -f "$PORTAL_PRIV/user.json"
-[[ "$PORTAL_LAST_STATUS" == "200" ]] || portal_die "operator upsert → $PORTAL_LAST_STATUS"
+[[ "$(portal_last_status)" == "200" ]] || portal_die "operator upsert → $(portal_last_status)"
 portal_login "$OP_ALIAS" "$OP_USER" || portal_die "operator login failed"
 portal_py package --building "$SITE" --equipment "$EQUIP" --rows 96 --out "$ART/fixture_package.zip"
 portal_api "$OP_ALIAS" POST /api/csv/import/package "$ART/fixture_package.zip" application/zip >"$ART/import.json"
-[[ "$PORTAL_LAST_STATUS" == "200" ]] || portal_die "fixture import → $PORTAL_LAST_STATUS"
+[[ "$(portal_last_status)" == "200" ]] || portal_die "fixture import → $(portal_last_status)"
 rows="$(portal_wait_rows "$SITE" 120)" || portal_die "no Timescale samples for $SITE after import"
 portal_step seed.fixture PASS "$SITE/$EQUIP $rows samples"
 
@@ -70,9 +70,9 @@ portal_step seed.fixture PASS "$SITE/$EQUIP $rows samples"
 identity_state() {
   portal_login admin admin || portal_die "admin login failed"
   portal_api admin GET /api/admin/tenants | jq -S '.tenants | sort_by(.id)' >"$1.tenants.json"
-  [[ "$PORTAL_LAST_STATUS" == "200" ]] || portal_die "admin tenants → $PORTAL_LAST_STATUS"
+  [[ "$(portal_last_status)" == "200" ]] || portal_die "admin tenants → $(portal_last_status)"
   portal_api admin GET /api/admin/users | jq -S '.users | sort_by(.username)' >"$1.users.json"
-  [[ "$PORTAL_LAST_STATUS" == "200" ]] || portal_die "admin users → $PORTAL_LAST_STATUS"
+  [[ "$(portal_last_status)" == "200" ]] || portal_die "admin users → $(portal_last_status)"
   printf '%s %s\n' \
     "$(sha256sum <"$1.tenants.json" | cut -d' ' -f1)" \
     "$(sha256sum <"$1.users.json" | cut -d' ' -f1)"
@@ -190,10 +190,10 @@ else
   portal_step restore.operator_login FAIL "restored operator cannot log in or lost its tenant"
 fi
 ds="$(portal_api "$OP_ALIAS" GET "/api/datasets?building_id=$SITE")"
-if [[ "$PORTAL_LAST_STATUS" == "200" ]] && jq -e --arg s "$SITE" '[.datasets[]? | (.id // .building_id)] | index($s) != null' <<<"$ds" >/dev/null; then
+if [[ "$(portal_last_status)" == "200" ]] && jq -e --arg s "$SITE" '[.datasets[]? | (.id // .building_id)] | index($s) != null' <<<"$ds" >/dev/null; then
   portal_step restore.dataset_visible PASS "$SITE listed for its operator"
 else
-  portal_step restore.dataset_visible FAIL "datasets → $PORTAL_LAST_STATUS"
+  portal_step restore.dataset_visible FAIL "datasets → $(portal_last_status)"
 fi
 
 echo "== Bounded API timings =="
