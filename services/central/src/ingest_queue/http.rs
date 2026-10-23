@@ -14,6 +14,8 @@ use uuid::Uuid;
 
 use crate::auth::{AuthUser, Role};
 use crate::contract::{self, json_error};
+use crate::providers::config::SiteConfig;
+use crate::providers::http_policy::provider_ids_equivalent;
 use crate::state::AppState;
 use crate::tenant::TenantContext;
 
@@ -413,6 +415,7 @@ pub async fn backfill(
     let tenant_id = match derive_backfill_tenant(
         &ctx,
         &plane,
+        &state.providers.sites,
         body.tenant_id.as_deref(),
         &body.canonical_site,
     ) {
@@ -446,7 +449,7 @@ pub async fn backfill(
             .active_plan(&tenant_id, &body.canonical_site)
             .cloned()
     };
-    let identity = match resolve_plan_identity(&tenant_id, &body, plan.as_ref()) {
+    let mut identity = match resolve_plan_identity(&tenant_id, &body, plan.as_ref()) {
         Ok(identity) => identity,
         Err(IdentityError::PlanMissing) => {
             return json_error(
@@ -467,6 +470,13 @@ pub async fn backfill(
             )
         }
     };
+    identity.provider_instance_id = bound_provider_id(
+        &state.providers.sites,
+        &identity.tenant_id,
+        &body.canonical_site,
+        &body.provider_instance_id,
+        &identity.provider_instance_id,
+    );
     let mut jobs = Vec::new();
     for window in &body.windows {
         if !is_hour_window(window.start, window.end) {
@@ -726,20 +736,44 @@ enum IdentityError {
     PlanMissing,
 }
 
+fn configured_site_tenants<'a>(sites: &'a [SiteConfig], site: &str) -> Vec<&'a str> {
+    let mut ids: Vec<&str> = sites
+        .iter()
+        .filter(|row| row.building_id == site)
+        .map(|row| row.tenant_id.as_str())
+        .filter(|id| !id.is_empty())
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
 fn derive_backfill_tenant(
     ctx: &TenantContext,
     plane: &crate::tenant::ControlPlane,
+    sites: &[SiteConfig],
     requested: Option<&str>,
     site: &str,
 ) -> Result<String, IdentityError> {
+    let configured = configured_site_tenants(sites, site);
     if !ctx.multi_tenant {
-        let tenant = ctx
-            .tenant_id
-            .clone()
-            .filter(|id| !id.is_empty())
-            .unwrap_or_else(|| "legacy".into());
-        if requested.is_some_and(|id| id != tenant) {
-            return Err(IdentityError::Mismatch);
+        // Env-configured portal tenants are not written into tenants.json.
+        // A single-hub upgrade keeps the site tenant (`lab`) instead of `legacy`.
+        let tenant = match configured.as_slice() {
+            [only] => (*only).to_string(),
+            _ => ctx
+                .tenant_id
+                .clone()
+                .filter(|id| !id.is_empty())
+                .unwrap_or_else(|| "legacy".into()),
+        };
+        if let Some(named) = requested {
+            if named != tenant {
+                if configured.contains(&named) {
+                    return Ok(named.to_string());
+                }
+                return Err(IdentityError::Mismatch);
+            }
         }
         return Ok(tenant);
     }
@@ -747,14 +781,13 @@ fn derive_backfill_tenant(
         let Some(requested) = requested.filter(|id| !id.is_empty()) else {
             return Err(IdentityError::TenantRequired);
         };
-        if !plane.tenants.iter().any(|tenant| tenant.id == requested) {
-            return Err(IdentityError::Mismatch);
-        }
-        if !plane
-            .buildings_for_tenant(requested)
-            .iter()
-            .any(|building| building == site)
-        {
+        let in_plane = plane.tenants.iter().any(|tenant| tenant.id == requested)
+            && plane
+                .buildings_for_tenant(requested)
+                .iter()
+                .any(|building| building == site);
+        let configured_here = configured.contains(&requested);
+        if !in_plane && !configured_here {
             return Err(IdentityError::Mismatch);
         }
         return Ok(requested.to_string());
@@ -781,16 +814,14 @@ fn resolve_plan_identity(
     }
     let Some(group) = plan.groups.iter().find(|group| {
         group.equipment_id == body.device_id
-            && group.provider_instance_id == body.provider_instance_id
+            && provider_ids_equivalent(&group.provider_instance_id, &body.provider_instance_id)
     }) else {
         return Err(IdentityError::Mismatch);
     };
-    if body
-        .model_revision
-        .as_deref()
-        .is_some_and(|revision| revision != plan.revision_id)
-    {
-        return Err(IdentityError::Mismatch);
+    if let Some(revision) = body.model_revision.as_deref() {
+        if revision != plan.revision_id && revision != MODEL_REVISION_BOOTSTRAP {
+            return Err(IdentityError::Mismatch);
+        }
     }
     Ok(PlanIdentity {
         tenant_id: tenant_id.to_string(),
@@ -798,6 +829,25 @@ fn resolve_plan_identity(
         device_id: group.equipment_id.clone(),
         model_revision: plan.revision_id.clone(),
     })
+}
+
+fn bound_provider_id(
+    sites: &[SiteConfig],
+    tenant_id: &str,
+    site_id: &str,
+    requested: &str,
+    plan_provider: &str,
+) -> String {
+    sites
+        .iter()
+        .find(|site| {
+            site.tenant_id == tenant_id
+                && site.building_id == site_id
+                && provider_ids_equivalent(&site.provider_instance_id, plan_provider)
+                && provider_ids_equivalent(&site.provider_instance_id, requested)
+        })
+        .map(|site| site.provider_instance_id.clone())
+        .unwrap_or_else(|| plan_provider.to_string())
 }
 
 fn backfill_claim(

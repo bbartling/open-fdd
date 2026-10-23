@@ -8,6 +8,9 @@ use uuid::Uuid;
 pub const COVERAGE_NOT_ASSESSED: &str = "not_assessed";
 pub const MAX_CATCHUP_HOURS: u32 = 48;
 pub const MAX_LIST: u32 = 200;
+/// Revision stamped on hourly jobs before plans were content-addressed.
+/// A backfill that still names it binds to the active plan.
+pub const MODEL_REVISION_BOOTSTRAP: &str = "bootstrap";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobState {

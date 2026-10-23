@@ -512,6 +512,56 @@ fn build_plan(model: &CommittedModel, revision_id: &str) -> Result<IngestPlan, S
     })
 }
 
+/// One device the scheduler may enqueue. `provider_instance_id` is the site
+/// connection id (`nf:…`), which is what 4.0.2 jobs and provider health use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlanDevice {
+    pub equipment_id: String,
+    pub provider_instance_id: String,
+    pub revision_id: String,
+    pub estimated_cost: u32,
+}
+
+/// Devices whose plan identity matches this configured site.
+///
+/// `Err` is a safe reason code (`plan_tenant_mismatch`, `plan_site_mismatch`,
+/// `plan_provider_mismatch`). An empty `Ok` means the plan has no groups.
+pub fn schedule_plan_devices(
+    tenant_id: &str,
+    site_id: &str,
+    connection_id: &str,
+    plan: &IngestPlan,
+) -> Result<Vec<PlanDevice>, &'static str> {
+    if plan.tenant_id != tenant_id {
+        return Err("plan_tenant_mismatch");
+    }
+    if plan.site_id != site_id {
+        return Err("plan_site_mismatch");
+    }
+    let matched: Vec<&IngestDeviceGroup> = plan
+        .groups
+        .iter()
+        .filter(|group| {
+            super::http_policy::provider_ids_equivalent(&group.provider_instance_id, connection_id)
+        })
+        .collect();
+    if matched.is_empty() {
+        if plan.groups.is_empty() {
+            return Ok(Vec::new());
+        }
+        return Err("plan_provider_mismatch");
+    }
+    Ok(matched
+        .into_iter()
+        .map(|group| PlanDevice {
+            equipment_id: group.equipment_id.clone(),
+            provider_instance_id: connection_id.to_string(),
+            revision_id: plan.revision_id.clone(),
+            estimated_cost: u32::try_from(group.points.len()).unwrap_or(1).max(1),
+        })
+        .collect())
+}
+
 fn source_index(plan: &IngestPlan) -> BTreeMap<String, (String, String, String)> {
     let mut out = BTreeMap::new();
     for group in &plan.groups {
@@ -1003,6 +1053,36 @@ mod tests {
         assert_eq!(devices, vec!["AHU_1", "VAV_1"]);
         assert_eq!(plan.groups[0].equip_type, "ahu");
         assert_eq!(plan.groups[1].equip_type, "vav");
+    }
+
+    #[test]
+    fn connection_id_schedules_the_slug_plan() {
+        let plan = IngestPlan {
+            schema: PLAN_SCHEMA.into(),
+            revision_id: "rev".into(),
+            tenant_id: "lab".into(),
+            site_id: "BOSSPI".into(),
+            groups: vec![IngestDeviceGroup {
+                provider_instance_id: "nf-bosspi".into(),
+                equipment_id: "NF_EDGE".into(),
+                equip_type: "ahu".into(),
+                points: vec![],
+            }],
+            withheld: vec![],
+        };
+        let devices =
+            schedule_plan_devices("lab", "BOSSPI", "nf:nf-bosspi", &plan).expect("alias match");
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].provider_instance_id, "nf:nf-bosspi");
+        assert_eq!(devices[0].equipment_id, "NF_EDGE");
+        assert_eq!(
+            schedule_plan_devices("other", "BOSSPI", "nf:nf-bosspi", &plan),
+            Err("plan_tenant_mismatch")
+        );
+        assert_eq!(
+            schedule_plan_devices("lab", "BOSSPI", "nf:other", &plan),
+            Err("plan_provider_mismatch")
+        );
     }
 
     fn json_model(model: &CommittedModel) -> Value {

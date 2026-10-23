@@ -13,6 +13,8 @@ mod worker;
 mod ledger_contract;
 #[cfg(test)]
 mod scope_acceptance;
+#[cfg(test)]
+mod upgrade_acceptance;
 
 pub use client::QueueClient;
 pub use worker::spawn_with_shutdown;
