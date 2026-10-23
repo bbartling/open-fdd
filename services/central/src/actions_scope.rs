@@ -455,6 +455,7 @@ mod tests {
     }
 
     fn audit_events(path: &Path) -> Vec<Value> {
+        open_fdd_edge_prototype::auth::audit::flush_sink();
         let raw = fs::read_to_string(path).unwrap_or_default();
         raw.lines()
             .filter_map(|line| serde_json::from_str::<Value>(line).ok())

@@ -1405,6 +1405,7 @@ mod tests {
             );
         }
 
+        open_fdd_edge_prototype::auth::audit::flush_sink();
         let raw = std::fs::read_to_string(&audit_path).unwrap_or_default();
         match prev_audit {
             Some(v) => std::env::set_var("OPENFDD_AUDIT_LOG_PATH", v),

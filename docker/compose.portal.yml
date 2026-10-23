@@ -5,6 +5,12 @@
 
 name: openfdd-portal
 
+x-openfdd-logging: &openfdd-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   central:
     image: ${OPENFDD_CENTRAL_IMAGE:-ghcr.io/bbartling/openfdd-central:nightly}
@@ -30,6 +36,7 @@ services:
       - "${OPENFDD_CENTRAL_BIND:-127.0.0.1}:8080:8080"
     volumes:
       - ../workspace:/workspace
+    logging: *openfdd-logging
     restart: unless-stopped
 
   web:
@@ -44,4 +51,5 @@ services:
       - "${OPENFDD_WEB_BIND:-0.0.0.0}:3000:8080"
     depends_on:
       - central
+    logging: *openfdd-logging
     restart: unless-stopped

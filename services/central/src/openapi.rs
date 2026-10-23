@@ -384,6 +384,7 @@ mod live_routes {
     ),
     components(schemas(
         OkHealthResponse,
+        AuditSinkHealth,
         crate::tenant::TenantsListResponse,
         crate::tenant::TenantRecord,
         IngestStatsResponse,

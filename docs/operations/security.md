@@ -76,18 +76,33 @@ Industry-typical dual sink — enough for auditors / pen testers, not a SIEM pro
 
 | Channel | What | Where |
 |---------|------|--------|
-| **Security audit** | Login success/fail/throttle, command authz, command issue, telemetry suspend/resume, fieldbus API-key rejects | JSONL file + stdout target `security_audit` |
+| **Security audit** | Login success/fail/throttle, command authz, command issue, telemetry suspend/resume, fieldbus API-key rejects | One JSONL file + stdout target `security_audit` |
 | **App / error logs** | `tracing` at info/warn/error with `request_id` | stdout (Railway / AWS / `docker logs`) |
 
 **File audit (local + volume mounts):**
 
 ```text
 $OPENFDD_WORKSPACE/logs/security_audit.jsonl
-# also mirrored to auth_audit.jsonl for older tooling
 ```
 
+Callers enqueue onto a bounded queue; a dedicated writer thread appends the
+JSONL file (never on the request worker). Queue overload drops the event,
+increments `dropped`, and sets `/api/health.audit_sink.degraded` (with a
+`security_audit` tracing error — no event body). Writer I/O failures set the
+same flag and `last_write_error` to `unwritable` or `io` (never a path). The
+next successful write clears `degraded`; `dropped` resets only on process
+restart. Audit files live under the workspace `logs/` directory — not in
+Timescale — and a guarded DB reset does not delete them.
+
+**Two independent copies (not a second volume):** local size rotation on the
+JSONL file (`OPENFDD_AUDIT_LOG_MAX_BYTES`, `OPENFDD_AUDIT_LOG_KEEP`) for
+edge/LAN mounts, and the stdout `security_audit` tracing target for hosted
+platforms that scrape container logs (Railway / AWS / `docker logs`). There is
+no network SIEM export and no legacy `auth_audit.jsonl` dual-write.
+
 Rotation (defaults): `OPENFDD_AUDIT_LOG_MAX_BYTES=10485760` (10 MiB), `OPENFDD_AUDIT_LOG_KEEP=5`.
-Override path with `OPENFDD_AUDIT_LOG_PATH`. Secrets / passwords / tokens / API keys are redacted.
+Queue (default): `OPENFDD_AUDIT_QUEUE_CAP=1024` (clamped). Override path with
+`OPENFDD_AUDIT_LOG_PATH`. Secrets / passwords / tokens / API keys are redacted.
 
 **Typed central events (`openfdd.audit.v1`):** each line keeps the
 `{timestamp, channel, event, detail}` envelope; for central sensitive
