@@ -4,7 +4,7 @@
   "token": {"accessToken": "qa-emulator-token-not-a-secret", "expiresIn": 3600},
   "points": [
     {
-      "name": "QA-OA-T",
+      "name": "QA-OUTDOOR-AIR-TEMP",
       "uuid": "0a0a0a0a-1111-4111-8111-000000000001",
       "units": "°F",
       "attrs": {"type": "OBJECT_ANALOG_INPUT"},
