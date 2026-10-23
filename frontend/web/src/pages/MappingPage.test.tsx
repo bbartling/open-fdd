@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { MappingPage } from "./MappingPage";
 
@@ -45,6 +45,30 @@ vi.mock("../api/fddApi", () => ({
   })),
 }));
 
+vi.mock("../api/historianApi", async () => {
+  const actual = await vi.importActual<typeof import("../api/historianApi")>(
+    "../api/historianApi",
+  );
+  return {
+    ...actual,
+    getHistorianPoints: vi.fn(),
+    purgeHistorian: vi.fn(),
+  };
+});
+
+vi.mock("../api/authApi", async () => {
+  const actual = await vi.importActual<typeof import("../api/authApi")>("../api/authApi");
+  return {
+    ...actual,
+    getAuthMe: vi.fn(async () => ({
+      ok: true,
+      username: "viewer",
+      role: "viewer",
+      auth_required: true,
+    })),
+  };
+});
+
 vi.mock("../api/providersApi", () => ({
   listProviderBuildingIds: vi.fn(async () => []),
   fetchOptionalJson: vi.fn(async () => ({ http: "missing" })),
@@ -53,6 +77,8 @@ vi.mock("../api/providersApi", () => ({
 }));
 
 import { listFddRules } from "../api/fddApi";
+import { getAuthMe } from "../api/authApi";
+import { getHistorianPoints, purgeHistorian } from "../api/historianApi";
 import {
   getPackageMapping,
   getSessionConfig,
@@ -92,6 +118,31 @@ describe("MappingPage", () => {
       },
     ]);
     vi.mocked(listPackageBuildings).mockResolvedValue(["B1"]);
+    vi.mocked(getHistorianPoints).mockResolvedValue({
+      ok: true,
+      building_id: "B1",
+      historian: "timescale",
+      points: [
+        {
+          equipment_id: "AHU_1",
+          equip_type: "ahu",
+          openfdd_key: "AHU_1.fan_cmd",
+          role: "fan_cmd",
+          unit: "%",
+          portal_point_id: null,
+          referenced: true,
+        },
+        {
+          equipment_id: "VAV_1",
+          equip_type: "vav",
+          openfdd_key: "VAV_1.zone_t",
+          role: "zone_t",
+          unit: "°F",
+          portal_point_id: "p-1",
+          referenced: false,
+        },
+      ],
+    });
     vi.mocked(getSessionConfig).mockResolvedValue({
       ok: true,
       config: {
@@ -183,28 +234,38 @@ describe("MappingPage", () => {
     });
   });
 
-  it("saves role edits via package roles + session-config", async () => {
-    renderMapping();
-    await waitFor(() => screen.getByTestId("map-role-input-SF_SPD"));
-    const roleSelect = screen
-      .getByTestId("map-role-input-SF_SPD")
-      .querySelector("select");
-    fireEvent.change(roleSelect!, {
-      target: { value: "fan_status" },
-    });
-    expect(screen.getByTestId("map-dirty-banner")).toBeTruthy();
-    const saveBtn = screen.getByTestId("map-save").querySelector("button");
-    fireEvent.click(saveBtn!);
-    await waitFor(() => {
-      expect(updatePackageRoles).toHaveBeenCalledWith("B1", "AHU_1", {
-        SF_SPD: "fan_status",
+  it.each(["viewer", "operator", "admin"] as const)(
+    "renders no model edit controls for a %s",
+    async (role) => {
+      vi.mocked(getAuthMe).mockResolvedValue({
+        ok: true,
+        username: role,
+        role,
+        auth_required: true,
       });
-      expect(putSessionConfig).toHaveBeenCalled();
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("mapping-notice").textContent).toMatch(/Saved mapping/);
-    });
-  });
+      renderMapping();
+      await waitFor(() => screen.getByTestId("map-columns-table"));
+      await waitFor(() => screen.getByTestId("mapping-tree"));
+      expect(screen.getByTestId("mapping-read-only").textContent).toMatch(/AI agent/);
+      expect(screen.getByTestId("mapping-read-only").textContent).toMatch(/openfdd-mcp/);
+      expect(screen.queryByTestId("mapping-role-editors")).toBeNull();
+      expect(screen.queryByTestId("map-save")).toBeNull();
+      expect(screen.queryByTestId("map-reload")).toBeNull();
+      expect(screen.queryByTestId("map-dirty-banner")).toBeNull();
+      expect(screen.queryByTestId("map-role-input-SF_SPD")).toBeNull();
+      const detail = screen.getByTestId("mapping-equipment-detail");
+      expect(detail.querySelectorAll("select, input, textarea")).toHaveLength(0);
+      const tree = screen.getByTestId("mapping-device-tree");
+      expect(tree.querySelectorAll("button, select, input, textarea")).toHaveLength(0);
+      expect(screen.getByTestId("mapping-tree-point-VAV_1.zone_t").textContent).toMatch(
+        /orphaned/,
+      );
+      expect(screen.queryByText(/Save mapping/)).toBeNull();
+      expect(updatePackageRoles).not.toHaveBeenCalled();
+      expect(putSessionConfig).not.toHaveBeenCalled();
+      expect(purgeHistorian).not.toHaveBeenCalled();
+    },
+  );
 
   it("lists shared runtime-role consumers for AHU and VAV and skips unknown metadata", async () => {
     vi.mocked(listFddRules).mockResolvedValue([
@@ -302,66 +363,7 @@ describe("MappingPage", () => {
     });
   });
 
-  it("shows a cleared role as unmapped in the draft, then restores it on discard", async () => {
-    const saved = {
-      ok: true,
-      building_id: "B1",
-      unit_system: "imperial",
-      equipment_ids: ["AHU_1"],
-      equipment: [
-        {
-          equipment_id: "AHU_1",
-          equipment_type: "AHU",
-          ok: true,
-          roles: { DA_T: "sat", SF_SPD: "fan_cmd" },
-          columns: [
-            { column: "DA_T", role: "sat", status: "mapped" },
-            { column: "SF_SPD", role: "fan_cmd", status: "mapped" },
-          ],
-          unmapped_columns: [],
-          blockers: [],
-          warnings: [],
-        },
-      ],
-      validation: { blocker_count: 0, warning_count: 0, equipment_count: 1 },
-    };
-    vi.mocked(getPackageMapping).mockResolvedValue(saved);
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-    renderMapping();
-    await waitFor(() => screen.getByTestId("map-role-input-DA_T"));
-
-    const roleSelect = screen.getByTestId("map-role-input-DA_T").querySelector("select");
-    fireEvent.change(roleSelect!, { target: { value: "" } });
-
-    expect(roleSelect).toHaveProperty("value", "");
-    const cleared = columnRow("DA_T");
-    expect(within(cleared).getAllByRole("cell")[1]?.textContent).toBe("");
-    expect(within(cleared).getAllByRole("cell")[2]?.textContent).toBe("unmapped");
-    expect(within(cleared).getAllByRole("cell")[3]?.textContent).toBe("—");
-    expect(cleared.textContent).not.toMatch(/SAT-1/);
-
-    fireEvent.click(screen.getByTestId("map-unmapped-only").querySelector("input")!);
-    expect(columnRow("DA_T")).toBeTruthy();
-    expect(screen.getByTestId("map-columns-table").textContent).not.toMatch(/SF_SPD/);
-    fireEvent.click(screen.getByTestId("map-unmapped-only").querySelector("input")!);
-
-    const saveBtn = screen.getByTestId("map-save").querySelector("button");
-    expect(saveBtn?.disabled).toBe(false);
-    expect(updatePackageRoles).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByTestId("map-reload").querySelector("button")!);
-    await waitFor(() => {
-      const restored = screen
-        .getByTestId("map-role-input-DA_T")
-        .querySelector("select");
-      expect(restored).toHaveProperty("value", "sat");
-    });
-    expect(screen.queryByTestId("map-dirty-banner")).toBeNull();
-    expect(within(columnRow("DA_T")).getAllByRole("cell")[2]?.textContent).toBe("mapped");
-    confirm.mockRestore();
-  });
-
-  it("labels draft, saved, and active ingest as separate revisions", async () => {
+  it("labels saved and active ingest as separate revisions", async () => {
     vi.mocked(getPackageMapping).mockResolvedValue({
       ok: true,
       building_id: "B1",
@@ -387,10 +389,8 @@ describe("MappingPage", () => {
       },
     });
     renderMapping();
-    await waitFor(() => screen.getByTestId("mapping-revision-draft"));
-    expect(screen.getByTestId("mapping-revision-draft").textContent).toBe(
-      "Draft: matches saved",
-    );
+    await waitFor(() => screen.getByTestId("mapping-revision-saved"));
+    expect(screen.queryByTestId("mapping-revision-draft")).toBeNull();
     expect(screen.getByTestId("mapping-revision-saved").textContent).toContain(
       "Saved column map",
     );
@@ -399,15 +399,9 @@ describe("MappingPage", () => {
       "Active ingest: rev-ingest-1",
     );
 
-    const roleSelect = screen.getByTestId("map-role-input-DA_T").querySelector("select");
-    fireEvent.change(roleSelect!, { target: { value: "" } });
-    expect(screen.getByTestId("mapping-revision-draft").textContent).toBe(
-      "Draft: DA_T unmapped",
-    );
-    expect(screen.getByTestId("mapping-revision-saved").textContent).toContain("DA_T → sat");
-    expect(screen.getByTestId("mapping-revision-active").textContent).toBe(
-      "Active ingest: rev-ingest-1",
-    );
+    const cell = within(columnRow("DA_T")).getAllByRole("cell");
+    expect(cell[1]?.textContent).toBe("sat");
+    expect(cell[2]?.textContent).toBe("mapped");
   });
 
   it("summarizes sample validation with not-evaluated checks instead of a zero-issue pass", async () => {
