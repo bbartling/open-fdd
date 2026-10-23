@@ -7405,6 +7405,8 @@ mod version_tests {
     )]
     async fn package_roles_http_denies_viewer_before_mutation() {
         let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        let _workspace = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
         let mut state = AppState::new();
         state.auth = crate::auth::AuthConfig {
             secret: Some("package-roles-viewer-deny-test-secret".into()),
