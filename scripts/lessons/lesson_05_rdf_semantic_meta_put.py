@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
         rev = got.get("revision") if got.get("present") else None
-        put_body: dict = {"building_id": building_id, "meta": meta}
+        put_body: dict = {"building_id": building_id, "meta": meta, "confirm": True}
         if rev:
             put_body["expected_revision"] = rev
         st_w, _, raw_w = http.request(
@@ -189,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
                 json_body={
                     "building_id": building_id,
                     "meta": restore,
+                    "confirm": True,
                     **({"expected_revision": rev2} if rev2 else {}),
                 },
                 timeout=30.0,

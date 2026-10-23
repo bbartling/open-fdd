@@ -4,5 +4,6 @@
   "equipment_type": "VAV",
   "poll_seconds": 300,
   "datafusion_compare": "pending",
-  "notes": "screening fixture; duration parity not claimed"
+  "notes": "screening fixture; duration parity not claimed",
+  "fault_hours": 0.0
 }

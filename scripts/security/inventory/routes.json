@@ -4,10 +4,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
-  "route_count": 190,
+  "route_count": 193,
   "disposition_counts": {
     "IMPLEMENTED": 38,
-    "PLANNED": 119,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 4
   },
@@ -6940,6 +6940,120 @@
     },
     {
       "method": "GET",
+      "path": "/api/historian/points",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_historian_points",
+        "y.authz.get_api_historian_points"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_historian_points",
+        "y.authz.get_api_historian_points"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Historian point_map device tree for one building (tenant scoped, read-only)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/historian/orphans",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_historian_orphans",
+        "y.authz.get_api_historian_orphans"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_historian_orphans",
+        "y.authz.get_api_historian_orphans"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Unreferenced historian series after portal inventory sync (tenant scoped, read-only)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/historian/purge",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_historian_purge",
+        "y.authz.post_api_historian_purge"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_historian_purge",
+        "y.authz.post_api_historian_purge"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "writes",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Deletes sample + point_map rows for one equipment or one series; operator/admin + confirm:true; audited; RDF untouched"
+    },
+    {
+      "method": "GET",
       "path": "/api/ingest/jobs",
       "section": "protected",
       "auth": "jwt_required",
@@ -7291,17 +7405,17 @@
   ],
   "counts": {
     "IMPLEMENTED": 38,
-    "PLANNED": 119,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 4,
     "implemented": 38,
-    "planned": 119,
+    "planned": 122,
     "blocked_policy": 29,
     "excluded": 4
   },
   "summary": {
     "IMPLEMENTED": 38,
-    "PLANNED": 119,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 4
   }

@@ -26,6 +26,9 @@ use super::writer;
 use super::Runtime;
 use crate::state::AppState;
 
+/// A full page may be truncated; inventory sync then skips removals.
+const INVENTORY_PAGE_SIZE: u32 = 500;
+
 fn poll_enabled() -> bool {
     std::env::var("OPENFDD_PROVIDER_POLL")
         .ok()
@@ -349,6 +352,17 @@ async fn nf_hourly_loop(
                 )
                 .await;
             continue;
+        }
+        match driver.query_inventory(INVENTORY_PAGE_SIZE).await {
+            Ok(snapshot) => {
+                let outcome =
+                    super::inventory_sync::apply(&runtime, &state.haystack_rdf, &site, &snapshot)
+                        .await;
+                if !outcome.errors.is_empty() {
+                    warn!(%building_id, errors = ?outcome.errors, "NF inventory sync incomplete");
+                }
+            }
+            Err(_) => warn!(%building_id, "NF inventory read failed; model left as last synced"),
         }
         let opened = runtime.hourly_store().await;
         let store = match opened {

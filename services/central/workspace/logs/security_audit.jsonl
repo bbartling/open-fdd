@@ -1,0 +1,3 @@
+{"channel":"security_audit","detail":{"building_id":"SYNTHETIC_ROLES_DENY","reason":"role","role":"viewer","sub":"viewer-roles-deny","tool":"csv.import.package.roles"},"event":"agent_write_denied","timestamp":"2026-10-23T00:21:24.692376777+00:00"}
+{"channel":"security_audit","detail":{"building_id":"SYNTHETIC_ROLES_DENY","reason":"role","role":"viewer","sub":"viewer-roles-deny","tool":"csv.import.package.roles"},"event":"agent_write_denied","timestamp":"2026-10-23T00:23:27.524250734+00:00"}
+{"channel":"security_audit","detail":{"reason":"test pending cap"},"event":"portal_ingest_backpressure","timestamp":"2026-10-23T00:23:28.202151269+00:00"}

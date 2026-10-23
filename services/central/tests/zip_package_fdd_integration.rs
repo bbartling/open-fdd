@@ -235,7 +235,8 @@ fn zip_package_upload_then_fc1_registry_run() {
     let roles_body = json!({
         "building_id": "ZIP_BUILDING_1",
         "equipment_id": "AHU_1",
-        "roles": {"SF_SPD": "fan_cmd", "DA_P": "duct_static", "DA_P_SP": "duct_static_sp"}
+        "roles": {"SF_SPD": "fan_cmd", "DA_P": "duct_static", "DA_P_SP": "duct_static_sp"},
+        "confirm": true
     })
     .to_string();
     let (status, upd) = post_bytes(

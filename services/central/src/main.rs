@@ -31,10 +31,13 @@ mod logging;
 mod mapping_revision;
 #[cfg(test)]
 mod metering_scope_fixtures;
+mod model_agent_writes;
 mod models;
 mod openapi;
 #[cfg(test)]
 mod package_preflight_fixtures;
+#[cfg(test)]
+mod portal_inventory_fixtures;
 mod providers;
 #[cfg(test)]
 mod rcx_row_fixtures;

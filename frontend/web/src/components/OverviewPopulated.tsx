@@ -36,6 +36,7 @@ import { VavHealthSection } from "./VavHealthSection";
 import { PlantHealthSections } from "./PlantHealthSections";
 import { WeatherHealthSection } from "./WeatherHealthSection";
 import { SqlAnomalySection } from "./SqlAnomalySection";
+import { DataHealthCard } from "./DataHealthCard";
 import { mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
 import { naturalCompare } from "../lib/naturalSort";
@@ -691,6 +692,8 @@ export function OverviewPopulated({
           ? " — run Run all rules for health matrices."
           : null}
       </InlineAlert>
+
+      <DataHealthCard buildingId={buildingId} refreshToken={vavHealthToken} />
 
       <div className="overview-toolbar" data-testid="overview-actions">
         <div className="overview-toolbar__action">

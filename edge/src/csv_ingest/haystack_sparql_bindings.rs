@@ -353,6 +353,49 @@ pub fn execute_readonly_on_snapshot_with_overlay(
     query_text: &str,
     overlay_turtle: &str,
 ) -> Result<Value, String> {
+    execute_readonly_dataset(
+        ReadonlyDataset {
+            building_id: &snap.building_id,
+            pack_turtle: &snap.turtle,
+            turtle_sha256: Some(&snap.turtle_sha256),
+            model_revision: snap.model_revision.as_deref(),
+        },
+        query_text,
+        overlay_turtle,
+    )
+}
+
+/// Read-only query over the writable overlay alone. A portal site has no CSV
+/// package projection; its model is the overlay the inventory sync writes.
+pub fn execute_readonly_on_overlay(
+    building_id: &str,
+    query_text: &str,
+    overlay_turtle: &str,
+) -> Result<Value, String> {
+    execute_readonly_dataset(
+        ReadonlyDataset {
+            building_id,
+            pack_turtle: "",
+            turtle_sha256: None,
+            model_revision: None,
+        },
+        query_text,
+        overlay_turtle,
+    )
+}
+
+struct ReadonlyDataset<'a> {
+    building_id: &'a str,
+    pack_turtle: &'a str,
+    turtle_sha256: Option<&'a str>,
+    model_revision: Option<&'a str>,
+}
+
+fn execute_readonly_dataset(
+    snap: ReadonlyDataset<'_>,
+    query_text: &str,
+    overlay_turtle: &str,
+) -> Result<Value, String> {
     let trimmed = query_text.trim();
     if trimmed.is_empty() {
         return Err("query text is required".into());
@@ -363,7 +406,7 @@ pub fn execute_readonly_on_snapshot_with_overlay(
         format!("{PREFIXES}\n{trimmed}")
     };
     let parsed = ensure_readonly_query(&full)?;
-    let store = load_store(&snap.turtle, overlay_turtle)?;
+    let store = load_store(snap.pack_turtle, overlay_turtle)?;
     let overlay_applied = !overlay_turtle.trim().is_empty();
     let results = SparqlEvaluator::new()
         .parse_query(&full)

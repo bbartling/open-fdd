@@ -187,6 +187,17 @@ vi.mock("../api/analyticsApi", () => ({
 
 vi.mock("../api/csvDownload", () => ({ downloadRowsCsv: vi.fn() }));
 
+vi.mock("../api/historianApi", () => ({
+  getHistorianOrphans: vi.fn(async () => ({
+    ok: true,
+    building_id: "B1",
+    historian: "timescale",
+    orphaned_points: 2,
+    equipment: ["VAV_9"],
+    points: [],
+  })),
+}));
+
 vi.mock("./widgets/PlotlyHost", () => ({
   PlotlyHost: ({ testId }: { testId?: string }) => (
     <div data-testid={testId ?? "plotly"} />
@@ -234,6 +245,16 @@ describe("OverviewPopulated metric isolation", () => {
     });
     expect(screen.getByTestId("overview-eq-count").textContent).toContain(
       "Weather is not counted as equipment",
+    );
+  });
+
+  it("warns in the Data health card when historian series are orphaned", async () => {
+    renderOverview();
+    const card = await screen.findByTestId("overview-data-health");
+    expect(card.textContent).toContain("2 historian series");
+    expect(card.textContent).toContain("VAV_9");
+    expect(screen.getByTestId("overview-data-health-jobs-link").getAttribute("href")).toBe(
+      "/jobs?site=B1",
     );
   });
 

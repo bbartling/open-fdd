@@ -3,6 +3,10 @@
 use serde_json::Value;
 use std::env;
 
+/// Serializes tests that set `OPENFDD_MCP_ALLOW_WRITES`.
+#[cfg(test)]
+pub(crate) static TEST_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub fn require_write_confirm(args: &Value, tool: &str) -> Result<(), String> {
     if env::var("OPENFDD_MCP_ALLOW_WRITES").ok().as_deref() != Some("1") {
         return Err(format!(
@@ -22,6 +26,7 @@ mod tests {
 
     #[test]
     fn write_gate_requires_env_and_confirm() {
+        let _lock = TEST_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         env::remove_var("OPENFDD_MCP_ALLOW_WRITES");
         let args = json!({"confirm": true});
         assert!(require_write_confirm(&args, "test_tool").is_err());

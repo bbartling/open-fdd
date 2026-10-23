@@ -8,22 +8,18 @@ import {
   Select,
   Toggle,
 } from "../components/widgets";
+import { DeviceTree } from "../components/DeviceTree";
 import { ProviderBindingsPanel } from "../components/ProviderBindingsPanel";
 import { ResultsByCategoryPanel } from "../components/ResultsByCategoryPanel";
-import { useDirtyFormWarning, useSessionQuery } from "../session";
+import { useSessionQuery } from "../session";
 import {
   buildMappingManifest,
   getPackageMapping,
-  getSessionConfig,
-  invertRolesToSessionMap,
-  listCookbookRoles,
   listPackageBuildings,
-  putSessionConfig,
-  updatePackageRoles,
   type MappingEquipment,
   type PackageMappingResponse,
-  type SessionConfig,
 } from "../api/mappingApi";
+import { getHistorianPoints, type HistorianPoint } from "../api/historianApi";
 import { listProviderBuildingIds } from "../api/providersApi";
 import { buildDataModelTurtle } from "../api/dataModelTurtle";
 import { listFddRules, type FddRuleSummary } from "../api/fddApi";
@@ -31,7 +27,6 @@ import {
   activeIngestRevision,
   columnNames,
   mappingRevisionLabels,
-  rolesForSave,
   savedAuthorityLabel,
   seedDraftRoles,
 } from "../lib/mappingDraft";
@@ -95,19 +90,12 @@ export function MappingPage() {
     null,
   );
   const [inventory, setInventory] = useState<PackageMappingResponse | null>(null);
-  const [sessionConfig, setSessionConfig] = useState<SessionConfig | null>(null);
-
-  const [draftRoles, setDraftRoles] = useState<Record<string, string>>({});
-  const [dirty, setDirty] = useState(false);
-  useDirtyFormWarning(dirty);
+  const [historianPoints, setHistorianPoints] = useState<HistorianPoint[] | null>(null);
 
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [showUnmappedOnly, setShowUnmappedOnly] = useState(false);
   const [providerOnlySite, setProviderOnlySite] = useState(false);
-  const [cookbookRoles, setCookbookRoles] = useState<string[]>([]);
   const [fddRules, setFddRules] = useState<FddRuleSummary[]>([]);
 
   const roleToFdd = useMemo(() => buildRoleToFddRules(fddRules), [fddRules]);
@@ -146,11 +134,8 @@ export function MappingPage() {
     setLoading(true);
     setError(null);
     try {
-      // Load full site inventory first (export SoT); equipment filter is edit-only.
-      const [invAll, sess] = await Promise.all([
-        getPackageMapping(buildingId),
-        getSessionConfig(buildingId),
-      ]);
+      // Full site inventory first (export SoT); the equipment filter narrows the view.
+      const invAll = await getPackageMapping(buildingId);
       if (ticket !== inventoryGen.current) return;
       setProviderOnlySite(false);
       setSiteInventory(invAll);
@@ -168,13 +153,10 @@ export function MappingPage() {
         if (ticket !== inventoryGen.current) return;
       }
       setInventory(inv);
-      setSessionConfig(sess.config ?? null);
       const eq =
         (eqId
           ? inv.equipment?.find((e) => e.equipment_id === eqId)
           : inv.equipment?.[0]) ?? null;
-      setDraftRoles(seedDraftRoles(eq));
-      setDirty(false);
       if (eq && !eqId) {
         setQuery({ equipment: eq.equipment_id }, true);
       }
@@ -201,10 +183,20 @@ export function MappingPage() {
   }, [refreshBuildings]);
 
   useEffect(() => {
-    void listCookbookRoles()
-      .then(setCookbookRoles)
-      .catch(() => setCookbookRoles([]));
-  }, []);
+    if (!buildingId) {
+      setHistorianPoints(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    getHistorianPoints(buildingId, ctrl.signal)
+      .then((res) => {
+        if (!ctrl.signal.aborted) setHistorianPoints(res.points ?? []);
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setHistorianPoints(null);
+      });
+    return () => ctrl.abort();
+  }, [buildingId]);
 
   useEffect(() => {
     void listFddRules()
@@ -215,59 +207,6 @@ export function MappingPage() {
   useEffect(() => {
     void refreshInventory();
   }, [refreshInventory]);
-
-  const onRoleChange = (column: string, role: string) => {
-    setDraftRoles((prev) => ({ ...prev, [column]: role.trim() }));
-    setDirty(true);
-    setNotice(null);
-  };
-
-  const onSave = async () => {
-    if (!buildingId || !selectedEq) {
-      setError("Select a building and equipment first");
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const savedRoles = rolesForSave(draftRoles);
-      const rolesResult = await updatePackageRoles(
-        buildingId,
-        selectedEq.equipment_id,
-        savedRoles,
-      );
-      const roleMap = {
-        ...(sessionConfig?.role_map ?? {}),
-        [selectedEq.equipment_id]: invertRolesToSessionMap(savedRoles),
-      };
-      const config: SessionConfig = {
-        schema_version: "openfdd_session_v1",
-        unit_system: sessionConfig?.unit_system ?? inventory?.unit_system ?? "imperial",
-        prefer_web_oat: sessionConfig?.prefer_web_oat ?? true,
-        role_map: roleMap,
-        params: sessionConfig?.params ?? {},
-      };
-      const saved = await putSessionConfig(config, buildingId);
-      setSessionConfig(saved.config ?? config);
-      let savedLead = `Saved mapping for ${selectedEq.equipment_id}`;
-      if (rolesResult.ingest_plan_activated === false) {
-        savedLead = `Saved column map for ${selectedEq.equipment_id}. Active ingest plan was not changed.`;
-      } else if (rolesResult.ingest_plan_activated === true) {
-        savedLead = `Saved column map for ${selectedEq.equipment_id}. Active ingest plan was updated.`;
-      }
-      setNotice(
-        savedLead +
-          (saved.warnings?.length ? ` (${saved.warnings.length} warning(s))` : ""),
-      );
-      setDirty(false);
-      await refreshInventory();
-    } catch (err) {
-      setError(formatErr(err));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   /** Prefer site/equip inventory only when it matches the selected building. */
   const exportSource = (() => {
@@ -336,15 +275,16 @@ export function MappingPage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
+  const savedRoles = useMemo(() => seedDraftRoles(selectedEq), [selectedEq]);
   const editorColumns = useMemo(() => columnNames(selectedEq), [selectedEq]);
 
   const tableRows: ColumnRow[] = useMemo(() => {
     return editorColumns
       .map((column) => {
-        const role = (draftRoles[column] ?? "").trim();
+        const role = (savedRoles[column] ?? "").trim();
         const consumers = role ? (roleToFdd.get(role) ?? []) : [];
         const owners = role
-          ? editorColumns.filter((name) => (draftRoles[name] ?? "").trim() === role)
+          ? editorColumns.filter((name) => (savedRoles[name] ?? "").trim() === role)
           : [];
         let status = "mapped";
         if (!role) status = "unmapped";
@@ -362,18 +302,18 @@ export function MappingPage() {
         };
       })
       .filter((row) => (showUnmappedOnly ? row.status !== "mapped" : true));
-  }, [editorColumns, draftRoles, showUnmappedOnly, roleToFdd]);
+  }, [editorColumns, savedRoles, showUnmappedOnly, roleToFdd]);
 
   const revisionView = useMemo(() => {
     if (!selectedEq) return null;
     return mappingRevisionLabels({
-      dirty,
-      draftRoles,
+      dirty: false,
+      draftRoles: savedRoles,
       savedRoles: selectedEq.roles ?? {},
       savedAuthorityLabel: savedAuthorityLabel(inventory),
       activeIngestRevision: activeIngestRevision(inventory),
     });
-  }, [selectedEq, dirty, draftRoles, inventory]);
+  }, [selectedEq, savedRoles, inventory]);
 
   const validationSummary = useMemo(
     () => summarizeMappingValidation(inventory),
@@ -391,18 +331,6 @@ export function MappingPage() {
       label: id,
     })),
   ];
-  const roleOptions = useMemo(() => {
-    const catalog = new Set(cookbookRoles);
-    for (const role of Object.values(draftRoles)) {
-      if (role) catalog.add(role);
-    }
-    const sorted = [...catalog].sort();
-    return [
-      { value: "", label: "(unmapped)" },
-      ...sorted.map((r) => ({ value: r, label: r })),
-    ];
-  }, [cookbookRoles, draftRoles]);
-
   return (
     <AppShell
       title="Data Model"
@@ -443,6 +371,13 @@ export function MappingPage() {
         ) : (
           <>
         <h2>Role mapping</h2>
+
+        <InlineAlert id="mapping-read-only" variant="info" testId="mapping-read-only">
+          This page is read-only for every site. To change the building model, ask an AI
+          agent to use the Open-FDD REST model endpoints or the openfdd-mcp write tools
+          (operator or admin token, <code>confirm: true</code>). For a Normal Framework
+          portal site, tag the points on the portal: the next poll updates the model.
+        </InlineAlert>
 
         <div
           style={{
@@ -493,21 +428,15 @@ export function MappingPage() {
             label="Building (site)"
             value={buildingId}
             options={buildingOptions}
-            onChange={(value) => {
-              if (dirty && !window.confirm("Discard unsaved mapping edits?")) return;
-              setQuery({ siteId: value, equipment: "" }, true);
-            }}
+            onChange={(value) => setQuery({ siteId: value, equipment: "" }, true)}
             testId="map-building-select"
           />
           <Select
             id="map-equipment"
-            label="Equipment (edit)"
+            label="Equipment"
             value={equipmentId}
             options={equipmentOptions}
-            onChange={(value) => {
-              if (dirty && !window.confirm("Discard unsaved mapping edits?")) return;
-              setQuery({ equipment: value }, true);
-            }}
+            onChange={(value) => setQuery({ equipment: value }, true)}
             testId="map-equipment-select"
             disabled={!buildingId}
           />
@@ -527,11 +456,6 @@ export function MappingPage() {
         {error ? (
           <InlineAlert id="mapping-error" variant="danger" testId="mapping-error">
             {error}
-          </InlineAlert>
-        ) : null}
-        {notice ? (
-          <InlineAlert id="mapping-notice" variant="success" testId="mapping-notice">
-            {notice}
           </InlineAlert>
         ) : null}
 
@@ -555,7 +479,7 @@ export function MappingPage() {
             testId="mapping-provider-only"
           >
             This site is in the provider registry and has no CSV package inventory.
-            Role editors stay empty until a package or a committed model is present.
+            The column table stays empty until a package or a committed model is present.
             Bindings above stay separate from CSV column roles.
           </InlineAlert>
         ) : null}
@@ -574,7 +498,6 @@ export function MappingPage() {
 
         {revisionView ? (
           <div data-testid="mapping-revisions">
-            <p data-testid="mapping-revision-draft">{revisionView.draft}</p>
             <p data-testid="mapping-revision-saved">{revisionView.saved}</p>
             <p data-testid="mapping-revision-active">{revisionView.active}</p>
           </div>
@@ -643,77 +566,13 @@ export function MappingPage() {
               rows={tableRows}
               testId="map-columns-table"
             />
+          </div>
+        ) : null}
 
-            <div style={{ marginTop: "1rem" }}>
-              <h3>Edit roles</h3>
-              <div
-                style={{
-                  display: "grid",
-                  gap: "0.5rem",
-                  maxWidth: "40rem",
-                }}
-                data-testid="mapping-role-editors"
-              >
-                {editorColumns.map((column) => (
-                  <div
-                    key={column}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "0.5rem",
-                      alignItems: "center",
-                    }}
-                  >
-                    <span id={`role-label-${column}`}>
-                      <code>{column}</code>
-                    </span>
-                    <Select
-                      id={`role-${column}`}
-                      label={`Role for ${column}`}
-                      value={draftRoles[column] ?? ""}
-                      options={roleOptions}
-                      onChange={(value) => onRoleChange(column, value)}
-                      testId={`map-role-input-${column}`}
-                      density="compact"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                gap: "0.5rem",
-                marginTop: "1rem",
-                flexWrap: "wrap",
-              }}
-            >
-              <Button
-                id="map-save"
-                label={saving ? "Saving…" : "Save mapping"}
-                onClick={() => void onSave()}
-                disabled={saving || !dirty}
-                testId="map-save"
-              />
-              <Button
-                id="map-reload"
-                label="Reload"
-                variant="secondary"
-                onClick={() => {
-                  if (dirty && !window.confirm("Discard unsaved mapping edits?")) {
-                    return;
-                  }
-                  void refreshInventory();
-                }}
-                testId="map-reload"
-              />
-            </div>
-            {dirty ? (
-              <p className="alert alert--warning" data-testid="map-dirty-banner">
-                Draft only. Save mapping writes this equipment. Other equipment stays as last saved.
-              </p>
-            ) : null}
+        {buildingId && historianPoints ? (
+          <div data-testid="mapping-device-tree">
+            <h3>Device tree</h3>
+            <DeviceTree points={historianPoints} testId="mapping-tree" />
           </div>
         ) : null}
           </>

@@ -61,7 +61,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route(
             "/api/csv/import/package/roles",
-            post(csv_import_package_roles),
+            post(crate::model_agent_writes::package_roles_post),
         )
         .route(
             "/api/csv/import/package/mapping",
@@ -204,21 +204,24 @@ pub fn router(state: Arc<AppState>) -> Router {
         // Soft-OPEN: revisioned semantic_meta CRUD (dry_run + expected_revision CAS).
         .route(
             "/api/model/semantic-meta",
-            get(csv_import_package_mapping_semantic_meta).put(model_semantic_meta_put),
+            get(csv_import_package_mapping_semantic_meta)
+                .put(crate::model_agent_writes::semantic_meta_put),
         )
         // Soft-OPEN: BPS-compatible Turtle overlay GET/PUT (dry_run + CAS; SPARQL unions pack ∪ overlay).
         .route(
             "/api/model/overlay",
-            get(model_overlay_get).put(model_overlay_put),
+            get(model_overlay_get).put(crate::model_agent_writes::overlay_put),
         )
         // Soft-OPEN: BPS model_crud equip/point upsert + tombstones (overlay sidecar).
         .route(
             "/api/model/equip",
-            post(model_equip_post).delete(model_equip_delete),
+            post(crate::model_agent_writes::equip_post)
+                .delete(crate::model_agent_writes::equip_delete),
         )
         .route(
             "/api/model/point",
-            post(model_point_post).delete(model_point_delete),
+            post(crate::model_agent_writes::point_post)
+                .delete(crate::model_agent_writes::point_delete),
         )
         // Soft-OPEN: BPS-compatible agent recipe bundle (overlay + equip/point CRUD).
         .route("/api/model/agent-context", get(model_agent_context))
@@ -261,6 +264,18 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/api/historian/compaction",
             get(historian_compaction_status).post(historian_compaction_run),
+        )
+        .route(
+            "/api/historian/purge",
+            post(crate::model_agent_writes::historian_purge),
+        )
+        .route(
+            "/api/historian/orphans",
+            get(crate::model_agent_writes::historian_orphans),
+        )
+        .route(
+            "/api/historian/points",
+            get(crate::model_agent_writes::historian_points),
         )
         .route("/api/fdd-schema/tables", get(fdd_schema_tables))
         .route("/api/fdd-rules", get(fdd_rules_list))
@@ -7598,6 +7613,8 @@ mod version_tests {
     )]
     async fn package_roles_http_denies_viewer_before_mutation() {
         let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        let _workspace = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
         let mut state = AppState::new();
         state.auth = crate::auth::AuthConfig {
             secret: Some("package-roles-viewer-deny-test-secret".into()),
@@ -7633,7 +7650,7 @@ mod version_tests {
             json.get("error")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
-                .contains("viewer role cannot mutate package roles"),
+                .contains("operator or admin role required"),
             "unexpected body: {json}"
         );
     }
@@ -7747,6 +7764,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "building_id": bid,
                     "meta": meta
                 })
@@ -7774,6 +7792,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "building_id": bid,
                     "meta": meta,
                     "expected_revision": "stale-rev-not-current"
@@ -7800,6 +7819,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "building_id": bid,
                     "meta": meta,
                     "expected_revision": rev
@@ -7877,6 +7897,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "building_id": bid,
                     "meta": meta
                 })
@@ -8030,6 +8051,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "site_id": bid,
                     "ttl": "not turtle {{{"
                 })
@@ -8046,6 +8068,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "site_id": bid,
                     "ttl": sample_ttl,
                     "expected_revision": 0
@@ -8069,6 +8092,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "building_id": bid,
                     "ttl": sample_ttl,
                     "expected_revision": 0
@@ -8157,6 +8181,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "site_id": bid,
                     "equipment_id": "AHU_1",
                     "dis": "AHU 1",
@@ -8181,6 +8206,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "building_id": bid,
                     "equipment_id": "AHU_1",
                     "point_id": "SAT",
@@ -8201,6 +8227,7 @@ mod version_tests {
             .header("authorization", format!("Bearer {op}"))
             .body(Body::from(
                 serde_json::json!({
+                    "confirm": true,
                     "building_id": bid,
                     "point_id": "SAT",
                     "also_exclude": ["AHU_1.discharge-air-temp"],

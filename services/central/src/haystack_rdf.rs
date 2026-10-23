@@ -188,9 +188,29 @@ impl HaystackRdfCache {
                 "soft_open_neq_fq": true,
             })
         })?;
-        let (snap, _inventory) =
-            self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
         let overlay = Self::load_overlay_ttl(building_id);
+        let snap = match self.get_or_materialize_with_inventory(
+            building_id,
+            equipment_id,
+            preferred_tenant,
+        ) {
+            Ok((snap, _inventory)) => snap,
+            Err(err) if err.get("present") == Some(&json!(false)) && !overlay.trim().is_empty() => {
+                return haystack_sparql_bindings::execute_readonly_on_overlay(
+                    building_id,
+                    query_text,
+                    &overlay,
+                )
+                .map_err(|e| {
+                    json!({
+                        "ok": false,
+                        "error": e,
+                        "schema": haystack_sparql_bindings::READONLY_SCHEMA,
+                    })
+                });
+            }
+            Err(err) => return Err(err),
+        };
         haystack_sparql_bindings::execute_readonly_on_snapshot_with_overlay(
             &snap, query_text, &overlay,
         )

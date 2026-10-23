@@ -12,6 +12,13 @@ pub struct SampleRow {
     pub quality: Option<String>,
     pub equipment_id: Option<String>,
     pub role: Option<String>,
+    /// Stable source point id from a portal inventory. When set, the series key
+    /// comes from `point_map (site_id, portal_point_id)` and `openfdd_key` is
+    /// only the key minted for a point seen for the first time.
+    #[serde(default)]
+    pub portal_point_id: Option<String>,
+    #[serde(default)]
+    pub provider_instance_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]

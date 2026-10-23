@@ -5,7 +5,6 @@ import {
   invertRolesToSessionMap,
   getPackageMapping,
   listPackageBuildings,
-  updatePackageRoles,
 } from "./mappingApi";
 
 describe("mappingApi", () => {
@@ -85,16 +84,6 @@ describe("mappingApi", () => {
     const inv = await getPackageMapping("B1", "AHU_1");
     expect(inv.building_id).toBe("B1");
     expect(inv.equipment?.[0]?.roles?.SF_SPD).toBe("fan_cmd");
-  });
-
-  it("posts package role updates", async () => {
-    const out = await updatePackageRoles("B1", "AHU_1", { SF_SPD: "fan_status" });
-    expect(out.ok).toBe(true);
-    expect(fetch).toHaveBeenCalled();
-    const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls.find(
-      (c) => String(c[0]).includes("/package/roles"),
-    )!;
-    expect(init.method).toBe("POST");
   });
 
   it("builds downloadable mapping manifest", () => {

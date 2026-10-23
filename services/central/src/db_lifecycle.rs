@@ -26,6 +26,7 @@ const SCHEMA_SQL: &[&str] = &[
     include_str!("../../../sql/schema/03_wide_history_helper.sql"),
     include_str!("../../../sql/schema/04_provider_hourly_jobs.sql"),
     include_str!("../../../sql/schema/04_ingest_queue.sql"),
+    include_str!("../../../sql/schema/05_portal_inventory.sql"),
 ];
 
 /// Tables whose rows mean this database is already in use.

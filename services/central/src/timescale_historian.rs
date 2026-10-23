@@ -360,6 +360,13 @@ pub(crate) fn point_to_sample(
     row.role = Some(role);
     row.unit = point.unit.clone();
     row.haystack_id = Some(point.id.clone());
+    if let (Some(instance), Some(source_id)) = (
+        tag_str(point, "provider_instance_id").filter(|s| !s.trim().is_empty()),
+        tag_str(point, "provider_point_id").filter(|s| !s.trim().is_empty()),
+    ) {
+        row.portal_point_id = Some(source_id);
+        row.provider_instance_id = Some(instance);
+    }
     if let Some(quality) = tag_str(point, "source_quality") {
         if !matches!(quality.as_str(), "good" | "uncertain" | "bad" | "stale") {
             return Ok(None);

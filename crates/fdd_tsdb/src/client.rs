@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
 
@@ -5,6 +6,7 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
 use thiserror::Error;
 
+use crate::portal::{upsert_portal_point, PortalPointUpsert};
 use crate::sample::{SampleRow, UpsertBatch};
 
 #[derive(Debug, Error)]
@@ -21,11 +23,17 @@ pub enum TsdbError {
 pub struct SampleUpsertStats {
     pub inserted: u64,
     pub updated: u64,
+    /// Already stored with identical value, unit, quality, and haystack id.
+    /// A retried window lands here: it is a duplicate, not new data.
+    pub unchanged: u64,
 }
 
 impl SampleUpsertStats {
+    /// Rows the historian holds after the batch, including unchanged duplicates.
     pub fn persisted(self) -> u64 {
-        self.inserted.saturating_add(self.updated)
+        self.inserted
+            .saturating_add(self.updated)
+            .saturating_add(self.unchanged)
     }
 }
 
@@ -153,7 +161,11 @@ impl Tsdb {
     }
 
     /// Inserted rows are new observations. Updated rows already existed at the
-    /// same `(site_id, openfdd_key, ts)` and were overwritten (overlap).
+    /// same `(site_id, openfdd_key, ts)` with a different value and were
+    /// overwritten in place. Unchanged rows were identical and left alone.
+    ///
+    /// Rows with a `portal_point_id` resolve their key through `point_map`, so
+    /// a re-poll lands on the series the first poll created.
     pub async fn upsert_samples_stats(
         &self,
         batch: &UpsertBatch,
@@ -163,9 +175,44 @@ impl Tsdb {
         }
         let mut tx = self.pool.begin().await?;
         let mut stats = SampleUpsertStats::default();
+        let mut portal_keys: HashMap<(String, String), String> = HashMap::new();
         for row in &batch.rows {
-            // xmax = 0 on the returned tuple means this command inserted the row.
-            let inserted: i32 = sqlx::query_scalar(
+            let portal = match (&row.portal_point_id, &row.equipment_id, &row.role) {
+                (Some(pid), Some(equip), Some(role)) if !pid.trim().is_empty() => {
+                    Some((pid.trim(), equip, role))
+                }
+                _ => None,
+            };
+            let key = match portal {
+                Some((pid, equip, role)) => {
+                    let cache = (row.site_id.clone(), pid.to_string());
+                    match portal_keys.get(&cache) {
+                        Some(key) => key.clone(),
+                        None => {
+                            let key = upsert_portal_point(
+                                &mut tx,
+                                &PortalPointUpsert {
+                                    site_id: &row.site_id,
+                                    portal_point_id: pid,
+                                    provider_instance_id: row.provider_instance_id.as_deref(),
+                                    equipment_id: equip,
+                                    role,
+                                    unit: row.unit.as_deref(),
+                                    candidate_key: &row.openfdd_key,
+                                    mark_referenced: false,
+                                },
+                            )
+                            .await?;
+                            portal_keys.insert(cache, key.clone());
+                            key
+                        }
+                    }
+                }
+                None => row.openfdd_key.clone(),
+            };
+            // Identical rows return nothing. xmax = 0 on a returned tuple means
+            // this command inserted it.
+            let outcome: Option<i32> = sqlx::query_scalar(
                 r#"
                 INSERT INTO sample(ts, site_id, openfdd_key, haystack_id, val, unit, quality)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -174,22 +221,32 @@ impl Tsdb {
                   unit = COALESCE(EXCLUDED.unit, sample.unit),
                   quality = COALESCE(EXCLUDED.quality, sample.quality),
                   haystack_id = COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
+                WHERE (sample.val, sample.unit, sample.quality, sample.haystack_id)
+                  IS DISTINCT FROM (
+                    EXCLUDED.val,
+                    COALESCE(EXCLUDED.unit, sample.unit),
+                    COALESCE(EXCLUDED.quality, sample.quality),
+                    COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
+                  )
                 RETURNING (CASE WHEN xmax = 0 THEN 1 ELSE 0 END)
                 "#,
             )
             .bind(row.ts)
             .bind(&row.site_id)
-            .bind(&row.openfdd_key)
+            .bind(&key)
             .bind(&row.haystack_id)
             .bind(row.val)
             .bind(&row.unit)
             .bind(&row.quality)
-            .fetch_one(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await?;
-            if inserted == 1 {
-                stats.inserted += 1;
-            } else {
-                stats.updated += 1;
+            match outcome {
+                Some(1) => stats.inserted += 1,
+                Some(_) => stats.updated += 1,
+                None => stats.unchanged += 1,
+            }
+            if portal.is_some() {
+                continue;
             }
             if let (Some(equip), Some(role)) = (&row.equipment_id, &row.role) {
                 sqlx::query(
@@ -378,6 +435,8 @@ impl SampleRow {
             quality: None,
             equipment_id: None,
             role: None,
+            portal_point_id: None,
+            provider_instance_id: None,
         }
     }
 }
