@@ -979,6 +979,305 @@ pub fn delete_equipment(
     )
 }
 
+/// One equipment in a portal inventory snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortalEquip {
+    pub equipment_id: String,
+    pub dis: Option<String>,
+    pub kind: Option<String>,
+    pub markers: Vec<String>,
+}
+
+/// One point in a portal inventory snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortalPoint {
+    pub point_id: String,
+    pub equipment_id: String,
+    pub openfdd_key: String,
+    pub role: String,
+    pub dis: Option<String>,
+    pub unit: Option<String>,
+    pub markers: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct PortalSyncReport {
+    pub changed: bool,
+    pub revision: u64,
+    pub equipment_upserted: usize,
+    pub points_upserted: usize,
+    pub equipment_deleted: Vec<String>,
+    pub points_deleted: Vec<String>,
+    pub removals_skipped: bool,
+}
+
+/// Make the overlay match one portal inventory snapshot for `source`.
+///
+/// Listed equipment and points are upserted in place (one node per id; tags,
+/// display name, unit, and equipment link replaced). Nodes stamped with this
+/// `source` that the snapshot no longer lists are removed and tombstoned, so a
+/// pack copy of the same id stays hidden from SPARQL. With `allow_removals`
+/// false (a possibly truncated snapshot) nothing is removed. The file and its
+/// revision change only when the graph changes.
+pub fn sync_portal_inventory(
+    building_root: &Path,
+    building_id: &str,
+    source: &str,
+    equipment: &[PortalEquip],
+    points: &[PortalPoint],
+    allow_removals: bool,
+) -> Result<PortalSyncReport, String> {
+    let source = source.trim();
+    if source.is_empty() {
+        return Err("portal source required".into());
+    }
+    let store = load_overlay_store(building_root)?;
+    let before = quad_set(&store)?;
+    let site = ensure_site(&store, building_id)?;
+    let source_pred = ofdd("portalSource");
+    let mut report = PortalSyncReport {
+        removals_skipped: !allow_removals,
+        ..PortalSyncReport::default()
+    };
+
+    if allow_removals {
+        let listed_equip: BTreeSet<&str> =
+            equipment.iter().map(|e| e.equipment_id.as_str()).collect();
+        let listed_points: BTreeSet<&str> = points.iter().map(|p| p.point_id.as_str()).collect();
+        for (subject, id) in sourced_subjects(&store, source, "equipmentId")? {
+            if listed_equip.contains(id.as_str()) {
+                continue;
+            }
+            for (child, child_id) in child_points(&store, &subject)? {
+                remove_subject(&store, &child)?;
+                if let Some(pid) = child_id {
+                    add_point_tombstone(&store, building_id, &pid)?;
+                    report.points_deleted.push(pid);
+                }
+            }
+            remove_subject(&store, &subject)?;
+            add_equip_tombstone(&store, building_id, &id)?;
+            report.equipment_deleted.push(id);
+        }
+        for (subject, id) in sourced_subjects(&store, source, "pointId")? {
+            if listed_points.contains(id.as_str()) {
+                continue;
+            }
+            remove_subject(&store, &subject)?;
+            add_point_tombstone(&store, building_id, &id)?;
+            report.points_deleted.push(id);
+        }
+    }
+
+    for eq in equipment {
+        let eid = eq.equipment_id.trim();
+        if eid.is_empty() {
+            continue;
+        }
+        let node = ensure_equip(&store, building_id, eid, &site)?;
+        set_str(&store, &node, &source_pred, source)?;
+        set_optional_str(&store, &node, &ph("dis"), eq.dis.as_deref())?;
+        let mut tags: Vec<String> = Vec::new();
+        if let Some(tag) = eq.kind.as_deref().and_then(kind_tag_iri) {
+            tags.push(tag);
+        }
+        for m in &eq.markers {
+            let local = m.trim().to_ascii_lowercase();
+            if !local.is_empty() {
+                tags.push(kind_tag_iri(&local).unwrap_or_else(|| phiot(&local)));
+            }
+        }
+        replace_tags(&store, &node, &tags)?;
+        remove_subject(&store, &tombstone_uri(building_id, "equip", eid)?)?;
+        report.equipment_upserted += 1;
+    }
+
+    for pt in points {
+        let pid = pt.point_id.trim();
+        let eid = pt.equipment_id.trim();
+        if pid.is_empty() || eid.is_empty() {
+            continue;
+        }
+        let equip = ensure_equip(&store, building_id, eid, &site)?;
+        let node = point_uri(building_id, pid)?;
+        if !has_type(&store, &node, &phiot("point"))? {
+            insert_type(&store, &node, &phiot("point"))?;
+            insert_str(&store, &node, &ofdd("pointId"), pid)?;
+            insert_str(&store, &node, &ofdd("hasTimeseriesId"), pid)?;
+            insert_str(&store, &node, &ofdd("siteId"), building_id)?;
+            insert_ref(&store, &node, &phiot("siteRef"), &site)?;
+            insert_bool_true(&store, &node, &ofdd("overlay"))?;
+        }
+        set_str(&store, &node, &source_pred, source)?;
+        set_ref(&store, &node, &phiot("equipRef"), &equip)?;
+        set_str(&store, &node, &ofdd("openfddKey"), pt.openfdd_key.trim())?;
+        set_str(&store, &node, &ofdd("role"), pt.role.trim())?;
+        set_optional_str(&store, &node, &ph("dis"), pt.dis.as_deref())?;
+        set_optional_str(&store, &node, &ph("unit"), pt.unit.as_deref())?;
+        let tags: Vec<String> = pt
+            .markers
+            .iter()
+            .map(|m| m.trim().to_ascii_lowercase())
+            .filter(|m| !m.is_empty())
+            .map(|m| ph(&m))
+            .collect();
+        replace_tags(&store, &node, &tags)?;
+        remove_subject(&store, &tombstone_uri(building_id, "point", pid)?)?;
+        report.points_upserted += 1;
+    }
+
+    let after = quad_set(&store)?;
+    if before == after {
+        report.revision = load_revision(building_root)?;
+        return Ok(report);
+    }
+    let committed = commit_store(
+        building_root,
+        building_id,
+        &store,
+        None,
+        false,
+        &format!("portal_inventory_sync:{source}"),
+    )
+    .map_err(|err| {
+        err.get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("overlay commit failed")
+            .to_string()
+    })?;
+    report.changed = true;
+    report.revision = committed
+        .get("revision")
+        .and_then(Value::as_u64)
+        .unwrap_or_default();
+    Ok(report)
+}
+
+fn quad_set(store: &Store) -> Result<BTreeSet<String>, String> {
+    store
+        .iter()
+        .map(|q| q.map(|quad| quad.to_string()))
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map_err(|e| format!("quads: {e}"))
+}
+
+fn set_optional_str(
+    store: &Store,
+    s: &NamedNode,
+    pred: &str,
+    value: Option<&str>,
+) -> Result<(), String> {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(v) => set_str(store, s, pred, v),
+        None => {
+            let pred_nn = nn(pred)?;
+            let existing: Vec<Quad> = store
+                .quads_for_pattern(
+                    Some(NamedOrBlankNode::from(s.clone()).as_ref()),
+                    Some((&pred_nn).into()),
+                    None,
+                    None,
+                )
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("quads: {e}"))?;
+            for q in existing {
+                store.remove(&q).map_err(|e| format!("remove quad: {e}"))?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn replace_tags(store: &Store, s: &NamedNode, tags: &[String]) -> Result<(), String> {
+    let pred = nn(HAS_TAG_IRI)?;
+    let existing: Vec<Quad> = store
+        .quads_for_pattern(
+            Some(NamedOrBlankNode::from(s.clone()).as_ref()),
+            Some((&pred).into()),
+            None,
+            None,
+        )
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("quads: {e}"))?;
+    for q in existing {
+        store.remove(&q).map_err(|e| format!("remove quad: {e}"))?;
+    }
+    for tag in tags {
+        insert_quad(store, s, HAS_TAG_IRI, Term::from(nn(tag)?))?;
+    }
+    Ok(())
+}
+
+/// Subjects stamped `ofdd:portalSource source`, with their `ofdd:<id_local>` value.
+fn sourced_subjects(
+    store: &Store,
+    source: &str,
+    id_local: &str,
+) -> Result<Vec<(NamedNode, String)>, String> {
+    let source_pred = nn(&ofdd("portalSource"))?;
+    let source_lit = Term::from(Literal::new_simple_literal(source));
+    let id_pred = nn(&ofdd(id_local))?;
+    let mut out = Vec::new();
+    for q in store.quads_for_pattern(
+        None,
+        Some((&source_pred).into()),
+        Some((&source_lit).into()),
+        None,
+    ) {
+        let q = q.map_err(|e| format!("quads: {e}"))?;
+        let NamedOrBlankNode::NamedNode(subject) = q.subject else {
+            continue;
+        };
+        for idq in store.quads_for_pattern(
+            Some(NamedOrBlankNode::from(subject.clone()).as_ref()),
+            Some((&id_pred).into()),
+            None,
+            None,
+        ) {
+            let idq = idq.map_err(|e| format!("quads: {e}"))?;
+            if let Term::Literal(lit) = idq.object {
+                out.push((subject.clone(), lit.value().to_string()));
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn child_points(
+    store: &Store,
+    equip: &NamedNode,
+) -> Result<Vec<(NamedNode, Option<String>)>, String> {
+    let equip_ref = nn(&phiot("equipRef"))?;
+    let equip_term = Term::from(equip.clone());
+    let p_id = nn(&ofdd("pointId"))?;
+    let mut out = Vec::new();
+    for q in store.quads_for_pattern(
+        None,
+        Some((&equip_ref).into()),
+        Some((&equip_term).into()),
+        None,
+    ) {
+        let q = q.map_err(|e| format!("quads: {e}"))?;
+        let NamedOrBlankNode::NamedNode(child) = q.subject else {
+            continue;
+        };
+        let mut pid = None;
+        for idq in store.quads_for_pattern(
+            Some(NamedOrBlankNode::from(child.clone()).as_ref()),
+            Some((&p_id).into()),
+            None,
+            None,
+        ) {
+            if let Term::Literal(lit) = idq.map_err(|e| format!("quads: {e}"))?.object {
+                pid = Some(lit.value().to_string());
+                break;
+            }
+        }
+        out.push((child, pid));
+    }
+    Ok(out)
+}
+
 pub fn soft_open_gaps() -> Vec<&'static str> {
     // Soft-OPEN SPARQL pack ∪ overlay (+ tombstones) is shipped.
     // Remaining Soft-OPEN honesty: C2–C6 Haystack FQ (#997/#1123) is out of this layer.
