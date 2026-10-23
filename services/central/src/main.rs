@@ -5,6 +5,7 @@ mod actions_scope;
 mod admin_cp;
 mod afdd_scheduler;
 mod analytics;
+mod audit;
 mod auth;
 mod building_sessions;
 mod canonical_state;
@@ -27,6 +28,7 @@ mod jobs;
 mod lifecycle;
 mod live_historian;
 mod logging;
+mod mapping_revision;
 #[cfg(test)]
 mod metering_scope_fixtures;
 mod models;
@@ -39,6 +41,10 @@ mod rcx_row_fixtures;
 mod routes;
 #[cfg(test)]
 mod rule_catalog_fixtures;
+#[cfg(test)]
+mod runtime_weekly_fixtures;
+#[cfg(test)]
+mod sat_pairing_fixtures;
 mod sql_anomaly;
 mod starter_seed;
 mod state;

@@ -93,7 +93,12 @@ SELECT
       AND dt_seconds > 0.0
       AND dt_seconds <= 3600.0
      THEN dt_seconds ELSE 0.0::double precision
-   END) / 3600.0) AS runtime_hours
+   END) / 3600.0) AS runtime_hours,
+  -- Chosen-signal samples in the week. This is not the chart's weekly cell count.
+  COUNT(*)::bigint AS n_observations,
+  -- A bucket that does not span most of its week is partial. The occupancy
+  -- reference stays the full schedule; the chart labels the short bucket.
+  COALESCE((MAX(ts) - MIN(ts)) < interval '6 days', true) AS partial_week
 FROM ordered
 GROUP BY 1, 3, 4, 5, 6
 ORDER BY 1, 5

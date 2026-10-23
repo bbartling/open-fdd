@@ -36,6 +36,7 @@ from helpers import (  # noqa: E402
     login,
     parse_connection,
     require_building_id,
+    run_child,
     safe_print,
     wait_until_ready,
 )
@@ -293,4 +294,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_child(main, "10_model_crud_helpers.py"))

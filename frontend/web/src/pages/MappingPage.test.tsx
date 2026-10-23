@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { MappingPage } from "./MappingPage";
 
@@ -81,6 +81,12 @@ describe("MappingPage", () => {
       {
         rule_id: "CMD-1",
         required_roles: ["fan_cmd", "fan_status"],
+        optional_roles: [],
+        applicability: "typed",
+      },
+      {
+        rule_id: "SAT-1",
+        required_roles: ["sat"],
         optional_roles: [],
         applicability: "typed",
       },
@@ -295,4 +301,164 @@ describe("MappingPage", () => {
       expect(screen.getByTestId("mapping-empty-building")).toBeTruthy();
     });
   });
+
+  it("shows a cleared role as unmapped in the draft, then restores it on discard", async () => {
+    const saved = {
+      ok: true,
+      building_id: "B1",
+      unit_system: "imperial",
+      equipment_ids: ["AHU_1"],
+      equipment: [
+        {
+          equipment_id: "AHU_1",
+          equipment_type: "AHU",
+          ok: true,
+          roles: { DA_T: "sat", SF_SPD: "fan_cmd" },
+          columns: [
+            { column: "DA_T", role: "sat", status: "mapped" },
+            { column: "SF_SPD", role: "fan_cmd", status: "mapped" },
+          ],
+          unmapped_columns: [],
+          blockers: [],
+          warnings: [],
+        },
+      ],
+      validation: { blocker_count: 0, warning_count: 0, equipment_count: 1 },
+    };
+    vi.mocked(getPackageMapping).mockResolvedValue(saved);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderMapping();
+    await waitFor(() => screen.getByTestId("map-role-input-DA_T"));
+
+    const roleSelect = screen.getByTestId("map-role-input-DA_T").querySelector("select");
+    fireEvent.change(roleSelect!, { target: { value: "" } });
+
+    expect(roleSelect).toHaveProperty("value", "");
+    const cleared = columnRow("DA_T");
+    expect(within(cleared).getAllByRole("cell")[1]?.textContent).toBe("");
+    expect(within(cleared).getAllByRole("cell")[2]?.textContent).toBe("unmapped");
+    expect(within(cleared).getAllByRole("cell")[3]?.textContent).toBe("—");
+    expect(cleared.textContent).not.toMatch(/SAT-1/);
+
+    fireEvent.click(screen.getByTestId("map-unmapped-only").querySelector("input")!);
+    expect(columnRow("DA_T")).toBeTruthy();
+    expect(screen.getByTestId("map-columns-table").textContent).not.toMatch(/SF_SPD/);
+    fireEvent.click(screen.getByTestId("map-unmapped-only").querySelector("input")!);
+
+    const saveBtn = screen.getByTestId("map-save").querySelector("button");
+    expect(saveBtn?.disabled).toBe(false);
+    expect(updatePackageRoles).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("map-reload").querySelector("button")!);
+    await waitFor(() => {
+      const restored = screen
+        .getByTestId("map-role-input-DA_T")
+        .querySelector("select");
+      expect(restored).toHaveProperty("value", "sat");
+    });
+    expect(screen.queryByTestId("map-dirty-banner")).toBeNull();
+    expect(within(columnRow("DA_T")).getAllByRole("cell")[2]?.textContent).toBe("mapped");
+    confirm.mockRestore();
+  });
+
+  it("labels draft, saved, and active ingest as separate revisions", async () => {
+    vi.mocked(getPackageMapping).mockResolvedValue({
+      ok: true,
+      building_id: "B1",
+      unit_system: "imperial",
+      source: "csv_column_map",
+      equipment_ids: ["AHU_1"],
+      equipment: [
+        {
+          equipment_id: "AHU_1",
+          equipment_type: "AHU",
+          ok: true,
+          roles: { DA_T: "sat" },
+          columns: [{ column: "DA_T", role: "sat", status: "mapped" }],
+          unmapped_columns: [],
+          blockers: [],
+          warnings: [],
+        },
+      ],
+      validation: { blocker_count: 0, warning_count: 0, equipment_count: 1 },
+      revisions: {
+        saved: { authority: "csv_column_map", label: "Saved column map" },
+        active_ingest: { revision_id: "rev-ingest-1", activated_by_mapping_save: false },
+      },
+    });
+    renderMapping();
+    await waitFor(() => screen.getByTestId("mapping-revision-draft"));
+    expect(screen.getByTestId("mapping-revision-draft").textContent).toBe(
+      "Draft: matches saved",
+    );
+    expect(screen.getByTestId("mapping-revision-saved").textContent).toContain(
+      "Saved column map",
+    );
+    expect(screen.getByTestId("mapping-revision-saved").textContent).toContain("DA_T → sat");
+    expect(screen.getByTestId("mapping-revision-active").textContent).toBe(
+      "Active ingest: rev-ingest-1",
+    );
+
+    const roleSelect = screen.getByTestId("map-role-input-DA_T").querySelector("select");
+    fireEvent.change(roleSelect!, { target: { value: "" } });
+    expect(screen.getByTestId("mapping-revision-draft").textContent).toBe(
+      "Draft: DA_T unmapped",
+    );
+    expect(screen.getByTestId("mapping-revision-saved").textContent).toContain("DA_T → sat");
+    expect(screen.getByTestId("mapping-revision-active").textContent).toBe(
+      "Active ingest: rev-ingest-1",
+    );
+  });
+
+  it("summarizes sample validation with not-evaluated checks instead of a zero-issue pass", async () => {
+    vi.mocked(getPackageMapping).mockResolvedValue({
+      ok: true,
+      building_id: "B1",
+      unit_system: "imperial",
+      source: "timescale_sample",
+      equipment_ids: ["EQ1"],
+      equipment: [
+        {
+          equipment_id: "EQ1",
+          equipment_type: "unclassified",
+          ok: true,
+          roles: { sat: "sat" },
+          columns: [{ column: "sat", role: "sat", status: "mapped" }],
+          unmapped_columns: [],
+          blockers: [],
+          warnings: [],
+        },
+      ],
+      validation: { blocker_count: 0, warning_count: 0, equipment_count: 1 },
+    });
+    renderMapping("/mapping?site=B1&eq=EQ1");
+    await waitFor(() => screen.getByTestId("mapping-validation-summary"));
+    const summaries = screen.getAllByTestId("mapping-validation-summary");
+    expect(summaries).toHaveLength(1);
+    const text = summaries[0]?.textContent ?? "";
+    expect(text).toMatch(/Semantic tags: not evaluated/);
+    expect(text).toMatch(/Kind and unit: not evaluated/);
+    expect(text).toMatch(/Provider bindings: not evaluated/);
+    expect(text).toMatch(/Active ingest plan: not evaluated/);
+    expect(text).toMatch(/Column role map: not evaluated/);
+    expect(text).toMatch(/Equipment stamp: incomplete/);
+    expect(text).toMatch(/Not evaluated:/);
+    expect(text).not.toMatch(/Validation: validated/);
+    expect(text).not.toMatch(/0 blocker/);
+    expect(screen.getByTestId("mapping-revision-active").textContent).toBe(
+      "Active ingest: not reported",
+    );
+    expect(screen.getByTestId("map-download-ttl").textContent).toMatch(/inventory/i);
+  });
 });
+
+function columnRow(column: string): HTMLElement {
+  const table = screen.getByTestId("map-columns-table");
+  const row = within(table)
+    .getAllByRole("row")
+    .find((candidate) => within(candidate).queryByText(column));
+  if (!row) {
+    throw new Error(`missing column row ${column}`);
+  }
+  return row;
+}

@@ -44,6 +44,17 @@ vi.mock("../api/mappingApi", () => ({
 
 vi.mock("../api/analyticsApi", () => ({
   listRcxPresets: vi.fn(async () => ALL_PRESETS),
+  postRuntime: vi.fn(async () => ({
+    schema_version: "1",
+    query_version: "motor-weekly-runtime",
+    generated_at: "",
+    engine: "timescale-sql",
+    warnings: [],
+    rows: [],
+    equipment: [],
+    points: [],
+    skipped: [],
+  })),
   postRcxPreset: vi.fn(async () => ({
     schema_version: "1",
     query_version: "rcx-preset-zone_comfort_rank-v1",
@@ -67,8 +78,8 @@ vi.mock("../api/fddApi", () => ({
 
 vi.mock("../api/uploadApi", () => ({ uploadPackage: vi.fn() }));
 
-import { listRcxPresets, postRcxPreset } from "../api/analyticsApi";
-import { listPackageBuildings } from "../api/mappingApi";
+import { listRcxPresets, postRcxPreset, postRuntime } from "../api/analyticsApi";
+import { getSessionConfig, listPackageBuildings } from "../api/mappingApi";
 
 function deferred<T>() {
   let resolve: (value: T) => void = () => undefined;
@@ -90,7 +101,8 @@ function presetValues(): string[] {
 
 describe("RcxPage vibe19 catalog", () => {
   beforeEach(() => {
-    vi.mocked(listRcxPresets).mockClear();
+    vi.mocked(listRcxPresets).mockReset();
+    vi.mocked(listRcxPresets).mockImplementation(async () => ALL_PRESETS);
     vi.mocked(postRcxPreset).mockClear();
   });
 
@@ -299,6 +311,114 @@ describe("RcxPage vibe19 catalog", () => {
       screen.getByTestId("rcx-plot-preview-table").querySelector("tbody td")
         ?.textContent,
     ).toBe("2024-06-01T00:11:00Z");
+  });
+
+  it("reports weekly observations and the saved schedule reference together", async () => {
+    vi.mocked(listRcxPresets).mockResolvedValue([
+      {
+        id: "ahu_motor_weekly",
+        title: "Weekly runtime",
+        family: "AHU / air",
+        chart: "bar",
+        frozen: true,
+      },
+      ...ALL_PRESETS,
+    ]);
+    vi.mocked(getSessionConfig).mockResolvedValue({
+      ok: true,
+      config: {
+        schema_version: "openfdd.session.v1",
+        occupancy_schedule: {
+          timezone: "America/Chicago",
+          nominal_occ_hours_week: 60,
+          days: {
+            mon: { occupied: true, start: "07:00", end: "17:00" },
+            tue: { occupied: true, start: "07:00", end: "17:00" },
+            wed: { occupied: true, start: "07:00", end: "17:00" },
+            thu: { occupied: true, start: "07:00", end: "17:00" },
+            fri: { occupied: false, start: "07:00", end: "17:00" },
+          },
+        },
+      },
+    });
+    vi.mocked(postRuntime).mockResolvedValue({
+      schema_version: "1",
+      query_version: "motor-weekly-runtime",
+      generated_at: "",
+      engine: "timescale-sql",
+      warnings: [],
+      rows: [
+        {
+          equipment_id: "AHU_A",
+          kind: "motor",
+          plant_group: "ahu",
+          week_label: "2026-W23",
+          week_start: "2026-06-01T00:00:00Z",
+          run_hours: 40,
+          n_observations: 18,
+          partial_week: false,
+          avg_oat_f: 70,
+        },
+        {
+          equipment_id: "AHU_B",
+          kind: "motor",
+          plant_group: "ahu",
+          week_label: "2026-W23",
+          week_start: "2026-06-01T00:00:00Z",
+          run_hours: 12,
+          n_observations: 18,
+          partial_week: false,
+          avg_oat_f: 71,
+        },
+        {
+          equipment_id: "AHU_A",
+          kind: "motor",
+          plant_group: "ahu",
+          week_label: "2026-W24",
+          week_start: "2026-06-08T00:00:00Z",
+          run_hours: 3,
+          n_observations: 6,
+          partial_week: true,
+          avg_oat_f: 75,
+        },
+      ],
+      equipment: [],
+      points: [],
+      skipped: [],
+    } as Awaited<ReturnType<typeof postRuntime>>);
+    render(
+      <MemoryRouter initialEntries={["/rcx?site=BUILDING_100"]}>
+        <RcxPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      const family = screen.getByTestId("rcx-family").querySelector("select");
+      const values = [...(family?.options ?? [])].map((option) => option.value);
+      expect(values).toContain("AHU / air");
+    });
+    fireEvent.change(screen.getByTestId("rcx-family").querySelector("select")!, {
+      target: { value: "AHU / air" },
+    });
+    await waitFor(() => {
+      const preset = screen.getByTestId("rcx-preset").querySelector("select");
+      const values = [...(preset?.options ?? [])].map((option) => option.value);
+      expect(values).toContain("ahu_motor_weekly");
+    });
+    fireEvent.change(screen.getByTestId("rcx-preset").querySelector("select")!, {
+      target: { value: "ahu_motor_weekly" },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("rcx-provenance").textContent).toContain(
+        "weekly observations 3",
+      );
+    });
+    const provenance = screen.getByTestId("rcx-provenance").textContent ?? "";
+    expect(provenance).toContain("samples 42");
+    expect(provenance).toContain(
+      "schedule 40 h/week (America/Chicago, session openfdd.session.v1)",
+    );
+    expect(provenance).not.toContain("points=0");
+    expect(provenance).not.toContain("60 h/week");
   });
 
   it("runs one preset query per selection", async () => {

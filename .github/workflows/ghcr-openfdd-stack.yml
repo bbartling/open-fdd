@@ -34,6 +34,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: openfdd
+          POSTGRES_PASSWORD: openfdd
+          POSTGRES_DB: openfdd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openfdd -d openfdd"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v5
 
@@ -51,7 +65,11 @@ jobs:
         run: cargo clippy -p openfdd-central -- -D warnings
 
       - name: Stack crate tests
-        run: cargo test -p openfdd-central
+        env:
+          OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+        run: |
+          cargo test -p openfdd-central -- --skip fixture_acceptance
+          cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
       - name: React sole product UI
         run: |

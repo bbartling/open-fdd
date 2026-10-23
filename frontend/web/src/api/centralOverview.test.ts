@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fetchCentralOverview } from "./centralOverview";
-import { AIR_BARE_MIN_OCC_HOURS_WEEK, RAINBOW_PALETTE } from "./plotlyTheme";
+import { RAINBOW_PALETTE } from "./plotlyTheme";
 
 vi.mock("./mappingApi", () => ({
+  getSessionConfig: vi.fn(async () => ({ ok: true, config: {} })),
   getPackageMapping: vi.fn(async () => ({
     ok: true,
     equipment: [
@@ -341,7 +342,14 @@ describe("fetchCentralOverview", () => {
     expect(oat?.yaxis).toBe("y2");
     expect(oat?.line).toMatchObject({ dash: "dot", color: "#333333" });
     const shapes = air!.figure?.layout?.shapes as Array<Record<string, unknown>>;
-    expect(shapes?.[0]?.y0).toBe(AIR_BARE_MIN_OCC_HOURS_WEEK);
+    const annotations = air!.figure?.layout?.annotations as Array<Record<string, unknown>>;
+    expect(shapes?.[0]?.y0).toBe(50);
+    expect(annotations?.[0]?.text).toBe("schedule 50 h/week (default)");
+    expect(air!.figure?.meta?.schedule_hours).toBe(shapes?.[0]?.y0);
+    expect(air!.figure?.meta?.weekly_observations).toBe(5);
+    expect(air!.figure?.meta?.point_count).toBe(5);
+    expect(air!.figure?.meta?.provenance).toContain("weekly observations 5");
+    expect(air!.figure?.meta?.provenance).toContain("schedule 50 h/week (default)");
     // Section owns the title — figure should not duplicate plant H2.
     expect(air!.figure?.layout?.title).toBeUndefined();
   });

@@ -222,6 +222,8 @@ pub async fn motor_weekly_runtime(
             "week_label": r.try_get::<String, _>("week_label").ok(),
             "run_hours": runtime,
             "runtime_hours": runtime,
+            "n_observations": r.try_get::<i64, _>("n_observations").ok(),
+            "partial_week": r.try_get::<bool, _>("partial_week").ok(),
         }));
     }
     Ok(finish_row_envelope(
@@ -1024,9 +1026,9 @@ pub async fn respond_query(
         "vav-health" => Ok(crate::analytics::vav_health::handle_async(req)
             .await
             .to_json()),
-        "sensor-health" => Ok(crate::analytics::sensor_health::handle_async(req)
+        "sensor-health" => crate::analytics::sensor_health::handle_async(req)
             .await
-            .to_json()),
+            .map(|env| env.to_json()),
         "economizer" | "rcx-ahu" => {
             economizer_deltas(&tsdb, &building, &scope, economizer_dt_min(req.dt_min_f)).await
         }
@@ -1275,6 +1277,14 @@ mod pack_version_tests {
         assert!(
             !MECH_COOLING_SQL.contains("* 300.0"),
             "mechanical cooling hours must not multiply sample counts by 300s"
+        );
+        assert!(
+            MOTOR_WEEKLY_SQL.contains("AS n_observations"),
+            "weekly runtime must report the chosen-signal sample count"
+        );
+        assert!(
+            MOTOR_WEEKLY_SQL.contains("AS partial_week"),
+            "weekly runtime must mark buckets that do not span the week"
         );
     }
 }

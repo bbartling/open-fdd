@@ -27,8 +27,21 @@ import {
 import { listProviderBuildingIds } from "../api/providersApi";
 import { buildDataModelTurtle } from "../api/dataModelTurtle";
 import { listFddRules, type FddRuleSummary } from "../api/fddApi";
+import {
+  activeIngestRevision,
+  columnNames,
+  mappingRevisionLabels,
+  rolesForSave,
+  savedAuthorityLabel,
+  seedDraftRoles,
+} from "../lib/mappingDraft";
+import {
+  checkLine,
+  summarizeMappingValidation,
+} from "../lib/mappingValidation";
 
 type ColumnRow = {
+  row_key: string;
   column: string;
   role: string;
   status: string;
@@ -160,7 +173,7 @@ export function MappingPage() {
         (eqId
           ? inv.equipment?.find((e) => e.equipment_id === eqId)
           : inv.equipment?.[0]) ?? null;
-      setDraftRoles({ ...(eq?.roles ?? {}) });
+      setDraftRoles(seedDraftRoles(eq));
       setDirty(false);
       if (eq && !eqId) {
         setQuery({ equipment: eq.equipment_id }, true);
@@ -204,12 +217,7 @@ export function MappingPage() {
   }, [refreshInventory]);
 
   const onRoleChange = (column: string, role: string) => {
-    setDraftRoles((prev) => {
-      const next = { ...prev };
-      if (!role.trim()) delete next[column];
-      else next[column] = role.trim();
-      return next;
-    });
+    setDraftRoles((prev) => ({ ...prev, [column]: role.trim() }));
     setDirty(true);
     setNotice(null);
   };
@@ -223,10 +231,15 @@ export function MappingPage() {
     setError(null);
     setNotice(null);
     try {
-      await updatePackageRoles(buildingId, selectedEq.equipment_id, draftRoles);
+      const savedRoles = rolesForSave(draftRoles);
+      const rolesResult = await updatePackageRoles(
+        buildingId,
+        selectedEq.equipment_id,
+        savedRoles,
+      );
       const roleMap = {
         ...(sessionConfig?.role_map ?? {}),
-        [selectedEq.equipment_id]: invertRolesToSessionMap(draftRoles),
+        [selectedEq.equipment_id]: invertRolesToSessionMap(savedRoles),
       };
       const config: SessionConfig = {
         schema_version: "openfdd_session_v1",
@@ -237,8 +250,14 @@ export function MappingPage() {
       };
       const saved = await putSessionConfig(config, buildingId);
       setSessionConfig(saved.config ?? config);
+      let savedLead = `Saved mapping for ${selectedEq.equipment_id}`;
+      if (rolesResult.ingest_plan_activated === false) {
+        savedLead = `Saved column map for ${selectedEq.equipment_id}. Active ingest plan was not changed.`;
+      } else if (rolesResult.ingest_plan_activated === true) {
+        savedLead = `Saved column map for ${selectedEq.equipment_id}. Active ingest plan was updated.`;
+      }
       setNotice(
-        `Saved mapping for ${selectedEq.equipment_id}` +
+        savedLead +
           (saved.warnings?.length ? ` (${saved.warnings.length} warning(s))` : ""),
       );
       setDirty(false);
@@ -317,34 +336,24 @@ export function MappingPage() {
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
+  const editorColumns = useMemo(() => columnNames(selectedEq), [selectedEq]);
+
   const tableRows: ColumnRow[] = useMemo(() => {
-    const cols = selectedEq?.columns ?? [];
-    const seen = new Set(cols.map((c) => c.column));
-    const extras = (selectedEq?.unmapped_columns ?? []).filter(
-      (c) => c && !seen.has(c),
-    );
-    const allCols = [
-      ...cols.map((c) => ({
-        column: c.column,
-        role: draftRoles[c.column] ?? c.role ?? "",
-      })),
-      ...extras.map((column) => ({
-        column,
-        role: draftRoles[column] ?? "",
-      })),
-    ];
-    return allCols
-      .map((c) => {
-        const role = c.role;
+    return editorColumns
+      .map((column) => {
+        const role = (draftRoles[column] ?? "").trim();
         const consumers = role ? (roleToFdd.get(role) ?? []) : [];
+        const owners = role
+          ? editorColumns.filter((name) => (draftRoles[name] ?? "").trim() === role)
+          : [];
+        let status = "mapped";
+        if (!role) status = "unmapped";
+        else if (owners.length > 1) status = "ambiguous";
         return {
-          column: c.column,
+          row_key: column,
+          column,
           role,
-          status: (() => {
-            if (!role) return "unmapped";
-            const owners = allCols.filter((x) => x.role === role).map((x) => x.column);
-            return owners.length > 1 ? "ambiguous" : "mapped";
-          })(),
+          status,
           fdd_rules: consumers.length
             ? consumers.slice(0, 8).join(", ") + (consumers.length > 8 ? "…" : "")
             : role
@@ -352,8 +361,24 @@ export function MappingPage() {
               : "—",
         };
       })
-      .filter((r) => (showUnmappedOnly ? r.status !== "mapped" : true));
-  }, [selectedEq, draftRoles, showUnmappedOnly, roleToFdd]);
+      .filter((row) => (showUnmappedOnly ? row.status !== "mapped" : true));
+  }, [editorColumns, draftRoles, showUnmappedOnly, roleToFdd]);
+
+  const revisionView = useMemo(() => {
+    if (!selectedEq) return null;
+    return mappingRevisionLabels({
+      dirty,
+      draftRoles,
+      savedRoles: selectedEq.roles ?? {},
+      savedAuthorityLabel: savedAuthorityLabel(inventory),
+      activeIngestRevision: activeIngestRevision(inventory),
+    });
+  }, [selectedEq, dirty, draftRoles, inventory]);
+
+  const validationSummary = useMemo(
+    () => summarizeMappingValidation(inventory),
+    [inventory],
+  );
 
   const buildingOptions = [
     { value: "", label: "— select building —" },
@@ -377,8 +402,6 @@ export function MappingPage() {
       ...sorted.map((r) => ({ value: r, label: r })),
     ];
   }, [cookbookRoles, draftRoles]);
-
-  const validation = inventory?.validation;
 
   return (
     <AppShell
@@ -448,7 +471,7 @@ export function MappingPage() {
           />
           <Button
             id="map-download-ttl"
-            label="Export TTL"
+            label="Export inventory TTL"
             variant="secondary"
             onClick={onDownloadTtl}
             disabled={!hasSiteModel}
@@ -456,7 +479,7 @@ export function MappingPage() {
           />
           <Button
             id="map-view-ttl-text"
-            label="View TTL as text"
+            label="View inventory TTL"
             variant="secondary"
             onClick={onViewTtlText}
             disabled={!hasSiteModel}
@@ -537,13 +560,24 @@ export function MappingPage() {
           </InlineAlert>
         ) : null}
 
-        {validation ? (
-          <p data-testid="mapping-validation-summary">
-            Validation: {validation.blocker_count} blocker(s),{" "}
-            {validation.warning_count} warning(s),{" "}
-            {validation.equipment_count} equipment — unit system{" "}
-            <code>{inventory?.unit_system ?? "—"}</code>
-          </p>
+        {validationSummary ? (
+          <div data-testid="mapping-validation-summary">
+            <p>{validationSummary.headline}</p>
+            <ul>
+              {validationSummary.checks.map((check) => (
+                <li key={check.id}>{checkLine(check)}</li>
+              ))}
+            </ul>
+            <p>{validationSummary.sourceLabel}</p>
+          </div>
+        ) : null}
+
+        {revisionView ? (
+          <div data-testid="mapping-revisions">
+            <p data-testid="mapping-revision-draft">{revisionView.draft}</p>
+            <p data-testid="mapping-revision-saved">{revisionView.saved}</p>
+            <p data-testid="mapping-revision-active">{revisionView.active}</p>
+          </div>
         ) : null}
 
         {selectedEq ? (
@@ -620,16 +654,7 @@ export function MappingPage() {
                 }}
                 data-testid="mapping-role-editors"
               >
-                {(selectedEq.columns ?? [])
-                  .map((c) => c.column)
-                  .concat(
-                    (selectedEq.unmapped_columns ?? []).filter(
-                      (c) =>
-                        c &&
-                        !(selectedEq.columns ?? []).some((x) => x.column === c),
-                    ),
-                  )
-                  .map((column) => (
+                {editorColumns.map((column) => (
                   <div
                     key={column}
                     style={{

@@ -65,14 +65,65 @@ fn safe_ident(name: &str) -> bool {
     !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// Quantity and display unit for an RCx companion role. Unknown roles stay unlabeled.
+/// Quantity and display unit for an RCx role. Unknown roles stay unlabeled.
+/// Storage stays canonical °F / in. w.c.; the client converts for display.
 fn role_measure(role: &str) -> (&'static str, &'static str) {
     match role {
         "duct_static" | "duct_static_sp" | "duct_sp" | "static_sp" => ("air_pressure", "in. w.c."),
-        "chw_supply_t" | "chw_return_t" | "cw_supply_t" | "cw_return_t" | "hw_supply_t"
-        | "hw_return_t" => ("absolute_temperature", "°F"),
+        "sat" | "mat" | "rat" | "oa_t" | "web_oa_t" | "web_wb_t" | "zone_t" | "chw_supply_t"
+        | "chw_return_t" | "cw_supply_t" | "cw_return_t" | "hw_supply_t" | "hw_return_t" => {
+            ("absolute_temperature", "°F")
+        }
         _ => ("other", ""),
     }
+}
+
+/// Nearest-sample age cap for a portal channel that does not share the Y clock.
+///
+/// A Y sample pairs with the nearest sample of one model-bound X series when
+/// the absolute timestamp difference is at most this age. The measured X value
+/// is copied unchanged. Nothing is interpolated, and an older sample stays unpaired.
+pub const RCX_X_ALIGN_MAX_AGE_SECS: i64 = 15 * 60;
+
+/// Window and point cap for one RCx historian read.
+pub(crate) struct RcxQuery {
+    pub max_points: usize,
+    pub scope: crate::timescale_analytics::AnalyticsSqlScope,
+}
+
+fn ts_rfc3339(ts: Option<DateTime<Utc>>) -> Value {
+    json!(ts.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)))
+}
+
+fn insert_scope(
+    obj: &mut serde_json::Map<String, Value>,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
+    effective: &[String],
+) {
+    obj.insert("window_start".to_string(), ts_rfc3339(scope.start));
+    obj.insert("window_end".to_string(), ts_rfc3339(scope.end));
+    obj.insert("equipment_ids".to_string(), json!(scope.equipment_ids));
+    obj.insert("effective_equipment_ids".to_string(), json!(effective));
+}
+
+/// Type filter first, then an exact equipment-id subset. No id substring.
+fn cohort_ids(
+    equipment: Vec<(String, Option<String>)>,
+    kinds: &[&str],
+    requested: &[String],
+) -> Vec<String> {
+    let mut ids: Vec<String> = equipment
+        .into_iter()
+        .filter(|(_, typ)| equip_matches_kinds(typ.as_deref(), kinds))
+        .map(|(id, _)| id)
+        .collect();
+    if !requested.is_empty() {
+        let wanted: BTreeSet<&str> = requested.iter().map(String::as_str).collect();
+        ids.retain(|id| wanted.contains(id.as_str()));
+    }
+    ids.sort();
+    ids.dedup();
+    ids
 }
 
 fn delta_measure(primary: &str, companion: &str) -> Option<(&'static str, &'static str)> {
@@ -214,9 +265,13 @@ pub async fn inspect_equipment(
     equipment_id: &str,
     columns: Option<&[String]>,
     max_points: usize,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let eq = equipment_id.trim();
     if eq.is_empty() || building_id.trim().is_empty() {
+        return Ok(None);
+    }
+    if !scope.equipment_ids.is_empty() && !scope.equipment_ids.iter().any(|id| id == eq) {
         return Ok(None);
     }
     let tsdb = Tsdb::connect_from_env().await?;
@@ -302,6 +357,8 @@ FROM (
     COUNT(*) OVER () AS _cnt
   FROM sample
   WHERE site_id = $1 AND ({filters})
+    AND ($3::timestamptz IS NULL OR ts >= $3)
+    AND ($4::timestamptz IS NULL OR ts < $4)
   GROUP BY ts
 ) s
 WHERE _rn = 1 OR _rn = _cnt
@@ -319,6 +376,8 @@ LIMIT $2
     let rows = sqlx::query(&sql)
         .bind(building_id)
         .bind(limit)
+        .bind(scope.start)
+        .bind(scope.end)
         .fetch_all(tsdb.pool())
         .await
         .context("inspect pivot")?;
@@ -372,6 +431,9 @@ LIMIT $2
         "building_id": building_id,
         "engine": TS_ENGINE,
     }));
+    if let Some(obj) = env.coverage.as_mut().and_then(Value::as_object_mut) {
+        insert_scope(obj, scope, &[eq.to_string()]);
+    }
     Ok(Some(env))
 }
 
@@ -383,22 +445,18 @@ pub async fn rcx_timeseries(
     pair_return_col: Option<&str>,
     eq_kinds: &[&str],
     filter_fan_on: bool,
-    max_points: usize,
+    read: &RcxQuery,
 ) -> Result<Option<AnalyticsEnvelope>> {
     if !safe_ident(role_col) {
         return Ok(None);
     }
     let tsdb = Tsdb::connect_from_env().await?;
     let equipment = list_equipment(&tsdb, building_id).await?;
-    let ids: Vec<String> = equipment
-        .into_iter()
-        .filter(|(_, t)| equip_matches_kinds(t.as_deref(), eq_kinds))
-        .map(|(id, _)| id)
-        .collect();
+    let ids = cohort_ids(equipment, eq_kinds, &read.scope.equipment_ids);
     if ids.is_empty() {
         return Ok(None);
     }
-    let limit = max_points.clamp(200, 20000) as i64;
+    let limit = read.max_points.clamp(200, 20000) as i64;
     let pattern = format!("%.{role_col}");
     let mut warnings =
         vec!["RCx role timeseries from Timescale sample (Wave-X Soft-OPEN)".to_string()];
@@ -474,6 +532,8 @@ FROM (
     AND s.openfdd_key LIKE $2
     AND split_part(s.openfdd_key, '.', 1) = ANY($3)
     AND s.val IS NOT NULL
+    AND ($7::timestamptz IS NULL OR s.ts >= $7)
+    AND ($8::timestamptz IS NULL OR s.ts < $8)
     {fan_join}
 ) q
 WHERE _rn = 1 OR _rn = _cnt
@@ -489,6 +549,8 @@ LIMIT $4
         .bind(limit)
         .bind(overlay_role)
         .bind(return_role)
+        .bind(read.scope.start)
+        .bind(read.scope.end)
         .fetch_all(tsdb.pool())
         .await
         .context("rcx_timeseries")?;
@@ -642,7 +704,106 @@ LIMIT $4
         "equipment_n": ids.len(),
         "engine": TS_ENGINE,
     }));
+    if let Some(obj) = env.coverage.as_mut().and_then(Value::as_object_mut) {
+        insert_scope(obj, &read.scope, &ids);
+    }
     Ok(Some(env))
+}
+
+fn scatter_x_role(prefer_wetbulb: bool) -> (&'static str, &'static str) {
+    if prefer_wetbulb {
+        ("web_wb_t", "wet_bulb_temperature")
+    } else {
+        ("web_oa_t", "dry_bulb_temperature")
+    }
+}
+
+fn scatter_unavailable(
+    building_id: &str,
+    y_col: &str,
+    prefer_wetbulb: bool,
+    ids: &[String],
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
+    reason: &str,
+) -> AnalyticsEnvelope {
+    let (role, quantity) = scatter_x_role(prefer_wetbulb);
+    let mut env = envelope_with_engine(
+        "rcx-scatter-v1",
+        &AnalyticsQuery {
+            building_id: Some(building_id.to_string()),
+            start: scope.start,
+            end: scope.end,
+            equipment_ids: Some(scope.equipment_ids.clone()),
+            ..Default::default()
+        },
+        vec![reason.to_string()],
+        TS_ENGINE,
+    );
+    env.coverage = Some(json!({
+        "point_count": 0,
+        "role_col": y_col,
+        "chart_kind": "scatter_oat",
+        "source": "timescale_sample",
+        "building_id": building_id,
+        "engine": TS_ENGINE,
+        "x_available": false,
+        "x_point": {
+            "role": role,
+            "quantity": quantity,
+            "unit": "°F",
+            "available": false,
+        },
+    }));
+    if let Some(obj) = env.coverage.as_mut().and_then(Value::as_object_mut) {
+        insert_scope(obj, scope, ids);
+    }
+    env
+}
+
+/// One weather-typed equipment carrying `role`, nearest id first.
+///
+/// The stamp is `equip_type = weather`. BAS `oa_t` and a second weather series
+/// are different points and are not candidates.
+async fn bound_weather_equipment(
+    tsdb: &Tsdb,
+    building_id: &str,
+    role: &str,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
+) -> Result<Option<String>> {
+    let row = sqlx::query(
+        r#"
+        SELECT e.equipment_id
+        FROM equipment e
+        WHERE e.building_id = $1
+          AND lower(btrim(e.equip_type)) = 'weather'
+          AND EXISTS (
+            SELECT 1
+            FROM sample s
+            WHERE s.site_id = $1
+              AND s.openfdd_key = e.equipment_id || '.' || $2
+              AND s.val IS NOT NULL
+              AND (
+                $3::timestamptz IS NULL
+                OR s.ts >= $3 - ($5::int * interval '1 second')
+              )
+              AND (
+                $4::timestamptz IS NULL
+                OR s.ts < $4 + ($5::int * interval '1 second')
+              )
+          )
+        ORDER BY e.equipment_id
+        LIMIT 1
+        "#,
+    )
+    .bind(building_id)
+    .bind(role)
+    .bind(scope.start)
+    .bind(scope.end)
+    .bind(RCX_X_ALIGN_MAX_AGE_SECS as i32)
+    .fetch_optional(tsdb.pool())
+    .await
+    .context("bound weather x")?;
+    Ok(row.and_then(|r| r.try_get::<String, _>("equipment_id").ok()))
 }
 
 pub async fn rcx_oat_scatter(
@@ -650,75 +811,162 @@ pub async fn rcx_oat_scatter(
     y_col: &str,
     eq_kinds: &[&str],
     prefer_wetbulb: bool,
-    max_points: usize,
+    read: &RcxQuery,
 ) -> Result<Option<AnalyticsEnvelope>> {
     if !safe_ident(y_col) {
         return Ok(None);
     }
-    let _ = prefer_wetbulb;
     let tsdb = Tsdb::connect_from_env().await?;
     let equipment = list_equipment(&tsdb, building_id).await?;
-    let ids: Vec<String> = equipment
-        .into_iter()
-        .filter(|(_, t)| equip_matches_kinds(t.as_deref(), eq_kinds))
-        .map(|(id, _)| id)
-        .collect();
+    let ids = cohort_ids(equipment, eq_kinds, &read.scope.equipment_ids);
     if ids.is_empty() {
         return Ok(None);
     }
-    let limit = max_points.clamp(200, 20000) as i64;
+    let (x_role, x_quantity) = scatter_x_role(prefer_wetbulb);
+    let Some(x_equipment) =
+        bound_weather_equipment(&tsdb, building_id, x_role, &read.scope).await?
+    else {
+        let reason = if prefer_wetbulb {
+            "requested wet-bulb is unavailable: no weather equipment has web_wb_t in the aligned window; dry-bulb was not substituted"
+        } else {
+            "requested web dry-bulb is unavailable: no weather equipment has web_oa_t in the aligned window; other outdoor-air series were not substituted"
+        };
+        return Ok(Some(scatter_unavailable(
+            building_id,
+            y_col,
+            prefer_wetbulb,
+            &ids,
+            &read.scope,
+            reason,
+        )));
+    };
+    let x_key = format!("{x_equipment}.{x_role}");
+    // Wet-bulb keeps a dry-bulb reference only when that same weather point
+    // actually has web_oa_t. The reference is never a copy of the wet-bulb value.
+    let dry_key = if prefer_wetbulb {
+        format!("{x_equipment}.web_oa_t")
+    } else {
+        String::new()
+    };
+    let limit = read.max_points.clamp(200, 20000) as i64;
     let y_pat = format!("%.{y_col}");
+    let age = RCX_X_ALIGN_MAX_AGE_SECS as i32;
+    let (y_quantity, y_unit) = role_measure(y_col);
     let rows = sqlx::query(
         r#"
         WITH y AS (
-          SELECT ts, split_part(openfdd_key,'.',1) AS equipment_id, val AS y_f
+          SELECT ts, split_part(openfdd_key, '.', 1) AS equipment_id, val AS y_f
           FROM sample
           WHERE site_id = $1
             AND openfdd_key LIKE $2
-            AND split_part(openfdd_key,'.',1) = ANY($3)
+            AND split_part(openfdd_key, '.', 1) = ANY($3)
             AND val IS NOT NULL
-        ),
-        oat AS (
-          SELECT ts, val AS oat_f
-          FROM sample
-          WHERE site_id = $1
-            AND (openfdd_key LIKE '%.web_oa_t' OR openfdd_key LIKE '%.oa_t')
+            AND ($4::timestamptz IS NULL OR ts >= $4)
+            AND ($5::timestamptz IS NULL OR ts < $5)
         )
-        SELECT y.ts AS timestamp_utc, y.equipment_id, y.y_f, o.oat_f
+        SELECT
+          y.ts AS timestamp_utc,
+          y.equipment_id,
+          y.y_f,
+          x.ts AS x_ts,
+          x.val AS x_f,
+          x.quality AS x_quality,
+          abs(EXTRACT(EPOCH FROM (y.ts - x.ts)))::float8 AS x_age_seconds,
+          dry.val AS dry_f
         FROM y
-        JOIN oat o ON o.ts = y.ts
-        WHERE o.oat_f IS NOT NULL
+        JOIN LATERAL (
+          SELECT s.ts, s.val, s.quality
+          FROM sample s
+          WHERE s.site_id = $1
+            AND s.openfdd_key = $6
+            AND s.val IS NOT NULL
+            AND s.ts >= y.ts - ($8::int * interval '1 second')
+            AND s.ts <= y.ts + ($8::int * interval '1 second')
+          ORDER BY abs(EXTRACT(EPOCH FROM (s.ts - y.ts))), s.ts
+          LIMIT 1
+        ) x ON true
+        LEFT JOIN LATERAL (
+          SELECT s.val
+          FROM sample s
+          WHERE $9::text <> ''
+            AND s.site_id = $1
+            AND s.openfdd_key = $9
+            AND s.val IS NOT NULL
+            AND s.ts >= y.ts - ($8::int * interval '1 second')
+            AND s.ts <= y.ts + ($8::int * interval '1 second')
+          ORDER BY abs(EXTRACT(EPOCH FROM (s.ts - y.ts))), s.ts
+          LIMIT 1
+        ) dry ON true
         ORDER BY y.ts DESC
-        LIMIT $4
+        LIMIT $7
         "#,
     )
     .bind(building_id)
     .bind(&y_pat)
     .bind(&ids)
+    .bind(read.scope.start)
+    .bind(read.scope.end)
+    .bind(&x_key)
     .bind(limit)
+    .bind(age)
+    .bind(&dry_key)
     .fetch_all(tsdb.pool())
     .await
     .context("rcx_oat_scatter")?;
-    if rows.is_empty() {
-        return Ok(None);
-    }
-    let mut points = Vec::new();
+    let mut points = Vec::with_capacity(rows.len());
     for r in &rows {
-        points.push(json!({
+        let y_f = r.try_get::<Option<f64>, _>("y_f").ok().flatten();
+        let x_f = r.try_get::<Option<f64>, _>("x_f").ok().flatten();
+        let dry_f = r.try_get::<Option<f64>, _>("dry_f").ok().flatten();
+        let mut point = json!({
             "timestamp_utc": r.try_get::<DateTime<Utc>, _>("timestamp_utc").ok().map(|t| t.to_rfc3339()),
             "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
-            "y_f": r.try_get::<Option<f64>, _>("y_f").ok().flatten(),
-            "oat_f": r.try_get::<Option<f64>, _>("oat_f").ok().flatten(),
-            "dry_bulb_f": r.try_get::<Option<f64>, _>("oat_f").ok().flatten(),
-        }));
+            "y_f": y_f,
+            "y_role": y_col,
+            "y_quantity": y_quantity,
+            "y_unit": y_unit,
+            "oat_f": x_f,
+            "x_f": x_f,
+            "x_timestamp_utc": r.try_get::<DateTime<Utc>, _>("x_ts").ok().map(|t| t.to_rfc3339()),
+            "x_equipment_id": &x_equipment,
+            "x_role": x_role,
+            "x_openfdd_key": &x_key,
+            "x_quantity": x_quantity,
+            "x_unit": "°F",
+            "x_quality": r.try_get::<Option<String>, _>("x_quality").ok().flatten(),
+            "x_age_seconds": r.try_get::<f64, _>("x_age_seconds").ok(),
+        });
+        if prefer_wetbulb {
+            if let (Some(value), Some(obj)) = (dry_f, point.as_object_mut()) {
+                obj.insert("dry_bulb_f".to_string(), json!(value));
+                obj.insert("dry_bulb_role".to_string(), json!("web_oa_t"));
+                obj.insert(
+                    "dry_bulb_quantity".to_string(),
+                    json!("dry_bulb_temperature"),
+                );
+                obj.insert("dry_bulb_unit".to_string(), json!("°F"));
+            }
+        }
+        points.push(point);
+    }
+    let mut warnings = vec![
+        "RCx scatter uses one weather-typed X series and nearest-sample alignment".to_string(),
+    ];
+    if points.is_empty() {
+        warnings.push(format!(
+            "no {y_col} samples paired with {x_key} within {RCX_X_ALIGN_MAX_AGE_SECS} seconds"
+        ));
     }
     let mut env = envelope_with_engine(
         "rcx-scatter-v1",
         &AnalyticsQuery {
             building_id: Some(building_id.to_string()),
+            start: read.scope.start,
+            end: read.scope.end,
+            equipment_ids: Some(read.scope.equipment_ids.clone()),
             ..Default::default()
         },
-        vec!["RCx OAT scatter from Timescale sample (Wave-X Soft-OPEN)".into()],
+        warnings,
         TS_ENGINE,
     );
     let n = points.len();
@@ -726,11 +974,32 @@ pub async fn rcx_oat_scatter(
     env.coverage = Some(json!({
         "point_count": n,
         "role_col": y_col,
+        "y_quantity": y_quantity,
+        "y_unit": y_unit,
         "chart_kind": "scatter_oat",
         "source": "timescale_sample",
         "building_id": building_id,
         "engine": TS_ENGINE,
+        "x_available": true,
+        "x_point": {
+            "equipment_id": x_equipment,
+            "role": x_role,
+            "openfdd_key": x_key,
+            "quantity": x_quantity,
+            "unit": "°F",
+            "available": true,
+            "selection": "lexicographically first weather equipment with this role near the window",
+        },
+        "alignment": {
+            "method": "nearest_sample",
+            "max_age_seconds": RCX_X_ALIGN_MAX_AGE_SECS,
+            "tie_break": "earlier_timestamp",
+            "interpolation": false,
+        },
     }));
+    if let Some(obj) = env.coverage.as_mut().and_then(Value::as_object_mut) {
+        insert_scope(obj, &read.scope, &ids);
+    }
     Ok(Some(env))
 }
 
@@ -739,9 +1008,8 @@ pub async fn rcx_box(
     role_col: &str,
     eq_kinds: &[&str],
     filter_fan_on: bool,
-    max_points: usize,
+    read: &RcxQuery,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    // Soft-OPEN: reuse timeseries points; SPA box chart tolerates value_f rows.
     rcx_timeseries(
         building_id,
         role_col,
@@ -749,7 +1017,7 @@ pub async fn rcx_box(
         None,
         eq_kinds,
         filter_fan_on,
-        max_points,
+        read,
     )
     .await
 }
@@ -759,14 +1027,11 @@ pub async fn rcx_zone_comfort_rank(
     eq_kinds: &[&str],
     comfort_low_f: f64,
     comfort_high_f: f64,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
     let tsdb = Tsdb::connect_from_env().await?;
     let equipment = list_equipment(&tsdb, building_id).await?;
-    let ids: Vec<String> = equipment
-        .into_iter()
-        .filter(|(_, t)| equip_matches_kinds(t.as_deref(), eq_kinds))
-        .map(|(id, _)| id)
-        .collect();
+    let ids = cohort_ids(equipment, eq_kinds, &scope.equipment_ids);
     if ids.is_empty() {
         return Ok(None);
     }
@@ -781,6 +1046,8 @@ pub async fn rcx_zone_comfort_rank(
           AND openfdd_key LIKE '%.zone_t'
           AND split_part(openfdd_key, '.', 1) = ANY($4)
           AND val IS NOT NULL
+          AND ($5::timestamptz IS NULL OR ts >= $5)
+          AND ($6::timestamptz IS NULL OR ts < $6)
         GROUP BY 1
         ORDER BY comfort_pct ASC
         LIMIT 200
@@ -790,6 +1057,8 @@ pub async fn rcx_zone_comfort_rank(
     .bind(comfort_low_f)
     .bind(comfort_high_f)
     .bind(&ids)
+    .bind(scope.start)
+    .bind(scope.end)
     .fetch_all(tsdb.pool())
     .await
     .context("rcx_zone_comfort_rank")?;
@@ -824,6 +1093,9 @@ pub async fn rcx_zone_comfort_rank(
         "building_id": building_id,
         "engine": TS_ENGINE,
     }));
+    if let Some(obj) = env.coverage.as_mut().and_then(Value::as_object_mut) {
+        insert_scope(obj, scope, &ids);
+    }
     Ok(Some(env))
 }
 
@@ -859,7 +1131,8 @@ pub async fn inspect_json(req: &AnalyticsRequest) -> Result<Value> {
         })
     });
     let max_points = req.query.max_points.unwrap_or(2000);
-    match inspect_equipment(&building, eq, columns.as_deref(), max_points).await? {
+    let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(req);
+    match inspect_equipment(&building, eq, columns.as_deref(), max_points, &scope).await? {
         Some(env) => Ok(env.to_json()),
         None => {
             let mut env = envelope_with_engine(
@@ -876,6 +1149,9 @@ pub async fn inspect_json(req: &AnalyticsRequest) -> Result<Value> {
                 "source": "timescale_sample",
                 "building_id": building,
             }));
+            if let Some(obj) = env.coverage.as_mut().and_then(Value::as_object_mut) {
+                insert_scope(obj, &scope, &[]);
+            }
             Ok(env.to_json())
         }
     }

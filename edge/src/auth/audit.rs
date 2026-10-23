@@ -128,10 +128,22 @@ fn sanitize(value: Value) -> Value {
             }
             Value::Object(out)
         }
-        Value::Array(items) => Value::Array(items.into_iter().map(sanitize).collect()),
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .take(MAX_DETAIL_ITEMS)
+                .map(sanitize)
+                .collect(),
+        ),
+        Value::String(text) => Value::String(super::redact::bounded(&text, MAX_DETAIL_CHARS)),
         other => other,
     }
 }
+
+/// Per-string budget for free-form detail values. Typed `openfdd.audit.v1`
+/// events are already bounded far below this.
+const MAX_DETAIL_CHARS: usize = 1024;
+const MAX_DETAIL_ITEMS: usize = 64;
 
 #[cfg(test)]
 mod tests {
@@ -151,6 +163,22 @@ mod tests {
         assert_eq!(sanitized["token"], "***REDACTED***");
         assert_eq!(sanitized["api_key"], "***REDACTED***");
         assert_eq!(sanitized["username"], "integrator");
+    }
+
+    #[test]
+    fn bounds_and_scrubs_free_form_detail_values() {
+        let sanitized = sanitize(serde_json::json!({
+            "note": format!("Bearer canary-token\n{}", "y".repeat(100 * 1024)),
+            "list": (0..500).collect::<Vec<_>>(),
+        }));
+        let note = sanitized["note"].as_str().unwrap();
+        assert!(!note.contains("canary-token"));
+        assert!(!note.contains('\n'));
+        assert!(note.chars().count() <= MAX_DETAIL_CHARS);
+        assert_eq!(
+            sanitized["list"].as_array().unwrap().len(),
+            MAX_DETAIL_ITEMS
+        );
     }
 
     #[test]

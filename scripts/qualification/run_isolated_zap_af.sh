@@ -8,7 +8,10 @@
 # scripts/qualification/zap/run_af_disposable.py (single evaluator).
 # Compatibility entrypoint for Wave C / gate runners.
 #
-# Never activeScans live Railway or a site. Never persists JWT to artifact disk.
+# Never activeScans live Railway or a site. Never persists JWT to the artifact dir.
+# The scanner credential is handed to the evaluator through a private 0600 file
+# outside the artifact dir. A negative control (broken scanner credential)
+# must be rejected before the real scan runs.
 # No fallback crawl or warning soft-pass paths.
 set -euo pipefail
 
@@ -52,33 +55,52 @@ portal_stack_up 240
 echo "OK disposable portal candidate (web+central+timescale, project $PORTAL_PROJECT)"
 
 portal_login admin admin || { echo "FAIL: could not mint admin JWT for ZAP context" >&2; exit 1; }
-# UA-04: never persist JWT to artifact disk (env injection only).
+# UA-04: token stays in the private dir, never in the artifact tree or argv.
+AUTH_FILE="$PORTAL_PRIV/scanner_auth_header"
+printf 'Bearer %s' "$(cat "$PORTAL_PRIV/tok.admin")" >"$AUTH_FILE"
+chmod 600 "$AUTH_FILE"
+if [[ "$(wc -c <"$AUTH_FILE")" -lt 20 ]]; then
+  echo "FAIL: could not mint admin JWT for ZAP context" >&2
+  exit 1
+fi
 rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
-echo "OK admin JWT minted (ephemeral env only)"
+echo "OK admin JWT minted (ephemeral env only; private file outside artifacts)"
 
 # Evaluator owns AF plan materialization + verdict; wrapper only mints candidate.
 export OPENFDD_ZAP_AF_EXECUTE=1
 export OPENFDD_ZAP_IMAGE="$ZAP_IMAGE"
 export OPENFDD_ZAP_REQUIRE_DIGEST=1
 export ZAP_TARGET_ORIGIN="$TARGET_ORIGIN"
-ZAP_AUTH_HEADER_VALUE="Bearer $(cat "$PORTAL_PRIV/tok.admin")"
-export ZAP_AUTH_HEADER_VALUE
-export ZAP_AF_WORK_DIR="$WRK"
+export ZAP_AUTH_HEADER_FILE="$AUTH_FILE"
+export OPENFDD_ZAP_EXPECTED_USERNAME="admin"
 export ZAP_DOCKER_NETWORK="$ZAP_NET"
-ZAP_AF_RUN_STARTED_EPOCH="$(date +%s)"
-export ZAP_AF_RUN_STARTED_EPOCH
+unset OPENFDD_ADMIN_PASSWORD OPENFDD_JWT_SECRET
 VERDICT_OUT="$ART/verdict.json"
 
+NEG_WRK="$ART/zap_wrk_negative"
+mkdir -p "$NEG_WRK"
+chmod 777 "$NEG_WRK"
+cp "$WRK/openapi.yaml" "$NEG_WRK/openapi.yaml"
+set +e
+ZAP_AF_WORK_DIR="$NEG_WRK" OPENFDD_ZAP_AF_ACTIVE=0 \
+  python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
+  --negative-control --out "$ART/negative_control_verdict.json"
+NEG_RC=$?
+set -e
+if [[ "$NEG_RC" -ne 0 ]]; then
+  echo "FAIL: negative control did not reject a broken scanner credential (rc=$NEG_RC)" >&2
+  exit 1
+fi
+
+export ZAP_AF_WORK_DIR="$WRK"
 set +e
 python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
   --out "$VERDICT_OUT"
 EVAL_RC=$?
 set -e
-unset ZAP_AUTH_HEADER_VALUE
 
 chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
 rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
-# Redact any accidental secret leakage from logs copied beside verdict.
 while IFS= read -r -d '' f; do
   portal_redact_file "$f"
 done < <(find "$ART" -type f \( -name '*.json' -o -name '*.log' -o -name '*.txt' -o -name '*.yaml' -o -name '*.html' \) -print0)
@@ -88,7 +110,6 @@ if [[ ! -f "$VERDICT_OUT" ]]; then
   exit 1
 fi
 
-# Surface evaluator summary without secrets.
 python3 -B - "$VERDICT_OUT" <<'PY'
 import json, sys
 from pathlib import Path

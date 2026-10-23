@@ -60,6 +60,8 @@ export function buildDataModelTurtle(inventory: PackageMappingResponse): string 
     "@prefix hs: <https://project-haystack.org/def/ph#> .",
     "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .",
     "",
+    "# Inventory projection of stored column roles. Not a semantic model evaluation.",
+    "",
     `${bSubj} a ofdd:Building ;`,
     `  ofdd:buildingId "${turtleEscape(buildingId)}" .`,
     "",

@@ -20,6 +20,10 @@ use tower::limit::ConcurrencyLimitLayer;
 
 use crate::actions;
 use crate::analytics::{self, AnalyticsRequest};
+use crate::audit::{
+    AuditAction, AuditChange, AuditEvent, BoundedList, HandlerResult, Outcome, ReasonCode,
+    TargetType,
+};
 use crate::auth;
 use crate::engineering_bundle;
 use crate::eplus_runner;
@@ -745,42 +749,21 @@ pub async fn select_tenant(
     let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
     let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
     let hub_admin = matches!(user.role, auth::Role::Admin) && user.tenant_ids.is_empty();
-    if hub_admin {
-        if !plane.tenants.iter().any(|t| t.id == tid) {
-            open_fdd_edge_prototype::auth::audit::log_event(
-                "tenant_select_denied",
-                json!({
-                    "username": user.sub,
-                    "tenant_id": tid,
-                    "reason": "unknown_tenant",
-                }),
-            );
-            return Err((
-                StatusCode::FORBIDDEN,
-                Json(json!({"ok": false, "error": "unknown tenant_id"})),
-            ));
-        }
-    } else if !user.tenant_ids.iter().any(|t| t == &tid) {
-        open_fdd_edge_prototype::auth::audit::log_event(
-            "tenant_select_denied",
-            json!({
-                "username": user.sub,
-                "tenant_id": tid,
-                "reason": "not_in_membership",
-                "membership": user.tenant_ids,
-            }),
-        );
-        open_fdd_edge_prototype::auth::audit::log_event(
-            "tenant_access_denied",
-            json!({
-                "username": user.sub,
-                "tenant_id": tid,
-                "surface": "tenants/select",
-            }),
-        );
+    let mut audit = AuditEvent::new(AuditAction::TenantSelect);
+    audit.user(&user).target(TargetType::Tenant, &tid);
+    let denied = if hub_admin {
+        (!plane.tenants.iter().any(|t| t.id == tid)).then_some("unknown tenant_id")
+    } else {
+        (!user.tenant_ids.iter().any(|t| t == &tid)).then_some("tenant not in membership")
+    };
+    if let Some(error) = denied {
+        audit
+            .deny(ReasonCode::TenantScope)
+            .status(StatusCode::FORBIDDEN)
+            .emit();
         return Err((
             StatusCode::FORBIDDEN,
-            Json(json!({"ok": false, "error": "tenant not in membership"})),
+            Json(json!({"ok": false, "error": error})),
         ));
     }
 
@@ -788,19 +771,20 @@ pub async fn select_tenant(
         .auth
         .issue_token_with_tenants(&user.sub, user.role, 8 * 3600, std::slice::from_ref(&tid))
         .map_err(|_| {
+            audit
+                .reason(ReasonCode::InternalError)
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .emit();
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"ok": false, "error": "token mint failed"})),
             )
         })?;
-    open_fdd_edge_prototype::auth::audit::log_event(
-        "tenant_select",
-        json!({
-            "username": user.sub,
-            "tenant_id": tid,
-            "hub_admin": hub_admin,
-        }),
-    );
+    audit
+        .tenant(Some(&tid))
+        .outcome(Outcome::Ok)
+        .status(StatusCode::OK)
+        .emit();
     Ok(Json(TenantSelectResponse {
         ok: true,
         multi_tenant: true,
@@ -903,30 +887,43 @@ fn preferred_tenant_for_building_read(
     plane.sole_tenant_for_building(bid)
 }
 
+/// Hub admin (admin role, no tenant membership). Records the caller and any
+/// denial on `audit`; the handler emits it once the result is known.
 fn require_hub_admin(
     state: &AppState,
     headers: &HeaderMap,
+    audit: &mut AuditEvent,
 ) -> Result<auth::AuthUser, (StatusCode, Json<Value>)> {
     let user = state.auth.user_from_headers(headers).map_err(|e| {
+        audit.deny(ReasonCode::from_auth_detail(&e));
         (
             StatusCode::UNAUTHORIZED,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
+    audit.user(&user);
     let hub_admin = matches!(user.role, auth::Role::Admin) && user.tenant_ids.is_empty();
     if !hub_admin {
-        tracing::info!(
-            target: "security_audit",
-            event = "admin_cp_denied",
-            subject = %user.sub,
-            "non-hub-admin blocked from /api/admin"
-        );
+        audit.deny(ReasonCode::HubAdminRequired);
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({"ok": false, "error": "hub admin required"})),
         ));
     }
     Ok(user)
+}
+
+/// Hub-admin routes outside the audited mutation set: emit only when the guard denies.
+fn require_hub_admin_or_audit_deny(
+    state: &AppState,
+    headers: &HeaderMap,
+    action: AuditAction,
+) -> Result<auth::AuthUser, (StatusCode, Json<Value>)> {
+    let mut audit = AuditEvent::new(action);
+    audit.target_route();
+    require_hub_admin(state, headers, &mut audit).inspect_err(|err| {
+        audit.status(err.0).emit();
+    })
 }
 
 fn workspace_path() -> std::path::PathBuf {
@@ -939,7 +936,7 @@ pub async fn admin_list_users(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let _admin = require_hub_admin(&state, &headers)?;
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
     let store = crate::user_store::UserStore::load_or_empty(&workspace_path());
     Ok(Json(json!({
         "ok": true,
@@ -952,9 +949,29 @@ pub async fn admin_upsert_user(
     headers: HeaderMap,
     Json(body): Json<crate::admin_cp::UserUpsertRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin(&state, &headers)?;
+    let mut audit = AuditEvent::new(AuditAction::UserUpsert);
+    audit.target(TargetType::User, &body.username);
+    let result = admin_upsert_user_inner(&state, &headers, body, &mut audit);
+    audit.finish(&result).emit();
+    result
+}
+
+fn admin_upsert_user_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: crate::admin_cp::UserUpsertRequest,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
+    require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
     let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    audit.change(AuditChange::UserUpsert {
+        created: store.get(&body.username).is_none(),
+        role: auth::Role::parse(body.role.trim()).map(Into::into),
+        disabled: body.disabled,
+        tenant_ids: BoundedList::new(&body.tenant_ids),
+        credential_changed: body.password.is_some() || body.password_env.is_some(),
+    });
     let rec = crate::user_store::UserRecord {
         username: body.username,
         user_id: String::new(),
@@ -966,23 +983,19 @@ pub async fn admin_upsert_user(
         session_version: 0,
     };
     store.upsert(rec).map_err(|e| {
+        audit.reason(ReasonCode::InvalidRequest);
         (
             StatusCode::BAD_REQUEST,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
     store.save(&ws).map_err(|e| {
+        audit.reason(ReasonCode::StorageError);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
-    tracing::info!(
-        target: "security_audit",
-        event = "admin_user_upsert",
-        actor = %admin.sub,
-        "control-plane user upsert"
-    );
     Ok(Json(json!({"ok": true, "users": store.public_list()})))
 }
 
@@ -997,29 +1010,41 @@ pub async fn admin_set_user_disabled(
     Path(username): Path<String>,
     Json(body): Json<AdminDisabledBody>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin(&state, &headers)?;
+    let mut audit = AuditEvent::new(AuditAction::UserDisable);
+    audit
+        .target(TargetType::User, &username)
+        .change(AuditChange::UserDisabled {
+            disabled: body.disabled,
+        });
+    let result = admin_set_user_disabled_inner(&state, &headers, &username, &body, &mut audit);
+    audit.finish(&result).emit();
+    result
+}
+
+fn admin_set_user_disabled_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    username: &str,
+    body: &AdminDisabledBody,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
+    require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
     let mut store = crate::user_store::UserStore::load_or_empty(&ws);
-    store.set_disabled(&username, body.disabled).map_err(|e| {
+    store.set_disabled(username, body.disabled).map_err(|e| {
+        audit.reason(ReasonCode::NotFound);
         (
             StatusCode::NOT_FOUND,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
     store.save(&ws).map_err(|e| {
+        audit.reason(ReasonCode::StorageError);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
-    tracing::info!(
-        target: "security_audit",
-        event = "admin_user_disabled",
-        actor = %admin.sub,
-        username = %username,
-        disabled = body.disabled,
-        "control-plane user disabled flag"
-    );
     Ok(Json(json!({"ok": true, "users": store.public_list()})))
 }
 
@@ -1039,12 +1064,46 @@ pub async fn admin_delete_user(
     Path(username): Path<String>,
     Query(q): Query<AdminDeleteUserQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin(&state, &headers)?;
+    // A dry run or a missing confirm only reads the cascade plan.
+    let action = if q.dry_run || !q.confirm {
+        AuditAction::AdminRead
+    } else {
+        AuditAction::UserDelete
+    };
+    let mut audit = AuditEvent::new(action);
+    audit.target(TargetType::User, &username);
+    let result = admin_delete_user_inner(&state, &headers, &username, &q, &mut audit).await;
+    audit.finish(&result).emit();
+    result
+}
+
+fn user_delete_change(
+    purged: &[crate::lifecycle::SitePurgeReport],
+    shared_sites_skipped: usize,
+    purge_errors: usize,
+) -> AuditChange {
+    let sites: Vec<&str> = purged.iter().map(|p| p.building_id.as_str()).collect();
+    AuditChange::UserDelete {
+        purged_sites: BoundedList::new(&sites),
+        shared_sites_skipped,
+        purge_errors,
+    }
+}
+
+async fn admin_delete_user_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    username: &str,
+    q: &AdminDeleteUserQuery,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
+    require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
     let store = crate::user_store::UserStore::load_or_empty(&ws);
     let plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
     let plan =
-        crate::admin_cp::plan_user_cascade_delete(&store, &plane, &username).map_err(|e| {
+        crate::admin_cp::plan_user_cascade_delete(&store, &plane, username).map_err(|e| {
+            audit.reason(ReasonCode::NotFound);
             (
                 StatusCode::NOT_FOUND,
                 Json(json!({"ok": false, "error": e})),
@@ -1060,21 +1119,33 @@ pub async fn admin_delete_user(
         })));
     }
 
-    let outcome = match crate::lifecycle::delete_user_cascade(&ws, &username).await {
+    let outcome = match crate::lifecycle::delete_user_cascade(&ws, username).await {
         Ok(outcome) => outcome,
         Err(crate::lifecycle::UserCascadeError::NotFound(error)) => {
+            audit.reason(ReasonCode::NotFound);
             return Err((
                 StatusCode::NOT_FOUND,
                 Json(json!({"ok": false, "error": error})),
             ));
         }
         Err(crate::lifecycle::UserCascadeError::Store(error)) => {
+            audit.reason(ReasonCode::StorageError);
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"ok": false, "error": error})),
             ));
         }
         Err(crate::lifecycle::UserCascadeError::Partial(partial)) => {
+            audit
+                .change(user_delete_change(
+                    &partial.purged,
+                    partial.plan.buildings_shared_skipped.len(),
+                    partial.errors.len(),
+                ))
+                .reason(ReasonCode::HistorianError);
+            if !partial.purged.is_empty() {
+                audit.outcome(Outcome::Partial);
+            }
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -1087,16 +1158,12 @@ pub async fn admin_delete_user(
             ));
         }
     };
+    audit.change(user_delete_change(
+        &outcome.purged,
+        outcome.plan.buildings_shared_skipped.len(),
+        0,
+    ));
     let store = crate::user_store::UserStore::load_or_empty(&ws);
-    tracing::info!(
-        target: "security_audit",
-        event = "admin_user_delete",
-        actor = %admin.sub,
-        username = %username,
-        purged = outcome.purged.len(),
-        skipped_shared = outcome.plan.buildings_shared_skipped.len(),
-        "control-plane user deleted with cascade"
-    );
     Ok(Json(json!({
         "ok": true,
         "plan": outcome.plan,
@@ -1109,7 +1176,7 @@ pub async fn admin_list_tenants_cp(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let _admin = require_hub_admin(&state, &headers)?;
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
     let plane = crate::tenant::ControlPlane::load_or_legacy(&workspace_path());
     Ok(Json(json!({
         "ok": true,
@@ -1122,9 +1189,26 @@ pub async fn admin_upsert_tenant(
     headers: HeaderMap,
     Json(body): Json<crate::admin_cp::TenantUpsertRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin(&state, &headers)?;
+    let mut audit = AuditEvent::new(AuditAction::TenantUpsert);
+    audit.target(TargetType::Tenant, &body.id);
+    let result = admin_upsert_tenant_inner(&state, &headers, body, &mut audit);
+    audit.finish(&result).emit();
+    result
+}
+
+fn admin_upsert_tenant_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: crate::admin_cp::TenantUpsertRequest,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
+    require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
     let mut plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    audit.change(AuditChange::TenantUpsert {
+        created: !plane.tenants.iter().any(|t| t.id == body.id),
+        building_ids: BoundedList::new(&body.building_ids),
+    });
     plane
         .upsert_tenant(crate::tenant::TenantRecord {
             id: body.id,
@@ -1132,23 +1216,19 @@ pub async fn admin_upsert_tenant(
             building_ids: body.building_ids,
         })
         .map_err(|e| {
+            audit.reason(ReasonCode::InvalidRequest);
             (
                 StatusCode::BAD_REQUEST,
                 Json(json!({"ok": false, "error": e})),
             )
         })?;
     plane.save(&ws).map_err(|e| {
+        audit.reason(ReasonCode::StorageError);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
-    tracing::info!(
-        target: "security_audit",
-        event = "admin_tenant_upsert",
-        actor = %admin.sub,
-        "control-plane tenant upsert"
-    );
     Ok(Json(json!({"ok": true, "tenants": plane.tenants})))
 }
 
@@ -1157,28 +1237,36 @@ pub async fn admin_delete_tenant(
     headers: HeaderMap,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin(&state, &headers)?;
+    let mut audit = AuditEvent::new(AuditAction::TenantDelete);
+    audit.target(TargetType::Tenant, &tenant_id);
+    let result = admin_delete_tenant_inner(&state, &headers, &tenant_id, &mut audit);
+    audit.finish(&result).emit();
+    result
+}
+
+fn admin_delete_tenant_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    tenant_id: &str,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
+    require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
     let mut plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
-    plane.remove_tenant(&tenant_id).map_err(|e| {
+    plane.remove_tenant(tenant_id).map_err(|e| {
+        audit.reason(ReasonCode::NotFound);
         (
             StatusCode::NOT_FOUND,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
     plane.save(&ws).map_err(|e| {
+        audit.reason(ReasonCode::StorageError);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
-    tracing::info!(
-        target: "security_audit",
-        event = "admin_tenant_delete",
-        actor = %admin.sub,
-        tenant_id = %tenant_id,
-        "control-plane tenant deleted"
-    );
     Ok(Json(json!({"ok": true, "tenants": plane.tenants})))
 }
 
@@ -1186,7 +1274,7 @@ pub async fn admin_get_historian_limits(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let _admin = require_hub_admin(&state, &headers)?;
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
     let lim = crate::historian_limits::HistorianLimits::load(&workspace_path());
     Ok(Json(json!({
         "ok": true,
@@ -1200,32 +1288,34 @@ pub async fn admin_put_historian_limits(
     headers: HeaderMap,
     Json(body): Json<crate::historian_limits::HistorianLimits>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin(&state, &headers)?;
+    let mut audit = AuditEvent::new(AuditAction::AdminHistorianLimits);
+    audit.target_type(TargetType::HistorianLimits);
+    let result = admin_put_historian_limits_inner(&state, &headers, body, &mut audit);
+    audit.finish(&result).emit();
+    result
+}
+
+fn admin_put_historian_limits_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: crate::historian_limits::HistorianLimits,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
+    require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
     let mut lim = body;
     lim.sanitize();
+    audit.change(AuditChange::HistorianLimits {
+        retain_days: lim.retain_days,
+        size_gib: lim.size_gib,
+    });
     lim.save(&ws).map_err(|e| {
+        audit.reason(ReasonCode::StorageError);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"ok": false, "error": e})),
         )
     })?;
-    tracing::info!(
-        target: "security_audit",
-        event = "admin_historian_limits_put",
-        actor = %admin.sub,
-        retain_days = lim.retain_days,
-        size_gib = lim.size_gib,
-        "historian retain/size limits updated"
-    );
-    open_fdd_edge_prototype::auth::audit::log_event(
-        "admin_historian_limits_put",
-        json!({
-            "actor": admin.sub,
-            "retain_days": lim.retain_days,
-            "size_gib": lim.size_gib,
-        }),
-    );
     Ok(Json(json!({"ok": true, "limits": lim})))
 }
 
@@ -1234,14 +1324,18 @@ pub async fn admin_put_historian_limits(
 fn require_dataset_writer(
     state: &AppState,
     headers: &HeaderMap,
+    audit: &mut AuditEvent,
 ) -> Result<auth::AuthUser, (StatusCode, Json<Value>)> {
     let user = state.auth.user_from_headers(headers).map_err(|detail| {
+        audit.deny(ReasonCode::from_auth_detail(&detail));
         (
             StatusCode::UNAUTHORIZED,
             Json(json!({"ok": false, "error": detail})),
         )
     })?;
+    audit.user(&user);
     if !user.role.can_issue_commands() {
+        audit.deny(ReasonCode::RoleRequired);
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({
@@ -1255,34 +1349,45 @@ fn require_dataset_writer(
 
 /// Tenant building scope for a dataset write.
 ///
-/// Denial returns 403 and does not append an audit record. Callers must run
-/// this before file, historian, or audit side effects.
+/// Denial returns 403 and records the deny on `audit`. Callers must run this
+/// before file, historian, or actions-log side effects.
 fn dataset_building_scope_denial(
     user: &auth::AuthUser,
     building_id: Option<&str>,
+    audit: &mut AuditEvent,
 ) -> Option<(StatusCode, Json<Value>)> {
+    let bid = building_id.map(str::trim).filter(|s| !s.is_empty());
+    if let Some(bid) = bid {
+        audit.target_site(bid);
+    }
     if !crate::tenant::multi_tenant_enabled() {
         return None;
     }
     let ctx = resolve_tenant_context_for_user(user);
-    match building_id.map(str::trim).filter(|s| !s.is_empty()) {
+    match bid {
         Some(bid) if ctx.allow_building(bid) => None,
-        Some(bid) => Some((
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "ok": false,
-                "error": "building not in tenant scope",
-                "building_id": bid,
-            })),
-        )),
+        Some(bid) => {
+            audit.deny(ReasonCode::SiteScope);
+            Some((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "building not in tenant scope",
+                    "building_id": bid,
+                })),
+            ))
+        }
         None if ctx.hub_admin => None,
-        None => Some((
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "ok": false,
-                "error": "building_id required in multi-tenant mode",
-            })),
-        )),
+        None => {
+            audit.deny(ReasonCode::SiteRequired);
+            Some((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "ok": false,
+                    "error": "building_id required in multi-tenant mode",
+                })),
+            ))
+        }
     }
 }
 
@@ -1295,19 +1400,27 @@ fn deny_if_building_out_of_scope(
     if !crate::tenant::multi_tenant_enabled() {
         return None;
     }
-    let ctx = resolve_tenant_context(state, headers);
+    let user = state
+        .auth
+        .user_from_headers(headers)
+        .unwrap_or_else(|_| auth::AuthUser::dev_anonymous());
+    let ctx = resolve_tenant_context_for_user(&user);
     let bid = building_id.map(str::trim).filter(|s| !s.is_empty());
+    let emit_denial = |site: Option<&str>, reason: ReasonCode| {
+        let mut audit = AuditEvent::new(AuditAction::SiteAccess);
+        audit
+            .user(&user)
+            .tenant(ctx.tenant_id.as_deref())
+            .target_type(TargetType::Site);
+        if let Some(site) = site {
+            audit.target_site(site);
+        }
+        audit.deny(reason).status(StatusCode::FORBIDDEN).emit();
+    };
     match bid {
         Some(b) if ctx.allow_building(b) => None,
         Some(b) => {
-            open_fdd_edge_prototype::auth::audit::log_event(
-                "tenant_building_denied",
-                json!({
-                    "building_id": b,
-                    "active_tenant_id": ctx.tenant_id,
-                    "hub_admin": ctx.hub_admin,
-                }),
-            );
+            emit_denial(Some(b), ReasonCode::SiteScope);
             Some((
                 StatusCode::FORBIDDEN,
                 Json(json!({
@@ -1319,10 +1432,7 @@ fn deny_if_building_out_of_scope(
         }
         None if ctx.hub_admin => None,
         None => {
-            open_fdd_edge_prototype::auth::audit::log_event(
-                "tenant_building_required",
-                json!({ "active_tenant_id": ctx.tenant_id }),
-            );
+            emit_denial(None, ReasonCode::SiteRequired);
             Some((
                 StatusCode::FORBIDDEN,
                 Json(json!({
@@ -1624,36 +1734,34 @@ pub async fn auth_login(
     headers: axum::http::HeaderMap,
     Json(body): Json<AuthLoginRequest>,
 ) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
-    let request_id = crate::contract::ensure_request_id(&headers);
+    let mut audit = AuditEvent::new(AuditAction::AuthLogin);
+    let result = auth_login_inner(&state, &headers, &body, &mut audit);
+    audit.finish_typed(&result).emit();
+    result
+}
+
+fn auth_login_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: &AuthLoginRequest,
+    audit: &mut AuditEvent,
+) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
     let username = body.username.trim().to_string();
+    audit.actor(&username).target(TargetType::User, &username);
     // Never key throttle on caller-controlled leftmost X-Forwarded-For by default
     // (S06). Optional trusted-proxy mode uses the rightmost hop only.
-    let ip = login_throttle_ip(&headers);
+    let ip = login_throttle_ip(headers);
     let throttle_key = format!("{ip}:{}", username.to_lowercase());
     if state.login_is_throttled(&throttle_key) {
-        open_fdd_edge_prototype::auth::audit::log_event(
-            "login_rate_limited",
-            json!({
-                "username": username,
-                "ip": ip,
-                "request_id": request_id,
-            }),
-        );
+        audit.deny(ReasonCode::RateLimited);
         return Err((
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             Json(json!({"ok": false, "error": "invalid credentials"})),
         ));
     }
     if !state.auth.required() {
-        open_fdd_edge_prototype::auth::audit::log_event(
-            "login_open_mode",
-            json!({
-                "username": username,
-                "ip": ip,
-                "request_id": request_id,
-            }),
-        );
         // Dev open mode — mint a placeholder so the UI can store a session token.
+        audit.actor("dev").role(auth::Role::Admin);
         return Ok(Json(AuthLoginResponse {
             ok: true,
             token: "open".into(),
@@ -1673,14 +1781,7 @@ pub async fn auth_login(
         Ok(v) => v,
         Err(_) => {
             state.login_record_failure(&throttle_key);
-            open_fdd_edge_prototype::auth::audit::log_event(
-                "login_failure",
-                json!({
-                    "username": username,
-                    "ip": ip,
-                    "request_id": request_id,
-                }),
-            );
+            audit.deny(ReasonCode::InvalidCredentials);
             return Err((
                 axum::http::StatusCode::UNAUTHORIZED,
                 Json(json!({"ok": false, "error": "invalid credentials"})),
@@ -1688,15 +1789,6 @@ pub async fn auth_login(
         }
     };
     state.login_record_success(&throttle_key);
-    let token = state
-        .auth
-        .issue_token_with_tenants(&sub, role, 8 * 3600, &tenant_ids)
-        .map_err(|_| {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"ok": false, "error": "login failed"})),
-            )
-        })?;
     let workspace = std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into());
     let plane = crate::tenant::ControlPlane::load_or_legacy(std::path::Path::new(&workspace));
     let auth_user = auth::AuthUser {
@@ -1706,18 +1798,20 @@ pub async fn auth_login(
         active_tenant_id: tenant_ids.first().cloned(),
     };
     let ctx = crate::tenant::TenantContext::resolve_fail_closed(&auth_user, &plane);
-    open_fdd_edge_prototype::auth::audit::log_event(
-        "login_success",
-        json!({
-            "username": sub,
-            "role": role.as_str(),
-            "ip": ip,
-            "request_id": request_id,
-            "active_tenant_id": ctx.tenant_id,
-            "tenant_ids": tenant_ids,
-            "hub_admin": ctx.hub_admin,
-        }),
-    );
+    audit
+        .user(&auth_user)
+        .tenant(ctx.tenant_id.as_deref())
+        .target(TargetType::User, &sub);
+    let token = state
+        .auth
+        .issue_token_with_tenants(&sub, role, 8 * 3600, &tenant_ids)
+        .map_err(|e| {
+            audit.reason(ReasonCode::from_auth_detail(&e));
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": "login failed"})),
+            )
+        })?;
     Ok(Json(AuthLoginResponse {
         ok: true,
         token: token.clone(),
@@ -1748,14 +1842,29 @@ pub async fn auth_agent_token(
     headers: axum::http::HeaderMap,
     Json(body): Json<AuthAgentTokenRequest>,
 ) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
-    let request_id = crate::contract::ensure_request_id(&headers);
-    let user = state.auth.user_from_headers(&headers).map_err(|detail| {
+    let mut audit = AuditEvent::new(AuditAction::AuthAgentToken);
+    audit.target(TargetType::User, "agent");
+    let result = auth_agent_token_inner(&state, &headers, &body, &mut audit);
+    audit.finish_typed(&result).emit();
+    result
+}
+
+fn auth_agent_token_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: &AuthAgentTokenRequest,
+    audit: &mut AuditEvent,
+) -> Result<Json<AuthLoginResponse>, (axum::http::StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(headers).map_err(|detail| {
+        audit.deny(ReasonCode::from_auth_detail(&detail));
         (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"ok": false, "error": detail})),
         )
     })?;
+    audit.user(&user);
     if state.auth.required() && user.role != auth::Role::Admin {
+        audit.deny(ReasonCode::RoleRequired);
         return Err((
             axum::http::StatusCode::FORBIDDEN,
             Json(json!({
@@ -1784,6 +1893,7 @@ pub async fn auth_agent_token(
                     let now = chrono::Utc::now().timestamp();
                     let remaining = parent.exp - now;
                     if remaining < 60 {
+                        audit.deny(ReasonCode::ExpiredToken);
                         return Err((
                             axum::http::StatusCode::FORBIDDEN,
                             Json(json!({
@@ -1795,6 +1905,7 @@ pub async fn auth_agent_token(
                     ttl = ttl.min(remaining);
                 }
                 Err(detail) => {
+                    audit.deny(ReasonCode::from_auth_detail(&detail));
                     return Err((
                         axum::http::StatusCode::UNAUTHORIZED,
                         Json(json!({"ok": false, "error": detail})),
@@ -1814,6 +1925,7 @@ pub async fn auth_agent_token(
     } else if scoped_admin {
         // Scoped admin must mint only within their membership; omit/blank/foreign → 403.
         let Some(tid) = requested else {
+            audit.deny(ReasonCode::TenantScope);
             return Err((
                 axum::http::StatusCode::FORBIDDEN,
                 Json(json!({
@@ -1823,6 +1935,7 @@ pub async fn auth_agent_token(
             ));
         };
         if !user.tenant_ids.iter().any(|t| t == &tid) {
+            audit.deny(ReasonCode::TenantScope);
             return Err((
                 axum::http::StatusCode::FORBIDDEN,
                 Json(json!({
@@ -1833,6 +1946,7 @@ pub async fn auth_agent_token(
         }
         vec![tid]
     } else {
+        audit.deny(ReasonCode::RoleRequired);
         return Err((
             axum::http::StatusCode::FORBIDDEN,
             Json(json!({
@@ -1841,6 +1955,10 @@ pub async fn auth_agent_token(
             })),
         ));
     };
+    audit.change(AuditChange::AgentToken {
+        ttl_secs: ttl,
+        tenant_ids: BoundedList::new(&tenant_ids),
+    });
     let active_tenant_id = tenant_ids
         .first()
         .cloned()
@@ -1849,23 +1967,12 @@ pub async fn auth_agent_token(
         .auth
         .issue_token_with_tenants("agent", auth::Role::Operator, ttl, &tenant_ids)
         .map_err(|_| {
+            audit.reason(ReasonCode::InternalError);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"ok": false, "error": "token mint failed"})),
             )
         })?;
-    open_fdd_edge_prototype::auth::audit::log_event(
-        "agent_token_minted",
-        json!({
-            "by": user.sub,
-            "role": "operator",
-            "ttl_secs": ttl,
-            "request_id": request_id,
-            "tenant_ids": tenant_ids,
-            "active_tenant_id": active_tenant_id,
-            "hub_admin_mint": hub_admin,
-        }),
-    );
     Ok(Json(AuthLoginResponse {
         ok: true,
         token: token.clone(),
@@ -2684,7 +2791,7 @@ pub async fn admin_schema_contract_softopen(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let _admin = require_hub_admin(&state, &headers)?;
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
     if !crate::timescale_historian::historian_is_timescale() {
         return Ok(Json(json!({
             "ok": true,
@@ -2803,6 +2910,12 @@ pub async fn fdd_session_config_put(
         )
     })?;
     if matches!(user.role, auth::Role::Viewer) {
+        crate::audit::role_denied(
+            &user,
+            AuditAction::SessionConfigPut,
+            ReasonCode::RoleRequired,
+        )
+        .emit();
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({
@@ -2928,8 +3041,33 @@ pub async fn csv_import_package(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    // Role before admission, archive parse, files, historian, or audit.
-    let writer = require_dataset_writer(&state, &headers)?;
+    let mut audit = AuditEvent::new(AuditAction::PackageImport);
+    // The archive is not parsed for a denied caller, so the route is the target
+    // until the building id is known.
+    audit.target(TargetType::Route, "/api/csv/import/package");
+    let result = csv_import_package_inner(&state, &headers, body, &mut audit).await;
+    if let Ok(Json(body)) = &result {
+        audit.change(package_change(body));
+    }
+    audit.finish(&result).emit();
+    result
+}
+
+fn package_change(body: &Value) -> AuditChange {
+    AuditChange::Package {
+        rows: body.get("total_rows").and_then(Value::as_u64),
+        equipment: body.get("equipment_written").and_then(Value::as_u64),
+    }
+}
+
+async fn csv_import_package_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: Bytes,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
+    // Role before admission, archive parse, files, historian, or actions log.
+    let writer = require_dataset_writer(state, headers, audit)?;
     // Admit before peek/decompress (#1127 P1). Body bytes are already buffered by
     // axum; do not start zip work until import + compute slots are held.
     let compute = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Import)
@@ -2950,20 +3088,17 @@ pub async fn csv_import_package(
                 Json(json!({"ok": false, "error": e})),
             )
         })?;
-    let ct = content_type(&headers);
+    let ct = content_type(headers);
     let peeked_building =
         match open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body) {
             Ok(bid) => {
-                if let Some(deny) = dataset_building_scope_denial(&writer, Some(&bid)) {
+                if let Some(deny) = dataset_building_scope_denial(&writer, Some(&bid), audit) {
                     return Err(deny);
                 }
                 if let Some(msg) =
                     crate::historian_limits::deny_building_over_size(&workspace_path(), &bid)
                 {
-                    open_fdd_edge_prototype::auth::audit::log_event(
-                        "historian_size_cap_deny",
-                        json!({ "building_id": bid, "surface": "csv/import/package" }),
-                    );
+                    audit.deny(ReasonCode::SizeCap);
                     return Err((
                         StatusCode::FORBIDDEN,
                         Json(json!({"ok": false, "error": msg})),
@@ -2972,6 +3107,7 @@ pub async fn csv_import_package(
                 Some(bid)
             }
             Err(e) if crate::tenant::multi_tenant_enabled() => {
+                audit.reason(ReasonCode::InvalidRequest);
                 return Err((
                     StatusCode::BAD_REQUEST,
                     Json(json!({"ok": false, "error": e})),
@@ -2992,6 +3128,13 @@ pub async fn csv_import_package(
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package import task: {e}")}));
+    if let Some(bid) = result
+        .get("building_id")
+        .and_then(|v| v.as_str())
+        .or(peeked_building.as_deref())
+    {
+        audit.target_site(bid);
+    }
     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     if ok {
         // Wave-X: seed Timescale from materialized package_root (no Parquet).
@@ -3054,6 +3197,7 @@ pub async fn csv_import_package(
                                         }
                                         Err(e) => {
                                             abort_import_staging(&result);
+                                            audit.reason(ReasonCode::StorageError);
                                             return Err((
                                                 StatusCode::INTERNAL_SERVER_ERROR,
                                                 Json(json!({
@@ -3073,6 +3217,7 @@ pub async fn csv_import_package(
                             }
                             Err(e) => {
                                 abort_import_staging(&result);
+                                audit.reason(ReasonCode::HistorianError);
                                 return Err((
                                     StatusCode::INTERNAL_SERVER_ERROR,
                                     Json(json!({
@@ -3086,6 +3231,7 @@ pub async fn csv_import_package(
                     }
                     Err(e) => {
                         abort_import_staging(&result);
+                        audit.reason(ReasonCode::HistorianError);
                         return Err((
                             StatusCode::SERVICE_UNAVAILABLE,
                             Json(json!({
@@ -3115,14 +3261,6 @@ pub async fn csv_import_package(
             );
         }
     }
-    open_fdd_edge_prototype::auth::audit::log_event(
-        "package_import",
-        json!({
-            "ok": ok,
-            "building_id": result.get("building_id"),
-            "surface": "csv/import/package",
-        }),
-    );
     if let Some(ref aid) = action_id {
         let status = if ok { "ok" } else { "fail" };
         let building_id = result.get("building_id").cloned().unwrap_or(Value::Null);
@@ -3147,9 +3285,40 @@ pub async fn csv_import_package_append(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    // Role before archive parse, files, historian, or audit.
-    let writer = require_dataset_writer(&state, &headers)?;
-    let ct = content_type(&headers);
+    let mut audit = AuditEvent::new(AuditAction::PackageAppend);
+    audit.target(TargetType::Route, "/api/csv/import/package/append");
+    let result = csv_import_package_append_inner(&state, &headers, body, &mut audit).await;
+    if let Ok(Json(body)) = &result {
+        audit.change(package_change(body));
+        if append_was_replay(body) {
+            audit.outcome(Outcome::Replayed);
+        }
+    }
+    audit.finish(&result).emit();
+    result
+}
+
+/// Every merge added zero rows and found duplicates: an idempotent re-send.
+fn append_was_replay(body: &Value) -> bool {
+    let Some(merges) = body.get("merges").and_then(Value::as_array) else {
+        return false;
+    };
+    let count = |m: &Value, key: &str| m.get(key).and_then(Value::as_u64).unwrap_or(0);
+    !merges.is_empty()
+        && merges
+            .iter()
+            .all(|m| count(m, "rows_added") == 0 && count(m, "rows_duped") > 0)
+}
+
+async fn csv_import_package_append_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: Bytes,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
+    // Role before archive parse, files, historian, or actions log.
+    let writer = require_dataset_writer(state, headers, audit)?;
+    let ct = content_type(headers);
     let building_id = if ct.to_ascii_lowercase().contains("application/json") {
         serde_json::from_slice::<Value>(&body).ok().and_then(|v| {
             v.get("building_id")
@@ -3159,16 +3328,13 @@ pub async fn csv_import_package_append(
     } else {
         open_fdd_edge_prototype::csv_ingest::package::peek_package_building_id(&ct, &body).ok()
     };
-    if let Some(deny) = dataset_building_scope_denial(&writer, building_id.as_deref()) {
+    if let Some(deny) = dataset_building_scope_denial(&writer, building_id.as_deref(), audit) {
         return Err(deny);
     }
     if let Some(bid) = building_id.as_deref() {
         if let Some(msg) = crate::historian_limits::deny_building_over_size(&workspace_path(), bid)
         {
-            open_fdd_edge_prototype::auth::audit::log_event(
-                "historian_size_cap_deny",
-                json!({ "building_id": bid, "surface": "csv/import/package/append" }),
-            );
+            audit.deny(ReasonCode::SizeCap);
             return Err((
                 StatusCode::FORBIDDEN,
                 Json(json!({"ok": false, "error": msg})),
@@ -3209,6 +3375,13 @@ pub async fn csv_import_package_append(
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package append task: {e}")}));
+    if let Some(bid) = result
+        .get("building_id")
+        .and_then(|v| v.as_str())
+        .or(building_id.as_deref())
+    {
+        audit.target_site(bid);
+    }
     // Wave-X C4: CSV merge alone is not success — commit Timescale upsert first.
     if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false)
         && crate::timescale_historian::historian_is_timescale()
@@ -3261,6 +3434,7 @@ pub async fn csv_import_package_append(
                             }
                         }
                         Err(e) => {
+                            audit.reason(ReasonCode::HistorianError);
                             result = json!({
                                 "ok": false,
                                 "building_id": bid,
@@ -3272,6 +3446,7 @@ pub async fn csv_import_package_append(
                     }
                 }
                 Err(e) => {
+                    audit.reason(ReasonCode::HistorianError);
                     result = json!({
                         "ok": false,
                         "error": format!("timescale connect for append: {e}"),
@@ -3311,6 +3486,8 @@ pub async fn csv_import_package_roles(
     })?;
     // Scope alone is not mutation permission — viewers may read mapping, not rewrite roles.
     if matches!(user.role, auth::Role::Viewer) {
+        crate::audit::role_denied(&user, AuditAction::PackageRoles, ReasonCode::RoleRequired)
+            .emit();
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({
@@ -3422,6 +3599,7 @@ pub async fn csv_import_package_roles(
             );
         }
     }
+    crate::mapping_revision::annotate_role_save(&mut result);
     Ok(Json(result))
 }
 
@@ -3429,6 +3607,16 @@ pub async fn csv_import_package_roles(
 pub struct PackageMappingQuery {
     building_id: Option<String>,
     equipment_id: Option<String>,
+}
+
+impl PackageMappingQuery {
+    #[cfg(test)]
+    pub(crate) fn for_test(building_id: &str) -> Self {
+        Self {
+            building_id: Some(building_id.to_string()),
+            equipment_id: None,
+        }
+    }
 }
 
 /// Inventory + validation for ingested package column→role maps (P1-M4-03).
@@ -3491,6 +3679,12 @@ pub async fn csv_import_package_mapping(
             }
         }
     }
+    let active_ingest = crate::mapping_revision::copy_active_ingest_revision(
+        &state.providers.models,
+        ctx.tenant_id.as_deref(),
+        &building_id,
+    );
+    crate::mapping_revision::annotate_mapping_response(&mut result, active_ingest.as_deref());
     Ok(Json(result))
 }
 
@@ -3653,6 +3847,7 @@ pub async fn model_semantic_meta_put(
         )
     })?;
     if matches!(user.role, auth::Role::Viewer) {
+        crate::audit::role_denied(&user, AuditAction::ModelWrite, ReasonCode::RoleRequired).emit();
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({
@@ -3991,6 +4186,7 @@ pub async fn model_overlay_put(
         )
     })?;
     if matches!(user.role, auth::Role::Viewer) {
+        crate::audit::role_denied(&user, AuditAction::ModelWrite, ReasonCode::RoleRequired).emit();
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({
@@ -4066,6 +4262,7 @@ fn deny_viewer_model_mutate(
         )
     })?;
     if matches!(user.role, auth::Role::Viewer) {
+        crate::audit::role_denied(&user, AuditAction::ModelWrite, ReasonCode::RoleRequired).emit();
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({
@@ -5250,20 +5447,37 @@ pub async fn csv_delete_dataset(
     headers: HeaderMap,
     Query(q): Query<DatasetIdQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let mut audit = AuditEvent::new(AuditAction::DatasetDelete);
+    audit.target_type(TargetType::Site);
+    if let Some(id) = q.id.as_deref().or(q.building_id.as_deref()) {
+        audit.target_site(id);
+    }
+    let result = csv_delete_dataset_inner(&state, &headers, &q, &mut audit).await;
+    audit.finish(&result).emit();
+    result
+}
+
+async fn csv_delete_dataset_inner(
+    state: &AppState,
+    headers: &HeaderMap,
+    q: &DatasetIdQuery,
+    audit: &mut AuditEvent,
+) -> HandlerResult {
     // Role and site scope before dataset files, historian purge, jobs, or actions.
-    let writer = require_dataset_writer(&state, &headers)?;
+    let writer = require_dataset_writer(state, headers, audit)?;
     let Some(id) =
         q.id.as_deref()
             .or(q.building_id.as_deref())
             .filter(|s| !s.is_empty())
             .map(str::to_string)
     else {
+        audit.reason(ReasonCode::InvalidRequest);
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({"ok": false, "error": "id query required"})),
         ));
     };
-    if let Some(deny) = dataset_building_scope_denial(&writer, Some(&id)) {
+    if let Some(deny) = dataset_building_scope_denial(&writer, Some(&id), audit) {
         return Err(deny);
     }
     let action_id = actions::start_action(
@@ -5289,6 +5503,17 @@ pub async fn csv_delete_dataset(
                 err.timescale_rows_deleted,
             ),
         };
+    audit.change(AuditChange::Purge {
+        jobs_deleted,
+        job_errors: job_errors.len(),
+        timescale_rows_deleted: timescale_rows,
+    });
+    if !ok {
+        audit.reason(ReasonCode::HistorianError);
+        if timescale_rows > 0 || jobs_deleted > 0 {
+            audit.outcome(Outcome::Partial);
+        }
+    }
     if let Some(ref aid) = action_id {
         let status = if ok { "ok" } else { "fail" };
         let _ = actions::finish_action(
@@ -5376,7 +5601,7 @@ pub async fn data_management_budget(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let _admin = require_hub_admin(&state, &headers)?;
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
     // Soft-OPEN R8d: do not present Parquet hive budget as Timescale product historian retention.
     if crate::timescale_historian::historian_is_timescale() {
         let budget = fdd_store::DataBudget::from_env();
@@ -5435,7 +5660,7 @@ pub async fn data_management_retention_apply(
     headers: HeaderMap,
     Json(body): Json<DataBudgetApplyBody>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin(&state, &headers)?;
+    let admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminMaintenance)?;
     if crate::timescale_historian::historian_is_timescale() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -5487,7 +5712,7 @@ pub async fn building_sessions_list(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let _admin = require_hub_admin(&state, &headers)?;
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
     let mut body = crate::building_sessions::snapshot();
     if let Some(obj) = body.as_object_mut() {
         obj.insert("ok".into(), json!(true));
@@ -5571,7 +5796,7 @@ pub async fn historian_compaction_status(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let _admin = require_hub_admin(&state, &headers)?;
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
     // Soft-OPEN R8d: Timescale tip must not advertise empty Parquet compaction as product.
     if crate::timescale_historian::historian_is_timescale() {
         return Ok(Json(json!({
@@ -5608,7 +5833,7 @@ pub async fn historian_compaction_run(
     headers: HeaderMap,
     Json(body): Json<HistorianCompactionBody>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin(&state, &headers)?;
+    let admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminMaintenance)?;
     if crate::timescale_historian::historian_is_timescale() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -6460,14 +6685,35 @@ async fn analytics_sensor_health(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    cached_analytics!(
-        "sensor-health",
-        analytics::QV_SENSOR_HEALTH,
-        &state,
-        &headers,
-        req,
-        analytics::sensor_health::handle_async(&req)
-    )
+    gate_analytics(&state, &headers, &mut req)?;
+    if crate::timescale_historian::historian_is_timescale() {
+        return crate::timescale_analytics::respond_query(
+            "sensor-health",
+            analytics::QV_SENSOR_HEALTH,
+            &req,
+        )
+        .await
+        .map(Json);
+    }
+    match analytics::sensor_health::handle_async(&req).await {
+        Ok(env) => {
+            crate::analytics::result_cache::respond(
+                "sensor-health",
+                analytics::QV_SENSOR_HEALTH,
+                &req,
+                async move || env,
+            )
+            .await
+        }
+        Err(err) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "ok": false,
+                "error": err.to_string(),
+                "engine": "timescale-sql",
+            })),
+        )),
+    }
 }
 
 async fn analytics_schedule(
@@ -6621,12 +6867,14 @@ async fn analytics_inspect(
                 })
             });
             let max_points = req.query.max_points.unwrap_or(2000);
+            let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
             match analytics::historian::inspect_from_history(
                 req.query.building_id.as_deref(),
                 eq,
                 columns.as_deref(),
                 max_points,
                 req.read_tenant_id.as_deref(),
+                &scope,
             )
             .await
             {
@@ -6772,6 +7020,7 @@ async fn analytics_rcx_preset(
                 .to_string();
             let building_id = req.query.building_id.clone();
             let max_points = req.query.max_points.unwrap_or(8000);
+            let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
             let action_id = actions::start_action(
                 "analytics_rcx",
                 &format!(
@@ -6797,6 +7046,7 @@ async fn analytics_rcx_preset(
                 building_id.as_deref(),
                 &preset_id,
                 max_points,
+                &scope,
             )
             .await
             {
@@ -8191,8 +8441,8 @@ mod version_tests {
 
     /// Import, append, and dataset delete (workspace delete + historian purge)
     /// require operator or admin and the caller's site. Denial leaves files,
-    /// the actions log, the audit log, and — when a test database is configured —
-    /// Timescale rows unchanged.
+    /// the actions log, and — when a test database is configured — Timescale
+    /// rows unchanged, and appends one typed deny event to the audit log.
     #[tokio::test]
     #[expect(
         clippy::await_holding_lock,
@@ -8207,7 +8457,8 @@ mod version_tests {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
         let parquet = workspace.path().join(".cache/parquet");
-        let audit_path = workspace.path().join("logs/security_audit.jsonl");
+        let audit_dir = tempfile::tempdir().unwrap();
+        let audit_path = audit_dir.path().join("security_audit.jsonl");
         let _historian =
             HistorianEnv::isolate(parquet.to_str().unwrap(), audit_path.to_str().unwrap());
 
@@ -8302,10 +8553,40 @@ mod version_tests {
                 assert_eq!(
                     workspace_fingerprint(workspace.path()),
                     before,
-                    "{role:?} {scope} {op:?} wrote a file, action, or audit record"
+                    "{role:?} {scope} {op:?} wrote a file or action"
                 );
+                let event = last_audit_event(&audit_path);
+                assert_eq!(event["schema"], "openfdd.audit.v1", "{event}");
+                assert_eq!(event["action"], op.audit_action(), "{event}");
+                assert_eq!(event["decision"], "deny", "{event}");
+                assert_eq!(event["outcome"], "failed", "{event}");
+                assert_eq!(event["http_status"], 403, "{event}");
+                assert_eq!(event["role"], role.as_str(), "{event}");
+                assert!(event["actor"]
+                    .as_str()
+                    .is_some_and(|a| a.starts_with("w1b-")));
+                assert!(event["target_type"].is_string(), "{event}");
+                assert!(event["target_id"].is_string(), "{event}");
+                let reason = if role == crate::auth::Role::Viewer {
+                    "role_required"
+                } else {
+                    "site_scope"
+                };
+                assert_eq!(event["reason"], reason, "{event}");
+                if role != crate::auth::Role::Viewer {
+                    assert_eq!(event["target_id"], building, "{event}");
+                }
             }
         }
+        let viewer_import = audit_events(&audit_path)
+            .into_iter()
+            .find(|e| e["action"] == "package.import" && e["role"] == "viewer")
+            .expect("viewer import deny event");
+        assert_eq!(viewer_import["actor"], "w1b-viewer");
+        assert_eq!(viewer_import["target_type"], "route");
+        assert_eq!(viewer_import["target_id"], "/api/csv/import/package");
+        assert_eq!(viewer_import["tenant_id"], tenant_a);
+        assert_eq!(viewer_import["auth_kind"], "human_login");
         assert_eq!(
             std::fs::read_to_string(
                 workspace
@@ -8332,6 +8613,33 @@ mod version_tests {
             Some(true),
             "{body}"
         );
+        let event = last_audit_event(&audit_path);
+        assert_eq!(event["action"], "package.import", "{event}");
+        assert_eq!(event["decision"], "allow", "{event}");
+        assert_eq!(event["outcome"], "ok", "{event}");
+        assert_eq!(event["target_type"], "site", "{event}");
+        assert_eq!(event["site_id"], "W1B_OWN", "{event}");
+        assert_eq!(event["change"]["kind"], "package", "{event}");
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/csv/import/package")
+                    .header("content-type", "application/zip")
+                    .header("authorization", format!("Bearer {operator}"))
+                    .body(Body::from("not a zip archive"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let event = last_audit_event(&audit_path);
+        assert_eq!(event["action"], "package.import", "{event}");
+        assert_eq!(event["actor"], "w1b-operator", "{event}");
+        assert_eq!(event["decision"], "allow", "{event}");
+        assert_eq!(event["outcome"], "failed", "{event}");
+        assert_eq!(event["reason"], "invalid_request", "{event}");
+        assert_eq!(event["http_status"], 400, "{event}");
         assert!(
             workspace
                 .path()
@@ -8559,6 +8867,29 @@ mod version_tests {
         Import,
         Append,
         Delete,
+    }
+
+    impl WriteOp {
+        fn audit_action(self) -> &'static str {
+            match self {
+                WriteOp::Import => "package.import",
+                WriteOp::Append => "package.append",
+                WriteOp::Delete => "dataset.delete",
+            }
+        }
+    }
+
+    fn audit_events(path: &std::path::Path) -> Vec<serde_json::Value> {
+        std::fs::read_to_string(path)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+            .map(|envelope| envelope["detail"].clone())
+            .collect()
+    }
+
+    fn last_audit_event(path: &std::path::Path) -> serde_json::Value {
+        audit_events(path).pop().unwrap_or(serde_json::Value::Null)
     }
 
     struct HistorianEnv {

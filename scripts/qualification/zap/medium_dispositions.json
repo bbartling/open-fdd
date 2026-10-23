@@ -1,14 +1,14 @@
 {
-  "schema_version": "openfdd.zap_medium_disposition.v1",
-  "dispositions": [
+  "schema_version": "openfdd.zap_alert_disposition.v2",
+  "dispositions": [],
+  "pending_rebind": [
     {
       "plugin_id": "10055",
       "alert_name": "CSP: style-src unsafe-inline",
       "component": "openfdd-web",
       "host_scope": "disposable_web_central",
       "owner": "cursor-astra-c-zap",
-      "rationale": "Product nginx CSP intentionally allows style-src 'unsafe-inline' for React/Vite inline styles. Not a blanket Medium accept — exact plugin 10055 only.",
-      "expiry": "2026-12-31",
+      "rationale": "Product nginx CSP intentionally allows style-src 'unsafe-inline' for React/Vite inline styles. Plugin-level acceptance retired; re-bind each observed instance (method + route + param + evidence_sha256) from alerts.derived.json after the next disposable scan.",
       "retest": "Replace unsafe-inline with style hashes/nonces after SPA stylesheet extraction",
       "candidate_binding": "ghcr_web_disposable_af"
     },
@@ -18,8 +18,7 @@
       "component": "openfdd-web",
       "host_scope": "disposable_web_central",
       "owner": "cursor-astra-c-zap",
-      "rationale": "Google Fonts CSS loaded without SRI (dynamic stylesheet). Self-host Soft-OPEN; exact plugin 90003 only.",
-      "expiry": "2026-12-31",
+      "rationale": "Google Fonts CSS loaded without SRI (dynamic stylesheet). Plugin-level acceptance retired; re-bind each observed instance from alerts.derived.json after the next disposable scan.",
       "retest": "Self-host Source Sans 3 with integrity hashes on link tags",
       "candidate_binding": "ghcr_web_disposable_af"
     }

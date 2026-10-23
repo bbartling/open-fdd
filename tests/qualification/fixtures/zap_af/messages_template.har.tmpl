@@ -1,0 +1,174 @@
+{
+  "log": {
+    "version": "1.2",
+    "creator": {"name": "ZAP", "version": "2.16.0"},
+    "entries": [
+      {
+        "startedDateTime": "2026-10-22T23:00:00.000+00:00",
+        "time": 4,
+        "request": {
+          "method": "GET",
+          "url": "__ORIGIN__/api/auth/me",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [
+            {"name": "host", "value": "127.0.0.1:18080"},
+            {"name": "X-OpenFDD-Auth-Probe", "value": "before-__NONCE__"},
+            {"name": "Accept", "value": "application/json"},
+            {"name": "Authorization", "value": "__AUTH__"}
+          ],
+          "queryString": [],
+          "headersSize": 160,
+          "bodySize": 0
+        },
+        "response": {
+          "status": __PROBE_STATUS__,
+          "statusText": "",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [{"name": "content-type", "value": "application/json"}],
+          "content": {"size": 90, "mimeType": "application/json", "text": "__PROBE_BODY__"},
+          "redirectURL": "",
+          "headersSize": 80,
+          "bodySize": 90
+        },
+        "cache": {},
+        "timings": {"send": 0, "wait": 4, "receive": 0},
+        "_zapMessageId": 1,
+        "_zapMessageType": 15
+      },
+      {
+        "startedDateTime": "2026-10-22T23:00:01.000+00:00",
+        "time": 3,
+        "request": {
+          "method": "GET",
+          "url": "__ORIGIN__/api/health",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [
+            {"name": "host", "value": "127.0.0.1:18080"},
+            {"name": "Authorization", "value": "__AUTH__"}
+          ],
+          "queryString": [],
+          "headersSize": 100,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [{"name": "content-type", "value": "application/json"}],
+          "content": {"size": 11, "mimeType": "application/json", "text": "{\"ok\":true}"},
+          "redirectURL": "",
+          "headersSize": 80,
+          "bodySize": 11
+        },
+        "cache": {},
+        "timings": {"send": 0, "wait": 3, "receive": 0},
+        "_zapMessageId": 2,
+        "_zapMessageType": 12
+      },
+      {
+        "startedDateTime": "2026-10-22T23:00:02.000+00:00",
+        "time": 4,
+        "request": {
+          "method": "GET",
+          "url": "__ORIGIN__/api/auth/me",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [
+            {"name": "host", "value": "127.0.0.1:18080"},
+            {"name": "X-OpenFDD-Auth-Probe", "value": "during-__NONCE__"},
+            {"name": "Accept", "value": "application/json"},
+            {"name": "Authorization", "value": "__AUTH__"}
+          ],
+          "queryString": [],
+          "headersSize": 160,
+          "bodySize": 0
+        },
+        "response": {
+          "status": __PROBE_STATUS__,
+          "statusText": "",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [{"name": "content-type", "value": "application/json"}],
+          "content": {"size": 90, "mimeType": "application/json", "text": "__PROBE_BODY__"},
+          "redirectURL": "",
+          "headersSize": 80,
+          "bodySize": 90
+        },
+        "cache": {},
+        "timings": {"send": 0, "wait": 4, "receive": 0},
+        "_zapMessageId": 3,
+        "_zapMessageType": 15
+      },
+      {
+        "startedDateTime": "2026-10-22T23:00:03.000+00:00",
+        "time": 5,
+        "request": {
+          "method": "GET",
+          "url": "__ORIGIN__/",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [
+            {"name": "host", "value": "127.0.0.1:18080"},
+            {"name": "Authorization", "value": "__AUTH__"}
+          ],
+          "queryString": [],
+          "headersSize": 100,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "OK",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [{"name": "content-type", "value": "text/html"}],
+          "content": {"size": 30, "mimeType": "text/html", "text": "PGh0bWw+PC9odG1sPg==", "encoding": "base64"},
+          "redirectURL": "",
+          "headersSize": 80,
+          "bodySize": 30
+        },
+        "cache": {},
+        "timings": {"send": 0, "wait": 5, "receive": 0},
+        "_zapMessageId": 4,
+        "_zapMessageType": 10
+      },
+      {
+        "startedDateTime": "2026-10-22T23:00:04.000+00:00",
+        "time": 4,
+        "request": {
+          "method": "GET",
+          "url": "__ORIGIN__/api/auth/me",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [
+            {"name": "host", "value": "127.0.0.1:18080"},
+            {"name": "X-OpenFDD-Auth-Probe", "value": "after-__NONCE__"},
+            {"name": "Accept", "value": "application/json"},
+            {"name": "Authorization", "value": "__AUTH__"}
+          ],
+          "queryString": [],
+          "headersSize": 160,
+          "bodySize": 0
+        },
+        "response": {
+          "status": __PROBE_STATUS__,
+          "statusText": "",
+          "httpVersion": "HTTP/1.1",
+          "cookies": [],
+          "headers": [{"name": "content-type", "value": "application/json"}],
+          "content": {"size": 90, "mimeType": "application/json", "text": "__PROBE_BODY__"},
+          "redirectURL": "",
+          "headersSize": 80,
+          "bodySize": 90
+        },
+        "cache": {},
+        "timings": {"send": 0, "wait": 4, "receive": 0},
+        "_zapMessageId": 5,
+        "_zapMessageType": 15
+      }
+    ]
+  }
+}

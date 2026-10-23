@@ -3,6 +3,7 @@ import { loadOverviewRcxPreset } from "./rcxOverviewPresets";
 
 vi.mock("./mappingApi", () => ({
   getPackageMapping: vi.fn(async () => ({ ok: true, equipment: [] })),
+  getSessionConfig: vi.fn(async () => ({ ok: true, config: {} })),
 }));
 
 vi.mock("./analyticsApi", () => ({
@@ -108,6 +109,10 @@ describe("RCx overview presets normalize row-only envelopes before charts", () =
     const runtime = await loadOverviewRcxPreset("SYN_SITE", "ahu_motor_weekly");
     expect(runtime.figure).toBeTruthy();
     expect(runtime.error).toBeUndefined();
+    expect(runtime.env.points).toEqual([]);
+    expect(runtime.figure?.meta?.weekly_observations).toBe(1);
+    expect(runtime.figure?.meta?.provenance).toContain("schedule 50 h/week (default)");
+    expect(runtime.figure?.meta?.schedule_hours).toBe(50);
 
     vi.mocked(postRuntime).mockResolvedValueOnce({ ...envelope, rows: [] } as never);
     const runtimeEmpty = await loadOverviewRcxPreset("SYN_SITE", "ahu_motor_weekly");

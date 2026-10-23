@@ -18,11 +18,14 @@ Flow:
        (A) full ``open_fdd.rules.run_rule`` (quality layer ON)
        (B) SQL-aligned oracle = equation + gate + confirm, quality OFF
   4. ``POST /api/fdd/run`` same rule on product SQL (Timescale Soft-OPEN tip)
-  5. Strict: SQL fault_hours ≈ (B) (|Δ| ≤ HOURS_TOL)
+  5. Strict: SQL fault_hours ≈ (B) (|Δ| ≤ HOURS_TOL) on the single SQL row
+     with exact ``(rule_id, equipment_id)`` identity — no looser fallback
   6. Reconcile: quality-ON oracle on normalized frame ≈ (A)
 
 Fail-closed by default. ``--allow-satdev-drift`` downgrades only AHU-SATDEV
 SQL↔oracle mismatch to WARN (lab emergency; do not weaken default).
+Missing roles, fewer than ``MIN_SAMPLES`` history rows, or fewer than
+``--min-rules`` compared rules exit 2 (BLOCKED); divergence exits 1 (FAIL).
 
 Soft-OPEN ≠ FQ. Synthetic ``--building-id`` only.
 
@@ -44,6 +47,9 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from helpers import (  # noqa: E402
+    EXIT_BLOCKED,
+    EXIT_FAIL,
+    EXIT_PASS,
     add_connection_args,
     apply_base_url,
     banner,
@@ -56,12 +62,18 @@ from helpers import (  # noqa: E402
     print_table,
     require_building_id,
     resolve_base_url,
+    run_child,
     safe_print,
     wait_until_ready,
 )
 
 POLL_S = 300.0
 HOURS_TOL = 0.05
+MIN_SAMPLES = 20
+
+
+class MissingFixture(Exception):
+    """Synthetic fixture lacks roles or history: BLOCKED, never a pass."""
 
 # Canonical Haystack cookbook roles (must match open_fdd RULES_BY_ID columns).
 # Short SQL aliases (sat / sat_sp) are warehouse-only — never pandas DF columns.
@@ -143,8 +155,10 @@ SELECT ?equipmentId ?pointId ?column ?fddSelection WHERE {{
 }}
 ORDER BY ?column
 """,
-        )
-    return [r for r in rows if (r.get("equipmentId") or r.get("equipment_id")) == equipment_id or True]
+            )
+    return [
+        r for r in rows if (r.get("equipmentId") or r.get("equipment_id") or "") == equipment_id
+    ]
 
 
 def _guess_role(column: str, selection: str, needed: tuple[str, ...]) -> str | None:
@@ -203,7 +217,7 @@ def _build_df_from_resolve(
             by_role[role] = col
     missing = [n for n in needed if n not in by_role]
     if missing:
-        raise SystemExit(
+        raise MissingFixture(
             f"SPARQL missed roles {missing} for {equipment_id} "
             f"(have columns={[r.get('column') for r in role_rows]})"
         )
@@ -216,21 +230,26 @@ def _build_df_from_resolve(
         hist = body.get("history") if isinstance(body.get("history"), dict) else {}
         samples = hist.get("samples") or []
         if hist.get("ok") is False:
-            raise SystemExit(f"point-resolve history error for {iri}: {hist.get('error')}")
+            raise MissingFixture(f"point-resolve history error for {iri}: {hist.get('error')}")
         max_pts = int(hist.get("max_points") or 2000)
         if len(samples) >= max_pts:
             raise SystemExit(
                 f"FAIL-CLOSED: {iri} history truncated at max_points={max_pts}"
             )
-        if len(samples) < 20:
-            raise SystemExit(
-                f"{iri} only {len(samples)} samples — seed Timescale for synthetic building"
+        if len(samples) < MIN_SAMPLES:
+            raise MissingFixture(
+                f"{iri} only {len(samples)} samples (< {MIN_SAMPLES}) — "
+                "seed Timescale for synthetic building"
             )
         idx = pd.to_datetime([s["ts"] for s in samples], utc=True)
         vals = [s.get("val") for s in samples]
         series[role] = pd.Series(vals, index=idx, name=role)
     df = pd.DataFrame(series).sort_index()
     df = df[~df.index.duplicated(keep="last")]
+    if len(df) < MIN_SAMPLES:
+        raise MissingFixture(
+            f"{equipment_id} oracle frame has {len(df)} rows (< {MIN_SAMPLES})"
+        )
     df.attrs.update(equipment_id=equipment_id, equipment_type="ahu", building_id=building_id)
     return df
 
@@ -294,6 +313,44 @@ def _pandas_hours_sql_semantics(
     return float(hours_true(pd.Series(confirmed, index=d.index), POLL_S)), meta
 
 
+def compare_sql_to_oracle(
+    results: list, rule_id: str, equipment_id: str, oracle_hours: float
+) -> tuple[str, float | None, str]:
+    """Judge one rule on exact ``(rule_id, equipment_id)`` identity.
+
+    Returns ``(status, sql_hours, message)`` with status PASS / FAIL / BLOCKED.
+    A row for other equipment never stands in, even with identical fault-hours.
+    """
+    rows = [r for r in results if isinstance(r, dict)]
+    if not rows:
+        return "BLOCKED", None, f"no SQL result rows for {rule_id}/{equipment_id}"
+    hits = [
+        r
+        for r in rows
+        if str(r.get("rule_id")) == rule_id and str(r.get("equipment_id")) == equipment_id
+    ]
+    if not hits:
+        seen = sorted({(str(r.get("rule_id")), str(r.get("equipment_id"))) for r in rows})
+        return "FAIL", None, f"no SQL row with identity ({rule_id}, {equipment_id}); got {seen}"
+    if len(hits) > 1:
+        return "FAIL", None, f"{len(hits)} SQL rows share identity ({rule_id}, {equipment_id})"
+    raw = hits[0].get("fault_hours")
+    try:
+        s_hours = float(raw)
+    except (TypeError, ValueError):
+        return "FAIL", None, f"{rule_id}/{equipment_id} SQL fault_hours={raw!r} is not numeric"
+    if not math.isfinite(s_hours):
+        return "FAIL", s_hours, f"{rule_id}/{equipment_id} SQL fault_hours={s_hours} not finite"
+    if math.isclose(oracle_hours, s_hours, abs_tol=HOURS_TOL):
+        return "PASS", s_hours, f"{rule_id}/{equipment_id} SQL≈pandas (|Δ|≤{HOURS_TOL})"
+    return (
+        "FAIL",
+        s_hours,
+        f"{rule_id}/{equipment_id} SQL fault_hours={s_hours:.4f} "
+        f"vs pandas SQL-aligned={oracle_hours:.4f}",
+    )
+
+
 def _checks(equipment_id: str) -> list[dict]:
     return [
         {
@@ -332,7 +389,15 @@ def main(argv: list[str] | None = None) -> int:
         help="WARN-only for AHU-SATDEV SQL↔oracle mismatch (lab emergency; see #1253)",
     )
     ap.add_argument("--equipment-id", default=None, help="AHU equipment_id (default: SPARQL first)")
+    ap.add_argument(
+        "--min-rules",
+        type=int,
+        default=len(_checks("")),
+        help="exact-identity SQL↔pandas rule comparisons required for PASS (>= 1; default all)",
+    )
     args = ap.parse_args(argv)
+    if args.min_rules < 1:
+        ap.error("--min-rules must be >= 1 (zero comparisons is never a pass)")
     base = apply_base_url(
         resolve_base_url(base_url=args.base_url, host=args.host, port=args.port)
     )
@@ -360,8 +425,8 @@ def main(argv: list[str] | None = None) -> int:
                 http, headers, building_id
             )
             if not equipment_id:
-                safe_print("FAIL: no AHU equipment in package RDF")
-                return 1
+                safe_print("BLOCKED: no AHU equipment in package RDF")
+                return EXIT_BLOCKED
             safe_print(f"  equipment_id={equipment_id}")
             role_rows = _role_points(http, headers, building_id, equipment_id)
         except RuntimeError as exc:
@@ -369,7 +434,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print_table("Role candidate points", role_rows, limit=30)
 
+        if not role_rows:
+            safe_print(f"BLOCKED: no role candidate points on {equipment_id}")
+            return EXIT_BLOCKED
+
         failures = 0
+        blocked = 0
+        compared = 0
         for check in _checks(equipment_id):
             rid = check["rule_id"]
             safe_print("\n" + "-" * 50)
@@ -383,12 +454,12 @@ def main(argv: list[str] | None = None) -> int:
                     needed=check["needed"],
                     role_rows=role_rows,
                 )
+            except MissingFixture as exc:
+                safe_print(f"BLOCKED {rid}: {exc}")
+                blocked += 1
+                continue
             except (SystemExit, RuntimeError) as exc:
-                msg = str(exc)
-                if rid == "AHU-DUCTHI" and "missed roles" in msg:
-                    safe_print(f"SKIP {rid}: {msg}")
-                    continue
-                safe_print(f"FAIL {rid}: {msg}")
+                safe_print(f"FAIL {rid}: {exc}")
                 failures += 1
                 continue
 
@@ -438,39 +509,27 @@ def main(argv: list[str] | None = None) -> int:
                 safe_print(f"FAIL: /api/fdd/run {rid}: {run_body.get('error')}")
                 failures += 1
                 continue
-            results = run_body.get("results") or []
-            hit = next(
-                (
-                    r
-                    for r in results
-                    if str(r.get("rule_id")) == rid
-                    and str(r.get("equipment_id")) == equipment_id
-                ),
-                None,
+            status, s_hours, msg = compare_sql_to_oracle(
+                run_body.get("results") or [], rid, equipment_id, o_hours
             )
-            if hit is None and results:
-                hit = next((r for r in results if str(r.get("rule_id")) == rid), results[0])
-            if hit is None:
-                safe_print(f"FAIL: no SQL result row for {rid}/{equipment_id}")
-                failures += 1
+            if s_hours is not None:
+                safe_print(
+                    f"  SQL FDD: fault_hours={s_hours:.4f} engine={run_body.get('engine')}"
+                )
+            if status == "PASS":
+                safe_print(f"PASS {msg}")
+                compared += 1
                 continue
-            s_hours = float(hit.get("fault_hours") or 0)
-            safe_print(
-                f"  SQL FDD: status={hit.get('status')} fault_hours={s_hours:.4f} "
-                f"engine={run_body.get('engine')}"
-            )
-            matched = math.isclose(o_hours, s_hours, abs_tol=HOURS_TOL)
-            if matched:
-                safe_print(f"PASS {rid}: SQL≈pandas SQL-aligned (|Δ|≤{HOURS_TOL})")
+            if status == "BLOCKED":
+                safe_print(f"BLOCKED {msg}")
+                blocked += 1
                 continue
-            msg = (
-                f"{rid} SQL fault_hours={s_hours:.4f} vs pandas SQL-aligned={o_hours:.4f} "
-                f"(runner quality ON={p_hours:.4f})"
-            )
-            if rid == "AHU-SATDEV" and args.allow_satdev_drift:
+            msg = f"{msg} (runner quality ON={p_hours:.4f})"
+            if rid == "AHU-SATDEV" and s_hours is not None and args.allow_satdev_drift:
                 safe_print(
                     f"WARN (--allow-satdev-drift): {msg} — likely #1253 quality-layer gap"
                 )
+                compared += 1
                 continue
             if rid == "AHU-SATDEV" and abs(quality_delta) > HOURS_TOL:
                 safe_print(
@@ -483,10 +542,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if failures:
         safe_print(f"\nFAIL 08 — {failures} rule divergence(s) (fail-closed)")
-        return 1
-    safe_print("\nPASS 08 — SQL FDD ↔ pandas via SPARQL (strict)")
-    return 0
+        return EXIT_FAIL
+    if blocked or compared < args.min_rules:
+        safe_print(
+            f"\nBLOCKED 08 — compared {compared} rule(s), need {args.min_rules}; "
+            f"{blocked} blocked (seed the synthetic fixture)"
+        )
+        return EXIT_BLOCKED
+    safe_print(f"\nPASS 08 — SQL FDD ↔ pandas via SPARQL (strict, {compared} rules)")
+    return EXIT_PASS
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_child(main, "08_sql_vs_pandas_sparql.py"))

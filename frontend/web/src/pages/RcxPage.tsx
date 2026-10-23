@@ -38,7 +38,11 @@ import {
   vavHealthDonut,
   vavHealthWorstBars,
 } from "../api/vibeCharts";
-import { resolveRoleUnit } from "../api/roleUnits";
+import {
+  displayUnitLabel,
+  resolveRoleUnit,
+  type UnitSystem,
+} from "../api/roleUnits";
 import type { PlotlyFigure } from "../api/plotDataset";
 import {
   isOverviewRcxPreset,
@@ -54,6 +58,12 @@ import {
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+const UNITS_KEY = "openfdd.ui.unit_system";
+
+function readUnitSystem(): UnitSystem {
+  return localStorage.getItem(UNITS_KEY) === "metric" ? "metric" : "imperial";
 }
 
 type RcxPresetRow = {
@@ -92,18 +102,38 @@ async function loadMappedRoles(site: string, signal: AbortSignal): Promise<strin
   }
 }
 
-function rcxYTitle(roleCol: string | undefined, fallback: string): string {
+function rcxYTitle(
+  roleCol: string | undefined,
+  fallback: string,
+  unitSystem: UnitSystem,
+): string {
   const role = (roleCol ?? "").trim();
   if (!role) return fallback;
-  const unit = resolveRoleUnit(role);
+  const unit = resolveRoleUnit(role, unitSystem);
   return unit || role || fallback;
 }
 
-function rcxScatterXTitle(coverage: Record<string, unknown> | undefined): string {
-  if (coverage?.prefer_wetbulb === true) return "Web wet-bulb °F";
-  const oat = String(coverage?.oat_column ?? "");
-  if (oat.includes("wb") || oat.includes("wet")) return "Web wet-bulb °F";
-  return "Web dry-bulb °F";
+function scatterXQuantity(
+  coverage: Record<string, unknown> | undefined,
+): string {
+  const point = coverage?.x_point;
+  if (point && typeof point === "object") {
+    const quantity = (point as Record<string, unknown>).quantity;
+    if (typeof quantity === "string" && quantity.trim()) return quantity.trim();
+  }
+  const direct = coverage?.x_quantity;
+  return typeof direct === "string" ? direct.trim() : "";
+}
+
+function rcxScatterXTitle(
+  coverage: Record<string, unknown> | undefined,
+  unitSystem: UnitSystem,
+): string {
+  const unit = displayUnitLabel("°F", unitSystem, "temperature");
+  if (scatterXQuantity(coverage) === "wet_bulb_temperature") {
+    return `Web wet-bulb ${unit}`;
+  }
+  return `Web dry-bulb ${unit}`;
 }
 
 function pointsLookLikeTimeseries(
@@ -157,6 +187,7 @@ export function RcxPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>(readUnitSystem);
   const [chartSite, setChartSite] = useState(buildingId);
   if (chartSite !== buildingId) {
     setChartSite(buildingId);
@@ -168,6 +199,16 @@ export function RcxPage() {
     setPresetTables([]);
     setError(null);
   }
+
+  useEffect(() => {
+    const onUnits = (event: Event) => {
+      const detail = (event as CustomEvent<UnitSystem>).detail;
+      if (detail === "metric" || detail === "imperial") setUnitSystem(detail);
+    };
+    window.addEventListener("openfdd:unit-system-changed", onUnits);
+    return () =>
+      window.removeEventListener("openfdd:unit-system-changed", onUnits);
+  }, []);
 
   useEffect(() => {
     if (!buildingId || presetLoad.committedKey !== buildingId) return;
@@ -219,6 +260,10 @@ export function RcxPage() {
 
   const coverageRows = useMemo(() => {
     const cov = env?.coverage;
+    const observed =
+      figure?.meta?.weekly_observations != null
+        ? String(figure.meta.weekly_observations)
+        : String(figure?.meta?.point_count ?? env?.points?.length ?? 0);
     if (!cov || typeof cov !== "object") {
       return presets.map((p) => ({
         preset_id: p.id,
@@ -240,7 +285,7 @@ export function RcxPage() {
         chart: String(cov.chart_kind ?? cov.chart ?? ""),
         frozen: presets.find((p) => p.id === runId)?.frozen ? "yes" : "no",
         status: cov.empty ? "empty" : "ok",
-        points: String(env?.points?.length ?? 0),
+        points: observed,
         note: [
           cov.role_col != null ? `role=${cov.role_col}` : "",
           cov.y_col != null ? `y=${cov.y_col}` : "",
@@ -276,7 +321,7 @@ export function RcxPage() {
           note: "",
         })),
     ];
-  }, [env, presets, presetId]);
+  }, [env, figure, presets, presetId]);
 
   const runHolder = useRef(createScopeHolder());
   const familyPresetsRef = useRef(familyPresets);
@@ -299,6 +344,7 @@ export function RcxPage() {
           presetId,
           undefined,
           opts?.refresh,
+          unitSystem,
           ticket.signal,
         );
         if (!live()) return;
@@ -379,17 +425,22 @@ export function RcxPage() {
       }
       let fig: PlotlyFigure | null = null;
       const roleCol = String(res.coverage?.role_col ?? res.coverage?.y_col ?? "");
-      const unitTitle = rcxYTitle(roleCol, "value");
+      const unitTitle = rcxYTitle(roleCol, "value", unitSystem);
       if (kind === "scatter_oat") {
         fig = oatScatter(points, {
           title,
           yTitle: unitTitle,
-          xTitle: rcxScatterXTitle(res.coverage as Record<string, unknown>),
+          xTitle: rcxScatterXTitle(
+            res.coverage as Record<string, unknown>,
+            unitSystem,
+          ),
+          unitSystem,
         });
       } else if (kind === "box") {
         fig = multiEquipmentBox(points, {
           title,
           yTitle: unitTitle,
+          unitSystem,
         });
       } else if (kind === "ranking") {
         fig = rankingBars(points, {
@@ -406,6 +457,7 @@ export function RcxPage() {
             multiEquipmentTimeseries(points, {
               title: "Worst zones — space temp",
               yTitle: unitTitle || "zone_t",
+              unitSystem,
             }),
           );
         } else {
@@ -424,6 +476,7 @@ export function RcxPage() {
         fig = multiEquipmentTimeseries(points, {
           title,
           yTitle: unitTitle,
+          unitSystem,
         });
       }
       if (rcxFigureHasFaultLane(fig)) {
@@ -449,7 +502,7 @@ export function RcxPage() {
     } finally {
       if (live()) setLoading(false);
     }
-  }, [buildingId, presetId]);
+  }, [buildingId, presetId, unitSystem]);
 
   const presetsReady = Boolean(buildingId) && presetLoad.committedKey === buildingId;
   useEffect(() => {
@@ -528,8 +581,10 @@ export function RcxPage() {
         ) : null}
         {env ? (
           <p className="oracle-sidebar__caption" data-testid="rcx-provenance">
-            engine={env.engine} · {env.query_version} · points=
-            {env.points?.length ?? 0}
+            engine={env.engine} · {env.query_version}
+            {figure?.meta?.weekly_observations != null && figure.meta.provenance
+              ? ` · ${figure.meta.provenance}`
+              : ` · points=${figure?.meta?.point_count ?? env.points?.length ?? 0}`}
             {env.warnings?.[0] ? ` · ${env.warnings[0]}` : ""}
           </p>
         ) : null}

@@ -6,7 +6,8 @@ Port of BPS ``09_analytics_sql_vs_pandas.py`` to Open-FDD:
   - Comfort via RCx zone comfort / vav-health surfaces when available
   - Independent pandas recompute from SPARQL → point-resolve samples
 
-Fail-closed on truncation and on numeric divergence beyond tolerances.
+Fail-closed on truncation and on numeric divergence beyond tolerances. Fewer than
+the declared ``--min-*`` comparisons (default 1 each) exits 2 (BLOCKED), never 0.
 Soft-OPEN ≠ FQ. Synthetic ``--building-id`` only.
 
   python scripts/stress/09_analytics_sql_vs_pandas.py --building-id SYNTH_01
@@ -26,6 +27,9 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from helpers import (  # noqa: E402
+    EXIT_BLOCKED,
+    EXIT_FAIL,
+    EXIT_PASS,
     add_connection_args,
     analytics_post,
     apply_base_url,
@@ -37,6 +41,7 @@ from helpers import (  # noqa: E402
     post_sparql,
     require_building_id,
     resolve_base_url,
+    run_child,
     safe_print,
     wait_until_ready,
 )
@@ -44,6 +49,7 @@ from helpers import (  # noqa: E402
 PCT_TOL = 1e-4
 TEMP_TOL = 1e-3
 RESID_TOL = 5e-4
+SPOT_CHECK_LIMIT = 25
 
 
 def _unwrap(body: dict) -> dict:
@@ -78,8 +84,67 @@ def _pandas_comfort_pct(samples: list, low: float, high: float) -> tuple[float, 
     return 100.0 * inside / len(vals), len(vals)
 
 
-def _check_economizer(http, headers, building_id: str) -> int:
-    """Compare economizer analytics points vs pandas ΔOR/ΔMR when roles resolve."""
+def _num(pt: dict, *keys: str) -> float | None:
+    for key in keys:
+        val = pt.get(key)
+        if val is None:
+            continue
+        try:
+            out = float(val)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(out):
+            return out
+    return None
+
+
+def compare_economizer_points(points: list, *, limit: int = SPOT_CHECK_LIMIT) -> tuple[str | None, int]:
+    """SQL economizer deltas vs pandas ΔOR/ΔMR. Returns ``(failure, compared)``."""
+    checked = 0
+    for pt in points[:limit]:
+        if not isinstance(pt, dict):
+            continue
+        oat = _num(pt, "oat_f", "oa_t", "oat")
+        rat = _num(pt, "rat_f", "ra_t", "rat")
+        mat = _num(pt, "mat_f", "ma_t", "mat")
+        dor = _num(pt, "delta_or_f")
+        dmr = _num(pt, "delta_mr_f")
+        if None in (oat, rat, mat, dor, dmr):
+            continue
+        exp_or = oat - rat
+        exp_mr = mat - rat
+        if abs(dor - exp_or) > TEMP_TOL or abs(dmr - exp_mr) > TEMP_TOL:
+            return (
+                f"economizer deltas: oat={oat} rat={rat} mat={mat} "
+                f"sql ΔOR={dor} ΔMR={dmr} vs pandas {exp_or}/{exp_mr}",
+                checked,
+            )
+        resid = _num(pt, "mat_resid_f")
+        damper = _num(pt, "oa_damper_pct")
+        if resid is not None and damper is not None:
+            exp_resid = mat - (rat + damper / 100.0 * exp_or)
+            if abs(resid - exp_resid) > RESID_TOL:
+                return f"economizer mat_resid: sql={resid} pandas={exp_resid}", checked
+        checked += 1
+    return None, checked
+
+
+def verdict(name: str, failure: str | None, compared: int, minimum: int) -> int:
+    if failure:
+        safe_print(f"FAIL {name}: {failure}")
+        return EXIT_FAIL
+    if compared < minimum:
+        safe_print(
+            f"BLOCKED {name}: compared {compared}, need {minimum} "
+            "(seed the synthetic pack — zero comparisons is never a pass)"
+        )
+        return EXIT_BLOCKED
+    safe_print(f"PASS {name}: {compared} comparison(s) match pandas")
+    return EXIT_PASS
+
+
+def _check_economizer(http, headers, building_id: str, *, minimum: int) -> int:
+    """Compare economizer analytics points vs pandas ΔOR/ΔMR."""
     body = analytics_post(
         http,
         headers,
@@ -87,61 +152,68 @@ def _check_economizer(http, headers, building_id: str) -> int:
         {"building_id": building_id, "refresh": True},
     )
     env = _unwrap(body)
-    if body.get("ok") is False and not env.get("points") and not env.get("rows"):
-        err = body.get("error") or env.get("note") or "unavailable"
-        safe_print(f"WARN economizer analytics unavailable: {err}")
-        return 0
     points = env.get("points") or env.get("rows") or []
     if not points:
-        safe_print("WARN economizer: empty points (seed synthetic pack with OAT/RAT/MAT)")
-        return 0
-    safe_print(f"  economizer engine={env.get('engine')} points={len(points)}")
-    # Spot-check up to 25 points that carry the classic delta fields.
-    checked = 0
-    for pt in points[:25]:
-        if not isinstance(pt, dict):
-            continue
-        try:
-            oat = float(pt.get("oat_f") or pt.get("oa_t") or pt["oat"])
-            rat = float(pt.get("rat_f") or pt.get("ra_t") or pt["rat"])
-            mat = float(pt.get("mat_f") or pt.get("ma_t") or pt["mat"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        dor = pt.get("delta_or_f")
-        dmr = pt.get("delta_mr_f")
-        if dor is None or dmr is None:
-            continue
-        exp_or = oat - rat
-        exp_mr = mat - rat
-        if abs(float(dor) - exp_or) > TEMP_TOL or abs(float(dmr) - exp_mr) > TEMP_TOL:
-            safe_print(
-                f"FAIL economizer deltas: oat={oat} rat={rat} mat={mat} "
-                f"sql ΔOR={dor} ΔMR={dmr} vs pandas {exp_or}/{exp_mr}"
-            )
-            return 1
-        resid = pt.get("mat_resid_f")
-        damper = pt.get("oa_damper_pct")
-        if resid is not None and damper is not None:
-            try:
-                exp_resid = mat - (rat + float(damper) / 100.0 * exp_or)
-                if abs(float(resid) - exp_resid) > RESID_TOL:
-                    safe_print(
-                        f"FAIL economizer mat_resid: sql={resid} pandas={exp_resid}"
-                    )
-                    return 1
-            except (TypeError, ValueError):
-                pass
-        checked += 1
-    if checked == 0:
-        safe_print("WARN economizer: no points with oat/rat/mat + deltas to compare")
-        return 0
-    safe_print(f"PASS economizer: {checked} points match pandas ΔOR/ΔMR")
-    return 0
+        err = body.get("error") or env.get("note") or "empty points"
+        safe_print(f"  economizer unavailable: {err} (seed synthetic pack with OAT/RAT/MAT)")
+    else:
+        safe_print(f"  economizer engine={env.get('engine')} points={len(points)}")
+    failure, checked = compare_economizer_points(points)
+    return verdict("economizer", failure, checked, minimum)
 
 
-def _check_comfort(http, headers, building_id: str) -> int:
-    """Best-effort comfort_pct vs pandas on zone-air-temp samples."""
-    # Prefer vav-health / rcx preset surfaces that expose comfort.
+def _comfort_for_row(http, headers, building_id: str, row: dict) -> tuple[str | None, int]:
+    """Returns ``(failure, compared)`` for one analytics row (compared is 0 or 1)."""
+    eid = str(row.get("equipment_id") or "")
+    try:
+        sql_pct = float(row["comfort_pct"])
+    except (KeyError, TypeError, ValueError):
+        return None, 0
+    if not eid or not math.isfinite(sql_pct):
+        return None, 0
+    try:
+        pts = post_sparql(
+            http,
+            headers,
+            building_id=building_id,
+            query_id="fdd_role_candidates",
+            equipment_id=eid,
+        )
+    except RuntimeError as exc:
+        safe_print(f"WARN SPARQL for comfort equip {eid}: {exc}")
+        return None, 0
+    col = None
+    for p in pts:
+        if (p.get("equipmentId") or p.get("equipment_id") or "") != eid:
+            continue
+        blob = f"{p.get('column','')} {p.get('fddSelection','')} {p.get('canonicalRole','')}".lower()
+        if "zone" in blob or "zn_t" in blob or "zone_air" in blob:
+            col = (p.get("column") or p.get("pointId") or "").strip()
+            if col:
+                break
+    if not col:
+        safe_print(f"WARN comfort: no zone temp column for {eid}")
+        return None, 0
+    try:
+        samples = _samples_for_key(http, headers, building_id, eid, col)
+    except SystemExit as exc:
+        return f"comfort samples: {exc}", 0
+    low = float(row.get("comfort_low_f") or 70.0)
+    high = float(row.get("comfort_high_f") or 75.0)
+    pandas_pct, n = _pandas_comfort_pct(samples, low, high)
+    if n == 0 or math.isnan(pandas_pct):
+        safe_print(f"WARN comfort: no samples for {eid}/{col}")
+        return None, 0
+    if abs(sql_pct - pandas_pct) > PCT_TOL * 100 and abs(sql_pct - pandas_pct) > 0.05:
+        # allow 0.05 absolute pct points for Soft-OPEN float noise
+        return f"comfort {eid}: sql={sql_pct:.4f} pandas={pandas_pct:.4f} n={n}", 0
+    safe_print(f"  comfort {eid}: sql={sql_pct:.4f} ≈ pandas={pandas_pct:.4f} n={n}")
+    return None, 1
+
+
+def _check_comfort(http, headers, building_id: str, *, minimum: int) -> int:
+    """comfort_pct vs pandas on zone-air-temp samples for ``minimum`` equipment."""
+    compared = 0
     for path in (
         "/api/analytics/vav-health",
         "/api/analytics/rcx/preset",
@@ -160,70 +232,38 @@ def _check_comfort(http, headers, building_id: str) -> int:
             note = env.get("note") or body.get("error")
             safe_print(f"WARN {path}: empty ({note})")
             continue
-        # Find first row with comfort_pct + equipment_id
         for row in rows:
-            if not isinstance(row, dict):
+            if not isinstance(row, dict) or row.get("comfort_pct") is None:
                 continue
-            if row.get("comfort_pct") is None:
-                continue
-            eid = str(row.get("equipment_id") or "")
-            if not eid:
-                continue
-            sql_pct = float(row["comfort_pct"])
-            # Discover zone temp column via SPARQL
-            try:
-                pts = post_sparql(
-                    http,
-                    headers,
-                    building_id=building_id,
-                    query_id="fdd_role_candidates",
-                    equipment_id=eid,
-                )
-            except RuntimeError as exc:
-                safe_print(f"WARN SPARQL for comfort equip {eid}: {exc}")
-                continue
-            col = None
-            for p in pts:
-                blob = f"{p.get('column','')} {p.get('fddSelection','')} {p.get('canonicalRole','')}".lower()
-                if "zone" in blob or "zn_t" in blob or "zone_air" in blob:
-                    col = (p.get("column") or p.get("pointId") or "").strip()
-                    if col:
-                        break
-            if not col:
-                safe_print(f"WARN comfort: no zone temp column for {eid}")
-                continue
-            try:
-                samples = _samples_for_key(http, headers, building_id, eid, col)
-            except SystemExit as exc:
-                safe_print(f"FAIL comfort samples: {exc}")
-                return 1
-            low = float(row.get("comfort_low_f") or 70.0)
-            high = float(row.get("comfort_high_f") or 75.0)
-            pandas_pct, n = _pandas_comfort_pct(samples, low, high)
-            if n == 0 or math.isnan(pandas_pct):
-                safe_print(f"WARN comfort: no samples for {eid}/{col}")
-                continue
-            if abs(sql_pct - pandas_pct) > PCT_TOL * 100 and abs(sql_pct - pandas_pct) > 0.05:
-                # allow 0.05 absolute pct points for Soft-OPEN float noise
-                safe_print(
-                    f"FAIL comfort {eid}: sql={sql_pct:.4f} pandas={pandas_pct:.4f} n={n}"
-                )
-                return 1
-            safe_print(
-                f"PASS comfort {eid}: sql={sql_pct:.4f} ≈ pandas={pandas_pct:.4f} n={n}"
-            )
-            return 0
-    safe_print(
-        "WARN comfort: no analytics row with comfort_pct "
-        "(seed synthetic VAV zone temps — Soft-OPEN ≠ FQ)"
-    )
-    return 0
+            failure, n = _comfort_for_row(http, headers, building_id, row)
+            if failure:
+                return verdict("comfort", failure, compared, minimum)
+            compared += n
+            if compared >= minimum:
+                return verdict("comfort", None, compared, minimum)
+    return verdict("comfort", None, compared, minimum)
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     add_connection_args(ap)
+    ap.add_argument(
+        "--min-economizer-points",
+        type=int,
+        default=1,
+        help="economizer points that must be compared for PASS (>= 1)",
+    )
+    ap.add_argument(
+        "--min-comfort-equipment",
+        type=int,
+        default=1,
+        help="equipment whose comfort_pct must be compared for PASS (>= 1)",
+    )
     args = ap.parse_args(argv)
+    if args.min_economizer_points < 1 or args.min_comfort_equipment < 1:
+        ap.error("comparison minimums must be >= 1 (zero comparisons is never a pass)")
+    if args.min_economizer_points > SPOT_CHECK_LIMIT:
+        ap.error(f"--min-economizer-points cannot exceed the {SPOT_CHECK_LIMIT}-point spot check")
     base = apply_base_url(
         resolve_base_url(base_url=args.base_url, host=args.host, port=args.port)
     )
@@ -232,7 +272,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if find_spec("pandas") is None:
         safe_print("FAIL: pip install pandas required for gate 09")
-        return 1
+        return EXIT_FAIL
 
     banner(
         "Stress 09 — analytics SQL ↔ pandas",
@@ -242,16 +282,27 @@ def main(argv: list[str] | None = None) -> int:
     with client(base) as http:
         wait_until_ready(http)
         headers = login(http, user=args.user, password=args.password)
-        rc = 0
-        rc |= _check_economizer(http, headers, building_id)
-        rc |= _check_comfort(http, headers, building_id)
+        codes = [
+            _check_economizer(http, headers, building_id, minimum=args.min_economizer_points),
+            _check_comfort(http, headers, building_id, minimum=args.min_comfort_equipment),
+        ]
 
-    if rc:
+    return combine(codes)
+
+
+def combine(codes: list[int]) -> int:
+    if not codes:
+        safe_print("\nBLOCKED 09 — no analytics checks ran")
+        return EXIT_BLOCKED
+    if any(c not in (EXIT_PASS, EXIT_BLOCKED) for c in codes):
         safe_print("\nFAIL 09 — analytics SQL↔pandas divergence")
-        return 1
-    safe_print("\nPASS 09 — analytics SQL ↔ pandas (available queries)")
-    return 0
+        return EXIT_FAIL
+    if any(c == EXIT_BLOCKED for c in codes):
+        safe_print("\nBLOCKED 09 — required analytics comparisons did not run")
+        return EXIT_BLOCKED
+    safe_print("\nPASS 09 — analytics SQL ↔ pandas")
+    return EXIT_PASS
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_child(main, "09_analytics_sql_vs_pandas.py"))

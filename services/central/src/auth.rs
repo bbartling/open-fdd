@@ -15,7 +15,13 @@ use crate::state::AppState;
 use crate::user_store::{UserRecord, UserStore, UserStoreLoad};
 
 const VALID_ROLES: &[&str] = &["viewer", "operator", "admin"];
-const IDENTITY_STORE_UNAVAILABLE: &str = "identity store unavailable";
+pub(crate) const IDENTITY_STORE_UNAVAILABLE: &str = "identity store unavailable";
+pub(crate) const IDENTITY_UNKNOWN: &str = "identity unknown";
+pub(crate) const IDENTITY_DISABLED: &str = "identity disabled";
+pub(crate) const SESSION_REVOKED: &str = "session revoked";
+pub(crate) const TOKEN_EXPIRED: &str = "token expired";
+pub(crate) const AUTH_HEADER_MISSING: &str = "Authorization: Bearer <token> required";
+pub(crate) const AUTH_HEADER_MALFORMED: &str = "Authorization must be Bearer token";
 
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     constant_time_eq_bytes(a, b)
@@ -146,7 +152,7 @@ fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
                 .position(|u| u.username.eq_ignore_ascii_case(sub))
             else {
                 if store.is_retired(sub) {
-                    return Err("identity unknown".into());
+                    return Err(IDENTITY_UNKNOWN.into());
                 }
                 return Ok(FilePlaneBinding {
                     session_version: 0,
@@ -155,7 +161,7 @@ fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
                 });
             };
             if store.users[idx].disabled {
-                return Err("identity disabled".into());
+                return Err(IDENTITY_DISABLED.into());
             }
             if store.users[idx].user_id.trim().is_empty() {
                 store.users[idx].user_id = uuid::Uuid::new_v4().to_string();
@@ -411,7 +417,10 @@ impl AuthConfig {
             &DecodingKey::from_secret(secret.as_bytes()),
             &validation,
         )
-        .map_err(|e| format!("invalid token: {e}"))?;
+        .map_err(|e| match e.kind() {
+            jsonwebtoken::errors::ErrorKind::ExpiredSignature => TOKEN_EXPIRED.to_string(),
+            _ => format!("invalid token: {e}"),
+        })?;
         Ok(data.claims)
     }
 
@@ -496,11 +505,11 @@ impl AuthConfig {
         let auth = headers
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
-            .ok_or_else(|| "Authorization: Bearer <token> required".to_string())?;
+            .ok_or_else(|| AUTH_HEADER_MISSING.to_string())?;
         let token = auth
             .strip_prefix("Bearer ")
             .or_else(|| auth.strip_prefix("bearer "))
-            .ok_or_else(|| "Authorization must be Bearer token".to_string())?;
+            .ok_or_else(|| AUTH_HEADER_MALFORMED.to_string())?;
         self.verify_bearer(token.trim())
     }
 }
@@ -542,35 +551,35 @@ fn authorize_loaded(
         Some(rec) => {
             if let Some(uid) = uid {
                 if rec.user_id != uid {
-                    return Err("identity unknown".into());
+                    return Err(IDENTITY_UNKNOWN.into());
                 }
             }
             live_record_ok(rec, claims, role)?;
             Ok(scope_for_live_record(rec, claims))
         }
-        None if uid.is_some() || store.is_retired(&claims.sub) => Err("identity unknown".into()),
+        None if uid.is_some() || store.is_retired(&claims.sub) => Err(IDENTITY_UNKNOWN.into()),
         None => Ok(scope_from_claims(claims)),
     }
 }
 
 fn live_record_ok(rec: &UserRecord, claims: &JwtClaims, role: Role) -> Result<(), String> {
     if rec.disabled {
-        return Err("identity disabled".into());
+        return Err(IDENTITY_DISABLED.into());
     }
     if rec.session_version != claims.session_version {
-        return Err("session revoked".into());
+        return Err(SESSION_REVOKED.into());
     }
     let store_role =
         Role::parse(rec.role.trim()).ok_or_else(|| "identity role invalid".to_string())?;
     if store_role != role {
-        return Err("session revoked".into());
+        return Err(SESSION_REVOKED.into());
     }
     if claims
         .tenant_ids
         .iter()
         .any(|tid| !rec.tenant_ids.iter().any(|have| have == tid))
     {
-        return Err("session revoked".into());
+        return Err(SESSION_REVOKED.into());
     }
     if let Some(active) = claims
         .active_tenant_id
@@ -579,7 +588,7 @@ fn live_record_ok(rec: &UserRecord, claims: &JwtClaims, role: Role) -> Result<()
         .filter(|id| !id.is_empty())
     {
         if !rec.tenant_ids.iter().any(|have| have == active) {
-            return Err("session revoked".into());
+            return Err(SESSION_REVOKED.into());
         }
     }
     Ok(())
@@ -644,6 +653,7 @@ pub async fn jwt_middleware(
         }
         Err(detail) => {
             let status = auth_failure_status(&detail);
+            crate::audit::bearer_rejected(&detail, status);
             (
                 status,
                 axum::Json(serde_json::json!({"ok": false, "error": detail})),
@@ -878,7 +888,7 @@ mod tests {
             vec![],
         );
         assert!(cfg.verify_bearer(&good).is_ok());
-        assert!(cfg.verify_bearer(&expired).is_err());
+        assert_eq!(cfg.verify_bearer(&expired).unwrap_err(), TOKEN_EXPIRED);
     }
 
     #[test]
@@ -1318,5 +1328,111 @@ mod tests {
         std::fs::remove_file(UserStore::path_under_workspace(dir.path())).unwrap();
         let (status, _) = probe(token).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE and OPENFDD_AUDIT_LOG_PATH across the middleware calls"
+    )]
+    async fn bearer_rejections_emit_typed_audit_events() {
+        use crate::test_env_lock::{lock_env, WorkspaceEnv};
+        use axum::body::Body;
+        use axum::extract::Request;
+        use axum::http::{header, StatusCode};
+        use axum::middleware;
+        use axum::routing::get;
+        use axum::Router;
+        use std::sync::Arc;
+        use tower::ServiceExt;
+
+        let _g = lock_env();
+        let dir = tempfile::tempdir().unwrap();
+        let _ws = WorkspaceEnv::set(dir.path());
+        save_operator(dir.path(), "acme-audit");
+        let audit_dir = tempfile::tempdir().unwrap();
+        let audit_path = audit_dir.path().join("audit.jsonl");
+        let prev_audit = std::env::var("OPENFDD_AUDIT_LOG_PATH").ok();
+        std::env::set_var("OPENFDD_AUDIT_LOG_PATH", &audit_path);
+
+        let mut state = crate::state::AppState::new();
+        state.auth = file_cfg();
+        let secret = state.auth.secret.clone().unwrap();
+        let state = Arc::new(state);
+        let app = Router::new()
+            .route("/probe", get(|| async { "ok" }))
+            .layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                jwt_middleware,
+            ))
+            .layer(middleware::from_fn(crate::contract::request_id_middleware));
+
+        let now = chrono::Utc::now().timestamp();
+        let expired = mint_with(
+            &secret,
+            "acme-audit",
+            "operator",
+            now - 600,
+            now - 1200,
+            vec!["acme".into()],
+        );
+        let canary = "eyJhbGciOiJIUzI1NiJ9.canary-not-a-real-token.sig";
+        let cases: [(Option<String>, &str); 4] = [
+            (None, "missing_credentials"),
+            (Some("Basic dXNlcjpwYXNz".into()), "malformed_authorization"),
+            (Some(format!("Bearer {canary}")), "invalid_token"),
+            (Some(format!("Bearer {expired}")), "expired_token"),
+        ];
+        let mut server_ids = Vec::new();
+        for (auth, _) in &cases {
+            let mut req =
+                Request::get("/probe?site=acme").header("x-request-id", "caller-supplied");
+            if let Some(value) = auth {
+                req = req.header(header::AUTHORIZATION, value);
+            }
+            let response = app
+                .clone()
+                .oneshot(req.body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            assert_eq!(response.headers()["x-request-id"], "caller-supplied");
+            server_ids.push(
+                response.headers()[crate::contract::SERVER_REQUEST_ID_HEADER]
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
+            );
+        }
+
+        let raw = std::fs::read_to_string(&audit_path).unwrap_or_default();
+        match prev_audit {
+            Some(v) => std::env::set_var("OPENFDD_AUDIT_LOG_PATH", v),
+            None => std::env::remove_var("OPENFDD_AUDIT_LOG_PATH"),
+        }
+        assert!(!raw.contains(canary), "bearer value leaked into audit log");
+        assert!(
+            !raw.contains(&expired),
+            "bearer value leaked into audit log"
+        );
+        assert!(!raw.contains("dXNlcjpwYXNz"));
+        let events: Vec<serde_json::Value> = raw
+            .lines()
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap()["detail"].clone())
+            .collect();
+        assert_eq!(events.len(), cases.len(), "{raw}");
+        for ((event, (_, reason)), server_id) in events.iter().zip(cases.iter()).zip(&server_ids) {
+            assert_eq!(event["schema"], "openfdd.audit.v1");
+            assert_eq!(event["request_id"], server_id.as_str());
+            assert_eq!(event["caller_request_id"], "caller-supplied");
+            assert_eq!(event["target_id"], "/probe");
+            assert_eq!(event["action"], "auth.bearer");
+            assert_eq!(event["decision"], "deny");
+            assert_eq!(event["outcome"], "failed");
+            assert_eq!(event["reason"], *reason, "{event}");
+            assert_eq!(event["auth_kind"], "anonymous");
+            assert_eq!(event["http_status"], 401);
+            assert_eq!(event["target_type"], "route");
+        }
     }
 }

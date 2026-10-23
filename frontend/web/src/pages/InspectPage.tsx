@@ -7,7 +7,8 @@ import { useSessionQuery } from "../session";
 import { postInspect, type AnalyticsEnvelope } from "../api/analyticsApi";
 import { getPackageMapping, type MappingEquipment } from "../api/mappingApi";
 import { equipmentInspectionChart } from "../api/inspectChart";
-import { downloadRowsCsv } from "../api/csvDownload";
+import { buildInspectSampleExport, downloadJson } from "../api/inspectExport";
+import { resolveRoleUnit } from "../api/roleUnits";
 import { naturalCompare } from "../lib/naturalSort";
 import type { PlotlyFigure } from "../api/plotDataset";
 import { useScopedLoad } from "../session/scopedLoad";
@@ -20,6 +21,8 @@ type InspectSnapshot = {
   figure: PlotlyFigure | null;
   rowCount: number;
   span: string;
+  first: string | null;
+  last: string | null;
   error: string | null;
 };
 
@@ -31,6 +34,8 @@ const EMPTY_SNAPSHOT: InspectSnapshot = {
   figure: null,
   rowCount: 0,
   span: "",
+  first: null,
+  last: null,
   error: null,
 };
 
@@ -77,6 +82,8 @@ function snapshotFromInspect(env: AnalyticsEnvelope, equipmentId: string): Inspe
       figure: null,
       rowCount,
       span,
+      first,
+      last,
       error: env.warnings[0] ?? "Inspection unavailable",
     };
   }
@@ -92,6 +99,8 @@ function snapshotFromInspect(env: AnalyticsEnvelope, equipmentId: string): Inspe
     figure,
     rowCount,
     span,
+    first,
+    last,
     error: figure ? null : "No plottable numeric columns for this equipment in Timescale.",
   };
 }
@@ -206,15 +215,18 @@ export function InspectPage() {
             variant="secondary"
             disabled={!snap.figure?.data?.length}
             onClick={() => {
-              const rows = snap.figure?.data?.[0] as
-                | { x?: unknown[]; y?: unknown[] }
-                | undefined;
-              if (!rows?.x?.length) return;
-              const preview = rows.x.map((x, i) => ({
-                timestamp: x,
-                value: rows.y?.[i] ?? null,
-              }));
-              downloadRowsCsv(`${selectValue || "equipment"}_series.csv`, preview);
+              if (!snap.figure?.data?.length) return;
+              const payload = buildInspectSampleExport({
+                equipmentId: selectValue || "equipment",
+                source: "POST /api/analytics/inspect",
+                window: { first: snap.first, last: snap.last },
+                traces: snap.figure.data,
+                unitFor: (name) => {
+                  const unit = resolveRoleUnit(name);
+                  return unit ? unit : null;
+                },
+              });
+              downloadJson(`${selectValue || "equipment"}_inspect.json`, payload);
             }}
             testId="overview-dl-inspect"
           />

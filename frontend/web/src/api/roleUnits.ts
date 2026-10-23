@@ -34,6 +34,7 @@ export const DEFAULT_ROLE_UNITS: Record<string, string> = {
   rat: "°F",
   oa_t: "°F",
   web_oa_t: "°F",
+  web_wb_t: "°F",
   web_oa_dp: "°F",
   zone_t: "°F",
   zone_flow: "cfm",
@@ -293,6 +294,46 @@ export function storeScalar(
     if (factor != null && factor !== 0) return display / factor;
   }
   return display;
+}
+
+/**
+ * Display conversion for a stored sample. Canonical history stays °F.
+ * Absolute temperature shifts; a temperature difference only scales.
+ * Pressure scales to pascals. Fraction, percent, and minutes stay put.
+ */
+export function displayStoredQuantity(
+  value: number,
+  quantity: string | undefined,
+  unit: string | undefined,
+  unitSystem: UnitSystem,
+): number {
+  const q = (quantity ?? "").trim().toLowerCase();
+  if (
+    q === "absolute_temperature" ||
+    q === "dry_bulb_temperature" ||
+    q === "wet_bulb_temperature" ||
+    q === "temperature"
+  ) {
+    return displayScalar(value, unit || "°F", unitSystem, "temperature");
+  }
+  if (q === "temperature_difference" || q === "temperature_delta") {
+    return displayScalar(value, unit || "°F", unitSystem, "temperature_delta");
+  }
+  if (q === "air_pressure" || q === "pressure") {
+    return displayScalar(value, unit || "in. w.c.", unitSystem, "pressure");
+  }
+  if (
+    q === "percent" ||
+    q === "fraction" ||
+    q === "volumetric_flow" ||
+    q === "boolean" ||
+    q === "hours" ||
+    q === "minutes" ||
+    q === "other"
+  ) {
+    return value;
+  }
+  return displayScalar(value, unit, unitSystem);
 }
 
 /** Slider step in the same units as {@link displayScalar}. */
