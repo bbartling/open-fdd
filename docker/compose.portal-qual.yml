@@ -18,6 +18,7 @@
 services:
   central:
     image: ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG=sha-<7>}
+    build: !reset null
     pull_policy: missing
     environment:
       OPENFDD_MULTI_TENANT: "1"
@@ -46,6 +47,7 @@ services:
 
   web:
     image: ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG=sha-<7>}
+    build: !reset null
     pull_policy: missing
     environment:
       OPENFDD_CENTRAL_UPSTREAM: central:8080

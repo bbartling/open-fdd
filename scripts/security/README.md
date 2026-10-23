@@ -30,18 +30,33 @@ and the fail-closed evaluator is
 sanitized evidence to bind the source/config/fixture hashes, immutable image
 digests, origin, listeners, required services, and explicitly absent services.
 
-The supported topology IDs are `cloud_mqtt_hub`, `ot_local_bacnet_modbus`,
-`ot_local_haystack`, and `local_development`. The cloud profile requires
-`openfdd-web` + `openfdd-central` + `openfdd-mqtt` and records all OT images as
-forbidden. Each OT profile requires Caddy + web + central + exactly one selected
-split connector and does not require a local MQTT broker.
+The active topology IDs are `cloud_portal` and `local_development`.
+
+`cloud_portal` is the current Open-FDD 4.0 product stack. It requires
+`openfdd-web` + `openfdd-central` + `openfdd-timescale` (MCP optional) and
+forbids `openfdd-mqtt`, `openfdd-fieldbus`, `openfdd-bacnet-modbus`, and
+`openfdd-haystack` as runtime services. Its `auth` block requires JWT, multi-tenant
+ON, a JWT secret of at least 32 characters, and no open-bind escape hatch. Its
+`egress.nf_portal` block keeps the production origin for reference but allows
+qualification only against the loopback NF emulator
+(`http://127.0.0.1:18089`); real portal connections and NF point writes are
+forbidden. The disposable recipe is
+[`scripts/qualification/run_portal_qualification.sh`](../qualification/run_portal_qualification.sh)
+(see [`scripts/qualification/README.md`](../qualification/README.md)).
+
+`cloud_mqtt_hub`, `ot_local_bacnet_modbus`, and `ot_local_haystack` stay in the
+registry with `lifecycle: "archived"` and an `archive_reason`. They describe the
+unqualified OT archive (`archive/ot-edge/`). An active profile may not require
+or allow an archived wire service or the `mqtt_acl` suite, and evidence for an
+archived profile is `BLOCKED` ("cannot qualify a current candidate") unless the
+evaluator is called with `allow_archived=True` for archive review.
 
 Evaluate an operator or CI evidence file without contacting a deployment:
 
 ```bash
 python3 scripts/security/deployment_profile_qualification.py --list-profiles
 python3 scripts/security/deployment_profile_qualification.py \
-  --profile cloud_mqtt_hub \
+  --profile cloud_portal \
   --evidence /secure/evidence/deployment.json
 ```
 
@@ -65,7 +80,7 @@ evidence JSON against a deployment profile without pulling images:
 python3 scripts/security/profile_image_scan.py --selftest
 python3 scripts/security/profile_image_scan.py --list-profiles
 python3 scripts/security/profile_image_scan.py \
-  --profile cloud_mqtt_hub \
+  --profile cloud_portal \
   --evidence /secure/evidence/profile_image_scan.json
 ```
 
@@ -98,7 +113,12 @@ python3 scripts/security/openfdd_security_probe.py \
 
 Flags: `--config` `--base-url` `--profile` `--suite` `--list-suites`
 `--dry-run` `--execute` `--max-requests` `--timeout` `--deadline` `--rate`
-`--output-dir` `--allow-fixture-writes`.
+`--output-dir` `--allow-fixture-writes` `--isolated-jwt-secret-env VAR`.
+
+`--isolated-jwt-secret-env` names an environment variable that holds the
+disposable candidate's real JWT secret (`isolated_full` only, at least 32
+characters) so the expired-token and sibling-token checks sign with it. The
+secret never appears on the command line.
 
 Profiles: `live_readonly`, `isolated_full`, `local_open`.
 
@@ -132,7 +152,15 @@ isolated canary server only.
 ## Suites
 
 - **X** — preauth, login/me, JWT integrity/alg/expiry
-- **Y** — A/B own+foreign (IDOR), viewer/admin differences, detector controls
+- **Y** — A/B own+foreign (IDOR), viewer/admin differences, detector controls,
+  and the viewer write matrix: `y.authz.viewer_{import,append,purge,delete}_{own,foreign}_denied`
+  (`isolated_full` + `--allow-fixture-writes` only; `NOT_APPLICABLE` elsewhere).
+  Each cell sends the write as the viewer (package zip, append JSON,
+  `DELETE /api/datasets?building_id=`, `DELETE /api/datasets?id=`) and passes only
+  on a structured role deny (`403` + `ok:false`; foreign may be `404`) **and** an
+  unchanged owner-visible fingerprint of the target site (`GET /api/datasets` +
+  `GET /api/fdd/equipment` as that site's operator) before and after. Central
+  routes purge and delete to the same handler; both query forms are probed.
 - **Z** — security.txt, CSP, CORS, redirect credential policy, body caps
 - **mqtt_acl** — generated tenant ACL fixture + observer (not MQTT continuity); live broker when `OPENFDD_MQTT_ACL_EXECUTE=1`
 - **ssrf** — URL fetch policy + isolated canary evidence (optional; never metadata probes)
@@ -140,7 +168,7 @@ isolated canary server only.
 ## Host runtime probe (Astra A10)
 
 Readiness-only (not Nessus). Selftest covers deployment-contract profiles
-(`cloud_mqtt_hub`, `ot_local_bacnet_modbus`, `ot_local_haystack`, plus legacy
+(`cloud_portal`, archived `cloud_mqtt_hub` / `ot_local_bacnet_modbus` / `ot_local_haystack`, plus legacy
 `standalone_https` / `field_only_ot`). Probe mode inspects listen bind
 addresses (loopback vs wildcard), effective SSH `PermitRootLogin` across
 `Include` files, and Docker publish-path hints.

@@ -22,11 +22,18 @@ class ProfileImageScanTest(unittest.TestCase):
         self.assertTrue(report["ok"], msg=json.dumps(report, indent=2))
         self.assertEqual(report["status"], "PASS")
 
-    def test_cloud_requires_mqtt_not_ot(self) -> None:
-        names = profile_required_scan_images("cloud_mqtt_hub")
-        self.assertIn("openfdd-mqtt", names)
-        self.assertNotIn("openfdd-bacnet-modbus", names)
-        self.assertNotIn("openfdd-haystack", names)
+    def test_portal_requires_timescale_not_ot(self) -> None:
+        names = profile_required_scan_images("cloud_portal")
+        self.assertEqual(names, ["openfdd-web", "openfdd-central", "openfdd-timescale"])
+        for ot in ("openfdd-mqtt", "openfdd-bacnet-modbus", "openfdd-haystack", "openfdd-fieldbus"):
+            self.assertNotIn(ot, names)
+
+    def test_archived_profile_blocked(self) -> None:
+        report = evaluate_scan_evidence(
+            "cloud_mqtt_hub",
+            {"schema_version": "openfdd_profile_image_scan_v1", "profile_id": "cloud_mqtt_hub", "images": []},
+        )
+        self.assertEqual(report["status"], "BLOCKED")
 
     def test_ot_bacnet_requires_connector_and_caddy(self) -> None:
         names = profile_required_scan_images("ot_local_bacnet_modbus")
@@ -38,7 +45,7 @@ class ProfileImageScanTest(unittest.TestCase):
         digest = "sha256:" + ("a" * 64)
         evidence = {
             "schema_version": "openfdd_profile_image_scan_v1",
-            "profile_id": "cloud_mqtt_hub",
+            "profile_id": "cloud_portal",
             "images": [
                 {
                     "name": "openfdd-web",
@@ -53,9 +60,9 @@ class ProfileImageScanTest(unittest.TestCase):
                     "platform": "linux/amd64",
                 },
                 {
-                    "name": "openfdd-mqtt",
+                    "name": "openfdd-timescale",
                     "digest": "sha256:" + ("c" * 64),
-                    "ref": "ghcr.io/bbartling/openfdd-mqtt@sha256:" + ("c" * 64),
+                    "ref": "docker.io/timescale/timescaledb@sha256:" + ("c" * 64),
                     "platform": "linux/amd64",
                 },
             ],
@@ -68,7 +75,7 @@ class ProfileImageScanTest(unittest.TestCase):
                 "attestation_digests": [digest],
             },
         }
-        report = evaluate_scan_evidence("cloud_mqtt_hub", evidence)
+        report = evaluate_scan_evidence("cloud_portal", evidence)
         self.assertEqual(report["status"], "FAIL")
         self.assertTrue(
             any(c["id"] == "provenance.not_workflow_inference" and not c["ok"] for c in report["checks"])
