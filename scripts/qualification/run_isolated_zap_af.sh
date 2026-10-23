@@ -5,7 +5,11 @@
 # evaluation to scripts/qualification/zap/run_af_disposable.py (single
 # evaluator). Compatibility entrypoint for Wave C / gate runners.
 #
-# Never activeScans live Railway OT. Never persists JWT to disk.
+# Never activeScans live Railway OT. Never persists JWT to the artifact dir.
+# Secrets reach containers by env name (-e NAME) or stdin, never argv. The
+# scanner credential is handed to the evaluator through a private 0600 file
+# outside the artifact dir. A negative control (broken scanner credential)
+# must be rejected before the real scan runs.
 # No fallback crawl or warning soft-pass paths.
 set -euo pipefail
 
@@ -41,21 +45,29 @@ chmod 700 "$ART"
 chmod 777 "$WRK"
 cp "$ROOT/docs/openapi.yaml" "$WRK/openapi.yaml"
 
-NET="openfdd-zap-af-${RANDOM}"
-CTR_CENTRAL="openfdd-zap-central-${RANDOM}"
-CTR_WEB="openfdd-zap-web-${RANDOM}"
+RUN_ID="$(python3 -c 'import secrets; print(secrets.token_hex(6))')"
+NET="openfdd-zap-af-${RUN_ID}"
+CTR_CENTRAL="openfdd-zap-central-${RUN_ID}"
+CTR_WEB="openfdd-zap-web-${RUN_ID}"
 VOL="${CTR_CENTRAL}-workspace"
-ADMIN_PASS="zap-af-admin-${RANDOM}"
-JWT_SECRET="zap-af-jwt-${RANDOM}"
+OPENFDD_ADMIN_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+OPENFDD_JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+export OPENFDD_ADMIN_PASSWORD OPENFDD_JWT_SECRET
+SECRET_DIR="$(mktemp -d)"
+chmod 700 "$SECRET_DIR"
+AUTH_FILE="$SECRET_DIR/scanner_auth_header"
 # A07: scan through nginx+SPA (web), not bare central.
 TARGET_ORIGIN="http://web:8080"
 
 cleanup() {
+  rm -rf "$SECRET_DIR"
+  docker ps -aq --filter "label=openfdd.zap.owner=run_af_disposable" | xargs -r docker rm -f >/dev/null 2>&1 || true
   docker rm -f "$CTR_WEB" "$CTR_CENTRAL" >/dev/null 2>&1 || true
   docker volume rm -f "$VOL" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 echo "== Pull images =="
 docker pull "$CENTRAL_IMAGE" >/dev/null
@@ -69,8 +81,8 @@ docker run -d --name "$CTR_CENTRAL" --network "$NET" --network-alias central \
   -e OPENFDD_MQTT_ENABLED=0 \
   -e OPENFDD_WORKSPACE=/workspace \
   -e OPENFDD_STORAGE_URL=file:///workspace/openfdd \
-  -e OPENFDD_JWT_SECRET="$JWT_SECRET" \
-  -e OPENFDD_ADMIN_PASSWORD="$ADMIN_PASS" \
+  -e OPENFDD_JWT_SECRET \
+  -e OPENFDD_ADMIN_PASSWORD \
   -e OPENFDD_ALLOW_OPEN_BIND=1 \
   -e OPENFDD_REACT_UI=1 \
   -e OPENFDD_MULTI_TENANT="${OPENFDD_MULTI_TENANT:-0}" \
@@ -107,18 +119,20 @@ until docker run --rm --network "$NET" curlimages/curl:8.5.0 \
 done
 echo "OK disposable web+central"
 
-TOKEN="$(docker run --rm --network "$NET" curlimages/curl:8.5.0 -fsS \
-  -X POST "${TARGET_ORIGIN}/api/auth/login" \
-  -H 'Content-Type: application/json' \
-  -d "{\"username\":\"admin\",\"password\":\"${ADMIN_PASS}\"}" \
-  | jq -r '.token // .access_token // empty')"
-if [[ -z "$TOKEN" ]]; then
+# Login body goes over stdin (never argv); the token lands in a private file.
+jq -n '{username:"admin",password:env.OPENFDD_ADMIN_PASSWORD}' \
+  | docker run --rm -i --network "$NET" curlimages/curl:8.5.0 -fsS --max-time 20 \
+      -X POST "${TARGET_ORIGIN}/api/auth/login" \
+      -H 'Content-Type: application/json' --data-binary @- \
+  | jq -r '"Bearer " + (.token // .access_token // "")' >"$AUTH_FILE"
+chmod 600 "$AUTH_FILE"
+if [[ "$(wc -c <"$AUTH_FILE")" -lt 20 ]]; then
   echo "FAIL: could not mint admin JWT for ZAP context" >&2
   exit 1
 fi
-# UA-04: never persist JWT to artifact disk (env injection only).
+# UA-04: never persist JWT to artifact disk (ephemeral env only / private file).
 rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
-echo "OK admin JWT minted (ephemeral env only)"
+echo "OK admin JWT minted (ephemeral env only; private file outside artifacts)"
 
 # Copy OpenAPI into work dir for AF openapi job (served via central too).
 # Evaluator owns AF plan materialization + verdict; wrapper only mints candidate.
@@ -126,12 +140,28 @@ export OPENFDD_ZAP_AF_EXECUTE=1
 export OPENFDD_ZAP_IMAGE="$ZAP_IMAGE"
 export OPENFDD_ZAP_REQUIRE_DIGEST=1
 export ZAP_TARGET_ORIGIN="$TARGET_ORIGIN"
-export ZAP_AUTH_HEADER_VALUE="Bearer ${TOKEN}"
-export ZAP_AF_WORK_DIR="$WRK"
+export ZAP_AUTH_HEADER_FILE="$AUTH_FILE"
+export OPENFDD_ZAP_EXPECTED_USERNAME="admin"
 export ZAP_DOCKER_NETWORK="$NET"
-export ZAP_AF_RUN_STARTED_EPOCH="$(date +%s)"
+unset OPENFDD_ADMIN_PASSWORD OPENFDD_JWT_SECRET
 VERDICT_OUT="$ART/verdict.json"
 
+NEG_WRK="$ART/zap_wrk_negative"
+mkdir -p "$NEG_WRK"
+chmod 777 "$NEG_WRK"
+cp "$WRK/openapi.yaml" "$NEG_WRK/openapi.yaml"
+set +e
+ZAP_AF_WORK_DIR="$NEG_WRK" OPENFDD_ZAP_AF_ACTIVE=0 \
+  python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
+  --negative-control --out "$ART/negative_control_verdict.json"
+NEG_RC=$?
+set -e
+if [[ "$NEG_RC" -ne 0 ]]; then
+  echo "FAIL: negative control did not reject a broken scanner credential (rc=$NEG_RC)" >&2
+  exit 1
+fi
+
+export ZAP_AF_WORK_DIR="$WRK"
 set +e
 python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
   --out "$VERDICT_OUT"
