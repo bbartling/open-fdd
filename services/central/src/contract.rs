@@ -13,6 +13,8 @@ use uuid::Uuid;
 
 pub const CONTRACT_VERSION: &str = "openfdd.api.contract.v1";
 pub const REQUEST_ID_HEADER: &str = "x-request-id";
+/// Server-generated id; the `request_id` on audit events.
+pub const SERVER_REQUEST_ID_HEADER: &str = "x-openfdd-server-request-id";
 
 /// Compatibility policy: stable `/api/*` surface; additive fields only.
 /// Breaking changes require a new `CONTRACT_VERSION` and React client bump.
@@ -68,18 +70,39 @@ pub fn ensure_request_id(headers: &HeaderMap) -> String {
 }
 
 /// Axum middleware: ensure every response echoes `x-request-id`.
+///
+/// Central always generates its own id for audit records
+/// ([`crate::audit::RequestContext`]) and returns it in
+/// [`SERVER_REQUEST_ID_HEADER`]. A caller-supplied `x-request-id` is still
+/// echoed for client correlation but is stored only as the bounded caller id.
 pub async fn request_id_middleware(mut req: Request<Body>, next: Next) -> Response {
-    let rid = ensure_request_id(req.headers());
+    let caller = req
+        .headers()
+        .get(REQUEST_ID_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let ctx = crate::audit::RequestContext::new(
+        caller.as_deref(),
+        req.method().as_str(),
+        req.uri().path(),
+    );
+    let server_id = ctx.server_id.clone();
+    let rid = caller.unwrap_or_else(|| server_id.clone());
     req.headers_mut().insert(
         HeaderName::from_static(REQUEST_ID_HEADER),
         HeaderValue::from_str(&rid).unwrap_or_else(|_| HeaderValue::from_static("invalid")),
     );
-    let mut res = next.run(req).await;
+    let mut res = crate::audit::with_request_context(ctx, next.run(req)).await;
     if res.headers().get(REQUEST_ID_HEADER).is_none() {
         if let Ok(hv) = HeaderValue::from_str(&rid) {
             res.headers_mut()
                 .insert(HeaderName::from_static(REQUEST_ID_HEADER), hv);
         }
+    }
+    if let Ok(hv) = HeaderValue::from_str(&server_id) {
+        res.headers_mut()
+            .insert(HeaderName::from_static(SERVER_REQUEST_ID_HEADER), hv);
     }
     res
 }
@@ -111,6 +134,7 @@ pub fn contract_capabilities_extra() -> Value {
         "revision_header": "expected_meta_revision (jobs)",
         "idempotency_header": "idempotency-key",
         "request_id_header": REQUEST_ID_HEADER,
+        "server_request_id_header": SERVER_REQUEST_ID_HEADER,
         "error_envelope": "error.{code,message,details?,retryable,request_id}",
         "job_run_status": ["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "INTERRUPTED"],
         "async_ops": "poll via /api/fdd/status and /api/jobs/{id}/runs/{run_id}",

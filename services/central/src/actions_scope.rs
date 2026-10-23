@@ -2,7 +2,8 @@
 //!
 //! Listing returns rows for the caller's tenants and sites. A hub admin sees
 //! the whole log. Deletes require an operator or admin acting inside that
-//! scope, and each delete appends a security audit event outside the Actions log.
+//! scope, and each delete or clear (allowed or denied) appends one
+//! `openfdd.audit.v1` event outside the Actions log.
 
 use std::path::Path;
 
@@ -11,13 +12,13 @@ use axum::Json;
 use serde_json::{json, Value};
 
 use crate::actions::{ActionEntry, ActionRef, RemoveOne};
+use crate::audit::{AuditAction, AuditChange, AuditEvent, BoundedList, ReasonCode, TargetType};
 use crate::auth::{AuthUser, Role};
 use crate::tenant::ControlPlane;
 
 type ActionResponse = Result<Json<Value>, (StatusCode, Json<Value>)>;
 
 struct CallerScope {
-    actor: String,
     role: Role,
     tenant_ids: Vec<String>,
     /// Hub admin, or the single-hub log when multi-tenant mode is off.
@@ -34,20 +35,39 @@ pub async fn list_actions(user: &AuthUser, limit: Option<usize>) -> ActionRespon
 }
 
 pub async fn delete_action(user: &AuthUser, id: &str) -> ActionResponse {
+    let mut audit = AuditEvent::new(AuditAction::ActionDelete);
+    audit.user(user).target(TargetType::Action, id);
     let user = user.clone();
     let id = id.to_string();
-    let value = tokio::task::spawn_blocking(move || delete_sync(&user, &id))
-        .await
-        .map_err(join_err)?;
-    value.map(Json)
+    run_audited(audit, move |audit| delete_sync(&user, &id, audit)).await
 }
 
 pub async fn clear_actions(user: &AuthUser) -> ActionResponse {
+    let mut audit = AuditEvent::new(AuditAction::ActionsClear);
+    audit.user(user).target_type(TargetType::ActionsLog);
     let user = user.clone();
-    let value = tokio::task::spawn_blocking(move || clear_sync(&user))
-        .await
-        .map_err(join_err)?;
-    value.map(Json)
+    run_audited(audit, move |audit| clear_sync(&user, audit)).await
+}
+
+/// Run a blocking Actions-log write and emit its audit event once the result
+/// (including a failed blocking task) is known.
+async fn run_audited<F>(audit: AuditEvent, op: F) -> ActionResponse
+where
+    F: FnOnce(&mut AuditEvent) -> Result<Value, (StatusCode, Json<Value>)> + Send + 'static,
+{
+    let fallback = audit.clone();
+    let joined = tokio::task::spawn_blocking(move || {
+        let mut audit = audit;
+        let result = op(&mut audit).map(Json);
+        (result, audit)
+    })
+    .await;
+    let (result, mut audit) = match joined {
+        Ok(pair) => pair,
+        Err(error) => (Err(join_err(error)), fallback),
+    };
+    audit.finish(&result).emit();
+    result
 }
 
 /// Stamp `tenant_id` / `building_id` from detail and the control plane.
@@ -82,30 +102,41 @@ fn list_sync(user: &AuthUser, limit: usize) -> Result<Value, (StatusCode, Json<V
     }))
 }
 
-fn delete_sync(user: &AuthUser, id: &str) -> Result<Value, (StatusCode, Json<Value>)> {
+fn delete_sync(
+    user: &AuthUser,
+    id: &str,
+    audit: &mut AuditEvent,
+) -> Result<Value, (StatusCode, Json<Value>)> {
     let scope = caller_scope(user);
     if !scope.role.can_issue_commands() {
-        audit_role_denied(&scope, id);
+        audit.deny(ReasonCode::RoleRequired);
         return Err(forbidden("operator or admin role required"));
     }
     let plane = load_plane();
     let outcome =
         crate::actions::remove_one(id, |entry| entry_visible(&scope, &plane, entry), stamp)
-            .map_err(store_err)?;
+            .map_err(|e| {
+                audit.reason(ReasonCode::StorageError);
+                store_err(e)
+            })?;
     match outcome {
         RemoveOne::Missing => Err((
             StatusCode::NOT_FOUND,
             Json(json!({"ok": false, "error": "action not found"})),
         )),
         RemoveOne::OutOfScope(action) => {
-            audit_decision(&scope, &action, "denied");
+            bind_action_scope(audit, &scope, &action);
+            audit.deny(ReasonCode::TenantScope);
             Err(forbidden("action is outside tenant scope"))
         }
         RemoveOne::Removed {
             action,
             in_scope_remaining,
         } => {
-            audit_decision(&scope, &action, "deleted");
+            bind_action_scope(audit, &scope, &action);
+            audit.change(AuditChange::ActionsRemoved {
+                action_ids: BoundedList::new(std::slice::from_ref(&action.id)),
+            });
             Ok(json!({
                 "ok": true,
                 "deleted": action.id,
@@ -115,17 +146,23 @@ fn delete_sync(user: &AuthUser, id: &str) -> Result<Value, (StatusCode, Json<Val
     }
 }
 
-fn clear_sync(user: &AuthUser) -> Result<Value, (StatusCode, Json<Value>)> {
+fn clear_sync(user: &AuthUser, audit: &mut AuditEvent) -> Result<Value, (StatusCode, Json<Value>)> {
     let scope = caller_scope(user);
     if !scope.role.can_issue_commands() {
-        audit_clear(&scope, &[], "denied");
+        audit.deny(ReasonCode::RoleRequired);
         return Err(forbidden("operator or admin role required"));
     }
     let plane = load_plane();
     let removed =
         crate::actions::remove_matching(|entry| entry_visible(&scope, &plane, entry), stamp)
-            .map_err(store_err)?;
-    audit_clear(&scope, &removed, "deleted");
+            .map_err(|e| {
+                audit.reason(ReasonCode::StorageError);
+                store_err(e)
+            })?;
+    let ids: Vec<&str> = removed.iter().map(|a| a.id.as_str()).collect();
+    audit.change(AuditChange::ActionsRemoved {
+        action_ids: BoundedList::new(&ids),
+    });
     Ok(json!({
         "ok": true,
         "cleared": true,
@@ -139,7 +176,6 @@ fn caller_scope(user: &AuthUser) -> CallerScope {
     // Mode off keeps the single hub log. Mode on filters unless the caller is a hub admin.
     let sees_all = hub_admin || !crate::tenant::multi_tenant_enabled();
     CallerScope {
-        actor: user.sub.clone(),
         role: user.role,
         tenant_ids: user.tenant_ids.clone(),
         sees_all,
@@ -216,67 +252,16 @@ fn load_plane() -> ControlPlane {
     ControlPlane::load_or_legacy(Path::new(&workspace))
 }
 
-fn audit_decision(scope: &CallerScope, action: &ActionRef, outcome: &str) {
+/// Resolved tenant and site of the row the caller tried to delete.
+fn bind_action_scope(audit: &mut AuditEvent, scope: &CallerScope, action: &ActionRef) {
     let tenant_id = action
         .tenant_id
-        .clone()
-        .or_else(|| scope.tenant_ids.first().cloned());
-    open_fdd_edge_prototype::auth::audit::log_event(
-        "actions_history_delete",
-        json!({
-            "actor": scope.actor,
-            "role": scope.role.as_str(),
-            "tenant_id": tenant_id,
-            "target": action.id,
-            "building_id": action.building_id,
-            "outcome": outcome,
-        }),
-    );
-}
-
-fn audit_role_denied(scope: &CallerScope, target: &str) {
-    open_fdd_edge_prototype::auth::audit::log_event(
-        "actions_history_delete",
-        json!({
-            "actor": scope.actor,
-            "role": scope.role.as_str(),
-            "tenant_id": scope.tenant_ids.first(),
-            "target": target,
-            "outcome": "denied",
-        }),
-    );
-}
-
-fn audit_clear(scope: &CallerScope, removed: &[ActionRef], outcome: &str) {
-    let mut target = Vec::with_capacity(removed.len());
-    let mut target_tenants = Vec::new();
-    for action in removed {
-        target.push(action.id.clone());
-        if let Some(tenant_id) = action.tenant_id.as_deref() {
-            if !target_tenants
-                .iter()
-                .any(|existing: &String| existing == tenant_id)
-            {
-                target_tenants.push(tenant_id.to_string());
-            }
-        }
+        .as_deref()
+        .or_else(|| scope.tenant_ids.first().map(String::as_str));
+    audit.tenant(tenant_id);
+    if let Some(building_id) = action.building_id.as_deref() {
+        audit.site(building_id);
     }
-    let tenant_id = scope
-        .tenant_ids
-        .first()
-        .cloned()
-        .or_else(|| target_tenants.first().cloned());
-    open_fdd_edge_prototype::auth::audit::log_event(
-        "actions_history_delete",
-        json!({
-            "actor": scope.actor,
-            "role": scope.role.as_str(),
-            "tenant_id": tenant_id,
-            "target": target,
-            "target_tenants": target_tenants,
-            "outcome": outcome,
-        }),
-    );
 }
 
 fn forbidden(error: &str) -> (StatusCode, Json<Value>) {
@@ -473,7 +458,20 @@ mod tests {
         let raw = fs::read_to_string(path).unwrap_or_default();
         raw.lines()
             .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-            .filter(|event| event["event"] == "actions_history_delete")
+            .filter(|event| event["event"] == "actions.delete" || event["event"] == "actions.clear")
+            .map(|event| {
+                assert_eq!(event["detail"]["schema"], "openfdd.audit.v1");
+                event["detail"].clone()
+            })
+            .collect()
+    }
+
+    fn removed_ids(event: &Value) -> Vec<String> {
+        event["change"]["action_ids"]["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|id| id.as_str().map(str::to_string))
             .collect()
     }
 
@@ -626,17 +624,36 @@ mod tests {
         let deleted = audit_events(audit_path)
             .into_iter()
             .find(|event| {
-                event["detail"]["outcome"] == "deleted" && event["detail"]["target"] == fixture.id_a
+                event["action"] == "actions.delete"
+                    && event["outcome"] == "ok"
+                    && event["target_id"] == fixture.id_a
             })
             .expect("delete audit");
-        assert_eq!(deleted["detail"]["actor"], "tenant-a-operator");
-        assert_eq!(deleted["detail"]["role"], "operator");
-        assert_eq!(deleted["detail"]["tenant_id"], "tenant-a");
-        assert_eq!(deleted["detail"]["building_id"], "site-a");
-        assert!(audit_events(audit_path).iter().any(|event| {
-            event["detail"]["outcome"] == "denied"
-                && event["detail"]["actor"] == "tenant-a-viewer"
-                && event["detail"]["target"] == fixture.id_a
+        assert_eq!(deleted["actor"], "tenant-a-operator");
+        assert_eq!(deleted["role"], "operator");
+        assert_eq!(deleted["decision"], "allow");
+        assert_eq!(deleted["tenant_id"], "tenant-a");
+        assert_eq!(deleted["site_id"], "site-a");
+        assert_eq!(removed_ids(&deleted), vec![fixture.id_a.clone()]);
+        let events = audit_events(audit_path);
+        assert!(events.iter().any(|event| {
+            event["action"] == "actions.delete"
+                && event["decision"] == "deny"
+                && event["reason"] == "role_required"
+                && event["actor"] == "tenant-a-viewer"
+                && event["role"] == "viewer"
+                && event["target_id"] == fixture.id_a
+        }));
+        assert!(events.iter().any(|event| {
+            event["action"] == "actions.clear"
+                && event["decision"] == "deny"
+                && event["actor"] == "tenant-a-viewer"
+        }));
+        assert!(events.iter().any(|event| {
+            event["decision"] == "deny"
+                && event["reason"] == "tenant_scope"
+                && event["actor"] == "tenant-a-operator"
+                && event["target_id"] == fixture.id_b
         }));
 
         let (status, body) = send(
@@ -652,7 +669,10 @@ mod tests {
         assert!(after_clear.contains(&fixture.marker_b));
         assert!(after_clear.contains(&fixture.marker_legacy_b));
         assert!(audit_events(audit_path).iter().any(|event| {
-            event["detail"]["outcome"] == "deleted" && event["detail"]["target"] == fixture.id_a
+            event["action"] == "actions.clear"
+                && event["outcome"] == "ok"
+                && event["actor"] == "tenant-a-operator"
+                && event["change"]["action_ids"]["total"] == 0
         }));
     }
 
@@ -682,19 +702,25 @@ mod tests {
         assert!(!cleared.contains(&fixture.marker_a));
         assert!(!cleared.contains(&fixture.marker_b));
         assert!(!cleared.contains(&fixture.marker_legacy_b));
-        assert!(!cleared.contains("actions_history_delete"));
+        assert!(!cleared.contains("actions.delete"));
+        assert!(!cleared.contains("actions.clear"));
         assert!(audit_events(audit_path).iter().any(|event| {
-            event["detail"]["actor"] == "tenant-a-operator"
-                && event["detail"]["tenant_id"] == "tenant-a"
-                && event["detail"]["target"] == fixture.id_a
-                && event["detail"]["outcome"] == "deleted"
+            event["actor"] == "tenant-a-operator"
+                && event["tenant_id"] == "tenant-a"
+                && event["target_id"] == fixture.id_a
+                && event["outcome"] == "ok"
+        }));
+        assert!(audit_events(audit_path).iter().any(|event| {
+            event["action"] == "actions.clear"
+                && event["actor"] == "hub-admin"
+                && event["outcome"] == "ok"
+                && removed_ids(event).contains(&fixture.id_legacy_b)
         }));
     }
 
     #[test]
     fn row_without_tenant_or_site_stays_hidden_from_members() {
         let scope = CallerScope {
-            actor: "tenant-a-viewer".into(),
             role: Role::Viewer,
             tenant_ids: vec!["tenant-a".into()],
             sees_all: false,

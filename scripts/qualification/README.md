@@ -110,20 +110,72 @@ python3 -B scripts/qualification/write_manifest.py selftest
 | `protocol_connector_qualification.py` | Phase 5D split image/recipe and read-only bench evidence evaluator; fail-closed selftest |
 | `write_manifest.py` | Create / record / finalize / selftest |
 | `zap_baseline_verdict.py` | Parse ZAP JSON; High always fails; Medium explicit |
-| `run_wave_c_isolated.sh` | Wave C entry: MQTTS isolation + restore-to-empty + ZAP AF |
-| `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint disposable **web+central** from GHCR, then call `zap/run_af_disposable.py` (single evaluator). Digest-pinned ZAP. Default `OPENFDD_MULTI_TENANT=0`. **Never** activeScan live Railway OT; no fallback crawl. |
-| `zap/run_af_disposable.py` | Single ZAP AF evaluator (A06–A07): plan hygiene, verified `/api/auth/me` (status+identity schema), digest pin gate, High/Medium verdict. `--selftest` → **BLOCKED**. Execute via `OPENFDD_ZAP_AF_EXECUTE=1`. |
+| `run_portal_qualification.sh` | Disposable `cloud_portal` qualification: central + web + Timescale + loopback NF emulator, two tenants, security harness, historian side-effect proof (see below) |
+| `lib/portal_stack.sh` | Shared disposable-stack helpers: per-run secrets, unique compose project, project-scoped teardown |
+| `portal/portal_qual.py` · `portal/nf_emulator.py` | Docker-free plan / package / verdict helpers and the stdlib NF emulator (fixture `fixtures/nf_emulator/points.json`) |
+| `run_wave_c_isolated.sh` | Wave C entry on the portal profile: portal qualification + restore-to-empty + ZAP AF |
+| `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint a disposable `cloud_portal` candidate (multi-tenant ON, per-run JWT secret) via `lib/portal_stack.sh`, run the broken-credential negative control, then call `zap/run_af_disposable.py` against `http://web:8080`. Scanner credential is a private file, never argv. Digest-pinned ZAP. **Never** activeScan Railway or a site; no fallback crawl. |
+| `zap/run_af_disposable.py` | Single ZAP AF evaluator: exact disposable origin checked before any credential is read; anchored scope; scanner-origin `/api/auth/me` probes before/during/after the scan proven from ZAP's exported message history; strict typed alert parsing; per-instance Medium dispositions with expiry; write-once raw report + SHA-256; wall-clock and request budgets with owned cleanup. `--selftest` → **BLOCKED**; `--negative-control` must reject a broken scanner credential. Execute via `OPENFDD_ZAP_AF_EXECUTE=1`. |
 | `zap/run_af_disposable.sh` | Thin shell alias to `run_af_disposable.py`. |
-| `restore_to_empty.sh` | Backup → empty volume restore + bounded API budgets |
-| `../integration/mqtts_transport_isolation.sh` | Disposable MQTTS cert/ACL/QoS/reconnect |
+| `restore_to_empty.sh` | Portal stack: `pg_dump` + workspace tarball → fresh volumes → restore; proves the fixture site's Timescale count + md5, total samples, workspace manifest, control-plane files, admin API identity state, and operator login; then bounded API budgets |
+
+## Disposable portal qualification (`cloud_portal`)
+
+GHCR images only (never a local build). Requires Docker with Compose >= 2.24.4,
+`curl`, `jq`, and `python3`. Pick the newest published tag by OCI `created`:
+
+```bash
+./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web
+export OPENFDD_IMAGE_TAG=sha-<7>        # same tag for central and web
+./scripts/qualification/run_portal_qualification.sh
+# optional: ARTIFACT_DIR=/path/to/out  OPENFDD_TIMESCALE_IMAGE=timescale/timescaledb@sha256:...
+```
+
+What one run does:
+
+1. Generates a `qa<YYYYMMDD><4hex>` prefix and a unique compose project
+   `openfdd-qual-portal-<prefix>`. Generates a 48-byte JWT secret, the hub
+   admin password, and the Timescale password into a 0600 env file under a
+   0700 temp dir. Secrets reach curl only through header/body files and
+   are scrubbed from artifacts.
+2. Starts `docker/compose.portal.yml` + `compose.timescale.yml` +
+   `compose.portal-qual.yml`. Central and Timescale sit on an internal network
+   with no host port and no internet route. Web listens on `127.0.0.1:<free port>`.
+   The NF emulator shares central's network namespace at
+   `http://127.0.0.1:18089`, the only provider origin configured. No real
+   portal credentials or connections exist.
+3. Creates tenants A and B plus a viewer and an operator per tenant through
+   `/api/admin/*`. The admin identity is the env hub admin, because file users
+   cannot be admin; the run asserts that a tenant-admin upsert is rejected.
+4. Seeds one canary package per tenant, waits for Timescale rows and NF
+   emulator samples, and checks that the emulator saw reads and zero point writes.
+5. Runs the security harness (`isolated_full`, X/Y/Z, viewer write matrix)
+   with `--isolated-jwt-secret-env`. It then proves that both tenants'
+   Timescale count + md5 did not change.
+6. Writes `verdict.json` (`portal_qualification_v1`) and tears down only its
+   own project: `down --remove-orphans` (no `-v`), then removes volumes
+   labelled with that project name. It never prunes.
+
+Exit codes: `0` PASS, `1` FAIL (any step FAIL/ERROR), `2` BLOCKED (no failures,
+but some checks unverified). Against `sha-c83ea9b` the harness reports 0 FAIL /
+0 ERROR and 14 BLOCKED `y.authz.a_own_*` positive controls: the canary package
+has one equipment row, so datasets mapping, FDD results/series and the plant
+analytics have no own content to prove a 200 against.
+
+Not covered by the local recipe: the profile's https origin and port-443
+listener evidence come from the deployed edge, not from this loopback run.
 
 ## Wave C isolated (pull GHCR only)
 
 ```bash
-export OPENFDD_IMAGE_TAG=sha-<7>   # e.g. sha-10d1ec5
+export OPENFDD_IMAGE_TAG=sha-<7>
 ./scripts/qualification/run_wave_c_isolated.sh
-# or workflow: .github/workflows/wave-c-isolated.yml
 ```
+
+Runs `run_portal_qualification.sh`, `restore_to_empty.sh`, and
+`run_isolated_zap_af.sh` in order, each in its own disposable project, and
+aggregates the verdicts (`wave_c_isolated_v2`). There is no MQTT step; the
+broker belongs to the archived OT profile.
 
 Field Railway closeout stays public `zap-baseline`. Gate 18 same-volume recreate remains separate from `restore_to_empty.sh`.
 

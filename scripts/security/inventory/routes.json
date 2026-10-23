@@ -6,9 +6,10 @@
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
   "route_count": 193,
   "disposition_counts": {
-    "IMPLEMENTED": 30,
-    "PLANNED": 134,
-    "BLOCKED_POLICY": 29
+    "IMPLEMENTED": 38,
+    "PLANNED": 122,
+    "BLOCKED_POLICY": 29,
+    "EXCLUDED": 4
   },
   "routes": [
     {
@@ -261,7 +262,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -271,12 +272,19 @@
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
         "x.preauth.anon401.post_api_csv_import_package",
-        "y.authz.post_api_csv_import_package"
+        "y.authz.post_api_csv_import_package",
+        "y.authz.viewer_import_own_denied",
+        "y.authz.viewer_import_foreign_denied"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "y.authz.viewer_import_own_denied",
+        "y.authz.viewer_import_foreign_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.post_api_csv_import_package",
-        "y.authz.post_api_csv_import_package"
+        "y.authz.post_api_csv_import_package",
+        "y.authz.viewer_import_own_denied",
+        "y.authz.viewer_import_foreign_denied"
       ],
       "request_schema": {
         "type": "unknown",
@@ -299,7 +307,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -309,12 +317,19 @@
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
         "x.preauth.anon401.post_api_csv_import_package_append",
-        "y.authz.post_api_csv_import_package_append"
+        "y.authz.post_api_csv_import_package_append",
+        "y.authz.viewer_append_own_denied",
+        "y.authz.viewer_append_foreign_denied"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "y.authz.viewer_append_own_denied",
+        "y.authz.viewer_append_foreign_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.post_api_csv_import_package_append",
-        "y.authz.post_api_csv_import_package_append"
+        "y.authz.post_api_csv_import_package_append",
+        "y.authz.viewer_append_own_denied",
+        "y.authz.viewer_append_foreign_denied"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1011,7 +1026,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -1021,12 +1036,25 @@
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
         "x.preauth.anon401.delete_api_datasets",
-        "y.authz.delete_api_datasets"
+        "y.authz.delete_api_datasets",
+        "y.authz.viewer_purge_own_denied",
+        "y.authz.viewer_purge_foreign_denied",
+        "y.authz.viewer_delete_own_denied",
+        "y.authz.viewer_delete_foreign_denied"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "y.authz.viewer_purge_own_denied",
+        "y.authz.viewer_purge_foreign_denied",
+        "y.authz.viewer_delete_own_denied",
+        "y.authz.viewer_delete_foreign_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.delete_api_datasets",
-        "y.authz.delete_api_datasets"
+        "y.authz.delete_api_datasets",
+        "y.authz.viewer_purge_own_denied",
+        "y.authz.viewer_purge_foreign_denied",
+        "y.authz.viewer_delete_own_denied",
+        "y.authz.viewer_delete_foreign_denied"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1163,7 +1191,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_scoped_provider_health",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         401,
         403
@@ -1176,7 +1204,9 @@
         "x.preauth.anon_providers_health_401",
         "y.authz.get_api_providers_health"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon_providers_health_401"
+      ],
       "check_ids": [
         "x.preauth.anon_providers_health_401",
         "y.authz.get_api_providers_health"
@@ -1205,7 +1235,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_scoped_provider_health",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         401,
         403
@@ -1218,7 +1248,9 @@
         "x.preauth.anon_providers_sites_401",
         "y.authz.get_api_providers_sites"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon_providers_sites_401"
+      ],
       "check_ids": [
         "x.preauth.anon_providers_sites_401",
         "y.authz.get_api_providers_sites"
@@ -2247,7 +2279,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "IMPLEMENTED",
+      "disposition": "EXCLUDED",
       "deny_statuses": [
         403
       ],
@@ -2259,11 +2291,10 @@
         "x.preauth.anon401.get_api_edges",
         "y.authz.get_api_edges"
       ],
-      "implemented_check_ids": [
-        "x.preauth.anon401.get_api_edges"
-      ],
+      "implemented_check_ids": [],
       "check_ids": [
-        "x.preauth.anon401.get_api_edges"
+        "x.preauth.anon401.get_api_edges",
+        "y.authz.get_api_edges"
       ],
       "request_schema": {
         "type": "unknown",
@@ -2278,7 +2309,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+      "notes": "EXCLUDED: route removed from central 4.0 with the OT archive (404); not probed."
     },
     {
       "method": "GET",
@@ -2286,7 +2317,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "EXCLUDED",
       "deny_statuses": [
         403
       ],
@@ -2316,7 +2347,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+      "notes": "EXCLUDED: route removed from central 4.0 with the OT archive (404); not probed."
     },
     {
       "method": "GET",
@@ -2324,7 +2355,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "EXCLUDED",
       "deny_statuses": [
         403
       ],
@@ -2354,7 +2385,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+      "notes": "EXCLUDED: route removed from central 4.0 with the OT archive (404); not probed."
     },
     {
       "method": "GET",
@@ -2362,7 +2393,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "EXCLUDED",
       "deny_statuses": [
         403
       ],
@@ -2392,7 +2423,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+      "notes": "EXCLUDED: route removed from central 4.0 with the OT archive (404); not probed."
     },
     {
       "method": "GET",
@@ -7027,7 +7058,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -7039,7 +7070,9 @@
         "x.preauth.anon401.get_api_ingest_jobs",
         "y.authz.get_api_ingest_jobs"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_jobs"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_ingest_jobs",
         "y.authz.get_api_ingest_jobs"
@@ -7141,7 +7174,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -7153,7 +7186,9 @@
         "x.preauth.anon401.get_api_ingest_receipts",
         "y.authz.get_api_ingest_receipts"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_receipts"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_ingest_receipts",
         "y.authz.get_api_ingest_receipts"
@@ -7217,7 +7252,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -7229,7 +7264,9 @@
         "x.preauth.anon401.get_api_ingest_gaps",
         "y.authz.get_api_ingest_gaps"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_gaps"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_ingest_gaps",
         "y.authz.get_api_ingest_gaps"
@@ -7255,7 +7292,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -7267,7 +7304,9 @@
         "x.preauth.anon401.get_api_ingest_queue",
         "y.authz.get_api_ingest_queue"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_queue"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_ingest_queue",
         "y.authz.get_api_ingest_queue"
@@ -7365,16 +7404,19 @@
     }
   ],
   "counts": {
-    "IMPLEMENTED": 30,
-    "PLANNED": 125,
+    "IMPLEMENTED": 38,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29,
-    "implemented": 30,
-    "planned": 125,
-    "blocked_policy": 29
+    "EXCLUDED": 4,
+    "implemented": 38,
+    "planned": 122,
+    "blocked_policy": 29,
+    "excluded": 4
   },
   "summary": {
-    "IMPLEMENTED": 30,
-    "PLANNED": 125,
-    "BLOCKED_POLICY": 29
+    "IMPLEMENTED": 38,
+    "PLANNED": 122,
+    "BLOCKED_POLICY": 29,
+    "EXCLUDED": 4
   }
 }

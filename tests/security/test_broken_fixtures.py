@@ -53,9 +53,10 @@ def _run(mode: str, td: str) -> dict:
                 suites=None,
                 execute=True,
                 dry_run=False,
-                # V3 MT breadth (+buildings/series/analytics POSTs) needs ~74;
-                # leave headroom above cleanup_reserved (10).
-                max_requests=120,
+                # V3 MT breadth (+buildings/series/analytics POSTs) needs ~74,
+                # the viewer write matrix ~40 more (5 per cell); leave headroom
+                # above cleanup_reserved (10).
+                max_requests=200,
                 timeout=5.0,
                 deadline=60.0,
                 rate=20.0,
@@ -139,6 +140,38 @@ class BrokenFixtureDetectorsTest(unittest.TestCase):
             self.assertEqual(
                 checks["y.authz.viewer_mutation_denied"].status, "FAIL"
             )
+
+    def test_viewer_write_matrix_passes_on_healthy(self):
+        from openfdd_security.suites import viewer_write_check_ids
+
+        with tempfile.TemporaryDirectory() as td:
+            checks = _run("healthy", td)
+        for cid in viewer_write_check_ids():
+            self.assertEqual(checks[cid].status, "PASS", (cid, checks[cid].detail))
+        for cid in (
+            "x.preauth.anon_providers_health_401",
+            "x.preauth.anon_providers_sites_401",
+            "x.preauth.anon401.get_api_ingest_jobs",
+            "x.preauth.anon401.get_api_ingest_queue",
+        ):
+            self.assertEqual(checks[cid].status, "PASS", cid)
+
+    def test_viewer_write_allowed_fails_matrix(self):
+        from openfdd_security.suites import viewer_write_check_ids
+
+        with tempfile.TemporaryDirectory() as td:
+            checks = _run("viewer_write_allowed", td)
+        for cid in viewer_write_check_ids():
+            self.assertEqual(checks[cid].status, "FAIL", cid)
+
+    def test_viewer_write_side_effect_behind_403_fails(self):
+        from openfdd_security.suites import viewer_write_check_ids
+
+        with tempfile.TemporaryDirectory() as td:
+            checks = _run("viewer_write_side_effect", td)
+        for cid in viewer_write_check_ids():
+            self.assertEqual(checks[cid].status, "FAIL", cid)
+            self.assertEqual(checks[cid].detector_id, "viewer_write_side_effect", cid)
 
     def test_cors_evil_reflected(self):
         with tempfile.TemporaryDirectory() as td:

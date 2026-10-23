@@ -44,7 +44,18 @@ def main(argv: list[str] | None = None) -> int:
 
     registry = load_profile_registry()
     if args.list_profiles:
-        print(json.dumps({"profiles": sorted(registry["profiles"])}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "profiles": sorted(registry["profiles"]),
+                    "lifecycle": {
+                        pid: prof.get("lifecycle")
+                        for pid, prof in sorted(registry["profiles"].items())
+                    },
+                },
+                indent=2,
+            )
+        )
         return 0
     if not args.profile or not args.evidence:
         parser.error("--profile and --evidence are required unless --list-profiles")

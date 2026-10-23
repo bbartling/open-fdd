@@ -10,7 +10,7 @@ Usage:
   python3 scripts/security/profile_image_scan.py --list-profiles
   python3 scripts/security/profile_image_scan.py --selftest
   python3 scripts/security/profile_image_scan.py \\
-      --profile cloud_mqtt_hub --evidence reports/security/image_scan.json
+      --profile cloud_portal --evidence reports/security/image_scan.json
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def _normalize_name(name: str) -> str:
     n = (name or "").strip()
     if n.startswith("openfdd-"):
         return n
-    if n in ("central", "web", "mqtt", "fieldbus", "bacnet-modbus", "haystack", "mcp"):
+    if n in ("central", "web", "timescale", "mqtt", "fieldbus", "bacnet-modbus", "haystack", "mcp"):
         return f"openfdd-{n}"
     if n == "caddy" or n.startswith("docker.io/library/caddy"):
         return "caddy"
@@ -93,6 +93,11 @@ def evaluate_scan_evidence(
             False,
             f"evidence profile_id={evidence.get('profile_id')!r} != {profile_id!r}",
         )
+
+    lifecycle = ((load_profile_registry().get("profiles") or {}).get(profile_id) or {}).get("lifecycle")
+    if lifecycle == "archived":
+        add("profile_active", False, f"profile {profile_id} is archived and cannot qualify a current candidate")
+        return _report(profile_id, "BLOCKED", checks, errors)
 
     required = profile_required_scan_images(profile_id)
     add("required_images_nonempty", bool(required), f"count={len(required)}")
@@ -283,15 +288,15 @@ def selftest() -> dict[str, Any]:
             "platform": "linux/amd64",
         },
         {
-            "name": "openfdd-mqtt",
+            "name": "openfdd-timescale",
             "digest": digest(3),
-            "ref": f"ghcr.io/bbartling/openfdd-mqtt@{digest(3)}",
+            "ref": f"docker.io/timescale/timescaledb@{digest(3)}",
             "platform": "linux/amd64",
         },
     ]
     healthy = {
         "schema_version": SCHEMA,
-        "profile_id": "cloud_mqtt_hub",
+        "profile_id": "cloud_portal",
         "images": healthy_images,
         "scanner": {"tool": "trivy", "version": "0.56.0"},
         "findings": {"critical": 0, "high": 0, "medium": 0},
@@ -302,7 +307,7 @@ def selftest() -> dict[str, Any]:
             "attestation_digests": [digest(8)],
         },
     }
-    r = evaluate_scan_evidence("cloud_mqtt_hub", healthy)
+    r = evaluate_scan_evidence("cloud_portal", healthy)
     results.append({"case": "healthy_pass", "ok": r["status"] == "PASS", "status": r["status"]})
 
     # Sabotage: workflow-file inference
@@ -312,7 +317,7 @@ def selftest() -> dict[str, Any]:
         "method": "workflow_file_present",
         "attestation_digests": [digest(8)],
     }
-    r = evaluate_scan_evidence("cloud_mqtt_hub", bad_prov)
+    r = evaluate_scan_evidence("cloud_portal", bad_prov)
     results.append(
         {
             "case": "workflow_inference_fail",
@@ -321,40 +326,25 @@ def selftest() -> dict[str, Any]:
         }
     )
 
-    # Sabotage: missing connector image for OT profile
-    ot_ev = {
-        "schema_version": SCHEMA,
-        "profile_id": "ot_local_bacnet_modbus",
-        "images": [
-            {
-                "name": "openfdd-web",
-                "digest": digest(1),
-                "ref": f"ghcr.io/bbartling/openfdd-web@{digest(1)}",
-                "platform": "linux/amd64",
-            },
-            {
-                "name": "openfdd-central",
-                "digest": digest(2),
-                "ref": f"ghcr.io/bbartling/openfdd-central@{digest(2)}",
-                "platform": "linux/amd64",
-            },
-            {
-                "name": "caddy",
-                "digest": digest(4),
-                "ref": f"docker.io/library/caddy@{digest(4)}",
-                "platform": "linux/amd64",
-            },
-            # missing openfdd-bacnet-modbus
-        ],
-        "scanner": {"tool": "trivy", "version": "0.56.0"},
-        "findings": {"critical": 0, "high": 0, "medium": 0},
-        "sbom": {"status": "BLOCKED"},
-        "provenance": {"status": "NOT_RUN"},
-    }
-    r = evaluate_scan_evidence("ot_local_bacnet_modbus", ot_ev)
+    # Archived OT-wire profile cannot qualify a current candidate.
+    archived = json.loads(json.dumps(healthy))
+    archived["profile_id"] = "cloud_mqtt_hub"
+    r = evaluate_scan_evidence("cloud_mqtt_hub", archived)
     results.append(
         {
-            "case": "missing_connector_fail",
+            "case": "archived_profile_blocked",
+            "ok": r["status"] == "BLOCKED",
+            "status": r["status"],
+        }
+    )
+
+    # Sabotage: required Timescale image missing from portal evidence
+    missing = json.loads(json.dumps(healthy))
+    missing["images"] = [i for i in missing["images"] if i["name"] != "openfdd-timescale"]
+    r = evaluate_scan_evidence("cloud_portal", missing)
+    results.append(
+        {
+            "case": "missing_required_image_fail",
             "ok": r["status"] == "FAIL",
             "status": r["status"],
         }
@@ -364,7 +354,7 @@ def selftest() -> dict[str, Any]:
     soft = json.loads(json.dumps(healthy))
     soft["sbom"] = {"status": "NOT_RUN"}
     soft["provenance"] = {"status": "ABSENT"}
-    r = evaluate_scan_evidence("cloud_mqtt_hub", soft)
+    r = evaluate_scan_evidence("cloud_portal", soft)
     results.append(
         {
             "case": "honest_absent_blocked",
@@ -377,7 +367,7 @@ def selftest() -> dict[str, Any]:
     tag_only = json.loads(json.dumps(healthy))
     tag_only["images"][0]["digest"] = ""
     tag_only["images"][0]["ref"] = "ghcr.io/bbartling/openfdd-web:nightly"
-    r = evaluate_scan_evidence("cloud_mqtt_hub", tag_only)
+    r = evaluate_scan_evidence("cloud_portal", tag_only)
     results.append(
         {
             "case": "tag_only_fail",

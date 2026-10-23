@@ -1,0 +1,91 @@
+# Disposable portal qualification overlay (deployment profile `cloud_portal`).
+#
+#   docker compose -p <unique project> --env-file <private env> \
+#     -f docker/compose.portal.yml -f docker/compose.timescale.yml \
+#     -f docker/compose.portal-qual.yml up -d --no-build
+#
+# Run it through scripts/qualification/lib/portal_stack.sh, which generates the
+# secrets, the unique project name, and the project-scoped teardown.
+#
+# - GHCR images pinned by OPENFDD_IMAGE_TAG (sha-<7>). Never built locally.
+# - Central and Timescale sit on an internal network: no host port, no
+#   internet egress, so no real NF portal is reachable.
+# - The NF emulator shares Central's network namespace and answers on
+#   http://127.0.0.1:18089, the only provider origin Central accepts over HTTP.
+# - The workspace is a project-scoped named volume, not the repo ../workspace.
+# Requires Docker Compose >= 2.24.4 for !reset / !override.
+
+services:
+  central:
+    image: ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG=sha-<7>}
+    build: !reset null
+    pull_policy: missing
+    environment:
+      OPENFDD_MULTI_TENANT: "1"
+      OPENFDD_ALLOW_OPEN_BIND: ""
+      OPENFDD_AGENT_PASSWORD: ""
+      OPENFDD_NF_ALLOW_ANONYMOUS: ""
+      OPENFDD_PROVIDER_SITES: ${OPENFDD_PROVIDER_SITES:-}
+      OPENFDD_PROVIDER_POLL: ${OPENFDD_PROVIDER_POLL:-}
+      OPENFDD_PROVIDER_TICK_SECS: "5"
+      OPENFDD_DATABASE_URL: ${OPENFDD_DATABASE_URL:?private env must set OPENFDD_DATABASE_URL}
+    ports: !reset []
+    volumes: !override
+      - qual-workspace:/workspace
+      - ../sql:/sql:ro
+    networks: !override
+      - qual-private
+    restart: "no"
+
+  timescale:
+    environment:
+      POSTGRES_PASSWORD: ${OPENFDD_TIMESCALE_PASSWORD:?private env must set OPENFDD_TIMESCALE_PASSWORD}
+    ports: !reset []
+    networks: !override
+      - qual-private
+    restart: "no"
+
+  web:
+    image: ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG=sha-<7>}
+    build: !reset null
+    pull_policy: missing
+    environment:
+      OPENFDD_CENTRAL_UPSTREAM: central:8080
+    ports: !override
+      - "127.0.0.1:${PORTAL_QUAL_WEB_PORT:?set PORTAL_QUAL_WEB_PORT}:8080"
+    networks: !override
+      - default
+      - qual-private
+    restart: "no"
+
+  nf-emulator:
+    profiles: ["nf"]
+    image: ${OPENFDD_QUAL_PYTHON_IMAGE:-python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d}
+    pull_policy: missing
+    network_mode: "service:central"
+    command:
+      - python3
+      - /emulator/nf_emulator.py
+      - --bind
+      - 127.0.0.1
+      - --port
+      - "18089"
+      - --fixture
+      - /fixture/points.json
+    volumes:
+      - ../scripts/qualification/portal/nf_emulator.py:/emulator/nf_emulator.py:ro
+      - ../scripts/qualification/fixtures/nf_emulator:/fixture:ro
+    user: "65534:65534"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      - central
+    restart: "no"
+
+networks:
+  qual-private:
+    internal: true
+
+volumes:
+  qual-workspace:

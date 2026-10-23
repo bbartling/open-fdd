@@ -89,6 +89,34 @@ $OPENFDD_WORKSPACE/logs/security_audit.jsonl
 Rotation (defaults): `OPENFDD_AUDIT_LOG_MAX_BYTES=10485760` (10 MiB), `OPENFDD_AUDIT_LOG_KEEP=5`.
 Override path with `OPENFDD_AUDIT_LOG_PATH`. Secrets / passwords / tokens / API keys are redacted.
 
+**Typed central events (`openfdd.audit.v1`):** each line keeps the
+`{timestamp, channel, event, detail}` envelope; for central sensitive
+operations `event` is the action and `detail` is a fixed-field record:
+
+| Field | Meaning |
+|-------|---------|
+| `schema` | `openfdd.audit.v1` |
+| `request_id` | Server-generated UUID, also returned as `x-openfdd-server-request-id` |
+| `caller_request_id` | Caller `x-request-id`, bounded (64 chars), never the primary key |
+| `actor`, `auth_kind`, `role` | Subject, `human_login` / `agent_token` / `anonymous`, and role |
+| `tenant_id`, `site_id` | Resolved tenant and site (`building_id`) |
+| `action`, `target_type`, `target_id` | See actions below; target is a user, tenant, site, action, or route |
+| `decision`, `reason` | `allow` / `deny` and a fixed reason code (`missing_credentials`, `expired_token`, `role_required`, `site_scope`, `size_cap`, …) |
+| `outcome`, `http_status` | `ok` / `failed` / `partial` / `replayed`, recorded after the result is known |
+| `change` | Typed summary (counts, ids, flags). Never request bodies, headers, or credentials |
+| `build`, `method`, `path`, `ts`, `truncated` | Build version, request line (no query string), time, and whether size budgets dropped data |
+
+Actions: `auth.login`, `auth.bearer`, `auth.agent_token`, `tenant.select`,
+`site.access`, `admin.read`, `admin.maintenance`, `admin.historian_limits`,
+`user.upsert`, `user.disable`, `user.delete`, `tenant.upsert`, `tenant.delete`,
+`package.import`, `package.append`, `package.roles`, `session_config.put`,
+`model.write`, `dataset.delete`, `actions.delete`, `actions.clear`.
+
+Every string is length-bounded with a `…[truncated]` marker, control and
+bidi characters are escaped, bearer/JWT/URL-query/`key=secret` fragments are
+replaced with `[redacted]`, and the whole record is capped at 8 KiB. The same
+sanitizer bounds free-form audit detail and the central panic hook line.
+
 **Container stdout rotation (GHCR compose / local Docker):**
 
 ```yaml

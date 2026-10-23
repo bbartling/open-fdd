@@ -56,6 +56,36 @@ PROFILES: dict[str, dict[str, Any]] = {
         ],
     },
     # Deployment-contract profiles (Astra A10).
+    "cloud_portal": {
+        "expected_listen": [],
+        "forbidden_listen": [
+            {
+                "proto": "tcp",
+                "port": 8080,
+                "bind": "must_absent",
+                "note": "central stays on the private network",
+            },
+            {
+                "proto": "tcp",
+                "port": 5432,
+                "bind": "must_absent",
+                "note": "Timescale stays on the private network",
+            },
+            {
+                "proto": "tcp",
+                "port": 8883,
+                "bind": "must_absent",
+                "note": "no MQTT broker in the portal stack",
+            },
+            {
+                "proto": "udp",
+                "port": 47808,
+                "bind": "must_absent",
+                "note": "no BACnet in the portal stack",
+            },
+        ],
+    },
+    # Archived OT-wire profile (registry lifecycle: archived).
     "cloud_mqtt_hub": {
         "expected_listen": [],
         "forbidden_listen": [
@@ -184,6 +214,7 @@ def selftest_checks() -> list[dict[str, Any]]:
     required = {
         "standalone_https",
         "field_only_ot",
+        "cloud_portal",
         "cloud_mqtt_hub",
         "ot_local_bacnet_modbus",
         "ot_local_haystack",
