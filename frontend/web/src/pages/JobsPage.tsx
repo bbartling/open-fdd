@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "../components/AppShell";
+import { HistorianDataSection } from "../components/HistorianDataSection";
 import { ApiClientError } from "../api/client";
 import {
   archiveJob,
@@ -55,6 +56,7 @@ function formatApiError(err: unknown): string {
 export function JobsPage() {
   const { query, setQuery } = useSessionQuery();
   const selectedJobId = query.jobId ?? "";
+  const siteId = query.siteId ?? "";
 
   const [includeArchived, setIncludeArchived] = useState(true);
   const [jobs, setJobs] = useState<JobMeta[]>([]);
@@ -532,6 +534,14 @@ export function JobsPage() {
             ) : null}
           </section>
         ) : null}
+
+        {siteId ? (
+          <HistorianDataSection siteId={siteId} />
+        ) : (
+          <p data-testid="jobs-historian-no-site">
+            Select a site to see its historian device tree and purge orphaned data.
+          </p>
+        )}
 
         <ConfirmModal
           id="jobs-archive-modal"
