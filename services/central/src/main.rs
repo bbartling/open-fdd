@@ -5,6 +5,7 @@ mod actions_scope;
 mod admin_cp;
 mod afdd_scheduler;
 mod analytics;
+mod audit;
 mod auth;
 mod building_sessions;
 mod canonical_state;
