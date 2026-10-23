@@ -160,6 +160,10 @@ async fn sql_fault_hours(tsdb: &Tsdb, site: &str, rule_id: &str, equipment_id: &
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "other fixtures point OPENFDD_SQL_ROOT at a temp registry while holding this lock"
+)]
 async fn duplicate_timestamp_fixtures_match_pandas_and_never_double_count() {
     let Some(url) = std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
@@ -168,6 +172,7 @@ async fn duplicate_timestamp_fixtures_match_pandas_and_never_double_count() {
     else {
         return;
     };
+    let _env_lock = crate::test_env_lock::lock_env();
     let pool = PgPoolOptions::new()
         .max_connections(2)
         .connect(&url)
