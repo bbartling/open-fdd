@@ -92,7 +92,7 @@ pub(crate) async fn apply_schema(pool: &PgPool) {
         "ALTER TABLE sample ADD COLUMN IF NOT EXISTS unit text",
         "ALTER TABLE sample ADD COLUMN IF NOT EXISTS quality text",
     ] {
-        sqlx::query(statement).execute(pool).await.expect(statement);
+        crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
     }
     for statement in PORTAL_SCHEMA
         .split(';')
@@ -104,10 +104,7 @@ pub(crate) async fn apply_schema(pool: &PgPool) {
         })
         .filter(|s| !s.trim().is_empty())
     {
-        sqlx::query(&statement)
-            .execute(pool)
-            .await
-            .expect("portal inventory schema");
+        crate::test_ddl::execute_idempotent_ddl(pool, &statement).await;
     }
 }
 

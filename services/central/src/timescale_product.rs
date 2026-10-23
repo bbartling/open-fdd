@@ -3966,10 +3966,7 @@ rules:
                 PRIMARY KEY (site_id, openfdd_key, ts)
             )",
         ] {
-            sqlx::query(statement)
-                .execute(pool)
-                .await
-                .expect("fixture schema");
+            crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
         // Contract tests share one database. A narrower fixture can create
         // `sample` first, and CREATE TABLE IF NOT EXISTS will not add columns.
@@ -3978,10 +3975,7 @@ rules:
             "ALTER TABLE sample ADD COLUMN IF NOT EXISTS unit text",
             "ALTER TABLE sample ADD COLUMN IF NOT EXISTS quality text",
         ] {
-            sqlx::query(statement)
-                .execute(pool)
-                .await
-                .expect("fixture sample columns");
+            crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
     }
 

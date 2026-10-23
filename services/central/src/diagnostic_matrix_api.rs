@@ -228,7 +228,8 @@ async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
         .connect(&url)
         .await
         .expect("connect postgres fixture");
-    sqlx::query(
+    crate::test_ddl::execute_idempotent_ddl(
+        &pool,
         "CREATE TABLE IF NOT EXISTS sample (
             ts timestamptz NOT NULL,
             site_id text NOT NULL,
@@ -237,9 +238,7 @@ async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
             PRIMARY KEY (site_id, openfdd_key, ts)
         )",
     )
-    .execute(&pool)
-    .await
-    .expect("sample table");
+    .await;
     for site in [&site_a, &site_b] {
         sqlx::query("DELETE FROM sample WHERE site_id = $1")
             .bind(site)

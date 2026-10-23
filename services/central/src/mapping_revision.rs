@@ -604,20 +604,14 @@ mod tests {
                 PRIMARY KEY (site_id, openfdd_key, ts)
             )",
         ] {
-            sqlx::query(statement)
-                .execute(pool)
-                .await
-                .expect("fixture schema");
+            crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
         for statement in [
             "ALTER TABLE sample ADD COLUMN IF NOT EXISTS haystack_id text",
             "ALTER TABLE sample ADD COLUMN IF NOT EXISTS unit text",
             "ALTER TABLE sample ADD COLUMN IF NOT EXISTS quality text",
         ] {
-            sqlx::query(statement)
-                .execute(pool)
-                .await
-                .expect("fixture sample columns");
+            crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
     }
 

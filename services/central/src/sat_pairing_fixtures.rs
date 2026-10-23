@@ -483,7 +483,7 @@ async fn apply_schema(pool: &PgPool) {
         )",
         "ALTER TABLE sample ADD COLUMN IF NOT EXISTS quality text",
     ] {
-        sqlx::query(statement).execute(pool).await.expect("schema");
+        crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
     }
 }
 
