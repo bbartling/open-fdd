@@ -8822,7 +8822,8 @@ mod version_tests {
             .connect(url)
             .await
             .unwrap();
-        sqlx::query(
+        crate::test_ddl::execute_idempotent_ddl(
+            &pool,
             "CREATE TABLE IF NOT EXISTS sample (
                 ts timestamptz NOT NULL,
                 site_id text NOT NULL,
@@ -8831,9 +8832,7 @@ mod version_tests {
                 PRIMARY KEY (site_id, openfdd_key, ts)
             )",
         )
-        .execute(&pool)
-        .await
-        .unwrap();
+        .await;
         for site in ["W1B_PG_OWN", "W1B_PG_VIEW", "W1B_PG_FOREIGN"] {
             sqlx::query("DELETE FROM sample WHERE site_id = $1")
                 .bind(site)

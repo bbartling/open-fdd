@@ -56,6 +56,8 @@ mod tenant_budget;
 #[cfg(test)]
 mod tenant_switch;
 #[cfg(test)]
+mod test_ddl;
+#[cfg(test)]
 mod test_env_lock;
 mod timescale_analytics;
 mod timescale_historian;

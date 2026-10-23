@@ -245,7 +245,7 @@ async fn switch_active_tenant_keeps_membership_and_denies_foreign_reads() {
             PRIMARY KEY (building_id, equipment_id)
         )",
     ] {
-        sqlx::query(statement).execute(&pool).await.expect("schema");
+        crate::test_ddl::execute_idempotent_ddl(&pool, statement).await;
     }
     for (site, equip) in [(&site_a, &equip_a), (&site_b, &equip_b)] {
         sqlx::query("DELETE FROM equipment WHERE building_id = $1")

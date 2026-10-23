@@ -245,7 +245,8 @@ async fn get_json(app: &axum::Router, path: &str) -> Value {
 }
 
 async fn apply_registry_schema(pool: &PgPool) {
-    sqlx::query(
+    crate::test_ddl::execute_idempotent_ddl(
+        pool,
         r#"
         CREATE TABLE IF NOT EXISTS fdd_rule_registry (
           rule_id text PRIMARY KEY,
@@ -260,16 +261,11 @@ async fn apply_registry_schema(pool: &PgPool) {
         )
         "#,
     )
-    .execute(pool)
-    .await
-    .expect("fdd_rule_registry");
+    .await;
     for column in ["equipment_kinds", "required_roles", "optional_roles"] {
-        sqlx::query(&format!(
-            "ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS {column} text[]"
-        ))
-        .execute(pool)
-        .await
-        .expect("registry column");
+        let statement =
+            format!("ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS {column} text[]");
+        crate::test_ddl::execute_idempotent_ddl(pool, &statement).await;
     }
 }
 

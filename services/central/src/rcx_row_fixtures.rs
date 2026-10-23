@@ -374,7 +374,7 @@ async fn apply_schema(pool: &PgPool) {
             PRIMARY KEY (site_id, openfdd_key, ts)
         )",
     ] {
-        sqlx::query(statement).execute(pool).await.expect("schema");
+        crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
     }
 }
 
