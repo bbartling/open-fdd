@@ -250,6 +250,13 @@ def run_suite_x(ctx: SuiteContext) -> None:
             "x.preauth.anon401.post_api_analytics_zone_other_health",
         ),
         ("/api/analytics/sensor-health", "x.preauth.anon401.post_api_analytics_sensor_health"),
+        # NF portal provider + ingest-queue read surfaces (cloud_portal profile).
+        ("/api/providers/health", "x.preauth.anon_providers_health_401"),
+        ("/api/providers/sites", "x.preauth.anon_providers_sites_401"),
+        ("/api/ingest/jobs", "x.preauth.anon401.get_api_ingest_jobs"),
+        ("/api/ingest/receipts", "x.preauth.anon401.get_api_ingest_receipts"),
+        ("/api/ingest/gaps", "x.preauth.anon401.get_api_ingest_gaps"),
+        ("/api/ingest/queue", "x.preauth.anon401.get_api_ingest_queue"),
     ):
         try:
             # Explicit POST for analytics mutations in this batch.
@@ -995,6 +1002,7 @@ def run_suite_y(ctx: SuiteContext) -> None:
         )
 
     # Viewer mutation: prove authenticated viewer read first; 401 ≠ role deny (E07).
+    viewer_confirmed = False
     if not tok_viewer and "viewer_a" in ctx.cfg.identities:
         _login_me(ctx, "viewer_a", "y.authz._login_viewer", default_user="viewer")
         tok_viewer = ctx.tokens.get("viewer_a")
@@ -1031,6 +1039,7 @@ def run_suite_y(ctx: SuiteContext) -> None:
                         detector_id="wrong_identity",
                     )
                 else:
+                    viewer_confirmed = True
                     r = ctx.client.request(
                         "POST",
                         "/api/auth/agent-token",
@@ -1367,6 +1376,188 @@ def run_suite_y(ctx: SuiteContext) -> None:
             )
         except TransportError as exc:
             ctx.check(foreign_cid, "Y", f"{path} foreign POST", "ERROR", detail=str(exc))
+
+    run_viewer_write_matrix(ctx, tok_viewer, tok_a, tok_b, viewer_confirmed)
+
+
+VIEWER_WRITE_ACTIONS = ("import", "append", "purge", "delete")
+VIEWER_WRITE_SCOPES = ("own", "foreign")
+VIEWER_PROBE_EQUIPMENT = "QA_VIEWER_PROBE"
+
+
+def viewer_write_check_ids() -> list[str]:
+    return [
+        f"y.authz.viewer_{action}_{scope}_denied"
+        for action in VIEWER_WRITE_ACTIONS
+        for scope in VIEWER_WRITE_SCOPES
+    ]
+
+
+def viewer_probe_package(building_id: str) -> bytes:
+    """Minimal ``openfdd_package_v1`` zip; a viewer must be refused before parse."""
+    import io
+    import zipfile
+
+    eq = VIEWER_PROBE_EQUIPMENT
+    manifest = {
+        "schema": "openfdd_package_v1",
+        "building_id": building_id,
+        "grid_minutes": 5,
+        "timezone": "UTC",
+    }
+    mapping = {
+        "equipment_id": eq,
+        "equipType": "ahu",
+        "columns": {"oat": {"role": "outside-air-temp", "unit": "degF"}},
+    }
+    csv_text = "timestamp_utc,oat\n2024-01-01T00:00:00Z,50.0\n2024-01-01T00:05:00Z,50.5\n"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, data in (
+            ("manifest.json", json.dumps(manifest, sort_keys=True)),
+            (f"{eq}/history_wide.json", json.dumps(mapping, sort_keys=True)),
+            (f"{eq}/history_wide.csv", csv_text),
+        ):
+            info = zipfile.ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0))
+            zf.writestr(info, data)
+    return buf.getvalue()
+
+
+def _persisted_fingerprint(ctx: SuiteContext, owner_token: str, building_id: str) -> str | None:
+    """Owner-visible persisted state for one site; ``None`` when unobservable."""
+    import hashlib
+
+    q = urlencode({"building_id": building_id})
+    parts: list[Any] = []
+    for path in (f"/api/datasets?{q}", f"/api/fdd/equipment?{q}"):
+        r = ctx.client.request("GET", path, token=owner_token)
+        if r.status != 200:
+            return None
+        try:
+            parts.append(json.loads(r.body.decode("utf-8")))
+        except Exception:
+            return None
+    blob = json.dumps(parts, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
+def _viewer_write_request(ctx: SuiteContext, token: str, action: str, building_id: str, equipment_id: str):
+    if action == "import":
+        return ctx.client.request(
+            "POST",
+            "/api/csv/import/package",
+            token=token,
+            body=viewer_probe_package(building_id),
+            headers={"Content-Type": "application/zip"},
+        )
+    if action == "append":
+        return ctx.client.request(
+            "POST",
+            "/api/csv/import/package/append",
+            token=token,
+            json_body={
+                "confirm": True,
+                "building_id": building_id,
+                "equipment_id": equipment_id,
+                "csv": "timestamp_utc,oat\n2099-01-01T00:00:00Z,1.0\n",
+            },
+        )
+    if action == "purge":
+        return ctx.client.request(
+            "DELETE", "/api/datasets?" + urlencode({"building_id": building_id}), token=token
+        )
+    return ctx.client.request("DELETE", "/api/datasets?" + urlencode({"id": building_id}), token=token)
+
+
+_VIEWER_WRITE_PATHS = {
+    "import": ("POST", "/api/csv/import/package"),
+    "append": ("POST", "/api/csv/import/package/append"),
+    "purge": ("DELETE", "/api/datasets"),
+    "delete": ("DELETE", "/api/datasets"),
+}
+
+
+def run_viewer_write_matrix(
+    ctx: SuiteContext,
+    tok_viewer: str | None,
+    tok_a: str | None,
+    tok_b: str | None,
+    viewer_confirmed: bool,
+) -> None:
+    """Viewer x {own, foreign} site x {import, append, purge, delete}.
+
+    PASS needs a role deny (403 + ``ok:false``; foreign may also be 404) AND an
+    unchanged owner-visible fingerprint of the target site before/after.
+    """
+    fx = ctx.fx
+    targets = {
+        "own": (fx.building_a, fx.equipment_a, tok_a, "operator_a"),
+        "foreign": (fx.building_b, fx.equipment_b, tok_b, "operator_b"),
+    }
+    for action in VIEWER_WRITE_ACTIONS:
+        method, path = _VIEWER_WRITE_PATHS[action]
+        for scope in VIEWER_WRITE_SCOPES:
+            cid = f"y.authz.viewer_{action}_{scope}_denied"
+            title = f"viewer {action} on {scope} site denied without side effect"
+            common = {"method": method, "path_template": path, "detector_id": "viewer_mutation"}
+            if ctx.profile != "isolated_full":
+                ctx.check(
+                    cid, "Y", title, "NOT_APPLICABLE",
+                    detail=f"mutating probe only runs in isolated_full (profile={ctx.profile})",
+                    **common,
+                )
+                continue
+            if not ctx.allow_fixture_writes:
+                ctx.check(cid, "Y", title, "BLOCKED", detail="requires --allow-fixture-writes", **common)
+                continue
+            building, equipment, owner_tok, owner_name = targets[scope]
+            if not tok_viewer or not viewer_confirmed:
+                ctx.check(
+                    cid, "Y", title, "BLOCKED",
+                    detail="viewer identity not confirmed via /api/auth/me", **common,
+                )
+                continue
+            if not owner_tok:
+                ctx.check(
+                    cid, "Y", title, "BLOCKED",
+                    detail=f"{owner_name} credentials missing; side effect unobservable", **common,
+                )
+                continue
+            try:
+                before = _persisted_fingerprint(ctx, owner_tok, building)
+                if before is None:
+                    ctx.check(
+                        cid, "Y", title, "BLOCKED",
+                        detail="owner could not read site state before attempt", **common,
+                    )
+                    continue
+                r = _viewer_write_request(ctx, tok_viewer, action, building, equipment)
+                after = _persisted_fingerprint(ctx, owner_tok, building)
+            except TransportError as exc:
+                ctx.check(cid, "Y", title, "ERROR", detail=str(exc), **common)
+                continue
+            allowed_deny = (403,) if scope == "own" else (403, 404)
+            denied = r.status in allowed_deny and _deny_envelope(r.body)
+            if after is None:
+                st, detail, det = "ERROR", "owner could not read site state after attempt", "viewer_mutation"
+            elif after != before:
+                st, detail, det = "FAIL", f"persisted state changed (status {r.status})", "viewer_write_side_effect"
+            elif r.status == 401:
+                st, detail, det = "ERROR", "401 is not viewer-role denial proof", "viewer_mutation"
+            elif 200 <= r.status < 300:
+                st, detail, det = "FAIL", "viewer write accepted", "viewer_write_allowed"
+            elif denied:
+                st, detail, det = "PASS", None, "viewer_mutation"
+            else:
+                st, detail, det = "FAIL", "expected structured role deny", "viewer_mutation"
+            common["detector_id"] = det
+            ctx.check(
+                cid, "Y", title, st,
+                expected="/".join(str(s) for s in allowed_deny) + "+ok:false, state unchanged",
+                observed=_status_of(r),
+                detail=detail,
+                **common,
+            )
 
 
 def _deny_envelope(body: bytes) -> bool:

@@ -26,7 +26,50 @@ def _json(handler: BaseHTTPRequestHandler, code: int, obj) -> None:
     handler.wfile.write(raw)
 
 
+def _claims(token: str | None) -> dict:
+    if not token or token.count(".") != 2:
+        return {}
+    import base64
+
+    part = token.split(".")[1]
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _zip_building(raw: bytes) -> str:
+    import io
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            return str(json.loads(zf.read("manifest.json")).get("building_id") or "")
+    except Exception:
+        return ""
+
+
+def _mutate(site: dict, action: str) -> None:
+    site["generation"] += 1
+    if action == "import":
+        site["equipment"] = sorted(set(site["equipment"]) | {"QA_VIEWER_PROBE"})
+    elif action == "append":
+        site["rows"] += 1
+    else:
+        site["rows"] = 0
+        site["equipment"] = []
+
+
+SITE_TENANT = {"BUILDING_A": "tenant_a", "BUILDING_B": "tenant_b"}
+VIEWER_WRITE_MODES = ("viewer_write_allowed", "viewer_write_side_effect")
+
+
 def make_handler(mode: str) -> type[BaseHTTPRequestHandler]:
+    # Persisted per-site state the viewer write matrix fingerprints via GET /api/datasets.
+    sites = {bid: {"rows": 100, "equipment": [f"AHU_{bid[-1]}"], "generation": 0} for bid in SITE_TENANT}
+    lock = threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args) -> None:  # noqa: A003
             return
@@ -36,6 +79,29 @@ def make_handler(mode: str) -> type[BaseHTTPRequestHandler]:
             if h.startswith("Bearer "):
                 return h[7:].strip()
             return None
+
+        def _site_write(self, action: str, building_id: str) -> None:
+            token = self._auth()
+            if not token:
+                return _json(self, 401, {"ok": False, "error": "unauthorized"})
+            claims = _claims(token)
+            role = str(claims.get("role") or "")
+            tids = list(claims.get("tenant_ids") or [])
+            site = sites.get(building_id)
+            if role == "viewer":
+                if mode in VIEWER_WRITE_MODES and site is not None:
+                    with lock:
+                        _mutate(site, action)
+                if mode == "viewer_write_allowed":
+                    return _json(self, 200, {"ok": True})
+                return _json(self, 403, {"ok": False, "error": "operator or admin role required"})
+            if site is None:
+                return _json(self, 404, {"ok": False, "error": "unknown site"})
+            if role != "admin" and SITE_TENANT[building_id] not in tids:
+                return _json(self, 403, {"ok": False, "error": "forbidden"})
+            with lock:
+                _mutate(site, action)
+            return _json(self, 200, {"ok": True})
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
@@ -118,6 +184,8 @@ def make_handler(mode: str) -> type[BaseHTTPRequestHandler]:
                 "html_200",
                 "foreign_canary",
                 "viewer_mutation",
+                "viewer_write_allowed",
+                "viewer_write_side_effect",
                 "cors_evil",
                 "wrong_identity",
             ):
@@ -261,6 +329,19 @@ def make_handler(mode: str) -> type[BaseHTTPRequestHandler]:
             if path == "/api/admin/users":
                 return _json(self, 403, {"ok": False})
 
+            if path == "/api/datasets":
+                bid = (qs.get("building_id") or qs.get("id") or [""])[0]
+                claims = _claims(token)
+                tids = list(claims.get("tenant_ids") or [])
+                site = sites.get(bid)
+                if site is None:
+                    return _json(self, 404, {"ok": False})
+                if claims.get("role") != "admin" and SITE_TENANT[bid] not in tids:
+                    return _json(self, 403, {"ok": False, "error": "forbidden"})
+                with lock:
+                    snap = {"id": bid, **site, "equipment": list(site["equipment"])}
+                return _json(self, 200, {"ok": True, "datasets": [snap]})
+
             if path.startswith("/api/"):
                 return _json(self, 401, {"ok": False})
 
@@ -309,7 +390,21 @@ def make_handler(mode: str) -> type[BaseHTTPRequestHandler]:
                     return _json(self, 200, {"token": make_valid_token(SECRET)})
                 return _json(self, 403, {"ok": False})
 
+            if path == "/api/csv/import/package":
+                return self._site_write("import", _zip_building(raw))
+            if path == "/api/csv/import/package/append":
+                return self._site_write("append", str(body.get("building_id") or ""))
+
             return _json(self, 404, {"ok": False})
+
+        def do_DELETE(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            qs = parse_qs(parsed.query)
+            if parsed.path != "/api/datasets":
+                return _json(self, 404, {"ok": False})
+            bid = (qs.get("id") or qs.get("building_id") or [""])[0]
+            action = "delete" if qs.get("id") else "purge"
+            return self._site_write(action, bid)
 
         def do_OPTIONS(self) -> None:  # noqa: N802
             origin = self.headers.get("Origin") or ""

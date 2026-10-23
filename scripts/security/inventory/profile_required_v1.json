@@ -56,7 +56,15 @@
         "y.detector.always_401_invalidates_authz",
         "y.detector.empty_200_not_deny",
         "y.detector.html_200_not_deny",
-        "y.detector.foreign_canary_leak"
+        "y.detector.foreign_canary_leak",
+        "y.authz.viewer_import_own_denied",
+        "y.authz.viewer_import_foreign_denied",
+        "y.authz.viewer_append_own_denied",
+        "y.authz.viewer_append_foreign_denied",
+        "y.authz.viewer_purge_own_denied",
+        "y.authz.viewer_purge_foreign_denied",
+        "y.authz.viewer_delete_own_denied",
+        "y.authz.viewer_delete_foreign_denied"
       ],
       "Z": [
         "z.deploy.security_txt",

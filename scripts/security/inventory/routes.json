@@ -6,8 +6,8 @@
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
   "route_count": 190,
   "disposition_counts": {
-    "IMPLEMENTED": 30,
-    "PLANNED": 131,
+    "IMPLEMENTED": 39,
+    "PLANNED": 122,
     "BLOCKED_POLICY": 29
   },
   "routes": [
@@ -261,7 +261,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -271,12 +271,19 @@
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
         "x.preauth.anon401.post_api_csv_import_package",
-        "y.authz.post_api_csv_import_package"
+        "y.authz.post_api_csv_import_package",
+        "y.authz.viewer_import_own_denied",
+        "y.authz.viewer_import_foreign_denied"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "y.authz.viewer_import_own_denied",
+        "y.authz.viewer_import_foreign_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.post_api_csv_import_package",
-        "y.authz.post_api_csv_import_package"
+        "y.authz.post_api_csv_import_package",
+        "y.authz.viewer_import_own_denied",
+        "y.authz.viewer_import_foreign_denied"
       ],
       "request_schema": {
         "type": "unknown",
@@ -299,7 +306,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -309,12 +316,19 @@
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
         "x.preauth.anon401.post_api_csv_import_package_append",
-        "y.authz.post_api_csv_import_package_append"
+        "y.authz.post_api_csv_import_package_append",
+        "y.authz.viewer_append_own_denied",
+        "y.authz.viewer_append_foreign_denied"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "y.authz.viewer_append_own_denied",
+        "y.authz.viewer_append_foreign_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.post_api_csv_import_package_append",
-        "y.authz.post_api_csv_import_package_append"
+        "y.authz.post_api_csv_import_package_append",
+        "y.authz.viewer_append_own_denied",
+        "y.authz.viewer_append_foreign_denied"
       ],
       "request_schema": {
         "type": "unknown",
@@ -493,7 +507,7 @@
         "identity",
         "semantic_meta"
       ],
-      "notes": "C3 strict Haystack TTL; suite emission follow-up \u2014 preauth covered in preauth_disclosure.rs"
+      "notes": "C3 strict Haystack TTL; suite emission follow-up — preauth covered in preauth_disclosure.rs"
     },
     {
       "method": "GET",
@@ -1011,7 +1025,7 @@
       "section": "csv",
       "auth": "jwt_required",
       "policy": "tenant_building_acl",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -1021,12 +1035,25 @@
       "source": "services/central/src/routes.rs",
       "planned_check_ids": [
         "x.preauth.anon401.delete_api_datasets",
-        "y.authz.delete_api_datasets"
+        "y.authz.delete_api_datasets",
+        "y.authz.viewer_purge_own_denied",
+        "y.authz.viewer_purge_foreign_denied",
+        "y.authz.viewer_delete_own_denied",
+        "y.authz.viewer_delete_foreign_denied"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "y.authz.viewer_purge_own_denied",
+        "y.authz.viewer_purge_foreign_denied",
+        "y.authz.viewer_delete_own_denied",
+        "y.authz.viewer_delete_foreign_denied"
+      ],
       "check_ids": [
         "x.preauth.anon401.delete_api_datasets",
-        "y.authz.delete_api_datasets"
+        "y.authz.delete_api_datasets",
+        "y.authz.viewer_purge_own_denied",
+        "y.authz.viewer_purge_foreign_denied",
+        "y.authz.viewer_delete_own_denied",
+        "y.authz.viewer_delete_foreign_denied"
       ],
       "request_schema": {
         "type": "unknown",
@@ -1163,7 +1190,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_scoped_provider_health",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         401,
         403
@@ -1176,7 +1203,9 @@
         "x.preauth.anon_providers_health_401",
         "y.authz.get_api_providers_health"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon_providers_health_401"
+      ],
       "check_ids": [
         "x.preauth.anon_providers_health_401",
         "y.authz.get_api_providers_health"
@@ -1205,7 +1234,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "tenant_scoped_provider_health",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         401,
         403
@@ -1218,7 +1247,9 @@
         "x.preauth.anon_providers_sites_401",
         "y.authz.get_api_providers_sites"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon_providers_sites_401"
+      ],
       "check_ids": [
         "x.preauth.anon_providers_sites_401",
         "y.authz.get_api_providers_sites"
@@ -2239,7 +2270,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN R8a: tip-safe read-only seed_meta + pinned contract probe (no migrator apply); hub admin; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN R8a: tip-safe read-only seed_meta + pinned contract probe (no migrator apply); hub admin; Soft-OPEN ≠ FQ"
     },
     {
       "method": "GET",
@@ -2899,7 +2930,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Wave-X C12 lean Plotly: catalog roles, max_points\u22481500, Timescale downsample"
+      "notes": "Wave-X C12 lean Plotly: catalog roles, max_points≈1500, Timescale downsample"
     },
     {
       "method": "GET",
@@ -2937,7 +2968,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN R4: lean plot role catalog per rule (Timescale); Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN R4: lean plot role catalog per rule (Timescale); Soft-OPEN ≠ FQ"
     },
     {
       "method": "GET",
@@ -6409,7 +6440,7 @@
         "identity",
         "semantic_meta"
       ],
-      "notes": "Wave-X C13: JSON {query,building_id} \u2264200KiB playground upload alias"
+      "notes": "Wave-X C13: JSON {query,building_id} ≤200KiB playground upload alias"
     },
     {
       "method": "GET",
@@ -6447,7 +6478,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "C4 H9: server SPARQL templates \u2192 ofdd_haystack_typed_bindings_v1; free-form query rejected"
+      "notes": "C4 H9: server SPARQL templates → ofdd_haystack_typed_bindings_v1; free-form query rejected"
     },
     {
       "method": "POST",
@@ -6486,7 +6517,7 @@
         "identity",
         "semantic_meta"
       ],
-      "notes": "C4 H10/H11: typed bindings \u2192 FDD role_map + history approved series + ECM plan"
+      "notes": "C4 H10/H11: typed bindings → FDD role_map + history approved series + ECM plan"
     },
     {
       "method": "GET",
@@ -6524,7 +6555,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN R5: opaque point IRI \u2192 openfdd_key (+ optional Timescale history); Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN R5: opaque point IRI → openfdd_key (+ optional Timescale history); Soft-OPEN ≠ FQ"
     },
     {
       "method": "GET",
@@ -6563,7 +6594,7 @@
         "identity",
         "semantic_meta"
       ],
-      "notes": "Soft-OPEN BPS-compatible alias \u2192 strict Haystack projection Turtle; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN BPS-compatible alias → strict Haystack projection Turtle; Soft-OPEN ≠ FQ"
     },
     {
       "method": "GET",
@@ -6601,7 +6632,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: tip semantic_meta + revision read; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: tip semantic_meta + revision read; Soft-OPEN ≠ FQ"
     },
     {
       "method": "PUT",
@@ -6639,7 +6670,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: dry_run + expected_revision CAS on openfdd_semantic_meta_v1; viewer deny; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: dry_run + expected_revision CAS on openfdd_semantic_meta_v1; viewer deny; Soft-OPEN ≠ FQ"
     },
     {
       "method": "GET",
@@ -6677,7 +6708,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: BPS-compatible agent recipe bundle (revision + lean model_tree + mutate recipes); semantic_meta primary + overlay sidecar; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: BPS-compatible agent recipe bundle (revision + lean model_tree + mutate recipes); semantic_meta primary + overlay sidecar; Soft-OPEN ≠ FQ"
     },
     {
       "method": "GET",
@@ -6715,7 +6746,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: BPS-compatible Turtle overlay read (sidecar; not SPARQL pack authority); Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: BPS-compatible Turtle overlay read (sidecar; not SPARQL pack authority); Soft-OPEN ≠ FQ"
     },
     {
       "method": "PUT",
@@ -6753,7 +6784,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: Turtle overlay dry_run + expected_revision CAS; viewer deny; not SPARQL union; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: Turtle overlay dry_run + expected_revision CAS; viewer deny; not SPARQL union; Soft-OPEN ≠ FQ"
     },
     {
       "method": "POST",
@@ -6791,7 +6822,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: BPS POST equip upsert into overlay TTL (dry_run + CAS); viewer deny; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: BPS POST equip upsert into overlay TTL (dry_run + CAS); viewer deny; Soft-OPEN ≠ FQ"
     },
     {
       "method": "DELETE",
@@ -6829,7 +6860,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: BPS DELETE equip tombstone on overlay; pack immutable; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: BPS DELETE equip tombstone on overlay; pack immutable; Soft-OPEN ≠ FQ"
     },
     {
       "method": "POST",
@@ -6867,7 +6898,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: BPS POST point upsert into overlay TTL (dry_run + CAS); viewer deny; Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: BPS POST point upsert into overlay TTL (dry_run + CAS); viewer deny; Soft-OPEN ≠ FQ"
     },
     {
       "method": "DELETE",
@@ -6905,7 +6936,7 @@
       "fixture_needs": [
         "identity"
       ],
-      "notes": "Soft-OPEN: BPS DELETE point tombstone on overlay (+ also_exclude); Soft-OPEN \u2260 FQ"
+      "notes": "Soft-OPEN: BPS DELETE point tombstone on overlay (+ also_exclude); Soft-OPEN ≠ FQ"
     },
     {
       "method": "GET",
@@ -6913,7 +6944,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -6925,7 +6956,9 @@
         "x.preauth.anon401.get_api_ingest_jobs",
         "y.authz.get_api_ingest_jobs"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_jobs"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_ingest_jobs",
         "y.authz.get_api_ingest_jobs"
@@ -7027,7 +7060,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -7039,7 +7072,9 @@
         "x.preauth.anon401.get_api_ingest_receipts",
         "y.authz.get_api_ingest_receipts"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_receipts"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_ingest_receipts",
         "y.authz.get_api_ingest_receipts"
@@ -7103,7 +7138,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -7115,7 +7150,9 @@
         "x.preauth.anon401.get_api_ingest_gaps",
         "y.authz.get_api_ingest_gaps"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_gaps"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_ingest_gaps",
         "y.authz.get_api_ingest_gaps"
@@ -7141,7 +7178,7 @@
       "section": "protected",
       "auth": "jwt_required",
       "policy": "authenticated",
-      "disposition": "PLANNED",
+      "disposition": "IMPLEMENTED",
       "deny_statuses": [
         403
       ],
@@ -7153,7 +7190,9 @@
         "x.preauth.anon401.get_api_ingest_queue",
         "y.authz.get_api_ingest_queue"
       ],
-      "implemented_check_ids": [],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_queue"
+      ],
       "check_ids": [
         "x.preauth.anon401.get_api_ingest_queue",
         "y.authz.get_api_ingest_queue"
@@ -7251,15 +7290,15 @@
     }
   ],
   "counts": {
-    "IMPLEMENTED": 30,
+    "IMPLEMENTED": 39,
     "PLANNED": 122,
     "BLOCKED_POLICY": 29,
-    "implemented": 30,
+    "implemented": 39,
     "planned": 122,
     "blocked_policy": 29
   },
   "summary": {
-    "IMPLEMENTED": 30,
+    "IMPLEMENTED": 39,
     "PLANNED": 122,
     "BLOCKED_POLICY": 29
   }
