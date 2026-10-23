@@ -73,7 +73,7 @@ This is the release-outcome index. [Wave U master](docs/operations/WAVE_U_MASTER
 
 | Issue | Disposition | Close only when |
 | --- | --- | --- |
-| [#999](https://github.com/bbartling/open-fdd/issues/999) | Absorb / Soft-OPEN | Own-object controls + `auth_me_in_zap_report=true` on live AF |
+| [#999](https://github.com/bbartling/open-fdd/issues/999) | Absorb / Soft-OPEN | Own-object controls + `scanner_auth_verified=true` (ZAP message-history probes) on live AF |
 | [#1127](https://github.com/bbartling/open-fdd/issues/1127) | Absorb / Soft-OPEN | Combined analytics/AFDD survival under budget + memory acceptance |
 | [#1149](https://github.com/bbartling/open-fdd/issues/1149) | Absorb tip landed | Live tip prove of non-empty BUILDING_100 export |
 | [#1151](https://github.com/bbartling/open-fdd/issues/1151) | Absorb tip landed | Live tip prove of suspend ack + no leave-behind |

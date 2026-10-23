@@ -1,71 +1,145 @@
-# Authenticated ZAP Automation Framework plan (Wave U U5 / Astra C-ZAP)
-# Disposable web+central only — OT drivers disabled/unreachable.
-# Do NOT upload JWT files; inject via env at runtime and delete after.
+# Authenticated ZAP Automation Framework plan (disposable web+central only).
 #
-# Coverage gates (must be asserted by run_af_disposable.py):
-# - verified authenticated /api/auth/me (HTTP 200 + JSON role/subject)
-# - site[] nonempty matching ZAP_TARGET_ORIGIN
-# - jobs complete without failOnError=false swallowing errors
-# - High=0 and undispositioned Medium=0
+# This file is a template. run_af_disposable.py validates it, substitutes the
+# non-secret placeholders below into the parsed structure, inserts the
+# optional activeScan job, and writes the rendered plan into the work dir.
 #
-# Active scan: enable only when OPENFDD_ZAP_AF_ACTIVE=1 on disposable candidate.
+#   ${ZAP_TARGET_ORIGIN}   exact disposable origin (validated before any credential is read)
+#   ${ZAP_SCOPE_REGEX}     ^re.escape(origin)(?:[/?#].*)?$
+#   ${ZAP_PROBE_NONCE}     per-run nonce tagging the scanner auth probes
+#   ${ZAP_LOGGED_IN_REGEX} matches the expected non-secret username in /api/auth/me
+#   ${ZAP_REPORT_DIR}      scanner output directory
+#   ${ZAP_PLAN_MAX_SECONDS} plan wall-clock cap (the runner also enforces its own)
+#
+# The scanner credential is never referenced here. ZAP reads it from the
+# system-level ZAP_AUTH_HEADER_VALUE env var (scoped by ZAP_AUTH_HEADER_SITE);
+# AF ignores those vars when defined in the env section.
+#
+# Authentication proof is scanner-origin only: the three requestor probes are
+# exported from ZAP's own message history (export job, source=all) and the
+# runner requires each probe to carry the credential and return 200 JSON with
+# the expected username, in order before/during/after the scan jobs.
 
 env:
   contexts:
     - name: openfdd-disposable
       urls:
-        # Prefer SPA root on web+central disposable; health remains a 200 seed.
         - "${ZAP_TARGET_ORIGIN}/"
-        - "${ZAP_TARGET_ORIGIN}/api/health"
-        # Seed scanner-origin authenticated /api/auth/me so AF report proves
-        # session traffic (preflight alone is insufficient) (#999).
-        - "${ZAP_TARGET_ORIGIN}/api/auth/me"
       includePaths:
-        - "${ZAP_TARGET_ORIGIN}.*"
+        - "${ZAP_SCOPE_REGEX}"
       authentication:
         method: "manual"
-        # Prefer header injection from env — never commit tokens:
-        # ZAP_AUTH_HEADER_VALUE="Bearer <ephemeral>"
-      sessionManagement:
-        method: "headers"
-        parameters:
-          Authorization: "${ZAP_AUTH_HEADER_VALUE}"
-      users: []
+        verification:
+          method: "poll"
+          pollFrequency: 60
+          pollUnits: "requests"
+          pollUrl: "${ZAP_TARGET_ORIGIN}/api/auth/me"
+          loggedInRegex: "${ZAP_LOGGED_IN_REGEX}"
+          loggedOutRegex: "\"ok\"\\s*:\\s*false"
+      users:
+        - name: "openfdd-scanner"
+  parameters:
+    failOnError: true
+    failOnWarning: false
+    continueOnFailure: false
+    progressToStdout: true
+    maxDuration: "${ZAP_PLAN_MAX_SECONDS}"
 
 jobs:
-  # Prefer a staged OpenAPI file. nginx SPA may serve HTML for /openapi.json;
-  # run_af_disposable.py fetches the central spec into /zap/wrk before AF runs.
+  - type: requestor
+    name: auth-probe-before
+    parameters:
+      user: "openfdd-scanner"
+    requests:
+      - url: "${ZAP_TARGET_ORIGIN}/api/auth/me"
+        name: auth-probe-before
+        method: GET
+        headers:
+          - "X-OpenFDD-Auth-Probe:before-${ZAP_PROBE_NONCE}"
+          - "Accept:application/json"
+        responseCode: 200
+    tests:
+      - name: scanner-auth-loggedin-before
+        type: stats
+        statistic: stats.auth.state.loggedin
+        site: "${ZAP_TARGET_ORIGIN}"
+        operator: ">="
+        value: 1
+        onFail: error
+
+  # The runner stages a real OpenAPI document into the work dir (nginx SPA may
+  # serve HTML for /openapi.json) and binds servers[] to the target origin.
   - type: openapi
     parameters:
-      apiFile: "/zap/wrk/openapi.json"
-      # targetUrl supplements specs that omit servers[] (also injected at stage).
+      apiFile: "${ZAP_REPORT_DIR}/openapi.json"
       targetUrl: "${ZAP_TARGET_ORIGIN}"
       context: openfdd-disposable
+
+  - type: requestor
+    name: auth-probe-during
+    parameters:
+      user: "openfdd-scanner"
+    requests:
+      - url: "${ZAP_TARGET_ORIGIN}/api/auth/me"
+        name: auth-probe-during
+        method: GET
+        headers:
+          - "X-OpenFDD-Auth-Probe:during-${ZAP_PROBE_NONCE}"
+          - "Accept:application/json"
+        responseCode: 200
 
   - type: spider
     parameters:
       context: openfdd-disposable
+      user: "openfdd-scanner"
       url: "${ZAP_TARGET_ORIGIN}/"
       maxDuration: 5
 
-  # Authenticated /api/auth/me coverage is asserted by run_af_disposable.py
-  # preflight (status + identity schema). Do not use ZAP job type "request" —
-  # older zaproxydocker digests reject it ("Unrecognised job type: request").
-  # Do not treat report URL text containing /api/auth/me as authenticated proof.
+  # maxDuration 0 waits until the passive scan queue is empty; the runner's
+  # wall-clock budget bounds the wait.
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 0
+
+  # activeScan + passiveScan-wait are inserted here when OPENFDD_ZAP_AF_ACTIVE=1.
+
+  - type: requestor
+    name: auth-probe-after
+    parameters:
+      user: "openfdd-scanner"
+    requests:
+      - url: "${ZAP_TARGET_ORIGIN}/api/auth/me"
+        name: auth-probe-after
+        method: GET
+        headers:
+          - "X-OpenFDD-Auth-Probe:after-${ZAP_PROBE_NONCE}"
+          - "Accept:application/json"
+        responseCode: 200
+    tests:
+      - name: scanner-auth-loggedin-after
+        type: stats
+        statistic: stats.auth.state.loggedin
+        site: "${ZAP_TARGET_ORIGIN}"
+        operator: ">="
+        value: 1
+        onFail: error
 
   - type: passiveScan-wait
     parameters:
-      maxDuration: 10
+      maxDuration: 0
 
-  # Active scan: inserted by run_af_disposable.py when OPENFDD_ZAP_AF_ACTIVE=1.
-  # - type: activeScan
-  #   parameters:
-  #     context: openfdd-disposable
-  #     policy: "Default Policy"
-  #     maxRuleDurationInMins: 5
-  #     maxScanDurationInMins: 30
+  # Secret-bearing (request headers): the runner hashes it, derives a
+  # redacted evidence summary, and deletes it. It is never archived.
+  - type: export
+    alwaysRun: true
+    parameters:
+      context: openfdd-disposable
+      type: har
+      source: all
+      fileName: "${ZAP_REPORT_DIR}/zap-af-messages.har"
 
   - type: report
+    alwaysRun: true
     parameters:
       template: traditional-json
       reportDir: "${ZAP_REPORT_DIR}"

@@ -1,0 +1,45 @@
+{
+  "@programName": "ZAP",
+  "@version": "2.16.0",
+  "@generated": "Thu, 22 Oct 2026 23:00:00",
+  "site": [
+    {
+      "@name": "__ORIGIN__",
+      "@host": "127.0.0.1",
+      "@port": "18080",
+      "@ssl": "false",
+      "alerts": [
+        {
+          "pluginid": "10055",
+          "alertRef": "10055-6",
+          "alert": "CSP: style-src unsafe-inline",
+          "name": "CSP: style-src unsafe-inline",
+          "riskcode": "2",
+          "confidence": "3",
+          "riskdesc": "Medium (High)",
+          "desc": "<p>fixture</p>",
+          "instances": [
+            {
+              "id": "11",
+              "uri": "__ORIGIN__/",
+              "nodeName": "__ORIGIN__/",
+              "method": "GET",
+              "param": "Content-Security-Policy",
+              "attack": "",
+              "evidence": "default-src 'self'; style-src 'self' 'unsafe-inline'",
+              "otherinfo": ""
+            }
+          ],
+          "count": "1",
+          "systemic": false,
+          "solution": "<p>fixture</p>",
+          "otherinfo": "",
+          "reference": "",
+          "cweid": "693",
+          "wascid": "15",
+          "sourceid": "1"
+        }
+      ]
+    }
+  ]
+}

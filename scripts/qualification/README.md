@@ -111,8 +111,8 @@ python3 -B scripts/qualification/write_manifest.py selftest
 | `write_manifest.py` | Create / record / finalize / selftest |
 | `zap_baseline_verdict.py` | Parse ZAP JSON; High always fails; Medium explicit |
 | `run_wave_c_isolated.sh` | Wave C entry: MQTTS isolation + restore-to-empty + ZAP AF |
-| `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint disposable **web+central** from GHCR, then call `zap/run_af_disposable.py` (single evaluator). Digest-pinned ZAP. Default `OPENFDD_MULTI_TENANT=0`. **Never** activeScan live Railway OT; no fallback crawl. |
-| `zap/run_af_disposable.py` | Single ZAP AF evaluator (A06–A07): plan hygiene, verified `/api/auth/me` (status+identity schema), digest pin gate, High/Medium verdict. `--selftest` → **BLOCKED**. Execute via `OPENFDD_ZAP_AF_EXECUTE=1`. |
+| `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint disposable **web+central** from GHCR, run the broken-credential negative control, then call `zap/run_af_disposable.py` (single evaluator). Secrets by env name / stdin / private file only. Digest-pinned ZAP. Default `OPENFDD_MULTI_TENANT=0`. **Never** activeScan live Railway OT; no fallback crawl. |
+| `zap/run_af_disposable.py` | Single ZAP AF evaluator: exact disposable origin (loopback or runner-owned docker network) checked before any credential is read; anchored scope; scanner-origin `/api/auth/me` probes before/during/after the scan proven from ZAP's exported message history (credential + 200 JSON + expected username); strict typed alert parsing; per-instance Medium dispositions (`medium_dispositions.json` v2) with expiry; write-once raw report + SHA-256 with separate derived files; wall-clock/request budgets, owned-process/container cleanup on timeout or cancel; passive-scan drain check. `--selftest` → **BLOCKED**; `--negative-control` must reject a broken scanner credential. Execute via `OPENFDD_ZAP_AF_EXECUTE=1`. |
 | `zap/run_af_disposable.sh` | Thin shell alias to `run_af_disposable.py`. |
 | `restore_to_empty.sh` | Backup → empty volume restore + bounded API budgets |
 | `../integration/mqtts_transport_isolation.sh` | Disposable MQTTS cert/ACL/QoS/reconnect |

@@ -47,7 +47,10 @@ OPENFDD_HTTPS_PEER_PROBE=1 ./scripts/security/probe_standalone_https.sh
 # When licensed scan exists (private artifact):
 python3 scripts/security/nessus/import_nessus_report.py \
   --report /path/to/private.nessus --require-credentialed --out reports/nessus/measured.json
-# Disposable authenticated ZAP AF (JWT via env only — never argv):
-# OPENFDD_ZAP_AF_EXECUTE=1 ZAP_TARGET_ORIGIN=http://… \
-#   ZAP_AUTH_HEADER_VALUE="Bearer …" ./scripts/qualification/zap/run_af_disposable.sh
+# Disposable authenticated ZAP AF (credential via private 0600 file or env — never argv).
+# Target must be loopback or web/central on a runner-owned openfdd-zap-af-* network.
+# Authenticated coverage is claimed only from ZAP's own message history.
+# OPENFDD_ZAP_AF_EXECUTE=1 ZAP_TARGET_ORIGIN=http://127.0.0.1:<port> \
+#   OPENFDD_ZAP_EXPECTED_USERNAME=admin ZAP_AUTH_HEADER_FILE=/private/0600/file \
+#   ./scripts/qualification/zap/run_af_disposable.sh [--negative-control]
 ```

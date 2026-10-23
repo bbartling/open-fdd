@@ -1,0 +1,46 @@
+{
+  "@programName": "ZAP",
+  "@version": "2.16.0",
+  "@generated": "Thu, 22 Oct 2026 23:00:00",
+  "created": "2026-10-22T23:00:00.000Z",
+  "site": [
+    {
+      "@name": "__ORIGIN__",
+      "@host": "127.0.0.1",
+      "@port": "18080",
+      "@ssl": "false",
+      "alerts": [
+        {
+          "pluginid": "10049",
+          "alertRef": "10049",
+          "alert": "Storable and Cacheable Content",
+          "name": "Storable and Cacheable Content",
+          "riskcode": "0",
+          "confidence": "2",
+          "riskdesc": "Informational (Medium)",
+          "desc": "<p>fixture</p>",
+          "instances": [
+            {
+              "id": "7",
+              "uri": "__ORIGIN__/api/auth/me",
+              "nodeName": "__ORIGIN__/api/auth/me",
+              "method": "GET",
+              "param": "",
+              "attack": "",
+              "evidence": "",
+              "otherinfo": ""
+            }
+          ],
+          "count": "1",
+          "systemic": false,
+          "solution": "<p>fixture</p>",
+          "otherinfo": "",
+          "reference": "",
+          "cweid": "524",
+          "wascid": "13",
+          "sourceid": "3"
+        }
+      ]
+    }
+  ]
+}
