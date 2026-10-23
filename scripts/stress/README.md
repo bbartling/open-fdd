@@ -35,6 +35,26 @@ Full write-up: [`docs/operations/SQL_PANDAS_QUALITY_CONTRACT.md`](../../docs/ope
 | H | `10_model_crud_helpers.py` | `PUT /api/model/semantic-meta` dry_run + CAS; overlay Turtle; `POST /api/model/equip` dry_run; agent-context; `/api/model/ttl`; SPARQL pack ∪ overlay | Soft-OPEN (≠ C2–C6 FQ) |
 | Runner | `run_gate.py` + `helpers.py` | `--host` / `--base-url` JWT | **This PR (T12)** |
 
+### Gate verdict (fail-closed, QA-01)
+
+`run_gate.py` prints a per-step summary and one verdict. Required steps are 01,
+03, 08, 09 and 10. 02, seed and 04–07 are optional: when absent they are
+reported `NOT_LANDED`, and when present they run and must pass.
+
+| Verdict | Exit | When |
+| --- | --- | --- |
+| `PASS` | 0 | Every required step exited 0 **and** wrote a `PASS` result file |
+| `FAIL` | 1 | Any step exited non-zero (other than 2), timed out (`--step-timeout`, default 1800 s), or exited 0 with a non-PASS result file |
+| `BLOCKED` | 2 | A required step is missing or skipped (`--skip-b50-parity`, `--skip-analytics`), exited 2, or exited 0 without a result file |
+
+Each child records its verdict through `helpers.run_child` to the path in
+`OPENFDD_STRESS_RESULT_FILE`. Gate 08 compares only the single SQL row with exact
+`(rule_id, equipment_id)` identity and needs `--min-rules` (default: all three)
+comparisons. Gate 09 needs `--min-economizer-points` and
+`--min-comfort-equipment` (default 1 each). Zero rows or missing fixtures exit
+2 (BLOCKED), never 0. `--summary-json PATH` writes the step table. Offline
+regressions: `tests/qualification/test_stress_gate_fail_closed.py`.
+
 ## Open-FDD API map (vs BPS)
 
 | Need | Open-FDD | BPS twin |
