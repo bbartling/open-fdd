@@ -260,9 +260,6 @@ def make_handler(mode: str) -> type[BaseHTTPRequestHandler]:
                     {"sub": "operator_a", "role": "operator", "tenant_ids": ["tenant_a"]},
                 )
 
-            if path == "/api/edges":
-                return _json(self, 200, {"edges": []})
-
             if path == "/api/fdd/equipment":
                 bid = (qs.get("building_id") or [""])[0]
                 # Infer caller tenant from token when possible

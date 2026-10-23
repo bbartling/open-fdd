@@ -25,6 +25,10 @@ from ..transport import SafeHttpClient, TransportError
 AddCheck = Callable[[CheckResult], None]
 
 
+
+# Any valid bearer gets 200 here; /api/edges was removed with the OT archive.
+JWT_PROBE_PATH = "/api/auth/me"
+
 def _status_of(resp) -> str:
     return str(resp.status)
 
@@ -215,7 +219,6 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ("/api/health/stack", "x.preauth.anon_stack_401"),
         ("/api/building/snapshot", "x.preauth.anon_snapshot_401"),
         ("/api/dashboard/summary", "x.preauth.anon_summary_401"),
-        ("/api/edges", "x.preauth.anon401.get_api_edges"),
         ("/api/fdd/equipment", "x.preauth.anon401.get_api_fdd_equipment"),
         ("/api/fdd/results", "x.preauth.anon401.get_api_fdd_results"),
         ("/api/fdd/session-config", "x.preauth.anon401.get_api_fdd_session_config"),
@@ -308,7 +311,7 @@ def run_suite_x(ctx: SuiteContext) -> None:
 
     # JWT negative cases (no login required)
     try:
-        r = ctx.client.request("GET", "/api/edges")
+        r = ctx.client.request("GET", JWT_PROBE_PATH)
         ctx.check(
             "x.jwt.missing_token_401",
             "X",
@@ -317,13 +320,13 @@ def run_suite_x(ctx: SuiteContext) -> None:
             expected="401",
             observed=_status_of(r),
             method="GET",
-            path_template="/api/edges",
+            path_template=JWT_PROBE_PATH,
         )
     except TransportError as exc:
         ctx.check("x.jwt.missing_token_401", "X", "missing bearer", "ERROR", detail=str(exc))
 
     try:
-        r = ctx.client.request("GET", "/api/edges", token="not-a-jwt")
+        r = ctx.client.request("GET", JWT_PROBE_PATH, token="not-a-jwt")
         ctx.check(
             "x.jwt.malformed_token_401",
             "X",
@@ -336,7 +339,7 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ctx.check("x.jwt.malformed_token_401", "X", "malformed JWT", "ERROR", detail=str(exc))
 
     try:
-        r = ctx.client.request("GET", "/api/edges", token=make_alg_none_token())
+        r = ctx.client.request("GET", JWT_PROBE_PATH, token=make_alg_none_token())
         ctx.check(
             "x.jwt.alg_none_rejected",
             "X",
@@ -351,7 +354,7 @@ def run_suite_x(ctx: SuiteContext) -> None:
 
     try:
         bad = make_tampered_token(ctx.isolated_jwt_secret)
-        r = ctx.client.request("GET", "/api/edges", token=bad)
+        r = ctx.client.request("GET", JWT_PROBE_PATH, token=bad)
         # Against real app with different secret also 401 — still PASS for rejection
         ctx.check(
             "x.jwt.tampered_sig_rejected",
@@ -371,8 +374,8 @@ def run_suite_x(ctx: SuiteContext) -> None:
     expired = make_expired_token(secret, role="operator")
     valid = make_valid_token(secret, role="operator", sub="sibling")
     try:
-        r_exp = ctx.client.request("GET", "/api/edges", token=expired)
-        r_ok = ctx.client.request("GET", "/api/edges", token=valid)
+        r_exp = ctx.client.request("GET", JWT_PROBE_PATH, token=expired)
+        r_ok = ctx.client.request("GET", JWT_PROBE_PATH, token=valid)
         # In fixture servers that share the secret: expired=401, valid=200
         # Against live Railway (different secret): both 401 → BLOCKED not FAIL
         if r_exp.status == 401 and r_ok.status == 200:
@@ -1685,7 +1688,7 @@ def run_suite_z(ctx: SuiteContext) -> None:
     try:
         r = ctx.client.request(
             "GET",
-            "/api/edges",
+            JWT_PROBE_PATH,
             token=tok or "probe",
             expect_redirect=True,
         )

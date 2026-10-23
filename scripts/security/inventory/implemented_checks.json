@@ -21,7 +21,6 @@
     "x.preauth.anon401.get_api_csv_import_package_mapping",
     "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
     "x.preauth.anon401.get_api_datasets",
-    "x.preauth.anon401.get_api_edges",
     "x.preauth.anon401.get_api_fdd_equipment",
     "x.preauth.anon401.get_api_fdd_results",
     "x.preauth.anon401.get_api_fdd_rules",
