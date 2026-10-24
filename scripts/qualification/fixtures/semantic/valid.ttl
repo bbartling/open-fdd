@@ -1,0 +1,54 @@
+@prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
+@prefix phScience: <https://project-haystack.org/def/phScience/4.0.0#> .
+@prefix ofdd: <urn:openfdd:ns#> .
+@prefix site: <urn:qa:site/> .
+@prefix eq: <urn:qa:equip/> .
+@prefix pt: <urn:qa:point/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Independent, synthetic acceptance model. Names intentionally mislead.
+site:a a phIoT:site ; ph:dis "Client A" .
+site:b a phIoT:site ; ph:dis "Client B" .
+eq:RTU_01 a phIoT:equip ; phIoT:siteRef site:a ; ph:hasTag phIoT:ahu ;
+  ph:dis "Chiller-looking name; authoritative type is AHU" .
+eq:RTU_010 a phIoT:equip ; phIoT:siteRef site:a ; ph:hasTag phIoT:ahu .
+eq:hp.2 a phIoT:equip ; phIoT:siteRef site:a ; ph:hasTag phIoT:heatPump .
+eq:foreign a phIoT:equip ; phIoT:siteRef site:b ; ph:hasTag phIoT:ahu ; ph:dis "RTU_01" .
+
+pt:measured a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_01 ;
+  ph:dis "setpoint" ; ph:hasTag phIoT:sensor, phIoT:discharge, phScience:air, phScience:temp, phIoT:his ;
+  ph:kind "Number" ; ph:unit "°F" ; ph:tz "New_York" ; phIoT:hisMode "sampled" ;
+  phIoT:curVal "55.0"^^xsd:double ; ofdd:seriesKey "opaque::8f6|unrelated-reader-key" ;
+  ofdd:providerInstance "fixture-nf-A" ; ofdd:remotePointId "provider/opaque/{42}" .
+pt:measured2 a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_01 ;
+  ph:dis "setpoint" ; ph:hasTag phIoT:sensor, phIoT:discharge, phScience:air, phScience:temp ;
+  ph:kind "Number" ; ph:unit "°C" ; ofdd:seriesKey "not-equipment.role-2" ;
+  ofdd:providerInstance "fixture-nf-A" ; ofdd:remotePointId "provider/43" .
+pt:setpoint a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_01 ;
+  ph:dis "sensor" ; ph:hasTag phIoT:sp, phIoT:discharge, phScience:air, phScience:temp ;
+  ph:kind "Number" ; ph:unit "°F" ; ofdd:seriesKey "a55a71f9-9d9f-4dfa-99dc-f6840e3236bd" ;
+  ofdd:providerInstance "fixture-nf-A" ; ofdd:remotePointId "some/portal-key" .
+pt:pressure a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_01 ;
+  ph:hasTag phIoT:sensor, phIoT:discharge, phScience:air, phScience:pressure ;
+  ph:kind "Number" ; ph:unit "Pa" ; ofdd:seriesKey "pressure-key-opaque" ;
+  ofdd:providerInstance "fixture-nf-A" ; ofdd:remotePointId "p/4" .
+pt:command a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_01 ;
+  ph:hasTag phIoT:fan, phIoT:cmd ; ph:kind "Bool" ; phIoT:curVal false ;
+  ofdd:seriesKey "binary-not-percent" ; ofdd:providerInstance "fixture-nf-A" ; ofdd:remotePointId "p/5" .
+pt:speed a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_01 ;
+  ph:hasTag phIoT:fan, phIoT:sensor ; ph:kind "Number" ; ph:unit "%" ;
+  ofdd:seriesKey "vfd-measurement" ; ofdd:providerInstance "fixture-nf-A" ; ofdd:remotePointId "p/6" .
+pt:mode a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_01 ;
+  ph:hasTag phIoT:synthetic ; ph:kind "Str" ; ph:enum "off,heat,cool" ; phIoT:curVal "heat" ;
+  ofdd:seriesKey "enum-mode" ; ofdd:providerInstance "fixture-nf-A" ; ofdd:remotePointId "p/7" .
+pt:reference a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_01 ;
+  ph:hasTag phIoT:synthetic ; ph:kind "Ref" ; phIoT:curVal eq:hp.2 ;
+  ofdd:seriesKey "ref-point" ; ofdd:providerInstance "fixture-nf-A" ; ofdd:remotePointId "p/8" .
+pt:near_prefix a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:RTU_010 ;
+  ph:hasTag phIoT:sensor, phIoT:discharge, phScience:air, phScience:temp ; ph:kind "Number" ; ph:unit "°F" .
+pt:hp_temp a phIoT:point ; phIoT:siteRef site:a ; phIoT:equipRef eq:hp.2 ;
+  ph:hasTag phIoT:sensor, phScience:temp ; ph:kind "Number" ; ph:unit "K" .
+pt:foreign a phIoT:point ; phIoT:siteRef site:b ; phIoT:equipRef eq:foreign ;
+  ph:dis "setpoint" ; ph:hasTag phIoT:sensor, phIoT:discharge, phScience:air, phScience:temp ;
+  ph:kind "Number" ; ph:unit "°F" .

@@ -42,6 +42,7 @@ portal_step stack.healthy PASS "web /api/health via 127.0.0.1:$PORTAL_WEB_PORT"
 
 echo "== Observe services and images =="
 running="$(portal_compose ps --services --status running | sort | tr '\n' ' ')"
+read -r -a running_services <<<"$running"
 echo "running: $running"
 forbidden_hit=""
 for svc in mqtt fieldbus bacnet modbus haystack; do
@@ -49,10 +50,10 @@ for svc in mqtt fieldbus bacnet modbus haystack; do
     forbidden_hit+="$svc "
   fi
 done
-if [[ "$running" == *central* && "$running" == *web* && "$running" == *timescale* && "$running" == *nf-emulator* ]]; then
-  portal_step deployment.services.required PASS "$running"
+if service_detail="$(portal_py validate-services "${running_services[@]}")"; then
+  portal_step deployment.services.required PASS "$service_detail"
 else
-  portal_step deployment.services.required FAIL "running: $running"
+  portal_step deployment.services.required FAIL "running: $running; $service_detail"
 fi
 if [[ -z "$forbidden_hit" ]]; then
   portal_step deployment.cloud.zero_ot PASS "no mqtt/fieldbus/bacnet/modbus/haystack service in project"
@@ -151,10 +152,9 @@ for i in $(seq 0 $((user_count - 1))); do
     continue
   fi
   me="$(portal_api "$alias" GET /api/auth/me)"
-  if ! jq -e --arg r "$want_role" --arg t "$want_tenant" \
-      '(.role | ascii_downcase) == $r and ((.tenant_ids // []) | index($t) != null)' <<<"$me" >/dev/null; then
+  if ! identity_detail="$(printf '%s' "$me" | portal_py validate-identity --role "$want_role" --tenant-id "$want_tenant")"; then
     identity_ok=0
-    echo "identity mismatch for $alias" >&2
+    echo "identity mismatch for $alias: $identity_detail" >&2
   fi
 done
 if (( identity_ok )); then
@@ -263,12 +263,10 @@ elif [[ "$probe_status" == "BLOCKED" && "$probe_bad" == "0" ]]; then
 else
   portal_step security.harness FAIL "rc=$PROBE_RC overall_status=$probe_status"
 fi
-viewer_matrix="$(jq -r '[.checks[] | select(.check_id | startswith("y.authz.viewer_")) | "\(.check_id)=\(.status)"] | join(" ")' \
-  "$ART/security/security_report.json" 2>/dev/null || true)"
-if [[ -n "$viewer_matrix" && "$viewer_matrix" != *"=FAIL"* && "$viewer_matrix" != *"=ERROR"* && "$viewer_matrix" != *"=BLOCKED"* ]]; then
+if viewer_matrix="$(portal_py validate-viewer-write-matrix --report "$ART/security/security_report.json" 2>&1)"; then
   portal_step security.viewer_write_matrix PASS "$viewer_matrix"
 else
-  portal_step security.viewer_write_matrix FAIL "${viewer_matrix:-no viewer checks in report}"
+  portal_step security.viewer_write_matrix FAIL "$viewer_matrix"
 fi
 
 echo "== Timescale fingerprint after the security harness =="

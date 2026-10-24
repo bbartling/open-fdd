@@ -32,6 +32,7 @@ from helpers import (  # noqa: E402
     post_sparql,
     print_table,
     require_building_id,
+    record_check,
     run_child,
     safe_print,
     wait_until_ready,
@@ -39,24 +40,18 @@ from helpers import (  # noqa: E402
 
 ZONE_OR_TEMP_RQ = """\
 PREFIX phIoT: <https://project-haystack.org/def/phIoT/4.0.0#>
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+PREFIX phScience: <https://project-haystack.org/def/phScience/4.0.0#>
 PREFIX ofdd: <urn:openfdd:ns#>
-SELECT ?equipmentId ?pointId ?column ?fddSelection WHERE {
-  ?point phIoT:equipRef ?equip .
+SELECT DISTINCT ?point ?equipmentId ?pointId ?column ?fddSelection WHERE {
+  ?point a phIoT:point ; phIoT:equipRef ?equip ;
+    ph:hasTag phScience:temp, phIoT:sensor .
   ?equip ofdd:equipmentId ?equipmentId .
   OPTIONAL { ?point ofdd:pointId ?pointId . }
   OPTIONAL { ?point ofdd:column ?column . }
   OPTIONAL { ?point ofdd:fddSelection ?fddSelection . }
-  FILTER(
-    !BOUND(?fddSelection) ||
-    CONTAINS(LCASE(STR(?fddSelection)), "zone") ||
-    CONTAINS(LCASE(STR(?fddSelection)), "temp") ||
-    CONTAINS(LCASE(STR(?column)), "zone") ||
-    CONTAINS(LCASE(STR(?column)), "sat") ||
-    CONTAINS(LCASE(STR(?column)), "rat") ||
-    CONTAINS(LCASE(STR(?pointId)), "sat")
-  )
 }
-ORDER BY ?equipmentId ?column
+ORDER BY ?equipmentId ?point
 LIMIT 50
 """
 
@@ -64,12 +59,8 @@ LIMIT 50
 def _pick_point(rows: list[dict[str, str]]) -> dict[str, str]:
     if not rows:
         raise SystemExit("no temp/zone/sat points in package RDF for building_id")
-    for prefer in ("zone-air-temp", "zone_air_temp", "ZN_T", "SAT", "sat"):
-        for r in rows:
-            col = (r.get("column") or r.get("pointId") or "").lower()
-            sel = (r.get("fddSelection") or "").lower()
-            if prefer.lower() in col or prefer.lower() in sel:
-                return r
+    # This is a single transport smoke, not an automatic FDD input approval.
+    # Query order is deterministic within the semantically selected cohort.
     return rows[0]
 
 
@@ -175,20 +166,23 @@ def fetch_point_dataframe(
     building_id: str,
     equipment_id: str,
     column: str,
+    point_iri: str | None = None,
 ):
     """Prefer Soft-OPEN point-resolve history; then historian; then readings."""
-    iri = mint_opaque_point_iri(building_id, equipment_id, column)
+    iri = point_iri or mint_opaque_point_iri(building_id, equipment_id, column)
     safe_print(f"  point-resolve iri={iri}")
     try:
         body = point_resolve(http, headers, point_iri=iri, include_history=True, max_points=2000)
         hist = body.get("history") if isinstance(body.get("history"), dict) else {}
+        if body.get("ok") is False or hist.get("ok") is False:
+            raise RuntimeError("point-resolve/history reported failure")
         samples = hist.get("samples") or []
-        max_pts = hist.get("max_points") or body.get("max_points")
+        max_pts = hist.get("max_points") or body.get("max_points") or 2000
         point_count = hist.get("point_count")
         if (
-            isinstance(max_pts, int)
-            and isinstance(point_count, int)
-            and point_count >= max_pts
+            body.get("truncated") is True or hist.get("truncated") is True
+            or (isinstance(max_pts, int)
+                and (len(samples) >= max_pts or (isinstance(point_count, int) and point_count >= max_pts)))
         ):
             safe_print(
                 f"FAIL: point-resolve history hit max_points={max_pts} "
@@ -212,6 +206,11 @@ def fetch_point_dataframe(
             safe_print(f"  history error: {hist.get('error')}")
     except RuntimeError as exc:
         safe_print(f"  point-resolve unavailable ({exc})")
+
+    if point_iri:
+        # Reconstructing a key or selecting a different series would conceal a
+        # broken graph-to-history binding in this explicit semantic path.
+        return None, {}, False
 
     safe_print(f"  historian query equipment_id={equipment_id!r} column={column!r}")
     try:
@@ -272,18 +271,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print_table("Temp/zone/sat candidate points", rows)
         if not rows:
-            try:
-                rows = post_sparql(
-                    http, headers, building_id=building_id, query_id="fdd_role_candidates"
-                )
-                print_table("fdd_role_candidates (template)", rows)
-            except RuntimeError as exc:
-                safe_print(f"FAIL: template fdd_role_candidates — {exc}")
-                return 1
+            safe_print("BLOCKED: no semantically selected measured temperature points")
+            return 2
         meta = _pick_point(rows)
         equipment_id = (meta.get("equipmentId") or meta.get("equipment_id") or "").strip()
         column = (meta.get("column") or meta.get("pointId") or "").strip()
-        if not equipment_id or not column:
+        point_iri = meta.get("point")
+        if not equipment_id or not column or not point_iri:
             safe_print(f"FAIL: could not resolve equipmentId/column from {meta!r}")
             return 1
         safe_print(f"  selected equipment_id={equipment_id} column={column}")
@@ -294,16 +288,20 @@ def main(argv: list[str] | None = None) -> int:
             building_id=building_id,
             equipment_id=equipment_id,
             column=column,
+            point_iri=point_iri,
         )
 
     if trunc_fail:
         return 1
-    if df is None:
+    if df is None or df.empty:
         safe_print(
-            "\nWARN 03 — graph OK but no samples yet "
-            "(seed Timescale samples for this synthetic building; continue gate)"
+            "\nBLOCKED 03 — graph discovered but no samples; data-path proof did not run"
         )
-        return 0
+        return 2
+
+    record_check("historian_samples", True)
+    import numpy as np
+    record_check("dataframe", bool(np.isfinite(df.to_numpy(dtype=float)).any()), comparisons=len(df))
 
     safe_print(f"\nDataFrame shape={df.shape}  columns={list(df.columns)}")
     safe_print(df.head(3))

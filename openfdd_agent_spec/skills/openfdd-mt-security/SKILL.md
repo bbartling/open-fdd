@@ -8,6 +8,28 @@ description: >-
 
 # Multi-tenant security (Wave O2c / Wave P2c)
 
+
+## Current portal qualification (4.0)
+
+NF/CSV, Rust/React and Timescale are the active product. The MQTT/fieldbus sections
+below are dated archive context, not current deployment or qualification steps.
+Use [current qualification](../../../scripts/qualification/README.md), the
+[portal stress skill](../openfdd-stress-closeout/SKILL.md), and
+[ZAP evidence semantics](../../../scripts/qualification/zap/README.md).
+
+Require exact /api/auth/me role, non-hub-admin claim and tenant set, every required
+viewer write assertion exactly once, own-object positive controls and denied-write
+side-effect readback. Keep model RDF scope checks distinct from HTTP authorization.
+A known-answer semantic fixture does not qualify tenant middleware. Runtime logs
+need distinct session/delegation/QA identities; shared admin and caller QA headers
+cannot attribute an incident. No credential values in artifacts/public issues.
+
+ZAP unknown counts are null, negative controls require observed denial rather
+than failed positive auth, and post-HAR request budgets are not preventive limits.
+The credential-site compatibility issue needs an exact-origin/port-safe solution;
+never widen bearer exposure to turn qualification green.
+
+
 Kali owns **live** ZAP/PEN. Mint implements **product fixes + automated tests**. Never ActiveScan production OT from Mint.
 
 Plans: [`.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`](../../../.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md) § O2c · [`.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md`](../../../.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md) § P2c.

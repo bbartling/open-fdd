@@ -84,7 +84,8 @@ cp "$WRK/openapi.yaml" "$NEG_WRK/openapi.yaml"
 set +e
 ZAP_AF_WORK_DIR="$NEG_WRK" OPENFDD_ZAP_AF_ACTIVE=0 \
   python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
-  --negative-control --out "$ART/negative_control_verdict.json"
+  --negative-control --out "$ART/negative_control_verdict.json" \
+  >"$PORTAL_PRIV/zap-negative.stdout" 2>"$PORTAL_PRIV/zap-negative.stderr"
 NEG_RC=$?
 set -e
 if [[ "$NEG_RC" -ne 0 ]]; then
@@ -95,15 +96,39 @@ fi
 export ZAP_AF_WORK_DIR="$WRK"
 set +e
 python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
-  --out "$VERDICT_OUT"
+  --out "$VERDICT_OUT" \
+  >"$PORTAL_PRIV/zap-evaluator.stdout" 2>"$PORTAL_PRIV/zap-evaluator.stderr"
 EVAL_RC=$?
 set -e
 
-chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || true
-rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || true
+# Buffer evaluator output until cleanup has verified that its hashed evidence
+# is unchanged. Redaction must never silently turn altered evidence into PASS.
+INTEGRITY=(python3 -B "$ROOT/scripts/qualification/zap/artifact_integrity.py"
+  --root "$ART" --state "$PORTAL_PRIV/zap-artifacts-before.json"
+  --report "$ART/artifact_integrity.json" --verdict "$VERDICT_OUT"
+  --verdict "$ART/negative_control_verdict.json")
+if ! "${INTEGRITY[@]}" snapshot; then
+  echo "FAIL: could not snapshot evaluated ZAP evidence; qualification invalid" >&2
+  exit 1
+fi
+REDACTION_FAILED=0
+chmod -R u+rwX,g+rwX,o-rwx "$WRK" 2>/dev/null || REDACTION_FAILED=1
+rm -f "$ART/admin.jwt" "$WRK/admin.jwt" 2>/dev/null || REDACTION_FAILED=1
+if ! find "$ART" -type f \( -name '*.json' -o -name '*.log' -o -name '*.txt' -o -name '*.yaml' -o -name '*.html' \) -print0 \
+  >"$PORTAL_PRIV/zap-redaction-files"; then
+  REDACTION_FAILED=1
+fi
 while IFS= read -r -d '' f; do
-  portal_redact_file "$f"
-done < <(find "$ART" -type f \( -name '*.json' -o -name '*.log' -o -name '*.txt' -o -name '*.yaml' -o -name '*.html' \) -print0)
+  portal_redact_file "$f" || REDACTION_FAILED=1
+done <"$PORTAL_PRIV/zap-redaction-files"
+INTEGRITY_FLAGS=()
+if [[ "$REDACTION_FAILED" -ne 0 ]]; then
+  INTEGRITY_FLAGS+=(--redaction-failed)
+fi
+if ! "${INTEGRITY[@]}" verify "${INTEGRITY_FLAGS[@]}"; then
+  echo "FAIL: cleanup changed evaluated ZAP evidence; qualification invalid" >&2
+  exit 1
+fi
 
 if [[ ! -f "$VERDICT_OUT" ]]; then
   echo "FAIL: evaluator wrote no verdict" >&2

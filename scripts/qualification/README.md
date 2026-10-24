@@ -1,5 +1,41 @@
 # Qualification harness (entry point)
 
+## Current portal and semantic tooling
+
+Product qualification targets Rust central + React web + Timescale, NF portal
+pull and CSV import. OT transport recipes below describe historical/archive
+qualification; they are not requirements for the current portal stack. Haystack
+semantic modeling remains active independently of retired Haystack wire drivers.
+
+Install test dependencies in a tooling venv, then run the offline tests:
+
+```bash
+python3 -m venv /tmp/openfdd-qa
+/tmp/openfdd-qa/bin/python -m pip install -r scripts/qualification/requirements.txt
+/tmp/openfdd-qa/bin/python -B -m unittest discover -s tests/qualification -v
+/tmp/openfdd-qa/bin/python scripts/qualification/semantic/qualify.py suite \
+  --candidate "$(git rev-parse HEAD)" --out /tmp/semantic-harness.json
+```
+
+The [semantic verifier](semantic/README.md) independently parses bounded Turtle,
+executes fixed bound SPARQL and compares exact known answers, typed metadata,
+scope, references and opaque history bindings. Its deliberately broken controls
+must fail. Fixture-suite success qualifies the verifier/fixture contract only;
+use `model` with an authorized export and independent expectations for an actual
+candidate model. No prefix search or plain-text RDF heuristic constitutes proof.
+
+[ZAP evaluator semantics](zap/README.md) distinguish probe-only bad-credential
+denial from a positive authenticated scan. Unknown counts remain null; malformed,
+missing or contradictory evidence is nonqualifying. Scanner wall time is enforced;
+the HAR request limit is a post-scan check, not a preventive traffic cap. An owned
+isolated target and external egress/request controls remain required for active
+scanning. Loopback alone is not ownership evidence. Offline unit results are not
+a live ZAP/add-on qualification.
+
+The portal recipe now requires exact identity memberships, exact service tokens
+and every required viewer-write assertion exactly once. The [stress runner](../stress/README.md)
+requires fresh run-bound executed-check evidence and nonzero comparisons.
+
 ## Protocol connector closeout (Phase 5D)
 
 `protocol_connector_qualification.py` is the bounded, fail-closed evidence
@@ -115,7 +151,7 @@ python3 -B scripts/qualification/write_manifest.py selftest
 | `portal/portal_qual.py` · `portal/nf_emulator.py` | Docker-free plan / package / verdict helpers and the stdlib NF emulator (fixture `fixtures/nf_emulator/points.json`) |
 | `run_wave_c_isolated.sh` | Wave C entry on the portal profile: portal qualification + restore-to-empty + ZAP AF |
 | `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint a disposable `cloud_portal` candidate (multi-tenant ON, per-run JWT secret) via `lib/portal_stack.sh`, run the broken-credential negative control, then call `zap/run_af_disposable.py` against `http://web:8080`. Scanner credential is a private file, never argv. Digest-pinned ZAP. **Never** activeScan Railway or a site; no fallback crawl. |
-| `zap/run_af_disposable.py` | Single ZAP AF evaluator: exact disposable origin checked before any credential is read; anchored scope; scanner-origin `/api/auth/me` probes before/during/after the scan proven from ZAP's exported message history; strict typed alert parsing; per-instance Medium dispositions with expiry; write-once raw report + SHA-256; wall-clock and request budgets with owned cleanup. `--selftest` → **BLOCKED**; `--negative-control` must reject a broken scanner credential. Execute via `OPENFDD_ZAP_AF_EXECUTE=1`. |
+| `zap/run_af_disposable.py` | Exact-origin evidence evaluator, scanner-origin nonce probes, strict alerts/dispositions and hashed artifacts; enforced wall time, post-HAR request count. `--selftest` is BLOCKED; probe-only negative control requires actual401/403denials. [Limits](zap/README.md). Execute opt-in only against an owned isolated target. |
 | `zap/run_af_disposable.sh` | Thin shell alias to `run_af_disposable.py`. |
 | `restore_to_empty.sh` | Portal stack: `pg_dump` + workspace tarball → fresh volumes → restore; proves the fixture site's Timescale count + md5, total samples, workspace manifest, control-plane files, admin API identity state, and operator login; then bounded API budgets |
 
