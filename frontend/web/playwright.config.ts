@@ -1,9 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * P1-M2-A: real-stack browser smoke. Defaults to local compose react SPA.
- * Skip automatically when OPENFDD_PLAYWRIGHT_SKIP=1 or base URL is unreachable
- * (CI without a live stack). Network mocks are banned in this suite.
+ * Real-stack browser smoke. Defaults to the local compose React SPA.
+ * Required CI sets OPENFDD_PLAYWRIGHT_REQUIRE_STACK=1 after starting a
+ * disposable compose stack; a skip of those tests fails the job.
+ * Network mocks are banned in this suite.
  */
 const baseURL = process.env.OPENFDD_PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 

@@ -1,14 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { collectPageErrors, simulateLanHttpCrypto } from "./lanHttp";
+import { failIfRequired, stackRequired } from "./requireStack";
 import { ensureProductSession } from "./session";
 
 /**
- * P1-M3 real-stack product markers — no route/network mocks.
- * Nightly gate 16 sets OPENFDD_PLAYWRIGHT_REQUIRE_STACK=1 so SPA-down is a hard fail.
- * CI without a stack may omit that env and soft-skip like smoke.spec.ts.
+ * Real-stack product markers — no route or network mocks.
+ * Required CI sets OPENFDD_PLAYWRIGHT_REQUIRE_STACK=1, starts a disposable
+ * compose stack, and fails the job when a test in this file is skipped.
  */
 const base = process.env.OPENFDD_PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
-const requireStack = process.env.OPENFDD_PLAYWRIGHT_REQUIRE_STACK === "1";
 
 async function waitForGatedPage(
   page: import("@playwright/test").Page,
@@ -45,21 +45,20 @@ test.describe("react product workflows (real stack)", () => {
 
   test.beforeAll(async ({ request }) => {
     if (process.env.OPENFDD_PLAYWRIGHT_SKIP === "1") {
-      test.skip(true, "OPENFDD_PLAYWRIGHT_SKIP=1");
+      failIfRequired("OPENFDD_PLAYWRIGHT_SKIP=1");
     }
+    let res;
     try {
-      const res = await request.get(base, { timeout: 5_000 });
-      if (!res.ok()) {
-        if (requireStack) {
-          throw new Error(`SPA not healthy at ${base} (HTTP ${res.status()})`);
-        }
-        test.skip(true, `SPA not healthy at ${base} (HTTP ${res.status()})`);
-      }
+      res = await request.get(base, { timeout: 5_000 });
     } catch (err) {
-      if (requireStack) {
+      if (stackRequired) {
         throw err instanceof Error ? err : new Error(String(err));
       }
       test.skip(true, `SPA unreachable at ${base}`);
+      return;
+    }
+    if (!res.ok()) {
+      failIfRequired(`SPA not healthy at ${base} (HTTP ${res.status()})`);
     }
   });
 
@@ -95,7 +94,9 @@ test.describe("react product workflows (real stack)", () => {
     await expect(page.getByTestId("auth-username")).toBeVisible();
 
     const password = process.env.OPENFDD_ADMIN_PASSWORD ?? "";
-    test.skip(!password, "OPENFDD_ADMIN_PASSWORD required for auth stack gate");
+    if (!password) {
+      failIfRequired("OPENFDD_ADMIN_PASSWORD required for auth stack gate");
+    }
     await page.getByTestId("auth-username").fill("admin");
     await page.getByTestId("auth-password").fill(password);
     await page.getByTestId("auth-login").click();
@@ -119,7 +120,9 @@ test.describe("react product workflows (real stack)", () => {
     expect(hasUuid, "simulateLanHttpCrypto must remove randomUUID").toBe(false);
 
     const password = process.env.OPENFDD_ADMIN_PASSWORD ?? "";
-    test.skip(!password, "OPENFDD_ADMIN_PASSWORD required for auth stack gate");
+    if (!password) {
+      failIfRequired("OPENFDD_ADMIN_PASSWORD required for auth stack gate");
+    }
     await page.getByTestId("auth-username").fill("admin");
     await page.getByTestId("auth-password").fill(password);
     await page.getByTestId("auth-login").click();
