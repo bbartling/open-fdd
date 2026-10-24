@@ -949,6 +949,24 @@ fn require_hub_admin_or_audit_deny(
     })
 }
 
+fn control_plane_write_error(
+    audit: &mut AuditEvent,
+    err: crate::lifecycle::ControlPlaneWriteError,
+) -> (StatusCode, Json<Value>) {
+    let rejected = matches!(err, crate::lifecycle::ControlPlaneWriteError::Rejected(_));
+    if rejected {
+        audit.reason(ReasonCode::InvalidRequest);
+    } else {
+        audit.reason(ReasonCode::StorageError);
+    }
+    let status = if rejected {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (status, Json(json!({"ok": false, "error": err.to_string()})))
+}
+
 fn workspace_path() -> std::path::PathBuf {
     std::path::PathBuf::from(
         std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
@@ -987,14 +1005,18 @@ fn admin_upsert_user_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    let requested_role = auth::Role::parse(body.role.trim()).map(Into::into);
+    let tenant_ids = body.tenant_ids.clone();
+    let disabled = body.disabled;
+    let credential_changed = body.password.is_some() || body.password_env.is_some();
     audit.change(AuditChange::UserUpsert {
-        created: store.get(&body.username).is_none(),
-        role: auth::Role::parse(body.role.trim()).map(Into::into),
-        disabled: body.disabled,
-        tenant_ids: BoundedList::new(&body.tenant_ids),
-        credential_changed: body.password.is_some() || body.password_env.is_some(),
+        created: false,
+        role: requested_role,
+        disabled,
+        tenant_ids: BoundedList::new(&tenant_ids),
+        credential_changed,
     });
+    let username = body.username.clone();
     let rec = crate::user_store::UserRecord {
         username: body.username,
         user_id: String::new(),
@@ -1002,24 +1024,26 @@ fn admin_upsert_user_inner(
         tenant_ids: body.tenant_ids,
         password_env: body.password_env,
         password: body.password,
-        disabled: body.disabled,
+        disabled,
         session_version: 0,
     };
-    store.upsert(rec).map_err(|e| {
-        audit.reason(ReasonCode::InvalidRequest);
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
-    store.save(&ws).map_err(|e| {
-        audit.reason(ReasonCode::StorageError);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
-    Ok(Json(json!({"ok": true, "users": store.public_list()})))
+    let written = crate::lifecycle::mutate_users(&ws, |store| {
+        let created = store.get(&username).is_none();
+        audit.change(AuditChange::UserUpsert {
+            created,
+            role: requested_role,
+            disabled,
+            tenant_ids: BoundedList::new(&tenant_ids),
+            credential_changed,
+        });
+        store.upsert(rec)?;
+        Ok(store.public_list())
+    });
+    let users = match written {
+        Ok(users) => users,
+        Err(err) => return Err(control_plane_write_error(audit, err)),
+    };
+    Ok(Json(json!({"ok": true, "users": users})))
 }
 
 #[derive(Deserialize)]
@@ -1053,22 +1077,23 @@ fn admin_set_user_disabled_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let mut store = crate::user_store::UserStore::load_or_empty(&ws);
-    store.set_disabled(username, body.disabled).map_err(|e| {
-        audit.reason(ReasonCode::NotFound);
-        (
-            StatusCode::NOT_FOUND,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
-    store.save(&ws).map_err(|e| {
-        audit.reason(ReasonCode::StorageError);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
-    Ok(Json(json!({"ok": true, "users": store.public_list()})))
+    let disabled = body.disabled;
+    let written = crate::lifecycle::mutate_users(&ws, |store| {
+        store.set_disabled(username, disabled)?;
+        Ok(store.public_list())
+    });
+    let users = match written {
+        Ok(users) => users,
+        Err(crate::lifecycle::ControlPlaneWriteError::Rejected(error)) => {
+            audit.reason(ReasonCode::NotFound);
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({"ok": false, "error": error})),
+            ));
+        }
+        Err(err) => return Err(control_plane_write_error(audit, err)),
+    };
+    Ok(Json(json!({"ok": true, "users": users})))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1122,8 +1147,13 @@ async fn admin_delete_user_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let store = crate::user_store::UserStore::load_or_empty(&ws);
-    let plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    let (store, plane) = crate::lifecycle::read_control_plane(&ws).map_err(|error| {
+        audit.reason(ReasonCode::StorageError);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": error})),
+        )
+    })?;
     let plan =
         crate::admin_cp::plan_user_cascade_delete(&store, &plane, username).map_err(|e| {
             audit.reason(ReasonCode::NotFound);
@@ -1177,6 +1207,8 @@ async fn admin_delete_user_inner(
                     "plan": partial.plan,
                     "purged": partial.purged_json(),
                     "purge_errors": partial.errors,
+                    "operation_id": partial.operation_id,
+                    "phase": partial.phase,
                 })),
             ));
         }
@@ -1186,12 +1218,30 @@ async fn admin_delete_user_inner(
         outcome.plan.buildings_shared_skipped.len(),
         0,
     ));
-    let store = crate::user_store::UserStore::load_or_empty(&ws);
+    let users = match crate::lifecycle::read_control_plane(&ws) {
+        Ok((store, _)) => store.public_list(),
+        Err(error) => {
+            audit.reason(ReasonCode::StorageError);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "ok": false,
+                    "error": error,
+                    "plan": outcome.plan,
+                    "purged": outcome.purged_json(),
+                    "operation_id": outcome.operation_id,
+                    "phase": outcome.phase,
+                })),
+            ));
+        }
+    };
     Ok(Json(json!({
         "ok": true,
         "plan": outcome.plan,
         "purged": outcome.purged_json(),
-        "users": store.public_list(),
+        "users": users,
+        "operation_id": outcome.operation_id,
+        "phase": outcome.phase,
     })))
 }
 
@@ -1227,32 +1277,30 @@ fn admin_upsert_tenant_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let mut plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    let building_ids = body.building_ids.clone();
+    let tenant_id = body.id.clone();
     audit.change(AuditChange::TenantUpsert {
-        created: !plane.tenants.iter().any(|t| t.id == body.id),
-        building_ids: BoundedList::new(&body.building_ids),
+        created: false,
+        building_ids: BoundedList::new(&building_ids),
     });
-    plane
-        .upsert_tenant(crate::tenant::TenantRecord {
+    let written = crate::lifecycle::mutate_tenants(&ws, |plane| {
+        let created = !plane.tenants.iter().any(|tenant| tenant.id == tenant_id);
+        audit.change(AuditChange::TenantUpsert {
+            created,
+            building_ids: BoundedList::new(&building_ids),
+        });
+        plane.upsert_tenant(crate::tenant::TenantRecord {
             id: body.id,
             name: body.name,
             building_ids: body.building_ids,
-        })
-        .map_err(|e| {
-            audit.reason(ReasonCode::InvalidRequest);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": e})),
-            )
         })?;
-    plane.save(&ws).map_err(|e| {
-        audit.reason(ReasonCode::StorageError);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
-    Ok(Json(json!({"ok": true, "tenants": plane.tenants})))
+        Ok(plane.tenants.clone())
+    });
+    let tenants = match written {
+        Ok(tenants) => tenants,
+        Err(err) => return Err(control_plane_write_error(audit, err)),
+    };
+    Ok(Json(json!({"ok": true, "tenants": tenants})))
 }
 
 pub async fn admin_delete_tenant(
@@ -1275,22 +1323,22 @@ fn admin_delete_tenant_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let mut plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
-    plane.remove_tenant(tenant_id).map_err(|e| {
-        audit.reason(ReasonCode::NotFound);
-        (
-            StatusCode::NOT_FOUND,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
-    plane.save(&ws).map_err(|e| {
-        audit.reason(ReasonCode::StorageError);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e})),
-        )
-    })?;
-    Ok(Json(json!({"ok": true, "tenants": plane.tenants})))
+    let written = crate::lifecycle::mutate_tenants(&ws, |plane| {
+        plane.remove_tenant(tenant_id)?;
+        Ok(plane.tenants.clone())
+    });
+    let tenants = match written {
+        Ok(tenants) => tenants,
+        Err(crate::lifecycle::ControlPlaneWriteError::Rejected(error)) => {
+            audit.reason(ReasonCode::NotFound);
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({"ok": false, "error": error})),
+            ));
+        }
+        Err(err) => return Err(control_plane_write_error(audit, err)),
+    };
+    Ok(Json(json!({"ok": true, "tenants": tenants})))
 }
 
 pub async fn admin_get_historian_limits(
