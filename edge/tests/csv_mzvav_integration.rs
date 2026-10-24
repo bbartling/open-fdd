@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! MZVAV CSV import → Haystack model → FDD → purge integration tests.
 
 use open_fdd_edge_prototype::data_management;

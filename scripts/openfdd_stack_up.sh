@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Bring up an Open-FDD compose build recipe (pull or build).
 #
-#   ./scripts/openfdd_stack_up.sh standalone
-#   ./scripts/openfdd_stack_up.sh react-ot
-#   OPENFDD_IMAGE_TAG=sha-abc1234 ./scripts/openfdd_stack_up.sh react-ot
+#   ./scripts/openfdd_stack_up.sh portal
+#   ./scripts/openfdd_stack_up.sh csv
+#   OPENFDD_IMAGE_TAG=sha-abc1234 ./scripts/openfdd_stack_up.sh portal
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/openfdd_stack_lib.sh

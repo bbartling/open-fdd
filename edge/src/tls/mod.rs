@@ -2,7 +2,7 @@
 
 use rcgen::{CertificateParams, DnType, SanType};
 use std::fs;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 
 pub struct TlsGenerateOptions {
@@ -37,7 +37,7 @@ pub fn generate_self_signed(opts: &TlsGenerateOptions) -> Result<TlsGenerateResu
     ));
     params
         .subject_alt_names
-        .push(SanType::IpAddress("127.0.0.1".parse::<IpAddr>().unwrap()));
+        .push(SanType::IpAddress(IpAddr::V4(Ipv4Addr::LOCALHOST)));
     if let Some(ip) = &opts.lan_ip {
         if let Ok(parsed) = ip.parse::<IpAddr>() {
             params.subject_alt_names.push(SanType::IpAddress(parsed));

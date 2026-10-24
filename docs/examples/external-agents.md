@@ -12,7 +12,7 @@ This keeps Open-FDD vendor-neutral, local-first, safe for OT networks, and indep
 
 ## Preferred workflow
 
-1. Bring up the stack locally or on the LAN/VPN (`./scripts/openfdd_stack_up.sh standalone`), **or** a private Railway central (see [RAILWAY_DEPLOYMENT.md](../operations/RAILWAY_DEPLOYMENT.md)).
+1. Bring up the stack locally or on the LAN/VPN (`./scripts/openfdd_stack_up.sh portal`), **or** a private Railway central + web (see [RAILWAY_DEPLOYMENT.md](../operations/RAILWAY_DEPLOYMENT.md)). Ingest is the Normal Framework portal API and CSV.
 2. Confirm health: `curl -fsS http://127.0.0.1:8080/api/health` (or Railway private URL).
 3. Obtain an **operator** JWT — prefer `username=agent` + `OPENFDD_AGENT_PASSWORD`, or admin `POST /api/auth/agent-token`. Never print or commit tokens; never use the admin password as the MCP credential.
 4. Run `openfdd-mcp` **outside** the Open-FDD web UI (stdio JSON-RPC), with `OPENFDD_MCP_TOKEN` set to that JWT.

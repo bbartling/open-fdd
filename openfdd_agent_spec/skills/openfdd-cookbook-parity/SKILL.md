@@ -30,6 +30,6 @@ labels): [`docs/RULE_DISPLAY_NAMES.md`](../../docs/RULE_DISPLAY_NAMES.md).
 
 ## Related skills
 
-- [`openfdd-sql-fdd`](../openfdd-sql-fdd/SKILL.md) — DataFusion expression
+- [`openfdd-sql-fdd`](../openfdd-sql-fdd/SKILL.md) — Timescale SQL expression
 - [`openfdd-pypi-oracle`](../openfdd-pypi-oracle/SKILL.md) — pandas package
 - [`openfdd-architecture`](../openfdd-architecture/SKILL.md) — what stays out of central

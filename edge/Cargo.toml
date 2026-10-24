@@ -11,10 +11,8 @@ edition = "2021"
 [features]
 default = []
 
-[lints.rust]
-unexpected_cfgs = { level = "allow", check-cfg = [
-  'cfg(feature, values("legacy-datafusion", "legacy-parquet"))',
-] }
+[lints]
+workspace = true
 
 [dependencies]
 # Arrow IPC remains for package CSV dataset pages (not product FDD engine).

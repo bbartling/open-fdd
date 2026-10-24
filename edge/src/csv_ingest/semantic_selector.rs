@@ -1094,7 +1094,7 @@ mod tests {
                     name: "equip_scope".into(),
                 },
             ),
-            &[first.clone(), second.clone()],
+            &[first.clone(), second],
             false,
             4,
         );

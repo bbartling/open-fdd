@@ -559,10 +559,9 @@ pub fn persist_atomic(
     let provisional_digest = sha256_hex(provisional.as_bytes());
     if let Some(cur) = &current {
         // Compare against stored tip bytes if available.
-        if let Ok(Some(existing)) = load_persisted_locked(building_root) {
-            let mut existing_cmp = existing.clone();
-            existing_cmp.revision = None;
-            if let Ok(ex_body) = encode_meta_body(&existing_cmp) {
+        if let Ok(Some(mut existing)) = load_persisted_locked(building_root) {
+            existing.revision = None;
+            if let Ok(ex_body) = encode_meta_body(&existing) {
                 if sha256_hex(ex_body.as_bytes()) == provisional_digest {
                     return Ok(cur.clone());
                 }
@@ -576,7 +575,7 @@ pub fn persist_atomic(
     let digest = sha256_hex(body.as_bytes());
     let rev = SemanticMetaRevision {
         schema: SCHEMA.to_string(),
-        building_id: meta.building_id.clone(),
+        building_id: meta.building_id,
         revision: next_rev.clone(),
         content_sha256: digest,
     };
@@ -648,7 +647,7 @@ pub fn rollback_to(
     let digest = sha256_hex(body.as_bytes());
     let rev = SemanticMetaRevision {
         schema: SCHEMA.to_string(),
-        building_id: meta.building_id.clone(),
+        building_id: meta.building_id,
         revision: target_revision.to_string(),
         content_sha256: digest,
     };
@@ -797,7 +796,7 @@ mod tests {
         assert_eq!(meta.schema, SCHEMA);
         assert_eq!(meta.points.len(), 1);
         let dir = tempdir().unwrap();
-        let rev = persist_atomic(dir.path(), meta.clone(), None).unwrap();
+        let rev = persist_atomic(dir.path(), meta, None).unwrap();
         let loaded = load_persisted(dir.path()).unwrap().unwrap();
         assert_eq!(loaded.schema, SCHEMA);
         assert_eq!(loaded.points[0].column, "SAT");

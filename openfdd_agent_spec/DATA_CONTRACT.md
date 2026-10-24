@@ -85,13 +85,19 @@ Target shape (Phase 4 hardening):
 
 ## Production FDD run
 
+`architecture_epoch: portal-timescale-v1`. Arrow, Feather, and DataFusion are not the product historian.
+
 | Item | Truth |
 | --- | --- |
-| API | `POST /api/fdd/run` (registry / DataFusion) |
-| Registry | `sql_rules/registry.yaml` |
-| Storage | Arrow / Feather via central |
+| API | `POST /api/fdd/run` (Timescale / PostgreSQL) |
+| Registry | `sql/fdd/registry.yaml` |
+| Rules | `sql/fdd/postgres/rules/*.sql` |
+| Storage | Timescale. A result-cache file is not telemetry. |
+| Units | °F canonical. Metric inputs convert at query (`unit_system=metric\|si`). |
+| Time | UTC `timestamptz`. Fault duration uses the forward timestamp delta. A gap longer than `MAX_GAP_HOURS` (default 1) is unknown: not fault time and not covered time. |
+| Ingest | Normal Framework portal API and CSV packages only |
 
-Agents must not treat pandas oracle output as production FDD execution.
+Agents must not treat pandas oracle output as production FDD execution. `sql_rules/` is the retired DataFusion pack.
 
 ---
 

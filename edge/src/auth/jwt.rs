@@ -19,7 +19,16 @@ pub struct Claims {
     pub exp: i64,
 }
 
-pub fn create_token(config: &AuthConfig, sub: &str, role: &str) -> (String, DateTime<Utc>) {
+fn signing_mac(secret: &str) -> Result<HmacSha256, String> {
+    HmacSha256::new_from_slice(secret.as_bytes())
+        .map_err(|_| "HMAC-SHA256 rejected the signing key".to_string())
+}
+
+pub fn create_token(
+    config: &AuthConfig,
+    sub: &str,
+    role: &str,
+) -> Result<(String, DateTime<Utc>), String> {
     let now = Utc::now();
     let exp = now + chrono::Duration::seconds(config.ttl_seconds);
     let header = json!({"alg":"HS256","typ":"JWT"});
@@ -34,10 +43,10 @@ pub fn create_token(config: &AuthConfig, sub: &str, role: &str) -> (String, Date
     let h = URL_SAFE_NO_PAD.encode(header.to_string().as_bytes());
     let c = URL_SAFE_NO_PAD.encode(claims.to_string().as_bytes());
     let msg = format!("{h}.{c}");
-    let mut mac = HmacSha256::new_from_slice(config.secret.as_bytes()).expect("hmac key");
+    let mut mac = signing_mac(&config.secret)?;
     mac.update(msg.as_bytes());
     let sig = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
-    (format!("{msg}.{sig}"), exp)
+    Ok((format!("{msg}.{sig}"), exp))
 }
 
 pub fn verify_token(config: &AuthConfig, token: &str) -> Result<Principal, String> {
@@ -46,7 +55,7 @@ pub fn verify_token(config: &AuthConfig, token: &str) -> Result<Principal, Strin
         return Err("malformed JWT".into());
     }
     let msg = format!("{}.{}", parts[0], parts[1]);
-    let mut mac = HmacSha256::new_from_slice(config.secret.as_bytes()).expect("hmac key");
+    let mut mac = signing_mac(&config.secret)?;
     mac.update(msg.as_bytes());
     let expected = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
     if expected != parts[2] {
@@ -87,7 +96,11 @@ pub fn verify_token(config: &AuthConfig, token: &str) -> Result<Principal, Strin
     })
 }
 
-pub fn create_ws_ticket(config: &AuthConfig, sub: &str, role: &str) -> (String, DateTime<Utc>) {
+pub fn create_ws_ticket(
+    config: &AuthConfig,
+    sub: &str,
+    role: &str,
+) -> Result<(String, DateTime<Utc>), String> {
     let mut short = config.clone();
     short.ttl_seconds = 120;
     create_token(&short, sub, role)
@@ -126,7 +139,7 @@ mod tests {
     #[test]
     fn jwt_roundtrip() {
         let cfg = test_config();
-        let (token, _exp) = create_token(&cfg, "integrator", "integrator");
+        let (token, _exp) = create_token(&cfg, "integrator", "integrator").unwrap();
         let principal = verify_token(&cfg, &token).unwrap();
         assert_eq!(principal.sub, "integrator");
         assert_eq!(principal.role, "integrator");
@@ -138,7 +151,7 @@ mod tests {
             ttl_seconds: -10,
             ..test_config()
         };
-        let (token, _) = create_token(&cfg, "agent", "agent");
+        let (token, _) = create_token(&cfg, "agent", "agent").unwrap();
         assert!(verify_token(&cfg, &token).is_err());
     }
 }

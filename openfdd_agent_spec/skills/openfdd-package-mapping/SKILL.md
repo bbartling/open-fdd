@@ -39,19 +39,19 @@ Modeling (agent context, docs-only expansions):
 9. No vendor, campus, or fixture-id hardcoding in product. Gold ids (`AHU_1` / `VAV_1` / `CHW_1` / `weather/`) are layout examples, not selectors. Select by `equipType` / roles; exact id only after the type filter (`RTU_01` must not hit `RTU_010`).
 10. **HP-1 caveat:** registry may list `fan_status` optional while SQL still gates on `fan_cmd` — fan-status-only packages are typically **not runnable**. Do not map binary fan status into fake percent `fan_cmd`. See rule-readiness doc.
 
-## Live MQTT stream (bosspi → Railway)
+## Portal inventory and CSV packages
 
-Empty Overview with healthy `ingest_ok` is the same doctrine as empty packages: **missing cookbook roles**, not broken nginx.
+`architecture_epoch: portal-timescale-v1`. Ingest is the Normal Framework portal API and CSV. Empty Overview with healthy ingest is **missing cookbook roles**, not a broken proxy.
 
-| Live MQTT `role` tag | After `normalize_role` | Cookbook / analytics |
-|----------------------|------------------------|----------------------|
+| Source tag | After `normalize_role` | Cookbook / analytics |
+| --- | --- | --- |
 | `zonetemp` / `zone_temp` / `zn_t` | `zone_t` | zone temperature |
 | `sa_t` / `duct_t` / `sat` | `sat` | supply / discharge air |
-| outdoor air tags | `oa_t` | when quality good |
+| outdoor air tags | `oa_t` | when quality is good |
 
-Product aliases live in `crates/fdd_core/src/columns.rs` (`normalize_role`). Prefer that over renaming OT devices. CSV package import and MQTT ingest both need these identities for Overview / RCx / FDD.
+Product aliases live in `crates/fdd_core/src/columns.rs` (`normalize_role`). CSV package import and portal history use the same role and key binding. Do not add an MQTT publisher to supply them. A retired MQTT tag table is `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../../../docs/archive/ai-agent/historical-3.5-ot-ops.md).
 
-Large package uploads need web nginx `client_max_body_size 128m` (matches central Axum) — otherwise Railway SPA shows `ERR_HTTP2_PROTOCOL_ERROR`.
+Large package uploads need web nginx `client_max_body_size 128m` (matches central Axum).
 
 ## Anti-patterns
 
@@ -63,7 +63,7 @@ Large package uploads need web nginx `client_max_body_size 128m` (matches centra
 
 ## Stamped equipment types
 
-Stamp `equipType` (or `equipment_type`) in each equipment map. Open-FDD classifies from that stamp (rule 64). A missing or unrecognized stamp is unclassified and matches nothing. Never prefer a fixture id over the stamp. Never substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not select `RTU_010`). Do not hard-code a building id. Do not invent an MQTT delta payload. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust. See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
+Stamp `equipType` (or `equipment_type`) in each equipment map. Open-FDD classifies from that stamp (rule 64). A missing or unrecognized stamp is unclassified and matches nothing. Never prefer a fixture id over the stamp. Never substring, prefix, `LIKE`, `contains`, or `starts_with` on `equipment_id` (`RTU_01` must not select `RTU_010`). Do not hard-code a building id. Do not invent an MQTT delta payload. Ingest is portal inventory and CSV, with the same role binding. If an Overview family is empty for an opaque id such as `AC_1`, stamp the correct generic type instead of adding a vendor/site heuristic to Rust. See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
 
 ## Skill home
 

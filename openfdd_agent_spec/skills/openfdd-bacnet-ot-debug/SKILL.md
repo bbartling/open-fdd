@@ -1,75 +1,22 @@
 ---
 name: openfdd-bacnet-ot-debug
 description: >-
-  Use when BACnet Who-Is, ReadProperty, fieldbus OT, MS/TP, or MQTTS ingest
-  fails on a LAN bench or edge. Triggers on: BACnet, Who-Is, ReadProperty,
-  fieldbus :8081, bacpypes3, rusty-bacnet-mcp, MS/TP, local OT bench, sensor
-  smoke, py-bacnet-stacks-playground.
+  historical/non-executable. BACnet Who-Is, fieldbus, MS/TP, and MQTTS debug
+  are not the 4.0 portal path. Product ingest is the Normal Framework portal
+  API and CSV. Triggers on: BACnet, Who-Is, fieldbus, rusty-bacnet, MQTTS ingest.
 ---
 
-# BACnet OT debug (Open-FDD)
+# BACnet OT debug — historical/non-executable
 
-Normal 4.0 MCP discovery does **not** list `openfdd_bacnet_whois` or
-`openfdd_bacnet_read`. Those calls return `ot_transport_retired`. Portal jobs
-use `openfdd_ingest_jobs`, `openfdd_ingest_receipts`, `openfdd_ingest_gaps`,
-and `openfdd_ingest_queue`. Set `OPENFDD_OT_TOOLS=1` only on an explicit
-archive lane. This skill is that lane, not the portal ingest path.
+`architecture_epoch: portal-timescale-v1`. This skill is not an instruction to run fieldbus or a broker.
 
-`openfdd-mcp` is **Central REST** (FDD/historian). It does **not** replace
-wire-level BACnet. **Product OT = `openfdd-fieldbus` + rusty-bacnet (Rust).**
-BACpypes3/Python is **troubleshoot-only** — never a production driver.
+Product ingest is the Normal Framework portal API and CSV. Timescale is the historian. Railway services are central and web.
 
-## Always prove both layers
+`openfdd-mcp` talks to central REST. It does not list `openfdd_bacnet_whois` or `openfdd_bacnet_read`. Those calls return `ot_transport_retired`.
 
-| Layer | Must pass | Why |
-|-------|-----------|-----|
-| **Who-Is** | ≥1 I-Am on the OT NIC | BVLL bound; peers reachable |
-| **ReadProperty** | Numeric `present-value` on a known object | IPs change; discovery alone is not enough |
+Empty RCx or FDD plots are missing roles on the package or portal inventory. Map them with [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md). Do not add a poll catalog to fill a chart.
 
-Peer addresses on the Mint bench move with DHCP — set `READ_TARGET` / `--target`
-from a live Who-Is (do not bake private IPs into product code).
-
-## Where to look (in order)
-
-1. **Product fieldbus (rusty-bacnet)** — `POST http://127.0.0.1:8081/bacnet/whois`
-   and read APIs; Who-Is binds `0.0.0.0` + hosted port (`SO_REUSEADDR`, #526).
-   Unicast reads use ephemeral ports. Poll is **hard-coded 300 s** — never put
-   fieldbus on Railway.
-   Policy: [`docs/operations/BACNET_OT_POLICY.md`](../../../docs/operations/BACNET_OT_POLICY.md)
-2. **BACpypes3 diagnose-only** (stop fieldbus first if you need host `:47808`)
-   - Doc: [`docs/operations/LOCAL_BACNET_BACPYPE3_BENCH.md`](../../../docs/operations/LOCAL_BACNET_BACPYPE3_BENCH.md)
-3. **MQTTS pipeline** (containers, no live MS/TP required) —
-   `scripts/integration/bacnet_mqtt_container_smoke.sh`
-4. **Companion rusty-bacnet-mcp** (read-only wire debug) —
-   [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](../../../docs/mcp-agents/companion-rusty-bacnet-mcp.md)
-5. **External playground** (lessons / vibe labs / DIY router — sibling project) —
-   local checkout `~/Desktop/py-bacnet-stacks-playground` or
-   [github.com/bbartling/py-bacnet-stacks-playground](https://github.com/bbartling/py-bacnet-stacks-playground)
-   - Days 1–27: Python + BACpypes3 / BAC0
-   - `vibe_code_apps_13`: DIY BACnet router
-   - `vibe_code_apps_16`: Rust BACnet lab
-   - Not shipped inside Open-FDD containers
-
-## Quick commands (Mint OptiPlex)
-
-Prefer **fieldbus :8081** Who-Is/read while product owns `:47808`. BACpypes3 only
-when fieldbus is stopped — set bind/target from live DHCP (`ip a` / Who-Is JSON),
-not baked product defaults.
-
-## MCP sync
-
-BACnet troubleshooting context for hosts is embedded in
-[`mcp/INSTRUCTIONS.md`](../../../mcp/INSTRUCTIONS.md) (`include_str!` → GHCR
-`openfdd-mcp`). After merge + Publish, refresh the MCP image tag so agents see
-Who-Is + ReadProperty + playground pointers. Tools:
-`openfdd_bacnet_whois` / `openfdd_bacnet_read` (commission API) and
-`openfdd_agent_context_pointers` (doc map).
-
-## Safety
-
-- No BACnet **writes** without explicit human approval.
-- Keep rusty-bacnet-mcp **`read_only: true`** unless approved.
-- Never print OT credentials or JWTs into public tickets.
+Retired wire commands, image pins, and the public Railway ZAP order are `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../../../docs/archive/ai-agent/historical-3.5-ot-ops.md). The container snapshot is [`archive/ot-edge/`](../../../archive/ot-edge/). `openfdd_stack_up.sh` refuses `standalone`, `edge`, and `react-ot`.
 
 ## Skill home
 
@@ -77,6 +24,6 @@ Who-Is + ReadProperty + playground pointers. Tools:
 
 ## Related skills
 
-- [`openfdd-rcx-fdd-plot-poll`](../openfdd-rcx-fdd-plot-poll/SKILL.md) — which points the plots need
-- [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — role names to poll
-- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — hub versus on-prem fieldbus
+- [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md) — roles for an empty chart
+- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — central and web re-pin
+- [`openfdd-stack-ghcr`](../openfdd-stack-ghcr/SKILL.md) — portal image pull

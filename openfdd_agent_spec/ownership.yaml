@@ -1,5 +1,6 @@
 # ownership.yaml — product + library ownership
 schema_version: 1
+architecture_epoch: portal-timescale-v1
 
 components:
   rule_metadata:
@@ -25,15 +26,19 @@ components:
 
   production_rule_execution:
     canonical_owner: openfdd-central
-    engine: datafusion_sql
-    registry: sql_rules/registry.yaml
+    engine: timescale_postgresql
+    registry: sql/fdd/registry.yaml
+    rules: sql/fdd/postgres/rules/
+    ingest: normal_framework_portal_and_csv
     forbidden:
       - silent_pandas_fallback
       - python_request_path
+      - datafusion_product_path
+      - mqtt_or_fieldbus_product_path
 
   production_analytics:
     canonical_owner: openfdd-central
-    engine: datafusion_sql
+    engine: timescale_postgresql
     routes: /api/analytics/*
     presentation: frontend/web client Plotly
     forbidden:
@@ -68,7 +73,7 @@ components:
     image: openfdd-web
     status: sole_production_ui
     backend: services/central
-    note: Browser → central /api only; Overview via /api/analytics/* (DataFusion) + client Plotly. No Python product runtime.
+    note: Browser → central /api only; Overview via /api/analytics/* (Timescale SQL) + client Plotly. No Python product runtime. Ingest is the Normal Framework portal API and CSV.
     adr: docs/architecture/adr-001-react-rust-modernization.md
 
   wattlab_offline_export:
@@ -94,7 +99,9 @@ components:
   cookbooks:
     sql:
       path: docs/rules/cookbook/datafusion-sql-cookbook.md
-      role: production
+      role: expression_record
+      engine: timescale_postgresql
+      note: Filename is historical. Product execution is sql/fdd on Timescale.
       protected: true
     pandas:
       path: docs/rules/cookbook/pandas-cookbook.md
@@ -109,6 +116,7 @@ components:
       - edge/
       - os/
     policy: never_delete
+    note: edge/ is the package and SQL helper central links. The edge process is archived. os/ stays a future concept. Never delete either path.
 
   mcp:
     canonical_owner: openfdd-mcp

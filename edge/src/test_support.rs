@@ -20,7 +20,9 @@ pub fn with_temp_workspace<F: FnOnce(&Path)>(f: F) {
             .as_nanos()
     ));
     let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
+    if let Err(err) = fs::create_dir_all(&dir) {
+        panic!("temp workspace directory: {err}");
+    }
     std::env::set_var("OPENFDD_WORKSPACE", &dir);
     // Drop any RDF store cached for a previous workspace before the test body runs.
     crate::model::rdf::invalidate_store();
