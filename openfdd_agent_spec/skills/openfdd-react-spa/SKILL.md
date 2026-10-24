@@ -3,7 +3,7 @@ name: openfdd-react-spa
 description: >-
   Maintain the Open-FDD React product SPA (frontend/web → openfdd-web). Use when
   editing Overview, Inspect, FDD Plots, RCx, Mapping, Operations, Sites, auth UI,
-  health matrices, or client Plotly charts against central /api (DataFusion).
+  health matrices, or client Plotly charts against central /api (Timescale SQL).
 ---
 
 # Open-FDD React SPA
@@ -14,14 +14,14 @@ description: >-
 
 How the code is written (hooks, keys, abort, TypeScript, accessibility) is [`docs/REACT_BEST_PRACTICES.md`](../../docs/REACT_BEST_PRACTICES.md). Review with [`openfdd-code-review-rust-react`](../openfdd-code-review-rust-react/SKILL.md). This skill is the product screen contract.
 - Overview / FDD / RCx chart parity vs vibe19 **presentation** (colors, axes)
-- Operations MQTT monitor / OT strip, Sites inventory
+- Operations sites inventory and AFDD. Do not add an MQTT monitor.
 - Auth/login hygiene for internet-facing UI
 
 ## Rules
 
 1. Browser → central Rust `/api` only. Overview data from `/api/analytics/*`
    via `fetchCentralOverview` — never invent a pandas/oracle product path.
-2. FDD math stays in DataFusion SQL (`sql_rules/`). TypeScript builds figures only.
+2. FDD math stays in Timescale SQL (`sql/fdd/`). TypeScript builds figures only.
 3. Shared palette: `frontend/web/src/api/plotlyTheme.ts` (`RAINBOW_PALETTE`).
    Chart contract: `charts.contract.json` (FDD fault axis, Inspect title/domains,
    Overview-RCx / fuel PNG stems). Overview-RCx downloads use bare stems
@@ -36,7 +36,7 @@ How the code is written (hooks, keys, abort, TypeScript, accessibility) is [`doc
    missing zip roles — see [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md).
 7b. **M&V / change-point / savings charts (Wave S):** prefer **Metering**
    (`/metering`) section radios (extend FuelDashboard families) or add one new
-   left section radio — never Plotly on Overview. Data from DataFusion
+   left section radio — never Plotly on Overview. Data from Timescale
    `/api/analytics/*` (or future M&V SQL routes) only; PyPI/`camber` oracle stays
    off the SPA request path. Update this skill + `AGENTS.md` when adding radios.
 8. Sidebar brand shows `GET /api/health` `semver+shortsha` (`data-testid="app-revision"`).
@@ -50,10 +50,10 @@ How the code is written (hooks, keys, abort, TypeScript, accessibility) is [`doc
    without a time axis (donut, ranking bars, OAT scatter) have no preview.
 10. Do not drop `REQUIRED_RCX_PRESET_IDS`. Health row tint uses existing
     `--health-broken-1/2/3` tokens (`n/3`; `?/3` is not red).
-11. **Operations** (`/operations`) includes Sites inventory + MQTT + AFDD radios
-    (`?view=sites|mqtt|afdd`). Legacy `/sites` redirects to Operations → Sites.
-12. **Sites** is package/edge **inventory** under Operations. CSV / MQTT / Both is an
-    operator label only — not a dual-writer historian epic.
+11. **Operations** (`/operations`) is sites inventory and AFDD. Do not add an
+    MQTT or fieldbus console. Legacy `/sites` redirects to Operations → Sites.
+12. **Sites** is package and portal **inventory** under Operations. CSV and
+    portal history share roles. They are not two historians.
 13. Low-RAM benches: prefer `npm run dev` (Vite → `:8080`) and get human approval
     before GHCR `openfdd-web` fresh pulls after UI PRs.
 14. **Rule display names:** one contract across sidebar, FDD Plots, plot titles, health
@@ -73,7 +73,7 @@ How the code is written (hooks, keys, abort, TypeScript, accessibility) is [`doc
     states. Package/agent workflow belongs in `AGENTS.md` / GitHub, not the SPA.
     Hide `tenant:legacy` chrome. Left rail = Sites · CSV Upload · Units · Lab;
     Sign in/out next to revision. Results by Category nests under Data Model;
-    Sites inventory nests under Operations (with MQTT / AFDD).
+    Sites inventory nests under Operations (with AFDD).
 17. **Hub Admin (Wave O8):** `/admin` is hub_admin only — quiet tables for users/tenants.
 18. **Data Model export (Wave O9):** Export = **entire active site** data model JSON.
     Do not offer device/point-scoped export. Equipment picker is for edits only.
@@ -107,7 +107,7 @@ How the code is written (hooks, keys, abort, TypeScript, accessibility) is [`doc
 - Exposing MQTT broker secrets to the SPA
 - Shipping GHCR web without Vite operator approval on low-RAM benches when required by the active plan
 - Adding goofy explanatory UI text for agent/under-hood changes
-- Clearing Overview and re-running all DataFusion analytics on every building switch
+- Clearing Overview and re-running all Timescale analytics on every building switch
 
 ## Skill home
 

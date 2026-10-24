@@ -254,7 +254,7 @@ pub fn analyze_timestamps(rows: &[(String, ParsedTimestamp)]) -> TimestampAnalys
 }
 
 pub fn default_tz() -> Tz {
-    "America/Chicago".parse().unwrap()
+    Tz::America__Chicago
 }
 
 #[cfg(test)]

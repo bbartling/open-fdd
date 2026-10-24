@@ -401,7 +401,7 @@ pub fn faults_csv(query: &ExportQuery, summary: bool) -> String {
                 if confirmed > 0 { "latched" } else { "normal" }.into(),
                 "bacnet".into(),
                 "oa_t".into(),
-                label.clone(),
+                label,
             ])
         );
     }

@@ -8,8 +8,8 @@
 # - If health fails, rollback to previous digests and restart
 #
 # Usage:
-#   ./scripts/openfdd_maint_update_resume.sh [standalone|central|edge|csv|react|react-ot] [OPENFDD_IMAGE_TAG]
-#   ./scripts/openfdd_maint_update_resume.sh react-ot nightly
+#   ./scripts/openfdd_maint_update_resume.sh [portal|csv|central|react] [OPENFDD_IMAGE_TAG]
+#   ./scripts/openfdd_maint_update_resume.sh portal sha-<7>
 #
 # Options:
 #   --skip-maintenance
@@ -20,7 +20,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-RECIPE="${1:-react-ot}"
+RECIPE="${1:-portal}"
 NEW_TAG="${2:-${OPENFDD_IMAGE_TAG:-nightly}}"
 
 DO_MAINT=1
@@ -37,10 +37,10 @@ while [[ $# -gt 0 ]]; do
     --backup-dir) BACKUP_DIR="$2"; shift 2 ;;
     -h|--help)
       cat <<EOF
-Usage: $0 [standalone|central|edge|csv|react|react-ot] [OPENFDD_IMAGE_TAG]
+Usage: $0 [portal|csv|central|react] [OPENFDD_IMAGE_TAG]
 
 Example:
-  $0 react-ot nightly
+  $0 portal sha-<7>
 
 Options:
   --skip-maintenance   Skip docker prune step

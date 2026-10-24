@@ -37,48 +37,38 @@ are **Timescale + `sql/fdd/*.sql`** (no DataFusion/Parquet product path; no dual
 Bring-up: [`docs/operations/TIMESCALE_WAVE_X.md`](../docs/operations/TIMESCALE_WAVE_X.md)
 · ADR-010 · ART REBOOT_SAFE under `/tmp/openfdd-softopen/3.6.0/`.
 
-OT LAN benches are the explicit archive lane — recipe **`react-ot`**
-(`compose.react.yml` + `compose.react.fieldbus.yml`), not the 4.0 default.
-Snapshot: `archive/ot-edge/unqualified-cdaa4f15/` (no verified 3.6.18 freeze).
-Agent handbook:
-[`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md).
+OT wire recipes are `historical/non-executable`. `openfdd_stack_up.sh` refuses
+`react-ot`. The archive render does not start containers:
+
+```bash
+OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay
+```
+
+Snapshot: `archive/ot-edge/unqualified-cdaa4f15/`. See
+[`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../docs/archive/ai-agent/historical-3.5-ot-ops.md).
 
 **Local UI/API are plain HTTP** (`:3000` / `:8080`) behind a firewall — product
 Compose does **not** terminate TLS yet. See
 [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md).
 
-**Pi 3 edges (~905 MiB):** run **fieldbus-only** (no central/web soak). Prefer
-native `linux/arm64` `openfdd-fieldbus` from GHCR multi-arch (Plan 3 CLOSED on
-bosspi `sha-fadf167`); qemu-amd64 is fallback only when arm64 pull is unavailable.
-
 Post-merge soak: **wait for** `Publish Open-FDD stack to GHCR` (+ MCP) **success**
-on the tip SHA before pulling `sha-<7>`. Tip git SHA can exist minutes before
-GHCR tags. Prefer:
+on the tip SHA before pulling. Tip git SHA can exist minutes before GHCR tags.
+Pick the image by OCI `created`, not by the git tip alone and not by the tag
+name `nightly`:
 
 ```bash
 cd ~/open-fdd
-```
-
-Manual pin path (only after GHCR Actions are green for that SHA):
-
-```bash
-SHORT=$(git -C ~/open-fdd rev-parse --short=7 origin/master)
-
-for img in openfdd-central openfdd-web openfdd-fieldbus openfdd-mqtt; do
-  docker pull "ghcr.io/bbartling/${img}:sha-${SHORT}"
-done
-
-export OPENFDD_IMAGE_TAG="sha-${SHORT}"
-cd ~/open-fdd
-./scripts/openfdd_stack_pull.sh react-ot
-./scripts/openfdd_stack_up.sh react-ot --no-pull
+./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web
+export OPENFDD_IMAGE_TAG="sha-<that>"
+./scripts/openfdd_stack_pull.sh portal
+./scripts/openfdd_stack_up.sh portal --no-pull
 curl -fsS http://127.0.0.1:8080/api/health
-curl -fsS http://127.0.0.1:8080/api/ui/generation   # expect generation=react
 curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 ```
 
-Day-to-day convenience may set `OPENFDD_IMAGE_TAG=nightly`, but qualification
-and post-merge verification must use `sha-*`.
+`openfdd_stack_up.sh` refuses `standalone`, `edge`, and `react-ot`. Fieldbus and
+MQTT pulls are `historical/non-executable`
+([`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../docs/archive/ai-agent/historical-3.5-ot-ops.md)).
 
 ### Low-RAM hosts (bensbench)
 
@@ -91,9 +81,9 @@ central/web — OOM risk. Ship code via PR → GH Actions →
 docker image prune -f
 docker images 'ghcr.io/bbartling/openfdd-*' --format '{{.Repository}}:{{.Tag}} {{.ID}}' | head
 
-# 2) pull + up (no rebuild) — local firewall path only; Railway hub is primary AFDD head-end
-./scripts/openfdd_stack_pull.sh react   # or react-ot
-./scripts/openfdd_stack_up.sh react --no-pull
+# 2) pull + up (no rebuild) — local firewall path; Railway lab is central + web
+./scripts/openfdd_stack_pull.sh portal
+./scripts/openfdd_stack_up.sh portal --no-pull
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
@@ -114,28 +104,25 @@ required for health, FDD, or Overview analytics.
 
 ## Analytics RAM and local disk budget
 
-Analytics/RCx/fault results are Parquet partitions, not AFDD JSON blobs. CSV buildings load for a query and unload when the job finishes, the SPA leaves the site, or the idle timer (30–120s) fires. Max interactive sessions default to 2. MQTTS keeps a small ingest buffer. Catalog size must not equal RSS.
+Timescale is the historian. Analytics/RCx/fault result cache may be Parquet partitions under `analytics_results/` and is not telemetry. CSV buildings load for a query and unload when the job finishes, the SPA leaves the site, or the idle timer fires. Max interactive sessions default to 2. There is no MQTTS ingest buffer on the product path.
 
-**Portable compute memory (#1179):** FairSpillPool size = `(cgroup/host hard − reserves) × OPENFDD_COMPUTE_MEMORY_FRACTION` (default 0.50). `OPENFDD_QUERY_MEMORY_MB` is per-request only. Shed/abort at 0.75/0.85 × hard. Read `/api/health.memory_budget`. Spill under `OPENFDD_DATAFUSION_SPILL_DIR` (counts toward disk budget). See [`AFDD_MODES.md`](../docs/operations/AFDD_MODES.md).
+**Memory:** prefer lookback-bounded Timescale SQL. DataFusion spill-pool variables are not the tip path ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)). See [`AFDD_MODES.md`](../docs/operations/AFDD_MODES.md).
 
 Local/edge data budget defaults to 100 GiB oldest-first across `history/` and `analytics_results/`. Before an on-box full backup or patch, run `scripts/openfdd_disk_preflight.py`. Do not plan 100 GiB live plus another 100 GiB backup on a ~200 GiB disk. Test deploys skip backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Railway eviction is a separate knob (`OPENFDD_DATA_BUDGET_ENABLED`). Soft-OPEN lab program: **no backups** unless Ben asks — keep historian volumes live across image refresh. Docs: [`ANALYTICS_RESULT_CACHE.md`](../docs/operations/ANALYTICS_RESULT_CACHE.md), [`DATA_RETENTION_BUDGET.md`](../docs/operations/DATA_RETENTION_BUDGET.md).
 
-## Ops patch cycle (Railway hub + qualification — 3.3.20+)
+## Ops patch cycle (portal)
 
-Living log: [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
-Active program: Wave L **ACTIVE** — multi-client shared hosting **3.5.x** (L4 LIVE on `sha-d67d27b` / 3.5.3 / mode OFF; L5 budgets next). Wave K **CLOSED / PINNED** on `sha-9c3e8b1` / 3.4.0. Cursor: [`wave_l_shared_db_mega_master`](../../.cursor/plans/wave_l_shared_db_mega_master.plan.md).
-Stress handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · entry [`scripts/qualification/README.md`](../scripts/qualification/README.md).
+`architecture_epoch: portal-timescale-v1`. Retired Wave L pins and the mqtt re-pin order are `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../docs/archive/ai-agent/historical-3.5-ot-ops.md).
 
 | Step | Action |
 | --- | --- |
-| Discover | Soft-OPEN / DEFERRED rows + child plan one-concern |
-| Fix | One PR; VERSION bump when shipping stack images |
-| Publish | Wait GHCR Publish green on merge sha |
-| Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-<7>` (product tip; docs-tip incompleteness may be noise) |
-| Re-pin | **Railway CLI** backup → central → mqtt → web |
-| Smoke | Mid-wave: health + gates **11–14**. Ship/L8: full stress |
-| Cleanup | `docker rm -f` zap-* / openfdd-mcp-railway-* leftovers (low-RAM) |
-| Close | BUG_REPORT + hygiene (0 open PRs / only `master`) |
+| Fix | One PR. Do not bump VERSION for a guidance-only change. |
+| Publish | Wait for GHCR Publish green on the merge sha |
+| Choose the image | `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web` |
+| Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-<7>` |
+| Re-pin | Railway CLI backup, then central, then web after `/api/health` is 200 |
+| Smoke | `GET /api/health` on the pinned sha |
+| Qualification | Owned disposable central + web + Timescale. Not a public Railway ZAP. |
 
 **Auth / MT smoke (Kali O2c — do not regress):** With `OPENFDD_JWT_SECRET` set, unauth
 `GET /api/tenants` (and capabilities / health/stack / building/snapshot /
@@ -144,17 +131,9 @@ readiness = `GET /api/health` only. Local regression:
 `cargo test -p openfdd-central --test preauth_disclosure`. Live ACL = gate 31;
 headers/`security.txt` = gate 34. Skill:
 [`skills/openfdd-mt-security/SKILL.md`](skills/openfdd-mt-security/SKILL.md).
-**No Railway re-pin while Kali owns the hub** unless operator OK.
+**Qualification:** an owned disposable central + web + Timescale stack, with authenticated portal checks and explicit budgets. A public Railway ZAP is not that check. Codex owns `scripts/stress/` and `scripts/qualification/`.
 
-**Stress tiers (do not conflate):**
-
-| Tier | Scope |
-| --- | --- |
-| Railway field | CSV matrix + public ZAP + auth + Railway MCP — closeout path |
-| Isolated candidate | Authenticated ZAP AF / MQTTS ACL / restore — disposable only |
-| Local `run_all` | Lab recipe only — **not** patch-cycle closeout |
-
-**Volume restore (gate 18):** disposable empty volume only for true restore (3.3.32). Never restore over live Railway workspace.
+**Volume restore:** disposable empty volume only. Never restore over a live Railway workspace.
 
 Session log: [`SESSION_LOG.md`](SESSION_LOG.md). Machine port: [`AI_CONTEXT_HANDOFF.md`](../docs/operations/recovery/AI_CONTEXT_HANDOFF.md).
 

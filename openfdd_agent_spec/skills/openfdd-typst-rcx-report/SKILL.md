@@ -1,10 +1,9 @@
 ---
 name: openfdd-typst-rcx-report
 description: >-
-  Build engineer-facing Typst lab PDFs from live DataFusion Overview / RCx /
-  Inspect APIs. Covers VAV AHU (BUILDING_100), heat-pump + metering (LAKESIDE_ES /
-  Creekside), and MQTTS zone monitoring (bldg2). CRITICAL: preserve Overview-
-  mirrored charts; never strip reports to thin package layouts. Triggers on:
+  Build engineer-facing Typst lab PDFs from Timescale Overview / RCx / Inspect
+  APIs or from a mapped CSV via open-fdd-anomaly report. MQTTS zone monitoring
+  is a historical lab kit, not product ingest. Triggers on:
   typst rcx, rcx lab report, heat pump report, lakeside, creekside, mqtts zone
   PDF, building100_rcx_report, elec_power metering PDF, box plot, seasonal heat cool,
   open-fdd-anomaly report, single-system AHU Typst, AHU_1 FDD RCx PDF.
@@ -15,7 +14,8 @@ description: >-
 Works with any AI agent that can read markdown skills and run the PyPI CLI. Author this skill only in `openfdd_agent_spec/skills/openfdd-typst-rcx-report/`. Do not create a copy under `.cursor/skills/` or another vendor directory. `./scripts/openfdd_install_agent_skills.sh --sync` is the sync. See [`AGENTS.md`](../../AGENTS.md).
 
 **Not** the product PDF path (`rust-text-pdf`). Agent lab screening pack:
-DataFusion → Plotly (UI palette) → Typst → PDF + CSVs for Excel.
+Timescale SQL or the pandas oracle → Plotly (UI palette) → Typst → PDF + CSVs for Excel.
+MQTTS zone PDFs in the external lab kit are historical/non-executable as an ingest path.
 
 Reference kit: `/home/ben/building100_rcx_report/` when that directory is present.
 The single-AHU command does not read it. A missing kit is not a blocker for
@@ -82,7 +82,7 @@ typst compile main.typ BUILDING_100_RCx_Lab_Report.pdf
 This path is **additive**. It does not render, replace, or overwrite the sacred
 BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
 
-AI agent reporting can consume FDD and analytics that DataFusion SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
+AI agent reporting can consume FDD and analytics that Timescale SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
 
 The reporter is not Railway-only. It draws from mapped roles (`RoleHistory`).
 `open-fdd-anomaly report` loads a local device folder (`history_wide.csv` +
@@ -178,7 +178,7 @@ Haystack exports store devices under `equip` (object). Flat sidecars use string 
 
 ### BUILDING_100 legacy kit
 
-The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into a PyPI report default or a DataFusion historian branch. Tests and ops may keep those names. Report and plot equipment still comes from `equipType` / `equipment_type`, roles, and the registry — do not prefer a fixture id, and do not substring-match `equipment_id` (`RTU_01` must not hit `RTU_010`). See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
+The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into a PyPI report default or a Timescale historian branch. Tests and ops may keep those names. Report and plot equipment still comes from `equipType` / `equipment_type`, roles, and the registry — do not prefer a fixture id, and do not substring-match `equipment_id` (`RTU_01` must not hit `RTU_010`). See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
 
 The single-AHU reporter above is not this site's Overview PDF, and it is not a Railway-only command.
 

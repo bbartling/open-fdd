@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! Optional operator-env TADCO smoke — no committed CSV in repo.
 //! Run: OPENFDD_TADCO_IMPORT_DIR=/path/to/hvac_systems_CLEANED cargo test tadco_env_preflight -- --ignored
 

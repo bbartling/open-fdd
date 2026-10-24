@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! Generic CSV import pipeline — filename-derived model, historian, FDD (no bench-specific IDs).
 
 use open_fdd_edge_prototype::fdd::execution;

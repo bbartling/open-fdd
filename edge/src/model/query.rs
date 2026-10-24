@@ -97,7 +97,7 @@ pub fn list_equipment(site_id: &str) -> Value {
         .map(|row| {
             let equipment_id = row.get("equipment_id").cloned().unwrap_or(json!(null));
             json!({
-                "id": equipment_id.clone(),
+                "id": equipment_id,
                 "equipment_id": equipment_id,
                 "name": row.get("name").cloned().unwrap_or(json!(null)),
                 "site_id": row.get("site_id").cloned().unwrap_or(json!(site_id)),
@@ -458,8 +458,8 @@ pub fn network_graph(site_id: Option<&str>) -> Value {
                 return None;
             }
             Some(json!({
-                "from_equipment_id": from.clone(),
-                "to_equipment_id": to.clone(),
+                "from_equipment_id": from,
+                "to_equipment_id": to,
                 "from_label": row.get("fromLabel").cloned().unwrap_or(from),
                 "to_label": row.get("toLabel").cloned().unwrap_or(to)
             }))

@@ -111,7 +111,7 @@ pub fn authenticate(config: &AuthConfig, body: &Value) -> Result<LoginResult, St
     }
 
     clear_failures(username);
-    let (token, expires_at) = super::jwt::create_token(config, username, role);
+    let (token, expires_at) = super::jwt::create_token(config, username, role)?;
     audit::log_event("login_success", json!({"username": username, "role": role}));
 
     Ok(LoginResult {

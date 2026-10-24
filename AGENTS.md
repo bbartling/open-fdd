@@ -77,6 +77,7 @@ When changing Rust:
 - **Remove** `#[allow(...)]` / `#![allow(...)]`; fix the cause. Prefer `_` / `_guard`, `?`, or smallest-scope `#[expect(...)]` with a one-line constraint comment. Never crate-wide `#![allow]`.
 - Never silently discard `Result`/`Option`; prefer `?` or explicit match/log. Last resort: `let _ = …;` + why.
 - Prefer `?` / combinators over `.unwrap()` on production paths. Tests may unwrap and expect (`allow-unwrap-in-tests` and `allow-expect-in-tests`). Product crates deny `clippy::unwrap_used` and `clippy::expect_used`.
+- Integration tests in `tests/` start with `#![cfg(test)]` so those switches, plus `allow-print-in-tests` and `allow-dbg-in-tests`, cover the whole file. Do not add `#[allow]`, `#![allow]`, or `#[expect]` to silence them.
 - Historian: **Timescale** (`OPENFDD_DATABASE_URL` / `OPENFDD_HISTORIAN=timescale`) is canonical ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md), [`TIMESCALE_WAVE_X.md`](docs/operations/TIMESCALE_WAVE_X.md)). No dual-write. Do not resurrect DataFusion/Parquet/Arrow on the product path (`legacy-*` features stay OFF). Feather dual-write remains retired.
 
 Patch-cycle train after Plans 1–4: log gate FAILs in [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) **before** fixing → tiny rev bump (product only) → GHCR `sha-*` → re-pin → smoke → re-stress affected gate → move row to patched. Local synthetic CSV FDD and Railway F1 are separate stress tiers (see [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md) § Ops patch cycle).
@@ -140,10 +141,10 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 
 Railway is an **experimental cloud path**, not a replacement for the LAN/VPN/OT deployment contract or a claim of production public-internet hardening.
 
-**Agent ops (bensbench):** use the **Railway CLI** for backup + hub tip re-pin — [`openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md`](openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) · [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Do **not** confuse Railway CLI / Railway MCP with **`openfdd-mcp`** FDD tools. **FQ OPS PINNED:** **`sha-7ad6479`** / **3.5.43** (Wave U V6 · stress `20260921T234148Z`). Rollback **`sha-1677c33`** / **3.5.37** (prior Wave U FQ) or Soft Tip B **`sha-4a5c11e`** / **3.5.28**.
+**Agent ops (bensbench):** use the **Railway CLI** for backup + hub tip re-pin — [`openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md`](openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) · [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Do **not** confuse Railway CLI / Railway MCP with **`openfdd-mcp`** FDD tools. Resolve the image with `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web`. Do not reuse a 3.5.x pin. Retired pins are `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](docs/archive/ai-agent/historical-3.5-ot-ops.md).
 
-- **CSV-only lab:** `openfdd-central` + `openfdd-web`.
-- **Archived3.x cloud MQTTS reference (not a4.0 deployment step):** `openfdd-central` + `openfdd-web` + **`openfdd-mqtt`** on Railway private networking; keep **`openfdd-fieldbus` on-prem** publishing MQTTS into the cloud broker. MQTTS is retired from the current portal product; preserve this transport recipe in the archive.
+- **Portal lab:** `openfdd-central` + `openfdd-web` + Timescale. Ingest is the Normal Framework portal API and CSV.
+- **CSV-only lab:** `openfdd-central` + `openfdd-web` (`./scripts/openfdd_stack_up.sh csv`).
 - Real optional image: `openfdd-mcp`.
 - Do **not** invent `openfdd-commission`, `openfdd-mcp-rag`, or a Python/Streamlit commissioning runtime.
 - Both central and web listen on container port `8080`; local Compose maps web host port `3000` to container `8080`.
@@ -152,8 +153,7 @@ Railway is an **experimental cloud path**, not a replacement for the LAN/VPN/OT 
 - Cloud pulls require public GHCR package visibility or Railway registry pull credentials. Railway private-registry credentials are plan-dependent; public GHCR is the simplest open-source path.
 - `OPENFDD_JWT_SECRET` and `OPENFDD_ADMIN_PASSWORD` must be deployment-unique secrets and must never be committed.
 - Attach persistent storage at central `/workspace` before relying on imported packages across redeploys.
-- BACnet/fieldbus generally requires deliberate OT-LAN/VPN/router access; generic Railway networking does not provide BACnet broadcast discovery automatically.
-- Prefer `:nightly` for the latest green `master` channel or `:sha-<7>` for reproducibility. A `master` merge triggers the GHCR stack and MCP publishers; do not claim the new nightly until those publish jobs are green and the target digest resolves.
+- Prefer the `sha-*` from `./scripts/ghcr_newest_by_created.py` over a tag named `:nightly`. A `master` merge triggers the GHCR stack and MCP publishers; do not claim the new image until those publish jobs are green and that created-time resolves.
 
 Full guide: [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Checklist: [`docs/operations/RAILWAY_DEPLOYMENT_CHECKLIST.md`](docs/operations/RAILWAY_DEPLOYMENT_CHECKLIST.md). Image/tag contract: [`docs/operations/ghcr-images.md`](docs/operations/ghcr-images.md). Local stack entry point remains `./scripts/openfdd_stack_up.sh`.
 
@@ -164,24 +164,14 @@ A Railway one-click template should eventually encode **Timescale → central �
 - **Never** local `docker build` / heavy Rust compile for stack images. Ship via PR → GH Actions → GHCR `nightly` / `sha-*`.
 - Before pulling new images: prune unused/old digests first, then `./scripts/openfdd_stack_pull.sh …` and `./scripts/openfdd_stack_up.sh … --no-pull`.
 - Memory / AFDD: prefer lookback-bounded Timescale SQL cycles on small hosts; see [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md). Legacy DataFusion spill pool vars are not the tip path ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)).
-- BACnet OT on cell edges: **fixed 300 s** poll/publish (compiled into fieldbus; not adjustable), poll ~**30%** health points only — [`docs/operations/BACNET_OT_POLICY.md`](docs/operations/BACNET_OT_POLICY.md). **`openfdd-fieldbus` never on Railway/cloud.** Hard BACnet debug: [`docs/mcp-agents/companion-rusty-bacnet-mcp.md`](docs/mcp-agents/companion-rusty-bacnet-mcp.md).
-- Who-Is / discovery: fieldbus binds **`0.0.0.0`** + hosted BACnet/IP port (`whois_bind_port = 0` → `bacnet_server.port`, `SO_REUSEADDR`) so directed-broadcast I-Am is receivable (#526); do not use the unicast `OPENFDD_FIELDBUS_BIND` address for discovery. Unicast reads stay ephemeral — see [`services/fieldbus/AGENTS.md`](services/fieldbus/AGENTS.md).
-- **Pi / arm64 edges:** pull multi-arch `openfdd-fieldbus` (`linux/arm64`); do **not** run central/web soak on Pi 3 (~905 MiB) — fieldbus-only.
+- Fieldbus, BACnet Who-Is, and Pi fieldbus-only soaks are `historical/non-executable` ([`docs/archive/ai-agent/historical-3.5-ot-ops.md`](docs/archive/ai-agent/historical-3.5-ot-ops.md)). Do not pull `openfdd-fieldbus` for a portal lab.
 - Details: [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md).
 
 ## AFDD vs bulk FDD
 
 Same Timescale SQL registry. Bulk = CSV/package / manual run; continuous AFDD = opt-in timer + lookback on the Timescale historian (watermark/incremental — not full-DB every tick). Ingest is the Normal Framework portal and CSV. Multi-site isolation is by `building_id`. Full contract: [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
 
-Local fieldbus ingest (#1048) uses explicit `OPENFDD_INGEST_MODE=mqtts|local_fieldbus|dual`.
-The broker-free path requires deployment-token auth and trusted tenant/building/edge
-configuration. Local and remote sinks are separate workers, so a remote backlog cannot
-delay local collection. Central uses one shared writer on a dedicated blocking thread.
-Local HTTP publishes that request before the ACK: HTTP 200 is a committed receipt
-with persisted rows, and HTTP 202 stays pending so fieldbus retains the spool.
-Journal compaction keeps pending envelopes and committed tombstones. Acceptance
-queries the unique persisted row and the exact replay count. #1049 cloud
-retention/backup and #1044 Modbus/driver coverage remain deferred dependencies.
+Product ingest has no `mqtts`, `local_fieldbus`, or `dual` mode. Those modes are `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](docs/archive/ai-agent/historical-3.5-ot-ops.md).
 
 ## Platform revision (sidebar)
 
