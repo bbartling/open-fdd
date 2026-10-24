@@ -7,10 +7,11 @@ const SESSION_GEN_KEY = "openfdd.auth.session_gen";
  * When central auth is required, mint a session before gated routes (Overview, jobs, …).
  * No-op when auth is disabled.
  *
- * The sign-in page calls /api/auth/me as it loads. That request starts with no
- * token. If it returns 401 after the token is stored, the client clears the
- * session unless the session generation moved. setStoredToken does that bump;
- * writing the token alone does not, and the next navigation is logged out.
+ * The token is installed with an init script so the first document already has
+ * it. Opening /auth first lets that page call /api/auth/me with no token. Chrome
+ * logs the 401, and a test that listens for console errors fails on it. The
+ * generation bump matches setStoredToken: a late 401 from an older request must
+ * not clear the session.
  */
 export async function ensureProductSession(
   page: Page,
@@ -51,12 +52,21 @@ export async function ensureProductSession(
     throw new Error("auth login returned no token");
   }
 
-  await page.goto("/auth", { waitUntil: "domcontentloaded" });
-  await page.evaluate(
-    ([key, genKey, value]) => {
-      sessionStorage.setItem(genKey, String(Date.now()));
+  await page.addInitScript(
+    ([key, genKey, value, gen]) => {
+      sessionStorage.setItem(genKey, gen);
       sessionStorage.setItem(key, value);
     },
-    [TOKEN_KEY, SESSION_GEN_KEY, token] as const,
+    [TOKEN_KEY, SESSION_GEN_KEY, token, String(Date.now())] as const,
   );
+}
+
+/** Drop the injected token on later document loads. A reload re-runs init scripts. */
+export async function clearProductSession(page: Page): Promise<void> {
+  await page.addInitScript((key: string) => {
+    sessionStorage.removeItem(key);
+  }, TOKEN_KEY);
+  await page
+    .evaluate((key: string) => sessionStorage.removeItem(key), TOKEN_KEY)
+    .catch(() => undefined);
 }

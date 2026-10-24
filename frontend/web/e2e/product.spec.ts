@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { collectPageErrors, simulateLanHttpCrypto } from "./lanHttp";
 import { failIfRequired, stackRequired } from "./requireStack";
-import { ensureProductSession } from "./session";
+import { clearProductSession, ensureProductSession } from "./session";
 
 /**
  * Real-stack product markers — no route or network mocks.
@@ -22,7 +22,7 @@ async function waitForGatedPage(
 }
 
 async function clearAuthSession(page: import("@playwright/test").Page) {
-  await page.evaluate(() => sessionStorage.removeItem("openfdd.auth.token"));
+  await clearProductSession(page);
 }
 
 /** Dev contract metrics live in a collapsed expander on empty sites. */
