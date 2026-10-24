@@ -425,3 +425,153 @@ async fn portal_repoll_is_idempotent_and_removed_equipment_keeps_samples_until_p
     );
     purge_site(&pool).await;
 }
+
+#[tokio::test]
+async fn unmapped_point_stays_referenced_without_a_role_row() {
+    let Some(url) = test_database_url() else {
+        return;
+    };
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&url)
+        .await
+        .expect("unmapped inventory postgres");
+    apply_schema(&pool).await;
+    let site = "w7n-unmapped-role";
+    for sql in [
+        "DELETE FROM sample WHERE site_id = $1",
+        "DELETE FROM role_map WHERE building_id = $1",
+        "DELETE FROM point_map WHERE site_id = $1",
+        "DELETE FROM equipment WHERE building_id = $1",
+    ] {
+        sqlx::query(sql)
+            .bind(site)
+            .execute(&pool)
+            .await
+            .expect("purge unmapped site");
+    }
+    let tsdb = Tsdb::from_pool(pool.clone());
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path().join(site);
+    let point = |id: &str, role: &str| crate::providers::inventory_sync::InventoryPoint {
+        portal_point_id: id.into(),
+        display_name: None,
+        unit: Some("°F".into()),
+        equipment_id: "AHU_1".into(),
+        equip_type: Some("ahu".into()),
+        equip_dis: None,
+        equip_markers: vec!["ahu".into(), "equip".into()],
+        role: role.into(),
+        markers: vec![
+            "sensor".into(),
+            "temp".into(),
+            "discharge".into(),
+            "air".into(),
+        ],
+        kind: Some("Number".into()),
+        tz: Some("America/Chicago".into()),
+        his: Some(true),
+        his_mode: Some("cov".into()),
+        enum_value: None,
+        ref_rel: None,
+        ref_id: None,
+    };
+    let snap = crate::providers::inventory_sync::InventorySnapshot {
+        points: vec![point("pt-sat", "sat"), point("pt-free", "")],
+        source_points: 2,
+        complete: true,
+    };
+    let first = apply_to_stores(Some(&tsdb), &root, site, "nf:unmapped", &snap).await;
+    assert!(first.errors.is_empty(), "{:?}", first.errors);
+    let free_key: Option<String> = sqlx::query_scalar(
+        "SELECT openfdd_key FROM point_map WHERE site_id = $1 AND portal_point_id = 'pt-free'",
+    )
+    .bind(site)
+    .fetch_one(&pool)
+    .await
+    .expect("free key");
+    assert_eq!(free_key.as_deref(), Some("pt-free"));
+    let free_role: Option<String> = sqlx::query_scalar(
+        "SELECT role FROM point_map WHERE site_id = $1 AND portal_point_id = 'pt-free'",
+    )
+    .bind(site)
+    .fetch_one(&pool)
+    .await
+    .expect("free role");
+    assert!(free_role.is_none());
+    let role_rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM role_map WHERE building_id = $1 AND openfdd_key = 'pt-free'",
+    )
+    .bind(site)
+    .fetch_one(&pool)
+    .await
+    .expect("role rows");
+    assert_eq!(role_rows, 0);
+    let mapped_roles: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM role_map WHERE building_id = $1 AND role = 'sat'")
+            .bind(site)
+            .fetch_one(&pool)
+            .await
+            .expect("mapped role");
+    assert_eq!(mapped_roles, 1);
+    let mut batch = UpsertBatch::default();
+    batch.push(fdd_tsdb::SampleRow::new(
+        Utc.with_ymd_and_hms(2026, 10, 1, 0, 0, 0)
+            .single()
+            .expect("ts"),
+        site,
+        "pt-free",
+        Some(70.0),
+    ));
+    tsdb.upsert_samples_stats(&batch).await.expect("sample");
+    let again = apply_to_stores(Some(&tsdb), &root, site, "nf:unmapped", &snap).await;
+    assert!(again.errors.is_empty(), "{:?}", again.errors);
+    let referenced: bool = sqlx::query_scalar(
+        "SELECT referenced FROM point_map WHERE site_id = $1 AND portal_point_id = 'pt-free'",
+    )
+    .bind(site)
+    .fetch_one(&pool)
+    .await
+    .expect("still referenced");
+    assert!(referenced);
+    let mut without = snap.clone();
+    without.points.retain(|pt| pt.portal_point_id != "pt-free");
+    let removed = apply_to_stores(Some(&tsdb), &root, site, "nf:unmapped", &without).await;
+    assert!(removed.errors.is_empty(), "{:?}", removed.errors);
+    let still_there: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM point_map WHERE site_id = $1 AND portal_point_id = 'pt-free'",
+    )
+    .bind(site)
+    .fetch_one(&pool)
+    .await
+    .expect("row kept");
+    assert_eq!(still_there, 1);
+    let now_referenced: bool = sqlx::query_scalar(
+        "SELECT referenced FROM point_map WHERE site_id = $1 AND portal_point_id = 'pt-free'",
+    )
+    .bind(site)
+    .fetch_one(&pool)
+    .await
+    .expect("unreferenced");
+    assert!(!now_referenced);
+    let samples: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sample WHERE site_id = $1 AND openfdd_key = 'pt-free'",
+    )
+    .bind(site)
+    .fetch_one(&pool)
+    .await
+    .expect("samples kept");
+    assert_eq!(samples, 1);
+    for sql in [
+        "DELETE FROM sample WHERE site_id = $1",
+        "DELETE FROM role_map WHERE building_id = $1",
+        "DELETE FROM point_map WHERE site_id = $1",
+        "DELETE FROM equipment WHERE building_id = $1",
+    ] {
+        sqlx::query(sql)
+            .bind(site)
+            .execute(&pool)
+            .await
+            .expect("cleanup unmapped site");
+    }
+}

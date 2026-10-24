@@ -600,10 +600,11 @@ pub fn parse_point_query_json(text: &str) -> Result<Vec<RawProviderPoint>, Provi
 /// Point query response → inventory snapshot. Unlike the latest-value parser,
 /// a point needs no `latestValue`; identity and portal tags are enough.
 ///
-/// A point joins the model when its attrs carry `equipRef` and `role`. Other
-/// tags: `equipType`, `equipDis`, `equipMarkers`, `markers` (comma or space
-/// separated string, or a string array). A full page may be truncated, so it
-/// is marked incomplete and sync does not remove anything from it.
+/// A point joins the model when its attrs carry `equipRef`. A custom `role`
+/// is optional: a point with Haystack markers and no role stays in the
+/// inventory. Typed `kind`, `tz`, `his`, `hisMode`, `enum`, and `airRef` are
+/// kept. A full page may be truncated, so it is marked incomplete and sync
+/// does not remove anything from it.
 pub fn parse_inventory_json(
     text: &str,
     page_size: u32,
@@ -629,19 +630,33 @@ pub fn parse_inventory_json(
         else {
             continue;
         };
-        let Some(role) = attr_str(&attrs, "role")
+        let role = attr_str(&attrs, "role")
             .map(|raw| fdd_core::columns::haystack_point_to_role(&raw))
             .filter(|role| valid_tag(role))
-        else {
-            continue;
-        };
+            .unwrap_or_default();
+        let kind = attr_str(&attrs, "kind")
+            .filter(|kind| matches!(kind.as_str(), "Number" | "Bool" | "Str"))
+            .or_else(|| {
+                attr_str(&attrs, "type")
+                    .as_deref()
+                    .and_then(kind_from_nf_type)
+                    .map(str::to_string)
+            });
+        let (ref_rel, ref_id) = attr_str(&attrs, "airRef")
+            .filter(|id| valid_equipment_id(id))
+            .map(|id| (Some("airRef".to_string()), Some(id)))
+            .unwrap_or((None, None));
         points.push(InventoryPoint {
             portal_point_id,
             display_name: pt
                 .name
                 .map(|n| n.trim().to_string())
                 .filter(|n| !n.is_empty()),
-            unit: pt.units.as_deref().and_then(acceptable_unit),
+            unit: pt
+                .units
+                .as_deref()
+                .and_then(acceptable_unit)
+                .or_else(|| attr_str(&attrs, "unit").and_then(|unit| acceptable_unit(&unit))),
             equipment_id,
             equip_type: attr_str(&attrs, "equipType")
                 .map(|t| t.to_ascii_lowercase())
@@ -650,6 +665,13 @@ pub fn parse_inventory_json(
             equip_markers: attr_markers(&attrs, "equipMarkers"),
             role,
             markers: attr_markers(&attrs, "markers"),
+            kind,
+            tz: attr_str(&attrs, "tz"),
+            his: attr_marker_bool(&attrs, "his"),
+            his_mode: attr_str(&attrs, "hisMode"),
+            enum_value: attr_str(&attrs, "enum"),
+            ref_rel,
+            ref_id,
         });
     }
     Ok(InventorySnapshot {
@@ -657,6 +679,35 @@ pub fn parse_inventory_json(
         source_points,
         complete: source_points > 0 && source_points < page_size as usize,
     })
+}
+
+fn kind_from_nf_type(raw: &str) -> Option<&'static str> {
+    match raw {
+        "OBJECT_ANALOG_INPUT" | "OBJECT_ANALOG_OUTPUT" | "OBJECT_ANALOG_VALUE" => Some("Number"),
+        "OBJECT_BINARY_INPUT" | "OBJECT_BINARY_OUTPUT" | "OBJECT_BINARY_VALUE" => Some("Bool"),
+        "OBJECT_MULTISTATE_INPUT"
+        | "OBJECT_MULTISTATE_OUTPUT"
+        | "OBJECT_MULTISTATE_VALUE"
+        | "OBJECT_CHARACTERSTRING_VALUE" => Some("Str"),
+        _ => None,
+    }
+}
+
+fn attr_marker_bool(attrs: &serde_json::Map<String, Value>, key: &str) -> Option<bool> {
+    match attrs.get(key) {
+        Some(Value::Bool(value)) => Some(*value),
+        Some(Value::String(value)) => {
+            let token = value.trim();
+            if token.eq_ignore_ascii_case("true") || token.eq_ignore_ascii_case("m") {
+                Some(true)
+            } else if token.eq_ignore_ascii_case("false") {
+                Some(false)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 fn attr_str(attrs: &serde_json::Map<String, Value>, key: &str) -> Option<String> {

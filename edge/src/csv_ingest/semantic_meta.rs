@@ -80,6 +80,12 @@ pub struct PointMeta {
     /// When true, emit `phIoT:his` marker (historized point).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub his: Option<bool>,
+    /// Haystack `hisMode` (`cov`, `sampled`, …). Absent is not a sampled mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub his_mode: Option<String>,
+    /// Haystack `enum` name or token list. Stored as given, not ranked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enum_value: Option<String>,
     /// Containment equip ref (must exist in scoped model when set).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ref_equip: Option<String>,

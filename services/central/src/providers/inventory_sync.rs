@@ -21,6 +21,7 @@ use fdd_tsdb::{PortalInventoryPoint, PortalInventoryReport, Tsdb};
 use open_fdd_edge_prototype::csv_ingest::model_overlay::{
     self, PortalEquip, PortalPoint, PortalSyncReport,
 };
+use open_fdd_edge_prototype::csv_ingest::semantic_selector;
 use serde::Serialize;
 use tracing::{debug, warn};
 
@@ -41,6 +42,13 @@ pub struct InventoryPoint {
     pub equip_markers: Vec<String>,
     pub role: String,
     pub markers: Vec<String>,
+    pub kind: Option<String>,
+    pub tz: Option<String>,
+    pub his: Option<bool>,
+    pub his_mode: Option<String>,
+    pub enum_value: Option<String>,
+    pub ref_rel: Option<String>,
+    pub ref_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -88,10 +96,13 @@ pub fn overlay_rows(
                 eq.markers.push(marker.clone());
             }
         }
-        let key = keys
-            .get(&pt.portal_point_id)
-            .cloned()
-            .unwrap_or_else(|| format!("{}.{}", pt.equipment_id, pt.role));
+        let key = keys.get(&pt.portal_point_id).cloned().unwrap_or_else(|| {
+            if pt.role.trim().is_empty() {
+                pt.portal_point_id.clone()
+            } else {
+                format!("{}.{}", pt.equipment_id, pt.role)
+            }
+        });
         points.push(PortalPoint {
             point_id: pt.portal_point_id.clone(),
             equipment_id: pt.equipment_id.clone(),
@@ -100,6 +111,13 @@ pub fn overlay_rows(
             dis: pt.display_name.clone(),
             unit: pt.unit.clone(),
             markers: pt.markers.clone(),
+            kind: pt.kind.clone(),
+            tz: pt.tz.clone(),
+            his: pt.his,
+            his_mode: pt.his_mode.clone(),
+            enum_value: pt.enum_value.clone(),
+            ref_rel: pt.ref_rel.clone(),
+            ref_id: pt.ref_id.clone(),
         });
     }
     for eq in equipment.values_mut() {
@@ -127,7 +145,7 @@ pub fn bootstrap_points(snapshot: &InventorySnapshot) -> Vec<BootstrapPoint> {
     snapshot
         .points
         .iter()
-        .filter(|pt| pt.equip_type.is_some())
+        .filter(|pt| pt.equip_type.is_some() && !pt.role.trim().is_empty())
         .map(|pt| BootstrapPoint {
             provider_point_id: pt.portal_point_id.clone(),
             semantic_point_id: None,
@@ -135,7 +153,7 @@ pub fn bootstrap_points(snapshot: &InventorySnapshot) -> Vec<BootstrapPoint> {
             role: pt.role.clone(),
             equip_type: pt.equip_type.clone(),
             unit: pt.unit.clone(),
-            kind: None,
+            kind: pt.kind.clone(),
             provisional: false,
         })
         .collect()
@@ -175,17 +193,34 @@ pub async fn apply_to_stores(
         }
     }
     let (equipment, points) = overlay_rows(snapshot, &keys);
+    let mut equipment_ids: Vec<String> =
+        equipment.iter().map(|eq| eq.equipment_id.clone()).collect();
+    equipment_ids.sort();
+    equipment_ids.dedup();
     let root = building_root.to_path_buf();
     let bid = building_id.to_string();
     let source = provider_instance_id.to_string();
     let complete = snapshot.complete;
-    let rdf = tokio::task::spawn_blocking(move || {
-        std::fs::create_dir_all(&root).map_err(|e| format!("building root: {e}"))?;
-        model_overlay::sync_portal_inventory(&root, &bid, &source, &equipment, &points, complete)
-    })
+    let rdf = tokio::task::spawn_blocking(
+        move || -> Result<(PortalSyncReport, Option<String>), String> {
+            std::fs::create_dir_all(&root).map_err(|e| format!("building root: {e}"))?;
+            let report = model_overlay::sync_portal_inventory(
+                &root, &bid, &source, &equipment, &points, complete,
+            )?;
+            let requests = semantic_selector::optional_discharge_selectors(&equipment_ids);
+            let selector_error =
+                semantic_selector::bind_semantic_aliases(&root, &bid, &requests).err();
+            Ok((report, selector_error))
+        },
+    )
     .await;
     match rdf {
-        Ok(Ok(report)) => outcome.rdf = Some(report),
+        Ok(Ok((report, selector_error))) => {
+            outcome.rdf = Some(report);
+            if selector_error.is_some() {
+                outcome.errors.push("selector_bind_failed".into());
+            }
+        }
         Ok(Err(err)) => {
             warn!(%building_id, error = %err, "portal inventory RDF sync failed");
             outcome.errors.push("rdf_sync_failed".into());
@@ -304,6 +339,7 @@ mod tests {
         let sat = &snap.points[0];
         assert_eq!(sat.equipment_id, "AHU_1");
         assert_eq!(sat.role, "sat");
+        assert_eq!(sat.kind.as_deref(), Some("Number"));
         assert_eq!(sat.equip_type.as_deref(), Some("ahu"));
         assert_eq!(sat.markers, vec!["air", "discharge", "sensor", "temp"]);
         let roles: Vec<&str> = snap.points.iter().map(|p| p.role.as_str()).collect();
@@ -316,6 +352,122 @@ mod tests {
             !parse_inventory_json(r#"{"points":[]}"#, 500)
                 .expect("empty")
                 .complete
+        );
+    }
+
+    #[tokio::test]
+    async fn unmapped_semantic_point_stays_without_becoming_the_temperature_input() {
+        let body = r#"{
+          "points": [
+            {
+              "uuid": "pt-sensor",
+              "name": "Discharge Setpoint",
+              "units": "°F",
+              "attrs": {
+                "equipRef": "AHU_1",
+                "equipType": "ahu",
+                "kind": "Number",
+                "tz": "America/Chicago",
+                "his": true,
+                "hisMode": "cov",
+                "markers": "discharge air temp sensor"
+              }
+            },
+            {
+              "uuid": "pt-sp",
+              "name": "Discharge Air Temp",
+              "units": "°C",
+              "attrs": {
+                "equipRef": "AHU_1",
+                "equipType": "ahu",
+                "kind": "Number",
+                "markers": "discharge,air,temp,sp"
+              }
+            },
+            {
+              "uuid": "pt-pressure",
+              "name": "Supply Temp",
+              "units": "inH₂O",
+              "attrs": {
+                "equipRef": "AHU_1",
+                "equipType": "ahu",
+                "role": "discharge-air-temp",
+                "kind": "Number",
+                "markers": ["sensor", "pressure", "duct"]
+              }
+            },
+            {
+              "uuid": "pt-spare",
+              "name": "Untagged",
+              "attrs": { "markers": "sensor temp" }
+            }
+          ]
+        }"#;
+        let snap = parse_inventory_json(body, 500).expect("parse");
+        assert_eq!(snap.source_points, 4);
+        assert_eq!(snap.points.len(), 3);
+        assert!(snap
+            .points
+            .iter()
+            .any(|pt| pt.portal_point_id == "pt-sensor" && pt.role.is_empty()));
+        assert_eq!(
+            snap.points
+                .iter()
+                .find(|pt| pt.portal_point_id == "pt-sensor")
+                .expect("sensor")
+                .kind
+                .as_deref(),
+            Some("Number")
+        );
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("SITE_UNMAPPED");
+        let synced = apply_to_stores(None, &root, "SITE_UNMAPPED", SOURCE, &snap).await;
+        assert!(synced.errors.is_empty(), "{:?}", synced.errors);
+        assert!(ask(
+            &root,
+            "SITE_UNMAPPED",
+            r#"ASK { ?s ofdd:pointId "pt-sensor" ; ph:kind "Number" ; ph:tz "America/Chicago" ; phIoT:hisMode "cov" ; ph:hasTag phIoT:his }"#
+        ));
+        assert!(!ask(
+            &root,
+            "SITE_UNMAPPED",
+            r#"ASK { ?s ofdd:pointId "pt-sensor" ; ofdd:role ?role }"#
+        ));
+        assert!(!ask(
+            &root,
+            "SITE_UNMAPPED",
+            r#"ASK { ?s ofdd:pointId "pt-spare" }"#
+        ));
+        let bindings =
+            open_fdd_edge_prototype::csv_ingest::semantic_selector::read_semantic_selectors(&root)
+                .expect("selectors");
+        let sat = bindings
+            .iter()
+            .find(|binding| binding.alias == "sat")
+            .expect("sat");
+        assert_eq!(sat.outcome, "selected");
+        assert_eq!(sat.readiness, "runnable");
+        assert_eq!(sat.selected_external_key.as_deref(), Some("pt-sensor"));
+        assert!(!sat.candidate_ids.iter().any(|id| id == "pt-pressure"));
+        let sp = bindings
+            .iter()
+            .find(|binding| binding.alias == "sat_sp")
+            .expect("sp");
+        assert_eq!(sp.selected_external_key.as_deref(), Some("pt-sp"));
+        assert_eq!(
+            sp.unit_conversion.as_ref().expect("conversion").conversion,
+            "celsius_to_fahrenheit"
+        );
+        let kept = bootstrap_points(&snap);
+        assert!(kept.iter().all(|pt| pt.provider_point_id != "pt-sensor"));
+        assert!(kept.iter().any(|pt| pt.provider_point_id == "pt-pressure"));
+        assert_eq!(
+            kept.iter()
+                .find(|pt| pt.provider_point_id == "pt-pressure")
+                .expect("pressure")
+                .kind
+                .as_deref(),
+            Some("Number")
         );
     }
 

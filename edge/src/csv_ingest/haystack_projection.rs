@@ -375,7 +375,7 @@ fn validate_function_cardinality(
     equipment_id: &str,
     column: &str,
 ) {
-    let funcs: Vec<&str> = ["sensor", "cmd", "sp"]
+    let funcs: Vec<&str> = ["sensor", "cmd", "sp", "synthetic"]
         .into_iter()
         .filter(|f| tags.contains(f))
         .collect();
@@ -386,7 +386,18 @@ fn validate_function_cardinality(
             column: Some(column.to_string()),
             term: Some(funcs.join("+")),
             detail: Some(
-                "Haystack point modeling: sensor/cmd/sp are mutually exclusive functions; retained with diagnostic"
+                "Haystack point modeling: sensor/cmd/sp/synthetic are mutually exclusive functions; retained with diagnostic"
+                    .into(),
+            ),
+        });
+    } else if funcs.is_empty() {
+        omitted.push(ProjectionOmission {
+            reason: "missing_point_function".into(),
+            equipment_id: Some(equipment_id.to_string()),
+            column: Some(column.to_string()),
+            term: None,
+            detail: Some(
+                "Haystack point modeling: a point needs sensor, cmd, sp, or synthetic; retained with diagnostic"
                     .into(),
             ),
         });
@@ -637,6 +648,22 @@ fn project_point(ctx: &mut PointProjectCtx<'_>, pt: &PointMeta) -> Result<bool, 
     }
     if pt.his == Some(true) {
         insert_tag(ctx.store, &subj, &def_iri("his")?)?;
+    }
+    if let Some(mode) = pt
+        .his_mode
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        insert_str(ctx.store, &subj, &def_iri("hisMode")?, mode)?;
+    }
+    if let Some(enum_value) = pt
+        .enum_value
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        insert_str(ctx.store, &subj, &def_iri("enum")?, enum_value)?;
     }
 
     if let Some(site_ref) = pt
@@ -1120,6 +1147,9 @@ mod tests {
             .omitted
             .iter()
             .any(|o| o.reason == "point_function_cardinality"));
+        assert!(result.report.omitted.iter().any(|o| {
+            o.reason == "point_function_cardinality" && o.term.as_deref() == Some("sensor+sp")
+        }));
         assert!(result
             .report
             .omitted
@@ -1194,6 +1224,61 @@ mod tests {
         }
         assert!(parse_opaque_point_iri("urn:openfdd:site/B1/equip/AHU_1").is_err());
         assert!(parse_opaque_point_iri("http://example/point").is_err());
+    }
+
+    #[test]
+    fn missing_function_and_synthetic_are_distinct_from_mixed_functions() {
+        let meta: SemanticMetaV1 = serde_json::from_value(json!({
+            "schema": "openfdd_semantic_meta_v1",
+            "building_id": "B1",
+            "points": [
+                {
+                    "equipment_id": "AHU_1",
+                    "column": "NO_FUNC",
+                    "haystack_tags": ["point", "temp", "air"],
+                    "kind": "Number",
+                    "unit": "°F"
+                },
+                {
+                    "equipment_id": "AHU_1",
+                    "column": "SYN",
+                    "haystack_tags": ["point", "synthetic", "temp"],
+                    "kind": "Number",
+                    "unit": "°F",
+                    "his_mode": "cov",
+                    "enum_value": "heat,cool"
+                },
+                {
+                    "equipment_id": "AHU_1",
+                    "column": "BOTH",
+                    "haystack_tags": ["point", "sensor", "synthetic"],
+                    "kind": "Number",
+                    "unit": "°F"
+                }
+            ],
+            "equipment": [{"equipment_id": "AHU_1", "haystack_tags": ["ahu", "equip"]}]
+        }))
+        .unwrap();
+        let result = project_strict(&meta, None);
+        assert!(result.turtle.contains("NO_FUNC"));
+        assert!(result.turtle.contains("SYN"));
+        assert!(result.turtle.contains("hisMode") || result.turtle.contains("cov"));
+        assert!(result.turtle.contains("heat,cool"));
+        let reasons = |column: &str| -> Vec<String> {
+            result
+                .report
+                .omitted
+                .iter()
+                .filter(|o| o.column.as_deref() == Some(column))
+                .map(|o| o.reason.clone())
+                .collect()
+        };
+        assert!(reasons("NO_FUNC").contains(&"missing_point_function".into()));
+        assert!(!reasons("SYN").iter().any(|r| r == "missing_point_function"));
+        assert!(!reasons("SYN")
+            .iter()
+            .any(|r| r == "point_function_cardinality"));
+        assert!(reasons("BOTH").contains(&"point_function_cardinality".into()));
     }
 
     #[test]
