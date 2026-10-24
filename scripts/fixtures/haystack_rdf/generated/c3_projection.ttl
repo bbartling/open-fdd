@@ -24,6 +24,7 @@
 	ofdd:column "MYSTERY_FLOW" ;
 	phIoT:siteRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1> ;
 	phIoT:equipRef <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/AHU_CASE_1> ;
+	ofdd:nativeTag "vendorFooTag" ;
 	ph:hasTag phIoT:point , phIoT:sensor ;
 	a phIoT:point .
 <urn:openfdd:site/OPENFDD_SYNTHETIC_HAYSTACK_RDF_C1_V1/equip/AHU_CASE_1/point/SAT> ph:unit "°F" ;
