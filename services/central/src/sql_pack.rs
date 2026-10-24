@@ -1089,11 +1089,37 @@ mod tests {
     }
 
     fn database_url() -> Option<String> {
-        std::env::var("OPENFDD_TEST_DATABASE_URL")
+        for key in [
+            "OPENFDD_LIFECYCLE_DATABASE_URL",
+            "OPENFDD_TEST_DATABASE_URL",
+        ] {
+            if let Ok(value) = std::env::var(key) {
+                let value = value.trim().to_string();
+                if !value.is_empty() {
+                    return Some(value);
+                }
+            }
+        }
+        Some("postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".to_string())
+    }
+
+    fn explicit_database_url() -> bool {
+        [
+            "OPENFDD_LIFECYCLE_DATABASE_URL",
+            "OPENFDD_TEST_DATABASE_URL",
+        ]
+        .into_iter()
+        .any(|key| {
+            std::env::var(key)
+                .ok()
+                .is_some_and(|value| !value.trim().is_empty())
+        })
+    }
+
+    fn timescale_required() -> bool {
+        std::env::var("OPENFDD_LIFECYCLE_DATABASE_REQUIRED")
             .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .or_else(|| Some("postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".to_string()))
+            .is_some_and(|value| matches!(value.trim(), "1" | "true" | "yes"))
     }
 
     struct EnvHold {
@@ -1322,20 +1348,35 @@ mod tests {
             return;
         };
         let admin = admin_url(&shared_url);
-        if sqlx::postgres::PgPoolOptions::new()
+        let admin_pool = match sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .acquire_timeout(std::time::Duration::from_secs(3))
             .connect(&admin)
             .await
-            .is_err()
         {
-            if std::env::var("OPENFDD_TEST_DATABASE_URL")
-                .ok()
-                .is_some_and(|value| !value.trim().is_empty())
-            {
-                panic!("OPENFDD_TEST_DATABASE_URL admin connect failed");
+            Ok(pool) => pool,
+            Err(_) if explicit_database_url() => {
+                panic!("pack database admin connect failed");
             }
-            eprintln!("skip: postgres admin unavailable");
+            Err(_) => {
+                eprintln!("skip: postgres admin unavailable");
+                return;
+            }
+        };
+        let timescale: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM pg_available_extensions WHERE name = 'timescaledb'
+             )",
+        )
+        .fetch_one(&admin_pool)
+        .await
+        .unwrap_or(false);
+        drop(admin_pool);
+        if !timescale {
+            if timescale_required() {
+                panic!("timescaledb extension is not available");
+            }
+            eprintln!("skip: timescaledb extension is not available");
             return;
         }
         let _lock = crate::test_env_lock::lock_env();
