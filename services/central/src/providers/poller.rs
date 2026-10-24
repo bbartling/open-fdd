@@ -15,7 +15,7 @@ use tracing::{debug, info, warn};
 
 use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
-use super::hourly::{assess_page, HourlyPolicy, LogicalWindow, UPDATE_LOG_STATUS};
+use super::hourly::{assess_page, HourlyPolicy, LogicalWindow};
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
 use super::map::{normalize_mapped, DevicePoints, HistorySeries, ResolvedRole, RoleResolver};
 use super::meteo::OpenMeteoDriver;
@@ -147,15 +147,15 @@ fn chosen_resolver<'a>(live: &'a RoleResolver, site: &'a RoleResolver) -> &'a Ro
     }
 }
 
-/// GET one claimed queue window for one device and record provider health.
-/// History stays `GET /api/v1/point/data`. This does not call `run_hourly_tick`.
-pub async fn execute_window(
+/// GET one claimed queue window. This does not write samples and does not
+/// mark the window committed. History stays `GET /api/v1/point/data`.
+pub async fn fetch_device_window(
     state: &Arc<AppState>,
     site: &SiteConfig,
     device_id: &str,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
-) -> Result<usize, String> {
+) -> Result<Vec<HistorySeries>, String> {
     if !matches!(site.kind, super::types::ProviderKind::Nf) {
         return Err("not_implemented".into());
     }
@@ -216,56 +216,57 @@ pub async fn execute_window(
             return Err(code);
         }
     };
+    Ok(page)
+}
+
+/// Write samples that already fall inside `[start, end)`. A successful write
+/// is not a coverage commit.
+pub async fn write_device_window(
+    state: &Arc<AppState>,
+    site: &SiteConfig,
+    device: &DevicePoints,
+    page: &[HistorySeries],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> Result<super::writer::ProviderIngestReceipt, String> {
     let accepted = accept_device_window(
         &site.building_id,
         &site.provider_instance_id,
-        &device,
-        &page,
+        device,
+        page,
         LogicalWindow { start, end },
     );
-    let persisted = if accepted.samples.is_empty() {
-        0
-    } else {
-        match writer::ingest_samples(
-            state,
-            &site.building_id,
-            &site.provider_instance_id,
-            &accepted.samples,
-        )
-        .await
-        {
-            Ok(receipt) => receipt.persisted_rows,
-            Err(_) => {
-                runtime
-                    .record_error(
-                        &site.building_id,
-                        ProviderHealthStatus::Error,
-                        Some("persistence".into()),
-                    )
-                    .await;
-                return Err("persistence".into());
-            }
+    if accepted.samples.is_empty() {
+        return Ok(super::writer::ProviderIngestReceipt {
+            submitted: 0,
+            eligible: 0,
+            skipped: 0,
+            persisted_rows: 0,
+            inserted_rows: 0,
+            updated_rows: 0,
+        });
+    }
+    match writer::ingest_samples(
+        state,
+        &site.building_id,
+        &site.provider_instance_id,
+        &accepted.samples,
+    )
+    .await
+    {
+        Ok(receipt) => Ok(receipt),
+        Err(_) => {
+            state
+                .providers
+                .record_error(
+                    &site.building_id,
+                    ProviderHealthStatus::Error,
+                    Some("persistence".into()),
+                )
+                .await;
+            Err("persistence".into())
         }
-    };
-    let ingested = u64::try_from(persisted).unwrap_or(u64::MAX);
-    runtime
-        .record_hourly(
-            &site.building_id,
-            ProviderHealthStatus::Ok,
-            ingested,
-            None,
-            HourlyCoverageHealth {
-                durable: true,
-                committed: 1,
-                samples_handed_off: ingested,
-                update_log_status: UPDATE_LOG_STATUS.into(),
-                detail: "queue_window".into(),
-                ..HourlyCoverageHealth::default()
-            },
-            false,
-        )
-        .await;
-    Ok(persisted)
+    }
 }
 
 async fn site_poll_loop(
@@ -908,7 +909,7 @@ mod tests {
                 None,
                 HourlyCoverageHealth {
                     samples_handed_off: 60,
-                    update_log_status: UPDATE_LOG_STATUS.into(),
+                    update_log_status: super::super::hourly::UPDATE_LOG_STATUS.into(),
                     detail: "queue_window".into(),
                     ..HourlyCoverageHealth::default()
                 },

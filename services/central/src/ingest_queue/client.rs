@@ -118,6 +118,20 @@ impl QueueClient {
         self.memory.finish(req)
     }
 
+    pub async fn apply_samples(
+        &self,
+        job: &JobView,
+        samples: &[AppliedSample],
+    ) -> Result<ApplyStats, QueueError> {
+        if samples.len() > super::coverage::MAX_TIMESTAMPS {
+            return Err(QueueError::Invalid("payload_bound".into()));
+        }
+        if let Some(pool) = self.pool_if_configured().await? {
+            return postgres::apply_samples(&pool, job, samples).await;
+        }
+        self.memory.apply_samples(job, samples)
+    }
+
     pub async fn list_jobs(&self, filter: &ListFilter) -> Result<Vec<JobView>, QueueError> {
         if let Some(pool) = self.pool_if_configured().await? {
             return postgres::list_jobs(&pool, filter).await;
@@ -199,7 +213,7 @@ impl QueueClient {
         let url = std::env::var("OPENFDD_DATABASE_URL")
             .map_err(|_| QueueError::Db("database url missing".into()))?;
         let pool = PgPoolOptions::new()
-            .max_connections(4)
+            .max_connections(queue_max_connections())
             .acquire_timeout(Duration::from_secs(5))
             .connect(url.trim())
             .await
@@ -227,6 +241,10 @@ fn budget_from_env() -> BudgetDefaults {
         max_in_flight: env_u32("OPENFDD_INGEST_PORTAL_MAX_IN_FLIGHT", 2).max(1),
         max_per_minute: env_u32("OPENFDD_INGEST_PORTAL_MAX_PER_MINUTE", 30).max(1),
     }
+}
+
+fn queue_max_connections() -> u32 {
+    env_u32("OPENFDD_INGEST_QUEUE_MAX_CONNECTIONS", 4).clamp(1, 8)
 }
 
 fn env_u32(name: &str, default: u32) -> u32 {

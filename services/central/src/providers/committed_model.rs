@@ -101,6 +101,13 @@ pub struct CommittedPoint {
     /// UX label only. Never a role source.
     #[serde(default)]
     pub display_name: Option<String>,
+    /// `interval` or `cov`. Absent means the queue must not invent a cadence.
+    #[serde(default)]
+    pub history_mode: Option<String>,
+    #[serde(default)]
+    pub cadence_secs: Option<u64>,
+    #[serde(default)]
+    pub heartbeat_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,6 +119,9 @@ pub struct PlannedPoint {
     pub source_unit: Option<String>,
     pub canonical_unit: Option<String>,
     pub quantity: Option<String>,
+    pub history_mode: Option<String>,
+    pub cadence_secs: Option<u64>,
+    pub heartbeat_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -238,6 +248,9 @@ pub fn model_from_point_map(
             quantity: None,
             provisional: entry.provisional,
             display_name: None,
+            history_mode: None,
+            cadence_secs: None,
+            heartbeat_secs: None,
         };
         let equip = by_equip
             .entry(entry.equipment_id.trim().to_string())
@@ -292,6 +305,9 @@ pub fn model_from_sparql_rows(
             quantity: None,
             provisional: row.provisional,
             display_name: None,
+            history_mode: None,
+            cadence_secs: None,
+            heartbeat_secs: None,
         };
         let equip =
             by_equip
@@ -367,6 +383,29 @@ pub fn validate_model(model: &CommittedModel) -> Result<(), String> {
             if let Some(unit) = point.canonical_unit.as_deref() {
                 validate_unit(unit)?;
             }
+            match point.history_mode.as_deref() {
+                None => {}
+                Some("interval") => match point.cadence_secs {
+                    Some(secs) if (1..=86_400).contains(&secs) => {}
+                    _ => {
+                        return Err(format!(
+                            "interval history requires cadence_secs for {}",
+                            point.point_id
+                        ))
+                    }
+                },
+                Some("cov") => {
+                    if let Some(secs) = point.heartbeat_secs {
+                        if secs == 0 || secs > 86_400 * 7 {
+                            return Err(format!(
+                                "cov heartbeat_secs is out of range for {}",
+                                point.point_id
+                            ));
+                        }
+                    }
+                }
+                Some(mode) => return Err(format!("history_mode {mode} is not interval or cov")),
+            }
             rows.push(IngestBindingRow {
                 tenant_id: model.tenant_id.clone(),
                 site_id: model.site_id.clone(),
@@ -419,7 +458,7 @@ fn revision_id(model: &CommittedModel) -> Result<String, String> {
         let points: Vec<_> = points
             .into_iter()
             .map(|point| {
-                json!({
+                let mut body = json!({
                     "point_id": point.point_id,
                     "provider_point_id": point.provider_point_id,
                     "canonical_role": point.canonical_role,
@@ -430,7 +469,17 @@ fn revision_id(model: &CommittedModel) -> Result<String, String> {
                     "kind": point.kind,
                     "quantity": point.quantity,
                     "provisional": point.provisional,
-                })
+                });
+                if let Some(mode) = point.history_mode.clone() {
+                    body["history_mode"] = json!(mode);
+                }
+                if let Some(secs) = point.cadence_secs {
+                    body["cadence_secs"] = json!(secs);
+                }
+                if let Some(secs) = point.heartbeat_secs {
+                    body["heartbeat_secs"] = json!(secs);
+                }
+                body
             })
             .collect();
         equipment.push(json!({
@@ -476,6 +525,9 @@ fn build_plan(model: &CommittedModel, revision_id: &str) -> Result<IngestPlan, S
                     source_unit: point.unit.clone(),
                     canonical_unit: point.canonical_unit.clone(),
                     quantity: point.quantity.clone(),
+                    history_mode: point.history_mode.clone(),
+                    cadence_secs: point.cadence_secs,
+                    heartbeat_secs: point.heartbeat_secs,
                 });
             } else {
                 withheld.push(WithheldPoint {
@@ -703,6 +755,9 @@ mod tests {
             quantity: None,
             provisional,
             display_name: Some("Supply Air Temp".into()),
+            history_mode: None,
+            cadence_secs: None,
+            heartbeat_secs: None,
         }
     }
 
@@ -719,6 +774,43 @@ mod tests {
                 points,
             }],
         }
+    }
+
+    #[test]
+    fn cadence_change_changes_the_model_revision() {
+        let mut base = point(
+            "urn:openfdd:point:site-a:AHU_1:sat",
+            "uuid-sat",
+            "sat",
+            "approved",
+            true,
+            false,
+        );
+        base.history_mode = Some("interval".into());
+        base.cadence_secs = Some(300);
+        let mut changed = base.clone();
+        changed.cadence_secs = Some(900);
+        let mut cov = base.clone();
+        cov.history_mode = Some("cov".into());
+        cov.cadence_secs = None;
+        let hourly = revision_id(&model_with(vec![base])).unwrap();
+        let fifteen = revision_id(&model_with(vec![changed])).unwrap();
+        let change_of_value = revision_id(&model_with(vec![cov])).unwrap();
+        assert_ne!(hourly, fifteen);
+        assert_ne!(hourly, change_of_value);
+        let plain = point(
+            "urn:openfdd:point:site-a:AHU_1:sat",
+            "uuid-sat",
+            "sat",
+            "approved",
+            true,
+            false,
+        );
+        let again = plain.clone();
+        assert_eq!(
+            revision_id(&model_with(vec![plain])).unwrap(),
+            revision_id(&model_with(vec![again])).unwrap()
+        );
     }
 
     #[test]

@@ -24,6 +24,18 @@ struct PortalBudget {
 
 struct StoredJob {
     view: JobView,
+    points_digest: Option<String>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct AppliedKey {
+    tenant_id: String,
+    canonical_site: String,
+    provider_instance_id: String,
+    device_id: String,
+    model_revision: String,
+    point_id: String,
+    ts: DateTime<Utc>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -49,6 +61,7 @@ struct Inner {
     defaults: BudgetDefaults,
     idempotency: HashMap<IdempotencyKey, IdempotencyRecord>,
     audit: VecDeque<AuditEvent>,
+    applied: HashMap<AppliedKey, u64>,
 }
 
 #[derive(Clone)]
@@ -75,6 +88,7 @@ impl MemoryStore {
                 defaults,
                 idempotency: HashMap::new(),
                 audit: VecDeque::new(),
+                applied: HashMap::new(),
             }),
         }
     }
@@ -162,6 +176,15 @@ impl MemoryStore {
         claimed
     }
 
+    pub fn apply_samples(
+        &self,
+        job: &JobView,
+        samples: &[AppliedSample],
+    ) -> Result<ApplyStats, QueueError> {
+        let mut inner = self.lock();
+        apply_locked(&mut inner, job, samples)
+    }
+
     pub fn finish(&self, req: &FinishRequest) -> Result<Option<ReceiptView>, QueueError> {
         let mut inner = self.lock();
         let Some(idx) = inner
@@ -179,20 +202,39 @@ impl MemoryStore {
         ) {
             return Err(QueueError::StaleFence);
         }
+        if model_changed(&inner.jobs[idx], req) {
+            let job = &mut inner.jobs[idx].view;
+            job.lease_owner = None;
+            job.lease_expiry = None;
+            job.state = JobState::PermanentFailure.as_str().to_string();
+            job.safe_error_code = Some("model_revision_changed".into());
+            return Ok(None);
+        }
+        guard_finish(req)?;
+        let snapshot = inner.jobs[idx].view.clone();
+        apply_locked(&mut inner, &snapshot, &req.applied_samples)?;
         let receipt_code = {
             let job = &mut inner.jobs[idx].view;
             job.lease_owner = None;
             job.lease_expiry = None;
             match &req.outcome {
-                FinishOutcome::Committed { counts } => {
+                FinishOutcome::Committed { counts, coverage } => {
                     job.state = JobState::Committed.as_str().to_string();
                     job.counts = *counts;
+                    job.coverage = coverage.summary.clone();
+                    job.point_coverage = coverage.points.clone();
                     job.safe_error_code = None;
                     Some(None)
                 }
-                FinishOutcome::Partial { counts, code } => {
+                FinishOutcome::Partial {
+                    counts,
+                    code,
+                    coverage,
+                } => {
                     job.state = JobState::Partial.as_str().to_string();
                     job.counts = *counts;
+                    job.coverage = coverage.summary.clone();
+                    job.point_coverage = coverage.points.clone();
                     job.safe_error_code = Some(code.clone());
                     Some(Some(code.clone()))
                 }
@@ -487,11 +529,15 @@ fn enqueue_locked(
         safe_error_code: None,
         receipt_id: None,
         coverage: COVERAGE_NOT_ASSESSED.to_string(),
+        point_coverage: Vec::new(),
         counts: JobCounts::default(),
     };
     let idx = inner.jobs.len();
     inner.by_key.insert(key, idx);
-    inner.jobs.push(StoredJob { view: view.clone() });
+    inner.jobs.push(StoredJob {
+        view: view.clone(),
+        points_digest: job.requested_points_digest,
+    });
     let _ = now;
     Ok(EnqueueOutcome::Created(view))
 }
@@ -589,25 +635,88 @@ fn remember_idempotency(
 }
 
 fn validate_new(job: &NewJob) -> Result<(), QueueError> {
-    for value in [
-        job.tenant_id.as_str(),
-        job.canonical_site.as_str(),
-        job.provider_instance_id.as_str(),
-        job.device_id.as_str(),
-        job.model_revision.as_str(),
-    ] {
-        if !bounded_id(value) {
-            return Err(QueueError::Invalid(
-                "job identity is empty or too long".into(),
-            ));
+    validate_new_job(job)
+}
+
+fn model_changed(job: &StoredJob, req: &FinishRequest) -> bool {
+    if !matches!(
+        req.outcome,
+        FinishOutcome::Committed { .. } | FinishOutcome::Partial { .. }
+    ) {
+        return false;
+    }
+    if let Some(active) = req.active_model_revision.as_deref() {
+        if !revision_still_owns(&job.view.model_revision, active) {
+            return true;
         }
     }
-    if !super::model::is_aligned_window(job.logical_window_start, job.logical_window_end) {
-        return Err(QueueError::Invalid(
-            "logical window must be an aligned 60 to 3600 second UTC window".into(),
-        ));
+    if let (Some(active_digest), Some(stored)) = (
+        req.active_points_digest.as_deref(),
+        job.points_digest.as_deref(),
+    ) {
+        return stored != active_digest;
+    }
+    false
+}
+
+fn guard_finish(req: &FinishRequest) -> Result<(), QueueError> {
+    match &req.outcome {
+        FinishOutcome::Committed { coverage, .. } => {
+            if !coverage.allows_commit() {
+                return Err(QueueError::Invalid("coverage does not allow commit".into()));
+            }
+        }
+        FinishOutcome::Partial { coverage, code, .. } => {
+            if coverage.allows_commit() {
+                return Err(QueueError::Invalid(
+                    "partial finish requires an incomplete coverage report".into(),
+                ));
+            }
+            if coverage.points.is_empty() && code != "payload_bound" {
+                return Err(QueueError::Invalid(
+                    "partial finish requires point coverage".into(),
+                ));
+            }
+        }
+        FinishOutcome::Retry { .. } | FinishOutcome::Permanent { .. } => {}
     }
     Ok(())
+}
+
+fn apply_locked(
+    inner: &mut Inner,
+    job: &JobView,
+    samples: &[AppliedSample],
+) -> Result<ApplyStats, QueueError> {
+    if samples.len() > super::coverage::MAX_TIMESTAMPS {
+        return Err(QueueError::Invalid("payload_bound".into()));
+    }
+    let mut stats = ApplyStats::default();
+    for sample in samples {
+        let key = AppliedKey {
+            tenant_id: job.tenant_id.clone(),
+            canonical_site: job.canonical_site.clone(),
+            provider_instance_id: job.provider_instance_id.clone(),
+            device_id: job.device_id.clone(),
+            model_revision: job.model_revision.clone(),
+            point_id: sample.point_id.clone(),
+            ts: sample.ts,
+        };
+        match super::coverage::classify_replay(inner.applied.get(&key).copied(), sample.value_bits)
+        {
+            super::coverage::Replay::Insert => {
+                inner.applied.insert(key, sample.value_bits);
+                stats.inserted = stats.inserted.saturating_add(1);
+            }
+            super::coverage::Replay::Unchanged => {
+                stats.unchanged = stats.unchanged.saturating_add(1);
+            }
+            super::coverage::Replay::Conflict => {
+                stats.conflict = stats.conflict.saturating_add(1);
+            }
+        }
+    }
+    Ok(stats)
 }
 
 fn fence_holds(job: &JobView, owner: &str, token: u64, now: DateTime<Utc>) -> bool {
@@ -900,32 +1009,28 @@ mod tests {
         assert_eq!(second.len(), 1);
         assert_eq!(second[0].job_id, created.job_id);
         assert_eq!(second[0].fencing_token, 2);
-        let stale = store.finish(&FinishRequest {
-            owner: "worker-a".into(),
-            job_id: created.job_id,
-            fencing_token: 1,
-            now: later,
-            outcome: FinishOutcome::Committed {
-                counts: JobCounts {
-                    inserted: 60,
-                    ..JobCounts::default()
-                },
-            },
-        });
+        let stale = store.finish(&FinishRequest::new(
+            "worker-a",
+            created.job_id,
+            1,
+            later,
+            FinishOutcome::committed_accounted(JobCounts {
+                inserted: 60,
+                ..JobCounts::default()
+            }),
+        ));
         assert!(matches!(stale, Err(QueueError::StaleFence)));
         let fresh = store
-            .finish(&FinishRequest {
-                owner: "worker-b".into(),
-                job_id: created.job_id,
-                fencing_token: 2,
-                now: later,
-                outcome: FinishOutcome::Committed {
-                    counts: JobCounts {
-                        inserted: 60,
-                        ..JobCounts::default()
-                    },
-                },
-            })
+            .finish(&FinishRequest::new(
+                "worker-b",
+                created.job_id,
+                2,
+                later,
+                FinishOutcome::committed_accounted(JobCounts {
+                    inserted: 60,
+                    ..JobCounts::default()
+                }),
+            ))
             .unwrap();
         assert!(fresh.is_some());
         assert!(store.claim(&claim_req("worker-c", 1, later)).is_empty());
@@ -959,26 +1064,22 @@ mod tests {
         assert!(store.claim(&claim_req("w2", 2, at)).is_empty());
         store.note_throttle("nf:other", at, chrono::Duration::seconds(60));
         store
-            .finish(&FinishRequest {
-                owner: "w".into(),
-                job_id: first[0].job_id,
-                fencing_token: first[0].fencing_token,
-                now: at,
-                outcome: FinishOutcome::Committed {
-                    counts: JobCounts::default(),
-                },
-            })
+            .finish(&FinishRequest::new(
+                "w",
+                first[0].job_id,
+                first[0].fencing_token,
+                at,
+                FinishOutcome::committed_accounted(JobCounts::default()),
+            ))
             .unwrap();
         store
-            .finish(&FinishRequest {
-                owner: "w".into(),
-                job_id: first[1].job_id,
-                fencing_token: first[1].fencing_token,
-                now: at,
-                outcome: FinishOutcome::Committed {
-                    counts: JobCounts::default(),
-                },
-            })
+            .finish(&FinishRequest::new(
+                "w",
+                first[1].job_id,
+                first[1].fencing_token,
+                at,
+                FinishOutcome::committed_accounted(JobCounts::default()),
+            ))
             .unwrap();
         let after = store.claim(&claim_req("w3", 2, at + chrono::Duration::seconds(1)));
         assert!(after
@@ -1018,15 +1119,15 @@ mod tests {
         let at = now();
         let leased = store.claim(&claim_req("w", 1, at));
         store
-            .finish(&FinishRequest {
-                owner: "w".into(),
-                job_id: leased[0].job_id,
-                fencing_token: leased[0].fencing_token,
-                now: at,
-                outcome: FinishOutcome::Permanent {
+            .finish(&FinishRequest::new(
+                "w",
+                leased[0].job_id,
+                leased[0].fencing_token,
+                at,
+                FinishOutcome::Permanent {
                     code: "provider_poll_failed".into(),
                 },
-            })
+            ))
             .unwrap();
         let claim = IdempotencyClaim {
             actor: "operator".into(),

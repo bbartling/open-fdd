@@ -131,3 +131,36 @@ CREATE TABLE IF NOT EXISTS ingest_audit (
   idempotency_key text,
   detail jsonb NOT NULL DEFAULT '{}'::jsonb
 );
+
+-- Coverage is derived queue state. These statements do not read or rewrite
+-- historian samples. Existing jobs stay `not_assessed` until a worker
+-- reconciles them.
+ALTER TABLE ingest_job ADD COLUMN IF NOT EXISTS coverage text NOT NULL DEFAULT 'not_assessed';
+ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS coverage text NOT NULL DEFAULT 'not_assessed';
+
+CREATE TABLE IF NOT EXISTS ingest_point_coverage (
+  job_id text NOT NULL,
+  point_id text NOT NULL,
+  disposition text NOT NULL,
+  expected_slots integer NOT NULL,
+  observed_slots integer NOT NULL,
+  late_slots integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (job_id, point_id)
+);
+
+-- Idempotent apply ledger for one device window. A replay of the same
+-- point and timestamp does not replace the first value.
+CREATE TABLE IF NOT EXISTS ingest_applied_sample (
+  tenant_id text NOT NULL,
+  canonical_site text NOT NULL,
+  provider_instance_id text NOT NULL,
+  device_id text NOT NULL,
+  model_revision text NOT NULL,
+  point_id text NOT NULL,
+  ts timestamptz NOT NULL,
+  value_bits text NOT NULL,
+  first_job_id text NOT NULL,
+  PRIMARY KEY (
+    tenant_id, canonical_site, provider_instance_id, device_id, model_revision, point_id, ts
+  )
+);

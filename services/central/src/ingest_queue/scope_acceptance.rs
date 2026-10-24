@@ -630,15 +630,15 @@ async fn run_matrix() {
         .clone();
     state
         .ingest_queue
-        .finish(&FinishRequest {
-            owner: "w2a-worker".into(),
-            job_id: retry_job.job_id,
-            fencing_token: retry_job.fencing_token,
-            now: Utc::now(),
-            outcome: FinishOutcome::Permanent {
+        .finish(&FinishRequest::new(
+            "w2a-worker",
+            retry_job.job_id,
+            retry_job.fencing_token,
+            Utc::now(),
+            FinishOutcome::Permanent {
                 code: "operator_hold".into(),
             },
-        })
+        ))
         .await
         .expect("permanent finish");
 
@@ -690,20 +690,18 @@ async fn run_matrix() {
 
     let receipt = state
         .ingest_queue
-        .finish(&FinishRequest {
-            owner: "w2a-worker".into(),
-            job_id: receipt_job.job_id,
-            fencing_token: receipt_job.fencing_token,
-            now: Utc::now(),
-            outcome: FinishOutcome::Committed {
-                counts: JobCounts {
-                    fetched: 1,
-                    accepted: 1,
-                    inserted: 1,
-                    ..JobCounts::default()
-                },
-            },
-        })
+        .finish(&FinishRequest::new(
+            "w2a-worker",
+            receipt_job.job_id,
+            receipt_job.fencing_token,
+            Utc::now(),
+            FinishOutcome::committed_accounted(JobCounts {
+                fetched: 1,
+                accepted: 1,
+                inserted: 1,
+                ..JobCounts::default()
+            }),
+        ))
         .await
         .expect("commit receipt")
         .expect("receipt row");
@@ -861,6 +859,9 @@ fn activate(
                 quantity: None,
                 provisional: false,
                 display_name: None,
+                history_mode: None,
+                cadence_secs: None,
+                heartbeat_secs: None,
             }],
         }],
     };
@@ -977,16 +978,16 @@ async fn hold_jobs(state: &AppState, wanted: &[Uuid]) -> Vec<super::model::JobVi
         }
         state
             .ingest_queue
-            .finish(&FinishRequest {
-                owner: "w2a-worker".into(),
-                job_id: job.job_id,
-                fencing_token: job.fencing_token,
-                now: Utc::now(),
-                outcome: FinishOutcome::Retry {
+            .finish(&FinishRequest::new(
+                "w2a-worker",
+                job.job_id,
+                job.fencing_token,
+                Utc::now(),
+                FinishOutcome::Retry {
                     code: "later".into(),
                     not_before: Utc::now() + Duration::hours(6),
                 },
-            })
+            ))
             .await
             .expect("defer claim");
     }

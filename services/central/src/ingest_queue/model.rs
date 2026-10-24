@@ -5,6 +5,8 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use super::coverage::{CoverageReport, COMPLETE, INCOMPLETE};
+
 pub const COVERAGE_NOT_ASSESSED: &str = "not_assessed";
 pub const MAX_CATCHUP_HOURS: u32 = 48;
 pub const MAX_LIST: u32 = 200;
@@ -123,6 +125,7 @@ pub struct JobView {
     pub safe_error_code: Option<String>,
     pub receipt_id: Option<Uuid>,
     pub coverage: String,
+    pub point_coverage: Vec<super::coverage::PointCoverage>,
     pub counts: JobCounts,
 }
 
@@ -172,10 +175,12 @@ pub struct ClaimRequest {
 pub enum FinishOutcome {
     Committed {
         counts: JobCounts,
+        coverage: CoverageReport,
     },
     Partial {
         counts: JobCounts,
         code: String,
+        coverage: CoverageReport,
     },
     Retry {
         code: String,
@@ -186,6 +191,16 @@ pub enum FinishOutcome {
     },
 }
 
+impl FinishOutcome {
+    #[cfg(test)]
+    pub fn committed_accounted(counts: JobCounts) -> Self {
+        Self::Committed {
+            counts,
+            coverage: CoverageReport::accounted("accounted-point"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FinishRequest {
     pub owner: String,
@@ -193,6 +208,47 @@ pub struct FinishRequest {
     pub fencing_token: u64,
     pub now: DateTime<Utc>,
     pub outcome: FinishOutcome,
+    /// Revision observed after the fetch. Commit is refused when it no longer
+    /// owns the job. `None` skips the check for callers that are not a worker.
+    pub active_model_revision: Option<String>,
+    /// Digest of the active point set. `None` skips the check.
+    pub active_points_digest: Option<String>,
+    pub applied_samples: Vec<AppliedSample>,
+}
+
+impl FinishRequest {
+    pub fn new(
+        owner: impl Into<String>,
+        job_id: Uuid,
+        fencing_token: u64,
+        now: DateTime<Utc>,
+        outcome: FinishOutcome,
+    ) -> Self {
+        Self {
+            owner: owner.into(),
+            job_id,
+            fencing_token,
+            now,
+            outcome,
+            active_model_revision: None,
+            active_points_digest: None,
+            applied_samples: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppliedSample {
+    pub point_id: String,
+    pub ts: DateTime<Utc>,
+    pub value_bits: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ApplyStats {
+    pub inserted: u32,
+    pub unchanged: u32,
+    pub conflict: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -307,6 +363,62 @@ pub fn is_hour_window(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
 
 /// Queue jobs accept the configured window length (60..=3600 seconds), aligned
 /// to that length. A 3600-second window is still an exact UTC hour.
+pub fn revision_still_owns(job_revision: &str, active_revision: &str) -> bool {
+    job_revision == active_revision || job_revision == MODEL_REVISION_BOOTSTRAP
+}
+
+pub fn points_digest(point_ids: &[String]) -> String {
+    let mut ids = point_ids.to_vec();
+    ids.sort();
+    let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+    scoped_digest(&refs)
+}
+
+pub fn validate_new_job(job: &NewJob) -> Result<(), QueueError> {
+    for value in [
+        job.tenant_id.as_str(),
+        job.canonical_site.as_str(),
+        job.provider_instance_id.as_str(),
+        job.device_id.as_str(),
+        job.model_revision.as_str(),
+    ] {
+        if !bounded_id(value) {
+            return Err(QueueError::Invalid(
+                "job identity is empty or too long".into(),
+            ));
+        }
+    }
+    if !is_aligned_window(job.logical_window_start, job.logical_window_end) {
+        return Err(QueueError::Invalid(
+            "logical window must be a half-open aligned 60 to 3600 second UTC window".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn rollup_coverage<'a>(summaries: impl IntoIterator<Item = &'a str>) -> &'static str {
+    let mut saw_incomplete = false;
+    let mut saw_unknown = false;
+    let mut saw_any = false;
+    for summary in summaries {
+        saw_any = true;
+        if summary == INCOMPLETE {
+            saw_incomplete = true;
+        } else if summary != COMPLETE {
+            saw_unknown = true;
+        }
+    }
+    if !saw_any {
+        COVERAGE_NOT_ASSESSED
+    } else if saw_incomplete {
+        INCOMPLETE
+    } else if saw_unknown {
+        COVERAGE_NOT_ASSESSED
+    } else {
+        COMPLETE
+    }
+}
+
 pub fn is_aligned_window(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
     if start.timestamp_subsec_micros() != 0 {
         return false;

@@ -21,6 +21,7 @@ pub struct ScheduleDevice {
     pub device_id: String,
     pub model_revision: String,
     pub estimated_cost: u32,
+    pub point_ids: Vec<String>,
 }
 
 pub fn due_windows(
@@ -57,7 +58,7 @@ pub fn due_windows(
                 shard: String::new(),
                 not_before,
                 estimated_cost: device.estimated_cost.max(1),
-                requested_points_digest: None,
+                requested_points_digest: Some(super::model::points_digest(&device.point_ids)),
             });
         }
     }
@@ -88,6 +89,7 @@ mod tests {
             device_id: id.into(),
             model_revision: "rev".into(),
             estimated_cost: 3,
+            point_ids: vec!["p".into()],
         }
     }
 
@@ -183,5 +185,23 @@ mod tests {
         assert!(jobs.iter().all(|job| {
             job.logical_window_end - job.logical_window_start == Duration::seconds(60)
         }));
+    }
+
+    #[test]
+    fn utc_windows_stay_one_hour_across_dst_transitions() {
+        let spring = DateTime::parse_from_rfc3339("2026-03-08T07:10:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let fall = DateTime::parse_from_rfc3339("2026-11-01T06:10:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        for now in [spring, fall] {
+            let jobs = due_windows(now, Duration::minutes(5), 2, 0, 3600, &[device("ahu")]);
+            assert!(jobs.iter().all(|job| {
+                job.logical_window_end - job.logical_window_start == Duration::seconds(3600)
+                    && job.logical_window_start < job.logical_window_end
+            }));
+            assert!(jobs.iter().any(|job| job.requested_points_digest.is_some()));
+        }
     }
 }
