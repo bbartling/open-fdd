@@ -106,9 +106,11 @@ a hard stop (SIGKILL or power loss). That window is not a graceful-shutdown
 claim. Stdout is not the durability boundary.
 
 Queue overflow (`OPENFDD_AUDIT_QUEUE_CAP`, default 1024, clamped 32..=16384)
-drops a best-effort event immediately and increments `dropped`. An acknowledged
-event waits `OPENFDD_AUDIT_ACK_MS` (default 2000, clamped 50..=5000) and then
-records the same loss. Writer failures set `last_write_error` to `unwritable`
+drops a best-effort event immediately and increments `dropped`. That path does
+not fsync once per drop. The loss file is sampled during the burst and fsynced
+on shutdown. An acknowledged event waits `OPENFDD_AUDIT_ACK_MS` (default 2000,
+clamped 50..=5000) and then records the same loss, and that record is fsynced.
+Writer failures set `last_write_error` to `unwritable`
 or `io` (never a path) and increment `write_failures`. Events refused because
 admission is already closed increment `dropped_shutdown`.
 

@@ -16,9 +16,10 @@
 //!   window is not a graceful-shutdown guarantee. There is no second durable
 //!   outbox for this file.
 //! - Queue overflow drops best-effort lines immediately and, after a bounded
-//!   wait, acknowledged lines. Both increment the persisted loss ledger.
-//!   `degraded` stays set while a drop or write failure is recorded. A later
-//!   successful write clears `last_write_error` only.
+//!   wait, acknowledged lines. Both increment the loss ledger. Best-effort
+//!   bursts sample the file and fsync it on shutdown. An acknowledged loss
+//!   fsyncs before return. `degraded` stays set while a drop or write failure
+//!   is recorded. A later successful write clears `last_write_error` only.
 //! - Stdout is a second copy for scrapers. It is not the durability boundary.
 //! - Retention is size rotation (`OPENFDD_AUDIT_LOG_MAX_BYTES`,
 //!   `OPENFDD_AUDIT_LOG_KEEP`). Removing a generation increments `rotated_out`.
@@ -282,7 +283,7 @@ fn load_ledger() -> LossLedger {
     serde_json::from_str(&text).unwrap_or_else(|_| LossLedger::empty())
 }
 
-fn persist_ledger(ledger: &LossLedger) {
+fn persist_ledger(ledger: &LossLedger, sync: bool) {
     let path = loss_path();
     if let Some(parent) = path.parent() {
         if fs::create_dir_all(parent).is_err() {
@@ -300,7 +301,7 @@ fn persist_ledger(ledger: &LossLedger) {
     else {
         return;
     };
-    if file.write_all(&body).is_ok() {
+    if file.write_all(&body).is_ok() && sync {
         let _ = file.sync_data();
     }
 }
@@ -308,7 +309,7 @@ fn persist_ledger(ledger: &LossLedger) {
 fn mutate_ledger(update: impl FnOnce(&mut LossLedger)) {
     let mut ledger = ledger_lock();
     update(&mut ledger);
-    persist_ledger(&ledger);
+    persist_ledger(&ledger, true);
 }
 
 fn note_lost_id(ledger: &mut LossLedger, detail: &Value) {
@@ -336,16 +337,28 @@ fn clear_write_error() {
         return;
     }
     ledger.last_write_error = None;
-    persist_ledger(&ledger);
+    persist_ledger(&ledger, true);
 }
 
 fn note_queue_drop(detail: &Value) {
+    // Best-effort drops must not fsync on the caller. The loss file is sampled
+    // during a burst and fsynced on shutdown or on an acknowledged loss.
+    record_queue_drop(detail, false);
+}
+
+fn note_acknowledged_queue_drop(detail: &Value) {
+    record_queue_drop(detail, true);
+}
+
+fn record_queue_drop(detail: &Value, sync: bool) {
     let n = {
         let mut ledger = ledger_lock();
         ledger.dropped_queue = ledger.dropped_queue.saturating_add(1);
         note_lost_id(&mut ledger, detail);
         let n = ledger.dropped_queue;
-        persist_ledger(&ledger);
+        if sync || n == 1 || n.is_multiple_of(64) {
+            persist_ledger(&ledger, sync);
+        }
         n
     };
     tracing::error!(
@@ -362,7 +375,7 @@ fn note_shutdown_drop(detail: &Value) {
         ledger.dropped_shutdown = ledger.dropped_shutdown.saturating_add(1);
         note_lost_id(&mut ledger, detail);
         let n = ledger.dropped_shutdown;
-        persist_ledger(&ledger);
+        persist_ledger(&ledger, true);
         n
     };
     tracing::error!(
@@ -527,6 +540,11 @@ pub fn flush_sink() {
     let _ = ack_rx.recv_timeout(Duration::from_secs(5));
 }
 
+fn flush_ledger() {
+    let ledger = ledger_lock();
+    persist_ledger(&ledger, true);
+}
+
 /// Stop admission, finish in-flight enqueues, then drain and fsync the writer.
 ///
 /// `signal` is recorded on the report (`SIGINT`, `SIGTERM`, or another name).
@@ -539,6 +557,8 @@ pub fn shutdown_for_signal(signal: &'static str, deadline: Duration) -> Shutdown
     }
     let mut guard = sink_lock();
     let Some(sink) = guard.as_mut() else {
+        drop(guard);
+        flush_ledger();
         return ShutdownReport {
             signal,
             drained: true,
@@ -554,6 +574,8 @@ pub fn shutdown_for_signal(signal: &'static str, deadline: Duration) -> Shutdown
             drop(handle);
         }
         *guard = None;
+        drop(guard);
+        flush_ledger();
         return ShutdownReport {
             signal,
             drained: false,
@@ -576,6 +598,8 @@ pub fn shutdown_for_signal(signal: &'static str, deadline: Duration) -> Shutdown
         drop(handle);
     }
     *guard = None;
+    drop(guard);
+    flush_ledger();
     ShutdownReport {
         signal,
         drained,
@@ -741,7 +765,7 @@ pub fn log_event_acknowledged(event: &str, detail: Value) -> bool {
     }
     let Some(tx) = ensure_sink() else {
         leave();
-        note_queue_drop(&detail);
+        note_acknowledged_queue_drop(&detail);
         return false;
     };
     let (ack_tx, ack_rx) = sync_channel(1);
@@ -764,12 +788,12 @@ pub fn log_event_acknowledged(event: &str, detail: Value) -> bool {
                 false
             }
             Err(_) => {
-                note_queue_drop(&detail);
+                note_acknowledged_queue_drop(&detail);
                 false
             }
         },
         Err(SendWaitError::Timeout) => {
-            note_queue_drop(&detail);
+            note_acknowledged_queue_drop(&detail);
             false
         }
         Err(SendWaitError::Disconnected) => {
