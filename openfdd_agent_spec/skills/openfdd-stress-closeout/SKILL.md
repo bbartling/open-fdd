@@ -1,58 +1,66 @@
 ---
 name: openfdd-stress-closeout
 description: >-
-  Use when closing a patch cycle with rigorous stress LAST on the Railway hub,
-  bensbench x86 fieldbus → MQTTS, CSV/synth59/Creekside/gate 19, B100 Railway-only,
-  light OWASP ZAP, auth role matrix, Railway MCP accuracy, or qualification
-  manifests. Triggers on: run_railway_hub_stress, RAILWAY_ONLY, synth59,
-  gate 17, gate 19, zap-baseline, qualification_manifest, SKIP_ZAP, PATCH_CYCLE, 3.3.N rev.
+  Current NF/CSV portal qualification, scoped stress evidence, semantic known-answer
+  tests, isolated authenticated ZAP and honest closeout reports.
 ---
 
-# Stress closeout (Open-FDD)
+# Stress closeout — portal stack
 
-Full handbook: [`docs/operations/STRESS_CLOSEOUT.md`](../../../docs/operations/STRESS_CLOSEOUT.md)  
-Rev template: [`docs/operations/PATCH_CYCLE.md`](../../../docs/operations/PATCH_CYCLE.md)  
-Qualification entry: [`scripts/qualification/README.md`](../../../scripts/qualification/README.md)  
-Field up: [`scripts/openfdd_fieldbus_railway_up.sh`](../../../scripts/openfdd_fieldbus_railway_up.sh)  
-Railway CLI: [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
+Current product is Rust central, React web, Timescale and NF portal pull/CSV.
+MQTT/BACnet/Modbus/Haystack transport containers are archived and unqualified;
+Haystack semantic modeling remains active. Historical3.x OT closeout rows do not
+qualify the portal product and do not authorize deployment or live scans.
 
-## Tiers (do not conflate)
+## Tiers
 
-- **Railway field** — `run_railway_hub_stress.sh` (read-oriented + public ZAP).
-- **Isolated candidate** — authenticated ZAP AF / MQTT ACL / restore (not live OT).
-- **Per PR** — unit + AppSec workflows.
+1. Offline: tests/evaluator controls, no application or scanner qualification.
+2. Owned isolated candidate: digest-pinned portal stack + NF emulator, synthetic
+   tenants, actual data readback, role/lifecycle controls, restore and authenticated
+   ZAP. Never restore OT merely to satisfy an old gate.
+3. Separately authorized live review: bounded read-oriented app checks. Active
+   scans, load bursts and destructive mutations require their own concrete scope.
 
-## Order
+Read [qualification entry](../../../scripts/qualification/README.md),
+[stress contract](../../../scripts/stress/README.md),
+[semantic verifier](../../../scripts/qualification/semantic/README.md) and
+[ZAP limits](../../../scripts/qualification/zap/README.md).
 
-1. Tip GHCR publish green → Railway backup + re-pin (central→mqtt→web)  
-2. `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` (stops local react-ot)  
-3. `OPENFDD_SECURITY_EXECUTE=1 OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-<7> ./scripts/nightly-ot-bench/run_railway_hub_stress.sh`  
-4. Cite `qualification_manifest.json` + generated `SUMMARY.md` (`fully_qualified` needs gates **19**+**35**+**25**/**25b**)  
-5. BUG_REPORT + SESSION_LOG + **Current ops pin** → OPS PINNED; GH hygiene END  
+## Order and evidence
 
-## Agent rules
+- Establish actual source/image/schema/SQL/model identity and fixture hashes.
+- Run the smallest local checks before any push/PR. Python/pandas/RDFLib stays
+  tooling-only; no local heavy product builds on bensbench.
+- Execute offline qualification/security tests and semantic broken controls.
+- Use one container/scanner runner at a time; independent source/test-review
+  agents may collaborate without starting duplicate workloads.
+- Stress child exit zero is insufficient: v2 evidence needs run nonce, scope,
+  script digest, required check IDs, real assertion/comparison counts and matching
+  health candidate when --expected-version is supplied. Missing/empty/truncated
+  evidence cannot pass. Fixed300second oracle cannot qualify irregular/COV data.
+- A denied viewer write is an authorization control, not a successful CRUD test.
+  Require exact scoped identity and own-object positive controls plus the complete
+  required viewer assertion set. Verify before/after sample/model state.
+- Parse RDF and run bound SPARQL known answers. Prefix/text presence, a sparse
+  fallback graph, or alias-based charts do not prove semantic readiness. Keep
+  fixture verifier PASS separate from a real candidate-export result.
+- ZAP negative control must observe the exact injected bad credential receiving
+  actual JSON401/403 on all nonce probes. Accepted credentials, missing evidence
+  and unrelated scanner errors cannot become PASS. Unknown counts remain null.
+- ZAP currently enforces wall time but request counts are post-HAR checks;
+  preventive traffic controls and disposable ownership proof are separate needs.
+  Keep the documented credential-site compatibility gap visible; never broaden
+  bearer scope or disable auth to obtain green.
+- Preserve redacted artifacts with hashes. Verify integrity after any redaction;
+  never mutate a hashed report and keep its original passing verdict silently.
+- Retain FAIL/BLOCKED/NOT_RUN and candidate-specific limitations. Soft-OPEN is
+  not FQ; scanner skip or zero numerical comparisons cannot close a release.
+- Append reports/checkpoints frequently. Do not rewrite historical passes,
+  automatically close issues, rotate secrets, deploy, or publish security details.
 
-- **No Raspberry Pis** on the closeout path (bosspi / fake AHU / fake VAV freed).
-- Railway is the AFDD head-end. Do not require local central for closeout.
-- Stress is **LAST**. Do not cite older-pin stress as proof.
-- ZAP = Railway public origin + `zap_baseline_verdict.py`; archive `reports/zap-railway_<TS>/`.
-- **Security harness:** gates **25** / **25b** need `OPENFDD_SECURITY_EXECUTE=1` for FQ; dry-run alone is BLOCKED. In the Wave U field qualification profile, gate **26** requires candidate runtime ACL evidence; absent fixtures/tools are BLOCKED. N/A requires a profile applicability rule and supporting evidence. High=0; Medium only via reviewed dispositions JSON (never blanket `ACCEPT_ZAP_MEDIUM=1` without review).
-- **Kali owns ActiveScan / exploratory PEN**; Mint runs gate 34 headers/`security.txt` + `preauth_disclosure` / gate 31 ACL. Skill: [`openfdd-mt-security`](../openfdd-mt-security/SKILL.md).
-- **After ZAP:** `docker rm -f` leftover zap containers (low-RAM). One agent only — no duplicate Task workers on the same train.
-- **`SKIP_ZAP=1` ⇒ not fully_qualified** (required gate SKIPPED). Never claim ZAP PASS when skipped.
-- **Gate 39** (`39_mqtts_gap_blame`) classifies MQTTS holes as EDGE / TRANSIT / RAILWAY / SPARSE_OK / INCONCLUSIVE. It does not bump `VERSION` and a green scorecard is not an FQ claim. Equipment comes from `equipment_type` only (no fixture-id preference, no id substring). ACME and vim-1 stay building and edge fixtures, not equipment filters. The fieldbus publish ledger does not filter MQTT publishes.
-- Railway MCP: exact image pin; `RAILWAY_ONLY=1` refuses local-central fallback in gate 13.
-- Keep [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) **Current ops pin** + railway-cli skill synced on tip-in-flight and OPS PINNED.
-- Do not rewrite historical PASS rows as if they used this enhanced suite.
-- **Wave U acceptance correction (2026-09-20):** read `.cursor/plans/wave_u_independent_acceptance_audit.plan.md` and root `MILESTONES.md`. Both gate 36 tests must be machine-required for the promised closeout; scanner/observer errors, missing provenance or component-only evidence cannot qualify a candidate. The current runner needs the audit's repairs before its FQ label can close those milestones. A missing Nessus license blocks only the actual assessment, not readiness work.
-- Machine port brain: [`docs/operations/recovery/AI_CONTEXT_HANDOFF.md`](../../../docs/operations/recovery/AI_CONTEXT_HANDOFF.md). Next program: 3.5.x patch train under `docs/operations/` / BUG_REPORT.
+## Skill source
 
-## Skill home
-
-`openfdd_agent_spec/skills/` is the only authoring tree. Do not create a parallel copy under `.cursor/skills/`, `.claude/skills/`, `.agents/skills/`, or a home directory. Sync with [`scripts/openfdd_install_agent_skills.sh`](../../../scripts/openfdd_install_agent_skills.sh) (`--sync`, optional `--user`). Orientation: [`openfdd_agent_spec/AGENTS.md`](../../AGENTS.md) and the repo [`AGENTS.md`](../../../AGENTS.md).
-
-## Related skills
-
-- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — backup and re-pin
-- [`openfdd-stack-ghcr`](../openfdd-stack-ghcr/SKILL.md) — image under test
-- [`openfdd-mt-security`](../openfdd-mt-security/SKILL.md) — ZAP and tenant checks
+Author only openfdd_agent_spec/skills. Repository vendor folders are sync targets,
+not second authoring copies. Use scripts/openfdd_install_agent_skills.sh --sync
+when those symlinks need refreshing; do not install into home directories unless
+requested. See [security skill](../openfdd-mt-security/SKILL.md).

@@ -135,6 +135,51 @@ class PortalQualHelpersTest(unittest.TestCase):
         self.assertEqual(cfg.fixtures.tenant_b, plan["tenants"]["b"]["id"])
         self.assertIn("viewer_a", cfg.identities)
 
+    def test_identity_requires_exact_role_and_single_tenant(self):
+        expected = {"ok": True, "multi_tenant": True, "hub_admin": False, "role": "viewer", "tenant_ids": ["tenant-a"]}
+        self.assertEqual(portal_qual.validate_identity(expected, "viewer", "tenant-a")[0], True)
+        for field, value in (("ok", False), ("multi_tenant", False), ("hub_admin", True)):
+            with self.subTest(field=field):
+                self.assertFalse(portal_qual.validate_identity(dict(expected, **{field: value}), "viewer", "tenant-a")[0])
+        for bad in (
+            {"role": "viewer", "tenant_ids": ["tenant-a", "tenant-b"]},
+            {"role": "viewer", "tenant_ids": ["tenant-a", "tenant-a"]},
+            {"role": "viewer", "tenant_ids": []},
+            {"role": "operator", "tenant_ids": ["tenant-a"]},
+            {"role": "viewer", "tenant_ids": "tenant-a"},
+            None,
+        ):
+            with self.subTest(identity=bad):
+                self.assertFalse(portal_qual.validate_identity(bad, "viewer", "tenant-a")[0])
+
+    def test_viewer_write_matrix_requires_exactly_once_passing_required_set(self):
+        checks = [
+            {"check_id": cid, "status": "PASS"}
+            for cid in sorted(portal_qual.VIEWER_WRITE_CHECK_IDS)
+        ]
+        self.assertTrue(portal_qual.validate_viewer_write_assertions(checks)[0])
+        self.assertFalse(portal_qual.validate_viewer_write_assertions(checks[:-1])[0])
+        self.assertFalse(portal_qual.validate_viewer_write_assertions(checks + [checks[0]])[0])
+        self.assertFalse(
+            portal_qual.validate_viewer_write_assertions(
+                [*checks[:-1], {**checks[-1], "status": "BLOCKED"}]
+            )[0]
+        )
+        self.assertFalse(
+            portal_qual.validate_viewer_write_assertions(
+                checks + [{"check_id": "y.authz.viewer_new_own_denied", "status": "PASS"}]
+            )[0]
+        )
+
+    def test_required_services_are_exact_tokens_and_exact_set(self):
+        required = sorted(portal_qual.REQUIRED_PORTAL_SERVICES)
+        self.assertTrue(portal_qual.validate_required_services(required)[0])
+        self.assertFalse(portal_qual.validate_required_services([*required, "openfdd-central"])[0])
+        self.assertFalse(portal_qual.validate_required_services([*required, "central"])[0])
+        self.assertFalse(
+            portal_qual.validate_required_services(["central-api", "web", "timescale", "nf-emulator"])[0]
+        )
+
     def test_verdict_requires_every_step_pass(self):
         steps = [{"id": "a", "status": "PASS"}, {"id": "b", "status": "PASS"}]
         self.assertEqual(portal_qual.verdict(steps, ["a", "b"], "s")["status"], "PASS")

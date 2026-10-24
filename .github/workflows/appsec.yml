@@ -92,12 +92,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install PyYAML (ZAP AF plan hygiene)
-        run: python3 -m pip install --quiet pyyaml
+      - name: Install isolated qualification tooling dependencies
+        run: python3 -m pip install --quiet -r scripts/qualification/requirements.txt
       - name: Offline security unittests (E01–E08 + inventory)
         run: python3 -B -m unittest discover -s tests/security -v
       - name: Qualification unittests
         run: python3 -B -m unittest discover -s tests/qualification -v
+      - name: Haystack known-answer and broken-control suite (offline)
+        run: |
+          python3 -B scripts/qualification/semantic/qualify.py suite \
+            --candidate "$GITHUB_SHA" --out "$RUNNER_TEMP/semantic-qualification.json"
+      - name: Keep semantic harness evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semantic-harness-evidence
+          path: ${{ runner.temp }}/semantic-qualification.json
+          if-no-files-found: error
       - name: Portal qualification recipe lint (no containers started)
         env:
           OPENFDD_IMAGE_TAG: sha-0000000

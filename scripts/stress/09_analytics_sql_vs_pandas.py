@@ -40,6 +40,7 @@ from helpers import (  # noqa: E402
     point_resolve,
     post_sparql,
     require_building_id,
+    record_check,
     resolve_base_url,
     run_child,
     safe_print,
@@ -75,7 +76,9 @@ def _pandas_comfort_pct(samples: list, low: float, high: float) -> tuple[float, 
         if not isinstance(s, dict) or s.get("val") is None:
             continue
         try:
-            vals.append(float(s["val"]))
+            value = float(s["val"])
+            if math.isfinite(value):
+                vals.append(value)
         except (TypeError, ValueError):
             continue
     if not vals:
@@ -140,6 +143,7 @@ def verdict(name: str, failure: str | None, compared: int, minimum: int) -> int:
         )
         return EXIT_BLOCKED
     safe_print(f"PASS {name}: {compared} comparison(s) match pandas")
+    record_check(name, True, comparisons=compared)
     return EXIT_PASS
 
 
@@ -182,28 +186,31 @@ def _comfort_for_row(http, headers, building_id: str, row: dict) -> tuple[str | 
     except RuntimeError as exc:
         safe_print(f"WARN SPARQL for comfort equip {eid}: {exc}")
         return None, 0
-    col = None
+    candidates = []
     for p in pts:
         if (p.get("equipmentId") or p.get("equipment_id") or "") != eid:
             continue
-        blob = f"{p.get('column','')} {p.get('fddSelection','')} {p.get('canonicalRole','')}".lower()
-        if "zone" in blob or "zn_t" in blob or "zone_air" in blob:
+        role = (p.get("canonicalRole") or p.get("fddSelection") or "").strip()
+        if role in {"zone-air-temp", "zone_t", "zone_air_temp"}:
             col = (p.get("column") or p.get("pointId") or "").strip()
             if col:
-                break
-    if not col:
-        safe_print(f"WARN comfort: no zone temp column for {eid}")
+                candidates.append(col)
+    if len(set(candidates)) != 1:
+        safe_print(f"BLOCKED comfort: absent or ambiguous explicit zone temperature role for {eid}")
         return None, 0
+    col = candidates[0]
     try:
         samples = _samples_for_key(http, headers, building_id, eid, col)
     except SystemExit as exc:
         return f"comfort samples: {exc}", 0
-    low = float(row.get("comfort_low_f") or 70.0)
-    high = float(row.get("comfort_high_f") or 75.0)
+    low = float(row.get("comfort_low_f", 70.0))
+    high = float(row.get("comfort_high_f", 75.0))
     pandas_pct, n = _pandas_comfort_pct(samples, low, high)
     if n == 0 or math.isnan(pandas_pct):
         safe_print(f"WARN comfort: no samples for {eid}/{col}")
         return None, 0
+    if row.get("n") != n:
+        return f"comfort {eid}: SQL/oracle coverage differs (SQL n={row.get('n')}, oracle n={n})", 0
     if abs(sql_pct - pandas_pct) > PCT_TOL * 100 and abs(sql_pct - pandas_pct) > 0.05:
         # allow 0.05 absolute pct points for Soft-OPEN float noise
         return f"comfort {eid}: sql={sql_pct:.4f} pandas={pandas_pct:.4f} n={n}", 0
@@ -220,14 +227,14 @@ def _check_comfort(http, headers, building_id: str, *, minimum: int) -> int:
     ):
         payload: dict = {"building_id": building_id, "refresh": True}
         if path.endswith("preset"):
-            payload["preset_id"] = "zone_comfort_rank"
+            payload["series"] = {"preset_id": "zone_comfort_rank"}
         try:
             body = analytics_post(http, headers, path, payload)
         except RuntimeError as exc:
             safe_print(f"WARN {path}: {exc}")
             continue
         env = _unwrap(body)
-        rows = env.get("equipment") or env.get("rows") or []
+        rows = env.get("equipment") or env.get("rows") or env.get("points") or []
         if not rows:
             note = env.get("note") or body.get("error")
             safe_print(f"WARN {path}: empty ({note})")

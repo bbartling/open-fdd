@@ -27,13 +27,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import math
 import sys
 import time
+import hashlib
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_PORT = 8080
@@ -154,12 +156,32 @@ def short(value: str) -> str:
     return value.rsplit("#", 1)[-1].rsplit("/", 1)[-1]
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # A scan/login redirect must never forward a bearer to another origin.
+        return None
+
+
 class HttpClient:
     """Minimal urllib client with BPS-like ``base_url`` + timeout."""
 
-    def __init__(self, base_url: str, *, timeout: float = 120.0) -> None:
+    def __init__(self, base_url: str, *, timeout: float = 120.0,
+                 max_requests: int = 500, max_response_bytes: int = 32 * 1024 * 1024) -> None:
         self.base_url = base_url.rstrip("/")
+        origin = urlsplit(self.base_url)
+        if (origin.scheme not in {"http", "https"} or not origin.hostname
+                or origin.username or origin.password or origin.query or origin.fragment
+                or origin.path not in {"", "/"}):
+            raise ValueError("stress base must be an http(s) origin without credentials or path")
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout must be finite and positive")
+        if max_requests < 1 or max_response_bytes < 1:
+            raise ValueError("request and response budgets must be positive")
         self.timeout = timeout
+        self.max_requests = max_requests
+        self.max_response_bytes = max_response_bytes
+        self.requests_sent = 0
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
 
     def __enter__(self) -> HttpClient:
         return self
@@ -177,7 +199,17 @@ class HttpClient:
         params: dict[str, Any] | None = None,
         timeout: float | None = None,
     ) -> tuple[int, dict[str, str], bytes]:
-        url = path if path.startswith("http") else f"{self.base_url}{path}"
+        if not math.isfinite(timeout or self.timeout) or (timeout is not None and timeout <= 0):
+            raise ValueError("timeout must be finite and positive")
+        url = path if path.startswith(("http://", "https://")) else f"{self.base_url}{path}"
+        parsed = urlsplit(url)
+        target = urlsplit(self.base_url)
+        if (parsed.scheme, parsed.hostname, parsed.port) != (target.scheme, target.hostname, target.port):
+            raise ValueError("stress request escaped the configured origin")
+        if parsed.username or parsed.password or parsed.fragment:
+            raise ValueError("request URLs must not embed credentials or fragments")
+        if self.requests_sent >= self.max_requests:
+            raise RuntimeError("stress request budget exhausted before transmission")
         if params:
             q = urlencode({k: v for k, v in params.items() if v is not None})
             url = f"{url}?{q}" if q else url
@@ -188,11 +220,16 @@ class HttpClient:
             hdrs.setdefault("Content-Type", "application/json")
         req = urllib.request.Request(url, data=data, headers=hdrs, method=method.upper())
         try:
-            with urllib.request.urlopen(req, timeout=timeout or self.timeout) as resp:
-                body = resp.read()
+            self.requests_sent += 1
+            with self._opener.open(req, timeout=timeout or self.timeout) as resp:
+                body = resp.read(self.max_response_bytes + 1)
+                if len(body) > self.max_response_bytes:
+                    raise RuntimeError("stress response exceeded byte budget")
                 return int(resp.status), {k.lower(): v for k, v in resp.headers.items()}, body
         except urllib.error.HTTPError as e:
-            body = e.read() if e.fp else b""
+            body = e.read(self.max_response_bytes + 1) if e.fp else b""
+            if len(body) > self.max_response_bytes:
+                raise RuntimeError("stress error response exceeded byte budget") from None
             return int(e.code), {k.lower(): v for k, v in e.headers.items()}, body
 
     def get_json(
@@ -206,8 +243,8 @@ class HttpClient:
         status, _hdrs, raw = self.request(
             "GET", path, headers=headers, params=params, timeout=timeout
         )
-        if status >= 400:
-            raise RuntimeError(f"GET {path} -> HTTP {status}: {raw[:500]!r}")
+        if not 200 <= status < 300:
+            raise RuntimeError(f"GET {path} -> HTTP {status}")
         return json.loads(raw.decode("utf-8") or "null")
 
     def post_json(
@@ -221,8 +258,8 @@ class HttpClient:
         status, _hdrs, raw = self.request(
             "POST", path, headers=headers, json_body=json_body, timeout=timeout
         )
-        if status >= 400:
-            raise RuntimeError(f"POST {path} -> HTTP {status}: {raw[:500]!r}")
+        if not 200 <= status < 300:
+            raise RuntimeError(f"POST {path} -> HTTP {status}")
         return json.loads(raw.decode("utf-8") or "null")
 
     def get_text(
@@ -236,8 +273,8 @@ class HttpClient:
         status, hdrs, raw = self.request(
             "GET", path, headers=headers, params=params, timeout=timeout
         )
-        if status >= 400:
-            raise RuntimeError(f"GET {path} -> HTTP {status}: {raw[:500]!r}")
+        if not 200 <= status < 300:
+            raise RuntimeError(f"GET {path} -> HTTP {status}")
         return raw.decode("utf-8", errors="replace"), hdrs
 
 
@@ -255,7 +292,11 @@ def wait_until_ready(http: HttpClient, *, timeout_s: float = 90.0) -> dict[str, 
             if status == 200:
                 body = json.loads(raw.decode("utf-8") or "{}")
                 # Open-FDD OkHealthResponse always includes ok=true when healthy.
-                if isinstance(body, dict) and body.get("ok") is not False:
+                if isinstance(body, dict) and body.get("ok") is True:
+                    expected = os.environ.get("OPENFDD_STRESS_EXPECT_VERSION")
+                    if expected and body.get("version") != expected:
+                        raise RuntimeError("candidate version does not match --expected-version")
+                    _OBSERVATIONS["observed_version"] = body.get("version")
                     safe_print(f"GET /api/health -> ok (attempt {attempt})")
                     return body
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
@@ -263,7 +304,7 @@ def wait_until_ready(http: HttpClient, *, timeout_s: float = 90.0) -> dict[str, 
         if time.monotonic() >= deadline:
             raise SystemExit(
                 f"API not ready within {timeout_s:.0f}s at {http.base_url}\n"
-                "  Tip: on the lab box run ./scripts/openfdd_stack_up.sh react-ot\n"
+                "  Tip: on the lab box run ./scripts/openfdd_stack_up.sh portal\n"
                 "  From Windows/LAN: python scripts/stress/run_gate.py --host <lab-ip>"
             )
         time.sleep(2.0)
@@ -288,12 +329,12 @@ def login(
         json_body={"username": user, "password": password},
         timeout=30.0,
     )
-    if status >= 400:
-        raise SystemExit(f"login failed HTTP {status}: {raw[:300]!r}")
+    if not 200 <= status < 300:
+        raise SystemExit(f"login failed HTTP {status}")
     body = json.loads(raw.decode("utf-8") or "{}")
     token = body.get("token") or body.get("access_token")
     if not token:
-        raise SystemExit(f"login response missing token: {body!r}")
+        raise SystemExit("login response missing token")
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -327,9 +368,14 @@ def post_sparql(
     status, _hdrs, raw = http.request(
         "POST", "/api/model/sparql", headers=headers, json_body=body
     )
-    if status >= 400:
-        raise RuntimeError(f"POST /api/model/sparql -> HTTP {status}: {raw[:800]!r}")
+    if not 200 <= status < 300:
+        raise RuntimeError(f"POST /api/model/sparql -> HTTP {status}")
     payload = json.loads(raw.decode("utf-8") or "{}")
+    if (not isinstance(payload, dict) or payload.get("ok") is False
+            or payload.get("truncated") is True
+            or any(isinstance(payload.get(k), dict) and payload[k].get("truncated") is True
+                   for k in ("meta", "results"))):
+        raise RuntimeError("SPARQL response failed or was truncated")
     return _normalize_sparql_rows(payload)
 
 
@@ -654,6 +700,22 @@ EXIT_PASS = 0
 EXIT_FAIL = 1
 EXIT_BLOCKED = 2
 RESULT_FILE_ENV = "OPENFDD_STRESS_RESULT_FILE"
+RUN_ID_ENV = "OPENFDD_STRESS_RUN_ID"
+_CHECKS: list[dict[str, Any]] = []
+_OBSERVATIONS: dict[str, Any] = {}
+_ACTIVE_CHILD = False
+
+
+def record_check(name: str, passed: bool, *, comparisons: int = 0) -> None:
+    """Record a real finite assertion, never inferred from exit zero alone."""
+    if not name or type(passed) is not bool or type(comparisons) is not int or comparisons < 0:
+        raise ValueError("invalid assertion or comparison count")
+    if not _ACTIVE_CHILD:
+        return
+    if any(check["id"] == name for check in _CHECKS):
+        raise ValueError("duplicate assertion id")
+    _CHECKS.append({"id": name, "status": "PASS" if passed else "FAIL",
+                    "comparison_count": comparisons})
 
 
 def status_for_exit(code: int) -> str:
@@ -681,10 +743,20 @@ def write_result(script: str, code: int, *, path: str | None = None) -> None:
         return
     out = Path(target)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        json.dumps({"script": script, "exit_code": code, "status": status_for_exit(code)}),
-        encoding="utf-8",
-    )
+    script_path = Path(__file__).parent / script
+    body = {"schema_version": 2, "script": script, "exit_code": code,
+            "status": status_for_exit(code), "run_id": os.environ.get(RUN_ID_ENV),
+            "base_url": os.environ.get("OPENFDD_STRESS_BASE", DEFAULT_BASE),
+            "building_id": os.environ.get("OPENFDD_STRESS_BUILDING_ID", ""),
+            "expected_version": os.environ.get("OPENFDD_STRESS_EXPECT_VERSION"),
+            "observed_version": _OBSERVATIONS.get("observed_version"),
+            "assertion_count": len(_CHECKS), "checks": _CHECKS,
+            "comparison_count": sum(check["comparison_count"] for check in _CHECKS),
+            "script_sha256": hashlib.sha256(script_path.read_bytes()).hexdigest()
+                if script_path.is_file() else None}
+    temp = out.with_suffix(out.suffix + ".tmp")
+    temp.write_text(json.dumps(body, allow_nan=False), encoding="utf-8")
+    temp.replace(out)
 
 
 def run_child(main: Any, script: str) -> int:
@@ -693,10 +765,22 @@ def run_child(main: Any, script: str) -> int:
     An uncaught exception records FAIL and propagates (non-zero exit).
     """
     code = EXIT_FAIL
+    global _ACTIVE_CHILD
+    _ACTIVE_CHILD = True
+    _CHECKS.clear()
+    _OBSERVATIONS.clear()
     try:
         code = _exit_code(main())
     except SystemExit as exc:
         code = _exit_code(exc.code)
     finally:
-        write_result(script, code)
+        if code == EXIT_PASS:
+            if any(check["status"] != "PASS" for check in _CHECKS):
+                code = EXIT_FAIL
+            elif not _CHECKS:
+                code = EXIT_BLOCKED
+        try:
+            write_result(script, code)
+        finally:
+            _ACTIVE_CHILD = False
     return code

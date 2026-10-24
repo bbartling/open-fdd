@@ -118,6 +118,7 @@ class FakeScanner:
         cancelled: bool = False,
         leak_to_stdout: bool = False,
         leak_to_report: bool = False,
+        har_mutator=None,
     ) -> None:
         self.report = load_report("report_clean.json") if report is None else report
         self.har = har
@@ -128,6 +129,7 @@ class FakeScanner:
         self.cancelled = cancelled
         self.leak_to_stdout = leak_to_stdout
         self.leak_to_report = leak_to_report
+        self.har_mutator = har_mutator
         self.calls: list[tuple[list[str], dict, bytes | None]] = []
         self.scanner_env: dict | None = None
 
@@ -150,6 +152,12 @@ class FakeScanner:
         scanner_header = env.get("ZAP_AUTH_HEADER_VALUE", "")
         if self.har != "none":
             har = build_har(nonce=nonce, auth=scanner_header, **self.har_kwargs)
+            if not any(j["type"] == "openapi" for j in plan["jobs"]):
+                # Follow the negative plan: only its three requestor probes.
+                har["log"]["entries"] = [
+                    e for e in har["log"]["entries"]
+                    if any(h["name"] == af.PROBE_HEADER for h in e["request"]["headers"])
+                ]
             if self.har == "broken_injection":
                 har = build_har(
                     nonce=nonce,
@@ -158,6 +166,8 @@ class FakeScanner:
                     probe_body=json.dumps({"ok": False, "error": "missing bearer"}),
                     drop_probe_auth=True,
                 )
+            if self.har_mutator is not None:
+                self.har_mutator(har)
             (work / af.MESSAGES_FILE).write_text(json.dumps(har), encoding="utf-8")
         if self.report is not False:
             raw = self.report if isinstance(self.report, bytes) else json.dumps(self.report).encode()
@@ -328,6 +338,14 @@ class ZapAfPlanHygieneTest(unittest.TestCase):
         self.assertLess(types.index("activeScan"), max(i for i, j in enumerate(plan["jobs"]) if j.get("name") == "auth-probe-after"))
         self.assertIn(f"{af.PROBE_HEADER}:after-n0nce", text)
         self.assertEqual(af.expected_passive_waits(plan), 3)
+        self.assertNotIn("maxDuration", plan["env"]["parameters"])
+        for job in plan["jobs"]:
+            if job["type"] == "passiveScan-wait":
+                self.assertEqual(job["parameters"]["maxDuration"], 0)
+
+    def test_redundant_global_duration_is_rejected_for_pinned_compatibility(self):
+        errors = self._mutated_yaml(lambda d: d["env"]["parameters"].__setitem__("maxDuration", 600))
+        self.assertTrue(any("pinned add-on compatibility" in error for error in errors), errors)
 
 
 # --------------------------------------------------------------------------- #
@@ -537,6 +555,38 @@ class ZapAfScannerAuthTest(ExecuteHarness):
         rc, verdict = self.execute(scanner, preflight={"ok": False, "status": 401, "error": "non_200"})
         self.assertEqual(verdict["status"], "FAIL")
         self.assertEqual(scanner.calls, [])
+        self.assertIsNone(verdict["high_alerts"])
+        self.assertFalse(verdict["alert_counts_evaluated"])
+        self.assertIsNone(verdict["scanner_error_count"])
+
+    def test_zero_exit_is_not_a_known_scanner_error_count(self):
+        rc, verdict = self.execute(FakeScanner())
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict["high_alerts"], 0)
+        self.assertTrue(verdict["alert_counts_evaluated"])
+        self.assertIsNone(verdict["scanner_error_count"])
+        self.assertEqual(verdict["scanner_error_count_status"], "not_reported_by_traditional_json")
+        self.assertFalse(verdict["budget"]["request_limit_preventive"])
+        self.assertEqual(verdict["budget"]["request_limit_enforcement"], "post_scan_har_check")
+
+    def test_auth_evidence_rejects_duplicate_or_stale_probes(self):
+        def duplicate(har):
+            extra = copy.deepcopy(har["log"]["entries"][0])
+            extra["response"]["status"] = 401
+            har["log"]["entries"].append(extra)
+
+        def stale(har):
+            extra = copy.deepcopy(har["log"]["entries"][0])
+            next(h for h in extra["request"]["headers"] if h["name"] == af.PROBE_HEADER)["value"] = "before-old-run"
+            har["log"]["entries"].append(extra)
+
+        for mutate in (duplicate, stale):
+            with self.subTest(case=mutate.__name__):
+                self.tearDown()
+                self.setUp()
+                rc, verdict = self.execute(FakeScanner(har_mutator=mutate))
+                self.assertEqual(rc, 1)
+                self.assertEqual(verdict["status"], "FAIL")
 
     def test_synthesized_auth_object_in_report_is_rejected(self):
         report = load_report("report_clean.json")
@@ -592,13 +642,41 @@ class ZapAfScannerAuthTest(ExecuteHarness):
 
 class ZapAfNegativeControlModeTest(ExecuteHarness):
     def test_negative_control_detects_broken_scanner_credential(self):
-        scanner = FakeScanner(rc=1)
-        rc, verdict = self.execute(scanner, negative_control=True)
-        self.assertEqual(rc, 0, verdict["notes"])
-        self.assertEqual(verdict["suite"], "zap_af_negative_control_v1")
-        self.assertTrue(verdict["negative_control_detected"])
-        self.assertTrue(scanner.scanner_env["ZAP_AUTH_HEADER_VALUE"].startswith("Bearer openfdd-negative-control-"))
-        self.assertNotIn(GOOD_AUTH, json.dumps(scanner.scanner_env))
+        for status in (401, 403):
+            with self.subTest(status=status):
+                if status == 403:
+                    self.tearDown()
+                    self.setUp()
+                scanner = FakeScanner(har_kwargs={
+                    "probe_status": status,
+                    "probe_body": json.dumps({"ok": False, "error": "invalid bearer"}),
+                })
+                rc, verdict = self.execute(scanner, negative_control=True)
+                self.assertEqual(rc, 0, verdict["notes"])
+                self.assertEqual(verdict["suite"], "zap_af_negative_control_v2")
+                self.assertTrue(verdict["negative_control_detected"])
+                self.assertEqual(verdict["scanner_auth"]["request_count"], 3)
+                self.assertIsNone(verdict["high_alerts"])
+                self.assertFalse(verdict["alert_counts_evaluated"])
+                self.assertTrue(scanner.scanner_env["ZAP_AUTH_HEADER_VALUE"].startswith("Bearer openfdd-negative-control-"))
+                self.assertNotIn(GOOD_AUTH, json.dumps(scanner.scanner_env))
+
+    def test_bad_header_200_is_fail_not_an_inverted_auth_pass(self):
+        rc, verdict = self.execute(FakeScanner(), negative_control=True)
+        self.assertEqual(rc, 1)
+        self.assertEqual(verdict["status"], "FAIL")
+        self.assertEqual(verdict["scanner_auth"]["unexpected_success_count"], 3)
+        self.assertTrue(verdict["scanner_auth"]["probes"]["before"]["authorization_matches"])
+        self.assertNotIn("negative_control_detected", verdict)
+
+    def test_any_200_body_is_fail_including_html_or_wrong_identity(self):
+        for body in (identity_body("other-user"), "<html>login</html>", "{}"):
+            with self.subTest(body=body):
+                self.tearDown()
+                self.setUp()
+                rc, verdict = self.execute(FakeScanner(har_kwargs={"probe_body": body}), negative_control=True)
+                self.assertEqual(verdict["status"], "FAIL")
+                self.assertEqual(rc, 1)
 
     def test_negative_control_fails_if_broken_credential_looks_authenticated(self):
         original = af.zap_env
@@ -615,6 +693,85 @@ class ZapAfNegativeControlModeTest(ExecuteHarness):
         rc, verdict = self.execute(FakeScanner(har="none", rc=1), negative_control=True)
         self.assertEqual(verdict["status"], "ERROR")
         self.assertIn("inconclusive", verdict["notes"])
+
+    def test_unrelated_failure_is_never_evidence_of_auth_rejection(self):
+        for status, body, rc in (
+            (500, '{"ok":false}', 0),
+            (0, "", 0),
+            (302, "", 0),
+            (401, "<html>error</html>", 0),
+            (401, '{"ok":true,"username":"admin"}', 0),
+            (401, '{"ok":false}', 1),
+        ):
+            with self.subTest(status=status, body=body, scanner_rc=rc):
+                self.tearDown()
+                self.setUp()
+                scanner = FakeScanner(rc=rc, har_kwargs={"probe_status": status, "probe_body": body})
+                result, verdict = self.execute(scanner, negative_control=True)
+                self.assertEqual(result, 1)
+                self.assertEqual(verdict["status"], "ERROR", verdict["notes"])
+                self.assertIsNone(verdict["high_alerts"])
+
+    def test_denial_needs_header_nonce_unique_order_scope_and_budget(self):
+        def headers(har):
+            return har["log"]["entries"][0]["request"]["headers"]
+
+        def drop_header(har):
+            headers(har)[:] = [h for h in headers(har) if h["name"].lower() != "authorization"]
+
+        def wrong_header(har):
+            next(h for h in headers(har) if h["name"].lower() == "authorization")["value"] = GOOD_AUTH
+
+        def stale_nonce(har):
+            next(h for h in headers(har) if h["name"] == af.PROBE_HEADER)["value"] = "before-old-run"
+
+        def duplicate(har):
+            har["log"]["entries"].append(copy.deepcopy(har["log"]["entries"][0]))
+
+        def missing(har):
+            har["log"]["entries"].pop()
+
+        def reordered(har):
+            har["log"]["entries"].reverse()
+
+        def off_origin(har):
+            har["log"]["entries"].append(har_entry("http://evil.example/leak", auth=GOOD_AUTH))
+
+        def foreign_redirect(har):
+            response = har["log"]["entries"][0]["response"]
+            response["status"] = 302
+            response["redirectURL"] = "http://evil.example/leak"
+
+        for mutate in (drop_header, wrong_header, stale_nonce, duplicate, missing, reordered, off_origin, foreign_redirect):
+            with self.subTest(case=mutate.__name__):
+                self.tearDown()
+                self.setUp()
+                scanner = FakeScanner(har_kwargs={"probe_status": 401, "probe_body": '{"ok":false}'},
+                                      har_mutator=mutate)
+                rc, verdict = self.execute(scanner, negative_control=True)
+                self.assertEqual(rc, 1)
+                self.assertEqual(verdict["status"], "ERROR", verdict["notes"])
+        self.tearDown()
+        self.setUp()
+        rc, verdict = self.execute(
+            FakeScanner(har_kwargs={"probe_status": 401, "probe_body": '{"ok":false}'}),
+            env=self.env(OPENFDD_ZAP_MAX_REQUESTS="2"), negative_control=True,
+        )
+        self.assertEqual(verdict["status"], "ERROR")
+        self.assertIn("request budget exceeded", verdict["notes"])
+
+    def test_negative_plan_is_probe_only_with_no_positive_auth_expectations(self):
+        scanner = FakeScanner(har_kwargs={"probe_status": 401, "probe_body": '{"ok":false}'})
+        with mock.patch.object(af, "stage_openapi_spec", side_effect=AssertionError("not needed for probes")):
+            rc, verdict = self.execute(scanner, env=self.env(OPENFDD_ZAP_AF_ACTIVE="1"), negative_control=True)
+        self.assertEqual(rc, 0, verdict["notes"])
+        plan = yaml.safe_load((self.work / "af_plan.yaml").read_text(encoding="utf-8"))
+        self.assertEqual([j["type"] for j in plan["jobs"]], ["requestor"] * 3 + ["export", "report"])
+        self.assertFalse(verdict["active_scan"])
+        self.assertNotIn("verification", plan["env"]["contexts"][0]["authentication"])
+        for job in plan["jobs"][:3]:
+            self.assertNotIn("tests", job)
+            self.assertNotIn("responseCode", job["requests"][0])
 
 
 # --------------------------------------------------------------------------- #
@@ -1048,6 +1205,30 @@ class ZapAfSelftestTest(unittest.TestCase):
             self.assertEqual(verdict["status"], "BLOCKED")
             self.assertTrue(verdict["plan_hygiene_ok"])
             self.assertEqual(verdict["suite"], "zap_af_authenticated_v2")
+            self.assertIsNone(verdict["high_alerts"])
+            self.assertIsNone(verdict["medium_alerts"])
+            self.assertFalse(verdict["alert_counts_evaluated"])
+
+    def test_scan_pass_cannot_claim_unevaluated_counts(self):
+        verdict = af.build_verdict(
+            status="PASS", mode="execute", plan_hygiene_ok=True,
+            high_alerts=None, medium_alerts=None, zap_available=True,
+            active_scan=False, notes="fixture", alert_counts_evaluated=False,
+        )
+        errors = af.verdict_schema_ok(verdict)
+        self.assertTrue(any("evaluated" in e for e in errors))
+        self.assertTrue(any("known" in e for e in errors))
+        verdict.update(high_alerts=0, medium_alerts=0, alert_counts_evaluated=True)
+        self.assertEqual(af.verdict_schema_ok(verdict), [])
+
+    def test_bad_counts_cannot_be_serialized_as_valid_evidence(self):
+        for count in (-1, True, "0"):
+            verdict = af.build_verdict(
+                status="ERROR", mode="execute", plan_hygiene_ok=True,
+                high_alerts=count, medium_alerts=None, zap_available=True,
+                active_scan=False, notes="fixture",
+            )
+            self.assertTrue(af.verdict_schema_ok(verdict))
 
     def test_execute_without_env_is_blocked(self):
         with tempfile.TemporaryDirectory() as td:

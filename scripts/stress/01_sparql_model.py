@@ -28,6 +28,8 @@ from helpers import (  # noqa: E402
     post_sparql,
     print_table,
     require_building_id,
+    record_check,
+    ensure_repo_on_path,
     run_child,
     safe_print,
     wait_until_ready,
@@ -85,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
                 safe_print(f"FAIL: missing predefined query_id {need!r}")
                 return 1
         safe_print(f"  catalog ids OK: {', '.join(REQUIRED_CATALOG_IDS)}")
+        record_check("catalog", True)
 
         try:
             ahus = post_sparql(http, headers, building_id=building_id, query=LIST_AHUS)
@@ -116,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         safe_print(f"  AHU equipment ids: {sorted(e for e in equip_ids if e)}")
+        record_check("sparql_ahu", True)
 
         try:
             counts = post_sparql(http, headers, building_id=building_id, query=POINT_COUNT)
@@ -123,39 +127,30 @@ def main(argv: list[str] | None = None) -> int:
         except RuntimeError as exc:
             safe_print(f"WARN: point count SPARQL failed ({exc}) — continue")
 
-        # Package TTL (product path). Prefer haystack.ttl; fall back to mapping ttl.
-        ttl_ok = False
-        for haystack in (True, False):
-            label = "haystack.ttl" if haystack else "mapping/ttl"
-            try:
-                ttl, hdrs = get_package_ttl(
-                    http, headers, building_id=building_id, haystack=haystack
-                )
-            except RuntimeError as exc:
-                safe_print(f"WARN: GET package {label} — {exc}")
-                continue
-            ctype = hdrs.get("content-type", "")
-            safe_print(f"\nTTL {label}: {len(ttl)} chars  content-type={ctype!r}")
-            if not ttl.strip():
-                safe_print(f"WARN: empty TTL body for {label}")
-                continue
-            # Haystack projection should mention ofdd / building; mapping ttl uses urn:openfdd.
-            needles = ("urn:openfdd", "ofdd:", building_id)
-            missing = [n for n in needles if n not in ttl]
-            if missing and haystack:
-                safe_print(f"WARN: {label} missing {missing!r} — checking mapping/ttl next")
-                continue
-            if "@prefix" not in ttl and "PREFIX" not in ttl and "<urn:openfdd" not in ttl:
-                safe_print(f"FAIL: {label} does not look like Turtle/RDF")
-                return 1
-            ttl_ok = True
-            safe_print(f"  TTL OK via {label}")
-            break
-        if not ttl_ok:
-            safe_print("FAIL: no usable package TTL for building_id")
+        # Parse the actual Haystack projection. A legacy mapping graph, prefix,
+        # comment or building-name substring cannot satisfy semantic evidence.
+        ensure_repo_on_path()
+        from scripts.qualification.semantic.qualify import parse_model, graph_inventory
+        try:
+            ttl, _hdrs = get_package_ttl(http, headers, building_id=building_id, haystack=True)
+            inventory = graph_inventory(parse_model(ttl))
+        except ImportError:
+            safe_print("BLOCKED: semantic parser dependency unavailable")
+            return 2
+        except RuntimeError as exc:
+            safe_print(f"BLOCKED: Haystack projection unavailable ({exc})")
+            return 2
+        except (ValueError, SyntaxError):
+            safe_print("FAIL: invalid or over-budget Haystack projection")
             return 1
+        if inventory["equip_count"] < 1 or inventory["point_count"] < 1:
+            safe_print("FAIL: parsed graph has no Haystack equipment/points")
+            return 1
+        safe_print(f"  Parsed inventory: {inventory['triple_count']} triples, "
+                   f"{inventory['equip_count']} equipment, {inventory['point_count']} points")
+        record_check("parsed_graph", True)
 
-    safe_print("\nPASS 01 — Haystack RDF SPARQL + package TTL + catalog")
+    safe_print("\nPASS 01 — parsed inventory + SPARQL + catalog (not full semantic qualification)")
     return 0
 
 

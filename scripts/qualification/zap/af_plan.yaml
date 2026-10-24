@@ -9,7 +9,8 @@
 #   ${ZAP_PROBE_NONCE}     per-run nonce tagging the scanner auth probes
 #   ${ZAP_LOGGED_IN_REGEX} matches the expected non-secret username in /api/auth/me
 #   ${ZAP_REPORT_DIR}      scanner output directory
-#   ${ZAP_PLAN_MAX_SECONDS} plan wall-clock cap (the runner also enforces its own)
+# Global AF maxDuration is deliberately omitted for older pinned add-ons. The
+# runner enforces the wall-clock cap by terminating its owned process/container.
 #
 # The scanner credential is never referenced here. ZAP reads it from the
 # system-level ZAP_AUTH_HEADER_VALUE env var (scoped by ZAP_AUTH_HEADER_SITE);
@@ -19,6 +20,10 @@
 # exported from ZAP's own message history (export job, source=all) and the
 # runner requires each probe to carry the credential and return 200 JSON with
 # the expected username, in order before/during/after the scan jobs.
+# Negative control renders a separate probe-only plan: no imported routes,
+# spider, active scan, positive response-code checks or logged-in statistics.
+# Its evaluator requires all three probes to carry the injected bad credential
+# and receive JSON 401/403 denials; an unrelated scanner error cannot pass it.
 
 env:
   contexts:
@@ -43,7 +48,6 @@ env:
     failOnWarning: false
     continueOnFailure: false
     progressToStdout: true
-    maxDuration: "${ZAP_PLAN_MAX_SECONDS}"
 
 jobs:
   - type: requestor

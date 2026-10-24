@@ -45,9 +45,28 @@ REQUIRED = [
 
 PASSING_CHILD = textwrap.dedent(
     """
-    import json, os, sys
+    import json, os, sys, hashlib
+    from pathlib import Path
+    script = Path(__file__).name
+    required = {
+        "01_sparql_model.py": ["catalog", "sparql_ahu", "parsed_graph"],
+        "03_sparql_zone_dataframe.py": ["historian_samples", "dataframe"],
+        "08_sql_vs_pandas_sparql.py": ["oracle.FC1", "oracle.AHU-DUCTHI", "oracle.AHU-SATDEV"],
+        "09_analytics_sql_vs_pandas.py": ["economizer", "comfort"],
+        "10_model_crud_helpers.py": ["semantic_meta_dry_run", "stale_revision", "overlay_dry_run", "equip_dry_run", "agent_context", "ttl_parsed"],
+    }
+    ids = required.get(script, ["unit"])
+    checks = [{"id": n, "status": "PASS", "comparison_count": 1} for n in ids]
+    body = {"schema_version": 2, "script": script, "exit_code": 0, "status": "PASS",
+            "run_id": os.environ["OPENFDD_STRESS_RUN_ID"],
+            "base_url": os.environ["OPENFDD_STRESS_BASE"],
+            "building_id": os.environ.get("OPENFDD_STRESS_BUILDING_ID", ""),
+            "expected_version": os.environ.get("OPENFDD_STRESS_EXPECT_VERSION"),
+            "observed_version": os.environ.get("OPENFDD_STRESS_EXPECT_VERSION"),
+            "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "assertion_count": len(checks), "comparison_count": len(checks), "checks": checks}
     with open(os.environ["OPENFDD_STRESS_RESULT_FILE"], "w") as fh:
-        json.dump({"status": "PASS", "exit_code": 0}, fh)
+        json.dump(body, fh)
     sys.exit(0)
     """
 )
@@ -189,12 +208,29 @@ class RunChildResultFileTest(unittest.TestCase):
 
     def test_blocked_and_pass_codes_recorded(self):
         self.assertEqual(self.run_child(lambda: 2)[1]["status"], "BLOCKED")
-        self.assertEqual(self.run_child(lambda: 0)[1]["status"], "PASS")
+        self.assertEqual(self.run_child(lambda: 0)[1]["status"], "BLOCKED")
+
+    def test_recorded_finite_assertion_can_pass(self):
+        def main():
+            sys.modules["helpers"].record_check("actual", True, comparisons=1)
+            return 0
+        code, body = self.run_child(main)
+        self.assertEqual(code, 0)
+        self.assertEqual(body["assertion_count"], 1)
+        self.assertEqual(body["comparison_count"], 1)
+
+    def test_failed_assertion_overrides_exit_zero(self):
+        def main():
+            sys.modules["helpers"].record_check("actual", False)
+            return 0
+        code, body = self.run_child(main)
+        self.assertEqual(code, 1)
+        self.assertEqual(body["status"], "FAIL")
 
 
 class Gate08IdentityTest(unittest.TestCase):
     def test_wrong_equipment_with_identical_fault_hours_fails(self):
-        results = [{"rule_id": "FC1", "equipment_id": "AHU_2", "fault_hours": 3.25}]
+        results = [{"rule_id": "FC1", "equipment_id": "AHU_2", "fault_hours": 3.25, "status": "FAULT"}]
         status, _, msg = gate08.compare_sql_to_oracle(results, "FC1", "AHU_1", 3.25)
         self.assertEqual(status, "FAIL")
         self.assertIn("AHU_1", msg)
@@ -225,8 +261,8 @@ class Gate08IdentityTest(unittest.TestCase):
 
     def test_exact_identity_within_tolerance_passes(self):
         results = [
-            {"rule_id": "FC1", "equipment_id": "AHU_2", "fault_hours": 9.0},
-            {"rule_id": "FC1", "equipment_id": "AHU_1", "fault_hours": 3.26},
+            {"rule_id": "FC1", "equipment_id": "AHU_2", "fault_hours": 9.0, "status": "FAULT"},
+            {"rule_id": "FC1", "equipment_id": "AHU_1", "fault_hours": 3.26, "status": "FAULT"},
         ]
         status, s_hours, _ = gate08.compare_sql_to_oracle(results, "FC1", "AHU_1", 3.25)
         self.assertEqual(status, "PASS")
