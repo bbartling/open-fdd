@@ -2522,6 +2522,37 @@ async fn fill_history_for_equipment(
             window_sql.push_str(&format!(" AND s.ts < '{end}'::timestamptz"));
         }
     }
+    // The time spine is this equipment. A site-wide join inserts another
+    // unit's timestamps as null holds and shortens forward intervals
+    // (a 5-minute fault series becomes the 1-minute cadence of its neighbor).
+    // Weather and CHW add only the one fallback equipment already chosen
+    // for that role. An ambiguous role adds no timestamps.
+    let mut spine = String::from("a.equipment_id = $2");
+    for role in roles {
+        let role_lit = role.replace('\'', "''");
+        let type_filter = if is_weather_role(role) {
+            "lower(coalesce(e.equip_type, '')) = 'weather'"
+        } else if is_chw_plant_role(role) {
+            "lower(coalesce(e.equip_type, '')) IN ( \
+               'chiller', 'chw', 'chwplant', 'chw_plant' \
+             )"
+        } else {
+            continue;
+        };
+        spine.push_str(&format!(
+            " OR (a.role = '{role_lit}' AND a.equipment_id = ( \
+               SELECT e.equipment_id FROM equipment e \
+               JOIN authorized_series w \
+                 ON w.site_id = e.building_id AND w.equipment_id = e.equipment_id \
+                AND w.role = '{role_lit}' \
+               WHERE e.building_id = $1 AND e.equipment_id <> $2 \
+                 AND {type_filter} \
+                 AND (SELECT count(*) FROM authorized_series c \
+                      WHERE c.site_id = w.site_id AND c.equipment_id = w.equipment_id \
+                        AND c.role = w.role) = 1 \
+               ORDER BY e.equipment_id LIMIT 1))"
+        ));
+    }
     let insert_cols = roles
         .iter()
         .map(|r| crate::series_binding::quote_ident(r))
@@ -2535,7 +2566,11 @@ FROM sample s
 JOIN authorized_series a
   ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
 WHERE s.site_id = $1
-  AND a.role = ANY($3){window_sql}
+  AND a.role = ANY($3)
+  AND ({spine})
+  AND (SELECT count(*) FROM authorized_series c
+       WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id
+         AND c.role = a.role) = 1{window_sql}
 GROUP BY s.ts
 "#
     );

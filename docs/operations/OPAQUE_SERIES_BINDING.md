@@ -20,6 +20,8 @@ Effective-time classification is not implemented. The maps do not store `valid_f
 
 Two referenced keys bound to the same equipment and role stay distinct. A wide input (Inspect pivot, FDD history, economizer, weather projection) uses that role only when exactly one key is bound. It does not average or max the candidates.
 
+FDD history timestamps come from that equipment's unique bindings. A weather or chilled-water fallback adds timestamps only from the one stamped equipment chosen for that role. Samples belonging to any other equipment do not add rows.
+
 `referenced = false` hides a series from readers and leaves its samples in place. A point purge deletes `sample`, `point_map`, and `role_map` rows for that one key.
 
 ## Migration and rollback
