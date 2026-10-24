@@ -275,6 +275,31 @@ impl Runtime {
                     );
                 }
             }
+            let scope = committed_model::ModelScope {
+                tenant_id: site.tenant_id.clone(),
+                site_id: site.building_id.clone(),
+                provider_instance_id: site.model.provider_instance_id.clone(),
+            };
+            match inventory_sync::restore_last_good_plan(
+                &mut models,
+                &inventory_sync::portal_building_root(&site.building_id),
+                &scope,
+            ) {
+                Ok(true) => {
+                    tracing::debug!(
+                        building_id = %site.building_id,
+                        "restored last good inventory plan"
+                    );
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    warn!(
+                        code = %safe_operator_code(&err),
+                        building_id = %site.building_id,
+                        "saved inventory plan was not restored"
+                    );
+                }
+            }
         }
         let compiled = models.compile_count();
         if compiled > 0 {

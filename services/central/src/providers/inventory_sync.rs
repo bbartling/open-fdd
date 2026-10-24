@@ -11,11 +11,14 @@
 //!    removes the ones this provider no longer lists, leaving a tombstone;
 //! 4. activates an ingest plan built from the tagged points.
 //!
-//! A snapshot that may be truncated (a full page) is applied without step 2
-//! or the RDF removals. Nothing here deletes samples or `point_map` rows.
+//! A snapshot that may be truncated is applied without step 2 or the RDF
+//! removals, and it does not replace the active ingest plan. Nothing here
+//! deletes samples or `point_map` rows. The last complete plan is written
+//! beside the overlay and restored on process start. An empty `totalCount`
+//! is a finished inventory and does replace the plan.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use fdd_tsdb::{PortalInventoryPoint, PortalInventoryReport, Tsdb};
 use open_fdd_edge_prototype::csv_ingest::model_overlay::{
@@ -25,7 +28,10 @@ use open_fdd_edge_prototype::csv_ingest::semantic_selector;
 use serde::Serialize;
 use tracing::{debug, warn};
 
-use super::committed_model::{model_from_point_map, BootstrapPoint, ModelScope};
+use super::committed_model::{
+    model_from_json, model_from_point_map, BootstrapPoint, CommittedModel, CommittedModelStore,
+    ModelScope,
+};
 use super::config::SiteConfig;
 use super::Runtime;
 use crate::haystack_rdf::HaystackRdfCache;
@@ -51,13 +57,29 @@ pub struct InventoryPoint {
     pub ref_id: Option<String>,
 }
 
+/// Why a walk did not replace the active plan. Absent when the snapshot is complete.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct InventoryDiagnostics {
+    pub pages_fetched: u32,
+    pub bytes_read: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InventorySnapshot {
     pub points: Vec<InventoryPoint>,
     /// Points the portal returned, tagged or not.
     pub source_points: usize,
-    /// False when the response may be truncated or carried no points at all.
+    /// True only when every page of this snapshot was accepted and the portal
+    /// total was met, or a short page ended a result that did not advertise a
+    /// total. `totalCount == 0` is complete. An empty body with no total is not.
     pub complete: bool,
+    pub diagnostics: InventoryDiagnostics,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -65,7 +87,33 @@ pub struct InventorySyncOutcome {
     pub historian: Option<PortalInventoryReport>,
     pub rdf: Option<PortalSyncReport>,
     pub model_activated: bool,
+    /// The previous plan is still the schedule.
+    pub plan_retained: bool,
+    /// Incomplete inventory or a plan that could not be saved.
+    pub degraded: bool,
+    pub diagnostics: InventoryDiagnostics,
     pub errors: Vec<String>,
+}
+
+const LAST_GOOD_SCHEMA: &str = "ofdd_portal_last_good_plan_v1";
+const LAST_GOOD_FILE: &str = "portal_last_good_plan.json";
+
+#[derive(Debug, Serialize, serde::Deserialize)]
+struct LastGoodFile {
+    schema: String,
+    model: CommittedModel,
+    source_points: u64,
+    #[serde(default)]
+    total_count: Option<u64>,
+    #[serde(default)]
+    snapshot_version: Option<String>,
+}
+
+pub fn portal_building_root(building_id: &str) -> PathBuf {
+    open_fdd_edge_prototype::historian::store::workspace_dir()
+        .join("data")
+        .join("csv_buildings")
+        .join(building_id)
 }
 
 /// Equipment and points for the RDF overlay. Point keys come from the
@@ -240,65 +288,168 @@ pub async fn apply(
     site: &SiteConfig,
     snapshot: &InventorySnapshot,
 ) -> InventorySyncOutcome {
+    apply_at(
+        runtime,
+        rdf_cache,
+        site,
+        &portal_building_root(&site.building_id),
+        snapshot,
+    )
+    .await
+}
+
+/// Same as [`apply`] with an explicit overlay directory. Tests use a temp root.
+pub async fn apply_at(
+    runtime: &Runtime,
+    rdf_cache: &HaystackRdfCache,
+    site: &SiteConfig,
+    building_root: &Path,
+    snapshot: &InventorySnapshot,
+) -> InventorySyncOutcome {
     let tsdb = if crate::timescale_historian::historian_is_timescale() {
         match Tsdb::shared().await {
             Ok(tsdb) => Some(tsdb),
             Err(err) => {
                 warn!(building_id = %site.building_id, error = %err, "portal inventory: historian unavailable");
-                let mut outcome = InventorySyncOutcome::default();
-                outcome.errors.push("historian_unavailable".into());
-                return outcome;
+                return InventorySyncOutcome {
+                    diagnostics: snapshot.diagnostics.clone(),
+                    degraded: true,
+                    plan_retained: true,
+                    errors: vec!["historian_unavailable".into()],
+                    ..InventorySyncOutcome::default()
+                };
             }
         }
     } else {
         None
     };
-    let root = open_fdd_edge_prototype::historian::store::workspace_dir()
-        .join("data")
-        .join("csv_buildings")
-        .join(&site.building_id);
     let mut outcome = apply_to_stores(
         tsdb.as_deref(),
-        &root,
+        building_root,
         &site.building_id,
         &site.provider_instance_id,
         snapshot,
     )
     .await;
+    outcome.diagnostics = snapshot.diagnostics.clone();
     if outcome.rdf.as_ref().is_some_and(|r| r.changed) {
         rdf_cache.invalidate_building(&site.building_id);
     }
+    if !snapshot.complete {
+        let code = snapshot
+            .diagnostics
+            .reason
+            .clone()
+            .unwrap_or_else(|| "inventory_incomplete".to_string());
+        warn!(building_id = %site.building_id, reason = %code, "incomplete inventory kept the last plan");
+        if !outcome.errors.iter().any(|err| err == &code) {
+            outcome.errors.push(code);
+        }
+        outcome.degraded = true;
+        outcome.plan_retained = true;
+        return outcome;
+    }
+    if !outcome.errors.is_empty() {
+        outcome.degraded = true;
+        outcome.plan_retained = true;
+        return outcome;
+    }
+    // An empty complete inventory is a real schedule with no devices.
+    // The historian keeps the connection id (`nf:…`). The plan slug drops
+    // colons; using the connection id here fails validation and leaves
+    // the startup plan unmatched.
     let entries = bootstrap_points(snapshot);
-    if !entries.is_empty() && outcome.errors.is_empty() {
-        // The historian keeps the connection id (`nf:…`). The plan slug drops
-        // colons; using the connection id here fails validation and leaves
-        // the startup plan unmatched.
-        let scope = ModelScope {
-            tenant_id: site.tenant_id.clone(),
-            site_id: site.building_id.clone(),
-            provider_instance_id: site.model.provider_instance_id.clone(),
-        };
-        match model_from_point_map(&scope, &entries) {
-            Ok(model) => {
-                let mut models = runtime.models.lock().unwrap_or_else(|e| e.into_inner());
-                match models.try_activate(None, &model) {
-                    Ok(report) => {
-                        debug!(building_id = %site.building_id, revision = %report.revision_id, "portal inventory plan active");
-                        outcome.model_activated = true;
-                    }
-                    Err(err) => {
-                        warn!(building_id = %site.building_id, error = %err, "portal inventory plan did not activate");
-                        outcome.errors.push("plan_not_activated".into());
-                    }
-                }
+    let scope = ModelScope {
+        tenant_id: site.tenant_id.clone(),
+        site_id: site.building_id.clone(),
+        provider_instance_id: site.model.provider_instance_id.clone(),
+    };
+    let model = match model_from_point_map(&scope, &entries) {
+        Ok(model) => model,
+        Err(err) => {
+            warn!(building_id = %site.building_id, error = %err, "portal inventory plan invalid");
+            outcome.errors.push("plan_invalid".into());
+            outcome.degraded = true;
+            outcome.plan_retained = true;
+            return outcome;
+        }
+    };
+    {
+        let mut models = runtime.models.lock().unwrap_or_else(|e| e.into_inner());
+        match models.try_activate(None, &model) {
+            Ok(report) => {
+                debug!(building_id = %site.building_id, revision = %report.revision_id, "portal inventory plan active");
+                outcome.model_activated = true;
             }
             Err(err) => {
-                warn!(building_id = %site.building_id, error = %err, "portal inventory plan invalid");
-                outcome.errors.push("plan_invalid".into());
+                warn!(building_id = %site.building_id, error = %err, "portal inventory plan did not activate");
+                outcome.errors.push("plan_not_activated".into());
+                outcome.degraded = true;
+                outcome.plan_retained = true;
+                return outcome;
             }
         }
     }
+    if let Err(err) = persist_last_good(building_root, &model, snapshot).await {
+        warn!(building_id = %site.building_id, error = %err, "last good inventory plan was not saved");
+        outcome.errors.push(err);
+        outcome.degraded = true;
+    }
     outcome
+}
+
+async fn persist_last_good(
+    root: &Path,
+    model: &CommittedModel,
+    snapshot: &InventorySnapshot,
+) -> Result<(), String> {
+    let file = LastGoodFile {
+        schema: LAST_GOOD_SCHEMA.to_string(),
+        model: model.clone(),
+        source_points: u64::try_from(snapshot.source_points).unwrap_or(u64::MAX),
+        total_count: snapshot.diagnostics.total_count,
+        snapshot_version: snapshot.diagnostics.snapshot_version.clone(),
+    };
+    let bytes = serde_json::to_vec(&file).map_err(|_| "plan_not_persisted".to_string())?;
+    tokio::fs::create_dir_all(root)
+        .await
+        .map_err(|_| "plan_not_persisted".to_string())?;
+    let tmp = root.join(".portal_last_good_plan.json.tmp");
+    let dest = root.join(LAST_GOOD_FILE);
+    tokio::fs::write(&tmp, &bytes)
+        .await
+        .map_err(|_| "plan_not_persisted".to_string())?;
+    if tokio::fs::rename(&tmp, &dest).await.is_err() {
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return Err("plan_not_persisted".to_string());
+    }
+    Ok(())
+}
+
+/// Load the last complete inventory plan into `models`. Missing file is
+/// `Ok(false)`. A corrupt file leaves the current plan in place.
+pub fn restore_last_good_plan(
+    models: &mut CommittedModelStore,
+    building_root: &Path,
+    scope: &ModelScope,
+) -> Result<bool, String> {
+    let path = building_root.join(LAST_GOOD_FILE);
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(_) => return Err("saved_plan_unreadable".to_string()),
+    };
+    let file: LastGoodFile =
+        serde_json::from_slice(&bytes).map_err(|_| "saved_plan_invalid".to_string())?;
+    if file.schema != LAST_GOOD_SCHEMA {
+        return Err("saved_plan_schema".to_string());
+    }
+    let raw = serde_json::to_string(&file.model).map_err(|_| "saved_plan_invalid".to_string())?;
+    let model = model_from_json(&raw, scope).map_err(|_| "saved_plan_invalid".to_string())?;
+    models
+        .try_activate(None, &model)
+        .map_err(|_| "saved_plan_invalid".to_string())?;
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -575,6 +726,200 @@ mod tests {
             "SITE_TRUNC",
             r#"ASK { ?s ofdd:equipmentId "VAV_1" }"#
         ));
+    }
+
+    fn lab_site() -> SiteConfig {
+        let scope = ModelScope {
+            tenant_id: "tenant-a".into(),
+            site_id: "site-a".into(),
+            provider_instance_id: "nf-conn-a".into(),
+        };
+        let model = model_from_point_map(&scope, &[]).expect("empty model");
+        SiteConfig {
+            building_id: "site-a".into(),
+            tenant_id: "tenant-a".into(),
+            provider_instance_id: "nf:conn-a".into(),
+            kind: crate::providers::types::ProviderKind::Nf,
+            endpoint: "http://127.0.0.1".into(),
+            client_id: None,
+            client_secret: None,
+            anonymous: true,
+            poll_secs: 300,
+            latitude: None,
+            longitude: None,
+            resolver: crate::providers::map::RoleResolver::default(),
+            model,
+        }
+    }
+
+    fn scheduled(runtime: &crate::providers::Runtime) -> (String, Vec<String>, Vec<String>) {
+        let models = runtime.models.lock().unwrap_or_else(|err| err.into_inner());
+        let revision = models
+            .active_revision("tenant-a", "site-a")
+            .unwrap_or("")
+            .to_string();
+        let Some(plan) = models.active_plan("tenant-a", "site-a") else {
+            return (revision, Vec::new(), Vec::new());
+        };
+        let devices = crate::providers::committed_model::schedule_plan_devices(
+            "tenant-a",
+            "site-a",
+            "nf:conn-a",
+            plan,
+        )
+        .expect("schedule");
+        let mut device_ids: Vec<String> = devices.into_iter().map(|d| d.equipment_id).collect();
+        device_ids.sort();
+        let mut point_ids: Vec<String> = plan
+            .groups
+            .iter()
+            .flat_map(|group| group.points.iter().map(|pt| pt.source_point_id.clone()))
+            .collect();
+        point_ids.sort();
+        (revision, device_ids, point_ids)
+    }
+
+    /// Clears the process-wide historian env for this test, then restores it.
+    struct ClearedHistorian {
+        historian: Option<String>,
+        database: Option<String>,
+    }
+
+    impl ClearedHistorian {
+        fn off() -> Self {
+            let historian = std::env::var("OPENFDD_HISTORIAN").ok();
+            let database = std::env::var("OPENFDD_DATABASE_URL").ok();
+            std::env::remove_var("OPENFDD_HISTORIAN");
+            std::env::remove_var("OPENFDD_DATABASE_URL");
+            Self {
+                historian,
+                database,
+            }
+        }
+    }
+
+    impl Drop for ClearedHistorian {
+        fn drop(&mut self) {
+            match self.historian.take() {
+                Some(value) => std::env::set_var("OPENFDD_HISTORIAN", value),
+                None => std::env::remove_var("OPENFDD_HISTORIAN"),
+            }
+            match self.database.take() {
+                Some(value) => std::env::set_var("OPENFDD_DATABASE_URL", value),
+                None => std::env::remove_var("OPENFDD_DATABASE_URL"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "OPENFDD_HISTORIAN is process-global while this plan is activated"
+    )]
+    async fn incomplete_inventory_keeps_the_last_plan_across_restart() {
+        let _lock = crate::test_env_lock::lock_env();
+        let _historian = ClearedHistorian::off();
+        let bodies = crate::providers::nf::synthetic_inventory_bodies(501, 500);
+        let owned: Vec<&str> = bodies.iter().map(String::as_str).collect();
+        let full = crate::providers::nf::assemble_inventory_pages(&owned, 500).expect("501");
+        assert!(full.complete);
+        assert_eq!(full.points.len(), 501);
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("site-a");
+        let runtime = crate::providers::Runtime::health_only_for_test("site-a");
+        let cache = crate::haystack_rdf::HaystackRdfCache::new();
+        let site = lab_site();
+        let first = apply_at(&runtime, &cache, &site, &root, &full).await;
+        assert!(first.model_activated, "{:?}", first.errors);
+        assert!(!first.plan_retained);
+        assert!(!first.degraded, "{:?}", first.errors);
+        let (revision, devices, points) = scheduled(&runtime);
+        assert!(devices.iter().any(|id| id == "EQ_FINAL"), "{devices:?}");
+        assert_eq!(points.len(), 501);
+        assert_eq!(points[0], "pt-0000");
+        assert_eq!(points[500], "pt-0500");
+
+        let restarted = crate::providers::Runtime::health_only_for_test("site-a");
+        {
+            let mut models = restarted
+                .models
+                .lock()
+                .unwrap_or_else(|err| err.into_inner());
+            let restored = restore_last_good_plan(
+                &mut models,
+                &root,
+                &ModelScope {
+                    tenant_id: "tenant-a".into(),
+                    site_id: "site-a".into(),
+                    provider_instance_id: "nf-conn-a".into(),
+                },
+            )
+            .expect("restore");
+            assert!(restored);
+        }
+        let (restored_rev, restored_devices, restored_points) = scheduled(&restarted);
+        assert_eq!(restored_rev, revision);
+        assert_eq!(restored_devices, devices);
+        assert_eq!(restored_points, points);
+
+        let unspecified =
+            crate::providers::nf::assemble_inventory_pages(&[r#"{"points":[]}"#], 500)
+                .expect("empty");
+        assert!(!unspecified.complete);
+        let kept = apply_at(&restarted, &cache, &site, &root, &unspecified).await;
+        assert!(kept.plan_retained);
+        assert!(kept.degraded);
+        assert!(!kept.model_activated);
+        assert_eq!(scheduled(&restarted).0, revision);
+        assert_eq!(scheduled(&restarted).2.len(), 501);
+
+        let interrupted =
+            crate::providers::nf::assemble_inventory_pages(&[&bodies[0]], 500).expect("page 1");
+        assert!(!interrupted.complete);
+        assert!(!interrupted
+            .points
+            .iter()
+            .any(|pt| pt.equipment_id == "EQ_FINAL"));
+        let still = apply_at(&restarted, &cache, &site, &root, &interrupted).await;
+        assert!(still.plan_retained);
+        assert_eq!(still.diagnostics.reason.as_deref(), Some("truncated"));
+        let (_, devices_after, points_after) = scheduled(&restarted);
+        assert!(devices_after.iter().any(|id| id == "EQ_FINAL"));
+        assert_eq!(points_after, points);
+
+        let empty = crate::providers::nf::assemble_inventory_pages(
+            &[&crate::providers::nf::synthetic_inventory_bodies(0, 500)[0]],
+            500,
+        )
+        .expect("empty complete");
+        assert!(empty.complete);
+        let cleared = apply_at(&restarted, &cache, &site, &root, &empty).await;
+        assert!(cleared.model_activated, "{:?}", cleared.errors);
+        assert!(!cleared.plan_retained);
+        assert!(scheduled(&restarted).1.is_empty());
+        assert!(scheduled(&restarted).2.is_empty());
+
+        let after_clear = crate::providers::Runtime::health_only_for_test("site-a");
+        {
+            let mut models = after_clear
+                .models
+                .lock()
+                .unwrap_or_else(|err| err.into_inner());
+            assert!(restore_last_good_plan(
+                &mut models,
+                &root,
+                &ModelScope {
+                    tenant_id: "tenant-a".into(),
+                    site_id: "site-a".into(),
+                    provider_instance_id: "nf-conn-a".into(),
+                },
+            )
+            .expect("restore empty"));
+        }
+        assert!(scheduled(&after_clear).1.is_empty());
+        assert!(scheduled(&after_clear).2.is_empty());
+        assert!(scheduled(&after_clear).0 != revision);
     }
 
     #[test]

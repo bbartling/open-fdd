@@ -26,7 +26,8 @@ use super::writer;
 use super::Runtime;
 use crate::state::AppState;
 
-/// A full page may be truncated; inventory sync then skips removals.
+/// Portal page size. A full page is fetched again at the next offset until
+/// `totalCount` is met or a short page ends the result.
 const INVENTORY_PAGE_SIZE: u32 = 500;
 
 fn poll_enabled() -> bool {
@@ -140,7 +141,9 @@ pub fn accept_device_window(
 }
 
 fn chosen_resolver<'a>(live: &'a RoleResolver, site: &'a RoleResolver) -> &'a RoleResolver {
-    if live.mapped_count() == 0 && site.mapped_count() > 0 {
+    // A committed plan with no devices is a finished empty inventory. Only a
+    // missing plan (no revision) falls back to the site resolver.
+    if live.model_revision().is_none() && site.mapped_count() > 0 {
         site
     } else {
         live
@@ -353,17 +356,31 @@ async fn nf_hourly_loop(
                 .await;
             continue;
         }
-        match driver.query_inventory(INVENTORY_PAGE_SIZE).await {
+        let inventory_note = match driver.query_inventory(INVENTORY_PAGE_SIZE).await {
             Ok(snapshot) => {
                 let outcome =
                     super::inventory_sync::apply(&runtime, &state.haystack_rdf, &site, &snapshot)
                         .await;
-                if !outcome.errors.is_empty() {
+                if !snapshot.complete {
+                    let code = snapshot
+                        .diagnostics
+                        .reason
+                        .clone()
+                        .unwrap_or_else(|| "inventory_incomplete".to_string());
+                    warn!(%building_id, reason = %code, "NF inventory incomplete; last plan kept");
+                    Some(code)
+                } else if !outcome.errors.is_empty() {
                     warn!(%building_id, errors = ?outcome.errors, "NF inventory sync incomplete");
+                    outcome.errors.first().cloned()
+                } else {
+                    None
                 }
             }
-            Err(_) => warn!(%building_id, "NF inventory read failed; model left as last synced"),
-        }
+            Err(_) => {
+                warn!(%building_id, "NF inventory read failed; model left as last synced");
+                Some("inventory_read_failed".to_string())
+            }
+        };
         let opened = runtime.hourly_store().await;
         let store = match opened {
             StoreOpen::Durable(store) | StoreOpen::MemoryOnly(store) => store,
@@ -448,6 +465,13 @@ async fn nf_hourly_loop(
                         .await;
                 }
                 runtime.record_ledger(&building_id, ledger).await;
+                if let Some(code) = inventory_note {
+                    if !as_error {
+                        runtime
+                            .record_error(&building_id, ProviderHealthStatus::Degraded, Some(code))
+                            .await;
+                    }
+                }
                 debug!(%building_id, status = ?status, "hourly tick finished");
             }
             Err(code) => {
@@ -924,5 +948,40 @@ mod tests {
         assert!(site.health.last_success_at.is_some());
         assert_eq!(site.last_ingested_points, 60);
         assert_eq!(site.health.status, ProviderHealthStatus::Ok);
+    }
+
+    #[test]
+    fn empty_committed_plan_is_not_replaced_by_the_site_resolver() {
+        use crate::providers::committed_model::{
+            model_from_point_map, CommittedModelStore, ModelScope,
+        };
+        use crate::providers::map::{PointMapEntry, RoleResolver};
+        let scope = ModelScope {
+            tenant_id: "tenant-a".into(),
+            site_id: "site-a".into(),
+            provider_instance_id: "nf-conn-a".into(),
+        };
+        let model = model_from_point_map(&scope, &[]).unwrap();
+        let mut store = CommittedModelStore::default();
+        store.try_activate(None, &model).unwrap();
+        let plan = store.active_plan("tenant-a", "site-a").unwrap().clone();
+        let live = RoleResolver::from_plan(&plan);
+        let site = RoleResolver::from_point_map(&[PointMapEntry {
+            provider_point_id: "pt-site".into(),
+            semantic_point_id: None,
+            equipment_id: "EQ_MAIN".into(),
+            role: "sat".into(),
+            equip_type: Some("ahu".into()),
+            unit: None,
+            kind: None,
+            provisional: false,
+        }])
+        .unwrap();
+        let chosen = chosen_resolver(&live, &site);
+        assert_eq!(chosen.mapped_count(), 0);
+        assert!(chosen.model_revision().is_some());
+        let unset = RoleResolver::default();
+        let fallback = chosen_resolver(&unset, &site);
+        assert_eq!(fallback.mapped_count(), 1);
     }
 }
