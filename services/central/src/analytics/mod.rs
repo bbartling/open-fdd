@@ -46,7 +46,9 @@ pub const QV_SETPOINTS: &str = "setpoints-v1";
 pub const QV_DIURNAL: &str = "sensor-diurnal-v1";
 pub const QV_TOPOLOGY: &str = "topology-v1";
 pub const QV_SENSOR_STATS: &str = "sensor-stats-v1";
-pub const QV_SQL_ANOMALY: &str = "sql-anomaly-v1";
+/// Event-table rolling z-score. Bump when the row shape or the baseline changes
+/// so a cached envelope from the previous summary contract cannot be served fresh.
+pub const QV_SQL_ANOMALY: &str = "sql-anomaly-event-v1";
 
 /// Shared query fields for `/api/analytics/*` requests.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]

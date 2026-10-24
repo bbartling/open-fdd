@@ -104,7 +104,7 @@
       "query_id": "sql-anomaly",
       "sql_path": "sql/analytics/postgres/queries/sql_anomaly_zscore.sql",
       "status": "softopen",
-      "notes": "z-score Soft-OPEN; full anomaly suite later"
+      "notes": "Event table: prior-window z-score. window_rows, z_threshold, and transition_events are SQL binds. Series coverage is sql_anomaly_series.sql."
     },
     {
       "query_id": "mv-change-point",

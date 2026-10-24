@@ -1,0 +1,990 @@
+{
+  "cases": {
+    "constant_history": {
+      "building_id": "w1c-anom-const",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 0,
+        "n_ok": 0,
+        "n_returned": 0,
+        "n_samples": 12,
+        "n_scored": 0,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 12,
+            "n_null": 0,
+            "reason": "constant_history",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "custom_threshold": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 2,
+        "n_ok": 10,
+        "n_returned": 2,
+        "n_samples": 16,
+        "n_scored": 12,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 10.0
+      },
+      "equipment_ids": [
+        "UNIT_A"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 10.0,
+          "transition": true,
+          "ts": "2026-06-01T14:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 10.0,
+          "transition": true,
+          "ts": "2026-06-01T08:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        }
+      ],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 10.0
+    },
+    "disabled": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 0,
+        "n_ok": 0,
+        "n_returned": 0,
+        "n_samples": 0,
+        "n_scored": 0,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [
+        "UNIT_A",
+        "UNIT_A2"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [
+        "sql anomaly screening disabled (OPENFDD_SQL_ANOMALY_SCREENING=0)"
+      ],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "exact_equipment": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 3,
+        "n_ok": 9,
+        "n_returned": 3,
+        "n_samples": 16,
+        "n_scored": 12,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [
+        "UNIT_A"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T14:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T08:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 18.5,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 14.364307617610162,
+          "threshold": 3.0,
+          "transition": false,
+          "ts": "2026-06-01T09:00:00.000000Z",
+          "val": 80.0,
+          "z_abs": 4.28144548537815
+        }
+      ],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "high_threshold": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 0,
+        "n_ok": 12,
+        "n_returned": 0,
+        "n_samples": 16,
+        "n_scored": 12,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 30.0
+      },
+      "equipment_ids": [
+        "UNIT_A"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 30.0
+    },
+    "legacy_version": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 6,
+        "n_ok": 18,
+        "n_returned": 6,
+        "n_samples": 32,
+        "n_scored": 24,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          },
+          {
+            "equipment_id": "UNIT_A2",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [
+        "UNIT_A",
+        "UNIT_A2"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T14:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A2",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T14:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T08:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A2",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T08:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 18.5,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 14.364307617610162,
+          "threshold": 3.0,
+          "transition": false,
+          "ts": "2026-06-01T09:00:00.000000Z",
+          "val": 80.0,
+          "z_abs": 4.28144548537815
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 18.5,
+          "equipment_id": "UNIT_A2",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 14.364307617610162,
+          "threshold": 3.0,
+          "transition": false,
+          "ts": "2026-06-01T09:00:00.000000Z",
+          "val": 80.0,
+          "z_abs": 4.28144548537815
+        }
+      ],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [
+        "unknown or unsupported query_version 'sql-anomaly-v1'; responding with 'sql-anomaly-event-v1'"
+      ],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "long_window": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 0,
+        "n_ok": 0,
+        "n_returned": 0,
+        "n_samples": 16,
+        "n_scored": 0,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 16,
+            "n_null": 0,
+            "reason": "short_history",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 100,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [
+        "UNIT_A"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 100,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "missing_values": {
+      "building_id": "w1c-anom-miss",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 0,
+        "n_ok": 0,
+        "n_returned": 0,
+        "n_samples": 0,
+        "n_scored": 0,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 0,
+            "n_null": 4,
+            "reason": "missing_values",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [
+        "no screened samples in this window"
+      ],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "multi_event": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 6,
+        "n_ok": 18,
+        "n_returned": 6,
+        "n_samples": 32,
+        "n_scored": 24,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          },
+          {
+            "equipment_id": "UNIT_A2",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [
+        "UNIT_A",
+        "UNIT_A2"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T14:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A2",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T14:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T08:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A2",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T08:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 18.5,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 14.364307617610162,
+          "threshold": 3.0,
+          "transition": false,
+          "ts": "2026-06-01T09:00:00.000000Z",
+          "val": 80.0,
+          "z_abs": 4.28144548537815
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 18.5,
+          "equipment_id": "UNIT_A2",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 14.364307617610162,
+          "threshold": 3.0,
+          "transition": false,
+          "ts": "2026-06-01T09:00:00.000000Z",
+          "val": 80.0,
+          "z_abs": 4.28144548537815
+        }
+      ],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "no_event": {
+      "building_id": "w1c-anom-none",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 0,
+        "n_ok": 8,
+        "n_returned": 0,
+        "n_samples": 12,
+        "n_scored": 8,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 12,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "no_history": {
+      "building_id": "w1c-anom-empty",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 0,
+        "n_ok": 0,
+        "n_returned": 0,
+        "n_samples": 0,
+        "n_scored": 0,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [
+        "no screened samples in this window"
+      ],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "short_history": {
+      "building_id": "w1c-anom-short",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 0,
+        "n_ok": 0,
+        "n_returned": 0,
+        "n_samples": 3,
+        "n_scored": 0,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 3,
+            "n_null": 0,
+            "reason": "short_history",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "timezone_precision": {
+      "building_id": "w1c-anom-tz",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 1,
+        "n_ok": 0,
+        "n_returned": 1,
+        "n_samples": 5,
+        "n_scored": 1,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 5,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          }
+        ],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": "2026-06-16T00:15:01Z",
+        "window_rows": 4,
+        "window_start": "2026-06-15T20:15:00Z",
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [
+        "UNIT_A"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-16T00:15:00.000000Z",
+          "val": 80.125,
+          "z_abs": 59.86400603659933
+        }
+      ],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [],
+      "window_end": "2026-06-16T00:15:01Z",
+      "window_rows": 4,
+      "window_start": "2026-06-15T20:15:00Z",
+      "z_threshold": 3.0
+    },
+    "transition_edges": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "zscore",
+        "n_flagged": 6,
+        "n_ok": 18,
+        "n_returned": 4,
+        "n_samples": 32,
+        "n_scored": 24,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [
+          {
+            "equipment_id": "UNIT_A",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          },
+          {
+            "equipment_id": "UNIT_A2",
+            "n": 16,
+            "n_null": 0,
+            "reason": "scored",
+            "role": "sat"
+          }
+        ],
+        "transition_events": true,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [
+        "UNIT_A",
+        "UNIT_A2"
+      ],
+      "method": "zscore",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T14:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A2",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T14:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T08:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        },
+        {
+          "anomaly_flag": "ANOMALY",
+          "avg_val": 11.0,
+          "equipment_id": "UNIT_A2",
+          "method": "zscore",
+          "role": "sat",
+          "stddev_val": 1.1547005383792515,
+          "threshold": 3.0,
+          "transition": true,
+          "ts": "2026-06-01T08:00:00.000000Z",
+          "val": 40.0,
+          "z_abs": 25.114736709748723
+        }
+      ],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": true,
+      "truncated": false,
+      "warnings": [],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    },
+    "unsupported_method": {
+      "building_id": "w1c-anom-multi",
+      "contract": "event-table",
+      "coverage": {
+        "contract": "event-table",
+        "method": "robust",
+        "n_flagged": 0,
+        "n_ok": 0,
+        "n_returned": 0,
+        "n_samples": 0,
+        "n_scored": 0,
+        "semantics": "rolling-prior-window-zscore",
+        "series": [],
+        "transition_events": false,
+        "truncated": false,
+        "window_end": null,
+        "window_rows": 4,
+        "window_start": null,
+        "z_threshold": 3.0
+      },
+      "equipment_ids": [
+        "UNIT_A"
+      ],
+      "method": "robust",
+      "query_id": "sql-anomaly",
+      "query_version": "sql-anomaly-event-v1",
+      "rows": [],
+      "semantics": "rolling-prior-window-zscore",
+      "transition_events": false,
+      "truncated": false,
+      "warnings": [
+        "sql-anomaly method 'robust' is not supported; the event table uses zscore"
+      ],
+      "window_end": null,
+      "window_rows": 4,
+      "window_start": null,
+      "z_threshold": 3.0
+    }
+  },
+  "contract": "sql-anomaly-event-v1",
+  "coverage_keys": [
+    "contract",
+    "method",
+    "n_flagged",
+    "n_ok",
+    "n_returned",
+    "n_samples",
+    "n_scored",
+    "semantics",
+    "series",
+    "transition_events",
+    "truncated",
+    "window_end",
+    "window_rows",
+    "window_start",
+    "z_threshold"
+  ],
+  "query_version": "sql-anomaly-event-v1",
+  "row_keys": [
+    "anomaly_flag",
+    "avg_val",
+    "equipment_id",
+    "method",
+    "role",
+    "stddev_val",
+    "threshold",
+    "transition",
+    "ts",
+    "val",
+    "z_abs"
+  ],
+  "semantics": "rolling-prior-window-zscore"
+}

@@ -49,6 +49,8 @@ mod runtime_weekly_fixtures;
 #[cfg(test)]
 mod sat_pairing_fixtures;
 mod sql_anomaly;
+#[cfg(test)]
+mod sql_anomaly_fixtures;
 mod sql_pack;
 mod starter_seed;
 mod state;

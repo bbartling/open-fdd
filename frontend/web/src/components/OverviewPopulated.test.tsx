@@ -181,7 +181,7 @@ vi.mock("../api/analyticsApi", () => ({
   })),
   postSqlAnomaly: vi.fn(async () => ({
     ...emptyAnalytics,
-    query_version: "sql-anomaly-v1",
+    query_version: "sql-anomaly-event-v1",
   })),
 }));
 

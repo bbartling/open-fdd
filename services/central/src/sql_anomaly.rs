@@ -1,6 +1,7 @@
-//! Wave UX Soft — SQL statistical anomaly screening (DataFusion rolling Z-score).
+//! Request parameters and screening flag for the anomaly event table.
 //!
-//! Default-on for CSV/Overview; set `OPENFDD_SQL_ANOMALY_SCREENING=0` on live OT hubs.
+//! The product calculation is the Timescale route. Default-on for CSV/Overview;
+//! set `OPENFDD_SQL_ANOMALY_SCREENING=0` to skip the scan.
 
 use std::sync::Arc;
 
@@ -43,9 +44,26 @@ impl Default for SqlAnomalyParams {
             window_rows: 24,
             z_threshold: 3.0,
             method: "zscore".into(),
-            transition_events: true,
+            // Every flagged timestamp stays in the event table unless the
+            // caller asks for rising edges.
+            transition_events: false,
         }
     }
+}
+
+fn json_u32(value: &Value) -> Option<u32> {
+    if let Some(n) = value.as_u64() {
+        return u32::try_from(n).ok();
+    }
+    let number = value.as_f64()?;
+    if !number.is_finite() || number < 0.0 || number > f64::from(u32::MAX) {
+        return None;
+    }
+    let whole = number.trunc();
+    if whole != number {
+        return None;
+    }
+    u32::try_from(whole as u64).ok()
 }
 
 pub fn params_from_request(req: &AnalyticsRequest) -> SqlAnomalyParams {
@@ -53,16 +71,21 @@ pub fn params_from_request(req: &AnalyticsRequest) -> SqlAnomalyParams {
     let Some(series) = req.series.as_ref().and_then(|s| s.as_object()) else {
         return p;
     };
-    if let Some(w) = series.get("window_rows").and_then(|v| v.as_u64()) {
-        p.window_rows = w.min(168) as u32;
+    if let Some(w) = series.get("window_rows").and_then(json_u32) {
+        p.window_rows = w.clamp(3, 168);
     }
-    if let Some(t) = series.get("z_threshold").and_then(|v| v.as_f64()) {
-        p.z_threshold = t;
+    if let Some(t) = series.get("z_threshold").and_then(Value::as_f64) {
+        if t.is_finite() && t > 0.0 {
+            p.z_threshold = t.min(1.0e6);
+        }
     }
-    if let Some(m) = series.get("method").and_then(|v| v.as_str()) {
-        p.method = m.to_string();
+    if let Some(m) = series.get("method").and_then(Value::as_str) {
+        let method = m.trim();
+        if !method.is_empty() {
+            p.method = method.to_string();
+        }
     }
-    if let Some(b) = series.get("transition_events").and_then(|v| v.as_bool()) {
+    if let Some(b) = series.get("transition_events").and_then(Value::as_bool) {
         p.transition_events = b;
     }
     p
@@ -122,7 +145,7 @@ async fn status(
         "ok": true,
         "enabled": enabled,
         "mode": if enabled { "default-on" } else { "disabled" },
-        "note": "Rolling Z-score / robust MAD screening over historian Parquet; set OPENFDD_SQL_ANOMALY_SCREENING=0 on OT hubs",
+        "note": "Rolling prior-window z-score event table on the Timescale historian. Set OPENFDD_SQL_ANOMALY_SCREENING=0 to skip the scan.",
         "endpoints": {
             "status": "/api/analytics/sql-anomaly/status",
             "run": "POST /api/analytics/sql-anomaly"
@@ -166,5 +189,37 @@ mod tests {
         assert!((p.z_threshold - 2.5).abs() < 1e-9);
         assert_eq!(p.method, "zscore");
         assert!(!p.transition_events);
+    }
+
+    #[test]
+    fn event_defaults_keep_every_flag_and_clamp_the_window() {
+        let defaults = params_from_request(&AnalyticsRequest::default());
+        assert_eq!(defaults.window_rows, 24);
+        assert!((defaults.z_threshold - 3.0).abs() < 1e-9);
+        assert_eq!(defaults.method, "zscore");
+        assert!(!defaults.transition_events);
+
+        let req = AnalyticsRequest {
+            series: Some(json!({
+                "window_rows": 1,
+                "z_threshold": 0.0,
+                "method": " robust ",
+                "transition_events": true
+            })),
+            ..Default::default()
+        };
+        let clamped = params_from_request(&req);
+        assert_eq!(clamped.window_rows, 3);
+        assert!((clamped.z_threshold - 3.0).abs() < 1e-9);
+        assert_eq!(clamped.method, "robust");
+        assert!(clamped.transition_events);
+
+        let wide = AnalyticsRequest {
+            series: Some(json!({ "window_rows": 500, "z_threshold": 30.0 })),
+            ..Default::default()
+        };
+        let wide = params_from_request(&wide);
+        assert_eq!(wide.window_rows, 168);
+        assert!((wide.z_threshold - 30.0).abs() < 1e-9);
     }
 }
