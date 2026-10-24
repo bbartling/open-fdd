@@ -97,6 +97,15 @@ pub struct JwtClaims {
     /// File-plane record id. Absent on env identities and on tokens that were never file-issued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uid: Option<String>,
+    /// Opaque server session id. Absent on tokens minted before session attribution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sid: Option<String>,
+    /// Parent session id when this token was minted for a delegated agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dlg: Option<String>,
+    /// Server identity class (`unique_human`, `shared_credential`, `agent_session`, `anonymous`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ak: Option<String>,
 }
 
 pub(crate) fn is_env_identity(sub: &str) -> bool {
@@ -126,6 +135,44 @@ struct FilePlaneBinding {
 /// Session epoch, record id, and durable membership to embed.
 /// Env identities stay unbound. A subject that is not in the store and was never
 /// retired stays unbound so direct-mint callers keep working. A retired name is refused.
+fn binding_after_id_assigned(
+    workspace: &std::path::Path,
+    sub: &str,
+) -> Result<FilePlaneBinding, String> {
+    let store = match UserStore::load_status(workspace) {
+        UserStoreLoad::Ready(store) => store,
+        UserStoreLoad::Absent | UserStoreLoad::Unreadable => {
+            return Err(IDENTITY_STORE_UNAVAILABLE.into());
+        }
+    };
+    let Some(user) = store
+        .users
+        .iter()
+        .find(|user| user.username.eq_ignore_ascii_case(sub))
+    else {
+        if store.is_retired(sub) {
+            return Err(IDENTITY_UNKNOWN.into());
+        }
+        return Ok(FilePlaneBinding {
+            session_version: 0,
+            uid: None,
+            durable_tenant_ids: None,
+        });
+    };
+    if user.disabled {
+        return Err(IDENTITY_DISABLED.into());
+    }
+    let uid = user.user_id.trim();
+    if uid.is_empty() {
+        return Err(IDENTITY_STORE_UNAVAILABLE.into());
+    }
+    Ok(FilePlaneBinding {
+        session_version: user.session_version,
+        uid: Some(uid.to_string()),
+        durable_tenant_ids: Some(user.tenant_ids.clone()),
+    })
+}
+
 fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
     if is_env_identity(sub) {
         return Ok(FilePlaneBinding {
@@ -145,7 +192,7 @@ fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
             warn!("control-plane user store is unreadable; refusing to mint a file token");
             Err(IDENTITY_STORE_UNAVAILABLE.into())
         }
-        UserStoreLoad::Ready(mut store) => {
+        UserStoreLoad::Ready(store) => {
             let Some(idx) = store
                 .users
                 .iter()
@@ -164,8 +211,10 @@ fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
                 return Err(IDENTITY_DISABLED.into());
             }
             if store.users[idx].user_id.trim().is_empty() {
-                store.users[idx].user_id = uuid::Uuid::new_v4().to_string();
-                store.save(&workspace)?;
+                let name = store.users[idx].username.clone();
+                crate::lifecycle::ensure_user_id(&workspace, &name)
+                    .map_err(|_| IDENTITY_STORE_UNAVAILABLE.to_string())?;
+                return binding_after_id_assigned(&workspace, sub);
             }
             Ok(FilePlaneBinding {
                 session_version: store.users[idx].session_version,
@@ -385,15 +434,41 @@ impl AuthConfig {
         let binding = file_plane_binding(sub)?;
         let (membership, active_tenant_id) =
             minted_session(tenant_ids, binding.durable_tenant_ids.as_deref());
+        let exp = now + ttl_secs.max(60);
+        let class = crate::audit::identity_class_for_new_session(sub, binding.uid.as_deref());
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let delegated_by = if class == crate::audit::IdentityClass::AgentSession {
+            crate::audit::bearer_session_id()
+        } else {
+            None
+        };
+        let expires_at = chrono::DateTime::<chrono::Utc>::from_timestamp(exp, 0)
+            .map(|ts| ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+        let actor_id = if class == crate::audit::IdentityClass::UniqueHuman {
+            binding.uid.clone().or_else(|| Some(sub.trim().to_string()))
+        } else {
+            None
+        };
+        crate::audit::note_minted_session(crate::audit::VerifiedActor {
+            class,
+            actor_id,
+            subject: sub.to_string(),
+            session_id: Some(session_id.clone()),
+            delegated_by: delegated_by.clone(),
+            expires_at,
+        });
         let claims = JwtClaims {
             sub: sub.to_string(),
             role: role.as_str().to_string(),
-            exp: now + ttl_secs.max(60),
+            exp,
             iat: now,
             tenant_ids: membership,
             active_tenant_id,
             session_version: binding.session_version,
             uid: binding.uid,
+            sid: Some(session_id),
+            dlg: delegated_by,
+            ak: Some(class.as_str().to_string()),
         };
         encode(
             &Header::default(),
@@ -490,6 +565,16 @@ impl AuthConfig {
         // Env identities are explicit and do not consult the file. An unreadable
         // store fails closed for every other subject.
         let scope = authorize_file_plane(&claims, role)?;
+        let expires_at = chrono::DateTime::<chrono::Utc>::from_timestamp(claims.exp, 0)
+            .map(|ts| ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
+        crate::audit::note_verified_bearer(crate::audit::VerifiedActor::from_token_claims(
+            &claims.sub,
+            claims.uid.as_deref(),
+            claims.sid.as_deref(),
+            claims.dlg.as_deref(),
+            claims.ak.as_deref(),
+            expires_at,
+        ));
         Ok(AuthUser {
             sub: claims.sub,
             role,
@@ -688,6 +773,9 @@ mod tests {
             active_tenant_id: None,
             session_version: 0,
             uid: None,
+            sid: None,
+            dlg: None,
+            ak: None,
         };
         let token = encode(
             &Header::default(),
@@ -698,6 +786,61 @@ mod tests {
         let user = cfg.verify_bearer(&token).unwrap();
         assert_eq!(user.sub, "operator");
         assert_eq!(user.role, Role::Operator);
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "token mint reads the process-wide workspace env and the request task local"
+    )]
+    async fn minted_sessions_are_unique_and_agent_tokens_name_the_parent() {
+        let _env = crate::test_env_lock::lock_env();
+        let dir = tempfile::tempdir().expect("session workspace");
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(dir.path());
+        let cfg = AuthConfig {
+            secret: Some("test-secret-with-enough-entropy-for-hmac-signing".into()),
+            admin_password: Some("admin-pw".into()),
+            agent_password: Some("agent-pw".into()),
+            viewer_password: None,
+            viewer_tenant_ids: vec![],
+        };
+        let admin = cfg
+            .issue_token_with_tenants("admin", Role::Admin, 3600, &[])
+            .expect("admin token");
+        let admin_claims = cfg.decode_claims(&admin).expect("admin claims");
+        assert_eq!(admin_claims.ak.as_deref(), Some("shared_credential"));
+        assert!(admin_claims.sid.as_ref().is_some_and(|id| !id.is_empty()));
+        assert!(admin_claims.dlg.is_none());
+        assert!(admin_claims.uid.is_none());
+
+        let file_user = cfg
+            .issue_token_with_tenants("ada", Role::Operator, 3600, &[])
+            .expect("file-less direct mint");
+        let file_claims = cfg.decode_claims(&file_user).expect("ada claims");
+        assert_eq!(file_claims.ak.as_deref(), Some("unique_human"));
+        assert_ne!(file_claims.sid, admin_claims.sid);
+
+        let ctx = crate::audit::RequestContext::new(None, "POST", "/api/auth/agent-token");
+        let (agent_a, agent_b) = crate::audit::with_request_context(ctx, async {
+            cfg.verify_bearer(&admin).expect("admin bearer");
+            let first = cfg
+                .issue_token_with_tenants("agent", Role::Operator, 600, &[])
+                .expect("agent token");
+            let second = cfg
+                .issue_token_with_tenants("agent", Role::Operator, 600, &[])
+                .expect("second agent token");
+            (
+                cfg.decode_claims(&first).expect("agent claims"),
+                cfg.decode_claims(&second).expect("agent claims"),
+            )
+        })
+        .await;
+        assert_eq!(agent_a.ak.as_deref(), Some("agent_session"));
+        assert_eq!(agent_b.ak.as_deref(), Some("agent_session"));
+        assert_ne!(agent_a.sid, agent_b.sid);
+        assert_eq!(agent_a.dlg, admin_claims.sid);
+        assert_eq!(agent_b.dlg, admin_claims.sid);
+        assert_ne!(agent_a.sid, admin_claims.sid);
     }
 
     #[test]
@@ -718,6 +861,9 @@ mod tests {
             active_tenant_id: None,
             session_version: 0,
             uid: None,
+            sid: None,
+            dlg: None,
+            ak: None,
         };
         let token = encode(
             &Header::default(),
@@ -844,6 +990,9 @@ mod tests {
             active_tenant_id: None,
             session_version: 0,
             uid: None,
+            sid: None,
+            dlg: None,
+            ak: None,
         };
         encode(
             &Header::default(),
@@ -1121,6 +1270,9 @@ mod tests {
                 active_tenant_id: None,
                 session_version: 0,
                 uid: None,
+                sid: None,
+                dlg: None,
+                ak: None,
             },
             &EncodingKey::from_secret(cfg.secret.as_ref().unwrap().as_bytes()),
         )

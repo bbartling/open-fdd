@@ -647,6 +647,9 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
             Some(crate::models::AuditSinkHealth {
                 degraded: s.degraded,
                 dropped: s.dropped,
+                dropped_shutdown: s.dropped_shutdown,
+                write_failures: s.write_failures,
+                rotated_out: s.rotated_out,
                 last_write_error: s.last_write_error.map(str::to_string),
             })
         },
@@ -949,6 +952,14 @@ fn require_hub_admin_or_audit_deny(
     })
 }
 
+fn control_plane_unavailable(audit: &mut AuditEvent, error: String) -> (StatusCode, Json<Value>) {
+    audit.reason(ReasonCode::StorageError);
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"ok": false, "error": error})),
+    )
+}
+
 fn workspace_path() -> std::path::PathBuf {
     std::path::PathBuf::from(
         std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
@@ -987,7 +998,8 @@ fn admin_upsert_user_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    let mut store = crate::lifecycle::load_users_for_write(&ws)
+        .map_err(|error| control_plane_unavailable(audit, error))?;
     audit.change(AuditChange::UserUpsert {
         created: store.get(&body.username).is_none(),
         role: auth::Role::parse(body.role.trim()).map(Into::into),
@@ -1053,7 +1065,8 @@ fn admin_set_user_disabled_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let mut store = crate::user_store::UserStore::load_or_empty(&ws);
+    let mut store = crate::lifecycle::load_users_for_write(&ws)
+        .map_err(|error| control_plane_unavailable(audit, error))?;
     store.set_disabled(username, body.disabled).map_err(|e| {
         audit.reason(ReasonCode::NotFound);
         (
@@ -1122,8 +1135,8 @@ async fn admin_delete_user_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let store = crate::user_store::UserStore::load_or_empty(&ws);
-    let plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    let (store, plane) = crate::lifecycle::read_control_plane(&ws)
+        .map_err(|error| control_plane_unavailable(audit, error))?;
     let plan =
         crate::admin_cp::plan_user_cascade_delete(&store, &plane, username).map_err(|e| {
             audit.reason(ReasonCode::NotFound);
@@ -1177,6 +1190,8 @@ async fn admin_delete_user_inner(
                     "plan": partial.plan,
                     "purged": partial.purged_json(),
                     "purge_errors": partial.errors,
+                    "operation_id": partial.operation_id,
+                    "phase": partial.phase,
                 })),
             ));
         }
@@ -1186,12 +1201,13 @@ async fn admin_delete_user_inner(
         outcome.plan.buildings_shared_skipped.len(),
         0,
     ));
-    let store = crate::user_store::UserStore::load_or_empty(&ws);
     Ok(Json(json!({
         "ok": true,
         "plan": outcome.plan,
         "purged": outcome.purged_json(),
-        "users": store.public_list(),
+        "users": outcome.users,
+        "operation_id": outcome.operation_id,
+        "phase": outcome.phase,
     })))
 }
 
@@ -1227,7 +1243,8 @@ fn admin_upsert_tenant_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let mut plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    let mut plane = crate::lifecycle::load_tenants_for_write(&ws)
+        .map_err(|error| control_plane_unavailable(audit, error))?;
     audit.change(AuditChange::TenantUpsert {
         created: !plane.tenants.iter().any(|t| t.id == body.id),
         building_ids: BoundedList::new(&body.building_ids),
@@ -1275,7 +1292,8 @@ fn admin_delete_tenant_inner(
 ) -> HandlerResult {
     require_hub_admin(state, headers, audit)?;
     let ws = workspace_path();
-    let mut plane = crate::tenant::ControlPlane::load_or_legacy(&ws);
+    let mut plane = crate::lifecycle::load_tenants_for_write(&ws)
+        .map_err(|error| control_plane_unavailable(audit, error))?;
     plane.remove_tenant(tenant_id).map_err(|e| {
         audit.reason(ReasonCode::NotFound);
         (

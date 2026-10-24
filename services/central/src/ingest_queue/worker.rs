@@ -932,6 +932,7 @@ mod tests {
             coverage: "not_assessed".into(),
             point_coverage: Vec::new(),
             counts: JobCounts::default(),
+            server_request_id: None,
         };
         assert!(!committed_tuple_matches(&job, &plan));
     }
@@ -961,6 +962,7 @@ mod tests {
             coverage: "not_assessed".into(),
             point_coverage: Vec::new(),
             counts: JobCounts::default(),
+            server_request_id: None,
         };
         let outcome = execute_job(&state, &job).await;
         assert!(matches!(

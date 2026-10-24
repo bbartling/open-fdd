@@ -127,6 +127,9 @@ pub struct JobView {
     pub coverage: String,
     pub point_coverage: Vec<super::coverage::PointCoverage>,
     pub counts: JobCounts,
+    /// Server request id captured when the job was created. Null for scheduler work.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -142,6 +145,9 @@ pub struct ReceiptView {
     pub committed_at: DateTime<Utc>,
     pub counts: JobCounts,
     pub safe_error_code: Option<String>,
+    /// Copied from the job. Null when the job had no server request id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]

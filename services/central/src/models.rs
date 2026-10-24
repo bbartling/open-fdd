@@ -64,12 +64,25 @@ pub struct OkHealthResponse {
 }
 
 /// `/api/health.audit_sink` — file writer queue health (no paths or payloads).
+///
+/// Counters are reloaded from the loss ledger after restart. `degraded` stays
+/// true while a drop or write failure is recorded. `last_write_error` clears
+/// after a later successful write. `rotated_out` is retention, not a failure.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AuditSinkHealth {
-    /// True after a dropped enqueue or a writer I/O failure; clears on next successful write.
+    /// True after a dropped enqueue or a writer I/O failure.
     pub degraded: bool,
-    /// Events dropped because the bounded queue was full (lifetime until process restart).
+    /// Events dropped because the bounded queue was full.
     pub dropped: u64,
+    /// Events refused after shutdown closed admission.
+    #[serde(default)]
+    pub dropped_shutdown: u64,
+    /// Writer failures (`unwritable` or `io`).
+    #[serde(default)]
+    pub write_failures: u64,
+    /// Events removed when size rotation exceeded the keep count.
+    #[serde(default)]
+    pub rotated_out: u64,
     /// Short stable code when the last write failed (`unwritable` | `io`), else null.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_write_error: Option<String>,
