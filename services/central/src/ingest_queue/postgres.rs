@@ -3,6 +3,8 @@
 //! Fencing rules match [`super::memory`]: a finish must present the current
 //! owner, token, and an unexpired lease. Schema DDL is applied on connect.
 
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
@@ -74,9 +76,38 @@ pub fn statements(ddl: &str) -> Vec<String> {
 
 pub async fn apply_schema(pool: &PgPool) -> Result<(), QueueError> {
     for stmt in statements(SCHEMA_SQL) {
-        sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
+        execute_schema_statement(pool, &stmt).await?;
     }
     migrate_idempotency_scope(pool).await
+}
+
+/// `CREATE TABLE` / `CREATE TYPE` from parallel test fixtures can both miss the
+/// relation and then collide in `pg_type`. Retry only that catalog race.
+async fn execute_schema_statement(pool: &PgPool, statement: &str) -> Result<(), QueueError> {
+    const RACE_CONSTRAINTS: &[&str] = &["pg_type_typname_nsp_index", "pg_class_relname_nsp_index"];
+    let mut pause = Duration::from_millis(20);
+    let mut attempt = 0u8;
+    loop {
+        match sqlx::query(statement).execute(pool).await {
+            Ok(_) => return Ok(()),
+            Err(err) if catalog_race(&err, RACE_CONSTRAINTS) && attempt < 5 => {
+                attempt += 1;
+                tokio::time::sleep(pause).await;
+                pause = pause.saturating_mul(2);
+            }
+            Err(err) => return Err(db_err(err)),
+        }
+    }
+}
+
+fn catalog_race(err: &sqlx::Error, constraints: &[&str]) -> bool {
+    let Some(db) = err.as_database_error() else {
+        return false;
+    };
+    db.code().as_deref() == Some("23505")
+        && db
+            .constraint()
+            .is_some_and(|name| constraints.contains(&name))
 }
 
 pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, QueueError> {
