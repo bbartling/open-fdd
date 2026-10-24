@@ -135,6 +135,44 @@ struct FilePlaneBinding {
 /// Session epoch, record id, and durable membership to embed.
 /// Env identities stay unbound. A subject that is not in the store and was never
 /// retired stays unbound so direct-mint callers keep working. A retired name is refused.
+fn binding_after_id_assigned(
+    workspace: &std::path::Path,
+    sub: &str,
+) -> Result<FilePlaneBinding, String> {
+    let store = match UserStore::load_status(workspace) {
+        UserStoreLoad::Ready(store) => store,
+        UserStoreLoad::Absent | UserStoreLoad::Unreadable => {
+            return Err(IDENTITY_STORE_UNAVAILABLE.into());
+        }
+    };
+    let Some(user) = store
+        .users
+        .iter()
+        .find(|user| user.username.eq_ignore_ascii_case(sub))
+    else {
+        if store.is_retired(sub) {
+            return Err(IDENTITY_UNKNOWN.into());
+        }
+        return Ok(FilePlaneBinding {
+            session_version: 0,
+            uid: None,
+            durable_tenant_ids: None,
+        });
+    };
+    if user.disabled {
+        return Err(IDENTITY_DISABLED.into());
+    }
+    let uid = user.user_id.trim();
+    if uid.is_empty() {
+        return Err(IDENTITY_STORE_UNAVAILABLE.into());
+    }
+    Ok(FilePlaneBinding {
+        session_version: user.session_version,
+        uid: Some(uid.to_string()),
+        durable_tenant_ids: Some(user.tenant_ids.clone()),
+    })
+}
+
 fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
     if is_env_identity(sub) {
         return Ok(FilePlaneBinding {
@@ -154,7 +192,7 @@ fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
             warn!("control-plane user store is unreadable; refusing to mint a file token");
             Err(IDENTITY_STORE_UNAVAILABLE.into())
         }
-        UserStoreLoad::Ready(mut store) => {
+        UserStoreLoad::Ready(store) => {
             let Some(idx) = store
                 .users
                 .iter()
@@ -173,8 +211,10 @@ fn file_plane_binding(sub: &str) -> Result<FilePlaneBinding, String> {
                 return Err(IDENTITY_DISABLED.into());
             }
             if store.users[idx].user_id.trim().is_empty() {
-                store.users[idx].user_id = uuid::Uuid::new_v4().to_string();
-                store.save(&workspace)?;
+                let name = store.users[idx].username.clone();
+                crate::lifecycle::ensure_user_id(&workspace, &name)
+                    .map_err(|_| IDENTITY_STORE_UNAVAILABLE.to_string())?;
+                return binding_after_id_assigned(&workspace, sub);
             }
             Ok(FilePlaneBinding {
                 session_version: store.users[idx].session_version,
