@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! OFDD-067: `building_id` scoping.
 //!
 //! Two fake building parquet trees under one `OPENFDD_PARQUET_ROOT` must yield

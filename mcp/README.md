@@ -1,6 +1,6 @@
 # openfdd-mcp
 
-Read-first [Model Context Protocol](https://modelcontextprotocol.io/) server for Open-FDD. Proxies JWT-authenticated REST calls to **central** and commission BACnet reads.
+Read-first [Model Context Protocol](https://modelcontextprotocol.io/) server for Open-FDD. Proxies JWT-authenticated REST calls to **central**. Product ingest is the Normal Framework portal API and CSV. BACnet reads are not on this path.
 
 Open-FDD does **not** include a built-in AI chatbot. External agents (Codex CLI, Cursor, Claude Desktop, OpenClaw, etc.) connect through this optional stdio server or JWT REST — see [docs/examples/external-agents.md](../docs/examples/external-agents.md).
 
@@ -14,7 +14,7 @@ MCP is opt-in — bring up a stack recipe first, then pull MCP on the **same tag
 
 | Path | Doc / skill |
 |------|-------------|
-| Local firewall hub (HTTP `:3000`/`:8080`, **no TLS**) | [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md) · `SHA=sha-<7chars>; ./scripts/openfdd_maint_update_resume.sh react-ot \"$SHA\" --skip-maintenance` |
+| Local firewall hub (HTTP `:3000`/`:8080`, **no TLS**) | [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md) · `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web` then `./scripts/openfdd_maint_update_resume.sh portal sha-<7> --skip-maintenance` |
 | Railway cloud hub | [`docs/operations/RAILWAY_DEPLOYMENT.md`](../docs/operations/RAILWAY_DEPLOYMENT.md) · skill [`openfdd-railway-cli`](../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) |
 | Stress LAST after re-pin | [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd_agent_spec/skills/openfdd-stress-closeout/SKILL.md) |
 

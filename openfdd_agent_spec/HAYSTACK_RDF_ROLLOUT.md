@@ -71,10 +71,13 @@ and defs where required by the profile. Never mint them inside Haystack/Brick.
    Do not select the first column or promote a guessed relationship to a fact
    merely to obtain a passing readiness result. Unmapped columns need not all
    become FDD inputs; distinguish intentional exclusions from unresolved mapping.
-5. **Keep the runtime boundaries.** Telemetry and FDD remain Parquet/DataFusion.
-   Rust owns product ingestion/APIs/serialization. Python remains external
-   engineering/agent/CI tooling. Use structured model edges and real RDF queries
-   for graph semantics; repository grep is fine for development, not graph answers.
+5. **Keep the runtime boundaries.** Telemetry and FDD are Timescale and
+   `sql/fdd` PostgreSQL (`architecture_epoch: portal-timescale-v1`). Ingest is
+   the Normal Framework portal API and CSV. Rust owns product ingestion, APIs,
+   and serialization. Python remains external engineering, agent, and CI
+   tooling. Use structured model edges and real RDF queries for graph
+   semantics; repository grep is fine for development, not graph answers.
+   This requirement does not mark HR-01–HR-12 as delivered.
 6. **Make identity and access explicit.** Vendor and tenant are independent.
    Repeated labels/IDs across tenants must not collide when exports are combined.
    Server-derived scope governs storage, caches, queries, downloads, jobs and MCP.
@@ -133,7 +136,7 @@ known answers independent of the implementation being tested.
 
 | ID | Required tests and acceptance |
 | --- | --- |
-| HR-01 Package compatibility | Old compact-map ZIPs, wrapper layout, utilities/weather, explicit type stamps, append, and CSV/MQTT metadata adapters keep their documented behavior. Compare known FDD/analytics results on unchanged inputs. Rich metadata survives save/restart/export. Invalid new metadata cannot partially overwrite a valid revision. |
+| HR-01 Package compatibility | Old compact-map ZIPs, wrapper layout, utilities/weather, explicit type stamps, append, and CSV plus Normal Framework portal metadata adapters keep their documented behavior. Compare known FDD/analytics results on unchanged inputs. Rich metadata survives save/restart/export. Invalid new metadata cannot partially overwrite a valid revision. MQTT metadata adapters are historical/non-executable (`docs/archive/ai-agent/historical-3.5-ot-ops.md`). |
 | HR-02 Identity | Unit/property tests for Unicode, quotes, backslashes, whitespace, reserved `enc_`, tuple separators, trailing periods, repeated labels, renames and duplicate IDs. Distinct resources stay distinct; conflicting IDs are rejected or explicitly reconciled. Test same building/equipment labels in different tenants. |
 | HR-03 Haystack semantics | Parse real Turtle with an independent RDF library, resolve terms against pinned defs, and validate explicit graph constraints/SHACL. Check site/equip/point types, markers, typed literals and references. False/null marker inputs must not silently become present markers. Fail dangling refs and invalid types where the profile forbids them. |
 | HR-04 Projection fidelity | Compare graph meaning modulo ordering and blank-node labels. Verify all declared fields, units, provenance, relationships, unmapped inventory and diagnostics. Record intentional omissions. Exercise every supported JSON/RDF import/export direction; a prefix/string presence test is insufficient. |
@@ -162,7 +165,7 @@ delivery requirement remains BLOCKED/PARTIAL. Keep those check IDs separate.
 
 Use bounded disposable fixtures in CI/candidate profiles, then the active master's
 scheduled enhanced full qualification run. Keep all existing security gates;
-adding model tests does not replace auth/ZAP/MQTT or other acceptance. Use smoke
+adding model tests does not replace auth or disposable portal qualification. MQTT acceptance is not a 4.0 product gate. Use smoke
 between bounded PRs. Do not rerun a historical S4/V6 window or disturb a live OT
 site because a stale plan says to do so. Plan deployment backup, immutable image
 pins, candidate verification, rollback and final evidence before promotion.

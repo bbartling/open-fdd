@@ -1,30 +1,37 @@
 ---
 name: openfdd-sql-fdd
 description: >-
-  Use when working on production DataFusion SQL FDD: sql_rules registry, central
-  /api/fdd/run, parity with pandas oracle, no pandas in central. Triggers on:
-  sql_rules, DataFusion, registry.yaml, FDD engine, SQL cookbook.
+  Use when working on production Timescale SQL FDD: sql/fdd registry, central
+  /api/fdd/run, parity with the pandas oracle, no pandas in central. Triggers on:
+  sql/fdd, registry.yaml, FDD engine, SQL cookbook, confirm_min.
 ---
 
 # Production SQL FDD
 
-- Registry: `sql_rules/registry.yaml`
-- Engine: openfdd-central DataFusion
-- Docs: `docs/rules/cookbook/datafusion-sql-cookbook.md`
-- Architecture: `docs/architecture/datafusion-first.md`
+`architecture_epoch: portal-timescale-v1`.
+
+- Registry: `sql/fdd/registry.yaml`
+- Rules: `sql/fdd/postgres/rules/*.sql`
+- Engine: openfdd-central on Timescale / PostgreSQL
+- Expression record: `docs/rules/cookbook/` (the file `datafusion-sql-cookbook.md` is not a DataFusion runner)
+- Architecture: `docs/architecture/adr-010-timescale-hard-cutover.md`
+
+`sql_rules/` is the retired DataFusion pack. New product rules go in `sql/fdd`, not there.
+
+## Typed unit and time contract
+
+- Temperatures are °F in SQL. Metric CSV values convert at query (`unit_system=metric|si`). Do not store a second copy of every rule for Celsius.
+- Timestamps are UTC `timestamptz`. Fault duration uses the forward timestamp delta. A gap longer than `MAX_GAP_HOURS` (default 1) is unknown: not fault time, not covered time, and it breaks the confirmation streak. The last sample does not add a trailing interval.
+- Run one authorized tenant and building at a time. Equipment selection is `equipType` / roles, then exact id. Never a prefix or `LIKE` on `equipment_id`.
 
 ## Hard rules
 
 1. Never add silent pandas fallback in central.
-2. New production rules need SQL file + registry + cookbook + parity row.
-3. Pandas oracle may differ — document in parity/gap matrices; do not paper over.
-4. UI production path calls central REST — not local pandas runner for “real” FDD.
-5. Series overlay (`/api/fdd/.../series`) must honor Lab/`session_config`
-   `confirm_min` and typed params the same way `/api/fdd/run` does (prefer
-   session-tuned detail over a stale empty results index when overrides exist).
-6. **SCHED-1:** portable occupancy — numeric/`false` unoccupied **and** string
-   `unoccupied` tokens; keep `sql_rules/sched1_unoccupied_runtime.sql` aligned
-   with pandas `sched1` in `open_fdd/rules/cookbook_catalog.py`.
+2. New production rules need a PostgreSQL file under `sql/fdd/postgres/rules/`, a `sql/fdd/registry.yaml` row, a cookbook row, and a parity row.
+3. The pandas oracle may differ. Document that in the parity and gap matrices. Do not paper over it.
+4. The UI production path calls central REST, not a local pandas runner.
+5. Series overlay (`/api/fdd/.../series`) must honor Lab/`session_config` `confirm_min` and typed params the same way `/api/fdd/run` does.
+6. **SCHED-1:** numeric/`false` unoccupied and the string `unoccupied` (and related tokens). Keep `sql/fdd/postgres/rules/sched1_unoccupied_runtime.sql` aligned with pandas `sched1` in `open_fdd/rules/cookbook_catalog.py`.
 
 ## Skill home
 

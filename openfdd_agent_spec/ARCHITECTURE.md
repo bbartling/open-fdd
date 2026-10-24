@@ -10,7 +10,7 @@ Trust **tested current code**. Update this file when code truth changes.
 
 | Surface | Role | Must not |
 | --- | --- | --- |
-| **Open-FDD product** (GHCR stack) | Rust central (Timescale historian + `sql/fdd` FDD + `/api/analytics/*`), React SPA (`openfdd-web`), fieldbus, mqtt. Deploy as **Recipe 1** cloud hub (mqtt+central+web, amd64) or **Recipe 2** OT edge (central+web+protocol; broker optional) — see [`docs/operations/build-recipes.md`](../docs/operations/build-recipes.md). Soft-OPEN ≠ FQ ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)) | Python/pandas in the product request path; FDD math in TypeScript; treat fieldbus→hub MQTTS as the only OT story; Parquet/DataFusion co-canonical |
+| **Open-FDD product** (GHCR stack) | Rust central (Timescale historian + `sql/fdd` FDD + `/api/analytics/*`), React SPA (`openfdd-web`). `architecture_epoch: portal-timescale-v1`. Ingest is the Normal Framework portal API and CSV. Deploy central + web + Timescale (`./scripts/openfdd_stack_up.sh portal`). Railway is central + web. Soft-OPEN ≠ FQ ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)) | Python/pandas in the product request path; FDD math in TypeScript; Parquet/DataFusion co-canonical; restoring MQTT or fieldbus as product ingest |
 | **React SPA** | Sole product UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
 | **Historian** | **TimescaleDB durable history** + versioned SQL FDD (`sql/fdd`, `sql/schema`); ADR-010 Timescale hard cutover ([historian lock](docs/HISTORIAN_ARCHITECTURE.md)) | Dual-write; Parquet/Arrow/DataFusion co-canonical; Feather durability; Python on FDD equation path |
 | **Open-FDD PyPI** (`open-fdd`) | Third-party libraries: `ecm_engineering`, `rules`, `analytics`, `reporting` — runs **outside** the product app | Be mistaken for the product FDD runtime |
@@ -19,7 +19,8 @@ Trust **tested current code**. Update this file when code truth changes.
 | **Vibe 19** (playground) | External pandas oracle demo + GHCR demo image | Own production FDD or product UI |
 | **Vibe 20** (playground) | EnergyPlus twin, calibration, ECM cross-check | Retain duplicate **generic** ECM formulas after Open-FDD parity |
 | **MCP** (`openfdd-mcp`) | Read-first stdio tools → central | Embed EnergyPlus dial tools without an explicit product decision |
-| **`edge/`, `os/`** | Future OS / edge concepts | Be deleted “for cleanup” |
+| **`edge/`** | Package, semantic, and SQL helper linked by central. The edge process is archived. | Be deleted “for cleanup” |
+| **`os/`** | Future OS concept | Be deleted “for cleanup” |
 | **WattLab export tooling** | `tools/wattlab_export` (optional offline Python) | Ship inside the product central image or block health/analytics |
 
 ---
@@ -91,7 +92,8 @@ Never delete one cookbook because the other engine “won.”
 
 | Image | Channel | Notes |
 | --- | --- | --- |
-| `openfdd-central`, `openfdd-web`, `openfdd-fieldbus`, `openfdd-mqtt` | `:nightly` → pin `sha-<short>` | Central image is **Rust/debian only** (no Python) |
+| `openfdd-central`, `openfdd-web` | newest-by-OCI-`created` `sha-*` (`./scripts/ghcr_newest_by_created.py`) | Central image is **Rust/debian only** (no Python). Timescale is the database, not a GHCR app image. |
+| `openfdd-fieldbus`, `openfdd-mqtt` | historical/non-executable | Unqualified archive. Do not pull them as the 4.0 stack. See [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../docs/archive/ai-agent/historical-3.5-ot-ops.md). |
 | `openfdd-mcp` | `:nightly` | Separate workflow |
 | `vibe19`, `vibe20` | `:develop` | External playgrounds |
 

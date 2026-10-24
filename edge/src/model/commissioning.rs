@@ -384,9 +384,8 @@ mod tests {
     #[test]
     fn commissioning_export_import_roundtrip_rules() {
         with_temp_workspace(|_| {
-            let export = super::commissioning_export_json();
-            assert_eq!(export.get("ok").and_then(|v| v.as_bool()), Some(true));
-            let mut payload = export.clone();
+            let mut payload = super::commissioning_export_json();
+            assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
             payload["points"] = json!([{
                 "point_id": "point:test-oa",
                 "name": "OAT",

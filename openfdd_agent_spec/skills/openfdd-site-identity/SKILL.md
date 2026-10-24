@@ -23,7 +23,7 @@ A spec audit that only searches for the string `ACME` does not satisfy this skil
 These paths stay generic:
 
 - SPA (`frontend/web`), including RCx and FDD plot selection
-- central, DataFusion, historian, and analytics
+- central, Timescale historian, and analytics
 - PyPI AI report, fault, and oracle tooling (`open_fdd` reporting, rules, Typst, anomaly CLI)
 
 Forbidden as a product default or a runtime branch: `ACME`, `BUILDING_100`, `LAKESIDE`, `LAKESIDE_ES`, a Detroit ACME office, or any other single-site constant.
@@ -50,6 +50,6 @@ Unit tests, integration tests, stress and ops scripts, migrate helpers, and lab 
 
 Docs and the external BUILDING_100 kit may name maintainer datasets. Do not copy those names into a product default.
 
-## Dual-read
+## Historian identity
 
-Historian dual-read (#1014) compares Parquet trees for the building id the caller passed. It does not branch on a lab name. A tie prefers hub-root. An empty legacy directory is not history.
+Timescale rows for the caller `building_id` are the historian (ADR-010). Do not branch on a lab name. Parquet dual-read is retired. Do not restore it. The old tree comparison is `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../../../docs/archive/ai-agent/historical-3.5-ot-ops.md).

@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! Commissioning import validation tests.
 
 use open_fdd_edge_prototype::ingest::validate_commissioning;

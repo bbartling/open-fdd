@@ -24,7 +24,11 @@ pub fn quick_login(body: &Value) -> Value {
     let config = AuthConfig::load();
     for (username, (_, user_role)) in &config.users {
         if *user_role == role {
-            let (token, expires_at) = crate::auth::jwt::create_token(&config, username, role);
+            let (token, expires_at) = match crate::auth::jwt::create_token(&config, username, role)
+            {
+                Ok(pair) => pair,
+                Err(err) => return json!({"ok": false, "error": err}),
+            };
             return json!({
                 "ok": true,
                 "token": token,

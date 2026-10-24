@@ -79,21 +79,27 @@ impl DefsIndex {
     }
 }
 
-pub static DEFS: Lazy<DefsIndex> = Lazy::new(|| {
-    let pin: PinFile = serde_json::from_str(DEFS_PIN_JSON).expect("defs.pin.json parse");
-    let index: IndexFile = serde_json::from_str(DEFS_INDEX_JSON).expect("defs_index.json parse");
-    assert_eq!(
-        pin.defs_pin, DEFS_PIN,
-        "embedded pin id mismatch with DEFS_PIN const"
-    );
-    assert_eq!(
-        index.defs_pin, DEFS_PIN,
-        "defs_index pin id mismatch with DEFS_PIN const"
-    );
-    assert_eq!(
-        pin.sha256, index.sha256,
-        "defs.pin.json sha256 must match defs_index.json"
-    );
+fn empty_defs_index() -> DefsIndex {
+    DefsIndex {
+        defs_pin: String::new(),
+        sha256: String::new(),
+        source_url: String::new(),
+        by_symbol: BTreeMap::new(),
+    }
+}
+
+fn load_embedded_defs() -> DefsIndex {
+    let pin: PinFile = match serde_json::from_str(DEFS_PIN_JSON) {
+        Ok(pin) => pin,
+        Err(_) => return empty_defs_index(),
+    };
+    let index: IndexFile = match serde_json::from_str(DEFS_INDEX_JSON) {
+        Ok(index) => index,
+        Err(_) => return empty_defs_index(),
+    };
+    if pin.defs_pin != DEFS_PIN || index.defs_pin != DEFS_PIN || pin.sha256 != index.sha256 {
+        return empty_defs_index();
+    }
 
     let mut by_symbol = BTreeMap::new();
     for (key, entry) in index.symbols {
@@ -126,7 +132,9 @@ pub static DEFS: Lazy<DefsIndex> = Lazy::new(|| {
         source_url: pin.source_url,
         by_symbol,
     }
-});
+}
+
+pub static DEFS: Lazy<DefsIndex> = Lazy::new(load_embedded_defs);
 
 pub fn defs() -> &'static DefsIndex {
     &DEFS

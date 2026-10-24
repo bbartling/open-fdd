@@ -1,10 +1,17 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 
 const TOKEN_KEY = "openfdd.auth.token";
+const SESSION_GEN_KEY = "openfdd.auth.session_gen";
 
 /**
  * When central auth is required, mint a session before gated routes (Overview, jobs, …).
- * No-op when auth is disabled or OPENFDD_ADMIN_PASSWORD is unset.
+ * No-op when auth is disabled.
+ *
+ * The token is installed with an init script so the first document already has
+ * it. Opening /auth first lets that page call /api/auth/me with no token. Chrome
+ * logs the 401, and a test that listens for console errors fails on it. The
+ * generation bump matches setStoredToken: a late 401 from an older request must
+ * not clear the session.
  */
 export async function ensureProductSession(
   page: Page,
@@ -13,21 +20,23 @@ export async function ensureProductSession(
   const password = process.env.OPENFDD_ADMIN_PASSWORD ?? "";
   const base = process.env.OPENFDD_PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 
-  let authRequired = false;
+  let statusRes;
   try {
-    const statusRes = await request.get(`${base}/api/auth/status`, { timeout: 8_000 });
-    if (statusRes.ok()) {
-      const status = (await statusRes.json()) as { auth_required?: boolean };
-      authRequired = Boolean(status.auth_required);
-    }
-  } catch {
-    return;
+    statusRes = await request.get(`${base}/api/auth/status`, { timeout: 8_000 });
+  } catch (err) {
+    throw new Error(
+      `auth status unreachable at ${base}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
-  if (!authRequired) {
+  if (!statusRes.ok()) {
+    throw new Error(`auth status failed (HTTP ${statusRes.status()})`);
+  }
+  const status = (await statusRes.json()) as { auth_required?: boolean };
+  if (!status.auth_required) {
     return;
   }
   if (!password) {
-    return;
+    throw new Error("OPENFDD_ADMIN_PASSWORD required for auth stack gate");
   }
 
   const loginRes = await request.post(`${base}/api/auth/login`, {
@@ -43,11 +52,21 @@ export async function ensureProductSession(
     throw new Error("auth login returned no token");
   }
 
-  await page.goto("/auth");
-  await page.evaluate(
-    ([key, value]) => {
+  await page.addInitScript(
+    ([key, genKey, value, gen]) => {
+      sessionStorage.setItem(genKey, gen);
       sessionStorage.setItem(key, value);
     },
-    [TOKEN_KEY, token] as const,
+    [TOKEN_KEY, SESSION_GEN_KEY, token, String(Date.now())] as const,
   );
+}
+
+/** Drop the injected token on later document loads. A reload re-runs init scripts. */
+export async function clearProductSession(page: Page): Promise<void> {
+  await page.addInitScript((key: string) => {
+    sessionStorage.removeItem(key);
+  }, TOKEN_KEY);
+  await page
+    .evaluate((key: string) => sessionStorage.removeItem(key), TOKEN_KEY)
+    .catch(() => undefined);
 }

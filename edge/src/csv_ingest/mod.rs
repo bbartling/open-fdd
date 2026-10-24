@@ -448,7 +448,7 @@ pub fn execute_handler(body: &Value) -> Value {
         }
     }
 
-    let dataset_id = plan.output_dataset_name.clone();
+    let dataset_id = plan.output_dataset_name;
     // Timescale package stage only. Arrow IPC and Parquet history are not written.
     match parquet_bridge::stage_rows_for_timescale(&dataset_id, &rows) {
         Ok(mut result) => {
@@ -509,7 +509,7 @@ pub fn fusion_preview_handler(session_id: &str, limit: usize) -> Value {
                 return json!({"ok": false, "error": "session has no staged files"});
             }
             plan_val = serde_json::to_value(&inferred).unwrap_or(json!({}));
-            session["plan"] = plan_val.clone();
+            session["plan"] = plan_val;
             if status == "previewed" {
                 session["status"] = json!("planned");
             }

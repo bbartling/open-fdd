@@ -365,28 +365,26 @@ fn arrow_cell_json(col: &Arc<dyn arrow::array::Array>, row: usize) -> Value {
         return Value::Null;
     }
     match col.data_type() {
-        DataType::Utf8 => {
-            let a = col.as_any().downcast_ref::<StringArray>().unwrap();
-            json!(a.value(row))
-        }
-        DataType::Float64 => {
-            let a = col
-                .as_any()
-                .downcast_ref::<arrow::array::Float64Array>()
-                .unwrap();
-            json!(a.value(row))
-        }
-        DataType::Boolean => {
-            let a = col.as_any().downcast_ref::<BooleanArray>().unwrap();
-            json!(a.value(row))
-        }
-        DataType::Timestamp(_, _) => {
-            let a = col
-                .as_any()
-                .downcast_ref::<TimestampMillisecondArray>()
-                .unwrap();
-            json!(a.value(row))
-        }
+        DataType::Utf8 => col
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .map(|a| json!(a.value(row)))
+            .unwrap_or(Value::Null),
+        DataType::Float64 => col
+            .as_any()
+            .downcast_ref::<arrow::array::Float64Array>()
+            .map(|a| json!(a.value(row)))
+            .unwrap_or(Value::Null),
+        DataType::Boolean => col
+            .as_any()
+            .downcast_ref::<BooleanArray>()
+            .map(|a| json!(a.value(row)))
+            .unwrap_or(Value::Null),
+        DataType::Timestamp(_, _) => col
+            .as_any()
+            .downcast_ref::<TimestampMillisecondArray>()
+            .map(|a| json!(a.value(row)))
+            .unwrap_or(Value::Null),
         _ => json!(null),
     }
 }
@@ -397,7 +395,10 @@ pub fn query_dataset_sql(dataset_id: &str, sql: &str) -> Value {
     if !arrow_path.exists() {
         return json!({"ok": false, "error": "dataset not found"});
     }
-    let rt = tokio::runtime::Runtime::new().expect("tokio");
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => return json!({"ok": false, "error": e.to_string()}),
+    };
     match rt.block_on(query_arrow_file(&arrow_path, sql, &id)) {
         Ok(rows) => json!({"ok": true, "rows": rows, "row_count": rows.len()}),
         Err(e) => json!({"ok": false, "error": e}),

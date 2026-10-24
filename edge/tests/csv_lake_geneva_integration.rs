@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! Manual Lake Geneva CSV integration — set OPENFDD_CSV_FIXTURE_DIR to operator test folder.
 
 use open_fdd_edge_prototype::csv_ingest::{

@@ -205,7 +205,7 @@ pub fn import_from_csv_commit(
     let mut rows: Vec<Value> = vec![
         json!({
             "id": site_id,
-            "dis": display_name.clone(),
+            "dis": display_name,
             "site": "M"
         }),
         json!({

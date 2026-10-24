@@ -1,79 +1,59 @@
 ---
 name: openfdd-stack-ghcr
 description: >-
-  Use when pulling, rebuilding, or verifying Open-FDD GHCR stack images.
-  Test channel is nightly. Triggers on: nightly, openfdd-central, openfdd-web,
-  GHCR, openfdd_stack_up, OPENFDD_IMAGE_TAG.
+  Use when pulling or verifying Open-FDD GHCR stack images for the portal
+  recipe (central, web, Timescale). Triggers on: nightly, openfdd-central,
+  openfdd-web, GHCR, openfdd_stack_up, OPENFDD_IMAGE_TAG.
 ---
 
-# Stack GHCR (nightly channel → immutable verify)
+# Stack GHCR
+
+`architecture_epoch: portal-timescale-v1`.
 
 Full protocol: [`CONTAINER_AGENT.md`](../../CONTAINER_AGENT.md).
 
-`nightly` is the channel selector. Qualification pulls `sha-<commit>` for
-central/web/fieldbus/mqtt, asserts digests match `:nightly`, then starts the
-stack with `OPENFDD_IMAGE_TAG=sha-<commit>`.
+`nightly` is a channel pointer. Run the image you resolved:
 
-**Newest means OCI `created`, not the word nightly.** Run
-`./scripts/ghcr_newest_by_created.py openfdd-central` before claiming tip.
+```bash
+./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web
+```
 
-**Unmerged `frontend/web` → local web only.** `openfdd_stack_up.sh` refuses
-GHCR web when the tree drifted (override `OPENFDD_ALLOW_STALE_GHCR_WEB=1`).
-Never paste a Caddy login until `./scripts/openfdd_demo_gate.sh` exits 0.
+Pin `OPENFDD_IMAGE_TAG` to that `sha-*`. Do not treat a tag named `nightly` as proof of tip.
 
-Product central image is Rust/debian only (no Python).
+**Unmerged `frontend/web` is local web only.** Do not serve `ghcr.io/bbartling/openfdd-web:sha-*` for an unmerged UI. `./scripts/openfdd_demo_gate.sh` must exit 0 before a login URL.
 
-**Low-RAM hosts:** never local `docker build` for stack images. Prune unused
-images before pull; wait for GH Actions publish; then pull +
-`openfdd_stack_up.sh … --no-pull`. See [`CONTAINER_AGENT.md`](../../CONTAINER_AGENT.md).
+Product central image is Rust/debian only (no Python). Ingest is the Normal Framework portal API and CSV.
 
-Nightly publish (`ghcr-openfdd-stack.yml`) stamps `OPENFDD_GIT_SHA` into central
-and writes web `version.json` `{ version, git, image_tag, service: openfdd-web }`.
-Optional extra image tag `:3.3.2-n<run_number>` sits **beside** `:nightly` /
-`:sha-*`. UI revision comes from central `/api/health` first.
+## Recipes
 
-**Named recipes (#1107):**
+| Recipe | What it is |
+| --- | --- |
+| `portal` | 4.0 default: central + web + Timescale. `./scripts/openfdd_stack_up.sh portal` |
+| `csv` | central + web, no portal provider env forwarder |
 
-| Recipe | Images | Arch | Broker |
-| --- | --- | --- | --- |
-| **1 — cloud hub** | mqtt + central + web | amd64 | required on hub |
-| **2 — OT edge** | central + web + protocol | amd64 + arm64 | **not** required; optional MQTTS publish off by default |
+`openfdd_stack_up.sh` refuses `standalone`, `edge`, and `react-ot`. Those fieldbus recipes are `historical/non-executable` ([`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../../../docs/archive/ai-agent/historical-3.5-ot-ops.md)). The archive render does not start containers:
 
-Compose helpers: `central` ≈ Recipe 1; `csv` / local-fieldbus / `standalone` ≈ Recipe 2. Docs: [`docs/operations/build-recipes.md`](../../../docs/operations/build-recipes.md).
+```bash
+OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay
+```
 
-For Railway (Recipe 1), use the same GHCR `openfdd-web` image and set
-`OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (assuming the
-central service uses that name). Tip images resolve upstream DNS lazily
-(`OPENFDD_NGINX_RESOLVER=auto`) so nginx does not die when `.railway.internal`
-is not ready at process start. Deploy **central healthy first**, then mqtt (for
-cloud MQTTS hubs), then web. Recipe 2 OT edges may publish MQTTS into the hub
-optionally — they can also ingest locally without a broker.
-**CLI re-pin** (bensbench): [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md)
-— `railway login` verified; project `gleaming-cooperation` / `production`; use live
-names (`openfdd-central-cQ-F`, …) with
-`railway service source connect --image ghcr.io/bbartling/<img>:sha-<7>` in
-central→mqtt→web order. Optional token file: `~/.config/railway/bensbench.env`.
-Railway CLI ≠ `openfdd-mcp` FDD tools.
-Set `OPENFDD_AGENT_PASSWORD` on central for FDD AI / MCP (username `agent` →
-operator JWT); do not put `OPENFDD_ADMIN_PASSWORD` into Cursor MCP config.
-Admins may `POST /api/auth/agent-token` for short-lived operator JWTs.
-Edge kits: operator/admin `POST /api/mqtt/edge-kits` or Operations MQTT UI
-(ZIP never includes CA private key).
-Local Compose keeps the default `central:8080`. **Local dashboard is HTTP only** (UI `:3000`, API `:8080`) behind a firewall — product Compose does **not** terminate TLS yet. Handbook: [`docs/operations/LOCAL_DEPLOYMENT.md`](../../docs/operations/LOCAL_DEPLOYMENT.md).
+Do not pull `openfdd-fieldbus` or `openfdd-mqtt` as the product stack.
 
-Do not claim a Railway-ready nightly until stack + MCP GHCR publish jobs are green and the target `sha-*` digest resolves.
+## Railway and local HTTP
 
-**Stress LAST** after re-pin: [`docs/operations/STRESS_CLOSEOUT.md`](../../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md).
+Railway uses the same `openfdd-web` image. Set `OPENFDD_CENTRAL_UPSTREAM` to the live central private DNS (`host:8080`, no `http://`). `OPENFDD_NGINX_RESOLVER=auto` lets nginx start before that DNS exists. Deploy central (healthy `/api/health`) then web. Re-pin steps: [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md).
 
-Hourly CSV append is API `POST /api/csv/import/package/append` on central (GHA image), not a local compile.
+Set `OPENFDD_AGENT_PASSWORD` on central for MCP (username `agent`). Do not put `OPENFDD_ADMIN_PASSWORD` in an MCP config. Admins may `POST /api/auth/agent-token` for a short-lived operator JWT.
 
-After GHCR publish, poll with `./scripts/ghcr_watch_central.py` (legacy shim: `wattlab_parity_watch_ghcr.py`), then maint pull + `synthetic_59_*` chain — not vibe19 dump-parity.
+Local Compose is plain HTTP (`:3000` / `:8080`) behind a firewall. Handbook: [`docs/operations/LOCAL_DEPLOYMENT.md`](../../../docs/operations/LOCAL_DEPLOYMENT.md).
 
+Low-RAM hosts do not `docker build` stack images. Prune, then `./scripts/openfdd_stack_pull.sh portal` and `./scripts/openfdd_stack_up.sh portal --no-pull`.
 
-**Ops patch cycle:** gate FAILs → [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](../../docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) Phase 7 table before fix; re-pin after publish per [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md).
+Hourly CSV append is `POST /api/csv/import/package/append` on central.
 
-Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master).
-MCP: separate `rust-ghcr-mcp.yml`.
+After publish, poll with `./scripts/ghcr_watch_central.py`.
+
+Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master). MCP: `rust-ghcr-mcp.yml`.
 
 ## Skill home
 
@@ -81,6 +61,5 @@ MCP: separate `rust-ghcr-mcp.yml`.
 
 ## Related skills
 
-- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — hub pin
-- [`openfdd-stress-closeout`](../openfdd-stress-closeout/SKILL.md) — stress closeout
-- [`openfdd-architecture`](../openfdd-architecture/SKILL.md) — what each image owns
+- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — backup and re-pin
+- [`openfdd-architecture`](../openfdd-architecture/SKILL.md) — engine boundary

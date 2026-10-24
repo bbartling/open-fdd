@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! CSV UT3 ingest unit and integration tests.
 
 use open_fdd_edge_prototype::csv_ingest::{

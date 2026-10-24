@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! Walk production Rust sources and fail if bench/demo IDs appear outside allowed paths.
 
 use open_fdd_edge_prototype::validation::audit;

@@ -1,5 +1,7 @@
 # AI agents (Rust edge)
 
+**Status: historical/non-executable.** Not the 4.0 portal contract (`architecture_epoch: portal-timescale-v1`). Current law is the repo [`AGENTS.md`](../../../AGENTS.md) and [`openfdd_agent_spec/AGENTS.md`](../../../openfdd_agent_spec/AGENTS.md). BACnet, Modbus, Haystack wire, and MQTT commands on this page are retired.
+
 External orchestrators (Cursor, Codex, MCP clients) operate Open-FDD through **JWT REST**, optional **MCP stdio**, and repo scripts. The bridge container does not embed Ollama or Python agents.
 
 **Architecture:** [agent/openfdd-agent-architecture.md](../agent/openfdd-agent-architecture.md) · **MCP:** [agent/openfdd-mcp-tool-contract.md](../agent/openfdd-mcp-tool-contract.md) · **Safety:** [security/agent-safety-boundaries.md](../security/agent-safety-boundaries.md)
