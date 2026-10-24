@@ -86,9 +86,10 @@ pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, Queu
         "INSERT INTO ingest_job (
             job_id, tenant_id, canonical_site, provider_instance_id, device_id,
             model_revision, logical_window_start, logical_window_end, shard,
-            state, attempt, not_before, fencing_token, estimated_cost, requested_points_digest
+            state, attempt, not_before, fencing_token, estimated_cost, requested_points_digest,
+            server_request_id
         ) VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,'queued',0,$10,0,$11,$12
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,'queued',0,$10,0,$11,$12,$13
         )
         ON CONFLICT ON CONSTRAINT ingest_job_logical_key DO NOTHING
         RETURNING job_id",
@@ -105,6 +106,7 @@ pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, Queu
     .bind(job.not_before)
     .bind(i32::try_from(job.estimated_cost.max(1)).unwrap_or(1))
     .bind(&job.requested_points_digest)
+    .bind(crate::audit::current_server_request_id())
     .fetch_optional(pool)
     .await
     .map_err(db_err)?;
@@ -129,6 +131,7 @@ pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, Queu
         .await
         .map_err(db_err)?,
     };
+    crate::audit::correlate_job(&id);
     let view = load_job(pool, &id).await?;
     if created {
         Ok(EnqueueOutcome::Created(view))
@@ -430,10 +433,11 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
     let inserted = sqlx::query(
         "INSERT INTO ingest_receipt (
             receipt_id, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
-            model_revision, fencing_token, committed_at, counts, safe_error_code, coverage
+            model_revision, fencing_token, committed_at, counts, safe_error_code, coverage,
+            server_request_id
          )
          SELECT $1, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
-                model_revision, $2, $3, $4, $5, $7
+                model_revision, $2, $3, $4, $5, $7, server_request_id
          FROM ingest_job
          WHERE job_id = $6",
     )
@@ -453,6 +457,7 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
         ));
     }
     tx.commit().await.map_err(db_err)?;
+    crate::audit::correlate_receipt(&receipt_id);
     Ok(Some(ReceiptView {
         receipt_id: parse_uuid(&receipt_id)?,
         job_id: req.job_id,
@@ -465,6 +470,7 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
         committed_at: req.now,
         counts,
         safe_error_code: code,
+        server_request_id: job.server_request_id.clone(),
     }))
 }
 
@@ -644,7 +650,8 @@ pub async fn list_receipts(
 ) -> Result<Vec<ReceiptView>, QueueError> {
     let rows = sqlx::query(
         "SELECT receipt_id, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
-                model_revision, fencing_token, committed_at, counts, safe_error_code
+                model_revision, fencing_token, committed_at, counts, safe_error_code,
+                server_request_id
          FROM ingest_receipt
          WHERE ($1::text[] IS NULL OR canonical_site = ANY($1))
            AND ($3::text IS NULL OR tenant_id = $3)
@@ -666,7 +673,8 @@ pub async fn get_receipt(
 ) -> Result<Option<ReceiptView>, QueueError> {
     let row = sqlx::query(
         "SELECT receipt_id, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
-                model_revision, fencing_token, committed_at, counts, safe_error_code
+                model_revision, fencing_token, committed_at, counts, safe_error_code,
+                server_request_id
          FROM ingest_receipt WHERE receipt_id = $1",
     )
     .bind(receipt_id.to_string())
@@ -768,7 +776,7 @@ const JOB_COLUMNS: &str = "job_id, tenant_id, canonical_site, provider_instance_
 model_revision, logical_window_start, logical_window_end, shard, state, attempt, not_before, \
 lease_owner, lease_expiry, fencing_token, estimated_cost, safe_error_code, receipt_id, \
 fetched_count, accepted_count, rejected_count, inserted_count, updated_count, unchanged_count, \
-coverage";
+coverage, server_request_id";
 
 async fn load_job(pool: &PgPool, job_id: &str) -> Result<JobView, QueueError> {
     let row = sqlx::query(&format!(
@@ -1022,6 +1030,7 @@ fn job_from_row(row: &PgRow) -> Result<JobView, QueueError> {
         receipt_id: receipt.as_deref().map(parse_uuid).transpose()?,
         coverage: row.try_get("coverage").map_err(db_err)?,
         point_coverage: Vec::new(),
+        server_request_id: row.try_get("server_request_id").map_err(db_err)?,
         counts: JobCounts {
             fetched: u32::try_from(row.try_get::<i32, _>("fetched_count").map_err(db_err)?)
                 .unwrap_or(0),
@@ -1063,6 +1072,7 @@ fn receipt_from_row(row: &PgRow) -> Result<ReceiptView, QueueError> {
                 .unwrap_or(0) as u32,
         },
         safe_error_code: row.try_get("safe_error_code").map_err(db_err)?,
+        server_request_id: row.try_get("server_request_id").map_err(db_err)?,
     })
 }
 
@@ -1151,12 +1161,15 @@ async fn store_idempotency_result(
     .map_err(db_err)?;
     sqlx::query(
         "INSERT INTO ingest_audit (actor, action, job_id, idempotency_key, detail)
-         VALUES ($1, $2, $3, $4, '{}'::jsonb)",
+         VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(&claim.actor)
     .bind(action)
     .bind(job_id.map(|id| id.to_string()))
     .bind(&claim.client_key)
+    .bind(serde_json::json!({
+        "server_request_id": crate::audit::current_server_request_id()
+    }))
     .execute(&mut **tx)
     .await
     .map_err(db_err)?;
@@ -1206,9 +1219,10 @@ async fn enqueue_tx(
         "INSERT INTO ingest_job (
             job_id, tenant_id, canonical_site, provider_instance_id, device_id,
             model_revision, logical_window_start, logical_window_end, shard,
-            state, attempt, not_before, fencing_token, estimated_cost, requested_points_digest
+            state, attempt, not_before, fencing_token, estimated_cost, requested_points_digest,
+            server_request_id
         ) VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,'queued',0,$10,0,$11,$12
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,'queued',0,$10,0,$11,$12,$13
         )
         ON CONFLICT ON CONSTRAINT ingest_job_logical_key DO NOTHING
         RETURNING job_id",
@@ -1225,6 +1239,7 @@ async fn enqueue_tx(
     .bind(job.not_before)
     .bind(i32::try_from(job.estimated_cost.max(1)).unwrap_or(1))
     .bind(&job.requested_points_digest)
+    .bind(crate::audit::current_server_request_id())
     .fetch_optional(&mut **tx)
     .await
     .map_err(db_err)?;
@@ -1248,6 +1263,7 @@ async fn enqueue_tx(
         .await
         .map_err(db_err)?,
     };
+    crate::audit::correlate_job(&id);
     load_job_tx(tx, &id).await
 }
 
@@ -1362,8 +1378,177 @@ mod tests {
         assert!(CLAIM_SELECT_SQL.contains("FOR UPDATE OF j SKIP LOCKED"));
         assert!(SCHEMA_SQL.contains("fencing_token"));
         assert!(SCHEMA_SQL.contains("ingest_job_logical_key"));
+        assert!(SCHEMA_SQL
+            .contains("ALTER TABLE ingest_job ADD COLUMN IF NOT EXISTS server_request_id text"));
+        assert!(SCHEMA_SQL.contains(
+            "ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS server_request_id text"
+        ));
         let stmts = statements(SCHEMA_SQL);
         assert!(stmts.len() >= 6);
         assert!(stmts.iter().all(|stmt| !stmt.contains("postgres://")));
+    }
+
+    #[tokio::test]
+    async fn server_request_id_round_trips_through_postgres_and_stays_on_conflict() {
+        let required = std::env::var("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED")
+            .ok()
+            .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"));
+        let Some(url) = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+        else {
+            if required {
+                panic!("OPENFDD_TEST_DATABASE_URL is required for the server request id fixture");
+            }
+            return;
+        };
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .expect("server request id postgres");
+        apply_schema(&pool).await.expect("ingest schema");
+
+        let device = format!("device-{}", Uuid::new_v4());
+        let tenant = "tenant-audit";
+        let at = DateTime::parse_from_rfc3339("2026-10-19T12:00:00Z")
+            .expect("window")
+            .with_timezone(&Utc);
+        let finish_at = at + chrono::Duration::minutes(65);
+        let job = NewJob {
+            tenant_id: tenant.into(),
+            canonical_site: "site-audit".into(),
+            provider_instance_id: "portal-audit".into(),
+            device_id: device.clone(),
+            model_revision: "rev-audit".into(),
+            logical_window_start: at,
+            logical_window_end: at + chrono::Duration::hours(1),
+            shard: String::new(),
+            not_before: at,
+            estimated_cost: 1,
+            requested_points_digest: None,
+        };
+        let ctx_a = crate::audit::RequestContext::new(Some("label-a"), "POST", "/api/ingest");
+        let id_a = ctx_a.server_id.clone();
+        let ctx_b = crate::audit::RequestContext::new(Some("label-b"), "POST", "/api/ingest");
+        let id_b = ctx_b.server_id.clone();
+        let created = crate::audit::with_request_context(ctx_a, async {
+            match enqueue(&pool, &job).await.expect("enqueue") {
+                EnqueueOutcome::Created(view) => view,
+                EnqueueOutcome::Existing(_) => panic!("new job"),
+            }
+        })
+        .await;
+        assert_eq!(created.server_request_id.as_deref(), Some(id_a.as_str()));
+
+        let existing = crate::audit::with_request_context(ctx_b.clone(), async {
+            match enqueue(&pool, &job).await.expect("conflict enqueue") {
+                EnqueueOutcome::Existing(view) => view,
+                EnqueueOutcome::Created(_) => panic!("duplicate job"),
+            }
+        })
+        .await;
+        assert_eq!(existing.job_id, created.job_id);
+        assert_eq!(existing.server_request_id.as_deref(), Some(id_a.as_str()));
+
+        let bare = enqueue(
+            &pool,
+            &NewJob {
+                device_id: format!("sched-{device}"),
+                ..job.clone()
+            },
+        )
+        .await
+        .expect("scheduler enqueue");
+        match bare {
+            EnqueueOutcome::Created(view) => assert!(view.server_request_id.is_none()),
+            EnqueueOutcome::Existing(_) => panic!("scheduler job"),
+        }
+
+        sqlx::query(
+            "UPDATE ingest_job SET state = 'permanent_failure', safe_error_code = 'io'
+             WHERE job_id = $1",
+        )
+        .bind(created.job_id.to_string())
+        .execute(&pool)
+        .await
+        .expect("mark retryable");
+        let actor = format!("actor-{}", Uuid::new_v4());
+        let claim = IdempotencyClaim {
+            actor: actor.clone(),
+            tenant_id: tenant.into(),
+            client_key: format!("key-{}", Uuid::new_v4()),
+            object_id: retry_object_id(created.job_id),
+            payload_hash: retry_payload_hash(tenant, created.job_id),
+        };
+        let retried = crate::audit::with_request_context(ctx_b, async {
+            retry_job(&pool, created.job_id, finish_at, &claim)
+                .await
+                .expect("retry")
+        })
+        .await;
+        assert_eq!(retried.server_request_id.as_deref(), Some(id_a.as_str()));
+        let detail: serde_json::Value = sqlx::query_scalar(
+            "SELECT detail FROM ingest_audit WHERE job_id = $1 AND action = 'retry'",
+        )
+        .bind(created.job_id.to_string())
+        .fetch_one(&pool)
+        .await
+        .expect("audit row");
+        assert_eq!(detail["server_request_id"], id_b);
+
+        sqlx::query(
+            "UPDATE ingest_job SET state = 'leased', lease_owner = 'worker',
+                lease_expiry = $2, fencing_token = 1
+             WHERE job_id = $1",
+        )
+        .bind(created.job_id.to_string())
+        .bind(finish_at + chrono::Duration::minutes(5))
+        .execute(&pool)
+        .await
+        .expect("lease");
+        let receipt = finish(
+            &pool,
+            &FinishRequest::new(
+                "worker",
+                created.job_id,
+                1,
+                finish_at,
+                FinishOutcome::committed_accounted(JobCounts::default()),
+            ),
+        )
+        .await
+        .expect("finish")
+        .expect("receipt");
+        assert_eq!(receipt.server_request_id.as_deref(), Some(id_a.as_str()));
+        let loaded = get_receipt(&pool, receipt.receipt_id)
+            .await
+            .expect("load receipt")
+            .expect("stored receipt");
+        assert_eq!(loaded.server_request_id.as_deref(), Some(id_a.as_str()));
+
+        sqlx::query("DELETE FROM ingest_receipt WHERE device_id = $1 OR device_id = $2")
+            .bind(&device)
+            .bind(format!("sched-{device}"))
+            .execute(&pool)
+            .await
+            .expect("delete receipts");
+        sqlx::query("DELETE FROM ingest_audit WHERE job_id = $1")
+            .bind(created.job_id.to_string())
+            .execute(&pool)
+            .await
+            .expect("delete audit");
+        sqlx::query("DELETE FROM ingest_idempotency WHERE actor = $1")
+            .bind(&actor)
+            .execute(&pool)
+            .await
+            .expect("delete idempotency");
+        sqlx::query("DELETE FROM ingest_job WHERE device_id = $1 OR device_id = $2")
+            .bind(&device)
+            .bind(format!("sched-{device}"))
+            .execute(&pool)
+            .await
+            .expect("delete jobs");
     }
 }

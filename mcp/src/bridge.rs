@@ -107,13 +107,25 @@ impl BridgeClient {
             .with_correlation(req)
             .send()
             .map_err(|e| e.to_string())?;
+        self.decode_response(response)
+    }
+
+    /// `x-request-id` on the way out is this client's label. The server id is
+    /// the response header, and it replaces any body field of the same name.
+    fn decode_response(&self, response: reqwest::blocking::Response) -> Result<Value, String> {
         let status = response.status();
+        let server_request_id = response
+            .headers()
+            .get("x-openfdd-server-request-id")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
         let text = response.text().map_err(|e| e.to_string())?;
-        let body: Value = serde_json::from_str(&text)
+        let mut body: Value = serde_json::from_str(&text)
             .map_err(|e| format!("HTTP {status}: invalid JSON response ({e}): {text}"))?;
         if !status.is_success() {
             return Err(format!("HTTP {status}: {body}"));
         }
+        attach_server_request_id(&mut body, server_request_id.as_deref());
         Ok(body)
     }
 
@@ -172,11 +184,11 @@ impl BridgeClient {
             .http_long
             .post(self.url("/api/csv/import/preview"))
             .multipart(form);
-        self.with_correlation(req)
+        let response = self
+            .with_correlation(req)
             .send()
-            .map_err(|e| e.to_string())?
-            .json()
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        self.decode_response(response)
     }
 
     pub fn csv_import_plan(&self, args: &Value) -> Result<Value, String> {
@@ -647,6 +659,19 @@ fn read_local_csv_path(path: &str) -> Result<Vec<u8>, String> {
     std::fs::read(p).map_err(|e| format!("read {path}: {e}"))
 }
 
+/// Header wins. An empty header leaves a body field unchanged.
+fn attach_server_request_id(body: &mut Value, header: Option<&str>) {
+    let Some(id) = header.map(str::trim).filter(|id| !id.is_empty()) else {
+        return;
+    };
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert(
+            "server_request_id".to_string(),
+            Value::String(id.to_string()),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -687,6 +712,7 @@ mod tests {
             uuid::Uuid::parse_str(header).is_ok(),
             "correlation id must be a uuid, got {header}"
         );
+        assert!(built.headers().get("x-openfdd-server-request-id").is_none());
         let body_text = tool_body.to_string();
         assert!(!header.contains("hunter2"));
         assert!(!header.contains("should-not-leak"));
@@ -707,5 +733,23 @@ mod tests {
             .expect("utf8")
             .to_string();
         assert_ne!(header, header2);
+    }
+
+    #[test]
+    fn server_request_header_replaces_a_body_claim() {
+        let mut body = json!({
+            "server_request_id": "caller-supplied",
+            "ok": true
+        });
+        attach_server_request_id(&mut body, Some("  6f0c1c3e-1a2b-4c5d-8e9f-0a1b2c3d4e5f  "));
+        assert_eq!(
+            body["server_request_id"],
+            "6f0c1c3e-1a2b-4c5d-8e9f-0a1b2c3d4e5f"
+        );
+        assert_eq!(body["ok"], true);
+        let mut kept = json!({"server_request_id": "caller-supplied"});
+        attach_server_request_id(&mut kept, Some("   "));
+        attach_server_request_id(&mut kept, None);
+        assert_eq!(kept["server_request_id"], "caller-supplied");
     }
 }

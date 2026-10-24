@@ -86,7 +86,8 @@ pub async fn request_id_middleware(mut req: Request<Body>, next: Next) -> Respon
         caller.as_deref(),
         req.method().as_str(),
         req.uri().path(),
-    );
+    )
+    .with_untrusted_headers(req.headers());
     let server_id = ctx.server_id.clone();
     let rid = caller.unwrap_or_else(|| server_id.clone());
     req.headers_mut().insert(
