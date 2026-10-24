@@ -13,12 +13,15 @@ use oxigraph::store::Store;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::haystack_defs::{self, DEFS_PIN, HAS_TAG_IRI, PHIOT_BASE, PHSCIENCE_BASE, PH_BASE};
+use super::haystack_defs::{
+    self, ResolvedTagList, DEFS_PIN, HAS_TAG_IRI, NATIVE_TAG_IRI, PHIOT_BASE, PHSCIENCE_BASE,
+    PH_BASE,
+};
 use super::semantic_meta::{EquipmentMeta, PointMeta, SemanticMetaV1};
 
 pub const PROFILE: &str = "ofdd_haystack_projection_v1";
 pub const REPORT_SCHEMA: &str = "ofdd_haystack_projection_report_v1";
-pub const OFDD_NS: &str = "urn:openfdd:ns#";
+pub use super::haystack_defs::OFDD_NS;
 /// Re-export pin id for callers/routes.
 pub use haystack_defs::DEFS_PIN as DEFS_PIN_REEXPORT;
 
@@ -172,60 +175,39 @@ pub fn parse_opaque_point_iri(iri: &str) -> Result<OpaquePointRef, String> {
     })
 }
 
-fn is_false_marker(tag: &str) -> bool {
-    let t = tag.trim();
-    t.is_empty()
-        || t.eq_ignore_ascii_case("false")
-        || t.eq_ignore_ascii_case("null")
-        || t.eq_ignore_ascii_case("none")
-        || t == "0"
-}
-
-/// Case-sensitive resolution against pinned defs. No blanket lowercasing.
+/// Case-sensitive resolution against the shared pinned def index.
 fn classify_tags(
     raw: &[String],
     omitted: &mut Vec<ProjectionOmission>,
     equipment_id: &str,
     column: Option<&str>,
-) -> Vec<String> {
-    let defs = haystack_defs::defs();
-    let mut out = Vec::new();
-    for tag in raw {
-        if is_false_marker(tag) {
-            omitted.push(ProjectionOmission {
-                reason: "false_or_null_marker".into(),
-                equipment_id: Some(equipment_id.to_string()),
-                column: column.map(str::to_string),
-                term: Some(tag.clone()),
-                detail: Some("false/null/empty markers are never present tags".into()),
-            });
-            continue;
-        }
-        let sym = tag.trim();
-        if defs.resolve(sym).is_some_and(|d| d.is_class) {
-            if !out.iter().any(|t| t == sym) {
-                out.push(sym.to_string());
-            }
-        } else if defs.contains(sym) {
-            // Known non-class symbol used as a tag — still not invent under ph; omit as not a marker class.
-            omitted.push(ProjectionOmission {
-                reason: "non_marker_def".into(),
-                equipment_id: Some(equipment_id.to_string()),
-                column: column.map(str::to_string),
-                term: Some(tag.clone()),
-                detail: Some("def exists but is not an owl:Class marker/entity tag".into()),
-            });
-        } else {
-            omitted.push(ProjectionOmission {
-                reason: "unknown_tag".into(),
-                equipment_id: Some(equipment_id.to_string()),
-                column: column.map(str::to_string),
-                term: Some(tag.clone()),
-                detail: Some(format!("not in pinned defs {DEFS_PIN}")),
-            });
-        }
+) -> ResolvedTagList {
+    let resolved = haystack_defs::resolve_marker_list(raw);
+    for diag in &resolved.diagnostics {
+        let reason = match diag.outcome {
+            "absent" => "false_or_null_marker",
+            "value_not_marker" => "non_marker_def",
+            "unknown" => "unknown_tag",
+            "extension" => "extension_tag",
+            _ => continue,
+        };
+        omitted.push(ProjectionOmission {
+            reason: reason.into(),
+            equipment_id: Some(equipment_id.to_string()),
+            column: column.map(str::to_string),
+            term: Some(diag.symbol.clone()),
+            detail: Some(diag.detail.clone()),
+        });
     }
-    out
+    resolved
+}
+
+fn marker_symbols(resolved: &ResolvedTagList) -> Vec<&str> {
+    resolved
+        .markers
+        .iter()
+        .map(|tag| tag.symbol.as_str())
+        .collect()
 }
 
 fn intentional_exclusion_columns(inventory: Option<&Value>) -> BTreeSet<(String, String)> {
@@ -368,35 +350,34 @@ fn insert_ref(
 }
 
 fn def_iri(symbol: &str) -> Result<String, String> {
-    haystack_defs::defs()
-        .resolve(symbol)
-        .map(|d| d.iri.clone())
-        .ok_or_else(|| format!("missing pinned def for {symbol}"))
+    haystack_defs::pinned_iri(symbol)
 }
 
 fn emit_entity_tags(
     store: &Store,
     subject: &NamedNode,
     entity: &str,
-    tags: &[String],
+    resolved: &ResolvedTagList,
 ) -> Result<(), String> {
     insert_type(store, subject, &def_iri(entity)?)?;
-    for tag in tags {
-        let iri = def_iri(tag)?;
-        insert_tag(store, subject, &iri)?;
+    for tag in resolved.markers.iter().chain(resolved.extensions.iter()) {
+        insert_tag(store, subject, &tag.iri)?;
+    }
+    for symbol in &resolved.native {
+        insert_str(store, subject, NATIVE_TAG_IRI, symbol)?;
     }
     Ok(())
 }
 
 fn validate_function_cardinality(
-    tags: &[String],
+    tags: &[&str],
     omitted: &mut Vec<ProjectionOmission>,
     equipment_id: &str,
     column: &str,
 ) {
     let funcs: Vec<&str> = ["sensor", "cmd", "sp"]
         .into_iter()
-        .filter(|f| tags.iter().any(|t| t == *f))
+        .filter(|f| tags.contains(f))
         .collect();
     if funcs.len() > 1 {
         omitted.push(ProjectionOmission {
@@ -426,7 +407,8 @@ fn project_equipment(
         return Ok(None);
     }
     let tags = classify_tags(&eq.haystack_tags, omitted, eid, None);
-    if tags.is_empty() {
+    let symbols = marker_symbols(&tags);
+    if symbols.is_empty() {
         omitted.push(ProjectionOmission {
             reason: "equip_without_pinned_tags".into(),
             equipment_id: Some(eid.to_string()),
@@ -436,7 +418,7 @@ fn project_equipment(
         });
         return Ok(None);
     }
-    if !tags.iter().any(|t| t == "equip") {
+    if !symbols.contains(&"equip") {
         omitted.push(ProjectionOmission {
             reason: "missing_equip_marker".into(),
             equipment_id: Some(eid.to_string()),
@@ -563,7 +545,8 @@ fn project_point(ctx: &mut PointProjectCtx<'_>, pt: &PointMeta) -> Result<bool, 
     }
 
     let tags = classify_tags(&pt.haystack_tags, ctx.omitted, eid, Some(col));
-    if !tags.iter().any(|t| t == "point") {
+    let symbols = marker_symbols(&tags);
+    if !symbols.contains(&"point") {
         ctx.omitted.push(ProjectionOmission {
             reason: "missing_point_marker".into(),
             equipment_id: Some(eid.to_string()),
@@ -585,7 +568,7 @@ fn project_point(ctx: &mut PointProjectCtx<'_>, pt: &PointMeta) -> Result<bool, 
         return Ok(false);
     };
 
-    validate_function_cardinality(&tags, ctx.omitted, eid, col);
+    validate_function_cardinality(&symbols, ctx.omitted, eid, col);
 
     let point_key = pt.point_id.as_deref().unwrap_or(col);
     let subj = nn(&point_iri(ctx.building_id, eid, point_key))?;
@@ -822,7 +805,8 @@ fn project_strict_inner(
 
     let store = Store::new().map_err(|e| format!("rdf store: {e}"))?;
     let site = nn(&site_iri(building_id))?;
-    emit_entity_tags(&store, &site, "site", &["site".to_string()])?;
+    let site_tags = haystack_defs::resolve_marker_list(&["site".to_string()]);
+    emit_entity_tags(&store, &site, "site", &site_tags)?;
     insert_str(&store, &site, &format!("{OFDD_NS}buildingId"), building_id)?;
 
     // Precompute equip IRIs (trimmed ids only — parse_semantic_meta rejects padded).
@@ -1089,7 +1073,6 @@ mod tests {
     #[test]
     fn false_markers_and_unknown_tags_omitted() {
         let result = project_strict(&sample_meta(), Some(&sample_inventory()));
-        assert!(!result.turtle.contains("vendorFooTag"));
         assert!(result
             .report
             .omitted

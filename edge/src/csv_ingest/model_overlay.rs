@@ -23,7 +23,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use super::haystack_defs::{HAS_TAG_IRI, PHIOT_BASE, PH_BASE};
+use super::haystack_defs::{
+    self, TagDiagnostic, HAS_TAG_IRI, NATIVE_TAG_IRI, PHICT_BASE, PHIOT_BASE, PHSCIENCE_BASE,
+    PH_BASE,
+};
 use super::haystack_projection::OFDD_NS;
 
 pub const OVERLAY_TTL_FILE: &str = "model_overlay.ttl";
@@ -35,15 +38,6 @@ pub const WRITABLE_LAYER: &str = "model_overlay_ttl";
 
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const XSD_BOOLEAN: &str = "http://www.w3.org/2001/XMLSchema#boolean";
-
-const KIND_TAGS: &[(&str, &str)] = &[
-    ("ahu", "ahu"),
-    ("vav", "vav"),
-    ("chiller", "chiller"),
-    ("boiler", "boiler"),
-    ("fan", "fan"),
-    ("pump", "pump"),
-];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverlayMeta {
@@ -84,12 +78,8 @@ fn ofdd(local: &str) -> String {
     format!("{OFDD_NS}{local}")
 }
 
-fn phiot(local: &str) -> String {
-    format!("{PHIOT_BASE}{local}")
-}
-
-fn ph(local: &str) -> String {
-    format!("{PH_BASE}{local}")
+fn pinned(symbol: &str) -> Result<String, String> {
+    haystack_defs::pinned_iri(symbol)
 }
 
 /// BPS `_safe_id` — alnum / `.` / `_` / `-`, max 128.
@@ -207,6 +197,10 @@ fn serialize_store_ttl(store: &Store) -> Result<String, String> {
         .map_err(|e| format!("prefix ph: {e}"))?
         .with_prefix("phIoT", PHIOT_BASE)
         .map_err(|e| format!("prefix phIoT: {e}"))?
+        .with_prefix("phScience", PHSCIENCE_BASE)
+        .map_err(|e| format!("prefix phScience: {e}"))?
+        .with_prefix("phIct", PHICT_BASE)
+        .map_err(|e| format!("prefix phIct: {e}"))?
         .with_prefix("ofdd", OFDD_NS)
         .map_err(|e| format!("prefix ofdd: {e}"))?;
     store
@@ -358,8 +352,9 @@ fn find_subject_by_id_literal(
 
 fn ensure_site(store: &Store, building_id: &str) -> Result<NamedNode, String> {
     let site = site_uri(building_id)?;
-    if !has_type(store, &site, &phiot("site"))? {
-        insert_type(store, &site, &phiot("site"))?;
+    let site_class = pinned("site")?;
+    if !has_type(store, &site, &site_class)? {
+        insert_type(store, &site, &site_class)?;
         insert_str(store, &site, &ofdd("siteId"), building_id)?;
     }
     Ok(site)
@@ -372,21 +367,99 @@ fn ensure_equip(
     site: &NamedNode,
 ) -> Result<NamedNode, String> {
     let equip = equip_uri(building_id, equipment_id)?;
-    if !has_type(store, &equip, &phiot("equip"))? {
-        insert_type(store, &equip, &phiot("equip"))?;
+    let equip_class = pinned("equip")?;
+    if !has_type(store, &equip, &equip_class)? {
+        insert_type(store, &equip, &equip_class)?;
         insert_str(store, &equip, &ofdd("equipmentId"), equipment_id)?;
-        insert_ref(store, &equip, &phiot("siteRef"), site)?;
+        let site_ref = pinned("siteRef")?;
+        insert_ref(store, &equip, &site_ref, site)?;
         insert_bool_true(store, &equip, &ofdd("overlay"))?;
     }
     Ok(equip)
 }
 
-fn kind_tag_iri(kind: &str) -> Option<String> {
-    let key = kind.trim().to_ascii_lowercase();
-    KIND_TAGS
+struct ResolvedWrite {
+    iris: Vec<String>,
+    native: Vec<String>,
+    diagnostics: Vec<TagDiagnostic>,
+}
+
+fn resolve_write_markers(raw: &[String]) -> ResolvedWrite {
+    let resolved = haystack_defs::resolve_marker_list(raw);
+    let mut iris = Vec::with_capacity(resolved.markers.len() + resolved.extensions.len());
+    for tag in resolved.markers {
+        push_iri(&mut iris, tag.iri);
+    }
+    for tag in resolved.extensions {
+        push_iri(&mut iris, tag.iri);
+    }
+    ResolvedWrite {
+        iris,
+        native: resolved.native,
+        diagnostics: resolved.diagnostics,
+    }
+}
+
+/// Internal equipment alias. A published class keeps its spelling; anything else
+/// stays out of the Haystack libraries.
+fn kind_class(kind: &str) -> (Option<String>, Option<TagDiagnostic>) {
+    let symbol = kind.trim();
+    if symbol.is_empty() {
+        return (None, None);
+    }
+    match haystack_defs::resolve_published_tag(symbol) {
+        haystack_defs::TagVerdict::Marker { iri, .. } => (Some(iri), None),
+        haystack_defs::TagVerdict::Value { symbol, .. } => (
+            None,
+            Some(TagDiagnostic {
+                symbol,
+                outcome: "value_not_marker",
+                detail: "equipment kind is not a marker class".into(),
+            }),
+        ),
+        haystack_defs::TagVerdict::Extension { symbol, .. } => (
+            None,
+            Some(TagDiagnostic {
+                symbol: format!("ext:{symbol}"),
+                outcome: "kind_not_marker",
+                detail: "equipment kind is an extension, not a pinned class".into(),
+            }),
+        ),
+        haystack_defs::TagVerdict::Unknown { symbol }
+        | haystack_defs::TagVerdict::Absent { symbol } => (
+            None,
+            Some(TagDiagnostic {
+                symbol,
+                outcome: "kind_not_marker",
+                detail: "equipment kind is not a pinned marker class".into(),
+            }),
+        ),
+    }
+}
+
+fn push_iri(iris: &mut Vec<String>, iri: String) {
+    if !iris.contains(&iri) {
+        iris.push(iri);
+    }
+}
+
+fn to_portal_diags(entity_id: &str, diags: &[TagDiagnostic]) -> Vec<PortalTagDiagnostic> {
+    diags
         .iter()
-        .find(|(k, _)| *k == key)
-        .map(|(_, local)| phiot(local))
+        .map(|diag| PortalTagDiagnostic {
+            entity_id: entity_id.to_string(),
+            symbol: diag.symbol.clone(),
+            outcome: diag.outcome.to_string(),
+        })
+        .collect()
+}
+
+fn attach_tag_diagnostics(mut body: Value, diags: &[PortalTagDiagnostic]) -> Value {
+    if let Some(obj) = body.as_object_mut() {
+        let value = serde_json::to_value(diags).unwrap_or_else(|_| json!([]));
+        obj.insert("tag_diagnostics".into(), value);
+    }
+    body
 }
 
 fn add_point_tombstone(store: &Store, building_id: &str, point_id: &str) -> Result<(), String> {
@@ -666,51 +739,55 @@ pub fn upsert_equipment(
             "soft_open_neq_fq": true,
         })
     })?;
-    let mutate = (|| -> Result<(), String> {
+    let mutate = (|| -> Result<Vec<PortalTagDiagnostic>, String> {
         let site = ensure_site(&store, building_id)?;
         let equip = ensure_equip(&store, building_id, eid, &site)?;
+        let dis_pred = pinned("dis")?;
         if let Some(d) = fields.dis.map(str::trim).filter(|s| !s.is_empty()) {
-            set_str(&store, &equip, &ph("dis"), d)?;
+            set_str(&store, &equip, &dis_pred, d)?;
         }
+        let mut diags = Vec::new();
+        let written = resolve_write_markers(fields.markers);
+        if !fields.markers.is_empty() {
+            replace_tags(&store, &equip, &written.iris)?;
+            replace_native_tags(&store, &equip, &written.native)?;
+        }
+        diags.extend(to_portal_diags(eid, &written.diagnostics));
         if let Some(k) = fields.kind.map(str::trim).filter(|s| !s.is_empty()) {
-            if let Some(tag) = kind_tag_iri(k) {
-                let tag_term = Term::from(nn(&tag)?);
-                if !has_quad(&store, &equip, HAS_TAG_IRI, &tag_term)? {
-                    insert_quad(&store, &equip, HAS_TAG_IRI, tag_term)?;
-                }
+            let (iri, diag) = kind_class(k);
+            if let Some(iri) = iri {
+                ensure_has_tag(&store, &equip, &iri)?;
             }
-        }
-        for m in fields.markers {
-            let local = m.trim().to_ascii_lowercase();
-            if local.is_empty() {
-                continue;
-            }
-            let tag = kind_tag_iri(&local).unwrap_or_else(|| phiot(&local));
-            let tag_term = Term::from(nn(&tag)?);
-            if !has_quad(&store, &equip, HAS_TAG_IRI, &tag_term)? {
-                insert_quad(&store, &equip, HAS_TAG_IRI, tag_term)?;
+            if let Some(diag) = diag {
+                diags.extend(to_portal_diags(eid, &[diag]));
             }
         }
         let tomb = tombstone_uri(building_id, "equip", eid)?;
         remove_subject(&store, &tomb)?;
-        Ok(())
+        Ok(diags)
     })();
-    if let Err(e) = mutate {
-        return Err(json!({
-            "ok": false,
-            "error": e,
-            "building_id": building_id,
-            "soft_open_neq_fq": true,
-        }));
-    }
-    commit_store(
+    let diags = match mutate {
+        Ok(diags) => diags,
+        Err(e) => {
+            return Err(json!({
+                "ok": false,
+                "error": e,
+                "building_id": building_id,
+                "soft_open_neq_fq": true,
+            }));
+        }
+    };
+    match commit_store(
         building_root,
         building_id,
         &store,
         opts.expected_revision,
         opts.dry_run,
         &format!("upsert_equipment:{eid}"),
-    )
+    ) {
+        Ok(body) => Ok(attach_tag_diagnostics(body, &diags)),
+        Err(err) => Err(err),
+    }
 }
 
 /// Upsert point into the writable overlay (BPS `POST /api/model/point`).
@@ -746,36 +823,34 @@ pub fn upsert_point(
         .filter(|s| !s.is_empty())
         .unwrap_or(pid)
         .to_string();
-    let mutate = (|| -> Result<(), String> {
+    let mutate = (|| -> Result<Vec<PortalTagDiagnostic>, String> {
         let site = ensure_site(&store, building_id)?;
         let equip = ensure_equip(&store, building_id, eid, &site)?;
         let point = point_uri(building_id, pid)?;
-        if !has_type(&store, &point, &phiot("point"))? {
-            insert_type(&store, &point, &phiot("point"))?;
+        let point_class = pinned("point")?;
+        if !has_type(&store, &point, &point_class)? {
+            insert_type(&store, &point, &point_class)?;
             insert_str(&store, &point, &ofdd("pointId"), pid)?;
             insert_str(&store, &point, &ofdd("hasTimeseriesId"), pid)?;
             insert_str(&store, &point, &ofdd("siteId"), building_id)?;
-            insert_ref(&store, &point, &phiot("siteRef"), &site)?;
+            let site_ref = pinned("siteRef")?;
+            insert_ref(&store, &point, &site_ref, &site)?;
             insert_bool_true(&store, &point, &ofdd("overlay"))?;
         }
-        set_ref(&store, &point, &phiot("equipRef"), &equip)?;
+        let equip_ref = pinned("equipRef")?;
+        set_ref(&store, &point, &equip_ref, &equip)?;
         set_str(&store, &point, &ofdd("openfddKey"), &ofk)?;
+        let dis_pred = pinned("dis")?;
         if let Some(d) = fields.dis.map(str::trim).filter(|s| !s.is_empty()) {
-            set_str(&store, &point, &ph("dis"), d)?;
+            set_str(&store, &point, &dis_pred, d)?;
         }
         if let Some(r) = fields.role.map(str::trim).filter(|s| !s.is_empty()) {
             set_str(&store, &point, &ofdd("role"), r)?;
         }
-        for m in fields.markers {
-            let local = m.trim().to_ascii_lowercase();
-            if local.is_empty() {
-                continue;
-            }
-            let tag = ph(&local);
-            let tag_term = Term::from(nn(&tag)?);
-            if !has_quad(&store, &point, HAS_TAG_IRI, &tag_term)? {
-                insert_quad(&store, &point, HAS_TAG_IRI, tag_term)?;
-            }
+        let written = resolve_write_markers(fields.markers);
+        if !fields.markers.is_empty() {
+            replace_tags(&store, &point, &written.iris)?;
+            replace_native_tags(&store, &point, &written.native)?;
         }
         let tomb = tombstone_uri(building_id, "point", pid)?;
         remove_subject(&store, &tomb)?;
@@ -783,24 +858,30 @@ pub fn upsert_point(
             let tomb_ofk = tombstone_uri(building_id, "point", &ofk)?;
             remove_subject(&store, &tomb_ofk)?;
         }
-        Ok(())
+        Ok(to_portal_diags(pid, &written.diagnostics))
     })();
-    if let Err(e) = mutate {
-        return Err(json!({
-            "ok": false,
-            "error": e,
-            "building_id": building_id,
-            "soft_open_neq_fq": true,
-        }));
-    }
-    commit_store(
+    let diags = match mutate {
+        Ok(diags) => diags,
+        Err(e) => {
+            return Err(json!({
+                "ok": false,
+                "error": e,
+                "building_id": building_id,
+                "soft_open_neq_fq": true,
+            }));
+        }
+    };
+    match commit_store(
         building_root,
         building_id,
         &store,
         opts.expected_revision,
         opts.dry_run,
         &format!("upsert_point:{pid}"),
-    )
+    ) {
+        Ok(body) => Ok(attach_tag_diagnostics(body, &diags)),
+        Err(err) => Err(err),
+    }
 }
 
 /// Delete / hide a point (overlay triples + tombstone). Pack RDF stays immutable.
@@ -921,7 +1002,7 @@ pub fn delete_equipment(
                 equip = found;
             }
         }
-        let equip_ref = phiot("equipRef");
+        let equip_ref = pinned("equipRef")?;
         let pred = nn(&equip_ref)?;
         let equip_term = Term::from(equip.clone());
         let children: Vec<NamedNode> = store
@@ -1009,6 +1090,17 @@ pub struct PortalSyncReport {
     pub equipment_deleted: Vec<String>,
     pub points_deleted: Vec<String>,
     pub removals_skipped: bool,
+    /// Symbols that were not emitted as pinned Haystack marker classes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tag_diagnostics: Vec<PortalTagDiagnostic>,
+}
+
+/// One marker the shared resolver refused to mint as an official class.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PortalTagDiagnostic {
+    pub entity_id: String,
+    pub symbol: String,
+    pub outcome: String,
 }
 
 /// Make the overlay match one portal inventory snapshot for `source`.
@@ -1076,18 +1168,23 @@ pub fn sync_portal_inventory(
         }
         let node = ensure_equip(&store, building_id, eid, &site)?;
         set_str(&store, &node, &source_pred, source)?;
-        set_optional_str(&store, &node, &ph("dis"), eq.dis.as_deref())?;
-        let mut tags: Vec<String> = Vec::new();
-        if let Some(tag) = eq.kind.as_deref().and_then(kind_tag_iri) {
-            tags.push(tag);
-        }
-        for m in &eq.markers {
-            let local = m.trim().to_ascii_lowercase();
-            if !local.is_empty() {
-                tags.push(kind_tag_iri(&local).unwrap_or_else(|| phiot(&local)));
+        let dis_pred = pinned("dis")?;
+        set_optional_str(&store, &node, &dis_pred, eq.dis.as_deref())?;
+        let mut written = resolve_write_markers(&eq.markers);
+        if let Some(kind) = eq.kind.as_deref() {
+            let (iri, diag) = kind_class(kind);
+            if let Some(iri) = iri {
+                push_iri(&mut written.iris, iri);
+            }
+            if let Some(diag) = diag {
+                written.diagnostics.push(diag);
             }
         }
-        replace_tags(&store, &node, &tags)?;
+        replace_tags(&store, &node, &written.iris)?;
+        replace_native_tags(&store, &node, &written.native)?;
+        report
+            .tag_diagnostics
+            .extend(to_portal_diags(eid, &written.diagnostics));
         remove_subject(&store, &tombstone_uri(building_id, "equip", eid)?)?;
         report.equipment_upserted += 1;
     }
@@ -1100,28 +1197,31 @@ pub fn sync_portal_inventory(
         }
         let equip = ensure_equip(&store, building_id, eid, &site)?;
         let node = point_uri(building_id, pid)?;
-        if !has_type(&store, &node, &phiot("point"))? {
-            insert_type(&store, &node, &phiot("point"))?;
+        let point_class = pinned("point")?;
+        if !has_type(&store, &node, &point_class)? {
+            insert_type(&store, &node, &point_class)?;
             insert_str(&store, &node, &ofdd("pointId"), pid)?;
             insert_str(&store, &node, &ofdd("hasTimeseriesId"), pid)?;
             insert_str(&store, &node, &ofdd("siteId"), building_id)?;
-            insert_ref(&store, &node, &phiot("siteRef"), &site)?;
+            let site_ref = pinned("siteRef")?;
+            insert_ref(&store, &node, &site_ref, &site)?;
             insert_bool_true(&store, &node, &ofdd("overlay"))?;
         }
         set_str(&store, &node, &source_pred, source)?;
-        set_ref(&store, &node, &phiot("equipRef"), &equip)?;
+        let equip_ref = pinned("equipRef")?;
+        set_ref(&store, &node, &equip_ref, &equip)?;
         set_str(&store, &node, &ofdd("openfddKey"), pt.openfdd_key.trim())?;
         set_str(&store, &node, &ofdd("role"), pt.role.trim())?;
-        set_optional_str(&store, &node, &ph("dis"), pt.dis.as_deref())?;
-        set_optional_str(&store, &node, &ph("unit"), pt.unit.as_deref())?;
-        let tags: Vec<String> = pt
-            .markers
-            .iter()
-            .map(|m| m.trim().to_ascii_lowercase())
-            .filter(|m| !m.is_empty())
-            .map(|m| ph(&m))
-            .collect();
-        replace_tags(&store, &node, &tags)?;
+        let dis_pred = pinned("dis")?;
+        let unit_pred = pinned("unit")?;
+        set_optional_str(&store, &node, &dis_pred, pt.dis.as_deref())?;
+        set_optional_str(&store, &node, &unit_pred, pt.unit.as_deref())?;
+        let written = resolve_write_markers(&pt.markers);
+        replace_tags(&store, &node, &written.iris)?;
+        replace_native_tags(&store, &node, &written.native)?;
+        report
+            .tag_diagnostics
+            .extend(to_portal_diags(pid, &written.diagnostics));
         remove_subject(&store, &tombstone_uri(building_id, "point", pid)?)?;
         report.points_upserted += 1;
     }
@@ -1188,6 +1288,34 @@ fn set_optional_str(
     }
 }
 
+fn ensure_has_tag(store: &Store, s: &NamedNode, iri: &str) -> Result<(), String> {
+    let tag_term = Term::from(nn(iri)?);
+    if !has_quad(store, s, HAS_TAG_IRI, &tag_term)? {
+        insert_quad(store, s, HAS_TAG_IRI, tag_term)?;
+    }
+    Ok(())
+}
+
+fn replace_native_tags(store: &Store, s: &NamedNode, symbols: &[String]) -> Result<(), String> {
+    let pred = nn(NATIVE_TAG_IRI)?;
+    let existing: Vec<Quad> = store
+        .quads_for_pattern(
+            Some(NamedOrBlankNode::from(s.clone()).as_ref()),
+            Some((&pred).into()),
+            None,
+            None,
+        )
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("quads: {e}"))?;
+    for q in existing {
+        store.remove(&q).map_err(|e| format!("remove quad: {e}"))?;
+    }
+    for symbol in symbols {
+        insert_str(store, s, NATIVE_TAG_IRI, symbol)?;
+    }
+    Ok(())
+}
+
 fn replace_tags(store: &Store, s: &NamedNode, tags: &[String]) -> Result<(), String> {
     let pred = nn(HAS_TAG_IRI)?;
     let existing: Vec<Quad> = store
@@ -1247,7 +1375,8 @@ fn child_points(
     store: &Store,
     equip: &NamedNode,
 ) -> Result<Vec<(NamedNode, Option<String>)>, String> {
-    let equip_ref = nn(&phiot("equipRef"))?;
+    let equip_ref_iri = pinned("equipRef")?;
+    let equip_ref = nn(&equip_ref_iri)?;
     let equip_term = Term::from(equip.clone());
     let p_id = nn(&ofdd("pointId"))?;
     let mut out = Vec::new();
@@ -1367,7 +1496,8 @@ fn apply_tombstone_exclusions(store: &Store) -> Result<(), String> {
     }
 
     // Hide points that reference a tombstoned equip (pack or overlay).
-    let equip_ref = nn(&phiot("equipRef"))?;
+    let equip_ref_iri = pinned("equipRef")?;
+    let equip_ref = nn(&equip_ref_iri)?;
     let equip_snapshot = doomed_nodes.clone();
     for eq in &equip_snapshot {
         let eq_term = Term::from(eq.clone());
@@ -1762,5 +1892,278 @@ mod tests {
                 .is_none(),
             "points under tombstoned equip must be stripped"
         );
+    }
+
+    /// Same published markers through NF inventory, agent CRUD, and the CSV
+    /// package projector. Parsed SPARQL must return one shared point id.
+    #[test]
+    fn nf_csv_and_agent_share_one_resolved_point_id() {
+        use crate::csv_ingest::haystack_projection::project_strict;
+        use crate::csv_ingest::semantic_meta::SemanticMetaV1;
+
+        const BID: &str = "SYNTH_TAG_RESOLVER";
+        const EID: &str = "EQ_HP";
+        const PID: &str = "pt-dat-1";
+        const POINT_QUERY: &str = r#"
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+PREFIX phIoT: <https://project-haystack.org/def/phIoT/4.0.0#>
+PREFIX phScience: <https://project-haystack.org/def/phScience/4.0.0#>
+PREFIX ofdd: <urn:openfdd:ns#>
+SELECT ?id WHERE {
+  ?point a phIoT:point ;
+         ph:hasTag phIoT:discharge ;
+         ph:hasTag phScience:air ;
+         ph:hasTag phScience:temp ;
+         ph:hasTag phIoT:sensor .
+  ?point ofdd:pointId ?id .
+}
+"#;
+        const EQUIP_QUERY: &str = r#"
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+PREFIX phIoT: <https://project-haystack.org/def/phIoT/4.0.0#>
+PREFIX phIct: <https://project-haystack.org/def/phIct/4.0.0#>
+PREFIX ofdd: <urn:openfdd:ns#>
+SELECT ?id WHERE {
+  ?equip a phIoT:equip ;
+         ph:hasTag phIoT:heatPump ;
+         ph:hasTag phIct:protocol .
+  ?equip ofdd:equipmentId ?id .
+}
+"#;
+        const WRONG_DISCHARGE: &str = r#"
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+PREFIX ofdd: <urn:openfdd:ns#>
+SELECT ?id WHERE {
+  ?point ph:hasTag <https://project-haystack.org/def/ph/4.0.0#discharge> .
+  ?point ofdd:pointId ?id .
+}
+"#;
+        const WRONG_HEATPUMP: &str = r#"
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+PREFIX ofdd: <urn:openfdd:ns#>
+SELECT ?id WHERE {
+  ?equip ph:hasTag <https://project-haystack.org/def/phIoT/4.0.0#heatpump> .
+  ?equip ofdd:equipmentId ?id .
+}
+"#;
+        const UNIT_AS_MARKER: &str = r#"
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+ASK { ?point ph:hasTag ph:unit . }
+"#;
+        const UNKNOWN_OFFICIAL: &str = r#"
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+ASK {
+  { ?s ph:hasTag <https://project-haystack.org/def/ph/4.0.0#vendorFooTag> }
+  UNION { ?s ph:hasTag <https://project-haystack.org/def/phIoT/4.0.0#vendorFooTag> }
+  UNION { ?s ph:hasTag <https://project-haystack.org/def/phScience/4.0.0#vendorFooTag> }
+  UNION { ?s ph:hasTag <https://project-haystack.org/def/phIct/4.0.0#vendorFooTag> }
+}
+"#;
+        const EXTENSION_QUERY: &str = r#"
+PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
+PREFIX ofdd: <urn:openfdd:ns#>
+SELECT ?id WHERE {
+  ?point ph:hasTag <urn:openfdd:ext#sitePolicy> .
+  ?point ofdd:pointId ?id .
+}
+"#;
+        const NATIVE_QUERY: &str = r#"
+PREFIX ofdd: <urn:openfdd:ns#>
+SELECT ?sym WHERE {
+  ?point ofdd:pointId "pt-dat-1" ;
+         ofdd:nativeTag ?sym .
+}
+"#;
+
+        let equip_markers = [
+            "equip".to_string(),
+            "protocol".to_string(),
+            "ahu".to_string(),
+        ];
+        let point_markers = [
+            "point",
+            "discharge",
+            "air",
+            "temp",
+            "sensor",
+            "unit",
+            "vendorFooTag",
+            "ext:sitePolicy",
+            "false",
+            "heatpump",
+        ]
+        .map(str::to_string);
+
+        let nf_dir = tempdir().unwrap();
+        let nf_report = sync_portal_inventory(
+            nf_dir.path(),
+            BID,
+            "nf:synth-resolver",
+            &[PortalEquip {
+                equipment_id: EID.to_string(),
+                dis: Some("Heat pump".into()),
+                kind: Some("heatPump".into()),
+                markers: equip_markers.to_vec(),
+            }],
+            &[PortalPoint {
+                point_id: PID.to_string(),
+                equipment_id: EID.to_string(),
+                openfdd_key: format!("{EID}.discharge-air-temp"),
+                role: "discharge-air-temp".into(),
+                dis: Some("Discharge air temp".into()),
+                unit: Some("F".into()),
+                markers: point_markers.to_vec(),
+            }],
+            true,
+        )
+        .expect("nf sync");
+        let nf_ttl = load_ttl(nf_dir.path()).expect("nf ttl");
+
+        let agent_dir = tempdir().unwrap();
+        upsert_equipment(
+            agent_dir.path(),
+            BID,
+            EID,
+            EquipUpsertFields {
+                dis: Some("Heat pump"),
+                kind: Some("heatPump"),
+                markers: &equip_markers,
+            },
+            OverlayCasOpts::default(),
+        )
+        .expect("agent equip");
+        upsert_point(
+            agent_dir.path(),
+            BID,
+            EID,
+            PID,
+            PointUpsertFields {
+                dis: Some("Discharge air temp"),
+                openfdd_key: Some("EQ_HP.discharge-air-temp"),
+                role: Some("discharge-air-temp"),
+                markers: &point_markers,
+            },
+            OverlayCasOpts {
+                expected_revision: Some(1),
+                dry_run: false,
+            },
+        )
+        .expect("agent point");
+        let agent_ttl = load_ttl(agent_dir.path()).expect("agent ttl");
+
+        let meta: SemanticMetaV1 = serde_json::from_value(json!({
+            "schema": "openfdd_semantic_meta_v1",
+            "building_id": BID,
+            "points": [{
+                "equipment_id": EID,
+                "column": "dat",
+                "point_id": PID,
+                "haystack_tags": point_markers,
+                "unit": "F"
+            }],
+            "equipment": [{
+                "equipment_id": EID,
+                "display_name": "Heat pump",
+                "haystack_tags": ["equip", "heatPump", "protocol", "ahu"]
+            }]
+        }))
+        .expect("semantic meta");
+        let projected = project_strict(&meta, None);
+        assert!(
+            projected
+                .report
+                .omitted
+                .iter()
+                .all(|o| o.reason != "projection_error"),
+            "{:?}",
+            projected.report.omitted
+        );
+        let csv_ttl = projected.turtle;
+
+        let graphs = [("nf", nf_ttl), ("agent", agent_ttl), ("csv", csv_ttl)];
+        let mut point_ids = Vec::new();
+        let mut equip_ids = Vec::new();
+        for (label, ttl) in &graphs {
+            let ids = select_values(ttl, POINT_QUERY, "id");
+            assert_eq!(ids, vec![PID.to_string()], "{label} point id");
+            point_ids.push(ids);
+            let equips = select_values(ttl, EQUIP_QUERY, "id");
+            assert_eq!(equips, vec![EID.to_string()], "{label} equip id");
+            equip_ids.push(equips);
+            assert!(
+                select_values(ttl, WRONG_DISCHARGE, "id").is_empty(),
+                "{label} matched discharge in the wrong library"
+            );
+            assert!(
+                select_values(ttl, WRONG_HEATPUMP, "id").is_empty(),
+                "{label} matched lowercased heatpump"
+            );
+            assert!(
+                !ask_graph(ttl, UNIT_AS_MARKER),
+                "{label} cast unit as a marker"
+            );
+            assert!(
+                !ask_graph(ttl, UNKNOWN_OFFICIAL),
+                "{label} minted vendorFooTag in a Haystack library"
+            );
+            assert_eq!(
+                select_values(ttl, EXTENSION_QUERY, "id"),
+                vec![PID.to_string()],
+                "{label} extension tag"
+            );
+            let mut native = select_values(ttl, NATIVE_QUERY, "sym");
+            native.sort();
+            assert_eq!(
+                native,
+                vec!["heatpump".to_string(), "vendorFooTag".to_string()],
+                "{label} native metadata"
+            );
+        }
+        assert_eq!(point_ids[0], point_ids[1]);
+        assert_eq!(point_ids[1], point_ids[2]);
+        assert_eq!(equip_ids[0], equip_ids[1]);
+        assert_eq!(equip_ids[1], equip_ids[2]);
+
+        let outcomes = |entity: &str, symbol: &str| -> Vec<String> {
+            nf_report
+                .tag_diagnostics
+                .iter()
+                .filter(|d| d.entity_id == entity && d.symbol == symbol)
+                .map(|d| d.outcome.clone())
+                .collect()
+        };
+        assert_eq!(outcomes(PID, "unit"), vec!["value_not_marker".to_string()]);
+        assert_eq!(outcomes(PID, "vendorFooTag"), vec!["unknown".to_string()]);
+        assert_eq!(outcomes(PID, "heatpump"), vec!["unknown".to_string()]);
+        assert_eq!(outcomes(PID, "false"), vec!["absent".to_string()]);
+        assert_eq!(
+            outcomes(PID, "ext:sitePolicy"),
+            vec!["extension".to_string()]
+        );
+    }
+
+    fn select_values(ttl: &str, query: &str, var: &str) -> Vec<String> {
+        use crate::csv_ingest::haystack_sparql_bindings::execute_readonly_on_overlay;
+        let out = execute_readonly_on_overlay("SYNTH_TAG_RESOLVER", query, ttl)
+            .unwrap_or_else(|e| panic!("sparql: {e}\n{query}"));
+        out["rows"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|row| {
+                row.get(var)
+                    .and_then(|b| b.get("value"))
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string)
+            })
+            .collect()
+    }
+
+    fn ask_graph(ttl: &str, query: &str) -> bool {
+        use crate::csv_ingest::haystack_sparql_bindings::execute_readonly_on_overlay;
+        let out = execute_readonly_on_overlay("SYNTH_TAG_RESOLVER", query, ttl)
+            .unwrap_or_else(|e| panic!("ask: {e}\n{query}"));
+        out["boolean"].as_bool().expect("ask boolean")
     }
 }
