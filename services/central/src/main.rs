@@ -156,10 +156,10 @@ async fn main() -> anyhow::Result<()> {
     );
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let signal_tx = shutdown_tx.clone();
+    let (shutdown_signal_tx, shutdown_signal_rx) = tokio::sync::oneshot::channel();
     let server = axum::serve(listener, app).with_graceful_shutdown(async move {
-        if let Err(error) = tokio::signal::ctrl_c().await {
-            warn!(%error, "failed to install graceful shutdown signal handler");
-        }
+        let signal = wait_for_shutdown_signal().await;
+        let _ = shutdown_signal_tx.send(signal);
         let _ = signal_tx.send(true);
     });
 
@@ -175,8 +175,50 @@ async fn main() -> anyhow::Result<()> {
     if let Err(error) = provider_task.await {
         warn!(%error, "provider poller task ended unexpectedly during shutdown");
     }
+    let signal = shutdown_signal_rx.await.unwrap_or("shutdown");
+    let audit_report =
+        open_fdd_edge_prototype::auth::audit::shutdown_for_signal(signal, Duration::from_secs(5));
+    if audit_report.timed_out {
+        warn!(
+            signal = audit_report.signal,
+            "audit sink drain timed out before the process exited"
+        );
+    }
     server_result?;
     Ok(())
+}
+
+async fn wait_for_shutdown_signal() -> &'static str {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut terminate = match signal(SignalKind::terminate()) {
+            Ok(terminate) => terminate,
+            Err(error) => {
+                warn!(%error, "SIGTERM handler was not installed");
+                if let Err(error) = tokio::signal::ctrl_c().await {
+                    warn!(%error, "failed to install graceful shutdown signal handler");
+                }
+                return "SIGINT";
+            }
+        };
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => {
+                if let Err(error) = result {
+                    warn!(%error, "failed to install graceful shutdown signal handler");
+                }
+                "SIGINT"
+            }
+            _ = terminate.recv() => "SIGTERM",
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            warn!(%error, "failed to install graceful shutdown signal handler");
+        }
+        "SIGINT"
+    }
 }
 
 async fn initialize_s3_scope_index() -> anyhow::Result<()> {

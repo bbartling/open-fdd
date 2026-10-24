@@ -480,6 +480,7 @@ async fn unmapped_point_stays_referenced_without_a_role_row() {
         points: vec![point("pt-sat", "sat"), point("pt-free", "")],
         source_points: 2,
         complete: true,
+        diagnostics: crate::providers::inventory_sync::InventoryDiagnostics::default(),
     };
     let first = apply_to_stores(Some(&tsdb), &root, site, "nf:unmapped", &snap).await;
     assert!(first.errors.is_empty(), "{:?}", first.errors);

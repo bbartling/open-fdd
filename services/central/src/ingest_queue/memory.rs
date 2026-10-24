@@ -507,8 +507,11 @@ fn enqueue_locked(
     validate_new(&job)?;
     let key = job.key();
     if let Some(idx) = inner.by_key.get(&key).copied() {
+        let id = inner.jobs[idx].view.job_id.to_string();
+        crate::audit::correlate_job(&id);
         return Ok(EnqueueOutcome::Existing(inner.jobs[idx].view.clone()));
     }
+    let server_request_id = crate::audit::current_server_request_id();
     let view = JobView {
         job_id: Uuid::new_v4(),
         tenant_id: job.tenant_id,
@@ -531,7 +534,9 @@ fn enqueue_locked(
         coverage: COVERAGE_NOT_ASSESSED.to_string(),
         point_coverage: Vec::new(),
         counts: JobCounts::default(),
+        server_request_id,
     };
+    crate::audit::correlate_job(&view.job_id.to_string());
     let idx = inner.jobs.len();
     inner.by_key.insert(key, idx);
     inner.jobs.push(StoredJob {
@@ -860,7 +865,9 @@ fn push_receipt(
         committed_at: now,
         counts: job.counts,
         safe_error_code: code,
+        server_request_id: job.server_request_id.clone(),
     };
+    crate::audit::correlate_receipt(&receipt.receipt_id.to_string());
     inner.receipts.push(receipt.clone());
     receipt
 }
@@ -1179,5 +1186,81 @@ mod tests {
         assert!(metrics.scheduler_owner.is_none());
         let global = store.metrics(at, &MetricsScope::global());
         assert_eq!(global.ready_backlog, 1);
+    }
+
+    #[tokio::test]
+    async fn server_request_id_is_copied_onto_the_job_and_the_receipt() {
+        let ctx = crate::audit::RequestContext::new(Some("caller-label"), "POST", "/api/ingest");
+        let server_id = ctx.server_id.clone();
+        let store = MemoryStore::new(BudgetDefaults::default());
+        let at = now();
+        crate::audit::with_request_context(ctx, async {
+            let created = match store
+                .enqueue(
+                    sample("site-a", "nf:site-a", "ahu-srv", "2026-10-19T12:00:00Z"),
+                    at,
+                )
+                .unwrap()
+            {
+                EnqueueOutcome::Created(view) => view,
+                EnqueueOutcome::Existing(_) => panic!("new job"),
+            };
+            assert_eq!(
+                created.server_request_id.as_deref(),
+                Some(server_id.as_str())
+            );
+            let again = match store
+                .enqueue(
+                    sample("site-a", "nf:site-a", "ahu-srv", "2026-10-19T12:00:00Z"),
+                    at,
+                )
+                .unwrap()
+            {
+                EnqueueOutcome::Existing(view) => view,
+                EnqueueOutcome::Created(_) => panic!("duplicate job"),
+            };
+            assert_eq!(again.server_request_id.as_deref(), Some(server_id.as_str()));
+            assert_eq!(again.job_id, created.job_id);
+            let leased = store.claim(&claim_req("worker", 1, at));
+            assert_eq!(leased.len(), 1);
+            let receipt = store
+                .finish(&FinishRequest::new(
+                    "worker",
+                    leased[0].job_id,
+                    leased[0].fencing_token,
+                    at,
+                    FinishOutcome::committed_accounted(JobCounts::default()),
+                ))
+                .unwrap()
+                .expect("receipt");
+            assert_eq!(
+                receipt.server_request_id.as_deref(),
+                Some(server_id.as_str())
+            );
+            let event = crate::audit::AuditEvent::new(crate::audit::AuditAction::PackageImport);
+            let value = event.to_value();
+            assert_eq!(value["correlation"]["server_request_id"], server_id);
+            assert_eq!(
+                value["correlation"]["job_ids"]["items"][0],
+                created.job_id.to_string()
+            );
+            assert_eq!(
+                value["correlation"]["receipt_ids"]["items"][0],
+                receipt.receipt_id.to_string()
+            );
+        })
+        .await;
+
+        let bare = match store
+            .enqueue(
+                sample("site-a", "nf:site-a", "ahu-sched", "2026-10-19T12:00:00Z"),
+                at,
+            )
+            .unwrap()
+        {
+            EnqueueOutcome::Created(view) => view,
+            EnqueueOutcome::Existing(_) => panic!("scheduler job"),
+        };
+        assert!(bare.server_request_id.is_none());
     }
 }

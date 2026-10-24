@@ -647,6 +647,9 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
             Some(crate::models::AuditSinkHealth {
                 degraded: s.degraded,
                 dropped: s.dropped,
+                dropped_shutdown: s.dropped_shutdown,
+                write_failures: s.write_failures,
+                rotated_out: s.rotated_out,
                 last_write_error: s.last_write_error.map(str::to_string),
             })
         },

@@ -83,6 +83,10 @@ ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS provider_instance_id text NO
 ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS device_id text NOT NULL DEFAULT '';
 ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS model_revision text NOT NULL DEFAULT '';
 
+-- Nullable server request id. Existing rows stay null. Old writers omit the column.
+ALTER TABLE ingest_job ADD COLUMN IF NOT EXISTS server_request_id text;
+ALTER TABLE ingest_receipt ADD COLUMN IF NOT EXISTS server_request_id text;
+
 CREATE INDEX IF NOT EXISTS ingest_receipt_site_idx
   ON ingest_receipt (canonical_site, committed_at DESC);
 
