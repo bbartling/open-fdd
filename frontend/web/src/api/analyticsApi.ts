@@ -255,8 +255,9 @@ export async function postSqlAnomaly(
       transition_events?: boolean;
     };
   },
+  init?: { signal?: AbortSignal },
 ): Promise<AnalyticsEnvelope> {
-  return postAnalytics("/api/analytics/sql-anomaly", body);
+  return postAnalytics("/api/analytics/sql-anomaly", body, init);
 }
 
 export async function postVavHealth(
