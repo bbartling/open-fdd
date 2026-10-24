@@ -1,9 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * P1-M2-A: real-stack browser smoke. Defaults to local compose react SPA.
- * Skip automatically when OPENFDD_PLAYWRIGHT_SKIP=1 or base URL is unreachable
- * (CI without a live stack). Network mocks are banned in this suite.
+ * Real-stack browser smoke. Defaults to the local compose React SPA.
+ * Required CI sets OPENFDD_PLAYWRIGHT_REQUIRE_STACK=1 after starting a
+ * disposable compose stack. Those tests run with retries 0. A skip or a
+ * retry-pass fails the job.
+ * Network mocks are banned in this suite.
  */
 const baseURL = process.env.OPENFDD_PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 
@@ -11,7 +13,7 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: process.env.OPENFDD_PLAYWRIGHT_REQUIRE_STACK === "1" ? 0 : process.env.CI ? 1 : 0,
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {

@@ -1,0 +1,65 @@
+# Disposable CI browser stack overlay.
+# Merge with docker/compose.portal.yml and docker/compose.timescale.yml.
+# Local image tags only. Throwaway Timescale. Starter seed stays off.
+# Requires Docker Compose >= 2.24 (!override / !reset).
+
+services:
+  central:
+    image: localhost/openfdd-ci-browser-central:${OPENFDD_CI_BROWSER_PROJECT:?set OPENFDD_CI_BROWSER_PROJECT}
+    pull_policy: never
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+    environment:
+      OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd_dev_only@timescale:5432/openfdd
+      OPENFDD_HISTORIAN: timescale
+      OPENFDD_FDD_ENGINE: postgres-sql
+      OPENFDD_SQL_ROOT: /sql/fdd
+      OPENFDD_STARTER_SEED: "0"
+      OPENFDD_JWT_SECRET: ${OPENFDD_CI_BROWSER_JWT_SECRET:?set OPENFDD_CI_BROWSER_JWT_SECRET}
+      OPENFDD_ADMIN_PASSWORD: ${OPENFDD_CI_BROWSER_ADMIN_PASSWORD:?set OPENFDD_CI_BROWSER_ADMIN_PASSWORD}
+      OPENFDD_AGENT_PASSWORD: ""
+      OPENFDD_ALLOW_OPEN_BIND: ""
+      OPENFDD_PROVIDER_SITES: ""
+      OPENFDD_STORAGE_URL: file:///workspace/openfdd
+      OPENFDD_WORKSPACE: /workspace
+    volumes: !override
+      - ci-browser-workspace:/workspace
+      - ../sql:/sql:ro
+
+  web:
+    image: localhost/openfdd-ci-browser-web:${OPENFDD_CI_BROWSER_PROJECT:?set OPENFDD_CI_BROWSER_PROJECT}
+    pull_policy: never
+    restart: "no"
+    environment:
+      OPENFDD_CENTRAL_UPSTREAM: central:8080
+    depends_on:
+      central:
+        condition: service_healthy
+
+  timescale:
+    image: timescale/timescaledb:2.17.2-pg16
+    pull_policy: missing
+    restart: "no"
+    environment:
+      POSTGRES_USER: openfdd
+      POSTGRES_PASSWORD: openfdd_dev_only
+      POSTGRES_DB: openfdd
+    ports: !reset []
+    volumes: !override
+      - ci-browser-timescale:/var/lib/postgresql/data
+      - ../sql/schema/00_extensions.sql:/docker-entrypoint-initdb.d/00_extensions.sql:ro
+      - ../sql/schema/01_bps_core.sql:/docker-entrypoint-initdb.d/01_bps_core.sql:ro
+      - ../sql/schema/02_openfdd_dims.sql:/docker-entrypoint-initdb.d/02_openfdd_dims.sql:ro
+      - ../sql/schema/03_wide_history_helper.sql:/docker-entrypoint-initdb.d/03_wide_history_helper.sql:ro
+      - ../sql/schema/04_provider_hourly_jobs.sql:/docker-entrypoint-initdb.d/04_provider_hourly_jobs.sql:ro
+      - ../sql/schema/04_ingest_queue.sql:/docker-entrypoint-initdb.d/05_ingest_queue.sql:ro
+      - ../sql/schema/05_portal_inventory.sql:/docker-entrypoint-initdb.d/06_portal_inventory.sql:ro
+
+volumes:
+  ci-browser-workspace:
+  ci-browser-timescale:

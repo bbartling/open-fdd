@@ -32,6 +32,7 @@ PRODUCT_COMPOSE_REL = (
     "docker/compose.caddy.react.yml",
     "docker/compose.wattlab.react.yml",
     "docker/compose.web.local-overview.yml",
+    "docker/compose.ci-browser.yml",
 )
 
 FORBIDDEN_COMPOSE_MARKERS = (

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { failIfRequired, stackRequired } from "./requireStack";
 import { ensureProductSession } from "./session";
 
 /**
@@ -8,16 +9,21 @@ import { ensureProductSession } from "./session";
 test.describe("react product smoke (real stack)", () => {
   test.beforeAll(async ({ request }) => {
     if (process.env.OPENFDD_PLAYWRIGHT_SKIP === "1") {
-      test.skip(true, "OPENFDD_PLAYWRIGHT_SKIP=1");
+      failIfRequired("OPENFDD_PLAYWRIGHT_SKIP=1");
     }
     const base = process.env.OPENFDD_PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
+    let res;
     try {
-      const res = await request.get(base, { timeout: 5_000 });
-      if (!res.ok()) {
-        test.skip(true, `SPA not healthy at ${base} (HTTP ${res.status()})`);
+      res = await request.get(base, { timeout: 5_000 });
+    } catch (err) {
+      if (stackRequired) {
+        throw err instanceof Error ? err : new Error(String(err));
       }
-    } catch {
       test.skip(true, `SPA unreachable at ${base}`);
+      return;
+    }
+    if (!res.ok()) {
+      failIfRequired(`SPA not healthy at ${base} (HTTP ${res.status()})`);
     }
   });
 

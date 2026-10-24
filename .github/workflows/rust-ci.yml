@@ -54,6 +54,11 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
+      - name: Dependency guard (cargo tree errors fail)
+        run: |
+          bash scripts/ci/test_forbid_datafusion_product.sh
+          bash scripts/ci/real_stack_browser.sh --self-test
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -144,19 +149,39 @@ jobs:
           npm run lint
           npm run test
           npm run build
-      - name: Playwright real-stack smoke (skip if SPA down)
-        working-directory: frontend/web
-        env:
-          OPENFDD_PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
-        run: |
-          npx playwright install --with-deps chromium
-          # No stack in this job — suite self-skips when SPA unreachable.
-          npm run test:e2e
       - name: architecture policy + capability ledger
         run: |
           python3 -m pip install --user PyYAML
           python3 scripts/architecture_react_policy_check.py
           python3 scripts/validate_capabilities_ledger.py
+
+  react-real-stack-browser:
+    name: Real-stack browser tests
+    # pull_request plus master. A branch push would otherwise run this twice.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+      - name: Install Playwright
+        working-directory: frontend/web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Free runner disk for the local image build
+        run: |
+          docker system prune -af
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+      - name: Disposable compose stack and required browser assertions
+        run: bash scripts/ci/real_stack_browser.sh
 
   docker:
     name: Stack compose config and Dockerfiles
@@ -180,6 +205,9 @@ jobs:
           done
           OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay >/tmp/ot-archive-replay.txt
           grep -q 'No containers were started' /tmp/ot-archive-replay.txt
+
+      - name: Disposable browser compose resolves local images
+        run: bash scripts/ci/real_stack_browser.sh --config-check
 
       - name: Stack script syntax
         run: |
