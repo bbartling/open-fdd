@@ -258,16 +258,18 @@ run_playwright() {
   local expects="${report}.expects.json"
   local status=0
   local report_status=0
-  rm -f "$expects"
+  rm -f "$expects" "$report"
   set +e
   (
     cd frontend/web
-    OPENFDD_EXPECT_COUNT_FILE="$expects" \
+    # One --reporter value. A second flag replaces the first, and the JSON
+    # report never reaches the gate.
+    PLAYWRIGHT_JSON_OUTPUT_FILE="$report" \
+      OPENFDD_EXPECT_COUNT_FILE="$expects" \
       npx playwright test "${REQUIRED_SPECS[@]}" \
         --retries=0 \
-        --reporter=json \
-        --reporter="${ROOT}/scripts/ci/playwright_expect_reporter.cjs"
-  ) >"$report"
+        --reporter="json,${ROOT}/scripts/ci/playwright_expect_reporter.cjs"
+  )
   status=$?
   python3 "$ROOT/scripts/ci/playwright_required_report.py" "$report" --expects "$expects"
   report_status=$?

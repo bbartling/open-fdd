@@ -399,7 +399,9 @@ def main(argv: list[str] | None = None) -> int:
     raw = args.report.read_text(encoding="utf-8")
     start = raw.find("{")
     if start < 0:
-        print("FAIL: Playwright JSON report has no object", file=sys.stderr)
+        preview = raw.strip().splitlines()
+        head = preview[0][:240] if preview else "(empty)"
+        print(f"FAIL: Playwright JSON report has no object ({head})", file=sys.stderr)
         return 1
     try:
         report = json.loads(raw[start:])

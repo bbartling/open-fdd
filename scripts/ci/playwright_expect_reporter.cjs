@@ -55,6 +55,12 @@ class ExpectCountReporter {
     this.attempts = new Map();
   }
 
+  // The JSON reporter owns the report file. Claiming stdio here makes a
+  // second --reporter flag replace that reporter, and the JSON never lands.
+  printsToStdio() {
+    return false;
+  }
+
   onBegin(_config, suite) {
     this.suite = suite;
   }
@@ -133,6 +139,10 @@ async function selfTest() {
     failures.push("error text was not redacted");
   }
 
+  if (new ExpectCountReporter().printsToStdio() !== false) {
+    failures.push("expect reporter claimed stdio and would hide the JSON report");
+  }
+
   const file = require("path").join(require("os").tmpdir(), `openfdd-expect-count-${process.pid}.json`);
   process.env.OPENFDD_EXPECT_COUNT_FILE = file;
   const reporter = new ExpectCountReporter();
@@ -198,7 +208,7 @@ async function selfTest() {
     }
     return 1;
   }
-  console.log("playwright_expect_reporter --self-test OK (positive=2 negative=4)");
+  console.log("playwright_expect_reporter --self-test OK (positive=2 negative=5)");
   return 0;
 }
 
