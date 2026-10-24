@@ -8,6 +8,22 @@ nav_exclude: true
 
 # Stress closeout — agent handbook
 
+
+## Current 4.0 portal tooling
+
+Use the current [qualification entry](../../scripts/qualification/README.md),
+[stress protocol](../../scripts/stress/README.md), [semantic known answers](../../scripts/qualification/semantic/README.md)
+and [ZAP evaluator contract](../../scripts/qualification/zap/README.md). Later
+OT/3.x commands and capacity observations in this document are historical and
+must not be treated as current Railway limits, product topology or authorization.
+The active stack is central + web + Timescale + isolated NF emulator for tests.
+
+Offline tests and deliberately broken fixtures prove harness behavior only.
+Current candidate qualification additionally needs actual import/history/model
+readback, nonzero numerical comparisons, exact role/tenant controls and isolated
+scanner evidence. Do not run the historical OT stress wrapper for a portal patch.
+
+
 Canonical **rigorous stress LAST** protocol after a product tip lands on GHCR. Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md). Next-rev template: [`PATCH_CYCLE.md`](PATCH_CYCLE.md).
 
 **Do not claim a train CLOSED** with only merge + one spot gate. Cite tip-pin artifacts (not an older `sha-*` stress run).
@@ -153,9 +169,9 @@ Offline check (no hub): `python3 -B -m unittest tests.qualification.test_mqtts_g
 # Manual public baseline only (still parse JSON — do not trust -I alone):
 ART="reports/zap-railway_$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$ART"
-docker run --rm -v "$PWD/$ART:/zap/wrk:rw" -t ghcr.io/zaproxy/zaproxy:stable \
+docker run --rm -v "$PWD/$ART:/zap/wrk:rw" -t "${OPENFDD_ZAP_IMAGE:?set a reviewed digest-pinned ZAP image}" \
   zap-baseline.py -t "$RAILWAY_PUBLIC_URL" -r zap_baseline.html -J zap_baseline.json -I
-python3 scripts/qualification/zap_baseline_verdict.py --report "$ART/zap_baseline.json" --accept-medium
+python3 scripts/qualification/zap_baseline_verdict.py --report "$ART/zap_baseline.json" --dispositions scripts/qualification/zap_risk_dispositions.json
 ```
 
 ## Related product gates (3.3.20+)

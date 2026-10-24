@@ -5,13 +5,14 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use fdd_rules::{
     effective_param_strings, load_registry, load_tuning_profiles, rule_params, substitute_sql,
     RuleRegistry, RuleSpec,
 };
 use fdd_tsdb::Tsdb;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use sqlx::{Column, PgConnection, Row};
 
 use crate::analytics::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest};
@@ -2523,6 +2524,358 @@ async fn historian_watermark(tsdb: &Tsdb, building_id: &str) -> Option<String> {
         .map(|ts| ts.to_rfc3339())
 }
 
+/// Analytics cache input. A failed model read and a failed watermark read stay
+/// separate so a watermark failure can still name the model it did read.
+#[derive(Debug)]
+pub(crate) struct AnalyticsCacheInput {
+    pub model_revision: Result<String, String>,
+    pub watermark: Result<ScopedWatermark, String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct ScopedWatermark {
+    pub order: u64,
+    pub utc: String,
+    pub coverage: String,
+}
+
+/// Analytics SQL pack plus the FDD pack fingerprint. A missing pack is an error.
+pub(crate) fn analytics_cache_sql_pack() -> Result<String, String> {
+    let fdd = fdd_sql_pack_fingerprint()?;
+    Ok(format!(
+        "analytics={};fdd={fdd}",
+        crate::timescale_analytics::analytics_sql_pack_identity()
+    ))
+}
+
+fn fdd_sql_pack_fingerprint() -> Result<String, String> {
+    let root = sql_root_for_registry();
+    static CACHE: std::sync::Mutex<Option<(PathBuf, String)>> = std::sync::Mutex::new(None);
+    let mut guard = CACHE.lock().unwrap_or_else(|err| err.into_inner());
+    if let Some((cached, digest)) = guard.as_ref() {
+        if cached == &root {
+            return Ok(digest.clone());
+        }
+    }
+    let digest = hash_fdd_pack(&root)?;
+    *guard = Some((root, digest.clone()));
+    Ok(digest)
+}
+
+fn hash_fdd_pack(root: &Path) -> Result<String, String> {
+    let registry = root.join("registry.yaml");
+    let rules = root.join("postgres").join("rules");
+    if !registry.is_file() {
+        return Err(format!(
+            "sql pack registry missing at {}",
+            registry.display()
+        ));
+    }
+    if !rules.is_dir() {
+        return Err(format!("sql pack rules missing at {}", rules.display()));
+    }
+    let mut names = Vec::new();
+    let rd = std::fs::read_dir(&rules).map_err(|err| format!("read sql pack: {err}"))?;
+    for ent in rd {
+        let ent = ent.map_err(|err| format!("read sql pack entry: {err}"))?;
+        let path = ent.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("sql") {
+            names.push(path);
+        }
+    }
+    names.sort();
+    let mut hasher = Sha256::new();
+    hasher.update(b"fdd-sql-pack-v1");
+    let registry_bytes =
+        std::fs::read(&registry).map_err(|err| format!("read sql pack registry: {err}"))?;
+    hasher.update((registry_bytes.len() as u64).to_le_bytes());
+    hasher.update(&registry_bytes);
+    for path in names {
+        let bytes = std::fs::read(&path).map_err(|err| format!("read sql pack rule: {err}"))?;
+        if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+            hasher.update(name.as_bytes());
+        }
+        hasher.update((bytes.len() as u64).to_le_bytes());
+        hasher.update(&bytes);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+pub(crate) async fn read_analytics_cache_input(
+    building_id: &str,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+    equipment_ids: &[String],
+) -> AnalyticsCacheInput {
+    let tsdb = match Tsdb::connect_from_env().await {
+        Ok(tsdb) => tsdb,
+        Err(err) => {
+            tracing::warn!(error = %err, "analytics cache timescale connect failed");
+            let reason = public_db_error("timescale connect", &err);
+            return AnalyticsCacheInput {
+                model_revision: Err(reason.clone()),
+                watermark: Err(reason),
+            };
+        }
+    };
+    read_analytics_cache_input_from(&tsdb, building_id, start, end, equipment_ids).await
+}
+
+pub(crate) async fn read_analytics_cache_input_from(
+    tsdb: &Tsdb,
+    building_id: &str,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+    equipment_ids: &[String],
+) -> AnalyticsCacheInput {
+    let model_revision = read_model_revision(tsdb, building_id).await;
+    let watermark = read_scoped_watermark(tsdb, building_id, start, end, equipment_ids).await;
+    AnalyticsCacheInput {
+        model_revision,
+        watermark,
+    }
+}
+
+async fn read_model_revision(tsdb: &Tsdb, building_id: &str) -> Result<String, String> {
+    let equipment = sqlx::query(
+        r#"
+        SELECT equipment_id, COALESCE(equip_type, ''), COALESCE(parent_equipment_id, '')
+        FROM equipment
+        WHERE building_id = $1
+        ORDER BY equipment_id
+        "#,
+    )
+    .bind(building_id)
+    .fetch_all(tsdb.pool())
+    .await
+    .map_err(|err| public_db_error("model revision", &err))?;
+    let roles = sqlx::query(
+        r#"
+        SELECT equipment_id, openfdd_key, role, COALESCE(unit, '')
+        FROM role_map
+        WHERE building_id = $1
+        ORDER BY equipment_id, openfdd_key, role
+        "#,
+    )
+    .bind(building_id)
+    .fetch_all(tsdb.pool())
+    .await
+    .map_err(|err| public_db_error("model revision", &err))?;
+    let points = sqlx::query(
+        r#"
+        SELECT COALESCE(equipment_id, ''), openfdd_key, COALESCE(role, ''),
+               COALESCE(unit, ''), haystack_id
+        FROM point_map
+        WHERE site_id = $1
+        ORDER BY openfdd_key, haystack_id
+        "#,
+    )
+    .bind(building_id)
+    .fetch_all(tsdb.pool())
+    .await
+    .map_err(|err| public_db_error("model revision", &err))?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"openfdd-model-v1");
+    for row in &equipment {
+        hash_line(
+            &mut hasher,
+            &format!(
+                "equip\t{}\t{}\t{}",
+                text_cell(row, 0)?,
+                text_cell(row, 1)?,
+                text_cell(row, 2)?
+            ),
+        );
+    }
+    for row in &roles {
+        hash_line(
+            &mut hasher,
+            &format!(
+                "role\t{}\t{}\t{}\t{}",
+                text_cell(row, 0)?,
+                text_cell(row, 1)?,
+                text_cell(row, 2)?,
+                text_cell(row, 3)?
+            ),
+        );
+    }
+    for row in &points {
+        hash_line(
+            &mut hasher,
+            &format!(
+                "point\t{}\t{}\t{}\t{}\t{}",
+                text_cell(row, 0)?,
+                text_cell(row, 1)?,
+                text_cell(row, 2)?,
+                text_cell(row, 3)?,
+                text_cell(row, 4)?
+            ),
+        );
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn hash_line(hasher: &mut Sha256, line: &str) {
+    hasher.update([0xff]);
+    hasher.update((line.len() as u64).to_le_bytes());
+    hasher.update(line.as_bytes());
+}
+
+fn text_cell(row: &sqlx::postgres::PgRow, index: usize) -> Result<String, String> {
+    row.try_get::<String, _>(index)
+        .map_err(|err| public_db_error("model revision", &err))
+}
+
+/// Site window, narrowed to the requested equipment tokens when the caller
+/// named them. Comparison is exact equality of the stored key's equipment
+/// token (`RTU_01` does not select `RTU_010`). Weather-stamped equipment stays
+/// in scope because scatter and other plots read it beside the requested cohort.
+async fn read_scoped_watermark(
+    tsdb: &Tsdb,
+    building_id: &str,
+    start: Option<DateTime<Utc>>,
+    end: Option<DateTime<Utc>>,
+    equipment_ids: &[String],
+) -> Result<ScopedWatermark, String> {
+    let equipment_bind: Option<Vec<String>> = if equipment_ids.is_empty() {
+        None
+    } else {
+        Some(equipment_ids.to_vec())
+    };
+    let row = sqlx::query(
+        r#"
+        SELECT
+          min(s.ts) AS coverage_start,
+          max(s.ts) AS coverage_end,
+          count(*)::bigint AS sample_count,
+          count(DISTINCT s.openfdd_key)::bigint AS series_count,
+          count(s.val)::bigint AS valued_count,
+          sum(s.val) AS value_sum
+        FROM sample s
+        WHERE s.site_id = $1
+          AND ($2::timestamptz IS NULL OR s.ts >= $2)
+          AND ($3::timestamptz IS NULL OR s.ts < $3)
+          AND (
+            $4::text[] IS NULL
+            OR split_part(s.openfdd_key, '.', 1) = ANY($4::text[])
+            OR split_part(s.openfdd_key, '.', 1) IN (
+              SELECT e.equipment_id
+              FROM equipment e
+              WHERE e.building_id = $1
+                AND lower(btrim(e.equip_type)) = 'weather'
+            )
+          )
+        "#,
+    )
+    .bind(building_id)
+    .bind(start)
+    .bind(end)
+    .bind(equipment_bind)
+    .fetch_one(tsdb.pool())
+    .await
+    .map_err(|err| public_db_error("timescale watermark", &err))?;
+    let sample_count = row
+        .try_get::<i64, _>("sample_count")
+        .map_err(|err| public_db_error("timescale watermark", &err))?;
+    let series_count = row
+        .try_get::<i64, _>("series_count")
+        .map_err(|err| public_db_error("timescale watermark", &err))?;
+    let valued_count = row
+        .try_get::<i64, _>("valued_count")
+        .map_err(|err| public_db_error("timescale watermark", &err))?;
+    let coverage_start = row
+        .try_get::<Option<DateTime<Utc>>, _>("coverage_start")
+        .map_err(|err| public_db_error("timescale watermark", &err))?;
+    let coverage_end = row
+        .try_get::<Option<DateTime<Utc>>, _>("coverage_end")
+        .map_err(|err| public_db_error("timescale watermark", &err))?;
+    let value_sum = row
+        .try_get::<Option<f64>, _>("value_sum")
+        .map_err(|err| public_db_error("timescale watermark", &err))?;
+    let order = match coverage_end {
+        Some(ts) => timestamp_order(ts)?,
+        None => 0,
+    };
+    let utc = coverage_end
+        .map(|ts| ts.to_rfc3339_opts(SecondsFormat::Secs, true))
+        .unwrap_or_default();
+    let min_utc = coverage_start
+        .map(|ts| ts.to_rfc3339_opts(SecondsFormat::Secs, true))
+        .unwrap_or_default();
+    let sum_token = match value_sum {
+        Some(value) if value.is_finite() => format!("{:x}", value.to_bits()),
+        Some(_) => "nonfinite".to_string(),
+        None => "none".to_string(),
+    };
+    let coverage = format!(
+        "samples={sample_count};valued={valued_count};series={series_count};min={min_utc};max={utc};sum={sum_token}"
+    );
+    Ok(ScopedWatermark {
+        order,
+        utc,
+        coverage,
+    })
+}
+
+fn timestamp_order(ts: DateTime<Utc>) -> Result<u64, String> {
+    let text = ts.format("%Y%m%d%H%M%S").to_string();
+    text.parse::<u64>()
+        .map_err(|err| format!("watermark order is not numeric: {err}"))
+}
+
+fn public_db_error(kind: &str, err: &impl std::fmt::Display) -> String {
+    let detail = err.to_string();
+    let lower = detail.to_ascii_lowercase();
+    if detail.contains("://") || lower.contains("password") || lower.contains("secret") {
+        format!("{kind} failed")
+    } else {
+        format!("{kind} failed: {detail}")
+    }
+}
+
+/// Drop derived analytics cache rows and parquet for one building.
+/// Historian samples, `fdd_run`, and labeled rule-result files are kept.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "selective derived-cache repair has no HTTP route in this change"
+    )
+)]
+pub(crate) async fn repair_derived_analytics_cache(
+    tsdb: &Tsdb,
+    storage_root: &Path,
+    building_id: &str,
+) -> Result<Value, String> {
+    let removed = fdd_store::remove_derived_result_cache(storage_root, building_id)
+        .map_err(|err| format!("derived cache repair failed: {err}"))?;
+    let deleted = sqlx::query("DELETE FROM analytics_result WHERE building_id = $1")
+        .bind(building_id)
+        .execute(tsdb.pool())
+        .await
+        .map_err(|err| public_db_error("derived analytics_result delete", &err))?;
+    let samples = tsdb
+        .sample_count(building_id)
+        .await
+        .map_err(|err| public_db_error("sample count", &err))?;
+    let runs = sqlx::query("SELECT count(*)::bigint AS n FROM fdd_run WHERE site_id = $1")
+        .bind(building_id)
+        .fetch_one(tsdb.pool())
+        .await
+        .map_err(|err| public_db_error("fdd_run count", &err))?;
+    let fdd_runs = runs
+        .try_get::<i64, _>("n")
+        .map_err(|err| public_db_error("fdd_run count", &err))?;
+    Ok(json!({
+        "ok": true,
+        "derived_files_removed": removed,
+        "analytics_result_rows_deleted": deleted.rows_affected(),
+        "samples_remaining": samples,
+        "fdd_runs_remaining": fdd_runs,
+    }))
+}
+
 /// Timescale postgres-sql registry run-now (Soft-OPEN).
 pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
     let building_id = payload
@@ -4440,6 +4793,352 @@ rules:
         for id in [&site_a, &site_b, &site_fail, &site_legacy] {
             delete_site(&pool, id).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod analytics_cache_identity {
+    use super::{
+        read_analytics_cache_input_from, repair_derived_analytics_cache, AnalyticsCacheInput,
+    };
+    use chrono::{Duration, TimeZone, Utc};
+    use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch};
+
+    fn disposable(id: &str) {
+        let upper = id.to_ascii_uppercase();
+        assert!(
+            upper != "BUILDING_50" && upper != "BOSSPI" && !upper.contains("BUILDING_100"),
+            "refusing protected site id"
+        );
+    }
+
+    async fn connect() -> Option<sqlx::PgPool> {
+        let explicit = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let url = explicit
+            .clone()
+            .unwrap_or_else(|| "postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".into());
+        match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&url)
+            .await
+        {
+            Ok(pool) => Some(pool),
+            Err(err) if explicit.is_some() => {
+                panic!("OPENFDD_TEST_DATABASE_URL connect failed: {err}")
+            }
+            Err(err) => {
+                eprintln!("skip: postgres fixture unavailable: {err}");
+                None
+            }
+        }
+    }
+
+    async fn apply_schema(pool: &sqlx::PgPool) {
+        // Plain Postgres is enough. The identity queries do not need a hypertable,
+        // and the main CI job has no Timescale extension.
+        for statement in [
+            "CREATE TABLE IF NOT EXISTS site (
+                site_id text PRIMARY KEY,
+                dis text,
+                timezone text NOT NULL DEFAULT 'UTC',
+                enabled boolean NOT NULL DEFAULT true,
+                created_at timestamptz NOT NULL DEFAULT now()
+            )",
+            "CREATE TABLE IF NOT EXISTS building (
+                building_id text PRIMARY KEY,
+                site_id text REFERENCES site(site_id),
+                dis text,
+                timezone text NOT NULL DEFAULT 'UTC',
+                created_at timestamptz NOT NULL DEFAULT now()
+            )",
+            "CREATE TABLE IF NOT EXISTS equipment (
+                building_id text NOT NULL REFERENCES building(building_id),
+                equipment_id text NOT NULL,
+                equip_type text,
+                parent_equipment_id text,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (building_id, equipment_id)
+            )",
+            "CREATE TABLE IF NOT EXISTS sample (
+                ts timestamptz NOT NULL,
+                site_id text NOT NULL,
+                openfdd_key text NOT NULL,
+                haystack_id text,
+                val double precision,
+                unit text,
+                quality text,
+                PRIMARY KEY (site_id, openfdd_key, ts)
+            )",
+            "CREATE TABLE IF NOT EXISTS role_map (
+                building_id text NOT NULL,
+                equipment_id text NOT NULL,
+                openfdd_key text NOT NULL,
+                role text NOT NULL,
+                unit text,
+                PRIMARY KEY (building_id, equipment_id, openfdd_key)
+            )",
+            "CREATE TABLE IF NOT EXISTS point_map (
+                site_id text NOT NULL,
+                openfdd_key text NOT NULL,
+                haystack_id text NOT NULL,
+                role text,
+                unit text,
+                equipment_id text,
+                PRIMARY KEY (site_id, openfdd_key)
+            )",
+            "CREATE TABLE IF NOT EXISTS fdd_run (
+                run_id bigserial PRIMARY KEY,
+                site_id text NOT NULL,
+                equipment_id text NOT NULL,
+                rule_id text NOT NULL,
+                window_start timestamptz NOT NULL,
+                window_end timestamptz NOT NULL,
+                poll_seconds integer NOT NULL DEFAULT 300,
+                confirm_min double precision NOT NULL DEFAULT 0,
+                config_hash text,
+                status text NOT NULL,
+                fault_seconds integer,
+                fault_hours double precision,
+                sample_count integer,
+                detail jsonb,
+                created_at timestamptz NOT NULL DEFAULT now()
+            )",
+            "CREATE TABLE IF NOT EXISTS analytics_result (
+                building_id text NOT NULL,
+                query_id text NOT NULL,
+                query_version text NOT NULL,
+                window_key text NOT NULL,
+                config_hash text NOT NULL,
+                stale boolean NOT NULL DEFAULT false,
+                payload jsonb NOT NULL,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (building_id, query_id, query_version, window_key, config_hash)
+            )",
+        ] {
+            crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
+        }
+        for statement in [
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS haystack_id text",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS unit text",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS quality text",
+        ] {
+            crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
+        }
+    }
+
+    async fn cleanup(pool: &sqlx::PgPool, site: &str) {
+        for sql in [
+            "DELETE FROM analytics_result WHERE building_id = $1",
+            "DELETE FROM fdd_run WHERE site_id = $1",
+            "DELETE FROM sample WHERE site_id = $1",
+            "DELETE FROM role_map WHERE building_id = $1",
+            "DELETE FROM point_map WHERE site_id = $1",
+            "DELETE FROM equipment WHERE building_id = $1",
+            "DELETE FROM building WHERE building_id = $1",
+            "DELETE FROM site WHERE site_id = $1",
+        ] {
+            let _ = sqlx::query(sql).bind(site).execute(pool).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn scoped_watermark_model_remap_and_repair_keep_history() {
+        let Some(pool) = connect().await else {
+            return;
+        };
+        apply_schema(&pool).await;
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        let site = format!("w1cache{}", &token[..8]);
+        disposable(&site);
+        let eq_a = format!("eq{}", &token[..8]);
+        let eq_prefix = format!("eq{}0", &token[..8]);
+        let weather = format!("wx{}", &token[..8]);
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        tsdb.upsert_equipment(&site, &eq_a, Some("ahu"))
+            .await
+            .expect("ahu");
+        tsdb.upsert_equipment(&site, &eq_prefix, Some("ahu"))
+            .await
+            .expect("longer id");
+        tsdb.upsert_equipment(&site, &weather, Some("weather"))
+            .await
+            .expect("weather");
+        let t0 = Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap();
+        let mut batch = UpsertBatch::default();
+        batch.push(SampleRow::new(t0, &site, format!("{eq_a}.sat"), Some(70.0)));
+        batch.push(SampleRow::new(
+            t0,
+            &site,
+            format!("{eq_prefix}.sat"),
+            Some(71.0),
+        ));
+        tsdb.upsert_samples(&batch).await.expect("samples");
+        sqlx::query(
+            "INSERT INTO role_map (building_id, equipment_id, openfdd_key, role, unit)
+             VALUES ($1, $2, $3, 'sat', 'degF')",
+        )
+        .bind(&site)
+        .bind(&eq_a)
+        .bind(format!("{eq_a}.sat"))
+        .execute(&pool)
+        .await
+        .expect("role");
+        sqlx::query(
+            "INSERT INTO fdd_run (site_id, equipment_id, rule_id, window_start, window_end, status)
+             VALUES ($1, $2, 'FC1', $3, $4, 'PASS')",
+        )
+        .bind(&site)
+        .bind(&eq_a)
+        .bind(t0)
+        .bind(t0 + Duration::hours(1))
+        .execute(&pool)
+        .await
+        .expect("fdd_run");
+        sqlx::query(
+            "INSERT INTO analytics_result
+                (building_id, query_id, query_version, window_key, config_hash, payload)
+             VALUES ($1, 'rcx-preset', 'rcx-preset-v1', 'open', 'old', '{}'::jsonb)",
+        )
+        .bind(&site)
+        .execute(&pool)
+        .await
+        .expect("analytics_result");
+
+        let root = tempfile::tempdir().expect("root");
+        let history = root
+            .path()
+            .join(format!("history/building_id={site}/year=2026/month=06"));
+        std::fs::create_dir_all(&history).expect("history");
+        let sample_file = history.join("part-20260601T000000Z-live.parquet");
+        std::fs::write(&sample_file, b"sample").expect("sample file");
+        let labeled = root.path().join(format!("rule_results/{site}"));
+        std::fs::create_dir_all(&labeled).expect("labels");
+        let rule_file = labeled.join("FC1.json");
+        std::fs::write(&rule_file, br#"{"rule_id":"FC1","status":"PASS"}"#).expect("label");
+        let cache_dir = root.path().join(format!(
+            "analytics_results/building_id={site}/query_id=rcx-preset"
+        ));
+        std::fs::create_dir_all(&cache_dir).expect("cache dir");
+        std::fs::write(cache_dir.join("results.parquet"), b"derived").expect("cache file");
+
+        let scoped = read_analytics_cache_input_from(
+            &tsdb,
+            &site,
+            Some(t0),
+            Some(t0 + Duration::hours(1)),
+            std::slice::from_ref(&eq_a),
+        )
+        .await;
+        let first = scoped.watermark.expect("watermark");
+        let model = scoped.model_revision.expect("model");
+        // The longer equipment token shares a prefix and must not be counted.
+        assert!(
+            first.coverage.starts_with("samples=1;"),
+            "exact token only: {}",
+            first.coverage
+        );
+
+        let mut weather_batch = UpsertBatch::default();
+        weather_batch.push(SampleRow::new(
+            t0 + Duration::minutes(5),
+            &site,
+            format!("{weather}.web_oa_t"),
+            Some(60.0),
+        ));
+        tsdb.upsert_samples(&weather_batch)
+            .await
+            .expect("weather sample");
+        let with_weather = read_analytics_cache_input_from(
+            &tsdb,
+            &site,
+            Some(t0),
+            Some(t0 + Duration::hours(1)),
+            std::slice::from_ref(&eq_a),
+        )
+        .await
+        .watermark
+        .expect("weather watermark");
+        assert!(with_weather.coverage.starts_with("samples=2;"));
+        assert_ne!(with_weather.order, first.order);
+
+        sqlx::query(
+            "UPDATE sample SET val = 72.0 WHERE site_id = $1 AND openfdd_key = $2 AND ts = $3",
+        )
+        .bind(&site)
+        .bind(format!("{eq_a}.sat"))
+        .bind(t0)
+        .execute(&pool)
+        .await
+        .expect("edit value");
+        let edited = read_analytics_cache_input_from(
+            &tsdb,
+            &site,
+            Some(t0),
+            Some(t0 + Duration::hours(1)),
+            std::slice::from_ref(&eq_a),
+        )
+        .await
+        .watermark
+        .expect("edited watermark");
+        assert_eq!(edited.order, with_weather.order);
+        assert_ne!(edited.coverage, with_weather.coverage);
+
+        sqlx::query(
+            "UPDATE role_map SET role = 'sat_sp' WHERE building_id = $1 AND equipment_id = $2",
+        )
+        .bind(&site)
+        .bind(&eq_a)
+        .execute(&pool)
+        .await
+        .expect("remap");
+        let remapped = read_analytics_cache_input_from(&tsdb, &site, None, None, &[] as &[String])
+            .await
+            .model_revision
+            .expect("remapped model");
+        assert_ne!(remapped, model);
+
+        let before_samples = tsdb.sample_count(&site).await.expect("count");
+        let repair = repair_derived_analytics_cache(&tsdb, root.path(), &site)
+            .await
+            .expect("repair");
+        assert_eq!(
+            repair["samples_remaining"],
+            serde_json::json!(before_samples)
+        );
+        assert_eq!(repair["fdd_runs_remaining"], serde_json::json!(1));
+        assert_eq!(
+            repair["analytics_result_rows_deleted"],
+            serde_json::json!(1)
+        );
+        assert!(repair["derived_files_removed"].as_u64().unwrap_or(0) >= 1);
+        assert_eq!(
+            tsdb.sample_count(&site).await.expect("samples stay"),
+            before_samples
+        );
+        assert!(sample_file.is_file(), "historian sample file stays");
+        assert!(rule_file.is_file(), "labeled result stays");
+        assert!(!cache_dir.join("results.parquet").exists());
+        let runs: i64 =
+            sqlx::query_scalar("SELECT count(*)::bigint FROM fdd_run WHERE site_id = $1")
+                .bind(&site)
+                .fetch_one(&pool)
+                .await
+                .expect("runs");
+        assert_eq!(runs, 1);
+        cleanup(&pool, &site).await;
+
+        pool.close().await;
+        let failed: AnalyticsCacheInput =
+            read_analytics_cache_input_from(&tsdb, &site, None, None, &[]).await;
+        let reason = failed.watermark.expect_err("closed pool is a failed read");
+        assert!(failed.model_revision.is_err());
+        assert!(!reason.contains("://"));
+        assert!(!reason.to_ascii_lowercase().contains("password"));
+        let _ = reason;
     }
 }
 

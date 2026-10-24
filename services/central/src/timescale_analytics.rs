@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use fdd_tsdb::Tsdb;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::sync::OnceLock;
 
@@ -66,6 +67,46 @@ fn analytics_pack_version() -> &'static str {
         .as_str()
 }
 
+/// Pack version plus a content hash of the registry and included SQL bodies.
+/// The version string alone is not the cache identity.
+pub(crate) fn analytics_sql_pack_identity() -> &'static str {
+    static PACK: OnceLock<String> = OnceLock::new();
+    PACK.get_or_init(|| {
+        let mut hasher = Sha256::new();
+        hasher.update(b"analytics-sql-pack-v1");
+        for body in [
+            ANALYTICS_REGISTRY_JSON,
+            MOTOR_WEEKLY_SQL,
+            BAS_VS_WEB_SQL,
+            ECONOMIZER_SQL,
+            PLANT_HEALTH_SQL,
+            ROLE_TIMESERIES_SQL,
+            MECH_COOLING_SQL,
+            SENSOR_STATS_SQL,
+            SCHEDULE_SQL,
+            SENSOR_FAULTS_SQL,
+            SETPOINTS_SQL,
+            DIURNAL_SQL,
+            TOPOLOGY_SQL,
+            METERING_SQL,
+            PID_HUNTING_SQL,
+            SQL_ANOMALY_SQL,
+            MV_CHANGE_POINT_SQL,
+            FUEL_DAILY_SQL,
+            RCX_PRESET_COVERAGE_SQL,
+        ] {
+            hasher.update((body.len() as u64).to_le_bytes());
+            hasher.update(body.as_bytes());
+        }
+        format!(
+            "{}:{}",
+            analytics_pack_version(),
+            hex::encode(hasher.finalize())
+        )
+    })
+    .as_str()
+}
+
 /// Soft-OPEN: SQL body from `sql/analytics` pack (hash-pinned).
 /// Sample queries bind `$1` site + `$2`/`$3` window + `$4` equipment_ids.
 /// Inventory (`plant_health`) binds `$1` building + `$2` equipment_ids only.
@@ -75,13 +116,6 @@ const BAS_VS_WEB_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/bas_vs_web_oat.sql");
 const ECONOMIZER_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/economizer_deltas.sql");
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "inventory SQL shape is asserted in tests; health matrices join FDD flags"
-    )
-)]
 const PLANT_HEALTH_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/plant_health_inventory.sql");
 const ROLE_TIMESERIES_SQL: &str =

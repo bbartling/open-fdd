@@ -1,0 +1,2 @@
+@prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .
+<urn:broken> ph:hasTag [

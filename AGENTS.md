@@ -21,6 +21,14 @@ connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 
 **Software-engineering agent OS:** [`openfdd_agent_spec/`](openfdd_agent_spec/) — architecture locks, skills, Milestone A.
 
+
+**Current test tooling:** [qualification](scripts/qualification/README.md),
+[stress v2 evidence](scripts/stress/README.md), [parsed semantic known answers](scripts/qualification/semantic/README.md)
+and [ZAP limits](scripts/qualification/zap/README.md). Offline evaluator passes
+are not live application/security qualification.3.x OT pins/fieldbus notes below
+are historical; do not restore retired transports to satisfy them. Keep one
+container/scanner workload at a time and save frequent evidence checkpoints.
+
 **Release outcomes:** [`MILESTONES.md`](MILESTONES.md) separates implementation, candidate verification and release. Wave U's 2026-09-20 independent acceptance audit is the local Cursor handoff at `.cursor/plans/wave_u_independent_acceptance_audit.plan.md`; follow its reopened acceptance criteria under the Wave U master. A missing Nessus license blocks the actual assessment, not standalone/field readiness work.
 
 **Active recovery / Vibe 21 twin program:** [`tools/open-fdd-vibe21-production/`](tools/open-fdd-vibe21-production/README.md) · capability ledger [`docs/migration/react-rust/capabilities.yaml`](docs/migration/react-rust/capabilities.yaml). Modernization Phase 1+2 exit is **architecture direction**; Vibe 21 recovery is the active qualification program (not “Phase 1 complete”).
@@ -76,8 +84,8 @@ Patch-cycle train after Plans 1–4: log gate FAILs in [`docs/operations/BUG_REP
 ## Safe scripts
 
 ```bash
-./scripts/openfdd_stack_pull.sh react-ot
-./scripts/openfdd_stack_up.sh react-ot
+./scripts/openfdd_stack_pull.sh portal
+./scripts/openfdd_stack_up.sh portal
 ./scripts/openfdd_stack_up.sh csv
 ```
 
@@ -135,12 +143,12 @@ Railway is an **experimental cloud path**, not a replacement for the LAN/VPN/OT 
 **Agent ops (bensbench):** use the **Railway CLI** for backup + hub tip re-pin — [`openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md`](openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) · [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Do **not** confuse Railway CLI / Railway MCP with **`openfdd-mcp`** FDD tools. **FQ OPS PINNED:** **`sha-7ad6479`** / **3.5.43** (Wave U V6 · stress `20260921T234148Z`). Rollback **`sha-1677c33`** / **3.5.37** (prior Wave U FQ) or Soft Tip B **`sha-4a5c11e`** / **3.5.28**.
 
 - **CSV-only lab:** `openfdd-central` + `openfdd-web`.
-- **Cloud MQTTS hub (preferred when live OT is the goal):** `openfdd-central` + `openfdd-web` + **`openfdd-mqtt`** on Railway private networking; keep **`openfdd-fieldbus` on-prem** publishing MQTTS into the cloud broker. MQTTS is the point of the hub — do not leave mqtt off by default for live sites.
+- **Archived3.x cloud MQTTS reference (not a4.0 deployment step):** `openfdd-central` + `openfdd-web` + **`openfdd-mqtt`** on Railway private networking; keep **`openfdd-fieldbus` on-prem** publishing MQTTS into the cloud broker. MQTTS is retired from the current portal product; preserve this transport recipe in the archive.
 - Real optional image: `openfdd-mcp`.
 - Do **not** invent `openfdd-commission`, `openfdd-mcp-rag`, or a Python/Streamlit commissioning runtime.
 - Both central and web listen on container port `8080`; local Compose maps web host port `3000` to container `8080`.
 - Central health is `GET /api/health`, not `/health`.
-- **Deploy order:** central (healthy `/api/health`) → mqtt (if hub) → web. Web uses `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (no `http://`). Tip web images resolve upstream DNS lazily (`OPENFDD_NGINX_RESOLVER=auto`) so nginx does not crash if private DNS is not ready at process start.
+- **Deploy order:** Timescale → central (healthy `/api/health`) → web. Web uses `OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080` (no `http://`). Tip web images resolve upstream DNS lazily (`OPENFDD_NGINX_RESOLVER=auto`) so nginx does not crash if private DNS is not ready at process start.
 - Cloud pulls require public GHCR package visibility or Railway registry pull credentials. Railway private-registry credentials are plan-dependent; public GHCR is the simplest open-source path.
 - `OPENFDD_JWT_SECRET` and `OPENFDD_ADMIN_PASSWORD` must be deployment-unique secrets and must never be committed.
 - Attach persistent storage at central `/workspace` before relying on imported packages across redeploys.
@@ -149,7 +157,7 @@ Railway is an **experimental cloud path**, not a replacement for the LAN/VPN/OT 
 
 Full guide: [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Checklist: [`docs/operations/RAILWAY_DEPLOYMENT_CHECKLIST.md`](docs/operations/RAILWAY_DEPLOYMENT_CHECKLIST.md). Image/tag contract: [`docs/operations/ghcr-images.md`](docs/operations/ghcr-images.md). Local stack entry point remains `./scripts/openfdd_stack_up.sh`.
 
-A Railway one-click template should eventually encode **central → mqtt → web** with generated secrets. Do not add a README deployment button until the real template exists and has been verified.
+A Railway one-click template should eventually encode **Timescale → central → web** with generated secrets. Do not add a README deployment button until the real template exists and has been verified.
 
 ## Low-RAM hosts (bensbench)
 
@@ -181,7 +189,7 @@ SPA shows `GET /api/health` → `{semver}+shortsha`. On each turnkey platform pa
 
 ## Analytics cache and disk budget
 
-**Cache ≠ historian.** The durable product historian is **Timescale** ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)). Separately, analytics / RCx / sensor-fault **result cache** may persist as Parquet under `analytics_results/` (schema `analytics-result-parquet-v2`), keyed by the caller `building_id`, query id, query version, window, and config hash — that cache is not the telemetry store and is not co-canonical with Timescale. Explicit JSON nulls stay on the row that set them. Request `equipment_ids` are part of that config hash. This cache does not classify equipment with `equipment_id` text filters and does not invent `equipType`. AFDD `{rule_id}.json` stays the rule-runner path. A newer historian watermark sets `stale: true` unless the client sends `refresh: true`. CSV buildings unload the working set when the job finishes; the SPA leaves the lease on `?site=` change; idle default is 60s; max interactive sessions default to 2. MQTTS keeps a small ingest buffer keyed by the envelope site id. Soft-OPEN until edge disk proof; Soft-OPEN ≠ FQ.
+**Cache ≠ historian.** The durable product historian is **Timescale** ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)). Separately, analytics / RCx / sensor-fault **result cache** may persist as Parquet under `analytics_results/` (schema `analytics-result-parquet-v2`), keyed by the caller `building_id`, query id, query version, window, and config hash — that cache is not the telemetry store and is not co-canonical with Timescale. Explicit JSON nulls stay on the row that set them. Request `equipment_ids` are part of that config hash. This cache does not classify equipment with `equipment_id` text filters and does not invent `equipType`. AFDD `{rule_id}.json` stays the rule-runner path. The cache key includes the result contract, SQL pack, and model revision. A newer scoped Timescale watermark or coverage sets `stale: true` unless the client sends `refresh: true`. A failed watermark read is explicit and is not treated as order zero. CSV buildings unload the working set when the job finishes; the SPA leaves the lease on `?site=` change; idle default is 60s; max interactive sessions default to 2. MQTTS keeps a small ingest buffer keyed by the envelope site id. Soft-OPEN until edge disk proof; Soft-OPEN ≠ FQ.
 
 Local/edge disk budget defaults to **100 GiB**, oldest cache artifacts first (`OPENFDD_LOCAL_DATA_BUDGET_GIB`). Railway eviction stays off unless `OPENFDD_DATA_BUDGET_ENABLED=1`. Soft-OPEN Railway/ACME: **no site backups** unless Ben asks — Timescale-only, dual-write false ([TIMESCALE_WAVE_X.md](docs/operations/TIMESCALE_WAVE_X.md)). `OPENFDD_TEST_DEPLOY=1` skips release backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Docs: [`docs/operations/ANALYTICS_RESULT_CACHE.md`](docs/operations/ANALYTICS_RESULT_CACHE.md) · [`docs/operations/DATA_RETENTION_BUDGET.md`](docs/operations/DATA_RETENTION_BUDGET.md).
 

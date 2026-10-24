@@ -61,6 +61,7 @@ from helpers import (  # noqa: E402
     post_sparql,
     print_table,
     require_building_id,
+    record_check,
     resolve_base_url,
     run_child,
     safe_print,
@@ -111,15 +112,15 @@ def _first_ahu(http, headers, building_id: str) -> str | None:
         http,
         headers,
         building_id=building_id,
-        query=f"""
+        query="""
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX ph: <https://project-haystack.org/def/ph/4.0.0#>
 PREFIX phIoT: <https://project-haystack.org/def/phIoT/4.0.0#>
 PREFIX ofdd: <urn:openfdd:ns#>
-SELECT DISTINCT ?equipmentId WHERE {{
+SELECT DISTINCT ?equipmentId WHERE {
   ?equip ofdd:equipmentId ?equipmentId .
-  {{ ?equip rdf:type phIoT:ahu . }} UNION {{ ?equip ph:hasTag phIoT:ahu . }}
-}}
+  { ?equip rdf:type phIoT:ahu . } UNION { ?equip ph:hasTag phIoT:ahu . }
+}
 ORDER BY ?equipmentId
 LIMIT 1
 """,
@@ -176,7 +177,6 @@ def _guess_role(column: str, selection: str, needed: tuple[str, ...]) -> str | N
         role = exact.get(key)
         if role and role in needed:
             return role
-    blob = f"{column} {selection}".lower().replace("-", "_")
     mapping = [
         ("discharge_air_temp_sp", "discharge-air-temp-sp"),
         ("discharge_air_temp", "discharge-air-temp"),
@@ -190,8 +190,9 @@ def _guess_role(column: str, selection: str, needed: tuple[str, ...]) -> str | N
         ("fan_cmd", "fan-cmd"),
         ("sf_sts", "fan-status"),
     ]
+    tokens = {(token or "").strip().lower().replace("-", "_") for token in (column, selection)}
     for needle, role in mapping:
-        if needle in blob and role in needed:
+        if needle in tokens and role in needed:
             return role
     return None
 
@@ -213,6 +214,8 @@ def _build_df_from_resolve(
         col = (r.get("column") or r.get("pointId") or "").strip()
         sel = (r.get("fddSelection") or r.get("canonicalRole") or "").strip()
         role = _guess_role(col, sel, needed)
+        if role and role in by_role and by_role[role] != col:
+            raise MissingFixture(f"ambiguous candidates for {role}; explicit model approval required")
         if role and role in needed and col and role not in by_role:
             by_role[role] = col
     missing = [n for n in needed if n not in by_role]
@@ -250,6 +253,9 @@ def _build_df_from_resolve(
         raise MissingFixture(
             f"{equipment_id} oracle frame has {len(df)} rows (< {MIN_SAMPLES})"
         )
+    gaps = df.index.to_series().diff().dropna().dt.total_seconds()
+    if not gaps.eq(POLL_S).all():
+        raise MissingFixture("this fixed-grid oracle requires complete 300-second cadence; irregular/COV elapsed-time qualification is separate")
     df.attrs.update(equipment_id=equipment_id, equipment_type="ahu", building_id=building_id)
     return df
 
@@ -334,12 +340,14 @@ def compare_sql_to_oracle(
         return "FAIL", None, f"no SQL row with identity ({rule_id}, {equipment_id}); got {seen}"
     if len(hits) > 1:
         return "FAIL", None, f"{len(hits)} SQL rows share identity ({rule_id}, {equipment_id})"
+    if hits[0].get("status") not in {"PASS", "FAULT"}:
+        return "FAIL", None, f"{rule_id}/{equipment_id} was not a successful diagnostic evaluation"
     raw = hits[0].get("fault_hours")
     try:
         s_hours = float(raw)
     except (TypeError, ValueError):
         return "FAIL", None, f"{rule_id}/{equipment_id} SQL fault_hours={raw!r} is not numeric"
-    if not math.isfinite(s_hours):
+    if not math.isfinite(s_hours) or s_hours < 0 or not math.isfinite(oracle_hours) or oracle_hours < 0:
         return "FAIL", s_hours, f"{rule_id}/{equipment_id} SQL fault_hours={s_hours} not finite"
     if math.isclose(oracle_hours, s_hours, abs_tol=HOURS_TOL):
         return "PASS", s_hours, f"{rule_id}/{equipment_id} SQL≈pandas (|Δ|≤{HOURS_TOL})"
@@ -519,6 +527,7 @@ def main(argv: list[str] | None = None) -> int:
             if status == "PASS":
                 safe_print(f"PASS {msg}")
                 compared += 1
+                record_check(f"oracle.{rid}", True, comparisons=1)
                 continue
             if status == "BLOCKED":
                 safe_print(f"BLOCKED {msg}")
@@ -529,7 +538,8 @@ def main(argv: list[str] | None = None) -> int:
                 safe_print(
                     f"WARN (--allow-satdev-drift): {msg} — likely #1253 quality-layer gap"
                 )
-                compared += 1
+                # A waived mismatch is diagnostic evidence, never strict parity.
+                blocked += 1
                 continue
             if rid == "AHU-SATDEV" and abs(quality_delta) > HOURS_TOL:
                 safe_print(

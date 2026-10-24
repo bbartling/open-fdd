@@ -36,6 +36,8 @@ from helpers import (  # noqa: E402
     login,
     parse_connection,
     require_building_id,
+    record_check,
+    ensure_repo_on_path,
     run_child,
     safe_print,
     wait_until_ready,
@@ -107,14 +109,15 @@ def main(argv: list[str] | None = None) -> int:
                 "WARN 10 — JWT lacks mutate permission for semantic-meta "
                 "(viewer?). Soft-OPEN ≠ FQ"
             )
-            return 0
-        if status >= 500:
-            safe_print("FAIL: semantic-meta dry_run returned 5xx")
+            return 2
+        if status != 200:
+            safe_print("FAIL: semantic-meta dry_run did not return HTTP 200")
             return 1
         if not isinstance(body, dict) or body.get("ok") is not True or body.get("dry_run") is not True:
             safe_print(f"FAIL: dry_run contract missing ok/dry_run=true — {body!r}")
             return 1
         safe_print("  dry_run contract OK")
+        record_check("semantic_meta_dry_run", True)
 
         # Optional: stale CAS should 409 when a tip exists (skip if building empty)
         status_g, _, raw_g = http.request(
@@ -147,16 +150,27 @@ def main(argv: list[str] | None = None) -> int:
                 safe_print(f"FAIL: expected HTTP 409 conflict, got {status_c} {raw_c[:200]!r}")
                 return 1
             safe_print("  revision conflict (409) OK")
+            status_after, _, raw_after = http.request(
+                "GET", "/api/model/semantic-meta", headers=headers,
+                params={"building_id": building_id}, timeout=30.0,
+            )
+            after = json.loads(raw_after.decode("utf-8") or "{}")
+            if status_after != 200 or after != got:
+                safe_print("FAIL: rejected CAS changed the model snapshot or readback failed")
+                return 1
+            record_check("stale_revision", True)
         else:
             safe_print(
                 "NOTE: no tip revision yet — skip live 409 CAS "
                 f"(GET status={status_g} present={got.get('present') if isinstance(got, dict) else None})"
             )
+            return 2
 
         # Turtle overlay dry_run (BPS PUT /api/model/overlay shape)
         sample_ttl = (
-            "@prefix ph: <https://project-haystack.org/def/ph#> .\n"
-            f"<urn:openfdd:site/{building_id}#equip-AHU_1> a ph:equip ;\n"
+            "@prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .\n"
+            "@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .\n"
+            f"<urn:openfdd:site/{building_id}#equip-AHU_1> a phIoT:equip ;\n"
             '  ph:dis "AHU 1" .\n'
         )
         status_o, _, raw_o = http.request(
@@ -186,8 +200,9 @@ def main(argv: list[str] | None = None) -> int:
                 "WARN 10 — JWT lacks mutate permission for overlay "
                 "(viewer?). Soft-OPEN ≠ FQ"
             )
-        elif status_o >= 500:
-            safe_print("FAIL: overlay dry_run returned 5xx")
+            return 2
+        elif status_o != 200:
+            safe_print("FAIL: overlay dry_run did not return HTTP 200")
             return 1
         elif (
             not isinstance(overlay_body, dict)
@@ -198,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         else:
             safe_print("  overlay dry_run contract OK")
+            record_check("overlay_dry_run", True)
 
         # Equip upsert dry_run (BPS POST /api/model/equip)
         status_e, _, raw_e = http.request(
@@ -229,8 +245,9 @@ def main(argv: list[str] | None = None) -> int:
                 "WARN 10 — JWT lacks mutate permission for equip "
                 "(viewer?). Soft-OPEN ≠ FQ"
             )
-        elif status_e >= 500:
-            safe_print("FAIL: equip dry_run returned 5xx")
+            return 2
+        elif status_e != 200:
+            safe_print("FAIL: equip dry_run did not return HTTP 200")
             return 1
         elif (
             not isinstance(equip_body, dict)
@@ -241,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         else:
             safe_print("  equip dry_run contract OK")
+            record_check("equip_dry_run", True)
 
         # BPS-compatible agent-context bundle (read)
         status_a, _, raw_a = http.request(
@@ -271,9 +289,10 @@ def main(argv: list[str] | None = None) -> int:
             safe_print("FAIL: agent-context recipes missing")
             return 1
         safe_print("  agent-context contract OK")
+        record_check("agent_context", True)
 
         # BPS-compatible TTL alias (read)
-        status_t, hdrs_t, _raw_t = http.request(
+        status_t, hdrs_t, raw_t = http.request(
             "GET",
             "/api/model/ttl",
             headers=headers,
@@ -282,9 +301,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         ctype = (hdrs_t.get("content-type") or "").lower()
         safe_print(f"GET /api/model/ttl -> HTTP {status_t} content-type={ctype!r}")
-        if status_t not in (200, 400, 404):
+        if status_t != 200:
             safe_print("FAIL: /api/model/ttl unexpected status")
             return 1
+        ensure_repo_on_path()
+        from scripts.qualification.semantic.qualify import parse_model
+        graph = parse_model(raw_t)
+        if len(graph) == 0:
+            safe_print("BLOCKED: model TTL graph empty")
+            return 2
+        record_check("ttl_parsed", True)
 
     safe_print(
         "PASS 10 — semantic-meta + overlay + equip dry_run (+ optional CAS) + "

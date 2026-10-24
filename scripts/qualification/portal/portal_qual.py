@@ -29,6 +29,12 @@ MIN_SECRET_CHARS = 32
 JWT_SECRET_BYTES = 48
 PACKAGE_START = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
 STEP_STATUSES = frozenset({"PASS", "FAIL", "ERROR", "BLOCKED", "SKIPPED", "NOT_APPLICABLE"})
+REQUIRED_PORTAL_SERVICES = frozenset({"central", "web", "timescale", "nf-emulator"})
+VIEWER_WRITE_CHECK_IDS = frozenset(
+    f"y.authz.viewer_{action}_{scope}_denied"
+    for action in ("import", "append", "purge", "delete")
+    for scope in ("own", "foreign")
+)
 
 
 def new_secret(nbytes: int = JWT_SECRET_BYTES) -> str:
@@ -242,6 +248,82 @@ def probe_config(plan: dict[str, Any], base_url: str) -> dict[str, Any]:
     }
 
 
+def validate_identity(
+    identity: Any, expected_role: str, expected_tenant_id: str
+) -> tuple[bool, str]:
+    """Require the authenticated identity to have exactly the planned role and tenant."""
+    if not isinstance(identity, dict):
+        return False, "identity response must be an object"
+    if identity.get("ok") is not True or identity.get("multi_tenant") is not True or identity.get("hub_admin") is not False:
+        return False, "identity must be successful, multi-tenant and non-hub-admin"
+    role = identity.get("role")
+    if not isinstance(role, str) or role.lower() != expected_role.lower():
+        return False, f"role mismatch (expected {expected_role})"
+    tenant_ids = identity.get("tenant_ids")
+    if not isinstance(tenant_ids, list) or tenant_ids != [expected_tenant_id]:
+        return False, f"tenant_ids mismatch (expected exactly [{expected_tenant_id}])"
+    return True, "identity role and single-tenant scope match"
+
+
+def validate_viewer_write_assertions(checks: Any) -> tuple[bool, str]:
+    """Require every viewer write assertion exactly once and PASS each one."""
+    if not isinstance(checks, list):
+        return False, "checks must be a list"
+    observed: dict[str, list[Any]] = {}
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        check_id = check.get("check_id")
+        if isinstance(check_id, str) and check_id.startswith("y.authz.viewer_"):
+            observed.setdefault(check_id, []).append(check.get("status"))
+
+    missing = sorted(VIEWER_WRITE_CHECK_IDS - observed.keys())
+    unexpected = sorted(observed.keys() - VIEWER_WRITE_CHECK_IDS)
+    duplicates = sorted(check_id for check_id, statuses in observed.items() if len(statuses) != 1)
+    non_pass = sorted(
+        check_id for check_id, statuses in observed.items()
+        if check_id in VIEWER_WRITE_CHECK_IDS and statuses != ["PASS"]
+    )
+    problems = []
+    if missing:
+        problems.append("missing: " + ", ".join(missing))
+    if unexpected:
+        problems.append("unexpected: " + ", ".join(unexpected))
+    if duplicates:
+        problems.append("duplicate: " + ", ".join(duplicates))
+    if non_pass:
+        problems.append("not PASS: " + ", ".join(non_pass))
+    if problems:
+        return False, "; ".join(problems)
+    return True, f"all {len(VIEWER_WRITE_CHECK_IDS)} viewer write assertions PASS exactly once"
+
+
+def validate_required_services(service_names: Any) -> tuple[bool, str]:
+    """Require exactly the known service tokens in the disposable portal stack."""
+    if isinstance(service_names, str):
+        names = service_names.split()
+    elif isinstance(service_names, (list, tuple, set, frozenset)):
+        names = list(service_names)
+    else:
+        return False, "service names must be a string or sequence"
+    if any(not isinstance(name, str) or not name for name in names):
+        return False, "service names contain an invalid token"
+    actual = set(names)
+    duplicates = sorted(name for name in actual if names.count(name) > 1)
+    missing = sorted(REQUIRED_PORTAL_SERVICES - actual)
+    unexpected = sorted(actual - REQUIRED_PORTAL_SERVICES)
+    if duplicates or missing or unexpected:
+        problems = []
+        if missing:
+            problems.append("missing: " + ", ".join(missing))
+        if unexpected:
+            problems.append("unexpected: " + ", ".join(unexpected))
+        if duplicates:
+            problems.append("duplicate: " + ", ".join(duplicates))
+        return False, "; ".join(problems)
+    return True, "exact required service set present"
+
+
 def read_steps(path: Path) -> list[dict[str, Any]]:
     steps = []
     if not path.is_file():
@@ -327,6 +409,37 @@ def _cmd_probe_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_validate_identity(args: argparse.Namespace) -> int:
+    try:
+        identity = json.load(sys.stdin)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        print(f"invalid /api/auth/me JSON: {exc}", file=sys.stderr)
+        return 1
+    valid, detail = validate_identity(identity, args.role, args.tenant_id)
+    print(detail)
+    return 0 if valid else 1
+
+
+def _cmd_validate_viewer_write_matrix(args: argparse.Namespace) -> int:
+    try:
+        report = json.loads(args.report.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"cannot read security report: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(report, dict):
+        print("security report must be an object", file=sys.stderr)
+        return 1
+    valid, detail = validate_viewer_write_assertions(report.get("checks"))
+    print(detail)
+    return 0 if valid else 1
+
+
+def _cmd_validate_services(args: argparse.Namespace) -> int:
+    valid, detail = validate_required_services(args.services)
+    print(detail)
+    return 0 if valid else 1
+
+
 def _cmd_verdict(args: argparse.Namespace) -> int:
     result = verdict(read_steps(args.steps), list(args.required), args.suite)
     result["image_tag"] = args.image_tag
@@ -364,6 +477,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-url", required=True)
     p.add_argument("--out", type=Path, required=True)
     p.set_defaults(fn=_cmd_probe_config)
+    p = sub.add_parser("validate-identity")
+    p.add_argument("--role", required=True)
+    p.add_argument("--tenant-id", required=True)
+    p.set_defaults(fn=_cmd_validate_identity)
+    p = sub.add_parser("validate-viewer-write-matrix")
+    p.add_argument("--report", type=Path, required=True)
+    p.set_defaults(fn=_cmd_validate_viewer_write_matrix)
+    p = sub.add_parser("validate-services")
+    p.add_argument("services", nargs="+")
+    p.set_defaults(fn=_cmd_validate_services)
     p = sub.add_parser("verdict")
     p.add_argument("--steps", type=Path, required=True)
     p.add_argument("--suite", required=True)

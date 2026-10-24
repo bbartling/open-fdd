@@ -28,6 +28,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import hashlib
+import math
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -41,6 +44,7 @@ from helpers import (  # noqa: E402
     EXIT_FAIL,
     EXIT_PASS,
     RESULT_FILE_ENV,
+    RUN_ID_ENV,
     apply_base_url,
     resolve_base_url,
     safe_print,
@@ -62,6 +66,8 @@ class Step:
     required: bool
     extra_args: tuple[str, ...] = ()
     skip_reason: str | None = None
+    required_checks: tuple[str, ...] = ()
+    minimum_comparisons: int = 0
 
 
 @dataclass
@@ -71,6 +77,9 @@ class StepResult:
     status: str
     detail: str = ""
     exit_code: int | None = None
+    assertion_count: int = 0
+    comparison_count: int = 0
+    evidence_sha256: str | None = None
 
 
 @dataclass
@@ -102,7 +111,7 @@ def _is_local_base(base: str) -> bool:
 
 
 def _read_result_file(path: Path) -> dict | None:
-    if not path.is_file():
+    if not path.is_file() or path.stat().st_size > 2 * 1024 * 1024:
         return None
     try:
         body = json.loads(path.read_text(encoding="utf-8"))
@@ -118,6 +127,7 @@ def run_step(
     scripts_dir: Path,
     result_dir: Path,
     timeout_s: float,
+    run_id: str,
 ) -> StepResult:
     if step.skip_reason:
         return StepResult(step.script, step.required, SKIPPED, step.skip_reason)
@@ -134,6 +144,7 @@ def run_step(
     result_file.unlink(missing_ok=True)
     env = dict(os.environ)
     env[RESULT_FILE_ENV] = str(result_file)
+    env[RUN_ID_ENV] = run_id
     cmd = [sys.executable, str(path), *conn_args, *step.extra_args]
     try:
         proc = subprocess.run(cmd, cwd=str(HERE.parents[1]), env=env, timeout=timeout_s)
@@ -158,7 +169,41 @@ def run_step(
             f"exit 0 but result file says {body.get('status')!r}",
             code,
         )
-    return StepResult(step.script, step.required, PASS, "", code)
+    if body.get("schema_version") != 2:
+        return StepResult(step.script, step.required, BLOCKED, "missing v2 executed-check evidence", code)
+    if type(body.get("exit_code")) is not int:
+        return StepResult(step.script, step.required, FAIL, "child exit code is not an integer", code)
+    expected = {"script": step.script, "exit_code": code, "run_id": run_id,
+                "base_url": env.get("OPENFDD_STRESS_BASE"),
+                "building_id": env.get("OPENFDD_STRESS_BUILDING_ID", ""),
+                "expected_version": env.get("OPENFDD_STRESS_EXPECT_VERSION"),
+                "script_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    if any(body.get(key) != value for key, value in expected.items()):
+        return StepResult(step.script, step.required, FAIL, "child identity, scope or script digest mismatch", code)
+    if expected["expected_version"] and body.get("observed_version") != expected["expected_version"]:
+        return StepResult(step.script, step.required, FAIL, "candidate health observation mismatch", code)
+    checks = body.get("checks")
+    if not isinstance(checks, list) or not checks:
+        return StepResult(step.script, step.required, BLOCKED, "no executed assertions", code)
+    if any(not isinstance(check, dict) or not isinstance(check.get("id"), str)
+           or not check["id"] or check.get("status") != PASS
+           or type(check.get("comparison_count")) is not int or check["comparison_count"] < 0
+           for check in checks):
+        return StepResult(step.script, step.required, FAIL, "invalid or failing child assertion", code)
+    ids = [check["id"] for check in checks]
+    n = len(checks)
+    comparisons = sum(check["comparison_count"] for check in checks)
+    if (len(set(ids)) != n or type(body.get("assertion_count")) is not int
+            or body["assertion_count"] != n or type(body.get("comparison_count")) is not int
+            or body["comparison_count"] != comparisons):
+        return StepResult(step.script, step.required, FAIL, "contradictory child counts or duplicate checks", code)
+    if (not set(step.required_checks).issubset(ids) or comparisons < step.minimum_comparisons
+            or (step.minimum_comparisons > 0 and any(
+                check["comparison_count"] < 1 for check in checks
+                if check["id"] in step.required_checks))):
+        return StepResult(step.script, step.required, BLOCKED, "required assertions/comparisons absent", code)
+    return StepResult(step.script, step.required, PASS, "", code, n, comparisons,
+                      hashlib.sha256(result_file.read_bytes()).hexdigest())
 
 
 def run_plan(
@@ -171,6 +216,7 @@ def run_plan(
 ) -> GateReport:
     """Run ``plan`` in order; after the first FAIL the rest are NOT_RUN."""
     report = GateReport()
+    run_id = uuid.uuid4().hex
     failed = False
     for step in plan:
         if failed:
@@ -184,6 +230,7 @@ def run_plan(
             scripts_dir=scripts_dir,
             result_dir=result_dir,
             timeout_s=timeout_s,
+            run_id=run_id,
         )
         report.results.append(res)
         failed = res.status == FAIL
@@ -196,9 +243,11 @@ def build_plan(args: argparse.Namespace) -> list[Step]:
 
     satdev = ("--allow-satdev-drift",) if args.allow_satdev_drift else ()
     return [
-        Step("01_sparql_model.py", required=True),
+        Step("01_sparql_model.py", required=True,
+             required_checks=("catalog", "sparql_ahu", "parsed_graph")),
         Step("02_sparql_fc1_points.py", required=False),
-        Step("03_sparql_zone_dataframe.py", required=True),
+        Step("03_sparql_zone_dataframe.py", required=True,
+             required_checks=("historian_samples", "dataframe")),
         Step("seed_sv_spike_fixture.py", required=False, skip_reason=skip(args.skip_seed, "skip-seed")),
         Step("04_sql_vs_pandas_zone.py", required=False, skip_reason=skip(args.skip_oracle, "skip-oracle")),
         Step("05_warehouse_parity_smoke.py", required=False, skip_reason=skip(args.skip_parity, "skip-parity")),
@@ -209,13 +258,18 @@ def build_plan(args: argparse.Namespace) -> list[Step]:
             required=True,
             extra_args=satdev,
             skip_reason=skip(args.skip_b50_parity, "skip-b50-parity"),
+            required_checks=("oracle.FC1", "oracle.AHU-DUCTHI", "oracle.AHU-SATDEV"),
+            minimum_comparisons=3,
         ),
         Step(
             "09_analytics_sql_vs_pandas.py",
             required=True,
             skip_reason=skip(args.skip_analytics, "skip-analytics"),
+            required_checks=("economizer", "comfort"), minimum_comparisons=2,
         ),
-        Step("10_model_crud_helpers.py", required=True),
+        Step("10_model_crud_helpers.py", required=True,
+             required_checks=("semantic_meta_dry_run", "stale_revision", "overlay_dry_run",
+                              "equip_dry_run", "agent_context", "ttl_parsed")),
     ]
 
 
@@ -244,6 +298,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--port", type=int, default=8080)
     p.add_argument("--user", default=None)
     p.add_argument("--password", default=None)
+    p.add_argument("--expected-version", default=None,
+                   help="Exact /api/health version including commit; mismatch fails each child")
     p.add_argument(
         "--building-id",
         default=None,
@@ -294,8 +350,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--scripts-dir", default=None, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
-    if args.step_timeout <= 0:
-        p.error("--step-timeout must be > 0")
+    if not math.isfinite(args.step_timeout) or args.step_timeout <= 0:
+        p.error("--step-timeout must be finite and > 0")
 
     base = apply_base_url(
         resolve_base_url(base_url=args.base_url, host=args.host, port=args.port)
@@ -305,14 +361,15 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["OPENFDD_STRESS_USER"] = args.user
     if args.password:
         os.environ["OPENFDD_STRESS_PASS"] = args.password
+    if args.expected_version:
+        os.environ["OPENFDD_STRESS_EXPECT_VERSION"] = args.expected_version
     if args.building_id:
         os.environ["OPENFDD_STRESS_BUILDING_ID"] = args.building_id
 
     conn_args: list[str] = ["--base-url", base]
     if args.user:
         conn_args += ["--user", args.user]
-    if args.password:
-        conn_args += ["--password", args.password]
+    # Secrets stay in inherited environment rather than process-list argv.
     if args.building_id:
         conn_args += ["--building-id", args.building_id]
 
@@ -340,13 +397,24 @@ def main(argv: list[str] | None = None) -> int:
             result_dir=Path(tmp),
             timeout_s=args.step_timeout,
         )
+        child_artifacts = {
+            path.name: json.loads(path.read_text(encoding="utf-8"))
+            for path in Path(tmp).glob("*.json") if _read_result_file(path) is not None
+        }
     print_report(report)
     if args.summary_json:
         Path(args.summary_json).write_text(
             json.dumps(
                 {
                     "verdict": report.verdict,
+                    "schema_version": 2,
+                    "base_url": base,
+                    "building_id": os.environ.get("OPENFDD_STRESS_BUILDING_ID", ""),
+                    "expected_version": os.environ.get("OPENFDD_STRESS_EXPECT_VERSION"),
+                    "required_steps": [step.script for step in build_plan(args) if step.required],
+                    "source_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                     "steps": [r.__dict__ for r in report.results],
+                    "child_evidence": child_artifacts,
                 },
                 indent=2,
             ),

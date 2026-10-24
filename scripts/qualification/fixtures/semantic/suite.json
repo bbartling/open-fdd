@@ -1,0 +1,108 @@
+{
+  "schema": "openfdd_semantic_controls_v1",
+  "cases": [
+    {
+      "id": "VALID",
+      "model": "valid.ttl",
+      "expected_status": "PASS"
+    },
+    {
+      "id": "WRONG_NAMESPACE",
+      "model": "wrong-namespace.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "DEFS-RESOLUTION",
+        "SAT-SP-CANDIDATES"
+      ]
+    },
+    {
+      "id": "WRONG_CASE",
+      "model": "wrong-case.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "DEFS-RESOLUTION"
+      ]
+    },
+    {
+      "id": "DANGLING_REFERENCE",
+      "model": "dangling-reference.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "SAT-SP-CANDIDATES"
+      ]
+    },
+    {
+      "id": "WRONG_QUANTITY_UNIT",
+      "model": "wrong-quantity-unit.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "SAT-SP-TYPED-4a3899a3c1be"
+      ]
+    },
+    {
+      "id": "WRONG_KIND",
+      "model": "wrong-kind.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "SAT-SP-TYPED-4a3899a3c1be"
+      ]
+    },
+    {
+      "id": "STALE_DECODED_SERIES_KEY",
+      "model": "stale-decoded-series-key.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "SAT-APPROVED-OPAQUE-BINDING"
+      ]
+    },
+    {
+      "id": "FALSE_MARKER",
+      "model": "false-marker.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "MARKER-TERMS"
+      ]
+    },
+    {
+      "id": "NULL_MARKER",
+      "model": "null-marker.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "MARKER-TERMS"
+      ]
+    },
+    {
+      "id": "BOOL_AS_STRING",
+      "model": "bool-as-string.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "BOOL-LITERAL"
+      ]
+    },
+    {
+      "id": "AMBIGUOUS_FUNCTION",
+      "model": "ambiguous-function.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "SAT-SP-CANDIDATES"
+      ]
+    },
+    {
+      "id": "EMPTY",
+      "model": "empty.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "RDF-INVENTORY",
+        "SITE-TYPE"
+      ]
+    },
+    {
+      "id": "MALFORMED",
+      "model": "malformed.ttl",
+      "expected_status": "FAIL",
+      "required_failure_ids": [
+        "RDF-SYNTAX"
+      ]
+    }
+  ]
+}

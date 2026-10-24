@@ -1,0 +1,163 @@
+{
+  "schema": "openfdd_semantic_expectations_v1",
+  "profile": "ofdd_haystack_projection_v1",
+  "site": "urn:qa:site/a",
+  "point_ids": [
+    "urn:qa:point/measured",
+    "urn:qa:point/measured2",
+    "urn:qa:point/setpoint",
+    "urn:qa:point/pressure",
+    "urn:qa:point/command",
+    "urn:qa:point/speed",
+    "urn:qa:point/mode",
+    "urn:qa:point/reference",
+    "urn:qa:point/near_prefix",
+    "urn:qa:point/hp_temp"
+  ],
+  "selectors": [
+    {
+      "id": "SAT-AMBIGUOUS",
+      "equipment": "urn:qa:equip/RTU_01",
+      "tags": [
+        "https://project-haystack.org/def/phIoT/4.0.0#discharge",
+        "https://project-haystack.org/def/phScience/4.0.0#air",
+        "https://project-haystack.org/def/phScience/4.0.0#temp",
+        "https://project-haystack.org/def/phIoT/4.0.0#sensor"
+      ],
+      "expected_candidates": [
+        "urn:qa:point/measured",
+        "urn:qa:point/measured2"
+      ],
+      "selected_point": null,
+      "expected_readiness": "AMBIGUOUS",
+      "kind": "Number",
+      "quantity": "temperature"
+    },
+    {
+      "id": "SAT-APPROVED",
+      "equipment": "urn:qa:equip/RTU_01",
+      "tags": [
+        "https://project-haystack.org/def/phIoT/4.0.0#discharge",
+        "https://project-haystack.org/def/phScience/4.0.0#air",
+        "https://project-haystack.org/def/phScience/4.0.0#temp",
+        "https://project-haystack.org/def/phIoT/4.0.0#sensor"
+      ],
+      "expected_candidates": [
+        "urn:qa:point/measured",
+        "urn:qa:point/measured2"
+      ],
+      "selected_point": "urn:qa:point/measured",
+      "expected_readiness": "READY",
+      "kind": "Number",
+      "quantity": "temperature",
+      "series_key": "opaque::8f6|unrelated-reader-key",
+      "provider_instance": "fixture-nf-A",
+      "remote_point_id": "provider/opaque/{42}"
+    },
+    {
+      "id": "SAT-SP",
+      "equipment": "urn:qa:equip/RTU_01",
+      "tags": [
+        "https://project-haystack.org/def/phIoT/4.0.0#discharge",
+        "https://project-haystack.org/def/phScience/4.0.0#air",
+        "https://project-haystack.org/def/phScience/4.0.0#temp",
+        "https://project-haystack.org/def/phIoT/4.0.0#sp"
+      ],
+      "expected_candidates": [
+        "urn:qa:point/setpoint"
+      ],
+      "selected_point": "urn:qa:point/setpoint",
+      "expected_readiness": "READY",
+      "kind": "Number",
+      "quantity": "temperature",
+      "series_key": "a55a71f9-9d9f-4dfa-99dc-f6840e3236bd",
+      "provider_instance": "fixture-nf-A",
+      "remote_point_id": "some/portal-key"
+    },
+    {
+      "id": "DUCT-PRESSURE",
+      "equipment": "urn:qa:equip/RTU_01",
+      "tags": [
+        "https://project-haystack.org/def/phIoT/4.0.0#discharge",
+        "https://project-haystack.org/def/phScience/4.0.0#air",
+        "https://project-haystack.org/def/phScience/4.0.0#pressure",
+        "https://project-haystack.org/def/phIoT/4.0.0#sensor"
+      ],
+      "expected_candidates": [
+        "urn:qa:point/pressure"
+      ],
+      "selected_point": "urn:qa:point/pressure",
+      "expected_readiness": "READY",
+      "kind": "Number",
+      "quantity": "pressure",
+      "series_key": "pressure-key-opaque",
+      "provider_instance": "fixture-nf-A",
+      "remote_point_id": "p/4"
+    },
+    {
+      "id": "FAN-BINARY-CMD",
+      "equipment": "urn:qa:equip/RTU_01",
+      "tags": [
+        "https://project-haystack.org/def/phIoT/4.0.0#fan",
+        "https://project-haystack.org/def/phIoT/4.0.0#cmd"
+      ],
+      "expected_candidates": [
+        "urn:qa:point/command"
+      ],
+      "selected_point": "urn:qa:point/command",
+      "expected_readiness": "READY",
+      "kind": "Bool",
+      "series_key": "binary-not-percent",
+      "provider_instance": "fixture-nf-A",
+      "remote_point_id": "p/5"
+    },
+    {
+      "id": "FAN-SPEED-MEASURED",
+      "equipment": "urn:qa:equip/RTU_01",
+      "tags": [
+        "https://project-haystack.org/def/phIoT/4.0.0#fan",
+        "https://project-haystack.org/def/phIoT/4.0.0#sensor"
+      ],
+      "expected_candidates": [
+        "urn:qa:point/speed"
+      ],
+      "selected_point": "urn:qa:point/speed",
+      "expected_readiness": "READY",
+      "kind": "Number",
+      "quantity": "fraction",
+      "series_key": "vfd-measurement",
+      "provider_instance": "fixture-nf-A",
+      "remote_point_id": "p/6"
+    }
+  ],
+  "typed_values": [
+    {
+      "id": "NUMBER-LITERAL",
+      "subject": "urn:qa:point/measured",
+      "predicate": "https://project-haystack.org/def/phIoT/4.0.0#curVal",
+      "type": "Number",
+      "value": 55.0
+    },
+    {
+      "id": "BOOL-LITERAL",
+      "subject": "urn:qa:point/command",
+      "predicate": "https://project-haystack.org/def/phIoT/4.0.0#curVal",
+      "type": "Bool",
+      "value": false
+    },
+    {
+      "id": "STR-ENUM",
+      "subject": "urn:qa:point/mode",
+      "predicate": "https://project-haystack.org/def/ph/4.0.0#enum",
+      "type": "Str",
+      "value": "off,heat,cool"
+    },
+    {
+      "id": "REF-VALUE",
+      "subject": "urn:qa:point/reference",
+      "predicate": "https://project-haystack.org/def/phIoT/4.0.0#curVal",
+      "type": "Ref",
+      "value": "urn:qa:equip/hp.2"
+    }
+  ]
+}

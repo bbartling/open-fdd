@@ -26,8 +26,9 @@ Modes:
       disposable origin and write the verdict.
   --negative-control
       Same, but the scanner is given a deliberately broken credential while
-      the preflight uses the real one. Exit 0 only if the evaluator rejects
-      the scanner authentication evidence.
+      the preflight uses the real one. Run auth probes only; exit 0 only when
+      all three scanner-origin probes demonstrably receive JSON 401/403 denials.
+      HTTP 200 is FAIL; missing, broken or unrelated evidence is ERROR.
 
 Secrets are accepted only from env or a private (0600, caller-owned) file and
 are passed to ZAP through the environment, never argv. Exit codes:
@@ -77,7 +78,7 @@ DEFAULT_ZAP_IMAGE = os.environ.get("OPENFDD_ZAP_IMAGE", _PINNED_ZAP_DIGEST)
 CURL_IMAGE = "curlimages/curl:8.5.0"
 
 SUITE = "zap_af_authenticated_v2"
-NEGATIVE_SUITE = "zap_af_negative_control_v1"
+NEGATIVE_SUITE = "zap_af_negative_control_v2"
 CONTEXT_NAME = "openfdd-disposable"
 SCANNER_USER = "openfdd-scanner"
 AUTH_CHECK_PATH = "/api/auth/me"
@@ -106,7 +107,6 @@ _REQUIRED_PLACEHOLDERS = (
     "${ZAP_PROBE_NONCE}",
     "${ZAP_LOGGED_IN_REGEX}",
     "${ZAP_REPORT_DIR}",
-    "${ZAP_PLAN_MAX_SECONDS}",
 )
 
 # Hardcoded JWT / Bearer material must never appear in the committed plan.
@@ -542,6 +542,8 @@ def validate_af_plan(path: Path) -> list[str]:
         errors.append("env.parameters.continueOnFailure must be false")
     if params.get("progressToStdout") is not True:
         errors.append("env.parameters.progressToStdout must be true (passive drain evidence)")
+    if "maxDuration" in params:
+        errors.append("omit env.parameters.maxDuration for pinned add-on compatibility; runner enforces wall time")
 
     contexts = env.get("contexts") or []
     if not isinstance(contexts, list) or len(contexts) != 1 or not isinstance(contexts[0], dict):
@@ -651,6 +653,7 @@ def materialize_plan(
     max_seconds: int,
     dest: Path,
     secrets: SecretSet | None = None,
+    negative_control: bool = False,
 ) -> dict[str, Any]:
     """Render the template into ``dest``; returns the rendered plan."""
     template = yaml.safe_load(PLAN_PATH.read_text(encoding="utf-8"))
@@ -663,12 +666,21 @@ def materialize_plan(
             "${ZAP_PROBE_NONCE}": nonce,
             "${ZAP_LOGGED_IN_REGEX}": logged_in_regex(expected_username),
             "${ZAP_REPORT_DIR}": report_dir.rstrip("/"),
-            "${ZAP_PLAN_MAX_SECONDS}": str(int(max_seconds)),
         },
     )
-    data["env"]["parameters"]["maxDuration"] = int(max_seconds)
     jobs = list(data["jobs"])
-    if active:
+    if negative_control:
+        # A bad credential must not accidentally reach imported mutation routes.
+        # Do not stop after the first expected denial, or evaluate positive-login
+        # statistics. The dedicated evaluator accepts either HTTP 401 or 403.
+        jobs = [j for j in jobs if j["type"] in ("requestor", "export", "report")]
+        for job in jobs:
+            if job["type"] == "requestor":
+                job.pop("tests", None)
+                for request in job["requests"]:
+                    request.pop("responseCode", None)
+        data["env"]["contexts"][0]["authentication"].pop("verification", None)
+    elif active:
         active_jobs = [
             {
                 "type": "activeScan",
@@ -1287,6 +1299,8 @@ def evaluate_scanner_auth(
             errors.append(f"no scanner-origin {phase} probe in ZAP message history")
             probes[phase] = info
             continue
+        if len(hits) != 1 or hits[0].req_header(PROBE_HEADER) != [tag]:
+            errors.append(f"{phase} probe must occur exactly once with one nonce header")
         hit = hits[0]
         probe_index[phase] = hit.index
         auth_values = hit.req_header("authorization")
@@ -1319,6 +1333,8 @@ def evaluate_scanner_auth(
         tags = e.req_header(PROBE_HEADER)
         if tags and not any(t in probe_ids for t in tags):
             stale_probes += 1
+    if stale_probes:
+        errors.append(f"{stale_probes} stale or unknown probe nonce(s)")
 
     scan_entries = [e for e in entries if not e.req_header(PROBE_HEADER)]
     if len(probe_index) == len(PROBE_PHASES):
@@ -1354,6 +1370,93 @@ def evaluate_scanner_auth(
     }
 
 
+def evaluate_negative_control(
+    entries: list[HarEntry],
+    *,
+    target: TargetOrigin,
+    nonce: str,
+    scanner_auth_header: str,
+    max_requests: int,
+) -> dict[str, Any]:
+    """Require actual denials of the injected bad credential, never invert auth.
+
+    A transport failure, missing header, wrong nonce, redirect or HTTP 500 cannot
+    establish credential rejection. The negative plan deliberately sends only
+    these three probes, so unexpected scanner traffic invalidates its evidence.
+    """
+    errors: list[str] = []
+    probes: dict[str, dict[str, Any]] = {}
+    indices: list[int] = []
+    unexpected_success_count = 0
+    if len(entries) > max_requests:
+        errors.append(f"request budget exceeded ({len(entries)} > {max_requests})")
+    out_of_scope = [e for e in entries if not target.in_scope(e.url)]
+    if out_of_scope:
+        errors.append(f"{len(out_of_scope)} scanner request(s) outside the target scope")
+    for entry in entries:
+        locations = entry.resp_header("location") + ([entry.redirect_url] if entry.redirect_url else [])
+        if 300 <= entry.status < 400 and any(
+            not target.in_scope(urljoin(entry.url, location)) for location in locations
+        ):
+            errors.append("scanner redirect points outside the target scope")
+    known_tags = {f"{phase}-{nonce}" for phase in PROBE_PHASES}
+    unexpected = [
+        e for e in entries
+        if e.method != "GET" or e.url != target.url(AUTH_CHECK_PATH)
+        or len(e.req_header(PROBE_HEADER)) != 1
+        or e.req_header(PROBE_HEADER)[0] not in known_tags
+    ]
+    if unexpected:
+        errors.append(f"{len(unexpected)} unexpected request(s) or stale probe nonce(s)")
+    for phase in PROBE_PHASES:
+        tag = f"{phase}-{nonce}"
+        hits = [
+            e for e in entries
+            if e.method == "GET" and e.url == target.url(AUTH_CHECK_PATH)
+            and e.req_header(PROBE_HEADER) == [tag]
+        ]
+        info: dict[str, Any] = {"found": bool(hits), "count": len(hits)}
+        probes[phase] = info
+        unexpected_success_count += sum(hit.status == 200 for hit in hits)
+        if len(hits) != 1:
+            errors.append(f"{phase} probe must occur exactly once with the current nonce")
+            continue
+        hit = hits[0]
+        indices.append(hit.index)
+        headers = hit.req_header("authorization")
+        matches = len(headers) == 1 and hmac.compare_digest(
+            headers[0].encode("utf-8"), scanner_auth_header.encode("utf-8")
+        )
+        ctype = hit.mime_type or ", ".join(hit.resp_header("content-type"))
+        denial_json = False
+        if "json" in ctype.lower():
+            try:
+                body = json.loads(hit.body.decode("utf-8"))
+                denial_json = isinstance(body, dict) and body.get("ok") is False
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                pass
+        info.update(index=hit.index, authorization_matches=matches, status=hit.status,
+                    denial_json=denial_json, denied=hit.status in (401, 403) and denial_json)
+        if not matches:
+            errors.append(f"{phase} probe did not carry the injected bad credential")
+        if hit.status not in (401, 403) or not denial_json:
+            errors.append(f"{phase} probe is not a JSON 401/403 denial")
+    if len(indices) == len(PROBE_PHASES) and indices != sorted(set(indices)):
+        errors.append("negative control probes out of order")
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "source": "zap_message_history_har",
+        "contract": "bad_credential_json_denial_before_during_after_v2",
+        "request_count": len(entries),
+        "max_requests": max_requests,
+        "out_of_scope_count": len(out_of_scope),
+        "unexpected_request_count": len(unexpected),
+        "unexpected_success_count": unexpected_success_count,
+        "probes": probes,
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Verdicts + write-once evidence
 # --------------------------------------------------------------------------- #
@@ -1378,6 +1481,15 @@ def verdict_schema_ok(verdict: dict[str, Any]) -> list[str]:
             errors.append(f"verdict missing key: {k}")
     if verdict.get("status") not in ("PASS", "FAIL", "BLOCKED", "ERROR"):
         errors.append(f"invalid status: {verdict.get('status')!r}")
+    for key in ("high_alerts", "medium_alerts"):
+        value = verdict.get(key)
+        if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 0):
+            errors.append(f"{key} must be a nonnegative integer or null when not evaluated")
+    if verdict.get("status") == "PASS" and verdict.get("mode") == "execute":
+        if verdict.get("alert_counts_evaluated") is not True:
+            errors.append("scan PASS requires evaluated alert counts")
+        if any(verdict.get(key) is None for key in ("high_alerts", "medium_alerts")):
+            errors.append("scan PASS requires known alert counts")
     blob = json.dumps(verdict)
     if _JWT_BLOB.search(blob) or _HARDCODED_BEARER.search(blob):
         errors.append("verdict must not embed JWT / Bearer tokens")
@@ -1699,9 +1811,10 @@ def run_selftest(verdict_path: Path) -> int:
         plan_hygiene_ok=not hygiene,
         plan_hygiene_errors=hygiene,
         disposition_errors=disp_errors,
-        high_alerts=0,
-        medium_alerts=0,
-        site_count=0,
+        high_alerts=None,
+        medium_alerts=None,
+        site_count=None,
+        alert_counts_evaluated=False,
         zap_available=mode is not None,
         zap_detection=detail if mode is None else mode,
         active_scan=False,
@@ -1739,9 +1852,14 @@ class _Run:
         self.fields: dict[str, Any] = {
             "mode": "negative_control" if negative_control else "execute",
             "plan_hygiene_ok": False,
-            "high_alerts": 0,
-            "medium_alerts": 0,
-            "site_count": 0,
+            "high_alerts": None,
+            "medium_alerts": None,
+            "site_count": None,
+            "alert_counts_evaluated": False,
+            # Traditional JSON does not expose a complete scanner error count.
+            # A process return code is completion evidence, not a count of errors.
+            "scanner_error_count": None,
+            "scanner_error_count_status": "not_reported_by_traditional_json",
             "zap_available": False,
             "active_scan": False,
             "execute_requested": True,
@@ -1790,7 +1908,13 @@ def _execute(run: _Run) -> int:
         budget = load_budget()
     except ConfigError as exc:
         return run.finish("ERROR", f"ERROR: {exc}")
-    run.fields["budget"] = {"max_wall_seconds": budget.max_wall_seconds, "max_requests": budget.max_requests}
+    run.fields["budget"] = {
+        "max_wall_seconds": budget.max_wall_seconds,
+        "max_requests": budget.max_requests,
+        "wall_clock_enforcement": "owned_process_termination",
+        "request_limit_enforcement": "post_scan_har_check",
+        "request_limit_preventive": False,
+    }
 
     origin_raw = (os.environ.get("ZAP_TARGET_ORIGIN") or "").strip()
     have_cred = bool(
@@ -1865,11 +1989,12 @@ def _execute(run: _Run) -> int:
     if report_path.exists() or har_path.exists():
         return run.finish("ERROR", "ERROR: work dir already holds scanner output; stale evidence refused")
 
-    staged_ok, staged_detail = stage_openapi_spec(
-        work_dir=work_root, target=target, budget=budget, docker_network=docker_network
-    )
-    if not staged_ok:
-        return run.finish("FAIL", f"FAIL: OpenAPI staging failed ({staged_detail})")
+    if not run.negative_control:
+        staged_ok, staged_detail = stage_openapi_spec(
+            work_dir=work_root, target=target, budget=budget, docker_network=docker_network
+        )
+        if not staged_ok:
+            return run.finish("FAIL", f"FAIL: OpenAPI staging failed ({staged_detail})")
 
     plan = materialize_plan(
         target=target,
@@ -1880,6 +2005,7 @@ def _execute(run: _Run) -> int:
         max_seconds=max(60, int(budget.remaining()) - 30),
         dest=work_root / "af_plan.yaml",
         secrets=run.secrets,
+        negative_control=run.negative_control,
     )
 
     if mode == "docker":
@@ -1928,7 +2054,8 @@ def _execute(run: _Run) -> int:
     run.cleanup_roots.append(evidence_dir)
     run.fields["evidence_dir"] = _rel(evidence_dir)
     if run.negative_control:
-        return _finish_negative_control(run, har_bytes, target, nonce, auth, expected_username, budget, evidence_dir)
+        return _finish_negative_control(run, har_bytes, target, nonce, scanner_header, budget, evidence_dir,
+                                        scanner_exit_code=proc.returncode)
 
     # Raw report: read once, hash, never rewritten.
     if not report_path.is_file() or report_path.stat().st_size == 0:
@@ -2000,6 +2127,7 @@ def _execute(run: _Run) -> int:
 
     high = by_risk["High"]
     run.fields.update(
+        alert_counts_evaluated=True,
         high_alerts=high,
         medium_alerts=by_risk["Medium"],
         medium_undispositioned=len(unaccepted),
@@ -2038,36 +2166,43 @@ def _finish_negative_control(
     har_bytes: bytes | None,
     target: TargetOrigin,
     nonce: str,
-    real_auth: str,
-    expected_username: str,
+    scanner_auth: str,
     budget: Budget,
     evidence_dir: Path,
+    *,
+    scanner_exit_code: int | None,
 ) -> int:
-    """Broken scanner credential must make the scanner auth check fail."""
+    """Only observed rejection of the exact bad credential can qualify this control."""
     if har_bytes is None:
         return run.finish("ERROR", "ERROR: negative control inconclusive (no ZAP message history)")
     try:
         entries = parse_scanner_messages(har_bytes)
     except EvidenceError as exc:
         return run.finish("ERROR", f"ERROR: negative control inconclusive ({exc})")
-    auth_ev = evaluate_scanner_auth(
+    auth_ev = evaluate_negative_control(
         entries,
         target=target,
         nonce=nonce,
-        expected_auth_header=real_auth,
-        expected_username=expected_username,
+        scanner_auth_header=scanner_auth,
         max_requests=budget.max_requests,
     )
-    write_once(evidence_dir / "auth_evidence.derived.json", (json.dumps(auth_ev, indent=2) + "\n").encode("utf-8"))
+    payload = (json.dumps(auth_ev, indent=2) + "\n").encode("utf-8")
+    run.fields["derived"] = {"auth_evidence.derived.json": {
+        "path": _rel(evidence_dir / "auth_evidence.derived.json"),
+        "sha256": write_once(evidence_dir / "auth_evidence.derived.json", payload),
+    }}
     run.fields["scanner_auth"] = auth_ev
-    if not any(p.get("found") for p in auth_ev["probes"].values()):
-        return run.finish("ERROR", "ERROR: negative control inconclusive (scanner sent no auth probes)")
-    if auth_ev["ok"]:
-        return run.finish("FAIL", "FAIL: negative control — broken scanner credential was accepted as authenticated")
+    if auth_ev["unexpected_success_count"]:
+        return run.finish("FAIL", "FAIL: negative control — an auth probe returned HTTP 200 with a broken credential")
+    if scanner_exit_code != 0:
+        return run.finish("ERROR", f"ERROR: negative control inconclusive (scanner exited {scanner_exit_code})")
+    if not auth_ev["ok"]:
+        return run.finish("ERROR", "ERROR: negative control inconclusive (" + "; ".join(auth_ev["errors"][:6]) + ")")
     return run.finish(
         "PASS",
         "PASS: negative control — broken scanner credential rejected while preflight succeeded",
         negative_control_detected=True,
+        auth_proof="zap_message_history_bad_credential_denials_before_during_after",
     )
 
 
@@ -2116,9 +2251,10 @@ def main(argv: list[str] | None = None) -> int:
             mode="idle",
             plan_hygiene_ok=not hygiene,
             plan_hygiene_errors=hygiene,
-            high_alerts=0,
-            medium_alerts=0,
-            site_count=0,
+            high_alerts=None,
+            medium_alerts=None,
+            site_count=None,
+            alert_counts_evaluated=False,
             zap_available=detect_zap()[0] is not None,
             active_scan=False,
             execute_requested=False,
