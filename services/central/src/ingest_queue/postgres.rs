@@ -73,10 +73,18 @@ pub fn statements(ddl: &str) -> Vec<String> {
 }
 
 pub async fn apply_schema(pool: &PgPool) -> Result<(), QueueError> {
+    // Ingest tables, the applied-sample ledger, the audit table, and the
+    // scheduler fence are one batch. The transaction lock serializes this
+    // with hourly-job schema init and the startup migration.
+    let mut tx = crate::db_lifecycle::begin_schema_ddl(pool)
+        .await
+        .map_err(db_err)?;
     for stmt in statements(SCHEMA_SQL) {
-        sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
+        sqlx::query(&stmt).execute(&mut *tx).await.map_err(db_err)?;
     }
-    migrate_idempotency_scope(pool).await
+    migrate_idempotency_scope(&mut tx).await?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(())
 }
 
 pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, QueueError> {
@@ -1267,24 +1275,29 @@ async fn enqueue_tx(
     load_job_tx(tx, &id).await
 }
 
-async fn migrate_idempotency_scope(pool: &PgPool) -> Result<(), QueueError> {
+async fn migrate_idempotency_scope(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+) -> Result<(), QueueError> {
     sqlx::query(
         "DELETE FROM ingest_idempotency
          WHERE tenant_id IS NULL OR object_id IS NULL OR payload_hash IS NULL
             OR tenant_id = '' OR object_id = '' OR payload_hash = ''",
     )
-    .execute(pool)
+    .execute(&mut **tx)
     .await
     .map_err(db_err)?;
     for column in ["tenant_id", "object_id", "payload_hash"] {
         let stmt = format!("ALTER TABLE ingest_idempotency ALTER COLUMN {column} SET NOT NULL");
-        sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
+        sqlx::query(&stmt)
+            .execute(&mut **tx)
+            .await
+            .map_err(db_err)?;
     }
     let current: Option<String> = sqlx::query_scalar(
         "SELECT pg_get_constraintdef(oid) FROM pg_constraint
          WHERE conrelid = 'ingest_idempotency'::regclass AND contype = 'p'",
     )
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(db_err)?;
     let definition = current.unwrap_or_default();
@@ -1298,7 +1311,7 @@ async fn migrate_idempotency_scope(pool: &PgPool) -> Result<(), QueueError> {
         "SELECT conname FROM pg_constraint
          WHERE conrelid = 'ingest_idempotency'::regclass AND contype = 'p'",
     )
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(db_err)?;
     if let Some(name) = name {
@@ -1308,14 +1321,17 @@ async fn migrate_idempotency_scope(pool: &PgPool) -> Result<(), QueueError> {
             ));
         };
         let drop_sql = format!("ALTER TABLE ingest_idempotency DROP CONSTRAINT {ident}");
-        sqlx::query(&drop_sql).execute(pool).await.map_err(db_err)?;
+        sqlx::query(&drop_sql)
+            .execute(&mut **tx)
+            .await
+            .map_err(db_err)?;
     }
     sqlx::query(
         "ALTER TABLE ingest_idempotency
          ADD CONSTRAINT ingest_idempotency_pkey
          PRIMARY KEY (actor, tenant_id, action, idempotency_key)",
     )
-    .execute(pool)
+    .execute(&mut **tx)
     .await
     .map_err(db_err)?;
     Ok(())
@@ -1550,5 +1566,175 @@ mod tests {
             .execute(&pool)
             .await
             .expect("delete jobs");
+    }
+
+    /// Eight fresh connections apply ingest schema at once, then eight more
+    /// apply the hourly-job schema. A second pass checks the lock still allows
+    /// a later init. Each pass uses an empty database so `CREATE TABLE IF NOT
+    /// EXISTS` takes the catalog path that races on `pg_type`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+    async fn concurrent_schema_init_on_fresh_connections() {
+        let Some(url) = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+        else {
+            return;
+        };
+        let admin = maintenance_database_url(&url).expect("maintenance database url");
+        for _ in 0..3 {
+            let name = disposable_database_name();
+            let _drop = DropDisposableDb {
+                admin: admin.clone(),
+                name: name.clone(),
+            };
+            create_disposable_database(&admin, &name).await;
+            let fresh = database_url_for(&url, &name).expect("fresh database url");
+            join_schema_inits(&fresh, 8, SchemaInit::Ingest).await;
+            join_schema_inits(&fresh, 8, SchemaInit::Hourly).await;
+            assert_schema_objects(&fresh).await;
+            join_schema_inits(&fresh, 8, SchemaInit::Ingest).await;
+            join_schema_inits(&fresh, 8, SchemaInit::Hourly).await;
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum SchemaInit {
+        Ingest,
+        Hourly,
+    }
+
+    fn disposable_database_name() -> String {
+        format!("schemarace{}", Uuid::new_v4().simple())
+    }
+
+    fn is_disposable_database_name(name: &str) -> bool {
+        let Some(rest) = name.strip_prefix("schemarace") else {
+            return false;
+        };
+        !rest.is_empty()
+            && rest
+                .chars()
+                .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit())
+    }
+
+    fn maintenance_database_url(database_url: &str) -> Option<String> {
+        let mut url = url::Url::parse(database_url).ok()?;
+        url.set_path("/postgres");
+        Some(url.to_string())
+    }
+
+    fn database_url_for(database_url: &str, name: &str) -> Option<String> {
+        if !is_disposable_database_name(name) {
+            return None;
+        }
+        let mut url = url::Url::parse(database_url).ok()?;
+        url.set_path(&format!("/{name}"));
+        Some(url.to_string())
+    }
+
+    async fn create_disposable_database(admin: &str, name: &str) {
+        assert!(
+            is_disposable_database_name(name),
+            "refusing to create a database whose name is not a generated schema-race id"
+        );
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(admin)
+            .await
+            .expect("admin connection");
+        let sql = format!("CREATE DATABASE {name}");
+        sqlx::query(&sql)
+            .execute(&pool)
+            .await
+            .expect("create disposable database");
+    }
+
+    async fn join_schema_inits(url: &str, workers: usize, kind: SchemaInit) {
+        let mut pools = Vec::with_capacity(workers);
+        for _ in 0..workers {
+            pools.push(
+                sqlx::postgres::PgPoolOptions::new()
+                    .max_connections(1)
+                    .connect(url)
+                    .await
+                    .expect("fresh schema connection"),
+            );
+        }
+        let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(workers));
+        let mut tasks = Vec::with_capacity(workers);
+        for pool in pools {
+            let barrier = std::sync::Arc::clone(&barrier);
+            tasks.push(tokio::spawn(async move {
+                barrier.wait().await;
+                match kind {
+                    SchemaInit::Ingest => {
+                        apply_schema(&pool).await.map_err(|err| format!("{err:?}"))
+                    }
+                    SchemaInit::Hourly => crate::providers::pg_store::ensure_schema(&pool).await,
+                }
+            }));
+        }
+        for task in tasks {
+            let result = task.await.expect("schema init task");
+            result.unwrap_or_else(|err| panic!("concurrent schema init failed: {err}"));
+        }
+    }
+
+    async fn assert_schema_objects(url: &str) {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(url)
+            .await
+            .expect("assert connection");
+        for relation in [
+            "public.ingest_applied_sample",
+            "public.ingest_audit",
+            "public.ingest_scheduler_lease",
+            "public.provider_hourly_job",
+        ] {
+            let reg: Option<String> = sqlx::query_scalar("SELECT to_regclass($1)::text")
+                .bind(relation)
+                .fetch_one(&pool)
+                .await
+                .expect("relation lookup");
+            assert!(
+                reg.is_some(),
+                "{relation} missing after concurrent schema init"
+            );
+        }
+    }
+
+    struct DropDisposableDb {
+        admin: String,
+        name: String,
+    }
+
+    impl Drop for DropDisposableDb {
+        fn drop(&mut self) {
+            let admin = self.admin.clone();
+            let name = self.name.clone();
+            if !is_disposable_database_name(&name) {
+                return;
+            }
+            let _ = std::thread::spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("drop runtime");
+                runtime.block_on(async move {
+                    let Ok(pool) = sqlx::postgres::PgPoolOptions::new()
+                        .max_connections(1)
+                        .connect(&admin)
+                        .await
+                    else {
+                        return;
+                    };
+                    let sql = format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)");
+                    let _ = sqlx::query(&sql).execute(&pool).await;
+                });
+            })
+            .join();
+        }
     }
 }
