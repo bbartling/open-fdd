@@ -1,9 +1,11 @@
 //! Serve analytics envelopes from the parquet result cache when the key matches.
 //!
-//! A hit does not recompute. A watermark newer than the cached order is `stale`
-//! (default) or recomputed when `OPENFDD_ANALYTICS_CACHE_ON_STALE=recompute`
+//! The key covers the result contract, SQL pack, and model revision. Freshness
+//! compares the scoped historian watermark and coverage. A failed or missing
+//! watermark read is explicit and is never a fresh hit. A newer watermark is
+//! `stale` (default) or recomputed when `OPENFDD_ANALYTICS_CACHE_ON_STALE=recompute`
 //! or the request sets `refresh: true`. AFDD `{rule_id}.json` files are not
-//! this cache.
+//! this cache. Storage layout stays `analytics-result-parquet-v2`.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -13,14 +15,30 @@ use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, SecondsFormat, Utc};
 use fdd_store::{
-    config_hash, freshness_for_watermark, historian_watermark_order, order_key_to_rfc3339,
+    config_hash, freshness_for_identity, historian_watermark_order, order_key_to_rfc3339,
     peek_result_provenance, read_plan, read_result, write_result, AnalyticsCacheKey,
-    AnalyticsResultTable, CacheFreshness, CacheProvenance, SessionBook, SessionError, SessionKind,
-    StaleAction,
+    AnalyticsResultTable, CacheFreshness, CacheIdentity, CacheProvenance, InputWatermark,
+    SessionBook, SessionError, SessionKind, StaleAction,
 };
 use serde_json::{json, Value};
 
 use super::{AnalyticsEnvelope, AnalyticsRequest, SCHEMA_VERSION};
+
+/// Semantic result contract. Distinct from storage schema `analytics-result-parquet-v2`.
+/// Unstamped envelopes written before this field existed are incompatible.
+pub const ANALYTICS_RESULT_CONTRACT: &str = "analytics-result-contract-v2";
+
+/// How `serve_with` learns the computation identity.
+pub enum CacheWatch {
+    /// Production path: Timescale scope when that historian is active, else Parquet.
+    Resolve,
+    /// Parquet part order only. A read error is unavailable, not order 0.
+    #[cfg(test)]
+    Parquet,
+    /// Caller-supplied identity (tests and already-resolved input).
+    #[cfg(test)]
+    Resolved(CacheIdentity),
+}
 
 fn analytics_admission_busy() -> (StatusCode, Json<Value>) {
     (
@@ -132,13 +150,14 @@ pub async fn serve(
     req: &AnalyticsRequest,
     compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
 ) -> Result<ServedAnalytics, (StatusCode, Json<Value>)> {
+    let root = storage_root();
     serve_with(
-        &storage_root(),
+        &root,
         crate::building_sessions::book(),
-        query_id,
-        query_version,
+        (query_id, query_version),
         req,
         stale_action_from_env(),
+        CacheWatch::Resolve,
         compute,
     )
     .await
@@ -147,12 +166,13 @@ pub async fn serve(
 pub async fn serve_with(
     root: &Path,
     sessions: &Mutex<SessionBook>,
-    query_id: &str,
-    query_version: &str,
+    query: (&str, &str),
     req: &AnalyticsRequest,
     on_stale: StaleAction,
+    watch: CacheWatch,
     compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
 ) -> Result<ServedAnalytics, (StatusCode, Json<Value>)> {
+    let (query_id, query_version) = query;
     if let Err(detail) = super::validate_analytics_request(req) {
         return Err(analytics_request_rejected(detail));
     }
@@ -172,7 +192,14 @@ pub async fn serve_with(
         ));
     };
 
-    let key = match cache_key(building_id, query_id, query_version, req) {
+    let identity = match watch {
+        CacheWatch::Resolve => resolve_cache_identity(root, building_id, req).await,
+        #[cfg(test)]
+        CacheWatch::Parquet => parquet_identity(root, building_id),
+        #[cfg(test)]
+        CacheWatch::Resolved(identity) => identity,
+    };
+    let key = match cache_key(building_id, query_id, query_version, req, &identity) {
         Ok(key) => key,
         Err(reason) => {
             let envelope = compute_with_admission(compute).await?;
@@ -189,12 +216,11 @@ pub async fn serve_with(
         }
     }
 
-    let historian_order = historian_watermark_order(root, &key.building_id).unwrap_or(0);
     // Soft-OPEN 371 T1c: peek provenance only — never materialize Parquet rows
     // before compute admission when serving a durable cache hit.
     let peeked = peek_result_provenance(root, &key).ok().flatten();
     let freshness = match &peeked {
-        Some(prov) => freshness_for_watermark(prov.watermark_order, historian_order),
+        Some(prov) => freshness_for_identity(prov, &identity),
         None => CacheFreshness::Miss,
     };
     let plan = read_plan(freshness, req.refresh, on_stale);
@@ -203,7 +229,7 @@ pub async fn serve_with(
             .ok_or_else(analytics_admission_busy)?;
         if let Some((table, prov)) = read_result(root, &key).ok().flatten() {
             let envelope = envelope_from_table(&table, &prov, req);
-            let cache = cache_status(true, plan.stale, started, &key, &prov, historian_order);
+            let cache = cache_status(true, plan.stale, started, &key, &prov, &identity);
             return Ok(ServedAnalytics { envelope, cache });
         }
         // Rare race: cache file vanished after peek — fall through to recompute.
@@ -222,27 +248,21 @@ pub async fn serve_with(
     };
     let envelope = compute_with_admission(compute).await?;
     let table = table_from_envelope(&envelope);
-    let provenance = CacheProvenance {
-        building_id: key.building_id.clone(),
-        query_id: key.query_id.clone(),
-        query_version: key.query_version.clone(),
-        window_start: key.window_start.clone(),
-        window_end: key.window_end.clone(),
-        config_hash: key.config_hash.clone(),
-        watermark_order: historian_order,
-        watermark_utc: order_key_to_rfc3339(historian_order),
-        generated_at: envelope
-            .generated_at
-            .to_rfc3339_opts(SecondsFormat::Secs, true),
-        engine: envelope.engine.clone(),
-        result_query_version: envelope.query_version.clone(),
-    };
+    let provenance = provenance_for(&key, &envelope, &identity);
     if let Err(err) = write_result(root, &key, &table, &provenance) {
         tracing::warn!(error = %err, query_id, "analytics result parquet write failed");
     } else if let Err(err) = fdd_store::enforce_budget_throttled(root, 60) {
         tracing::warn!(error = %err, "local data budget enforcement failed");
     }
-    let cache = cache_status(false, false, started, &key, &provenance, historian_order);
+    // A just-computed envelope is fresh only when the input read succeeded.
+    let cache = cache_status(
+        false,
+        !input_certifiable(&identity),
+        started,
+        &key,
+        &provenance,
+        &identity,
+    );
     Ok(ServedAnalytics { envelope, cache })
 }
 
@@ -297,6 +317,7 @@ fn cache_key(
     query_id: &str,
     query_version: &str,
     req: &AnalyticsRequest,
+    identity: &CacheIdentity,
 ) -> Result<AnalyticsCacheKey, String> {
     fdd_store::safe_partition_value(building_id, "building_id").map_err(|e| e.to_string())?;
     fdd_store::safe_partition_value(query_id, "query_id").map_err(|e| e.to_string())?;
@@ -307,7 +328,7 @@ fn cache_key(
         query_version: query_version.to_string(),
         window_start: window_token(req.query.start),
         window_end: window_token(req.query.end),
-        config_hash: config_hash(&config_material(req)),
+        config_hash: config_hash(&config_material(req, identity)),
     })
 }
 
@@ -316,7 +337,37 @@ fn window_token(ts: Option<DateTime<Utc>>) -> String {
         .unwrap_or_else(|| "open".into())
 }
 
-fn config_material(req: &AnalyticsRequest) -> String {
+fn config_material(req: &AnalyticsRequest, identity: &CacheIdentity) -> String {
+    let mut equipment = req.query.equipment_ids.clone().unwrap_or_default();
+    equipment.sort();
+    format!(
+        "req_qv={}\nread_tenant={}\ndt_min={}\ngap={}\nmax_points={}\nequipment={}\nseries={}\nresult_contract={}\nsql_pack={}\nmodel_revision={}",
+        req.query.query_version.as_deref().unwrap_or(""),
+        req.read_tenant_id.as_deref().unwrap_or(""),
+        req.dt_min_f.map(|v| v.to_string()).unwrap_or_default(),
+        req.max_gap_seconds
+            .map(|v| v.to_string())
+            .unwrap_or_default(),
+        req.query.max_points.unwrap_or(0),
+        equipment.join(","),
+        canonical_json(req.series.as_ref().unwrap_or(&Value::Null)),
+        identity.result_contract,
+        key_component(&identity.sql_pack),
+        key_component(&identity.model_revision),
+    )
+}
+
+/// Empty identity components must not collide with a real fingerprint.
+fn key_component(value: &str) -> &str {
+    if value.is_empty() {
+        "status:unavailable"
+    } else {
+        value
+    }
+}
+
+#[cfg(test)]
+fn legacy_request_material(req: &AnalyticsRequest) -> String {
     let mut equipment = req.query.equipment_ids.clone().unwrap_or_default();
     equipment.sort();
     format!(
@@ -408,8 +459,31 @@ fn cache_status(
     started: Instant,
     key: &AnalyticsCacheKey,
     prov: &CacheProvenance,
-    historian_order: u64,
+    identity: &CacheIdentity,
 ) -> Value {
+    let (source, status, order, utc, coverage, error) = match &identity.watermark {
+        InputWatermark::Known {
+            source,
+            order,
+            utc,
+            coverage,
+        } => (
+            json!(source),
+            json!("known"),
+            json!(order),
+            json!(utc),
+            json!(coverage),
+            Value::Null,
+        ),
+        InputWatermark::Unavailable { reason } => (
+            json!("unavailable"),
+            json!("unavailable"),
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            json!(reason),
+        ),
+    };
     json!({
         "hit": hit,
         "stale": stale,
@@ -421,9 +495,127 @@ fn cache_status(
         "building_id": key.building_id,
         "watermark_utc": prov.watermark_utc,
         "watermark_order": prov.watermark_order,
-        "historian_watermark_order": historian_order,
-        "historian_watermark_utc": order_key_to_rfc3339(historian_order),
+        "historian_watermark_order": order,
+        "historian_watermark_utc": utc,
+        "watermark_source": source,
+        "watermark_status": status,
+        "coverage": coverage,
+        "result_contract": identity.result_contract,
+        "sql_pack": key_component(&identity.sql_pack),
+        "model_revision": key_component(&identity.model_revision),
+        "watermark_error": error,
     })
+}
+
+fn input_certifiable(identity: &CacheIdentity) -> bool {
+    !identity.result_contract.is_empty()
+        && !identity.sql_pack.is_empty()
+        && !identity.model_revision.is_empty()
+        && matches!(identity.watermark, InputWatermark::Known { .. })
+}
+
+fn provenance_for(
+    key: &AnalyticsCacheKey,
+    envelope: &AnalyticsEnvelope,
+    identity: &CacheIdentity,
+) -> CacheProvenance {
+    let (order, utc, source, status, coverage) = match &identity.watermark {
+        InputWatermark::Known {
+            source,
+            order,
+            utc,
+            coverage,
+        } => (
+            *order,
+            utc.clone(),
+            source.clone(),
+            "known".to_string(),
+            coverage.clone(),
+        ),
+        InputWatermark::Unavailable { .. } => (
+            0,
+            String::new(),
+            String::new(),
+            "unavailable".to_string(),
+            String::new(),
+        ),
+    };
+    CacheProvenance {
+        building_id: key.building_id.clone(),
+        query_id: key.query_id.clone(),
+        query_version: key.query_version.clone(),
+        window_start: key.window_start.clone(),
+        window_end: key.window_end.clone(),
+        config_hash: key.config_hash.clone(),
+        watermark_order: order,
+        watermark_utc: utc,
+        generated_at: envelope
+            .generated_at
+            .to_rfc3339_opts(SecondsFormat::Secs, true),
+        engine: envelope.engine.clone(),
+        result_query_version: envelope.query_version.clone(),
+        result_contract: identity.result_contract.clone(),
+        sql_pack: identity.sql_pack.clone(),
+        model_revision: identity.model_revision.clone(),
+        watermark_source: source,
+        watermark_status: status,
+        coverage,
+    }
+}
+
+fn parquet_identity(root: &Path, building_id: &str) -> CacheIdentity {
+    let watermark = match historian_watermark_order(root, building_id) {
+        Ok(order) => InputWatermark::Known {
+            source: "parquet".into(),
+            order,
+            utc: order_key_to_rfc3339(order),
+            coverage: format!("parquet-parts:{order}"),
+        },
+        Err(err) => InputWatermark::Unavailable {
+            reason: format!("parquet watermark read failed: {err}"),
+        },
+    };
+    CacheIdentity {
+        result_contract: ANALYTICS_RESULT_CONTRACT.into(),
+        sql_pack: crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default(),
+        model_revision: "parquet-historian".into(),
+        watermark,
+    }
+}
+
+async fn resolve_cache_identity(
+    root: &Path,
+    building_id: &str,
+    req: &AnalyticsRequest,
+) -> CacheIdentity {
+    if !crate::timescale_historian::historian_is_timescale() {
+        return parquet_identity(root, building_id);
+    }
+    let sql_pack = crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default();
+    let equipment = req.query.equipment_ids.clone().unwrap_or_default();
+    let input = crate::timescale_product::read_analytics_cache_input(
+        building_id,
+        req.query.start,
+        req.query.end,
+        &equipment,
+    )
+    .await;
+    let model_revision = input.model_revision.unwrap_or_default();
+    let watermark = match input.watermark {
+        Ok(watermark) => InputWatermark::Known {
+            source: "timescale".into(),
+            order: watermark.order,
+            utc: watermark.utc,
+            coverage: watermark.coverage,
+        },
+        Err(reason) => InputWatermark::Unavailable { reason },
+    };
+    CacheIdentity {
+        result_contract: ANALYTICS_RESULT_CONTRACT.into(),
+        sql_pack,
+        model_revision,
+        watermark,
+    }
 }
 
 fn skipped(envelope: AnalyticsEnvelope, started: Instant, reason: &str) -> ServedAnalytics {
@@ -529,10 +721,10 @@ mod tests {
         let first = serve_with(
             tmp.path(),
             &sessions,
-            "runtime",
-            "runtime-v1",
+            ("runtime", "runtime-v1"),
             &req("site-a"),
             StaleAction::ServeStale,
+            CacheWatch::Parquet,
             async || {
                 calls_hit.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("runtime-v1", &req("site-a").query, Vec::new());
@@ -552,10 +744,10 @@ mod tests {
         let second = serve_with(
             tmp.path(),
             &sessions,
-            "runtime",
-            "runtime-v1",
+            ("runtime", "runtime-v1"),
             &req("site-a"),
             StaleAction::ServeStale,
+            CacheWatch::Parquet,
             async || {
                 calls_second.fetch_add(1, Ordering::SeqCst);
                 envelope("runtime-v1", &req("site-a").query, Vec::new())
@@ -581,10 +773,10 @@ mod tests {
         let _ = serve_with(
             tmp.path(),
             &sessions,
-            "sensor-faults",
-            "sensor-faults-v1",
+            ("sensor-faults", "sensor-faults-v1"),
             &req("site-a"),
             StaleAction::ServeStale,
+            CacheWatch::Parquet,
             async || {
                 c1.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("sensor-faults-v1", &req("site-a").query, Vec::new());
@@ -604,10 +796,10 @@ mod tests {
         let stale = serve_with(
             tmp.path(),
             &sessions,
-            "sensor-faults",
-            "sensor-faults-v1",
+            ("sensor-faults", "sensor-faults-v1"),
             &req("site-a"),
             StaleAction::ServeStale,
+            CacheWatch::Parquet,
             async || {
                 c2.fetch_add(1, Ordering::SeqCst);
                 envelope("sensor-faults-v1", &req("site-a").query, Vec::new())
@@ -626,10 +818,10 @@ mod tests {
         let fresh = serve_with(
             tmp.path(),
             &sessions,
-            "sensor-faults",
-            "sensor-faults-v1",
+            ("sensor-faults", "sensor-faults-v1"),
             &refresh,
             StaleAction::ServeStale,
+            CacheWatch::Parquet,
             async || {
                 c3.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("sensor-faults-v1", &req("site-a").query, Vec::new());
@@ -664,10 +856,10 @@ mod tests {
         let err = match serve_with(
             tmp.path(),
             &sessions,
-            "runtime",
-            "runtime-v1",
+            ("runtime", "runtime-v1"),
             &req("site-busy"),
             StaleAction::ServeStale,
+            CacheWatch::Parquet,
             async || envelope("runtime-v1", &req("site-busy").query, Vec::new()),
         )
         .await
@@ -678,5 +870,508 @@ mod tests {
         assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(err.1["code"], json!("compute_admission_busy"));
         drop(held);
+    }
+
+    fn timescale_identity(model: &str, order: u64, coverage: &str) -> CacheIdentity {
+        CacheIdentity {
+            result_contract: ANALYTICS_RESULT_CONTRACT.into(),
+            sql_pack: "analytics=test-pack;fdd=test-pack".into(),
+            model_revision: model.into(),
+            watermark: InputWatermark::Known {
+                source: "timescale".into(),
+                order,
+                utc: "2026-06-01T00:00:00Z".into(),
+                coverage: coverage.into(),
+            },
+        }
+    }
+
+    fn duplicate_scatter() -> Vec<Value> {
+        vec![
+            json!({
+                "equipment_id": "AHU_1",
+                "timestamp_utc": "2026-06-01T00:00:00Z",
+                "dry_bulb_f": 70.0
+            }),
+            json!({
+                "equipment_id": "AHU_1",
+                "timestamp_utc": "2026-06-01T00:00:00Z",
+                "dry_bulb_f": 71.0
+            }),
+        ]
+    }
+
+    fn corrected_scatter() -> AnalyticsEnvelope {
+        let mut env = envelope("rcx-preset-v1", &req("site-a").query, Vec::new());
+        env.points = vec![json!({
+            "equipment_id": "AHU_1",
+            "timestamp_utc": "2026-06-01T00:00:00Z",
+            "x_role": "web_oa_t",
+            "x_point": "weather.web_oa_t",
+            "oat_f": 60.0
+        })];
+        env.generated_at = DateTime::parse_from_rfc3339("2026-06-02T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        env
+    }
+
+    fn write_legacy_scatter(root: &Path, request: &AnalyticsRequest) {
+        let hash = config_hash(&legacy_request_material(request));
+        let key = AnalyticsCacheKey {
+            building_id: "site-a".into(),
+            query_id: "rcx-preset".into(),
+            query_version: "rcx-preset-v1".into(),
+            window_start: "open".into(),
+            window_end: "open".into(),
+            config_hash: hash.clone(),
+        };
+        let table = AnalyticsResultTable {
+            rows: Vec::new(),
+            equipment: Vec::new(),
+            points: duplicate_scatter(),
+            skipped: Vec::new(),
+            warnings: Vec::new(),
+            coverage: None,
+            engine: "timescale-sql".into(),
+            result_query_version: "rcx-preset-v1".into(),
+        };
+        let provenance = CacheProvenance {
+            building_id: key.building_id.clone(),
+            query_id: key.query_id.clone(),
+            query_version: key.query_version.clone(),
+            window_start: key.window_start.clone(),
+            window_end: key.window_end.clone(),
+            config_hash: hash,
+            watermark_order: 0,
+            watermark_utc: String::new(),
+            generated_at: "2026-06-01T01:00:32Z".into(),
+            engine: "timescale-sql".into(),
+            result_query_version: "rcx-preset-v1".into(),
+            result_contract: String::new(),
+            sql_pack: String::new(),
+            model_revision: String::new(),
+            watermark_source: String::new(),
+            watermark_status: String::new(),
+            coverage: String::new(),
+        };
+        write_result(root, &key, &table, &provenance).unwrap();
+    }
+
+    #[tokio::test]
+    async fn preupgrade_envelope_recomputes_and_refresh_survives_restart() {
+        let _cg = CgroupTestEnv::low_pressure();
+        let tmp = tempfile::tempdir().unwrap();
+        let history = tmp
+            .path()
+            .join("history/building_id=site-a/equipment_id=ahu/year=2026/month=06");
+        fs::create_dir_all(&history).unwrap();
+        let sample = history.join("part-20260601T000000Z-live.parquet");
+        fs::write(&sample, b"historian-sample").unwrap();
+        let labeled = tmp.path().join("rule_results/site-a");
+        fs::create_dir_all(&labeled).unwrap();
+        let rule = labeled.join("FC1.json");
+        fs::write(&rule, br#"{"rule_id":"FC1","status":"PASS"}"#).unwrap();
+        let request = req("site-a");
+        write_legacy_scatter(tmp.path(), &request);
+        let legacy_hash = config_hash(&legacy_request_material(&request));
+        let identity = timescale_identity("model-a", 20260601000000, "samples=4;series=2");
+        let current_hash = config_hash(&config_material(&request, &identity));
+        assert_ne!(legacy_hash, current_hash);
+
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_first = calls.clone();
+        let first = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(identity.clone()),
+            async || {
+                calls_first.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(first.cache["hit"], false);
+        assert_eq!(first.cache["stale"], false);
+        assert_eq!(first.cache["schema"], json!(fdd_store::SCHEMA_NAME));
+        assert_eq!(fdd_store::SCHEMA_NAME, "analytics-result-parquet-v2");
+        assert_eq!(first.envelope.points.len(), 1);
+        assert_eq!(first.envelope.points[0]["x_role"], "web_oa_t");
+        assert!(sample.is_file());
+        assert!(rule.is_file());
+
+        let restarted = Mutex::new(SessionBook::new(limits()));
+        let calls_second = calls.clone();
+        let second = serve_with(
+            tmp.path(),
+            &restarted,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(identity.clone()),
+            async || {
+                calls_second.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(second.cache["hit"], true);
+        assert_eq!(second.cache["stale"], false);
+        assert_eq!(second.envelope.points[0]["x_role"], "web_oa_t");
+        assert_eq!(
+            second.envelope.generated_at, first.envelope.generated_at,
+            "refresh result survives a new session"
+        );
+
+        let mut refresh = request.clone();
+        refresh.refresh = true;
+        let calls_refresh = calls.clone();
+        let refreshed = serve_with(
+            tmp.path(),
+            &restarted,
+            ("rcx-preset", "rcx-preset-v1"),
+            &refresh,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(identity.clone()),
+            async || {
+                calls_refresh.fetch_add(1, Ordering::SeqCst);
+                let mut env = corrected_scatter();
+                env.points[0]["oat_f"] = json!(61.0);
+                env.generated_at = DateTime::parse_from_rfc3339("2026-06-03T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc);
+                env
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(refreshed.cache["hit"], false);
+        assert_eq!(refreshed.envelope.points[0]["oat_f"], 61.0);
+
+        let again = Mutex::new(SessionBook::new(limits()));
+        let calls_again = calls.clone();
+        let persisted = serve_with(
+            tmp.path(),
+            &again,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(identity),
+            async || {
+                calls_again.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(persisted.cache["hit"], true);
+        assert_eq!(persisted.cache["stale"], false);
+        assert_eq!(persisted.envelope.points[0]["oat_f"], 61.0);
+        assert_eq!(
+            persisted.envelope.generated_at,
+            refreshed.envelope.generated_at
+        );
+        assert!(sample.is_file());
+        assert!(rule.is_file());
+    }
+
+    #[tokio::test]
+    async fn incompatible_stamp_on_the_current_partition_recomputes() {
+        let _cg = CgroupTestEnv::low_pressure();
+        let tmp = tempfile::tempdir().unwrap();
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let request = req("site-a");
+        let identity = timescale_identity("model-a", 1, "samples=1;series=1");
+        let key = cache_key("site-a", "rcx-preset", "rcx-preset-v1", &request, &identity).unwrap();
+        let table = AnalyticsResultTable {
+            rows: Vec::new(),
+            equipment: Vec::new(),
+            points: duplicate_scatter(),
+            skipped: Vec::new(),
+            warnings: Vec::new(),
+            coverage: None,
+            engine: "timescale-sql".into(),
+            result_query_version: "rcx-preset-v1".into(),
+        };
+        let mut provenance = provenance_for(&key, &corrected_scatter(), &identity);
+        provenance.result_contract.clear();
+        provenance.sql_pack.clear();
+        provenance.model_revision.clear();
+        provenance.watermark_status.clear();
+        provenance.coverage.clear();
+        provenance.watermark_order = 0;
+        write_result(tmp.path(), &key, &table, &provenance).unwrap();
+
+        let served = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(identity),
+            async || corrected_scatter(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(served.cache["hit"], false);
+        assert_eq!(served.cache["stale"], false);
+        assert_eq!(served.envelope.points.len(), 1);
+        assert_eq!(served.envelope.points[0]["x_role"], "web_oa_t");
+    }
+
+    #[tokio::test]
+    async fn timescale_advance_without_parquet_is_stale() {
+        let _cg = CgroupTestEnv::low_pressure();
+        let tmp = tempfile::tempdir().unwrap();
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let request = req("site-a");
+        let first_id = timescale_identity("model-a", 20260601000000, "samples=4;series=2");
+        let c1 = calls.clone();
+        let _ = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(first_id),
+            async || {
+                c1.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        assert!(!tmp.path().join("history").exists());
+        let c2 = calls.clone();
+        let advanced = timescale_identity("model-a", 20260602000000, "samples=5;series=2");
+        let stale = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(advanced),
+            async || {
+                c2.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(stale.cache["hit"], true);
+        assert_eq!(stale.cache["stale"], true);
+        assert_eq!(stale.cache["watermark_status"], json!("known"));
+        assert_eq!(stale.envelope.points[0]["oat_f"], 60.0);
+        assert!(!tmp.path().join("history").exists());
+    }
+
+    #[tokio::test]
+    async fn model_remap_and_sql_pack_are_distinct_identities() {
+        let _cg = CgroupTestEnv::low_pressure();
+        let tmp = tempfile::tempdir().unwrap();
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let request = req("site-a");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let original = timescale_identity("model-a", 1, "samples=1;series=1");
+        let c1 = calls.clone();
+        let _ = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(original.clone()),
+            async || {
+                c1.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        let mut remapped = original.clone();
+        remapped.model_revision = "model-b".into();
+        let c2 = calls.clone();
+        let remapped_hit = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(remapped),
+            async || {
+                c2.fetch_add(1, Ordering::SeqCst);
+                let mut env = corrected_scatter();
+                env.points[0]["x_role"] = json!("web_oa_t_remapped");
+                env
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(remapped_hit.cache["hit"], false);
+        assert_eq!(
+            remapped_hit.envelope.points[0]["x_role"],
+            "web_oa_t_remapped"
+        );
+
+        let mut other_pack = original.clone();
+        other_pack.sql_pack = "analytics=other;fdd=other".into();
+        let c3 = calls.clone();
+        let pack_hit = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(other_pack),
+            async || {
+                c3.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+        assert_eq!(pack_hit.cache["hit"], false);
+        assert_ne!(
+            config_hash(&config_material(&request, &original)),
+            config_hash(&config_material(
+                &request,
+                &timescale_identity("model-b", 1, "samples=1;series=1")
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn broken_watermark_is_never_a_fresh_hit() {
+        let _cg = CgroupTestEnv::low_pressure();
+        let tmp = tempfile::tempdir().unwrap();
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let request = req("site-a");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let known = timescale_identity("model-a", 1, "samples=1;series=1");
+        let c1 = calls.clone();
+        let _ = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(known.clone()),
+            async || {
+                c1.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        let mut broken = known.clone();
+        broken.watermark = InputWatermark::Unavailable {
+            reason: "timescale watermark read failed".into(),
+        };
+        let c2 = calls.clone();
+        let stale = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(broken.clone()),
+            async || {
+                c2.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(stale.cache["hit"], true);
+        assert_eq!(stale.cache["stale"], true);
+        assert_eq!(stale.cache["watermark_status"], json!("unavailable"));
+        assert_eq!(stale.cache["historian_watermark_order"], Value::Null);
+        assert_eq!(
+            stale.cache["watermark_error"],
+            json!("timescale watermark read failed")
+        );
+
+        let c3 = calls.clone();
+        let again = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(broken),
+            async || {
+                c3.fetch_add(1, Ordering::SeqCst);
+                corrected_scatter()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(again.cache["stale"], true);
+        assert_ne!(
+            (
+                again.cache["hit"].as_bool().unwrap_or(false),
+                again.cache["stale"].as_bool().unwrap_or(true)
+            ),
+            (true, false)
+        );
+    }
+
+    #[tokio::test]
+    async fn tenants_do_not_share_a_cache_hit() {
+        let _cg = CgroupTestEnv::low_pressure();
+        let tmp = tempfile::tempdir().unwrap();
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let identity = timescale_identity("model-a", 1, "samples=1;series=1");
+        let mut site_a = req("site-a");
+        site_a.read_tenant_id = Some("tenant-a".into());
+        let _ = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &site_a,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(identity.clone()),
+            async || corrected_scatter(),
+        )
+        .await
+        .unwrap();
+        let mut site_b = req("site-b");
+        site_b.read_tenant_id = Some("tenant-b".into());
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls_b = calls.clone();
+        let other = serve_with(
+            tmp.path(),
+            &sessions,
+            ("rcx-preset", "rcx-preset-v1"),
+            &site_b,
+            StaleAction::ServeStale,
+            CacheWatch::Resolved(identity),
+            async || {
+                calls_b.fetch_add(1, Ordering::SeqCst);
+                let mut env = corrected_scatter();
+                env.points[0]["equipment_id"] = json!("AHU_9");
+                env
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(other.cache["hit"], false);
+        assert_eq!(other.envelope.points[0]["equipment_id"], "AHU_9");
     }
 }
