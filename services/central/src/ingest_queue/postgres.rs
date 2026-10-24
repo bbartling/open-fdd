@@ -74,9 +74,37 @@ pub fn statements(ddl: &str) -> Vec<String> {
 
 pub async fn apply_schema(pool: &PgPool) -> Result<(), QueueError> {
     for stmt in statements(SCHEMA_SQL) {
-        sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
+        execute_idempotent_schema(pool, &stmt).await?;
     }
     migrate_idempotency_scope(pool).await
+}
+
+/// `CREATE TABLE IF NOT EXISTS` can still collide in `pg_type` when two
+/// sessions apply the queue schema together. Retry that catalog race only.
+async fn execute_idempotent_schema(pool: &PgPool, statement: &str) -> Result<(), QueueError> {
+    let mut pause = std::time::Duration::from_millis(20);
+    let mut attempt = 0u8;
+    loop {
+        match sqlx::query(statement).execute(pool).await {
+            Ok(_) => return Ok(()),
+            Err(err) if schema_catalog_race(&err) && attempt < 5 => {
+                attempt += 1;
+                tokio::time::sleep(pause).await;
+                pause = pause.saturating_mul(2);
+            }
+            Err(err) => return Err(db_err(err)),
+        }
+    }
+}
+
+fn schema_catalog_race(err: &sqlx::Error) -> bool {
+    let Some(db) = err.as_database_error() else {
+        return false;
+    };
+    db.code().as_deref() == Some("23505")
+        && db.constraint().is_some_and(|name| {
+            name == "pg_type_typname_nsp_index" || name == "pg_class_relname_nsp_index"
+        })
 }
 
 pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, QueueError> {
@@ -1389,6 +1417,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize ingest schema DDL with the other queue fixtures"
+    )]
     async fn server_request_id_round_trips_through_postgres_and_stays_on_conflict() {
         let required = std::env::var("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED")
             .ok()
@@ -1403,6 +1435,7 @@ mod tests {
             }
             return;
         };
+        let _env = crate::test_env_lock::lock_env();
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&url)
