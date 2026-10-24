@@ -2613,9 +2613,9 @@ pub async fn fdd_results_readiness(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
-    Ok(Json(
-        open_fdd_edge_prototype::fdd::registry_api::readiness_response(q.scoped()),
-    ))
+    let mut body = open_fdd_edge_prototype::fdd::registry_api::readiness_response(q.scoped());
+    crate::sql_pack::attach_pack_readiness(&mut body).await;
+    Ok(Json(body))
 }
 
 #[derive(Debug, Deserialize)]
