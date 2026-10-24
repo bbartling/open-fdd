@@ -1,13 +1,5 @@
+#![cfg(test)]
 //! Generic CSV import pipeline — filename-derived model, historian, FDD (no bench-specific IDs).
-
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::print_stdout,
-    clippy::print_stderr,
-    clippy::dbg_macro,
-    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
-)]
 
 use open_fdd_edge_prototype::fdd::execution;
 use open_fdd_edge_prototype::historian::store;

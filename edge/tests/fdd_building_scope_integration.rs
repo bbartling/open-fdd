@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! OFDD-067: `building_id` scoping.
 //!
 //! Two fake building parquet trees under one `OPENFDD_PARQUET_ROOT` must yield
@@ -8,14 +9,6 @@
 //! Wave-X: DataFusion/Parquet product path retired — keep this integration under
 //! `legacy-datafusion` only.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::print_stdout,
-    clippy::print_stderr,
-    clippy::dbg_macro,
-    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
-)]
 #![cfg(feature = "legacy-datafusion")]
 
 use std::path::Path;
