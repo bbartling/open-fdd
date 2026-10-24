@@ -30,6 +30,7 @@ const SCHEMA_SQL: &[&str] = &[
     // Canonical helper body. Installed on every fresh start and forward upgrade.
     include_str!("../../../sql/fdd/postgres/postgres_helpers.sql"),
     include_str!("../../../sql/schema/06_fdd_pack_runtime.sql"),
+    include_str!("../../../sql/schema/07_opaque_series_binding.sql"),
 ];
 
 /// Tables whose rows mean this database is already in use.

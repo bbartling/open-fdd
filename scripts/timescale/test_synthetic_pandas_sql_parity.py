@@ -128,16 +128,46 @@ def _statements(text: str) -> list[str]:
 
 def apply_schema(conn) -> None:
     schema = ROOT / "sql" / "schema"
+    # 05 adds point_map.referenced. 07 is the reader view. Motor and other
+    # analytics SQL join it; a database that stops at the wide-history helper
+    # cannot run those queries.
     for name in (
         "00_extensions.sql",
         "01_bps_core.sql",
         "02_openfdd_dims.sql",
         "03_wide_history_helper.sql",
+        "05_portal_inventory.sql",
+        "07_opaque_series_binding.sql",
     ):
         for stmt in _statements((schema / name).read_text(encoding="utf-8")):
             with conn.cursor() as cur:
                 cur.execute(stmt)
         conn.commit()
+
+
+def bind_current(cur, site: str, equipment_id: str, role: str, openfdd_key: str) -> None:
+    """Current point_map + role_map binding. Readers join this; they do not split the key."""
+    cur.execute(
+        """
+        INSERT INTO point_map (site_id, openfdd_key, haystack_id, role, equipment_id, referenced)
+        VALUES (%s, %s, %s, %s, %s, true)
+        ON CONFLICT (site_id, openfdd_key) DO UPDATE
+          SET haystack_id = EXCLUDED.haystack_id,
+              role = EXCLUDED.role,
+              equipment_id = EXCLUDED.equipment_id,
+              referenced = true
+        """,
+        (site, openfdd_key, openfdd_key, role, equipment_id),
+    )
+    cur.execute(
+        """
+        INSERT INTO role_map (building_id, equipment_id, openfdd_key, role)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (building_id, equipment_id, openfdd_key) DO UPDATE
+          SET role = EXCLUDED.role
+        """,
+        (site, equipment_id, openfdd_key, role),
+    )
 
 
 def render_fc1() -> str:
@@ -203,6 +233,7 @@ def load_and_query(database_url: str) -> dict[str, float]:
                         """,
                         (row["ts"], SITE, openfdd_key, openfdd_key, row[role]),
                     )
+                    bind_current(cur, SITE, str(row["equipment_id"]), role, openfdd_key)
             cur.execute(
                 """
                 CREATE TEMP TABLE history (

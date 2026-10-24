@@ -10,29 +10,39 @@
 -- and |OAT−RAT| at or above $5. Missing fan status is not fan-on.
 -- MAT residual is the measured MAT minus the damper mixing model, and is
 -- null when the damper feedback is absent.
-WITH keyed AS (
+-- A role with two bound keys is left null. It is not maxed into one input.
+WITH unique_role AS (
+  SELECT site_id, equipment_id, role, min(openfdd_key) AS openfdd_key
+  FROM authorized_series
+  GROUP BY site_id, equipment_id, role
+  HAVING count(*) = 1
+),
+keyed AS (
   SELECT
-    ts,
-    split_part(openfdd_key, '.', 1) AS equipment_id,
-    max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'oa_t') AS oa_t,
-    max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'rat') AS rat,
-    max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'mat') AS mat,
-    max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'sat') AS sat,
-    max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'oa_damper_pct') AS oa_damper_pct,
-    max(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = 'fan_status') AS fan_status
-  FROM sample
-  WHERE site_id = $1
-    AND ($2::timestamptz IS NULL OR ts >= $2)
-    AND ($3::timestamptz IS NULL OR ts < $3)
+    s.ts,
+    u.equipment_id,
+    max(s.val) FILTER (WHERE u.role = 'oa_t') AS oa_t,
+    max(s.val) FILTER (WHERE u.role = 'rat') AS rat,
+    max(s.val) FILTER (WHERE u.role = 'mat') AS mat,
+    max(s.val) FILTER (WHERE u.role = 'sat') AS sat,
+    max(s.val) FILTER (WHERE u.role = 'oa_damper_pct') AS oa_damper_pct,
+    max(s.val) FILTER (WHERE u.role = 'fan_status') AS fan_status
+  FROM sample s
+  JOIN unique_role u
+    ON u.site_id = s.site_id
+   AND u.openfdd_key = s.openfdd_key
+  WHERE s.site_id = $1
+    AND ($2::timestamptz IS NULL OR s.ts >= $2)
+    AND ($3::timestamptz IS NULL OR s.ts < $3)
     AND (
       $4::text[] IS NULL
       OR cardinality($4) = 0
-      OR split_part(openfdd_key, '.', 1) = ANY ($4)
+      OR u.equipment_id = ANY ($4)
     )
-    AND split_part(openfdd_key, '.', 2) IN (
+    AND u.role IN (
       'oa_t', 'rat', 'mat', 'sat', 'oa_damper_pct', 'fan_status'
     )
-  GROUP BY ts, split_part(openfdd_key, '.', 1)
+  GROUP BY s.ts, u.equipment_id
 )
 SELECT
   ts,

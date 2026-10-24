@@ -132,6 +132,7 @@ async fn insert_series(
             .await
             .expect("insert sample");
     }
+    crate::series_binding::bind_conventional_key(pool, site, &key).await;
 }
 
 fn repeat(value: f64, count: usize) -> Vec<f64> {

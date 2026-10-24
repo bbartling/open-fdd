@@ -233,30 +233,52 @@ pub async fn type_map_for_building(building_id: Option<&str>) -> Result<BTreeMap
         .collect())
 }
 
-async fn roles_for_equipment(
+/// Current binding: role → opaque keys. More than one key is ambiguous.
+async fn binding_keys(
     tsdb: &Tsdb,
     building_id: &str,
     equipment_id: &str,
-) -> Result<Vec<String>> {
+) -> Result<BTreeMap<String, Vec<String>>> {
     let rows = sqlx::query(
         r#"
-        SELECT DISTINCT split_part(openfdd_key, '.', 2) AS role
-        FROM sample
-        WHERE site_id = $1
-          AND split_part(openfdd_key, '.', 1) = $2
-          AND split_part(openfdd_key, '.', 2) <> ''
-        ORDER BY 1
+        SELECT role, openfdd_key
+        FROM authorized_series
+        WHERE site_id = $1 AND equipment_id = $2
+        ORDER BY role, openfdd_key
         "#,
     )
     .bind(building_id)
     .bind(equipment_id)
     .fetch_all(tsdb.pool())
     .await
-    .context("roles_for_equipment")?;
-    Ok(rows
-        .into_iter()
-        .filter_map(|r| r.try_get::<String, _>("role").ok())
-        .filter(|r| safe_ident(r))
+    .context("binding_keys")?;
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in rows {
+        let role: String = row.try_get("role").context("binding role")?;
+        let key: String = row.try_get("openfdd_key").context("binding key")?;
+        if role.is_empty() || role.contains('\0') || key.is_empty() {
+            continue;
+        }
+        out.entry(role).or_default().push(key);
+    }
+    Ok(out)
+}
+
+fn ambiguous_bindings(keys: &BTreeMap<String, Vec<String>>) -> BTreeMap<String, Vec<String>> {
+    keys.iter()
+        .filter(|(_, bound)| bound.len() > 1)
+        .map(|(role, bound)| (role.clone(), bound.clone()))
+        .collect()
+}
+
+async fn roles_for_equipment(
+    tsdb: &Tsdb,
+    building_id: &str,
+    equipment_id: &str,
+) -> Result<Vec<String>> {
+    Ok(binding_keys(tsdb, building_id, equipment_id)
+        .await?
+        .into_keys()
         .collect())
 }
 
@@ -333,18 +355,20 @@ pub async fn inspect_equipment(
         return Ok(None);
     }
     let limit = max_points.clamp(50, 8000) as i64;
-    // Pivot selected roles; span-preserving downsample via row_number.
-    let mut filters = String::new();
-    for (i, role) in selected.iter().enumerate() {
-        if i > 0 {
-            filters.push_str(" OR ");
-        }
-        filters.push_str(&format!("openfdd_key = '{eq}.{role}'"));
-    }
+    let bound = binding_keys(&tsdb, building_id, eq).await?;
+    let ambiguous = ambiguous_bindings(&bound);
+    let unique: Vec<String> = selected
+        .iter()
+        .filter(|role| bound.get(*role).is_some_and(|keys| keys.len() == 1))
+        .cloned()
+        .collect();
+    // One key per role. A second key stays out of the pivot instead of being maxed.
     let mut max_cols = String::new();
-    for role in &selected {
+    for role in &unique {
+        let alias = crate::series_binding::quote_ident(role);
         max_cols.push_str(&format!(
-            ", MAX(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = '{role}') AS \"{role}\""
+            ", MAX(s.val) FILTER (WHERE a.role = '{role_lit}') AS {alias}",
+            role_lit = role.replace('\'', "''"),
         ));
     }
     let sql = format!(
@@ -352,36 +376,45 @@ pub async fn inspect_equipment(
 SELECT timestamp_utc {max_cols_outer}
 FROM (
   SELECT
-    ts AS timestamp_utc
+    s.ts AS timestamp_utc
     {max_cols},
-    ROW_NUMBER() OVER (ORDER BY ts) AS _rn,
+    ROW_NUMBER() OVER (ORDER BY s.ts) AS _rn,
     COUNT(*) OVER () AS _cnt
-  FROM sample
-  WHERE site_id = $1 AND ({filters})
-    AND ($3::timestamptz IS NULL OR ts >= $3)
-    AND ($4::timestamptz IS NULL OR ts < $4)
-  GROUP BY ts
+  FROM sample s
+  JOIN authorized_series a
+    ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+  WHERE s.site_id = $1
+    AND a.equipment_id = $2
+    AND a.role = ANY($3)
+    AND ($5::timestamptz IS NULL OR s.ts >= $5)
+    AND ($6::timestamptz IS NULL OR s.ts < $6)
+  GROUP BY s.ts
 ) s
 WHERE _rn = 1 OR _rn = _cnt
-   OR (_rn % (CASE WHEN ((_cnt + $2 - 1) / $2) > 1 THEN ((_cnt + $2 - 1) / $2) ELSE 1 END)) = 0
+   OR (_rn % (CASE WHEN ((_cnt + $4 - 1) / $4) > 1 THEN ((_cnt + $4 - 1) / $4) ELSE 1 END)) = 0
 ORDER BY timestamp_utc
-LIMIT $2
+LIMIT $4
 "#,
-        max_cols_outer = selected
+        max_cols_outer = unique
             .iter()
-            .map(|r| format!(", \"{r}\""))
+            .map(|r| format!(", {}", crate::series_binding::quote_ident(r)))
             .collect::<String>(),
         max_cols = max_cols,
-        filters = filters,
     );
-    let rows = sqlx::query(&sql)
-        .bind(building_id)
-        .bind(limit)
-        .bind(scope.start)
-        .bind(scope.end)
-        .fetch_all(tsdb.pool())
-        .await
-        .context("inspect pivot")?;
+    let rows = if unique.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query(&sql)
+            .bind(building_id)
+            .bind(eq)
+            .bind(&unique)
+            .bind(limit)
+            .bind(scope.start)
+            .bind(scope.end)
+            .fetch_all(tsdb.pool())
+            .await
+            .context("inspect pivot")?
+    };
     let mut points = Vec::with_capacity(rows.len());
     for r in &rows {
         let ts = r
@@ -394,7 +427,7 @@ LIMIT $2
             "equipment_id": eq,
         });
         if let Some(obj) = row.as_object_mut() {
-            for c in &selected {
+            for c in &unique {
                 let v = r.try_get::<Option<f64>, _>(c.as_str()).ok().flatten();
                 obj.insert(c.clone(), json!(v));
             }
@@ -419,13 +452,22 @@ LIMIT $2
         TS_ENGINE,
     );
     env.points = points;
-    env.rows = selected.iter().map(|c| json!({ "column": c })).collect();
+    env.rows = unique.iter().map(|c| json!({ "column": c })).collect();
+    let mut selected_keys = serde_json::Map::new();
+    for role in &unique {
+        if let Some(keys) = bound.get(role).and_then(|keys| keys.first()) {
+            selected_keys.insert(role.clone(), json!(keys));
+        }
+    }
     env.coverage = Some(json!({
         "equipment_id": eq,
         "row_count": env.points.len(),
         "point_count": env.points.len(),
         "plottable_columns": plottable,
-        "columns_plotted": selected,
+        "columns_plotted": unique,
+        "selected_openfdd_keys": selected_keys,
+        "ambiguous_roles": ambiguous,
+        "role_binding_policy": crate::series_binding::ROLE_BINDING_POLICY,
         "first_timestamp": first,
         "last_timestamp": last,
         "source": "timescale_sample",
@@ -458,7 +500,6 @@ pub async fn rcx_timeseries(
         return Ok(None);
     }
     let limit = read.max_points.clamp(200, 20000) as i64;
-    let pattern = format!("%.{role_col}");
     let mut warnings =
         vec!["RCx role timeseries from Timescale sample (Wave-X Soft-OPEN)".to_string()];
     let overlay_role = match overlay_col {
@@ -484,55 +525,99 @@ pub async fn rcx_timeseries(
     let fan_join = if filter_fan_on {
         "AND EXISTS (
             SELECT 1 FROM sample f
+            JOIN authorized_series fa
+              ON fa.site_id = f.site_id AND fa.openfdd_key = f.openfdd_key
             WHERE f.site_id = s.site_id AND f.ts = s.ts
-              AND f.openfdd_key = split_part(s.openfdd_key,'.',1) || '.fan_status'
+              AND fa.equipment_id = a.equipment_id
+              AND fa.role = 'fan_status'
               AND COALESCE(f.val, 0) > 0.05
+              AND (
+                SELECT count(*) FROM authorized_series fac
+                WHERE fac.site_id = fa.site_id
+                  AND fac.equipment_id = fa.equipment_id
+                  AND fac.role = fa.role
+              ) = 1
           )"
     } else {
         ""
     };
-    // Bound equipment via ANY($3). Companion roles are exact key suffixes ($5, $6),
-    // aligned to the same site, timestamp, and equipment as the primary sample.
+    // Bound equipment via ANY($3). Companion roles ($5, $6) join the same
+    // authorized binding. A role with two keys is omitted, not averaged.
     let sql = format!(
         r#"
 SELECT timestamp_utc, equipment_id, value_f, motor_f, overlay_f, return_f
 FROM (
   SELECT
     s.ts AS timestamp_utc,
-    split_part(s.openfdd_key, '.', 1) AS equipment_id,
+    a.equipment_id,
     s.val AS value_f,
     (
       SELECT CASE WHEN COALESCE(m.val, 0) > 0.05 THEN 1.0 ELSE 0.0 END
       FROM sample m
+      JOIN authorized_series ma
+        ON ma.site_id = m.site_id AND ma.openfdd_key = m.openfdd_key
       WHERE m.site_id = s.site_id AND m.ts = s.ts
-        AND m.openfdd_key = split_part(s.openfdd_key, '.', 1) || '.fan_status'
+        AND ma.equipment_id = a.equipment_id
+        AND ma.role = 'fan_status'
+        AND (
+          SELECT count(*) FROM authorized_series mac
+          WHERE mac.site_id = ma.site_id
+            AND mac.equipment_id = ma.equipment_id
+            AND mac.role = ma.role
+        ) = 1
       LIMIT 1
     ) AS motor_f,
     (
       SELECT o.val
       FROM sample o
+      JOIN authorized_series oa
+        ON oa.site_id = o.site_id AND oa.openfdd_key = o.openfdd_key
       WHERE $5::text <> ''
         AND o.site_id = s.site_id
         AND o.ts = s.ts
-        AND o.openfdd_key = split_part(s.openfdd_key, '.', 1) || '.' || $5::text
+        AND oa.equipment_id = a.equipment_id
+        AND oa.role = $5::text
+        AND (
+          SELECT count(*) FROM authorized_series oac
+          WHERE oac.site_id = oa.site_id
+            AND oac.equipment_id = oa.equipment_id
+            AND oac.role = oa.role
+        ) = 1
       LIMIT 1
     ) AS overlay_f,
     (
       SELECT ret.val
       FROM sample ret
+      JOIN authorized_series ra
+        ON ra.site_id = ret.site_id AND ra.openfdd_key = ret.openfdd_key
       WHERE $6::text <> ''
         AND ret.site_id = s.site_id
         AND ret.ts = s.ts
-        AND ret.openfdd_key = split_part(s.openfdd_key, '.', 1) || '.' || $6::text
+        AND ra.equipment_id = a.equipment_id
+        AND ra.role = $6::text
+        AND (
+          SELECT count(*) FROM authorized_series rac
+          WHERE rac.site_id = ra.site_id
+            AND rac.equipment_id = ra.equipment_id
+            AND rac.role = ra.role
+        ) = 1
       LIMIT 1
     ) AS return_f,
     ROW_NUMBER() OVER (ORDER BY s.ts, s.openfdd_key) AS _rn,
     COUNT(*) OVER () AS _cnt
   FROM sample s
+  JOIN authorized_series a
+    ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
   WHERE s.site_id = $1
-    AND s.openfdd_key LIKE $2
-    AND split_part(s.openfdd_key, '.', 1) = ANY($3)
+    AND a.role = $2
+    AND a.equipment_id = ANY($3)
     AND s.val IS NOT NULL
+    AND (
+      SELECT count(*) FROM authorized_series ac
+      WHERE ac.site_id = a.site_id
+        AND ac.equipment_id = a.equipment_id
+        AND ac.role = a.role
+    ) = 1
     AND ($7::timestamptz IS NULL OR s.ts >= $7)
     AND ($8::timestamptz IS NULL OR s.ts < $8)
     {fan_join}
@@ -545,7 +630,7 @@ LIMIT $4
     );
     let rows = sqlx::query(&sql)
         .bind(building_id)
-        .bind(&pattern)
+        .bind(role_col)
         .bind(&ids)
         .bind(limit)
         .bind(overlay_role)
@@ -770,18 +855,29 @@ async fn bound_weather_equipment(
     building_id: &str,
     role: &str,
     scope: &crate::timescale_analytics::AnalyticsSqlScope,
-) -> Result<Option<String>> {
+) -> Result<Option<(String, String)>> {
     let row = sqlx::query(
         r#"
-        SELECT e.equipment_id
+        SELECT e.equipment_id, a.openfdd_key
         FROM equipment e
+        JOIN authorized_series a
+          ON a.site_id = e.building_id
+         AND a.equipment_id = e.equipment_id
+         AND a.role = $2
         WHERE e.building_id = $1
           AND lower(btrim(e.equip_type)) = 'weather'
+          AND (
+            SELECT count(*)
+            FROM authorized_series c
+            WHERE c.site_id = a.site_id
+              AND c.equipment_id = a.equipment_id
+              AND c.role = a.role
+          ) = 1
           AND EXISTS (
             SELECT 1
             FROM sample s
             WHERE s.site_id = $1
-              AND s.openfdd_key = e.equipment_id || '.' || $2
+              AND s.openfdd_key = a.openfdd_key
               AND s.val IS NOT NULL
               AND (
                 $3::timestamptz IS NULL
@@ -804,7 +900,14 @@ async fn bound_weather_equipment(
     .fetch_optional(tsdb.pool())
     .await
     .context("bound weather x")?;
-    Ok(row.and_then(|r| r.try_get::<String, _>("equipment_id").ok()))
+    Ok(match row {
+        Some(r) => {
+            let equipment_id: String = r.try_get("equipment_id").context("weather equipment")?;
+            let openfdd_key: String = r.try_get("openfdd_key").context("weather key")?;
+            Some((equipment_id, openfdd_key))
+        }
+        None => None,
+    })
 }
 
 pub async fn rcx_oat_scatter(
@@ -824,7 +927,7 @@ pub async fn rcx_oat_scatter(
         return Ok(None);
     }
     let (x_role, x_quantity) = scatter_x_role(prefer_wetbulb);
-    let Some(x_equipment) =
+    let Some((x_equipment, x_key)) =
         bound_weather_equipment(&tsdb, building_id, x_role, &read.scope).await?
     else {
         let reason = if prefer_wetbulb {
@@ -841,29 +944,40 @@ pub async fn rcx_oat_scatter(
             reason,
         )));
     };
-    let x_key = format!("{x_equipment}.{x_role}");
-    // Wet-bulb keeps a dry-bulb reference only when that same weather point
-    // actually has web_oa_t. The reference is never a copy of the wet-bulb value.
+    // Wet-bulb keeps a dry-bulb reference only when that same weather equipment
+    // has one current web_oa_t binding. The reference is never a copy of wet-bulb.
     let dry_key = if prefer_wetbulb {
-        format!("{x_equipment}.web_oa_t")
+        binding_keys(&tsdb, building_id, &x_equipment)
+            .await?
+            .get("web_oa_t")
+            .filter(|keys| keys.len() == 1)
+            .and_then(|keys| keys.first().cloned())
+            .unwrap_or_default()
     } else {
         String::new()
     };
     let limit = read.max_points.clamp(200, 20000) as i64;
-    let y_pat = format!("%.{y_col}");
     let age = RCX_X_ALIGN_MAX_AGE_SECS as i32;
     let (y_quantity, y_unit) = role_measure(y_col);
     let rows = sqlx::query(
         r#"
         WITH y AS (
-          SELECT ts, split_part(openfdd_key, '.', 1) AS equipment_id, val AS y_f
-          FROM sample
-          WHERE site_id = $1
-            AND openfdd_key LIKE $2
-            AND split_part(openfdd_key, '.', 1) = ANY($3)
-            AND val IS NOT NULL
-            AND ($4::timestamptz IS NULL OR ts >= $4)
-            AND ($5::timestamptz IS NULL OR ts < $5)
+          SELECT s.ts, a.equipment_id, s.val AS y_f
+          FROM sample s
+          JOIN authorized_series a
+            ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+          WHERE s.site_id = $1
+            AND a.role = $2
+            AND a.equipment_id = ANY($3)
+            AND (
+              SELECT count(*) FROM authorized_series c
+              WHERE c.site_id = a.site_id
+                AND c.equipment_id = a.equipment_id
+                AND c.role = a.role
+            ) = 1
+            AND s.val IS NOT NULL
+            AND ($4::timestamptz IS NULL OR s.ts >= $4)
+            AND ($5::timestamptz IS NULL OR s.ts < $5)
         )
         SELECT
           y.ts AS timestamp_utc,
@@ -903,7 +1017,7 @@ pub async fn rcx_oat_scatter(
         "#,
     )
     .bind(building_id)
-    .bind(&y_pat)
+    .bind(y_col)
     .bind(&ids)
     .bind(read.scope.start)
     .bind(read.scope.end)
@@ -1039,17 +1153,25 @@ pub async fn rcx_zone_comfort_rank(
     let rows = sqlx::query(
         r#"
         SELECT
-          split_part(openfdd_key, '.', 1) AS equipment_id,
-          100.0 * AVG(CASE WHEN val BETWEEN $2 AND $3 THEN 1.0 ELSE 0.0 END) AS comfort_pct,
+          a.equipment_id,
+          100.0 * AVG(CASE WHEN s.val BETWEEN $2 AND $3 THEN 1.0 ELSE 0.0 END) AS comfort_pct,
           COUNT(*)::bigint AS n
-        FROM sample
-        WHERE site_id = $1
-          AND openfdd_key LIKE '%.zone_t'
-          AND split_part(openfdd_key, '.', 1) = ANY($4)
-          AND val IS NOT NULL
-          AND ($5::timestamptz IS NULL OR ts >= $5)
-          AND ($6::timestamptz IS NULL OR ts < $6)
-        GROUP BY 1
+        FROM sample s
+        JOIN authorized_series a
+          ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+        WHERE s.site_id = $1
+          AND a.role = 'zone_t'
+          AND a.equipment_id = ANY($4)
+          AND (
+            SELECT count(*) FROM authorized_series c
+            WHERE c.site_id = a.site_id
+              AND c.equipment_id = a.equipment_id
+              AND c.role = a.role
+          ) = 1
+          AND s.val IS NOT NULL
+          AND ($5::timestamptz IS NULL OR s.ts >= $5)
+          AND ($6::timestamptz IS NULL OR s.ts < $6)
+        GROUP BY a.equipment_id
         ORDER BY comfort_pct ASC
         LIMIT 200
         "#,
@@ -1247,8 +1369,38 @@ pub async fn fdd_plot(
         }));
     }
     let tsdb = Tsdb::connect_from_env().await?;
-    let present = roles_for_equipment(&tsdb, building_id, equipment_id).await?;
-    let present_set: BTreeSet<_> = present.iter().cloned().collect();
+    let bound = binding_keys(&tsdb, building_id, equipment_id).await?;
+    let ambiguous = ambiguous_bindings(&bound);
+    let present_set: BTreeSet<_> = bound
+        .iter()
+        .filter(|(_, keys)| keys.len() == 1)
+        .map(|(role, _)| role.clone())
+        .collect();
+    let required_ambiguous: Vec<String> = rule
+        .required_roles
+        .iter()
+        .filter(|r| ambiguous.contains_key(r.as_str()))
+        .cloned()
+        .collect();
+    if !required_ambiguous.is_empty() {
+        return Ok(json!({
+            "ok": false,
+            "error": format!(
+                "ambiguous roles for rule {}: {}",
+                rule.rule_id,
+                required_ambiguous.join(", ")
+            ),
+            "ambiguous_roles": required_ambiguous,
+            "role_binding_policy": crate::series_binding::ROLE_BINDING_POLICY,
+            "equipment_id": equipment_id,
+            "rule_id": rule.rule_id,
+            "site_id": building_id,
+            "building_id": building_id,
+            "rows": [],
+            "series": {},
+            "engine": TS_ENGINE,
+        }));
+    }
     let missing: Vec<String> = rule
         .required_roles
         .iter()
@@ -1293,25 +1445,18 @@ pub async fn fdd_plot(
     let mut max_cols = String::new();
     for role in &roles {
         max_cols.push_str(&format!(
-            ", MAX(val) FILTER (WHERE split_part(openfdd_key, '.', 2) = '{role}') AS \"{role}\""
+            ", MAX(s.val) FILTER (WHERE a.role = '{role}') AS \"{role}\""
         ));
-    }
-    let mut filters = String::new();
-    for (i, role) in roles.iter().enumerate() {
-        if i > 0 {
-            filters.push_str(" OR ");
-        }
-        filters.push_str(&format!("openfdd_key = '{equipment_id}.{role}'"));
     }
     let mut window_sql = String::new();
     if let Some(start) = window_start.map(str::trim).filter(|s| !s.is_empty()) {
         if DateTime::parse_from_rfc3339(start).is_ok() {
-            window_sql.push_str(&format!(" AND ts >= '{start}'::timestamptz"));
+            window_sql.push_str(&format!(" AND s.ts >= '{start}'::timestamptz"));
         }
     }
     if let Some(end) = window_end.map(str::trim).filter(|s| !s.is_empty()) {
         if DateTime::parse_from_rfc3339(end).is_ok() {
-            window_sql.push_str(&format!(" AND ts <= '{end}'::timestamptz"));
+            window_sql.push_str(&format!(" AND s.ts <= '{end}'::timestamptz"));
         }
     }
     let sql = format!(
@@ -1319,29 +1464,34 @@ pub async fn fdd_plot(
 SELECT timestamp_utc {sel}
 FROM (
   SELECT
-    ts AS timestamp_utc
+    s.ts AS timestamp_utc
     {max_cols},
-    ROW_NUMBER() OVER (ORDER BY ts) AS _rn,
+    ROW_NUMBER() OVER (ORDER BY s.ts) AS _rn,
     COUNT(*) OVER () AS _cnt
-  FROM sample
-  WHERE site_id = $1 AND ({filters}){window_sql}
-  GROUP BY ts
+  FROM sample s
+  JOIN authorized_series a
+    ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+  WHERE s.site_id = $1
+    AND a.equipment_id = $2
+    AND a.role = ANY($3){window_sql}
+  GROUP BY s.ts
 ) s
 WHERE _rn = 1 OR _rn = _cnt
-   OR (_rn % (CASE WHEN ((_cnt + $2 - 1) / $2) > 1 THEN ((_cnt + $2 - 1) / $2) ELSE 1 END)) = 0
+   OR (_rn % (CASE WHEN ((_cnt + $4 - 1) / $4) > 1 THEN ((_cnt + $4 - 1) / $4) ELSE 1 END)) = 0
 ORDER BY timestamp_utc
-LIMIT $2
+LIMIT $4
 "#,
         sel = roles
             .iter()
             .map(|r| format!(", \"{r}\""))
             .collect::<String>(),
         max_cols = max_cols,
-        filters = filters,
         window_sql = window_sql,
     );
     let rows = sqlx::query(&sql)
         .bind(building_id)
+        .bind(equipment_id)
+        .bind(&roles)
         .bind(max_pts as i64)
         .fetch_all(tsdb.pool())
         .await
@@ -1441,6 +1591,12 @@ LIMIT $2
     // Soft-OPEN R4: surface lean plot budgets for SPA (roles ≤6, pts hard-cap).
     let approx_bytes =
         point_count.saturating_mul(roles.len().saturating_mul(24).saturating_add(32));
+    let mut selected_keys = serde_json::Map::new();
+    for role in &roles {
+        if let Some(key) = bound.get(role).and_then(|keys| keys.first()) {
+            selected_keys.insert(role.clone(), json!(key));
+        }
+    }
     Ok(json!({
         "ok": true,
         "equipment_id": equipment_id,
@@ -1448,6 +1604,8 @@ LIMIT $2
         "site_id": building_id,
         "building_id": building_id,
         "roles": roles,
+        "selected_openfdd_keys": selected_keys,
+        "role_binding_policy": crate::series_binding::ROLE_BINDING_POLICY,
         "rows": out_rows,
         "series": lean,
         "confirmed_fault": {"ts": fault_ts, "y": fault_y},
@@ -1603,34 +1761,49 @@ pub async fn opaque_point_history_softopen(
             "soft_open_neq_fq": true,
         }));
     }
-    let (equipment_id, point_key) = match key.split_once('.') {
-        Some((eq, pk)) => (eq, pk),
-        None => {
-            return Ok(json!({
-                "ok": false,
-                "error": "openfdd_key must be equipment_id.point_key",
-                "soft_open_neq_fq": true,
-            }));
-        }
-    };
-    let candidates = candidate_openfdd_keys_for_point(bid, equipment_id, point_key);
     let limit = max_points.clamp(1, 2000) as i64;
     let tsdb = Tsdb::connect_from_env().await?;
-    let rows = sqlx::query(
+    // The stored key is opaque. Read it directly before any column/role fallback.
+    let exact = sqlx::query(
         r#"
         SELECT ts, openfdd_key, val
         FROM sample
-        WHERE site_id = $1 AND openfdd_key = ANY($2)
+        WHERE site_id = $1 AND openfdd_key = $2
         ORDER BY ts DESC
         LIMIT $3
         "#,
     )
     .bind(bid)
-    .bind(&candidates)
+    .bind(key)
     .bind(limit)
     .fetch_all(tsdb.pool())
     .await
     .context("opaque_point_history_softopen")?;
+    let (rows, candidates) = if !exact.is_empty() {
+        (exact, vec![key.to_string()])
+    } else if let Some((equipment_id, point_key)) = key.split_once('.') {
+        let candidates = candidate_openfdd_keys_for_point(bid, equipment_id, point_key);
+        let rows = sqlx::query(
+            r#"
+            SELECT s.ts, s.openfdd_key, s.val
+            FROM sample s
+            JOIN authorized_series a
+              ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+            WHERE s.site_id = $1 AND s.openfdd_key = ANY($2)
+            ORDER BY s.ts DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(bid)
+        .bind(&candidates)
+        .bind(limit)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("opaque_point_history_softopen")?;
+        (rows, candidates)
+    } else {
+        (exact, vec![key.to_string()])
+    };
     let resolved_key = rows
         .first()
         .and_then(|r| r.try_get::<String, _>("openfdd_key").ok())
@@ -2209,6 +2382,20 @@ fn poll_seconds_from_payload(payload: &Value) -> f64 {
     300.0
 }
 
+fn admitted_on_sample(role: &str) -> String {
+    // `authorized_series` also has `unit`. The sample columns are `s.val` and `s.unit`.
+    fdd_core::sql_admit_val_expr(role)
+        .replace("unit", "s.unit")
+        .replace("val", "s.val")
+}
+
+fn is_chw_plant_role(role: &str) -> bool {
+    matches!(
+        role,
+        "chw_supply_t" | "chw_return_t" | "chw_flow" | "chw_dp" | "chw_supply_sp"
+    )
+}
+
 fn is_weather_role(role: &str) -> bool {
     matches!(
         role,
@@ -2242,7 +2429,10 @@ fn row_fault_hours(row: &sqlx::postgres::PgRow) -> f64 {
 async fn ensure_history_table(conn: &mut PgConnection, roles: &[String]) -> Result<()> {
     let mut cols = String::from("equipment_id text not null, timestamp_utc timestamptz not null");
     for r in roles {
-        cols.push_str(&format!(", \"{r}\" double precision"));
+        cols.push_str(&format!(
+            ", {} double precision",
+            crate::series_binding::quote_ident(r)
+        ));
     }
     sqlx::query(&format!(
         "CREATE TEMP TABLE history ({cols}) ON COMMIT DROP"
@@ -2266,112 +2456,128 @@ async fn fill_history_for_equipment(
     }
     // Admit known source units into imperial-f-v1 pack ABI (°F / in.w.c. / cfm)
     // before MAX/pivot so mixed °C/°F points do not false-fault (#1284).
+    // Columns come from the current unique binding. A second key for the same
+    // role is left out. Weather and CHW fall back to one stamped equipment,
+    // the lexicographically first unique binding, when the target has none.
     let mut max_cols = String::new();
     for role in roles {
-        let admitted = fdd_core::sql_admit_val_expr(role);
-        let local_key = format!("{equipment_id}.{role}");
-        if matches!(
-            role.as_str(),
-            "chw_supply_t" | "chw_return_t" | "chw_flow" | "chw_dp" | "chw_supply_sp"
-        ) {
-            // Prefer target equipment's own key; only then a stamped plant. Never
-            // MAX across unrelated plants (that invented 50/54 from 44/54 + 50/52).
+        let admitted = admitted_on_sample(role);
+        let alias = crate::series_binding::quote_ident(role);
+        let role_lit = role.replace('\'', "''");
+        let local = format!(
+            "MAX({admitted}) FILTER (WHERE a.equipment_id = $2 AND a.role = '{role_lit}' \
+               AND (SELECT count(*) FROM authorized_series c \
+                    WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id \
+                      AND c.role = a.role) = 1)"
+        );
+        if is_chw_plant_role(role) {
             max_cols.push_str(&format!(
-                ", COALESCE(\
-                   MAX({admitted}) FILTER (WHERE openfdd_key = '{local_key}'), \
-                   MAX({admitted}) FILTER (WHERE split_part(openfdd_key, '.', 2) = '{role}' \
-                     AND openfdd_key <> '{local_key}' \
-                     AND split_part(openfdd_key, '.', 1) IN ( \
-                       SELECT equipment_id FROM equipment \
-                       WHERE building_id = $1 \
-                         AND lower(coalesce(equip_type, '')) IN ( \
+                ", COALESCE({local}, \
+                   MAX({admitted}) FILTER (WHERE a.role = '{role_lit}' \
+                     AND a.equipment_id = ( \
+                       SELECT e.equipment_id FROM equipment e \
+                       JOIN authorized_series w \
+                         ON w.site_id = e.building_id AND w.equipment_id = e.equipment_id \
+                        AND w.role = '{role_lit}' \
+                       WHERE e.building_id = $1 AND e.equipment_id <> $2 \
+                         AND lower(coalesce(e.equip_type, '')) IN ( \
                            'chiller', 'chw', 'chwplant', 'chw_plant' \
                          ) \
-                     ))\
-                 ) AS \"{role}\""
+                         AND (SELECT count(*) FROM authorized_series c \
+                              WHERE c.site_id = w.site_id AND c.equipment_id = w.equipment_id \
+                                AND c.role = w.role) = 1 \
+                       ORDER BY e.equipment_id LIMIT 1 \
+                     ))) AS {alias}"
             ));
         } else if is_weather_role(role) {
             max_cols.push_str(&format!(
-                ", COALESCE(\
-                   MAX({admitted}) FILTER (WHERE openfdd_key = '{local_key}'), \
-                   MAX({admitted}) FILTER (WHERE split_part(openfdd_key, '.', 2) = '{role}' \
-                     AND openfdd_key <> '{local_key}' \
-                     AND split_part(openfdd_key, '.', 1) IN ( \
-                       SELECT equipment_id FROM equipment \
-                       WHERE building_id = $1 \
-                         AND lower(coalesce(equip_type, '')) IN ('weather') \
-                     ))\
-                 ) AS \"{role}\""
+                ", COALESCE({local}, \
+                   MAX({admitted}) FILTER (WHERE a.role = '{role_lit}' \
+                     AND a.equipment_id = ( \
+                       SELECT e.equipment_id FROM equipment e \
+                       JOIN authorized_series w \
+                         ON w.site_id = e.building_id AND w.equipment_id = e.equipment_id \
+                        AND w.role = '{role_lit}' \
+                       WHERE e.building_id = $1 AND e.equipment_id <> $2 \
+                         AND lower(coalesce(e.equip_type, '')) = 'weather' \
+                         AND (SELECT count(*) FROM authorized_series c \
+                              WHERE c.site_id = w.site_id AND c.equipment_id = w.equipment_id \
+                                AND c.role = w.role) = 1 \
+                       ORDER BY e.equipment_id LIMIT 1 \
+                     ))) AS {alias}"
             ));
         } else {
-            max_cols.push_str(&format!(
-                ", MAX({admitted}) FILTER (WHERE openfdd_key = '{local_key}') AS \"{role}\""
-            ));
-        }
-    }
-    let mut filters = String::new();
-    for (i, role) in roles.iter().enumerate() {
-        if i > 0 {
-            filters.push_str(" OR ");
-        }
-        filters.push_str(&format!("openfdd_key = '{equipment_id}.{role}'"));
-        // Soft-OPEN R6: weather/utility roles also from stamped weather equipment.
-        if is_weather_role(role) {
-            filters.push_str(&format!(
-                " OR (split_part(openfdd_key, '.', 2) = '{role}' \
-                 AND split_part(openfdd_key, '.', 1) IN ( \
-                   SELECT equipment_id FROM equipment \
-                   WHERE building_id = $1 \
-                     AND lower(coalesce(equip_type, '')) IN ('weather') \
-                 ))"
-            ));
-        }
-        // Soft-OPEN R6: CHW plant roles from stamped chiller/chwPlant equipment when
-        // the target itself has no local key (exact role match only).
-        if matches!(
-            role.as_str(),
-            "chw_supply_t" | "chw_return_t" | "chw_flow" | "chw_dp" | "chw_supply_sp"
-        ) {
-            filters.push_str(&format!(
-                " OR (split_part(openfdd_key, '.', 2) = '{role}' \
-                 AND split_part(openfdd_key, '.', 1) IN ( \
-                   SELECT equipment_id FROM equipment \
-                   WHERE building_id = $1 \
-                     AND lower(coalesce(equip_type, '')) IN ( \
-                       'chiller', 'chw', 'chwplant', 'chw_plant' \
-                     ) \
-                 ))"
-            ));
+            max_cols.push_str(&format!(", {local} AS {alias}"));
         }
     }
     // Soft-OPEN R6: honor half-open [start, end) when caller supplies window.
     let mut window_sql = String::new();
     if let Some(start) = window_start.map(str::trim).filter(|s| !s.is_empty()) {
         if safe_rfc3339(start) {
-            window_sql.push_str(&format!(" AND ts >= '{start}'::timestamptz"));
+            window_sql.push_str(&format!(" AND s.ts >= '{start}'::timestamptz"));
         }
     }
     if let Some(end) = window_end.map(str::trim).filter(|s| !s.is_empty()) {
         if safe_rfc3339(end) {
-            window_sql.push_str(&format!(" AND ts < '{end}'::timestamptz"));
+            window_sql.push_str(&format!(" AND s.ts < '{end}'::timestamptz"));
         }
+    }
+    // The time spine is this equipment. A site-wide join inserts another
+    // unit's timestamps as null holds and shortens forward intervals
+    // (a 5-minute fault series becomes the 1-minute cadence of its neighbor).
+    // Weather and CHW add only the one fallback equipment already chosen
+    // for that role. An ambiguous role adds no timestamps.
+    let mut spine = String::from("a.equipment_id = $2");
+    for role in roles {
+        let role_lit = role.replace('\'', "''");
+        let type_filter = if is_weather_role(role) {
+            "lower(coalesce(e.equip_type, '')) = 'weather'"
+        } else if is_chw_plant_role(role) {
+            "lower(coalesce(e.equip_type, '')) IN ( \
+               'chiller', 'chw', 'chwplant', 'chw_plant' \
+             )"
+        } else {
+            continue;
+        };
+        spine.push_str(&format!(
+            " OR (a.role = '{role_lit}' AND a.equipment_id = ( \
+               SELECT e.equipment_id FROM equipment e \
+               JOIN authorized_series w \
+                 ON w.site_id = e.building_id AND w.equipment_id = e.equipment_id \
+                AND w.role = '{role_lit}' \
+               WHERE e.building_id = $1 AND e.equipment_id <> $2 \
+                 AND {type_filter} \
+                 AND (SELECT count(*) FROM authorized_series c \
+                      WHERE c.site_id = w.site_id AND c.equipment_id = w.equipment_id \
+                        AND c.role = w.role) = 1 \
+               ORDER BY e.equipment_id LIMIT 1))"
+        ));
     }
     let insert_cols = roles
         .iter()
-        .map(|r| format!("\"{r}\""))
+        .map(|r| crate::series_binding::quote_ident(r))
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!(
         r#"
 INSERT INTO history (equipment_id, timestamp_utc, {insert_cols})
-SELECT '{equipment_id}', ts {max_cols}
-FROM sample
-WHERE site_id = $1 AND ({filters}){window_sql}
-GROUP BY ts
+SELECT $2, s.ts {max_cols}
+FROM sample s
+JOIN authorized_series a
+  ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+WHERE s.site_id = $1
+  AND a.role = ANY($3)
+  AND ({spine})
+  AND (SELECT count(*) FROM authorized_series c
+       WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id
+         AND c.role = a.role) = 1{window_sql}
+GROUP BY s.ts
 "#
     );
     let res = sqlx::query(&sql)
         .bind(building_id)
+        .bind(equipment_id)
+        .bind(roles)
         .execute(&mut *conn)
         .await
         .context("fill history")?;
@@ -2753,13 +2959,15 @@ async fn read_scoped_watermark(
           count(s.val)::bigint AS valued_count,
           sum(s.val) AS value_sum
         FROM sample s
+        JOIN authorized_series a
+          ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
         WHERE s.site_id = $1
           AND ($2::timestamptz IS NULL OR s.ts >= $2)
           AND ($3::timestamptz IS NULL OR s.ts < $3)
           AND (
             $4::text[] IS NULL
-            OR split_part(s.openfdd_key, '.', 1) = ANY($4::text[])
-            OR split_part(s.openfdd_key, '.', 1) IN (
+            OR a.equipment_id = ANY($4::text[])
+            OR a.equipment_id IN (
               SELECT e.equipment_id
               FROM equipment e
               WHERE e.building_id = $1
@@ -2924,9 +3132,9 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
             // Exact id may exist only on samples (no equipment row yet).
             let rows = sqlx::query(
                 r#"
-                SELECT DISTINCT split_part(openfdd_key,'.',1) AS equipment_id
-                FROM sample
-                WHERE site_id = $1 AND split_part(openfdd_key,'.',1) = $2
+                SELECT DISTINCT equipment_id
+                FROM authorized_series
+                WHERE site_id = $1 AND equipment_id = $2
                 LIMIT 1
                 "#,
             )
@@ -2961,8 +3169,9 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         // No selector: inventory from sample keys (site-scoped).
         let rows = sqlx::query(
             r#"
-            SELECT DISTINCT split_part(openfdd_key,'.',1) AS equipment_id
-            FROM sample WHERE site_id = $1
+            SELECT DISTINCT equipment_id
+            FROM authorized_series
+            WHERE site_id = $1
             ORDER BY 1 LIMIT 200
             "#,
         )
@@ -3365,13 +3574,10 @@ pub async fn package_mapping_from_samples(
     let mut types: BTreeMap<String, Option<String>> = typed.into_iter().collect();
     let role_rows = sqlx::query(
         r#"
-        SELECT split_part(openfdd_key, '.', 1) AS equipment_id,
-               split_part(openfdd_key, '.', 2) AS role
-        FROM sample
+        SELECT equipment_id, role, openfdd_key
+        FROM authorized_series
         WHERE site_id = $1
-          AND split_part(openfdd_key, '.', 2) <> ''
-        GROUP BY 1, 2
-        ORDER BY 1, 2
+        ORDER BY equipment_id, role, openfdd_key
         "#,
     )
     .bind(bid)
@@ -3379,14 +3585,24 @@ pub async fn package_mapping_from_samples(
     .await
     .context("sample roles for mapping")?;
     let mut roles_by_eq: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut ambiguous_by_eq: BTreeMap<String, BTreeMap<String, Vec<String>>> = BTreeMap::new();
+    let mut keys_by_role: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
     for row in role_rows {
         let eq = row.try_get::<String, _>("equipment_id").unwrap_or_default();
         let role = row.try_get::<String, _>("role").unwrap_or_default();
-        if eq.is_empty() || !safe_ident(&role) {
+        let key = row.try_get::<String, _>("openfdd_key").unwrap_or_default();
+        if eq.is_empty() || role.is_empty() || key.is_empty() {
             continue;
         }
         types.entry(eq.clone()).or_insert(None);
-        roles_by_eq.entry(eq).or_default().push(role);
+        keys_by_role.entry((eq, role)).or_default().push(key);
+    }
+    for ((eq, role), keys) in keys_by_role {
+        if keys.len() > 1 {
+            ambiguous_by_eq.entry(eq).or_default().insert(role, keys);
+        } else {
+            roles_by_eq.entry(eq).or_default().push(role);
+        }
     }
     if let Some(want) = equipment_id.map(str::trim).filter(|s| !s.is_empty()) {
         types.retain(|id, _| id == want);
@@ -3404,13 +3620,15 @@ pub async fn package_mapping_from_samples(
     let sample_count = tsdb.sample_count(bid).await.unwrap_or(0);
     let span_rows = sqlx::query(
         r#"
-        SELECT split_part(openfdd_key, '.', 1) AS equipment_id,
-               MIN(ts) AS first_ts,
-               MAX(ts) AS last_ts,
+        SELECT a.equipment_id,
+               MIN(s.ts) AS first_ts,
+               MAX(s.ts) AS last_ts,
                COUNT(*)::bigint AS row_count
-        FROM sample
-        WHERE site_id = $1
-        GROUP BY 1
+        FROM sample s
+        JOIN authorized_series a
+          ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+        WHERE s.site_id = $1
+        GROUP BY a.equipment_id
         "#,
     )
     .bind(bid)
@@ -3457,7 +3675,7 @@ pub async fn package_mapping_from_samples(
             "columns": columns,
             "roles": role_obj,
             "unmapped_columns": [],
-            "ambiguous_roles": {},
+            "ambiguous_roles": ambiguous_by_eq.get(eq).cloned().unwrap_or_default(),
             "blockers": [],
             "warnings": [],
             "sampling": sampling_json(span.first, span.last, span.rows),
@@ -4469,6 +4687,8 @@ rules:
             .await
             .expect("sample");
         }
+        crate::series_binding::bind_conventional_key(pool, site, &format!("{equipment_id}.zone_t"))
+            .await;
     }
 
     async fn delete_site(pool: &sqlx::PgPool, site: &str) {
@@ -4977,9 +5197,13 @@ mod analytics_cache_identity {
             Some(71.0),
         ));
         tsdb.upsert_samples(&batch).await.expect("samples");
+        crate::series_binding::bind_conventional_key(&pool, &site, &format!("{eq_a}.sat")).await;
+        crate::series_binding::bind_conventional_key(&pool, &site, &format!("{eq_prefix}.sat"))
+            .await;
         sqlx::query(
             "INSERT INTO role_map (building_id, equipment_id, openfdd_key, role, unit)
-             VALUES ($1, $2, $3, 'sat', 'degF')",
+             VALUES ($1, $2, $3, 'sat', 'degF')
+             ON CONFLICT (building_id, equipment_id, openfdd_key) DO UPDATE SET role = EXCLUDED.role",
         )
         .bind(&site)
         .bind(&eq_a)
@@ -5052,6 +5276,8 @@ mod analytics_cache_identity {
         tsdb.upsert_samples(&weather_batch)
             .await
             .expect("weather sample");
+        crate::series_binding::bind_conventional_key(&pool, &site, &format!("{weather}.web_oa_t"))
+            .await;
         let with_weather = read_analytics_cache_input_from(
             &tsdb,
             &site,
@@ -5139,6 +5365,377 @@ mod analytics_cache_identity {
         assert!(!reason.contains("://"));
         assert!(!reason.to_ascii_lowercase().contains("password"));
         let _ = reason;
+    }
+}
+
+#[cfg(test)]
+mod opaque_series_binding {
+    use super::{
+        fdd_plot, inspect_equipment, package_mapping_from_samples, rcx_timeseries, RcxQuery,
+    };
+    use chrono::{TimeZone, Utc};
+    use fdd_tsdb::{PurgeTarget, Tsdb};
+    use serde_json::json;
+
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let prev = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.prev.take() {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+            fdd_tsdb::clear_shared_pool();
+        }
+    }
+
+    fn database_url() -> Option<String> {
+        let explicit = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        if explicit.is_some() {
+            return explicit;
+        }
+        Some("postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".into())
+    }
+
+    async fn connect() -> Option<sqlx::PgPool> {
+        let explicit = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .is_some_and(|value| !value.trim().is_empty());
+        let url = database_url().unwrap_or_default();
+        match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&url)
+            .await
+        {
+            Ok(pool) => Some(pool),
+            Err(err) if explicit => panic!("OPENFDD_TEST_DATABASE_URL connect failed: {err}"),
+            Err(err) => {
+                eprintln!("skip: postgres fixture unavailable: {err}");
+                None
+            }
+        }
+    }
+
+    async fn seed_equipment(pool: &sqlx::PgPool, site: &str, equipment_id: &str, kind: &str) {
+        sqlx::query(
+            "INSERT INTO site(site_id, dis) VALUES ($1, $1) ON CONFLICT (site_id) DO NOTHING",
+        )
+        .bind(site)
+        .execute(pool)
+        .await
+        .expect("site");
+        sqlx::query(
+            "INSERT INTO building(building_id, site_id, dis) VALUES ($1, $1, $1)
+             ON CONFLICT (building_id) DO NOTHING",
+        )
+        .bind(site)
+        .execute(pool)
+        .await
+        .expect("building");
+        sqlx::query(
+            "INSERT INTO equipment(building_id, equipment_id, equip_type) VALUES ($1, $2, $3)
+             ON CONFLICT (building_id, equipment_id) DO UPDATE SET equip_type = EXCLUDED.equip_type",
+        )
+        .bind(site)
+        .bind(equipment_id)
+        .bind(kind)
+        .execute(pool)
+        .await
+        .expect("equipment");
+    }
+
+    async fn put(
+        pool: &sqlx::PgPool,
+        site: &str,
+        equipment_id: &str,
+        role: &str,
+        openfdd_key: &str,
+        val: f64,
+    ) {
+        let ts = Utc.with_ymd_and_hms(2026, 6, 1, 12, 0, 0).unwrap();
+        sqlx::query(
+            "INSERT INTO sample(ts, site_id, openfdd_key, val)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (site_id, openfdd_key, ts) DO UPDATE SET val = EXCLUDED.val",
+        )
+        .bind(ts)
+        .bind(site)
+        .bind(openfdd_key)
+        .bind(val)
+        .execute(pool)
+        .await
+        .expect("sample");
+        crate::series_binding::bind_series(pool, site, equipment_id, role, openfdd_key).await;
+    }
+
+    fn scope() -> crate::timescale_analytics::AnalyticsSqlScope {
+        crate::timescale_analytics::AnalyticsSqlScope {
+            start: None,
+            end: None,
+            equipment_ids: Vec::new(),
+        }
+    }
+
+    fn plotted_value(body: &crate::analytics::AnalyticsEnvelope, role: &str) -> Option<f64> {
+        body.points
+            .iter()
+            .find_map(|row| row.get(role).and_then(serde_json::Value::as_f64))
+    }
+
+    fn coverage(body: &crate::analytics::AnalyticsEnvelope) -> &serde_json::Value {
+        body.coverage.as_ref().expect("coverage")
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize the database env for the shared fixture"
+    )]
+    async fn readers_follow_current_binding_for_opaque_keys() {
+        let _lock = crate::test_env_lock::lock_env();
+        let Some(pool) = connect().await else {
+            return;
+        };
+        let url = database_url().unwrap_or_default();
+        let _db = EnvGuard::set("OPENFDD_DATABASE_URL", &url);
+        fdd_tsdb::clear_shared_pool();
+        crate::series_binding::ensure_authorized_series(&pool).await;
+        for statement in [
+            "CREATE TABLE IF NOT EXISTS building (
+                building_id text PRIMARY KEY,
+                site_id text REFERENCES site(site_id),
+                dis text,
+                timezone text NOT NULL DEFAULT 'UTC',
+                created_at timestamptz NOT NULL DEFAULT now()
+            )",
+            "CREATE TABLE IF NOT EXISTS equipment (
+                building_id text NOT NULL REFERENCES building(building_id),
+                equipment_id text NOT NULL,
+                equip_type text,
+                parent_equipment_id text,
+                created_at timestamptz NOT NULL DEFAULT now(),
+                PRIMARY KEY (building_id, equipment_id)
+            )",
+            "CREATE TABLE IF NOT EXISTS sample (
+                ts timestamptz NOT NULL,
+                site_id text NOT NULL,
+                openfdd_key text NOT NULL,
+                haystack_id text,
+                val double precision,
+                unit text,
+                quality text,
+                PRIMARY KEY (site_id, openfdd_key, ts)
+            )",
+        ] {
+            crate::test_ddl::execute_idempotent_ddl(&pool, statement).await;
+        }
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        let site = format!("w2b{}", &token[..8]);
+        let dotted = "a.b";
+        let quoted = "say 'hi'";
+        let unicode = "机组一";
+        let moved = format!("moved{}", &token[..6]);
+        let ambiguous = format!("amb{}", &token[..6]);
+        let kept = format!("kept{}", &token[..6]);
+        for (id, kind) in [
+            (dotted, "ahu"),
+            (quoted, "ahu"),
+            (unicode, "ahu"),
+            (moved.as_str(), "ahu"),
+            (ambiguous.as_str(), "ahu"),
+            (kept.as_str(), "ahu"),
+            ("decoy", "ahu"),
+        ] {
+            seed_equipment(&pool, &site, id, kind).await;
+        }
+
+        put(&pool, &site, dotted, "sat", "not-a-role", 7.0).await;
+        put(&pool, &site, "decoy", "sat", "a.sat", 99.0).await;
+        put(&pool, &site, dotted, "duct_static", "urn:static", 1.2).await;
+        put(&pool, &site, dotted, "duct_static_sp", "urn:static-sp", 1.5).await;
+        put(&pool, &site, dotted, "fan_cmd", "urn:fan", 1.0).await;
+        put(&pool, &site, quoted, "sat", "k'1", 8.0).await;
+        put(&pool, &site, unicode, "o'clock", "点位", 9.0).await;
+        put(&pool, &site, &ambiguous, "sat", "urn:one", 11.0).await;
+        put(&pool, &site, &ambiguous, "sat", "urn:two", 22.0).await;
+        put(&pool, &site, &kept, "sat", "purge-me", 1.0).await;
+        put(&pool, &site, &kept, "mat", "keep-key", 2.0).await;
+
+        let dotted_inspect = inspect_equipment(&site, dotted, None, 100, &scope())
+            .await
+            .expect("inspect")
+            .expect("dotted series");
+        assert_eq!(plotted_value(&dotted_inspect, "sat"), Some(7.0));
+        assert_eq!(
+            coverage(&dotted_inspect)["selected_openfdd_keys"]["sat"],
+            json!("not-a-role")
+        );
+        assert_ne!(plotted_value(&dotted_inspect, "sat"), Some(99.0));
+
+        let rcx = rcx_timeseries(
+            &site,
+            "sat",
+            None,
+            None,
+            &["ahu"],
+            false,
+            &RcxQuery {
+                max_points: 200,
+                scope: scope(),
+            },
+        )
+        .await
+        .expect("rcx")
+        .expect("rcx rows");
+        let dotted_rcx = rcx.points.iter().any(|row| {
+            row.get("equipment_id").and_then(|v| v.as_str()) == Some(dotted)
+                && row.get("value_f").and_then(|v| v.as_f64()) == Some(7.0)
+                && row.get("series").and_then(|v| v.as_str()) == Some("primary")
+        });
+        assert!(
+            dotted_rcx,
+            "rcx did not select the bound opaque key: {}",
+            serde_json::to_string(&rcx).unwrap_or_default()
+        );
+
+        let plot = fdd_plot(Some(&site), dotted, "FC1", Some(50), None, None)
+            .await
+            .expect("fdd plot");
+        assert_eq!(plot["ok"], json!(true), "{plot}");
+        assert_eq!(
+            plot["selected_openfdd_keys"]["duct_static"],
+            json!("urn:static")
+        );
+        assert_eq!(
+            plot["rows"][0]["duct_static"],
+            json!(1.2),
+            "fdd plot did not use the current key: {plot}"
+        );
+
+        crate::series_binding::bind_series(&pool, &site, &moved, "sat", "not-a-role").await;
+        let left = inspect_equipment(&site, dotted, Some(&["sat".into()]), 100, &scope())
+            .await
+            .expect("inspect after reparent");
+        assert!(
+            left.as_ref()
+                .is_none_or(|body| plotted_value(body, "sat").is_none()),
+            "reparented series still plotted on the old equipment: {left:?}"
+        );
+        let arrived = inspect_equipment(&site, &moved, None, 100, &scope())
+            .await
+            .expect("moved inspect")
+            .expect("moved series");
+        assert_eq!(plotted_value(&arrived, "sat"), Some(7.0));
+        let still: f64 = sqlx::query_scalar(
+            "SELECT val FROM sample WHERE site_id = $1 AND openfdd_key = 'not-a-role'",
+        )
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("sample stays");
+        assert_eq!(still, 7.0);
+
+        crate::series_binding::bind_series(&pool, &site, &moved, "mat", "not-a-role").await;
+        let edited = inspect_equipment(&site, &moved, None, 100, &scope())
+            .await
+            .expect("role edit")
+            .expect("edited series");
+        assert_eq!(plotted_value(&edited, "mat"), Some(7.0));
+        assert!(plotted_value(&edited, "sat").is_none());
+
+        let clash = inspect_equipment(&site, &ambiguous, None, 100, &scope())
+            .await
+            .expect("ambiguous")
+            .expect("ambiguous envelope");
+        let plotted = coverage(&clash)["columns_plotted"]
+            .as_array()
+            .expect("columns");
+        assert!(
+            plotted.iter().all(|role| role != "sat"),
+            "{}",
+            serde_json::to_string(&clash).unwrap_or_default()
+        );
+        assert_eq!(
+            coverage(&clash)["ambiguous_roles"]["sat"]
+                .as_array()
+                .map(|k| k.len()),
+            Some(2)
+        );
+
+        let quoted_inspect = inspect_equipment(&site, quoted, None, 100, &scope())
+            .await
+            .expect("quoted")
+            .expect("quoted series");
+        assert_eq!(plotted_value(&quoted_inspect, "sat"), Some(8.0));
+        let unicode_inspect = inspect_equipment(&site, unicode, None, 100, &scope())
+            .await
+            .expect("unicode")
+            .expect("unicode series");
+        assert_eq!(plotted_value(&unicode_inspect, "o'clock"), Some(9.0));
+
+        let mapping = package_mapping_from_samples(&site, Some(quoted))
+            .await
+            .expect("mapping");
+        assert_eq!(mapping["ok"], json!(true), "{mapping}");
+        assert_eq!(mapping["equipment"][0]["equipment_id"], json!(quoted));
+
+        let tsdb = Tsdb::from_pool(pool.clone());
+        let report = tsdb
+            .purge_historian(&site, PurgeTarget::Point("purge-me"))
+            .await
+            .expect("purge");
+        assert_eq!(report.samples_deleted, 1);
+        let kept_n: i64 = sqlx::query_scalar(
+            "SELECT count(*)::bigint FROM sample WHERE site_id = $1 AND openfdd_key = 'keep-key'",
+        )
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("kept samples");
+        let purged_n: i64 = sqlx::query_scalar(
+            "SELECT count(*)::bigint FROM sample WHERE site_id = $1 AND openfdd_key = 'purge-me'",
+        )
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("purged samples");
+        assert_eq!(kept_n, 1);
+        assert_eq!(purged_n, 0);
+        let kept_inspect = inspect_equipment(&site, &kept, None, 100, &scope())
+            .await
+            .expect("kept inspect")
+            .expect("kept series");
+        assert_eq!(plotted_value(&kept_inspect, "mat"), Some(2.0));
+        assert!(plotted_value(&kept_inspect, "sat").is_none());
+
+        for sql in [
+            "DELETE FROM sample WHERE site_id = $1",
+            "DELETE FROM role_map WHERE building_id = $1",
+            "DELETE FROM point_map WHERE site_id = $1",
+            "DELETE FROM equipment WHERE building_id = $1",
+            "DELETE FROM building WHERE building_id = $1",
+            "DELETE FROM site WHERE site_id = $1",
+        ] {
+            sqlx::query(sql)
+                .bind(&site)
+                .execute(&pool)
+                .await
+                .expect("cleanup");
+        }
     }
 }
 

@@ -648,6 +648,7 @@ mod tests {
         .execute(pool)
         .await
         .expect("sample");
+        crate::series_binding::bind_conventional_key(pool, site, "EQ1.sat").await;
     }
 
     async fn delete_site(pool: &sqlx::PgPool, site: &str) {

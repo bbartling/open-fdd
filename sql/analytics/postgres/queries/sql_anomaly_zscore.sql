@@ -16,21 +16,25 @@
 --   $7 transition_events (boolean)
 WITH keyed AS (
   SELECT
-    split_part(openfdd_key, '.', 1) AS equipment_id,
-    split_part(openfdd_key, '.', 2) AS role,
-    ts,
-    val
-  FROM sample
-  WHERE site_id = $1
-    AND ($2::timestamptz IS NULL OR ts >= $2)
-    AND ($3::timestamptz IS NULL OR ts < $3)
+    a.equipment_id,
+    a.role,
+    a.openfdd_key,
+    s.ts,
+    s.val
+  FROM sample s
+  JOIN authorized_series a
+    ON a.site_id = s.site_id
+   AND a.openfdd_key = s.openfdd_key
+  WHERE s.site_id = $1
+    AND ($2::timestamptz IS NULL OR s.ts >= $2)
+    AND ($3::timestamptz IS NULL OR s.ts < $3)
     AND (
       $4::text[] IS NULL
       OR cardinality($4) = 0
-      OR split_part(openfdd_key, '.', 1) = ANY ($4)
+      OR a.equipment_id = ANY ($4)
     )
-    AND val IS NOT NULL
-    AND split_part(openfdd_key, '.', 2) IN (
+    AND s.val IS NOT NULL
+    AND a.role IN (
       'sat', 'mat', 'rat', 'oa_t', 'web_oa_t', 'zone_t', 'dsp'
     )
 ),
@@ -38,6 +42,7 @@ scored AS (
   SELECT
     k.equipment_id,
     k.role,
+    k.openfdd_key,
     k.ts,
     k.val,
     stats.avg_val,
@@ -54,6 +59,7 @@ scored AS (
       FROM keyed p
       WHERE p.equipment_id = k.equipment_id
         AND p.role = k.role
+        AND p.openfdd_key = k.openfdd_key
         AND p.ts < k.ts
       ORDER BY p.ts DESC
       LIMIT $5::int
@@ -74,7 +80,7 @@ marked AS (
     z_abs,
     z_abs >= $6::double precision AS is_anomaly,
     lag(z_abs >= $6::double precision) OVER (
-      PARTITION BY equipment_id, role
+      PARTITION BY openfdd_key
       ORDER BY ts
     ) AS prev_anomaly
   FROM scored

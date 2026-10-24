@@ -1,48 +1,64 @@
--- Soft-OPEN analytics pack: mechanical cooling × OAT bins (elapsed hours).
+-- Mechanical cooling × OAT bins (elapsed hours).
 -- Parameters:
 --   $1 = site_id
 --   $2 = window start (timestamptz, NULL = open)
 --   $3 = window end   (timestamptz, NULL = open)
 --   $4 = equipment_ids (text[], NULL/empty = all)
--- Status/cmd proof preferred over amps (amps Soft-OPEN later). Prefer web_oa_t then oa_t.
--- kind=oat_bin Soft-OPEN consumer shape.
-WITH oat AS (
-  SELECT ts,
-    COALESCE(
-      max(val) FILTER (WHERE openfdd_key LIKE '%.web_oa_t'),
-      max(val) FILTER (WHERE openfdd_key LIKE '%.oa_t')
-    ) AS oat_f
-  FROM sample
+-- Status/cmd proof preferred over amps. Prefer one web_oa_t series, else one oa_t.
+-- Two keys for one role are not maxed into the bin.
+WITH unique_role AS (
+  SELECT site_id, equipment_id, role, min(openfdd_key) AS openfdd_key
+  FROM authorized_series
+  GROUP BY site_id, equipment_id, role
+  HAVING count(*) = 1
+),
+oat_choice AS (
+  SELECT role
+  FROM unique_role
   WHERE site_id = $1
-    AND ($2::timestamptz IS NULL OR ts >= $2)
-    AND ($3::timestamptz IS NULL OR ts < $3)
-    AND (openfdd_key LIKE '%.web_oa_t' OR openfdd_key LIKE '%.oa_t')
-  GROUP BY ts
+    AND role IN ('web_oa_t', 'oa_t')
+  GROUP BY role
+  HAVING count(*) = 1
+  ORDER BY CASE role WHEN 'web_oa_t' THEN 0 ELSE 1 END
+  LIMIT 1
+),
+oat AS (
+  SELECT s.ts, max(s.val) AS oat_f
+  FROM sample s
+  JOIN unique_role u
+    ON u.site_id = s.site_id
+   AND u.openfdd_key = s.openfdd_key
+  JOIN oat_choice c ON c.role = u.role
+  WHERE s.site_id = $1
+    AND ($2::timestamptz IS NULL OR s.ts >= $2)
+    AND ($3::timestamptz IS NULL OR s.ts < $3)
+  GROUP BY s.ts
 ),
 comp AS (
   SELECT
-    ts,
-    split_part(openfdd_key, '.', 1) AS equipment_id,
-    max(val) FILTER (
-      WHERE openfdd_key LIKE '%.chiller_status'
-         OR openfdd_key LIKE '%.compressor_status'
-         OR openfdd_key LIKE '%.chiller_cmd'
-         OR openfdd_key LIKE '%.compressor_cmd'
+    s.ts,
+    u.equipment_id,
+    max(s.val) FILTER (
+      WHERE u.role IN (
+        'chiller_status', 'compressor_status', 'chiller_cmd', 'compressor_cmd'
+      )
     ) AS active
-  FROM sample
-  WHERE site_id = $1
-    AND ($2::timestamptz IS NULL OR ts >= $2)
-    AND ($3::timestamptz IS NULL OR ts < $3)
+  FROM sample s
+  JOIN unique_role u
+    ON u.site_id = s.site_id
+   AND u.openfdd_key = s.openfdd_key
+  WHERE s.site_id = $1
+    AND ($2::timestamptz IS NULL OR s.ts >= $2)
+    AND ($3::timestamptz IS NULL OR s.ts < $3)
     AND (
       $4::text[] IS NULL
       OR cardinality($4) = 0
-      OR split_part(openfdd_key, '.', 1) = ANY ($4)
+      OR u.equipment_id = ANY ($4)
     )
-    AND (
-      openfdd_key LIKE '%.chiller_status' OR openfdd_key LIKE '%.compressor_status'
-      OR openfdd_key LIKE '%.chiller_cmd' OR openfdd_key LIKE '%.compressor_cmd'
+    AND u.role IN (
+      'chiller_status', 'compressor_status', 'chiller_cmd', 'compressor_cmd'
     )
-  GROUP BY ts, split_part(openfdd_key, '.', 1)
+  GROUP BY s.ts, u.equipment_id
 ),
 joined AS (
   SELECT c.equipment_id, c.ts, c.active, o.oat_f
@@ -51,8 +67,6 @@ joined AS (
   WHERE c.active IS NOT NULL AND o.oat_f IS NOT NULL
 ),
 ordered AS (
-  -- Inactive samples stay on the timeline so an active sample cannot hold
-  -- across them. Only the active sample's own forward delta is credited.
   SELECT
     equipment_id,
     ts,
@@ -74,7 +88,6 @@ SELECT
     WHEN oat_f < 90 THEN '80-90'
     ELSE '>=90'
   END AS oat_bin,
-  -- Active time is the forward delta. Gaps longer than 1 hour are unknown.
   (SUM(CASE
      WHEN COALESCE(active, 0) > 0.05
       AND dt_seconds > 0.0

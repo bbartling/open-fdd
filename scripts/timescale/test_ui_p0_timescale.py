@@ -160,8 +160,10 @@ def render_sql(rule: dict) -> str:
     return raw
 
 
-def seed(cur) -> None:
+def seed(cur, parity) -> None:
     cur.execute("DELETE FROM sample WHERE site_id = %s", (SITE,))
+    cur.execute("DELETE FROM point_map WHERE site_id = %s", (SITE,))
+    cur.execute("DELETE FROM role_map WHERE building_id = %s", (SITE,))
     cur.execute("DELETE FROM equipment WHERE building_id = %s", (SITE,))
     cur.execute("DELETE FROM building WHERE building_id = %s", (SITE,))
     cur.execute("DELETE FROM site WHERE site_id = %s", (SITE,))
@@ -215,6 +217,7 @@ def seed(cur) -> None:
                     """,
                     (ts, SITE, key, key, val),
                 )
+                parity.bind_current(cur, SITE, equipment_id, role, key)
 
 
 def fill_history(cur) -> None:
@@ -337,7 +340,7 @@ def main() -> int:
     with parity.connect_with_retry(database_url) as conn:
         parity.apply_schema(conn)
         with conn.cursor() as cur:
-            seed(cur)
+            seed(cur, parity)
             check_motor(cur)
             fill_history(cur)
             check_rules(cur, rules)

@@ -116,7 +116,7 @@ fn stamp_micros(ts: DateTime<Utc>) -> String {
 }
 
 fn role_list(sql: &str) -> String {
-    let marker = "split_part(openfdd_key, '.', 2) IN (";
+    let marker = "a.role IN (";
     let start = sql
         .find(marker)
         .unwrap_or_else(|| panic!("role list missing"));
@@ -236,6 +236,7 @@ async fn insert_series(
             .await
             .unwrap_or_else(|err| panic!("insert {site}: {err}"));
     }
+    crate::series_binding::bind_conventional_key(pool, site, &format!("{equipment}.{role}")).await;
 }
 
 async fn run(tsdb: &fdd_tsdb::Tsdb, probe: &Probe<'_>) -> Value {
@@ -474,6 +475,7 @@ async fn timescale_route_matches_the_shared_event_fixture() {
         .execute(&pool)
         .await
         .expect("unscreened role");
+    crate::series_binding::bind_conventional_key(&pool, MULTI, &format!("{UNIT_A}.zone_rh")).await;
     insert_series(
         &pool,
         NONE,
@@ -496,6 +498,7 @@ async fn timescale_route_matches_the_shared_event_fixture() {
             .await
             .expect("null history");
     }
+    crate::series_binding::bind_conventional_key(&pool, MISS, &format!("{UNIT_A}.sat")).await;
     sqlx::query(
         "INSERT INTO sample (ts, site_id, openfdd_key, val) VALUES
          (timestamptz '2026-06-15 15:15:00-04', $1, $2, 7),
@@ -511,6 +514,7 @@ async fn timescale_route_matches_the_shared_event_fixture() {
     .execute(&pool)
     .await
     .expect("timezone samples");
+    crate::series_binding::bind_conventional_key(&pool, TZ, &format!("{UNIT_A}.sat")).await;
 
     let tsdb = fdd_tsdb::Tsdb::from_pool(pool);
     let both = [UNIT_A, UNIT_A2];

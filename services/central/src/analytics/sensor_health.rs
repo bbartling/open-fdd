@@ -208,8 +208,9 @@ pub const NO_SAMPLES_IN_WINDOW: &str = "no_samples_in_window";
 
 const SENSOR_HEALTH_SQL: &str = r#"
 SELECT
-  split_part(openfdd_key, '.', 1) AS equipment_id,
-  split_part(openfdd_key, '.', 2) AS role,
+  a.equipment_id,
+  a.role,
+  a.openfdd_key,
   count(*)::bigint AS n,
   count(val) FILTER (
     WHERE val = val
@@ -236,18 +237,20 @@ SELECT
       AND val > '-Infinity'::float8
       AND val < 'Infinity'::float8
   ) AS std_val
-FROM sample
-WHERE site_id = $1
-  AND ts >= $2
-  AND ts < $3
-  AND split_part(openfdd_key, '.', 2) <> ''
+FROM sample s
+JOIN authorized_series a
+  ON a.site_id = s.site_id
+ AND a.openfdd_key = s.openfdd_key
+WHERE s.site_id = $1
+  AND s.ts >= $2
+  AND s.ts < $3
   AND (
     $4::text[] IS NULL
     OR cardinality($4) = 0
-    OR split_part(openfdd_key, '.', 1) = ANY ($4)
+    OR a.equipment_id = ANY ($4)
   )
-GROUP BY 1, 2
-ORDER BY 1, 2
+GROUP BY a.equipment_id, a.role, a.openfdd_key
+ORDER BY a.equipment_id, a.role, a.openfdd_key
 "#;
 
 /// Aggregate current `sample` rows for one site.
@@ -885,6 +888,7 @@ mod tests {
         .execute(pool)
         .await
         .expect("sample");
+        crate::series_binding::bind_conventional_key(pool, site, openfdd_key).await;
     }
 
     async fn delete_site(pool: &sqlx::PgPool, site: &str) {

@@ -296,4 +296,5 @@ async fn insert_hourly(
             .await
             .expect("sample");
     }
+    crate::series_binding::bind_conventional_key(pool, SITE, &key).await;
 }
