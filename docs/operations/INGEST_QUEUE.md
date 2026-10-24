@@ -36,9 +36,17 @@ States: `queued`, `leased`, `retry_wait`, `committed`, `partial`, `permanent_fai
 
 A finish must present the current owner, fencing token, and an unexpired lease. An old worker cannot commit after the lease moves. Claims commit the database transaction before any portal read.
 
-The scheduler enqueues at most `OPENFDD_INGEST_CATCHUP_HOURS` (default 6, max 48) exact UTC hours per mapped device. That is a bound, not the N5 checkpoint walk. Duplicate keys insert nothing. Portal caps (`OPENFDD_INGEST_PORTAL_MAX_IN_FLIGHT`, `OPENFDD_INGEST_PORTAL_MAX_PER_MINUTE`) are shared by every worker. A 429 pause on one portal does not free another portal's cap.
+The scheduler enqueues at most `OPENFDD_INGEST_CATCHUP_HOURS` (default 6, max 48) exact UTC hours per mapped device. That is a bound, not the N5 checkpoint walk. Duplicate keys insert nothing. Portal caps (`OPENFDD_INGEST_PORTAL_MAX_IN_FLIGHT`, `OPENFDD_INGEST_PORTAL_MAX_PER_MINUTE`) are shared by every worker. A 429 pause on one portal does not free another portal's cap. Claim size is at most 32 jobs. The queue pool is at most 8 connections (`OPENFDD_INGEST_QUEUE_MAX_CONNECTIONS`, default 4).
 
-Coverage on these rows is `not_assessed`. The gap API says `guarantee: bounded_windows_only` and `update_log: not_claimed`. A full coverage ledger stays with N7.
+Windows are half-open UTC intervals `[start, end)`. The end instant is excluded. A job accepts a length of 60 to 3600 seconds when `start` is aligned to that length. A 3600-second window is still one exact UTC hour, including the civil hours that spring forward or fall back.
+
+Each job is owned by one row. The unique key is the identity above. A claim commits before any portal read. Finish requires the current owner, fencing token, and an unexpired lease. An expired lease can be claimed by another worker; the previous token cannot finish. A provider HTTP success, a row count, or a checkpoint does not commit the job.
+
+Coverage is assessed per expected point. Dispositions are `present`, `no_sample_expected`, `no_sample_received`, `late_arrival`, `source_unavailable`, `genuine_gap`, and `expectation_unspecified`. `no_sample_expected` is a cadence or COV rule that asked for nothing in the window. `no_sample_received` is an expected slot or heartbeat that the completed page did not contain. An omitted series is `source_unavailable` and stays retryable. A finished page that is missing interval slots is `genuine_gap` and stays `partial`. A truncated page is not treated as a genuine gap. Commit is allowed only when every expected point is `present`, `no_sample_expected`, or `late_arrival`. Rows that have not been reconciled stay `not_assessed`. The jobs list rolls those summaries up; an empty gap list stays `not_assessed` and does not claim the window was complete.
+
+The gap API says `guarantee: bounded_windows_only` and `update_log: not_claimed`.
+
+Writes of the same point and timestamp are idempotent. The first value is kept. A different value is a conflict and does not rewrite the stored bits. That ledger is queue state (`ingest_applied_sample`). It does not replace or rewrite historian samples. A receipt is written in the same transaction as a committed or partial finish. Retry, throttle, timeout, and a model change do not write a receipt and do not advance the job to `committed`. A model or point-set change observed at finish becomes `permanent_failure` / `model_revision_changed`.
 
 ## HTTP and MCP
 

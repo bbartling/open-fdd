@@ -80,6 +80,7 @@ pub async fn apply_schema(pool: &PgPool) -> Result<(), QueueError> {
 }
 
 pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, QueueError> {
+    validate_new_job(job)?;
     let job_id = Uuid::new_v4().to_string();
     let inserted: Option<String> = sqlx::query_scalar(
         "INSERT INTO ingest_job (
@@ -279,20 +280,72 @@ pub async fn claim(
     Ok(out)
 }
 
+pub async fn apply_samples(
+    pool: &PgPool,
+    job: &JobView,
+    samples: &[AppliedSample],
+) -> Result<ApplyStats, QueueError> {
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    let stats = apply_samples_tx(&mut tx, job, samples).await?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(stats)
+}
+
 pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<ReceiptView>, QueueError> {
     let job_id = req.job_id.to_string();
-    let exists: Option<String> =
-        sqlx::query_scalar("SELECT job_id FROM ingest_job WHERE job_id = $1")
-            .bind(&job_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(db_err)?;
-    if exists.is_none() {
+    let exists: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT model_revision, requested_points_digest FROM ingest_job WHERE job_id = $1",
+    )
+    .bind(&job_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?;
+    let Some((model_revision, stored_digest)) = exists else {
         return Err(QueueError::NotFound);
+    };
+    if model_identity_changed(&model_revision, stored_digest.as_deref(), req) {
+        let updated = sqlx::query(
+            "UPDATE ingest_job SET state = 'permanent_failure', safe_error_code = 'model_revision_changed',
+                lease_owner = NULL, lease_expiry = NULL, updated_at = $4
+             WHERE job_id = $1 AND lease_owner = $2 AND fencing_token = $3
+               AND state = 'leased' AND lease_expiry > $4",
+        )
+        .bind(&job_id)
+        .bind(&req.owner)
+        .bind(i64::try_from(req.fencing_token).unwrap_or(i64::MAX))
+        .bind(req.now)
+        .execute(pool)
+        .await
+        .map_err(db_err)?;
+        if updated.rows_affected() == 0 {
+            return Err(QueueError::StaleFence);
+        }
+        return Ok(None);
     }
-    let (state, code, counts) = match &req.outcome {
-        FinishOutcome::Committed { counts } => ("committed", None, *counts),
-        FinishOutcome::Partial { counts, code } => ("partial", Some(code.clone()), *counts),
+    let (state, code, counts, coverage) = match &req.outcome {
+        FinishOutcome::Committed { counts, coverage } => {
+            if !coverage.allows_commit() {
+                return Err(QueueError::Invalid("coverage does not allow commit".into()));
+            }
+            ("committed", None, *counts, Some(coverage))
+        }
+        FinishOutcome::Partial {
+            counts,
+            code,
+            coverage,
+        } => {
+            if coverage.allows_commit() {
+                return Err(QueueError::Invalid(
+                    "partial finish requires an incomplete coverage report".into(),
+                ));
+            }
+            if coverage.points.is_empty() && code != "payload_bound" {
+                return Err(QueueError::Invalid(
+                    "partial finish requires point coverage".into(),
+                ));
+            }
+            ("partial", Some(code.clone()), *counts, Some(coverage))
+        }
         FinishOutcome::Retry { code, not_before } => {
             let updated = sqlx::query(
                 "UPDATE ingest_job SET state = 'retry_wait', safe_error_code = $5,
@@ -336,11 +389,15 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
         }
     };
     let receipt_id = Uuid::new_v4().to_string();
+    let coverage_summary = coverage
+        .map(|report| report.summary.clone())
+        .unwrap_or_else(|| COVERAGE_NOT_ASSESSED.to_string());
     let mut tx = pool.begin().await.map_err(db_err)?;
     let updated = sqlx::query(
         "UPDATE ingest_job SET state = $5, safe_error_code = $6, receipt_id = $7,
             fetched_count = $8, accepted_count = $9, rejected_count = $10,
             inserted_count = $11, updated_count = $12, unchanged_count = $13,
+            coverage = $14,
             lease_owner = NULL, lease_expiry = NULL, updated_at = $4
          WHERE job_id = $1 AND lease_owner = $2 AND fencing_token = $3
            AND state = 'leased' AND lease_expiry > $4",
@@ -358,6 +415,7 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
     .bind(i32_count(counts.inserted))
     .bind(i32_count(counts.updated))
     .bind(i32_count(counts.unchanged))
+    .bind(&coverage_summary)
     .execute(&mut *tx)
     .await
     .map_err(db_err)?;
@@ -365,13 +423,17 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
         return Err(QueueError::StaleFence);
     }
     let job = load_job_tx(&mut tx, &job_id).await?;
+    if let Some(report) = coverage {
+        replace_point_coverage(&mut tx, &job_id, report).await?;
+    }
+    apply_samples_tx(&mut tx, &job, &req.applied_samples).await?;
     let inserted = sqlx::query(
         "INSERT INTO ingest_receipt (
             receipt_id, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
-            model_revision, fencing_token, committed_at, counts, safe_error_code
+            model_revision, fencing_token, committed_at, counts, safe_error_code, coverage
          )
          SELECT $1, job_id, tenant_id, canonical_site, provider_instance_id, device_id,
-                model_revision, $2, $3, $4, $5
+                model_revision, $2, $3, $4, $5, $7
          FROM ingest_job
          WHERE job_id = $6",
     )
@@ -381,6 +443,7 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
     .bind(serde_json::json!(counts))
     .bind(&code)
     .bind(&job_id)
+    .bind(&coverage_summary)
     .execute(&mut *tx)
     .await
     .map_err(db_err)?;
@@ -421,7 +484,12 @@ pub async fn list_jobs(pool: &PgPool, filter: &ListFilter) -> Result<Vec<JobView
     .fetch_all(pool)
     .await
     .map_err(db_err)?;
-    rows.iter().map(job_from_row).collect()
+    let mut jobs = rows
+        .iter()
+        .map(job_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
+    attach_point_coverage(pool, &mut jobs).await?;
+    Ok(jobs)
 }
 
 pub async fn get_job(pool: &PgPool, job_id: Uuid) -> Result<Option<JobView>, QueueError> {
@@ -433,7 +501,11 @@ pub async fn get_job(pool: &PgPool, job_id: Uuid) -> Result<Option<JobView>, Que
     .await
     .map_err(db_err)?
     {
-        Some(row) => Ok(Some(job_from_row(&row)?)),
+        Some(row) => {
+            let mut job = job_from_row(&row)?;
+            attach_point_coverage(pool, std::slice::from_mut(&mut job)).await?;
+            Ok(Some(job))
+        }
         None => Ok(None),
     }
 }
@@ -558,7 +630,12 @@ pub async fn list_gaps(pool: &PgPool, filter: &ListFilter) -> Result<Vec<JobView
     .fetch_all(pool)
     .await
     .map_err(db_err)?;
-    rows.iter().map(job_from_row).collect()
+    let mut jobs = rows
+        .iter()
+        .map(job_from_row)
+        .collect::<Result<Vec<_>, _>>()?;
+    attach_point_coverage(pool, &mut jobs).await?;
+    Ok(jobs)
 }
 
 pub async fn list_receipts(
@@ -690,7 +767,8 @@ pub async fn metrics(
 const JOB_COLUMNS: &str = "job_id, tenant_id, canonical_site, provider_instance_id, device_id, \
 model_revision, logical_window_start, logical_window_end, shard, state, attempt, not_before, \
 lease_owner, lease_expiry, fencing_token, estimated_cost, safe_error_code, receipt_id, \
-fetched_count, accepted_count, rejected_count, inserted_count, updated_count, unchanged_count";
+fetched_count, accepted_count, rejected_count, inserted_count, updated_count, unchanged_count, \
+coverage";
 
 async fn load_job(pool: &PgPool, job_id: &str) -> Result<JobView, QueueError> {
     let row = sqlx::query(&format!(
@@ -700,7 +778,9 @@ async fn load_job(pool: &PgPool, job_id: &str) -> Result<JobView, QueueError> {
     .fetch_one(pool)
     .await
     .map_err(db_err)?;
-    job_from_row(&row)
+    let mut job = job_from_row(&row)?;
+    attach_point_coverage(pool, std::slice::from_mut(&mut job)).await?;
+    Ok(job)
 }
 
 async fn load_job_tx(
@@ -752,6 +832,172 @@ async fn touch_budget(
     Ok(())
 }
 
+async fn attach_point_coverage(pool: &PgPool, jobs: &mut [JobView]) -> Result<(), QueueError> {
+    if jobs.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<String> = jobs.iter().map(|job| job.job_id.to_string()).collect();
+    let rows = sqlx::query(
+        "SELECT job_id, point_id, disposition, expected_slots, observed_slots, late_slots
+         FROM ingest_point_coverage
+         WHERE job_id = ANY($1)
+         ORDER BY point_id",
+    )
+    .bind(&ids)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    for job in jobs.iter_mut() {
+        job.point_coverage.clear();
+    }
+    for row in rows {
+        let job_id: String = row.try_get("job_id").map_err(db_err)?;
+        let point = super::coverage::PointCoverage {
+            point_id: row.try_get("point_id").map_err(db_err)?,
+            disposition: row.try_get("disposition").map_err(db_err)?,
+            expected_slots: i32_to_u32(row.try_get("expected_slots").map_err(db_err)?),
+            observed_slots: i32_to_u32(row.try_get("observed_slots").map_err(db_err)?),
+            late_slots: i32_to_u32(row.try_get("late_slots").map_err(db_err)?),
+        };
+        if let Some(job) = jobs.iter_mut().find(|job| job.job_id.to_string() == job_id) {
+            job.point_coverage.push(point);
+        }
+    }
+    Ok(())
+}
+
+async fn replace_point_coverage(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    job_id: &str,
+    report: &super::coverage::CoverageReport,
+) -> Result<(), QueueError> {
+    sqlx::query("DELETE FROM ingest_point_coverage WHERE job_id = $1")
+        .bind(job_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(db_err)?;
+    for point in &report.points {
+        if !bounded_point_id(&point.point_id) {
+            return Err(QueueError::Invalid("point id is empty or too long".into()));
+        }
+        sqlx::query(
+            "INSERT INTO ingest_point_coverage (
+                job_id, point_id, disposition, expected_slots, observed_slots, late_slots
+             ) VALUES ($1, $2, $3, $4, $5, $6)",
+        )
+        .bind(job_id)
+        .bind(&point.point_id)
+        .bind(&point.disposition)
+        .bind(i32_count(point.expected_slots))
+        .bind(i32_count(point.observed_slots))
+        .bind(i32_count(point.late_slots))
+        .execute(&mut **tx)
+        .await
+        .map_err(db_err)?;
+    }
+    Ok(())
+}
+
+async fn apply_samples_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    job: &JobView,
+    samples: &[AppliedSample],
+) -> Result<ApplyStats, QueueError> {
+    if samples.len() > super::coverage::MAX_TIMESTAMPS {
+        return Err(QueueError::Invalid("payload_bound".into()));
+    }
+    let mut stats = ApplyStats::default();
+    for sample in samples {
+        if !bounded_point_id(&sample.point_id) {
+            return Err(QueueError::Invalid("point id is empty or too long".into()));
+        }
+        let bits = format!("{:016x}", sample.value_bits);
+        let inserted: Option<String> = sqlx::query_scalar(
+            "INSERT INTO ingest_applied_sample (
+                tenant_id, canonical_site, provider_instance_id, device_id, model_revision,
+                point_id, ts, value_bits, first_job_id
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             ON CONFLICT (
+                tenant_id, canonical_site, provider_instance_id, device_id, model_revision,
+                point_id, ts
+             ) DO NOTHING
+             RETURNING value_bits",
+        )
+        .bind(&job.tenant_id)
+        .bind(&job.canonical_site)
+        .bind(&job.provider_instance_id)
+        .bind(&job.device_id)
+        .bind(&job.model_revision)
+        .bind(&sample.point_id)
+        .bind(sample.ts)
+        .bind(&bits)
+        .bind(job.job_id.to_string())
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db_err)?;
+        if inserted.is_some() {
+            stats.inserted = stats.inserted.saturating_add(1);
+            continue;
+        }
+        let stored: String = sqlx::query_scalar(
+            "SELECT value_bits FROM ingest_applied_sample
+             WHERE tenant_id = $1 AND canonical_site = $2 AND provider_instance_id = $3
+               AND device_id = $4 AND model_revision = $5 AND point_id = $6 AND ts = $7",
+        )
+        .bind(&job.tenant_id)
+        .bind(&job.canonical_site)
+        .bind(&job.provider_instance_id)
+        .bind(&job.device_id)
+        .bind(&job.model_revision)
+        .bind(&sample.point_id)
+        .bind(sample.ts)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(db_err)?;
+        if stored == bits {
+            stats.unchanged = stats.unchanged.saturating_add(1);
+        } else {
+            stats.conflict = stats.conflict.saturating_add(1);
+        }
+    }
+    Ok(stats)
+}
+
+fn model_identity_changed(
+    model_revision: &str,
+    stored_digest: Option<&str>,
+    req: &FinishRequest,
+) -> bool {
+    if !matches!(
+        req.outcome,
+        FinishOutcome::Committed { .. } | FinishOutcome::Partial { .. }
+    ) {
+        return false;
+    }
+    if let Some(active) = req.active_model_revision.as_deref() {
+        if !revision_still_owns(model_revision, active) {
+            return true;
+        }
+    }
+    if let (Some(active_digest), Some(stored)) =
+        (req.active_points_digest.as_deref(), stored_digest)
+    {
+        if stored != active_digest {
+            return true;
+        }
+    }
+    false
+}
+
+fn bounded_point_id(value: &str) -> bool {
+    let n = value.chars().count();
+    (1..=512).contains(&n) && value.chars().all(|ch| !ch.is_control())
+}
+
+fn i32_to_u32(value: i32) -> u32 {
+    u32::try_from(value).unwrap_or(0)
+}
+
 fn job_from_row(row: &PgRow) -> Result<JobView, QueueError> {
     let receipt: Option<String> = row.try_get("receipt_id").map_err(db_err)?;
     Ok(JobView {
@@ -774,7 +1020,8 @@ fn job_from_row(row: &PgRow) -> Result<JobView, QueueError> {
             .unwrap_or(1),
         safe_error_code: row.try_get("safe_error_code").map_err(db_err)?,
         receipt_id: receipt.as_deref().map(parse_uuid).transpose()?,
-        coverage: COVERAGE_NOT_ASSESSED.to_string(),
+        coverage: row.try_get("coverage").map_err(db_err)?,
+        point_coverage: Vec::new(),
         counts: JobCounts {
             fetched: u32::try_from(row.try_get::<i32, _>("fetched_count").map_err(db_err)?)
                 .unwrap_or(0),
@@ -953,6 +1200,7 @@ async fn enqueue_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     job: &NewJob,
 ) -> Result<JobView, QueueError> {
+    validate_new_job(job)?;
     let job_id = Uuid::new_v4().to_string();
     let inserted: Option<String> = sqlx::query_scalar(
         "INSERT INTO ingest_job (

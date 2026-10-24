@@ -3,7 +3,7 @@
 //! The handlers run through the router against the queue. PostgreSQL runs when
 //! `OPENFDD_TEST_DATABASE_URL` is set, and is required when
 //! `OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED=1`. An empty gap list stays
-//! `bounded_windows_only` with coverage `not_assessed`.
+//! `bounded_windows_only` and does not claim coverage.
 
 use std::sync::Arc;
 
@@ -149,9 +149,15 @@ async fn run_contract() {
             .all(|row| row["canonical_site"] == SITE_GAPS && row["device_id"] == DEVICE_GAPS),
         "{jobs}"
     );
-    assert!(
-        job_rows.iter().all(|row| row["coverage"] == "not_assessed"),
-        "{jobs}"
+    assert_eq!(jobs["coverage"], "incomplete", "{jobs}");
+    let committed = job_rows
+        .iter()
+        .find(|row| row["state"] == "committed")
+        .expect("committed job");
+    assert_eq!(committed["coverage"], "complete", "{committed}");
+    assert_eq!(
+        committed["point_coverage"][0]["disposition"], "present",
+        "{committed}"
     );
     let states: Vec<&str> = job_rows
         .iter()
@@ -171,6 +177,15 @@ async fn run_contract() {
     assert_eq!(partial["counts"]["rejected"], 2);
     assert_eq!(partial["counts"]["inserted"], 0);
     assert_eq!(partial["safe_error_code"], "upstream_timeout");
+    assert_eq!(partial["coverage"], "incomplete", "{partial}");
+    assert_eq!(
+        partial["point_coverage"][0]["disposition"], "no_sample_received",
+        "{partial}"
+    );
+    assert_ne!(
+        partial["point_coverage"][0]["disposition"], "no_sample_expected",
+        "{partial}"
+    );
     assert!(
         partial["logical_window_start"]
             .as_str()
@@ -250,7 +265,7 @@ fn assert_bounded_envelope(body: &Value, list_field: &str) {
         body["request_id"].as_str().is_some_and(|id| !id.is_empty()),
         "{body}"
     );
-    assert_eq!(body["coverage"], "not_assessed", "{body}");
+    assert!(body.get("coverage").is_some(), "{body}");
     assert!(
         body.get(list_field).and_then(Value::as_array).is_some(),
         "{body}"
@@ -381,10 +396,22 @@ async fn settle_memory(state: &AppState, rows: &[SeedRow]) {
             panic!("claimed unexpected job {}", job.job_id);
         };
         let outcome = match row.kind {
-            Kind::Committed => FinishOutcome::Committed { counts: row.counts },
+            Kind::Committed => FinishOutcome::committed_accounted(row.counts),
             Kind::Partial => FinishOutcome::Partial {
                 counts: row.counts,
                 code: row.code.unwrap_or("upstream_timeout").to_string(),
+                coverage: super::coverage::CoverageReport {
+                    summary: "incomplete".into(),
+                    points: vec![super::coverage::PointCoverage {
+                        point_id: "missing-point".into(),
+                        disposition: "no_sample_received".into(),
+                        expected_slots: 1,
+                        observed_slots: 0,
+                        late_slots: 0,
+                    }],
+                    duplicate_timestamps: 0,
+                    out_of_window: 0,
+                },
             },
             Kind::Permanent => FinishOutcome::Permanent {
                 code: row.code.unwrap_or("retention_exceeded").to_string(),
@@ -396,13 +423,13 @@ async fn settle_memory(state: &AppState, rows: &[SeedRow]) {
         };
         state
             .ingest_queue
-            .finish(&FinishRequest {
-                owner: "w5c-worker".into(),
-                job_id: job.job_id,
-                fencing_token: job.fencing_token,
-                now: Utc::now(),
+            .finish(&FinishRequest::new(
+                "w5c-worker",
+                job.job_id,
+                job.fencing_token,
+                Utc::now(),
                 outcome,
-            })
+            ))
             .await
             .expect("finish ledger fixture");
         left -= 1;
@@ -418,12 +445,21 @@ async fn mark_postgres(rows: &[SeedRow]) {
         .await
         .expect("postgres ledger mark");
     for row in rows {
-        let (state, code) = match row.kind {
-            Kind::Committed => ("committed", None),
-            Kind::Partial => ("partial", row.code.or(Some("upstream_timeout"))),
-            Kind::Permanent => ("permanent_failure", row.code.or(Some("retention_exceeded"))),
-            Kind::Retry => ("retry_wait", row.code.or(Some("later"))),
+        let (state, code, coverage) = match row.kind {
+            Kind::Committed => ("committed", None, "complete"),
+            Kind::Partial => (
+                "partial",
+                row.code.or(Some("upstream_timeout")),
+                "incomplete",
+            ),
+            Kind::Permanent => (
+                "permanent_failure",
+                row.code.or(Some("retention_exceeded")),
+                "not_assessed",
+            ),
+            Kind::Retry => ("retry_wait", row.code.or(Some("later")), "not_assessed"),
         };
+        let job_id = row.job_id.to_string();
         let updated = sqlx::query(
             "UPDATE ingest_job
              SET state = $2,
@@ -431,10 +467,11 @@ async fn mark_postgres(rows: &[SeedRow]) {
                  fetched_count = $4,
                  accepted_count = $5,
                  rejected_count = $6,
-                 inserted_count = $7
+                 inserted_count = $7,
+                 coverage = $10
              WHERE job_id = $1 AND canonical_site IN ($8, $9)",
         )
-        .bind(row.job_id.to_string())
+        .bind(&job_id)
         .bind(state)
         .bind(code)
         .bind(i32::try_from(row.counts.fetched).unwrap_or(0))
@@ -443,6 +480,7 @@ async fn mark_postgres(rows: &[SeedRow]) {
         .bind(i32::try_from(row.counts.inserted).unwrap_or(0))
         .bind(SITE_GAPS)
         .bind(SITE_CLEAR)
+        .bind(coverage)
         .execute(&pool)
         .await
         .expect("mark ledger job");
@@ -452,11 +490,41 @@ async fn mark_postgres(rows: &[SeedRow]) {
             "ledger job {} not updated",
             row.job_id
         );
+        sqlx::query("DELETE FROM ingest_point_coverage WHERE job_id = $1")
+            .bind(&job_id)
+            .execute(&pool)
+            .await
+            .expect("clear ledger point coverage");
+        let point = match row.kind {
+            Kind::Committed => Some(("accounted-point", "present", 1, 1)),
+            Kind::Partial => Some(("missing-point", "no_sample_received", 1, 0)),
+            Kind::Permanent | Kind::Retry => None,
+        };
+        if let Some((point_id, disposition, expected, observed)) = point {
+            sqlx::query(
+                "INSERT INTO ingest_point_coverage (
+                    job_id, point_id, disposition, expected_slots, observed_slots, late_slots
+                 ) VALUES ($1, $2, $3, $4, $5, 0)",
+            )
+            .bind(&job_id)
+            .bind(point_id)
+            .bind(disposition)
+            .bind(expected)
+            .bind(observed)
+            .execute(&pool)
+            .await
+            .expect("insert ledger point coverage");
+        }
     }
 }
 
 async fn purge_fixture(pool: &PgPool) {
     for stmt in [
+        "DELETE FROM ingest_point_coverage WHERE job_id IN (
+            SELECT job_id FROM ingest_job
+            WHERE canonical_site IN ('w5c-gaps', 'w5c-clear') OR tenant_id = 'w5c-tenant'
+         )",
+        "DELETE FROM ingest_applied_sample WHERE tenant_id = 'w5c-tenant'",
         "DELETE FROM ingest_receipt WHERE canonical_site IN ('w5c-gaps', 'w5c-clear') OR tenant_id = 'w5c-tenant'",
         "DELETE FROM ingest_job WHERE canonical_site IN ('w5c-gaps', 'w5c-clear') OR tenant_id = 'w5c-tenant'",
         "DELETE FROM ingest_idempotency WHERE tenant_id = 'w5c-tenant' OR actor = 'w5c-operator'",

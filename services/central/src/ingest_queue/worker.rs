@@ -16,7 +16,14 @@ use crate::state::AppState;
 use super::client::{Coordination, QueueClient};
 use crate::providers::committed_model::IngestPlan;
 
-use super::model::{FinishOutcome, FinishRequest, JobCounts, JobView};
+use super::coverage::{
+    expectation_from_fields, reconcile, CoverageError, PointExpectation, PointObservation,
+    ReconcileInput, INCOMPLETE,
+};
+use super::model::{
+    points_digest, revision_still_owns, AppliedSample, FinishOutcome, FinishRequest, JobCounts,
+    JobView,
+};
 use super::schedule::{self, ScheduleDevice};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,14 +146,17 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
         let state = Arc::clone(state);
         let owner = owner.to_string();
         tasks.push(tokio::spawn(async move {
-            let outcome = execute_job(&state, &job).await;
-            let finish = FinishRequest {
+            let decision = execute_job(&state, &job).await;
+            let mut finish = FinishRequest::new(
                 owner,
-                job_id: job.job_id,
-                fencing_token: job.fencing_token,
-                now: Utc::now(),
-                outcome,
-            };
+                job.job_id,
+                job.fencing_token,
+                Utc::now(),
+                decision.outcome,
+            );
+            finish.active_model_revision = decision.active_model_revision;
+            finish.active_points_digest = decision.active_points_digest;
+            finish.applied_samples = decision.applied_samples;
             if let Err(err) = state.ingest_queue.finish(&finish).await {
                 warn!(job_id = %job.job_id, error = %err, "ingest finish rejected");
             }
@@ -160,21 +170,57 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
     Ok(())
 }
 
-async fn execute_job(state: &Arc<AppState>, job: &JobView) -> FinishOutcome {
-    let identity_ok = {
+struct WindowDecision {
+    outcome: FinishOutcome,
+    applied_samples: Vec<AppliedSample>,
+    active_model_revision: Option<String>,
+    active_points_digest: Option<String>,
+}
+
+impl WindowDecision {
+    fn bare(outcome: FinishOutcome) -> Self {
+        Self {
+            outcome,
+            applied_samples: Vec::new(),
+            active_model_revision: None,
+            active_points_digest: None,
+        }
+    }
+}
+
+async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
+    let plan = {
         let models = state
             .providers
             .models
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         match models.active_plan(&job.tenant_id, &job.canonical_site) {
-            Some(plan) => committed_tuple_matches(job, plan),
-            None => false,
+            Some(plan) if committed_tuple_matches(job, plan) => Some(plan.clone()),
+            Some(_) | None => None,
         }
     };
-    if !identity_ok {
-        return FinishOutcome::Permanent {
+    let Some(plan) = plan else {
+        return WindowDecision::bare(FinishOutcome::Permanent {
             code: "plan_identity_mismatch".into(),
+        });
+    };
+    let active_revision = Some(plan.revision_id.clone());
+    let expectations = expectations_for(&plan, job);
+    let active_digest = Some(points_digest(
+        &expectations
+            .iter()
+            .map(|point| point.point_id.clone())
+            .collect::<Vec<_>>(),
+    ));
+    if !revision_still_owns(&job.model_revision, plan.revision_id.as_str()) {
+        return WindowDecision {
+            outcome: FinishOutcome::Permanent {
+                code: "model_revision_changed".into(),
+            },
+            applied_samples: Vec::new(),
+            active_model_revision: active_revision,
+            active_points_digest: active_digest,
         };
     }
     let Some(site) = state.providers.sites.iter().find(|site| {
@@ -185,16 +231,16 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> FinishOutcome {
                 &job.provider_instance_id,
             )
     }) else {
-        return FinishOutcome::Permanent {
+        return WindowDecision::bare(FinishOutcome::Permanent {
             code: "site_not_configured".into(),
-        };
+        });
     };
     if matches!(site.kind, ProviderKind::AceIot) {
-        return FinishOutcome::Permanent {
+        return WindowDecision::bare(FinishOutcome::Permanent {
             code: "not_implemented".into(),
-        };
+        });
     }
-    match poller::execute_window(
+    let page = match poller::fetch_device_window(
         state,
         site,
         &job.device_id,
@@ -203,22 +249,333 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> FinishOutcome {
     )
     .await
     {
-        Ok(ingested) => match u32::try_from(ingested) {
-            Ok(count) => FinishOutcome::Committed {
-                counts: JobCounts {
-                    fetched: count,
-                    accepted: count,
-                    inserted: count,
-                    ..JobCounts::default()
-                },
+        Ok(page) => page,
+        Err(err) => {
+            return WindowDecision::bare(finish_for_poll_error(state, job, &err).await);
+        }
+    };
+    let plan_after = {
+        let models = state
+            .providers
+            .models
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        models
+            .active_plan(&job.tenant_id, &job.canonical_site)
+            .filter(|active| committed_tuple_matches(job, active))
+            .map(|active| active.revision_id.clone())
+    };
+    if plan_after.as_deref() != Some(plan.revision_id.as_str()) {
+        return WindowDecision {
+            outcome: FinishOutcome::Permanent {
+                code: "model_revision_changed".into(),
             },
-            Err(_) => FinishOutcome::Partial {
-                counts: JobCounts::default(),
-                code: "count_overflow".into(),
-            },
-        },
-        Err(err) => finish_for_poll_error(state, job, &err).await,
+            applied_samples: Vec::new(),
+            active_model_revision: plan_after,
+            active_points_digest: active_digest,
+        };
     }
+    let observations = observations_for(&expectations, &page);
+    let response_complete = page
+        .iter()
+        .map(|series| series.samples.len())
+        .sum::<usize>()
+        < crate::providers::http_policy::MAX_SAMPLES_PER_RESPONSE;
+    let coverage = reconcile(&ReconcileInput {
+        start: job.logical_window_start,
+        end: job.logical_window_end,
+        expectations: &expectations,
+        observations: &observations,
+        prior: &job.point_coverage,
+        response_complete,
+    });
+    let coverage = match coverage {
+        Ok(report) => report,
+        Err(CoverageError::InvalidWindow) => {
+            return WindowDecision::bare(FinishOutcome::Permanent {
+                code: "invalid_window".into(),
+            });
+        }
+        Err(CoverageError::PayloadBound) => {
+            record_window_health(state, &job.canonical_site, 0, 0, 1, 0, "payload_bound").await;
+            return WindowDecision::bare(FinishOutcome::Partial {
+                counts: JobCounts::default(),
+                code: "payload_bound".into(),
+                coverage: super::coverage::CoverageReport {
+                    summary: INCOMPLETE.to_string(),
+                    points: Vec::new(),
+                    duplicate_timestamps: 0,
+                    out_of_window: 0,
+                },
+            });
+        }
+    };
+    let device = device_for_write(&plan, job);
+    let written = if let Some(device) = device.as_ref() {
+        match poller::write_device_window(
+            state,
+            site,
+            device,
+            &page,
+            job.logical_window_start,
+            job.logical_window_end,
+        )
+        .await
+        {
+            Ok(receipt) => receipt,
+            Err(err) => {
+                return WindowDecision::bare(finish_for_poll_error(state, job, &err).await);
+            }
+        }
+    } else {
+        crate::providers::writer::ProviderIngestReceipt {
+            submitted: 0,
+            eligible: 0,
+            skipped: 0,
+            persisted_rows: 0,
+            inserted_rows: 0,
+            updated_rows: 0,
+        }
+    };
+    let applied = applied_samples(&page, job.logical_window_start, job.logical_window_end);
+    if let Err(err) = state.ingest_queue.apply_samples(job, &applied).await {
+        warn!(job_id = %job.job_id, error = %err, "ingest apply ledger rejected");
+        return WindowDecision::bare(finish_for_poll_error(state, job, "persistence").await);
+    }
+    let outcome = decide_window(&DecideWindow {
+        job_revision: &job.model_revision,
+        active_revision: Some(plan.revision_id.as_str()),
+        job_digest: None,
+        active_digest: None,
+        coverage: &coverage,
+        attempt: job.attempt,
+        now: Utc::now(),
+        written: &written,
+        applied: &applied,
+    });
+    let committed = u32::from(matches!(outcome, FinishOutcome::Committed { .. }));
+    let partial = u32::from(matches!(outcome, FinishOutcome::Partial { .. }));
+    let failed = u32::from(matches!(
+        outcome,
+        FinishOutcome::Retry { .. } | FinishOutcome::Permanent { .. }
+    ));
+    let detail = if coverage.allows_commit() {
+        coverage.summary.clone()
+    } else {
+        coverage.block_code()
+    };
+    let handed = u64::try_from(written.persisted_rows).unwrap_or(u64::MAX);
+    record_window_health(
+        state,
+        &job.canonical_site,
+        committed,
+        partial,
+        failed,
+        handed,
+        detail.as_str(),
+    )
+    .await;
+    WindowDecision {
+        outcome,
+        applied_samples: applied,
+        active_model_revision: active_revision,
+        active_points_digest: active_digest,
+    }
+}
+
+fn expectations_for(plan: &IngestPlan, job: &JobView) -> Vec<PointExpectation> {
+    plan.groups
+        .iter()
+        .find(|group| {
+            group.equipment_id == job.device_id
+                && crate::providers::http_policy::provider_ids_equivalent(
+                    &group.provider_instance_id,
+                    &job.provider_instance_id,
+                )
+        })
+        .map(|group| {
+            group
+                .points
+                .iter()
+                .map(|point| PointExpectation {
+                    point_id: point.source_point_id.clone(),
+                    expectation: expectation_from_fields(
+                        point.history_mode.as_deref(),
+                        point.cadence_secs,
+                        point.heartbeat_secs,
+                        None,
+                    ),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn observations_for(
+    expectations: &[PointExpectation],
+    page: &[crate::providers::map::HistorySeries],
+) -> Vec<PointObservation> {
+    expectations
+        .iter()
+        .map(|expected| {
+            let series = page
+                .iter()
+                .find(|series| series.provider_point_id == expected.point_id);
+            PointObservation {
+                point_id: expected.point_id.clone(),
+                returned: series.is_some(),
+                timestamps: series
+                    .map(|series| series.samples.iter().map(|sample| sample.ts).collect())
+                    .unwrap_or_default(),
+            }
+        })
+        .collect()
+}
+
+fn device_for_write(
+    plan: &IngestPlan,
+    job: &JobView,
+) -> Option<crate::providers::map::DevicePoints> {
+    let group = plan.groups.iter().find(|group| {
+        group.equipment_id == job.device_id
+            && crate::providers::http_policy::provider_ids_equivalent(
+                &group.provider_instance_id,
+                &job.provider_instance_id,
+            )
+    })?;
+    Some(crate::providers::map::DevicePoints {
+        device_id: job.device_id.clone(),
+        points: group
+            .points
+            .iter()
+            .map(|point| crate::providers::map::MappedPoint {
+                provider_point_id: point.source_point_id.clone(),
+                role: point.canonical_role.clone(),
+                equip_type: Some(group.equip_type.clone()),
+            })
+            .collect(),
+    })
+}
+
+fn applied_samples(
+    page: &[crate::providers::map::HistorySeries],
+    start: chrono::DateTime<Utc>,
+    end: chrono::DateTime<Utc>,
+) -> Vec<AppliedSample> {
+    let mut out = Vec::new();
+    for series in page {
+        for sample in &series.samples {
+            if sample.ts < start || sample.ts >= end {
+                continue;
+            }
+            if out.iter().any(|row: &AppliedSample| {
+                row.point_id == series.provider_point_id && row.ts == sample.ts
+            }) {
+                continue;
+            }
+            out.push(AppliedSample {
+                point_id: series.provider_point_id.clone(),
+                ts: sample.ts,
+                value_bits: sample.val.to_bits(),
+            });
+        }
+    }
+    out
+}
+
+struct DecideWindow<'a> {
+    job_revision: &'a str,
+    active_revision: Option<&'a str>,
+    job_digest: Option<&'a str>,
+    active_digest: Option<&'a str>,
+    coverage: &'a super::coverage::CoverageReport,
+    attempt: u32,
+    now: chrono::DateTime<Utc>,
+    written: &'a crate::providers::writer::ProviderIngestReceipt,
+    applied: &'a [AppliedSample],
+}
+
+fn decide_window(input: &DecideWindow<'_>) -> FinishOutcome {
+    if let Some(active) = input.active_revision {
+        if !revision_still_owns(input.job_revision, active) {
+            return FinishOutcome::Permanent {
+                code: "model_revision_changed".into(),
+            };
+        }
+    }
+    if let (Some(stored), Some(active)) = (input.job_digest, input.active_digest) {
+        if stored != active {
+            return FinishOutcome::Permanent {
+                code: "model_revision_changed".into(),
+            };
+        }
+    }
+    let counts = JobCounts {
+        fetched: u32::try_from(input.applied.len()).unwrap_or(u32::MAX),
+        accepted: u32::try_from(input.written.eligible).unwrap_or(u32::MAX),
+        rejected: u32::try_from(input.written.skipped).unwrap_or(0),
+        inserted: u32::try_from(input.written.inserted_rows).unwrap_or(u32::MAX),
+        updated: 0,
+        unchanged: u32::try_from(
+            input
+                .written
+                .persisted_rows
+                .saturating_sub(input.written.inserted_rows),
+        )
+        .unwrap_or(0),
+    };
+    if input.coverage.allows_commit() {
+        return FinishOutcome::Committed {
+            counts,
+            coverage: input.coverage.clone(),
+        };
+    }
+    if input.coverage.retryable_source_failure() {
+        return classify_poll_error(SOURCE_RETRY, input.attempt, input.now);
+    }
+    FinishOutcome::Partial {
+        counts,
+        code: input.coverage.block_code(),
+        coverage: input.coverage.clone(),
+    }
+}
+
+const SOURCE_RETRY: &str = "source_unavailable";
+
+async fn record_window_health(
+    state: &Arc<AppState>,
+    building_id: &str,
+    committed: u32,
+    partial: u32,
+    failed: u32,
+    samples_handed_off: u64,
+    detail: &str,
+) {
+    let status = if partial > 0 || failed > 0 {
+        crate::providers::types::ProviderHealthStatus::Degraded
+    } else {
+        crate::providers::types::ProviderHealthStatus::Ok
+    };
+    state
+        .providers
+        .record_hourly(
+            building_id,
+            status,
+            0,
+            Some(detail.to_string()),
+            crate::providers::types::HourlyCoverageHealth {
+                durable: true,
+                committed,
+                partial,
+                failed,
+                samples_handed_off,
+                update_log_status: crate::providers::hourly::UPDATE_LOG_STATUS.to_string(),
+                detail: detail.to_string(),
+                ..crate::providers::types::HourlyCoverageHealth::default()
+            },
+            failed > 0,
+        )
+        .await;
 }
 
 async fn finish_for_poll_error(state: &Arc<AppState>, job: &JobView, err: &str) -> FinishOutcome {
@@ -244,22 +601,36 @@ async fn finish_for_poll_error(state: &Arc<AppState>, job: &JobView, err: &str) 
 }
 
 fn classify_poll_error(err: &str, attempt: u32, now: chrono::DateTime<Utc>) -> FinishOutcome {
-    if err == "device_unmapped" {
+    if err == "device_unmapped" || err == "not_implemented" {
         return FinishOutcome::Permanent {
             code: err.to_string(),
         };
     }
+    let code = if err == "source_unavailable" {
+        "source_unavailable".to_string()
+    } else if portal_throttled(err) {
+        "throttled".to_string()
+    } else if portal_timeout(err) {
+        "timeout".to_string()
+    } else if err == "persistence" || err == "auth_failed" {
+        err.to_string()
+    } else {
+        "provider_poll_failed".to_string()
+    };
     if attempt >= 8 {
-        FinishOutcome::Permanent {
-            code: "provider_poll_failed".into(),
-        }
+        FinishOutcome::Permanent { code }
     } else {
         let backoff = (30i64 * 2i64.saturating_pow(attempt.saturating_sub(1))).min(900);
         FinishOutcome::Retry {
-            code: "provider_poll_failed".into(),
+            code,
             not_before: now + chrono::Duration::seconds(backoff),
         }
     }
+}
+
+fn portal_timeout(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("timeout") || lower.contains("timed out") || lower.contains("deadline")
 }
 
 fn portal_throttled(err: &str) -> bool {
@@ -328,13 +699,28 @@ fn devices_from_state(state: &AppState) -> (Vec<ScheduleDevice>, Vec<(String, &'
             &plan,
         ) {
             Ok(planned) => {
-                devices.extend(planned.into_iter().map(|device| ScheduleDevice {
-                    tenant_id: site.tenant_id.clone(),
-                    canonical_site: site.building_id.clone(),
-                    provider_instance_id: device.provider_instance_id,
-                    device_id: device.equipment_id,
-                    model_revision: device.revision_id,
-                    estimated_cost: device.estimated_cost,
+                devices.extend(planned.into_iter().map(|device| {
+                    let point_ids = plan
+                        .groups
+                        .iter()
+                        .find(|group| group.equipment_id == device.equipment_id)
+                        .map(|group| {
+                            group
+                                .points
+                                .iter()
+                                .map(|point| point.source_point_id.clone())
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    ScheduleDevice {
+                        tenant_id: site.tenant_id.clone(),
+                        canonical_site: site.building_id.clone(),
+                        provider_instance_id: device.provider_instance_id,
+                        device_id: device.equipment_id,
+                        model_revision: device.revision_id,
+                        estimated_cost: device.estimated_cost,
+                        point_ids,
+                    }
                 }));
             }
             Err(code) => {
@@ -431,6 +817,7 @@ fn max_concurrent() -> usize {
         .and_then(|value| value.parse().ok())
         .filter(|value| *value > 0)
         .unwrap_or(2)
+        .clamp(1, 32)
 }
 
 #[cfg(test)]
@@ -543,6 +930,7 @@ mod tests {
             safe_error_code: None,
             receipt_id: None,
             coverage: "not_assessed".into(),
+            point_coverage: Vec::new(),
             counts: JobCounts::default(),
         };
         assert!(!committed_tuple_matches(&job, &plan));
@@ -571,12 +959,88 @@ mod tests {
             safe_error_code: None,
             receipt_id: None,
             coverage: "not_assessed".into(),
+            point_coverage: Vec::new(),
             counts: JobCounts::default(),
         };
         let outcome = execute_job(&state, &job).await;
         assert!(matches!(
-            outcome,
+            outcome.outcome,
             FinishOutcome::Permanent { code } if code == "plan_identity_mismatch"
+        ));
+    }
+
+    #[test]
+    fn throttled_and_timeout_retry_without_committing() {
+        let now = Utc::now();
+        match classify_poll_error("429 too many", 1, now) {
+            FinishOutcome::Retry { code, not_before } => {
+                assert_eq!(code, "throttled");
+                assert!(not_before > now);
+            }
+            other => panic!("expected retry, got {other:?}"),
+        }
+        match classify_poll_error("context deadline exceeded", 2, now) {
+            FinishOutcome::Retry { code, .. } => assert_eq!(code, "timeout"),
+            other => panic!("expected timeout retry, got {other:?}"),
+        }
+        assert!(matches!(
+            classify_poll_error("429", 8, now),
+            FinishOutcome::Permanent { code } if code == "throttled"
+        ));
+    }
+
+    #[test]
+    fn model_change_and_partial_coverage_do_not_commit() {
+        let now = Utc::now();
+        let gap = super::super::coverage::CoverageReport {
+            summary: "incomplete".into(),
+            points: vec![super::super::coverage::PointCoverage {
+                point_id: "sat".into(),
+                disposition: "genuine_gap".into(),
+                expected_slots: 1,
+                observed_slots: 0,
+                late_slots: 0,
+            }],
+            duplicate_timestamps: 0,
+            out_of_window: 0,
+        };
+        let written = crate::providers::writer::ProviderIngestReceipt {
+            submitted: 0,
+            eligible: 0,
+            skipped: 0,
+            persisted_rows: 0,
+            inserted_rows: 0,
+            updated_rows: 0,
+        };
+        let changed = decide_window(&DecideWindow {
+            job_revision: "rev-old",
+            active_revision: Some("rev-new"),
+            job_digest: Some("digest-a"),
+            active_digest: Some("digest-a"),
+            coverage: &super::super::coverage::CoverageReport::accounted("sat"),
+            attempt: 1,
+            now,
+            written: &written,
+            applied: &[],
+        });
+        assert!(matches!(
+            changed,
+            FinishOutcome::Permanent { code } if code == "model_revision_changed"
+        ));
+        let partial = decide_window(&DecideWindow {
+            job_revision: "rev-old",
+            active_revision: Some("rev-old"),
+            job_digest: None,
+            active_digest: None,
+            coverage: &gap,
+            attempt: 1,
+            now,
+            written: &written,
+            applied: &[],
+        });
+        assert!(matches!(
+            partial,
+            FinishOutcome::Partial { code, .. } if code == "genuine_gap"
         ));
     }
 }

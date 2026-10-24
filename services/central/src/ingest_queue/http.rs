@@ -68,7 +68,7 @@ pub async fn list_jobs(
             "ok": true,
             "request_id": request_id,
             "scope": scope_json(&ctx),
-            "coverage": COVERAGE_NOT_ASSESSED,
+            "coverage": rollup_coverage(jobs.iter().map(|job| job.coverage.as_str())),
             "jobs": jobs,
         }))
         .into_response(),
@@ -166,6 +166,11 @@ pub async fn list_gaps(
     };
     match state.ingest_queue.list_gaps(&filter).await {
         Ok(gaps) => {
+            let coverage = if gaps.is_empty() {
+                COVERAGE_NOT_ASSESSED
+            } else {
+                rollup_coverage(gaps.iter().map(|job| job.coverage.as_str()))
+            };
             let rows: Vec<Value> = gaps
                 .into_iter()
                 .map(|job| {
@@ -182,7 +187,7 @@ pub async fn list_gaps(
                 "scope": scope_json(&ctx),
                 "guarantee": "bounded_windows_only",
                 "update_log": "not_claimed",
-                "coverage": COVERAGE_NOT_ASSESSED,
+                "coverage": coverage,
                 "gaps": rows,
             }))
             .into_response()
