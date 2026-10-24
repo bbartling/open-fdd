@@ -54,7 +54,6 @@ utoipa = { version = "5", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
 anyhow = "1"
 futures-util = "0.3"
-libc = "0.2"
 csv = { workspace = true }
 dashmap = "6"
 tempfile = "3"

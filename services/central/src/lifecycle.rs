@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::admin_cp::{plan_user_cascade_delete, UserCascadePlan};
+use crate::admin_cp::{plan_user_cascade_delete, UserCascadePlan, UserPublic};
 use crate::tenant::ControlPlane;
 use crate::user_store::{UserStore, UserStoreLoad};
 
@@ -51,6 +51,7 @@ pub struct SitePurgeError {
 pub struct UserCascadeOutcome {
     pub plan: UserCascadePlan,
     pub purged: Vec<SitePurgeReport>,
+    pub users: Vec<UserPublic>,
     pub operation_id: String,
     pub phase: String,
 }
@@ -203,21 +204,6 @@ pub fn mutate_users<T>(
     Ok(value)
 }
 
-/// Reload tenants, apply `mutate`, and write that plane.
-pub fn mutate_tenants<T>(
-    workspace: &Path,
-    mutate: impl FnOnce(&mut ControlPlane) -> Result<T, String>,
-) -> Result<T, ControlPlaneWriteError> {
-    let _fence = Fence::acquire(workspace).map_err(ControlPlaneWriteError::Unavailable)?;
-    let mut plane =
-        load_plane_fail_closed(workspace).map_err(ControlPlaneWriteError::Unavailable)?;
-    let value = mutate(&mut plane).map_err(ControlPlaneWriteError::Rejected)?;
-    plane
-        .save(workspace)
-        .map_err(ControlPlaneWriteError::Unavailable)?;
-    Ok(value)
-}
-
 /// Fill an empty server user id from the store loaded under the fence.
 pub fn ensure_user_id(workspace: &Path, username: &str) -> Result<(), ControlPlaneWriteError> {
     mutate_users(workspace, |store| {
@@ -309,31 +295,73 @@ impl Drop for Fence {
 }
 
 fn lock_exclusive(file: &std::fs::File) -> Result<(), String> {
-    use std::os::fd::AsRawFd;
-    // SAFETY: `file` is an open descriptor. `flock` locks that descriptor only.
-    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-    if rc == 0 {
-        Ok(())
-    } else {
-        Err(format!(
-            "control plane fence: {}",
-            std::io::Error::last_os_error()
-        ))
-    }
+    file.lock()
+        .map_err(|err| format!("control plane fence: {err}"))
 }
 
 fn unlock_exclusive(file: &std::fs::File) -> Result<(), String> {
-    use std::os::fd::AsRawFd;
-    // SAFETY: `file` is an open descriptor. `flock` unlocks that descriptor only.
-    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
-    if rc == 0 {
-        Ok(())
-    } else {
-        Err(format!(
-            "control plane fence: {}",
-            std::io::Error::last_os_error()
-        ))
+    file.unlock()
+        .map_err(|err| format!("control plane fence: {err}"))
+}
+
+/// User store loaded under the fence. The fence is held until this value drops,
+/// which covers `UserStore::save` on the same value.
+pub struct LockedUsers {
+    _fence: Fence,
+    store: UserStore,
+}
+
+impl std::ops::Deref for LockedUsers {
+    type Target = UserStore;
+    fn deref(&self) -> &UserStore {
+        &self.store
     }
+}
+
+impl std::ops::DerefMut for LockedUsers {
+    fn deref_mut(&mut self) -> &mut UserStore {
+        &mut self.store
+    }
+}
+
+/// Reload users and hold the fence until the returned value is dropped.
+pub fn load_users_for_write(workspace: &Path) -> Result<LockedUsers, String> {
+    let fence = Fence::acquire(workspace)?;
+    let store = load_users_fail_closed(workspace)?;
+    Ok(LockedUsers {
+        _fence: fence,
+        store,
+    })
+}
+
+/// Tenant plane loaded under the fence. The fence is held until this value drops,
+/// which covers `ControlPlane::save` on the same value.
+pub struct LockedTenants {
+    _fence: Fence,
+    plane: ControlPlane,
+}
+
+impl std::ops::Deref for LockedTenants {
+    type Target = ControlPlane;
+    fn deref(&self) -> &ControlPlane {
+        &self.plane
+    }
+}
+
+impl std::ops::DerefMut for LockedTenants {
+    fn deref_mut(&mut self) -> &mut ControlPlane {
+        &mut self.plane
+    }
+}
+
+/// Reload tenants and hold the fence until the returned value is dropped.
+pub fn load_tenants_for_write(workspace: &Path) -> Result<LockedTenants, String> {
+    let fence = Fence::acquire(workspace)?;
+    let plane = load_plane_fail_closed(workspace)?;
+    Ok(LockedTenants {
+        _fence: fence,
+        plane,
+    })
 }
 
 fn load_users_fail_closed(workspace: &Path) -> Result<UserStore, String> {
@@ -610,6 +638,7 @@ fn try_finish(
         return Ok(Finish::Continue(purged));
     }
     store.remove(username).map_err(UserCascadeError::NotFound)?;
+    let users = store.public_list();
     store.save(workspace).map_err(UserCascadeError::Store)?;
     operation.phase = "complete".into();
     operation.errors.clear();
@@ -625,6 +654,7 @@ fn try_finish(
             buildings_shared_skipped: plan.buildings_shared_skipped,
         },
         purged,
+        users,
         operation_id: operation.operation_id.clone(),
         phase: operation.phase.clone(),
     }))

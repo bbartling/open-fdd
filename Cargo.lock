@@ -2311,7 +2311,6 @@ dependencies = [
  "futures-util",
  "hex",
  "jsonwebtoken",
- "libc",
  "object_store",
  "open_fdd_edge_prototype",
  "openfdd_contracts",
