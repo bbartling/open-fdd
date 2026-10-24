@@ -17,10 +17,28 @@ if rg -n '^legacy-datafusion|^legacy-parquet|legacy-datafusion\s*=' \
   fail=1
 fi
 
-tree_out="$(cargo tree -p openfdd-central -e normal --prefix none 2>/dev/null || true)"
-if echo "$tree_out" | rg -q '^datafusion |^fdd_sql '; then
+# A non-zero cargo tree exit, an error line, or an empty package list is a
+# failed inspection. Swallowing stderr or forcing success hid a broken tree.
+tree_err="$(mktemp)"
+trap 'rm -f "$tree_err"' EXIT
+tree_status=0
+tree_out="$(cargo tree -p openfdd-central -e normal --prefix none 2>"$tree_err")" || tree_status=$?
+if [[ "$tree_status" -ne 0 ]]; then
+  echo "FAIL: cargo tree -p openfdd-central exited ${tree_status}"
+  cat "$tree_err"
+  fail=1
+elif grep -E -q '^error(\[[^]]+\])?:' "$tree_err" || grep -E -q '^error(\[[^]]+\])?:' <<<"$tree_out"; then
+  echo "FAIL: cargo tree -p openfdd-central reported an error"
+  cat "$tree_err"
+  printf '%s\n' "$tree_out"
+  fail=1
+elif [[ -z "${tree_out//[$' \t\r\n']/}" ]]; then
+  echo "FAIL: cargo tree -p openfdd-central produced no package list"
+  cat "$tree_err"
+  fail=1
+elif grep -E -q '^datafusion |^fdd_sql ' <<<"$tree_out"; then
   echo "FAIL: openfdd-central default tree includes datafusion or fdd_sql"
-  echo "$tree_out" | rg 'datafusion|fdd_sql' || true
+  grep -E 'datafusion|fdd_sql' <<<"$tree_out" || true
   fail=1
 fi
 

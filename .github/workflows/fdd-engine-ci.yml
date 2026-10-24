@@ -10,6 +10,7 @@ on:
       - "sql_rules/**"
       - "services/central/**"
       - "scripts/ci/forbid_datafusion_product.sh"
+      - "scripts/ci/test_forbid_datafusion_product.sh"
       - ".github/workflows/fdd-engine-ci.yml"
   pull_request:
     paths:
@@ -18,6 +19,7 @@ on:
       - "sql_rules/**"
       - "services/central/**"
       - "scripts/ci/forbid_datafusion_product.sh"
+      - "scripts/ci/test_forbid_datafusion_product.sh"
       - ".github/workflows/fdd-engine-ci.yml"
 
 env:
@@ -35,7 +37,7 @@ jobs:
       - name: Install PyYAML for registry validation
         run: python3 -m pip install --user PyYAML
       - name: Forbid product DataFusion / fdd_sql
-        run: bash scripts/ci/forbid_datafusion_product.sh
+        run: bash scripts/ci/test_forbid_datafusion_product.sh
       - name: cargo fmt
         run: cargo fmt --all --check
       - name: cargo clippy (Timescale FDD crates)
