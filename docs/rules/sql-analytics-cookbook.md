@@ -486,57 +486,21 @@ LIMIT 2000;
 
 ## sql-anomaly
 
-`sql/analytics/postgres/queries/sql_anomaly_zscore.sql`.
+`sql/analytics/postgres/queries/sql_anomaly_zscore.sql` with coverage from `sql_anomaly_series.sql`.
 
-```sql
--- Soft-OPEN analytics pack: simple z-score anomaly flags on common sensor roles.
--- Parameter: $1 = site_id. Soft-OPEN ≠ FQ (not full SV/oracle suite).
-WITH role_stats AS (
-  SELECT
-    split_part(openfdd_key, '.', 1) AS equipment_id,
-    split_part(openfdd_key, '.', 2) AS role,
-    avg(val) AS avg_val,
-    stddev_samp(val) AS stddev_val,
-    count(*)::bigint AS n
-  FROM sample
-  WHERE site_id = $1
-    AND val IS NOT NULL
-    AND split_part(openfdd_key, '.', 2) IN (
-      'sat', 'mat', 'rat', 'oa_t', 'web_oa_t', 'zone_t', 'dsp'
-    )
-  GROUP BY 1, 2
-  HAVING count(*) >= 24 AND stddev_samp(val) IS NOT NULL AND stddev_samp(val) > 0
-),
-scored AS (
-  SELECT
-    split_part(s.openfdd_key, '.', 1) AS equipment_id,
-    split_part(s.openfdd_key, '.', 2) AS role,
-    s.ts,
-    s.val,
-    r.avg_val,
-    r.stddev_val,
-    abs((s.val - r.avg_val) / r.stddev_val) AS z_abs
-  FROM sample s
-  JOIN role_stats r
-    ON r.equipment_id = split_part(s.openfdd_key, '.', 1)
-   AND r.role = split_part(s.openfdd_key, '.', 2)
-  WHERE s.site_id = $1
-    AND s.val IS NOT NULL
-)
-SELECT
-  equipment_id,
-  role,
-  ts,
-  val,
-  avg_val,
-  stddev_val,
-  z_abs,
-  CASE WHEN z_abs >= 3.0 THEN 'ANOMALY' ELSE 'OK' END AS anomaly_flag
-FROM scored
-WHERE z_abs >= 3.0
-ORDER BY z_abs DESC, ts DESC
-LIMIT 2000;
-```
+The product response is one row per flagged timestamp (`query_version: sql-anomaly-event-v1`). The baseline is the previous `$5` samples for that equipment and role. The current sample is excluded from its own mean and sample standard deviation. A scored sample is an event when `|z| >= $6`. `$7` false keeps every flagged timestamp. `$7` true keeps rising edges only. `coverage.n_flagged` still counts flagged samples the edge filter omits.
+
+| Bind | Meaning |
+|------|---------|
+| `$1` | `site_id` |
+| `$2` | window start (`timestamptz`, NULL = open) |
+| `$3` | window end (`timestamptz`, NULL = open, half-open) |
+| `$4` | equipment ids (`text[]`, NULL/empty = all). Exact `= ANY ($4)` match |
+| `$5` | `window_rows` (int, prior-sample count) |
+| `$6` | `z_threshold` (double precision) |
+| `$7` | `transition_events` (boolean) |
+
+Screened roles: `sat`, `mat`, `rat`, `oa_t`, `web_oa_t`, `zone_t`, `dsp`. The event query returns at most 2000 rows ordered by `|z|` descending, then timestamp descending. The counts row is always present, including when no timestamp is flagged. Short, constant, and all-null series are classified by `sql_anomaly_series.sql` and do not become a zero-filled summary.
 
 ## mv-change-point
 

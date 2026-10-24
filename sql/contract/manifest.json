@@ -12,8 +12,8 @@
   ],
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
-  "file_count": 107,
-  "pack_sha256": "3f1c4b91a7f0ec154fc7b3e9f2ccc63bdd4a8b62bd2f5f311f94aafee318a215",
+  "file_count": 108,
+  "pack_sha256": "94274587ed76aa8d8df0a4afca1e1127d955c37b7d2c2141bf994cc2e7bee304",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -516,9 +516,14 @@
       "bytes": 1198
     },
     {
+      "path": "sql/analytics/postgres/queries/sql_anomaly_series.sql",
+      "sha256": "2da2e4296ffa6ad0a6894fdc90055cbd94885c606567f7233392f5c52da33b5a",
+      "bytes": 1126
+    },
+    {
       "path": "sql/analytics/postgres/queries/sql_anomaly_zscore.sql",
-      "sha256": "6ebbd2a9378f01ec48bd993fb9762834eb6fc47c44ab18e795485d079306e2c4",
-      "bytes": 1880
+      "sha256": "ff72228c17eab3af57c0f1978453b89a95b28b7796bbf25489e1fa8d5439acbf",
+      "bytes": 2991
     },
     {
       "path": "sql/analytics/postgres/queries/topology_equipment.sql",
@@ -527,8 +532,8 @@
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "1f47ce8fe9739ebd22aa4ad00bde3e8fc29477ae8fb7cc6fc9c8443df455f5a4",
-      "bytes": 4165
+      "sha256": "82780247ee01440bbdd6a06ada04fec047821fb2f93e2d21d835b5e23d149291",
+      "bytes": 4262
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",

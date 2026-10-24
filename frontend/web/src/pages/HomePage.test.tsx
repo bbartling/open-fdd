@@ -151,7 +151,10 @@ vi.mock("../api/analyticsApi", () => ({
   postChillerHealth: vi.fn(emptyHealth),
   postBoilerHealth: vi.fn(emptyHealth),
   postHpHealth: vi.fn(emptyHealth),
-  postSqlAnomaly: vi.fn(emptyHealth),
+  postSqlAnomaly: vi.fn(async () => ({
+    ...(await emptyHealth()),
+    query_version: "sql-anomaly-event-v1",
+  })),
   postPlantHealth: vi.fn(emptyHealth),
   postAnalytics: vi.fn(emptyHealth),
 }));

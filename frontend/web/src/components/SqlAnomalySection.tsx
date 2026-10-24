@@ -1,23 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, InlineAlert } from "./widgets";
 import { postSqlAnomaly } from "../api/analyticsApi";
-import { naturalCompare } from "../lib/naturalSort";
 import { useExplicitAnalyticsRefresh } from "../session/useExplicitAnalyticsRefresh";
+import {
+  SQL_ANOMALY_QUERY_VERSION,
+  anomalyEdgeNote,
+  anomalyEmptyNote,
+  formatAnomalyNumber,
+  formatAnomalyTimestamp,
+  parseAnomalyEnvelope,
+  parseWindowRows,
+  parseZThreshold,
+  sortAnomalyEvents,
+  type AnomalyEvent,
+} from "./sqlAnomaly";
 
-function fmtNum(v: unknown, digits = 2): string {
-  if (v == null || v === "") return "—";
-  const n = typeof v === "number" ? v : Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toFixed(digits);
-}
+const CONTROL_NOTE =
+  "Window is a whole number from 3 to 168. Threshold is a positive number up to 100.";
 
-function fmtTs(v: unknown): string {
-  if (v == null || v === "") return "—";
-  const s = String(v);
-  return s.length > 19 ? s.slice(0, 19).replace("T", " ") : s;
-}
-
-/** Overview tabulated SQL anomaly screening (rolling Z-score; no Plotly). */
+/** Overview event table for rolling prior-window z-score (no Plotly). */
 export function SqlAnomalySection({
   buildingId,
   refreshToken,
@@ -25,88 +26,93 @@ export function SqlAnomalySection({
   buildingId: string;
   refreshToken: number;
 }) {
-  const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
+  const [windowText, setWindowText] = useState("24");
+  const [thresholdText, setThresholdText] = useState("3");
+  const [edgesOnly, setEdgesOnly] = useState(false);
+  const [rows, setRows] = useState<AnomalyEvent[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [edgeNote, setEdgeNote] = useState<string | null>(null);
+  const [truncated, setTruncated] = useState(false);
   const refresh = useExplicitAnalyticsRefresh(buildingId, refreshToken);
+  const windowRows = parseWindowRows(windowText);
+  const threshold = parseZThreshold(thresholdText);
 
   useEffect(() => {
     if (!buildingId) {
       setRows([]);
+      setErr(null);
+      setNote(null);
+      setEdgeNote(null);
+      setTruncated(false);
+      setLoading(false);
       return;
     }
-    let cancelled = false;
+    if (windowRows == null || threshold == null) {
+      setRows([]);
+      setErr(null);
+      setEdgeNote(null);
+      setTruncated(false);
+      setNote(CONTROL_NOTE);
+      setLoading(false);
+      return;
+    }
+    const ctrl = new AbortController();
     setLoading(true);
     setErr(null);
     setNote(null);
+    setEdgeNote(null);
     void (async () => {
       try {
-        const env = await postSqlAnomaly({
-          building_id: buildingId,
-          query_version: "sql-anomaly-v1",
-          series: {
-            window_rows: 24,
-            z_threshold: 3,
-            method: "zscore",
-            transition_events: true,
+        const env = await postSqlAnomaly(
+          {
+            building_id: buildingId,
+            query_version: SQL_ANOMALY_QUERY_VERSION,
+            series: {
+              window_rows: windowRows,
+              z_threshold: threshold,
+              method: "zscore",
+              transition_events: edgesOnly,
+            },
+            ...(refresh ? { refresh: true } : {}),
           },
-          ...(refresh ? { refresh: true } : {}),
-        });
-        if (cancelled) return;
-        const warnings = env.warnings ?? [];
-        if (warnings.some((w) => w.includes("disabled"))) {
-          setNote(
-            "SQL anomaly screening is disabled on this central (OPENFDD_SQL_ANOMALY_SCREENING=0).",
-          );
-          setRows([]);
-          return;
-        }
-        if (warnings.some((w) => w.includes("no mapped"))) {
-          setNote(
-            "No mapped SAT/OAT/zone sensor columns in historian — import package roles first.",
-          );
-          setRows([]);
-          return;
-        }
-        const sorted = [...(env.rows ?? [])].sort((a, b) => {
-          const ah = Number(a.anomaly_hours) || 0;
-          const bh = Number(b.anomaly_hours) || 0;
-          if (bh !== ah) return bh - ah;
-          const as = Number(a.score) || 0;
-          const bs = Number(b.score) || 0;
-          if (bs !== as) return bs - as;
-          return naturalCompare(String(a.equipment_id), String(b.equipment_id));
-        });
-        setRows(sorted);
-        if (!sorted.length) {
-          setNote("No rolling Z-score anomalies above threshold in this window.");
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setErr(e instanceof Error ? e.message : String(e));
-          setRows([]);
-        }
+          { signal: ctrl.signal },
+        );
+        if (ctrl.signal.aborted) return;
+        const parsed = parseAnomalyEnvelope(env);
+        setRows(sortAnomalyEvents(parsed.rows));
+        setNote(anomalyEmptyNote(parsed));
+        setEdgeNote(anomalyEdgeNote(parsed));
+        setTruncated(parsed.coverage.truncated);
+      } catch (error) {
+        if (ctrl.signal.aborted) return;
+        setErr(error instanceof Error ? error.message : String(error));
+        setRows([]);
+        setNote(null);
+        setEdgeNote(null);
+        setTruncated(false);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!ctrl.signal.aborted) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [buildingId, refreshToken, refresh]);
+    return () => ctrl.abort();
+  }, [buildingId, edgesOnly, refresh, threshold, windowRows]);
 
   const tableRows = useMemo(
     () =>
-      rows.map((r) => ({
-        equipment_id: String(r.equipment_id ?? ""),
-        role: String(r.role ?? r.metric ?? ""),
-        method: String(r.method ?? "zscore"),
-        score: fmtNum(r.score),
-        threshold: fmtNum(r.threshold, 1),
-        anomaly_hours: fmtNum(r.anomaly_hours, 1),
-        anomaly_events: fmtNum(r.anomaly_events, 0),
-        last_at: fmtTs(r.last_at),
+      rows.map((row) => ({
+        row_key: row.row_key,
+        equipment_id: row.equipment_id,
+        role: row.role,
+        ts: formatAnomalyTimestamp(row.ts),
+        val: formatAnomalyNumber(row.val),
+        avg_val: formatAnomalyNumber(row.avg_val),
+        stddev_val: formatAnomalyNumber(row.stddev_val),
+        z_abs: formatAnomalyNumber(row.z_abs),
+        threshold: formatAnomalyNumber(row.threshold),
+        anomaly_flag: row.anomaly_flag,
+        transition: row.transition ? "true" : "false",
       })),
     [rows],
   );
@@ -114,6 +120,44 @@ export function SqlAnomalySection({
   return (
     <section className="overview-section" data-testid="overview-sql-anomaly">
       <h3>Anomaly screening (SQL)</h3>
+      <div className="form-row overview-anomaly-controls">
+        <label htmlFor="overview-sql-anomaly-window">
+          Window
+          <input
+            id="overview-sql-anomaly-window"
+            data-testid="overview-sql-anomaly-window"
+            type="number"
+            min={3}
+            max={168}
+            step={1}
+            value={windowText}
+            onChange={(event) => setWindowText(event.target.value)}
+          />
+        </label>
+        <label htmlFor="overview-sql-anomaly-threshold">
+          Threshold
+          <input
+            id="overview-sql-anomaly-threshold"
+            data-testid="overview-sql-anomaly-threshold"
+            type="number"
+            min={0.001}
+            max={100}
+            step="any"
+            value={thresholdText}
+            onChange={(event) => setThresholdText(event.target.value)}
+          />
+        </label>
+        <label htmlFor="overview-sql-anomaly-transitions">
+          <input
+            id="overview-sql-anomaly-transitions"
+            data-testid="overview-sql-anomaly-transitions"
+            type="checkbox"
+            checked={edgesOnly}
+            onChange={(event) => setEdgesOnly(event.target.checked)}
+          />
+          Rising edges only
+        </label>
+      </div>
       {loading ? (
         <InlineAlert
           id="overview-sql-anomaly-loading"
@@ -124,8 +168,30 @@ export function SqlAnomalySection({
         </InlineAlert>
       ) : null}
       {err ? (
-        <InlineAlert id="overview-sql-anomaly-err" variant="danger">
+        <InlineAlert
+          id="overview-sql-anomaly-err"
+          variant="danger"
+          testId="overview-sql-anomaly-err"
+        >
           {err}
+        </InlineAlert>
+      ) : null}
+      {edgeNote && !err ? (
+        <InlineAlert
+          id="overview-sql-anomaly-edges"
+          variant="info"
+          testId="overview-sql-anomaly-edges"
+        >
+          {edgeNote}
+        </InlineAlert>
+      ) : null}
+      {truncated && !err ? (
+        <InlineAlert
+          id="overview-sql-anomaly-truncated"
+          variant="info"
+          testId="overview-sql-anomaly-truncated"
+        >
+          The event table stops at 2000 rows. Flagged-sample coverage still counts the rest.
         </InlineAlert>
       ) : null}
       {note && !err ? (
@@ -140,16 +206,18 @@ export function SqlAnomalySection({
       {tableRows.length > 0 ? (
         <DataTable
           id="sql-anomaly-overview"
-          label="SQL anomaly overview"
+          label="SQL anomaly events"
           columns={[
             { key: "equipment_id", header: "equipment" },
-            { key: "role", header: "role / metric" },
-            { key: "method", header: "method" },
-            { key: "score", header: "max |z|" },
+            { key: "role", header: "role" },
+            { key: "ts", header: "time (UTC)" },
+            { key: "val", header: "value" },
+            { key: "avg_val", header: "baseline" },
+            { key: "stddev_val", header: "stddev" },
+            { key: "z_abs", header: "|z|" },
             { key: "threshold", header: "threshold" },
-            { key: "anomaly_hours", header: "anomaly h" },
-            { key: "anomaly_events", header: "events" },
-            { key: "last_at", header: "last_at" },
+            { key: "anomaly_flag", header: "flag" },
+            { key: "transition", header: "edge" },
           ]}
           rows={tableRows}
           testId="overview-sql-anomaly-table"

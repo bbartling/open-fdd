@@ -105,6 +105,9 @@ const PID_HUNTING_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/pid_hunting_proxy.sql");
 const SQL_ANOMALY_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/sql_anomaly_zscore.sql");
+const SQL_ANOMALY_SERIES_SQL: &str =
+    include_str!("../../../sql/analytics/postgres/queries/sql_anomaly_series.sql");
+const ANOMALY_EVENT_LIMIT: i64 = 2000;
 const MV_CHANGE_POINT_SQL: &str =
     include_str!("../../../sql/analytics/postgres/queries/mv_change_point_daily.sql");
 const FUEL_DAILY_SQL: &str = include_str!("../../../sql/analytics/postgres/queries/fuel_daily.sql");
@@ -609,36 +612,311 @@ pub async fn pid_hunting_proxy(
     ))
 }
 
+fn anomaly_series_reason(
+    n: i64,
+    n_null: i64,
+    stddev: Option<f64>,
+    window_rows: u32,
+) -> &'static str {
+    if n == 0 && n_null > 0 {
+        return "missing_values";
+    }
+    let needed = i64::from(window_rows) + 1;
+    if n < needed {
+        return "short_history";
+    }
+    match stddev {
+        Some(scale) if scale.is_finite() && scale > 0.0 => "scored",
+        _ => "constant_history",
+    }
+}
+
+struct AnomalyCounts {
+    n_samples: i64,
+    n_scored: i64,
+    n_flagged: i64,
+    n_ok: i64,
+    n_returned: i64,
+    truncated: bool,
+}
+
+fn anomaly_coverage(
+    params: &crate::sql_anomaly::SqlAnomalyParams,
+    scope: &AnalyticsSqlScope,
+    counts: &AnomalyCounts,
+    series: Vec<Value>,
+) -> Value {
+    let stamp = |ts: Option<DateTime<Utc>>| {
+        ts.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+    };
+    json!({
+        "contract": "event-table",
+        "semantics": "rolling-prior-window-zscore",
+        "method": params.method,
+        "window_rows": params.window_rows,
+        "z_threshold": params.z_threshold,
+        "transition_events": params.transition_events,
+        "truncated": counts.truncated,
+        "window_start": stamp(scope.start),
+        "window_end": stamp(scope.end),
+        "n_samples": counts.n_samples,
+        "n_scored": counts.n_scored,
+        "n_flagged": counts.n_flagged,
+        "n_ok": counts.n_ok,
+        "n_returned": counts.n_returned,
+        "series": series,
+    })
+}
+
+struct AnomalyBody {
+    warnings: Vec<String>,
+    rows: Vec<Value>,
+    coverage: Value,
+    truncated: bool,
+}
+
+fn anomaly_envelope(
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+    params: &crate::sql_anomaly::SqlAnomalyParams,
+    query_version: &str,
+    body: AnomalyBody,
+) -> Value {
+    let mut env = with_scope_meta(envelope("sql-anomaly", building_id, body.rows), scope);
+    if let Some(obj) = env.as_object_mut() {
+        obj.insert("query_version".to_string(), json!(query_version));
+        obj.insert("contract".to_string(), json!("event-table"));
+        obj.insert(
+            "semantics".to_string(),
+            json!("rolling-prior-window-zscore"),
+        );
+        obj.insert("method".to_string(), json!(params.method));
+        obj.insert("window_rows".to_string(), json!(params.window_rows));
+        obj.insert("z_threshold".to_string(), json!(params.z_threshold));
+        obj.insert(
+            "transition_events".to_string(),
+            json!(params.transition_events),
+        );
+        obj.insert("truncated".to_string(), json!(body.truncated));
+        obj.insert("warnings".to_string(), json!(body.warnings));
+        obj.insert("coverage".to_string(), json!(body.coverage));
+    }
+    env
+}
+
+struct ScoredEvent {
+    equipment_id: String,
+    role: String,
+    ts: DateTime<Utc>,
+    val: f64,
+    avg_val: f64,
+    stddev_val: f64,
+    z_abs: f64,
+    transition: bool,
+}
+
+fn anomaly_event_row(event: &ScoredEvent, threshold: f64) -> Value {
+    json!({
+        "anomaly_flag": "ANOMALY",
+        "avg_val": event.avg_val,
+        "equipment_id": event.equipment_id,
+        "method": "zscore",
+        "role": event.role,
+        "stddev_val": event.stddev_val,
+        "threshold": threshold,
+        "transition": event.transition,
+        "ts": event.ts.to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
+        "val": event.val,
+        "z_abs": event.z_abs,
+    })
+}
+
+/// One event row per flagged sample. `window_rows` is the prior-sample
+/// baseline, `z_threshold` is the cutoff, and `transition_events` keeps
+/// rising edges only when true.
 pub async fn sql_anomaly_zscore(
     tsdb: &Tsdb,
     building_id: &str,
     scope: &AnalyticsSqlScope,
+    req: &AnalyticsRequest,
+    query_version: &str,
 ) -> Result<Value> {
-    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
-    let rows = sqlx::query(SQL_ANOMALY_SQL)
+    let params = crate::sql_anomaly::params_from_request(req);
+    let mut warnings = Vec::new();
+    if let Some(warning) = crate::analytics::version_mismatch_warning(
+        query_version,
+        req.query.query_version.as_deref(),
+    ) {
+        warnings.push(warning);
+    }
+    if !crate::sql_anomaly::screening_enabled() {
+        warnings
+            .push("sql anomaly screening disabled (OPENFDD_SQL_ANOMALY_SCREENING=0)".to_string());
+        let counts = AnomalyCounts {
+            n_samples: 0,
+            n_scored: 0,
+            n_flagged: 0,
+            n_ok: 0,
+            n_returned: 0,
+            truncated: false,
+        };
+        let coverage = anomaly_coverage(&params, scope, &counts, Vec::new());
+        return Ok(anomaly_envelope(
+            building_id,
+            scope,
+            &params,
+            query_version,
+            AnomalyBody {
+                warnings,
+                rows: Vec::new(),
+                coverage,
+                truncated: false,
+            },
+        ));
+    }
+    if params.method != "zscore" {
+        warnings.push(format!(
+            "sql-anomaly method '{}' is not supported; the event table uses zscore",
+            params.method
+        ));
+        let counts = AnomalyCounts {
+            n_samples: 0,
+            n_scored: 0,
+            n_flagged: 0,
+            n_ok: 0,
+            n_returned: 0,
+            truncated: false,
+        };
+        let coverage = anomaly_coverage(&params, scope, &counts, Vec::new());
+        return Ok(anomaly_envelope(
+            building_id,
+            scope,
+            &params,
+            query_version,
+            AnomalyBody {
+                warnings,
+                rows: Vec::new(),
+                coverage,
+                truncated: false,
+            },
+        ));
+    }
+
+    let window_rows = i32::try_from(params.window_rows).context("sql-anomaly window_rows")?;
+    let fetched = sqlx::query(SQL_ANOMALY_SQL)
+        .bind(building_id)
+        .bind(scope.start)
+        .bind(scope.end)
+        .bind(scope.equipment_bind())
+        .bind(window_rows)
+        .bind(params.z_threshold)
+        .bind(params.transition_events)
+        .fetch_all(tsdb.pool())
+        .await
+        .context("sql_anomaly_zscore")?;
+    if fetched.is_empty() {
+        anyhow::bail!("sql-anomaly event query returned no count row");
+    }
+    let mut n_scored = 0_i64;
+    let mut n_flagged = 0_i64;
+    let mut n_ok = 0_i64;
+    let mut n_selected = 0_i64;
+    let mut rows = Vec::new();
+    for (index, row) in fetched.iter().enumerate() {
+        if index == 0 {
+            n_scored = row.try_get("n_scored").context("sql-anomaly n_scored")?;
+            n_flagged = row.try_get("n_flagged").context("sql-anomaly n_flagged")?;
+            n_ok = row.try_get("n_ok").context("sql-anomaly n_ok")?;
+            n_selected = row
+                .try_get("n_selected")
+                .context("sql-anomaly n_selected")?;
+        }
+        let equipment_id: Option<String> = row
+            .try_get("equipment_id")
+            .context("sql-anomaly equipment_id")?;
+        let Some(equipment_id) = equipment_id.filter(|id| !id.is_empty()) else {
+            continue;
+        };
+        let role: String = row.try_get("role").context("sql-anomaly role")?;
+        let ts: DateTime<Utc> = row.try_get("ts").context("sql-anomaly ts")?;
+        let val: f64 = row.try_get("val").context("sql-anomaly val")?;
+        let avg_val: f64 = row.try_get("avg_val").context("sql-anomaly avg_val")?;
+        let stddev_val: f64 = row
+            .try_get("stddev_val")
+            .context("sql-anomaly stddev_val")?;
+        let z_abs: f64 = row.try_get("z_abs").context("sql-anomaly z_abs")?;
+        let transition: bool = row
+            .try_get("transition")
+            .context("sql-anomaly transition")?;
+        rows.push(anomaly_event_row(
+            &ScoredEvent {
+                equipment_id,
+                role,
+                ts,
+                val,
+                avg_val,
+                stddev_val,
+                z_abs,
+                transition,
+            },
+            params.z_threshold,
+        ));
+    }
+
+    let series_rows = sqlx::query(SQL_ANOMALY_SERIES_SQL)
         .bind(building_id)
         .bind(scope.start)
         .bind(scope.end)
         .bind(scope.equipment_bind())
         .fetch_all(tsdb.pool())
         .await
-        .context("sql_anomaly_zscore")?;
-    let mut out = Vec::new();
-    for r in rows {
-        out.push(json!({
-            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
-            "role": r.try_get::<String, _>("role").unwrap_or_default(),
-            "ts": r.try_get::<chrono::DateTime<chrono::Utc>, _>("ts").ok().map(|t| t.to_rfc3339()),
-            "val": r.try_get::<f64, _>("val").ok(),
-            "avg_val": r.try_get::<f64, _>("avg_val").ok(),
-            "stddev_val": r.try_get::<f64, _>("stddev_val").ok(),
-            "z_abs": r.try_get::<f64, _>("z_abs").ok(),
-            "anomaly_flag": r.try_get::<String, _>("anomaly_flag").unwrap_or_else(|_| "OK".into()),
+        .context("sql_anomaly_series")?;
+    let mut series = Vec::with_capacity(series_rows.len());
+    let mut n_samples = 0_i64;
+    for row in &series_rows {
+        let equipment_id: String = row
+            .try_get("equipment_id")
+            .context("sql-anomaly series equipment_id")?;
+        let role: String = row.try_get("role").context("sql-anomaly series role")?;
+        let n: i64 = row.try_get("n").context("sql-anomaly series n")?;
+        let n_null: i64 = row.try_get("n_null").context("sql-anomaly series n_null")?;
+        let stddev: Option<f64> = row
+            .try_get("stddev_val")
+            .context("sql-anomaly series stddev")?;
+        n_samples += n;
+        series.push(json!({
+            "equipment_id": equipment_id,
+            "role": role,
+            "reason": anomaly_series_reason(n, n_null, stddev, params.window_rows),
+            "n": n,
+            "n_null": n_null,
         }));
     }
-    Ok(with_scope_meta(
-        envelope("sql-anomaly", building_id, out),
+    if n_samples == 0 {
+        warnings.push("no screened samples in this window".to_string());
+    }
+    let n_returned = i64::try_from(rows.len()).context("sql-anomaly row count")?;
+    let truncated = n_selected > ANOMALY_EVENT_LIMIT;
+    let counts = AnomalyCounts {
+        n_samples,
+        n_scored,
+        n_flagged,
+        n_ok,
+        n_returned,
+        truncated,
+    };
+    let coverage = anomaly_coverage(&params, scope, &counts, series);
+    Ok(anomaly_envelope(
+        building_id,
         scope,
+        &params,
+        query_version,
+        AnomalyBody {
+            warnings,
+            rows,
+            coverage,
+            truncated,
+        },
     ))
 }
 
@@ -976,7 +1254,7 @@ fn building_from(
 /// Universal product dispatch — never calls DataFusion.
 pub async fn respond_query(
     query_id: &str,
-    _query_version: &str,
+    query_version: &str,
     req: &AnalyticsRequest,
 ) -> Result<Value, (axum::http::StatusCode, axum::Json<Value>)> {
     let building = building_from(req)?;
@@ -1064,7 +1342,7 @@ pub async fn respond_query(
         "topology" => topology_equipment(&tsdb, &building, &scope).await,
         "metering" => metering_kwh(&tsdb, &building, &scope).await,
         "pid-hunting" => pid_hunting_proxy(&tsdb, &building, &scope).await,
-        "sql-anomaly" => sql_anomaly_zscore(&tsdb, &building, &scope).await,
+        "sql-anomaly" => sql_anomaly_zscore(&tsdb, &building, &scope, req, query_version).await,
         "mv-change-point" => mv_change_point_daily(&tsdb, &building, &scope).await,
         "fuel" => fuel_daily(&tsdb, &building, &scope).await,
         "rcx-preset-coverage" => rcx_preset_role_coverage(&tsdb, &building, &scope).await,
@@ -1189,6 +1467,7 @@ mod pack_version_tests {
         assert_window_equipment_binds(SETPOINTS_SQL, "setpoints");
         assert_window_equipment_binds(PID_HUNTING_SQL, "pid-hunting");
         assert_window_equipment_binds(SQL_ANOMALY_SQL, "sql-anomaly");
+        assert_window_equipment_binds(SQL_ANOMALY_SERIES_SQL, "sql-anomaly-series");
         assert_window_equipment_binds(MV_CHANGE_POINT_SQL, "mv-change-point");
         assert_window_equipment_binds(RCX_PRESET_COVERAGE_SQL, "rcx-preset-coverage");
         assert_window_equipment_binds(TOPOLOGY_SQL, "topology");

@@ -1578,6 +1578,11 @@ body {
   min-width: 12rem;
 }
 
+.overview-anomaly-controls input[type="number"] {
+  min-width: 4.5rem;
+  width: 5.5rem;
+}
+
 .table-wrap {
   overflow-x: auto;
   margin: var(--space-sm) 0 var(--space-md);

@@ -11,55 +11,56 @@ Open-FDD ships **two** anomaly-style layers. Do not conflate them:
 
 | Layer | What it is | Where you see it | Tuners |
 |-------|------------|------------------|--------|
-| **Overview SQL anomaly screening** | Statistical self-baseline (rolling Z-score / robust) on mapped sensors | Overview → **Anomaly screening (SQL)** | Request `series` params (not Lab rule sliders) |
+| **Overview SQL anomaly screening** | Prior-window z-score event table on mapped sensors | Overview → **Anomaly screening (SQL)** | Request `series` params (not Lab rule sliders) |
 | **Registry rules (`SV-*`, `PID-HUNT-1`, `WX-1`)** | Deterministic physics / quality / hunting screens in DataFusion SQL | Lab → **SQL FDD Rules** → Run all / FDD Plots · plant health matrices | Lab sliders from [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) |
 
 Neither layer is ML or peer-fleet scoring. Peer / self-baseline expansion beyond the Overview screen remains optional follow-on work.
 
 ---
 
-## 1. Overview SQL anomaly screening (Wave M / soft-OPEN)
+## 1. Overview SQL anomaly screening
 
-**Purpose:** Flag equipment × sensor roles whose recent samples deviate from their own recent distribution — useful when hard physics limits are still “in range” but the point is behaving oddly.
+**Purpose:** Flag individual samples whose value is far from that series’ own recent baseline — useful when a hard range check is still inside limits but one timestamp is not.
 
-**Engine:** DataFusion over historian Parquet (`POST /api/analytics/sql-anomaly`, `query_version: sql-anomaly-v1`).
+**Engine:** Timescale SQL on the product historian (`POST /api/analytics/sql-anomaly`, `query_version: sql-anomaly-event-v1`). The response is an **event table**. Each row is one flagged timestamp. Coverage on the same envelope says how many samples were scored, why a series produced no rows, and whether the table was cut at 2000 events.
 
-**UI:** React Overview section `data-testid="overview-sql-anomaly"` — tabulated only (no Plotly).
+**UI:** React Overview section `data-testid="overview-sql-anomaly"`. Window, threshold, and “Rising edges only” are the request. The table lists equipment, role, UTC time, value, baseline, sample standard deviation, |z|, threshold, flag, and whether the row is a rising edge. No Plotly.
 
 **Hub flag:**
 
 | Env | Default | Meaning |
 |-----|---------|---------|
-| `OPENFDD_SQL_ANOMALY_SCREENING` | **on** when unset | Set `0` / `false` / `off` on live OT hubs that should skip the scan |
+| `OPENFDD_SQL_ANOMALY_SCREENING` | **on** when unset | Set `0` / `false` / `off` to skip the scan and return an empty event table |
 | Status | — | `GET /api/analytics/sql-anomaly/status` → `{ enabled, mode }` |
 
 ### Screened roles
 
-Only columns present in the building’s historian are screened:
+`sat`, `mat`, `rat`, `oa_t`, `web_oa_t`, `zone_t`, `dsp`.
 
-`oa_t`, `mat`, `sat`, `zone_t`, `zone_rh`, `duct_static`, `oa_h`
+The role is `split_part(openfdd_key, '.', 2)` and must be one of those names. Equipment selection is an exact id list (`= ANY ($4)`). A missing role is not screened.
 
-(Package maps must expose these SQL roles — see [package authoring]({{ site.baseurl }}/agent/PACKAGE_AUTHORING.html) / Haystack → SQL.)
+### Score
 
-### Methods
+The baseline for a sample is the previous `window_rows` numeric values on the same equipment and role. The current sample is not part of its own mean or sample standard deviation. A sample is scored only when that prior window is full and the sample standard deviation is positive.
 
-| `series.method` | Behavior |
-|-----------------|----------|
-| `zscore` (default) | Rolling mean / stddev over `window_rows`; flag when `\|z\| > z_threshold` |
-| `robust` | Per-equipment median + population σ (MAD-style soft fallback); same threshold on robust z |
+`|z| = |value − prior mean| / prior sample stddev`. The row is an event when `|z| >= z_threshold`.
+
+`transition_events: false` (Overview default) returns every flagged timestamp. `true` returns rising edges only. `coverage.n_flagged` still counts flagged samples the edge filter omits.
+
+Any `series.method` other than `zscore` returns a warning and no rows. The route does not invent a second score.
 
 ### Request tuners (`series` object)
 
-Overview currently posts the defaults below. Agents / API clients may override:
+| Key | Type | Default | Notes |
+|-----|------|---------|--------|
+| `window_rows` | u32 | `24` | Clamped **3–168**. This is the prior-sample count, not a whole-window aggregate. |
+| `z_threshold` | f64 | `3.0` | Positive and finite. Values above `1e6` are capped. Non-positive values stay at `3.0`. |
+| `method` | string | `"zscore"` | Only `zscore` produces rows. |
+| `transition_events` | bool | `false` | `true` keeps rising edges. Coverage still reports every flag. |
 
-| Key | Type | Default | Clamp / notes |
-|-----|------|---------|---------------|
-| `window_rows` | u32 | `24` | Clamped **3–168** (hours-ish samples; depends on poll) |
-| `z_threshold` | f64 | `3.0` | Clamped **1–10** |
-| `method` | string | `"zscore"` | `"robust"` for the median/σ path |
-| `transition_events` | bool | `true` | Counts normal→anomaly edges into `anomaly_events` |
+**Event columns:** `anomaly_flag` (`ANOMALY`), `avg_val`, `equipment_id`, `method` (`zscore`), `role`, `stddev_val`, `threshold`, `transition`, `ts` (UTC, microsecond RFC3339), `val`, `z_abs`.
 
-**Output columns:** `equipment_id`, `role` (Haystack-ish), `method`, `score` (max \|z\|), `threshold`, `anomaly_hours` (≈ flagged sample count), `anomaly_events`, `last_at`.
+**Coverage:** `contract` (`event-table`), `semantics` (`rolling-prior-window-zscore`), the request controls, `truncated`, window bounds, `n_samples`, `n_scored`, `n_flagged`, `n_ok`, `n_returned`, and per-series `reason` (`scored`, `short_history`, `constant_history`, `missing_values`) with `n` and `n_null`. An empty window is a warning and an empty row list. It is not a zero-filled summary.
 
 **Example:**
 
@@ -68,18 +69,18 @@ curl -sS -X POST "$OPENFDD_API_BASE/api/analytics/sql-anomaly" \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{
-    "building_id": "ACME",
-    "query_version": "sql-anomaly-v1",
+    "building_id": "<building_id>",
+    "query_version": "sql-anomaly-event-v1",
     "series": {
       "window_rows": 48,
       "z_threshold": 2.5,
       "method": "zscore",
-      "transition_events": true
+      "transition_events": false
     }
   }'
 ```
 
-There is **no Lab slider strip** for this analytics path today — tune via Overview defaults or the API `series` body. After **Update this rule** on registry rules, Overview still refreshes its own anomaly table on building / refresh token only.
+There is no Lab slider strip for this analytics path. Tune it from Overview or the API `series` body. After **Update this rule** on registry rules, Overview still refreshes this table on building / refresh token only. SQL text: [`sql_anomaly_zscore.sql`](https://github.com/bbartling/open-fdd/blob/master/sql/analytics/postgres/queries/sql_anomaly_zscore.sql) and [`sql_anomaly_series.sql`](https://github.com/bbartling/open-fdd/blob/master/sql/analytics/postgres/queries/sql_anomaly_series.sql).
 
 ---
 
@@ -133,10 +134,10 @@ Related to spike screening but scoped to OAT on weather equipment — not the Ov
 Package map (Haystack → SQL roles)
         │
         ▼
- Historian Parquet
+ Timescale historian
         │
-        ├── Overview POST /api/analytics/sql-anomaly     ← statistical screen
-        │         (window_rows, z_threshold, method)
+        ├── Overview POST /api/analytics/sql-anomaly     ← event table
+        │         (window_rows, z_threshold, transition_events)
         │
         └── POST /api/fdd/run  (registry SV-*, PID-HUNT-1, WX-1, …)
                   ↑
