@@ -39,6 +39,7 @@ pub(crate) async fn upsert_portal_point(
     .bind(point.portal_point_id)
     .fetch_optional(&mut **tx)
     .await?;
+    let role = null_if_empty(point.role);
     let key = match existing {
         Some(key) => key,
         None => {
@@ -82,7 +83,7 @@ pub(crate) async fn upsert_portal_point(
     .bind(point.site_id)
     .bind(&key)
     .bind(point.portal_point_id)
-    .bind(point.role)
+    .bind(role)
     .bind(point.unit)
     .bind(point.equipment_id)
     .bind(point.provider_instance_id)
@@ -99,24 +100,56 @@ pub(crate) async fn upsert_portal_point(
     .execute(&mut **tx)
     .await?;
     if referenced {
-        sqlx::query(
-            r#"
-            INSERT INTO role_map(building_id, equipment_id, openfdd_key, role, unit)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (building_id, equipment_id, openfdd_key) DO UPDATE
-              SET role = EXCLUDED.role,
-                  unit = COALESCE(EXCLUDED.unit, role_map.unit)
-            "#,
-        )
-        .bind(point.site_id)
-        .bind(point.equipment_id)
-        .bind(&key)
-        .bind(point.role)
-        .bind(point.unit)
-        .execute(&mut **tx)
-        .await?;
+        if let Some(role) = role {
+            sqlx::query(
+                r#"
+                INSERT INTO role_map(building_id, equipment_id, openfdd_key, role, unit)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (building_id, equipment_id, openfdd_key) DO UPDATE
+                  SET role = EXCLUDED.role,
+                      unit = COALESCE(EXCLUDED.unit, role_map.unit)
+                "#,
+            )
+            .bind(point.site_id)
+            .bind(point.equipment_id)
+            .bind(&key)
+            .bind(role)
+            .bind(point.unit)
+            .execute(&mut **tx)
+            .await?;
+        } else {
+            sqlx::query("DELETE FROM role_map WHERE building_id = $1 AND openfdd_key = $2")
+                .bind(point.site_id)
+                .bind(&key)
+                .execute(&mut **tx)
+                .await?;
+        }
     }
     Ok(key)
+}
+
+fn null_if_empty(role: &str) -> Option<&str> {
+    let role = role.trim();
+    if role.is_empty() {
+        None
+    } else {
+        Some(role)
+    }
+}
+
+/// Series key used only when this portal point has no `point_map` row yet.
+/// A point with no custom role keeps the portal id. It does not become
+/// `{equipment}.` and it is not chosen by sorting other keys.
+pub(crate) fn inventory_candidate_key(
+    equipment_id: &str,
+    role: &str,
+    portal_point_id: &str,
+) -> String {
+    if role.trim().is_empty() {
+        portal_point_id.to_string()
+    } else {
+        format!("{}.{}", equipment_id.trim(), role.trim())
+    }
 }
 
 /// The candidate key unless another portal point already owns it.
@@ -226,7 +259,8 @@ impl Tsdb {
             .bind(point.equip_type.as_deref())
             .execute(&mut *tx)
             .await?;
-            let candidate = format!("{}.{}", point.equipment_id, point.role);
+            let candidate =
+                inventory_candidate_key(&point.equipment_id, &point.role, &point.portal_point_id);
             let key = upsert_portal_point(
                 &mut tx,
                 &PortalPointUpsert {
@@ -385,4 +419,25 @@ fn historian_point(row: &sqlx::postgres::PgRow) -> Result<HistorianPoint, TsdbEr
         portal_point_id: row.try_get("portal_point_id")?,
         referenced: row.try_get("referenced")?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inventory_candidate_key;
+
+    #[test]
+    fn unmapped_inventory_keeps_the_portal_id_as_its_series_key() {
+        assert_eq!(
+            inventory_candidate_key("AHU_1", "", "portal-point-1"),
+            "portal-point-1"
+        );
+        assert_eq!(
+            inventory_candidate_key("AHU_1", "sat", "portal-point-1"),
+            "AHU_1.sat"
+        );
+        assert_ne!(
+            inventory_candidate_key("AHU_1", "", "portal-point-1"),
+            "AHU_1."
+        );
+    }
 }

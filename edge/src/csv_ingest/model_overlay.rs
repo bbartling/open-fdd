@@ -317,6 +317,81 @@ fn set_str(store: &Store, s: &NamedNode, pred: &str, value: &str) -> Result<(), 
     insert_str(store, s, pred, value)
 }
 
+fn remove_pred(store: &Store, s: &NamedNode, pred: &str) -> Result<(), String> {
+    let pred_nn = nn(pred)?;
+    let existing: Vec<Quad> = store
+        .quads_for_pattern(
+            Some(NamedOrBlankNode::from(s.clone()).as_ref()),
+            Some((&pred_nn).into()),
+            None,
+            None,
+        )
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("quads: {e}"))?;
+    for q in existing {
+        store.remove(&q).map_err(|e| format!("remove quad: {e}"))?;
+    }
+    Ok(())
+}
+
+fn read_literal(store: &Store, s: &NamedNode, pred: &str) -> Result<Option<String>, String> {
+    let pred_nn = nn(pred)?;
+    for quad in store.quads_for_pattern(
+        Some(NamedOrBlankNode::from(s.clone()).as_ref()),
+        Some((&pred_nn).into()),
+        None,
+        None,
+    ) {
+        let quad = quad.map_err(|e| format!("quads: {e}"))?;
+        if let Term::Literal(lit) = quad.object {
+            return Ok(Some(lit.value().to_string()));
+        }
+    }
+    Ok(None)
+}
+
+fn write_point_metadata(
+    store: &Store,
+    building_id: &str,
+    node: &NamedNode,
+    pt: &PortalPoint,
+) -> Result<(), String> {
+    set_optional_str(store, node, &pinned("kind")?, pt.kind.as_deref())?;
+    set_optional_str(store, node, &pinned("tz")?, pt.tz.as_deref())?;
+    set_optional_str(store, node, &pinned("hisMode")?, pt.his_mode.as_deref())?;
+    set_optional_str(store, node, &pinned("enum")?, pt.enum_value.as_deref())?;
+    if let Some(previous) = read_literal(store, node, &ofdd("refRel"))? {
+        if let haystack_defs::TagVerdict::Value {
+            iri, is_ref: true, ..
+        } = haystack_defs::resolve_published_tag(&previous)
+        {
+            remove_pred(store, node, &iri)?;
+        }
+    }
+    let rel = pt
+        .ref_rel
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let id = pt
+        .ref_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    set_optional_str(store, node, &ofdd("refRel"), rel)?;
+    set_optional_str(store, node, &ofdd("refId"), id)?;
+    if let (Some(rel), Some(id)) = (rel, id) {
+        if let haystack_defs::TagVerdict::Value {
+            iri, is_ref: true, ..
+        } = haystack_defs::resolve_published_tag(rel)
+        {
+            let target = equip_uri(building_id, id)?;
+            set_ref(store, node, &iri, &target)?;
+        }
+    }
+    Ok(())
+}
+
 fn set_ref(store: &Store, s: &NamedNode, pred: &str, target: &NamedNode) -> Result<(), String> {
     let pred_nn = nn(pred)?;
     let existing: Vec<Quad> = store
@@ -1070,6 +1145,10 @@ pub struct PortalEquip {
 }
 
 /// One point in a portal inventory snapshot.
+///
+/// `role` is empty when the portal point has no custom role. The point stays
+/// in the overlay. Typed kind, unit, ref, enum, timezone, and history metadata
+/// are stored beside that role and do not by themselves approve a rule input.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PortalPoint {
     pub point_id: String,
@@ -1079,6 +1158,13 @@ pub struct PortalPoint {
     pub dis: Option<String>,
     pub unit: Option<String>,
     pub markers: Vec<String>,
+    pub kind: Option<String>,
+    pub tz: Option<String>,
+    pub his: Option<bool>,
+    pub his_mode: Option<String>,
+    pub enum_value: Option<String>,
+    pub ref_rel: Option<String>,
+    pub ref_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -1211,12 +1297,22 @@ pub fn sync_portal_inventory(
         let equip_ref = pinned("equipRef")?;
         set_ref(&store, &node, &equip_ref, &equip)?;
         set_str(&store, &node, &ofdd("openfddKey"), pt.openfdd_key.trim())?;
-        set_str(&store, &node, &ofdd("role"), pt.role.trim())?;
+        set_optional_str(
+            &store,
+            &node,
+            &ofdd("role"),
+            Some(pt.role.trim()).filter(|role| !role.is_empty()),
+        )?;
         let dis_pred = pinned("dis")?;
         let unit_pred = pinned("unit")?;
         set_optional_str(&store, &node, &dis_pred, pt.dis.as_deref())?;
         set_optional_str(&store, &node, &unit_pred, pt.unit.as_deref())?;
-        let written = resolve_write_markers(&pt.markers);
+        write_point_metadata(&store, building_id, &node, pt)?;
+        let mut markers = pt.markers.clone();
+        if pt.his == Some(true) && !markers.iter().any(|marker| marker == "his") {
+            markers.push("his".to_string());
+        }
+        let written = resolve_write_markers(&markers);
         replace_tags(&store, &node, &written.iris)?;
         replace_native_tags(&store, &node, &written.native)?;
         report
@@ -2013,6 +2109,13 @@ SELECT ?sym WHERE {
                 dis: Some("Discharge air temp".into()),
                 unit: Some("F".into()),
                 markers: point_markers.to_vec(),
+                kind: None,
+                tz: None,
+                his: None,
+                his_mode: None,
+                enum_value: None,
+                ref_rel: None,
+                ref_id: None,
             }],
             true,
         )

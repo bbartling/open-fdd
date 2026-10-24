@@ -45,7 +45,7 @@
       "equipment_id": "VAV_CASE_1",
       "column": "CLG_VLV_CMD",
       "term": "sensor+sp",
-      "detail": "Haystack point modeling: sensor/cmd/sp are mutually exclusive functions; retained with diagnostic"
+      "detail": "Haystack point modeling: sensor/cmd/sp/synthetic are mutually exclusive functions; retained with diagnostic"
     },
     {
       "reason": "ambiguous_role_unresolved_fdd",
