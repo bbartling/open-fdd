@@ -1,35 +1,38 @@
--- Soft-OPEN analytics pack: sensor staleness / range flags (not full SV suite).
+-- Sensor staleness / range flags. One row per bound key.
 -- Parameters:
 --   $1 = site_id
 --   $2 = window start (timestamptz, NULL = open)
 --   $3 = window end   (timestamptz, NULL = open)
 --   $4 = equipment_ids (text[], NULL/empty = all)
--- Soft-OPEN ≠ FQ.
 WITH role_stats AS (
   SELECT
-    split_part(openfdd_key, '.', 1) AS equipment_id,
-    split_part(openfdd_key, '.', 2) AS role,
+    a.equipment_id,
+    a.role,
+    a.openfdd_key,
     count(*)::bigint AS n,
-    max(ts) AS last_ts,
-    min(val) AS min_val,
-    max(val) AS max_val,
-    stddev_samp(val) AS stddev_val
-  FROM sample
-  WHERE site_id = $1
-    AND ($2::timestamptz IS NULL OR ts >= $2)
-    AND ($3::timestamptz IS NULL OR ts < $3)
+    max(s.ts) AS last_ts,
+    min(s.val) AS min_val,
+    max(s.val) AS max_val,
+    stddev_samp(s.val) AS stddev_val
+  FROM sample s
+  JOIN authorized_series a
+    ON a.site_id = s.site_id
+   AND a.openfdd_key = s.openfdd_key
+  WHERE s.site_id = $1
+    AND ($2::timestamptz IS NULL OR s.ts >= $2)
+    AND ($3::timestamptz IS NULL OR s.ts < $3)
     AND (
       $4::text[] IS NULL
       OR cardinality($4) = 0
-      OR split_part(openfdd_key, '.', 1) = ANY ($4)
+      OR a.equipment_id = ANY ($4)
     )
-    AND val IS NOT NULL
-    AND split_part(openfdd_key, '.', 2) <> ''
-  GROUP BY 1, 2
+    AND s.val IS NOT NULL
+  GROUP BY a.equipment_id, a.role, a.openfdd_key
 )
 SELECT
   equipment_id,
   role,
+  openfdd_key,
   n,
   last_ts,
   min_val,
@@ -54,5 +57,6 @@ ORDER BY
     ELSE 3
   END,
   equipment_id,
-  role
+  role,
+  openfdd_key
 LIMIT 2000;

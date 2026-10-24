@@ -1,49 +1,54 @@
--- Soft-OPEN analytics pack: day-over-day mean change (change-point Soft-OPEN).
+-- Day-over-day mean change. The window is one bound key.
 -- Parameters:
 --   $1 = site_id
 --   $2 = window start (timestamptz, NULL = open)
 --   $3 = window end   (timestamptz, NULL = open)
 --   $4 = equipment_ids (text[], NULL/empty = all)
--- Soft-OPEN ≠ FQ (not full MV suite).
 WITH daily AS (
   SELECT
-    split_part(openfdd_key, '.', 1) AS equipment_id,
-    split_part(openfdd_key, '.', 2) AS role,
-    date_trunc('day', ts) AS day_utc,
-    avg(val) AS avg_val,
+    a.equipment_id,
+    a.role,
+    a.openfdd_key,
+    date_trunc('day', s.ts) AS day_utc,
+    avg(s.val) AS avg_val,
     count(*)::bigint AS n
-  FROM sample
-  WHERE site_id = $1
-    AND ($2::timestamptz IS NULL OR ts >= $2)
-    AND ($3::timestamptz IS NULL OR ts < $3)
+  FROM sample s
+  JOIN authorized_series a
+    ON a.site_id = s.site_id
+   AND a.openfdd_key = s.openfdd_key
+  WHERE s.site_id = $1
+    AND ($2::timestamptz IS NULL OR s.ts >= $2)
+    AND ($3::timestamptz IS NULL OR s.ts < $3)
     AND (
       $4::text[] IS NULL
       OR cardinality($4) = 0
-      OR split_part(openfdd_key, '.', 1) = ANY ($4)
+      OR a.equipment_id = ANY ($4)
     )
-    AND val IS NOT NULL
-    AND split_part(openfdd_key, '.', 2) IN (
+    AND s.val IS NOT NULL
+    AND a.role IN (
       'electric_kwh', 'gas_therm', 'power_kw', 'steam_mlb',
       'oa_t', 'web_oa_t', 'sat', 'zone_t'
     )
-  GROUP BY 1, 2, 3
+  GROUP BY a.equipment_id, a.role, a.openfdd_key, 4
   HAVING count(*) >= 6
 ),
 ranked AS (
   SELECT
     equipment_id,
     role,
+    openfdd_key,
     day_utc,
     avg_val,
     n,
     lag(avg_val) OVER (
-      PARTITION BY equipment_id, role ORDER BY day_utc
+      PARTITION BY openfdd_key ORDER BY day_utc
     ) AS prev_avg
   FROM daily
 )
 SELECT
   equipment_id,
   role,
+  openfdd_key,
   day_utc,
   avg_val,
   prev_avg,
@@ -58,5 +63,5 @@ SELECT
 FROM ranked
 WHERE prev_avg IS NOT NULL
   AND abs(avg_val - prev_avg) >= greatest(abs(prev_avg) * 0.25, 1.0)
-ORDER BY day_utc DESC, abs(avg_val - prev_avg) DESC
+ORDER BY day_utc DESC, abs(avg_val - prev_avg) DESC, openfdd_key
 LIMIT 2000;

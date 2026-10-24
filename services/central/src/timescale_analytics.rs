@@ -317,13 +317,12 @@ pub async fn role_timeseries(
     scope: &AnalyticsSqlScope,
 ) -> Result<Value> {
     // Soft-OPEN: bind requested window/equipment before LIMIT (not building-only).
-    let pattern = format!("%.{role_suffix}");
     let rows = sqlx::query(ROLE_TIMESERIES_SQL)
         .bind(building_id)
         .bind(scope.start)
         .bind(scope.end)
         .bind(scope.equipment_bind())
-        .bind(&pattern)
+        .bind(role_suffix)
         .bind(limit)
         .fetch_all(tsdb.pool())
         .await
@@ -1470,8 +1469,8 @@ mod pack_version_tests {
         assert_window_equipment_binds(SENSOR_FAULTS_SQL, "sensor-faults");
         assert_window_equipment_binds(SCHEDULE_SQL, "schedule");
         assert!(
-            ROLE_TIMESERIES_SQL.contains("LIKE $5"),
-            "role_timeseries must keep role pattern as $5 after window/equipment binds"
+            ROLE_TIMESERIES_SQL.contains("a.role = $5"),
+            "role_timeseries must bind the exact role as $5"
         );
         assert!(
             ROLE_TIMESERIES_SQL.contains("LIMIT $6"),

@@ -584,6 +584,7 @@ async fn seed_vav(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("zone role");
+    crate::series_binding::bind_series(pool, VAV_HISTORY, "BOX_B", "zone_t", "BOX_B.zone_t").await;
 
     ensure_site(pool, VAV_READY).await;
     insert_equipment(pool, VAV_READY, "BOX_C", "VAV").await;
@@ -604,6 +605,12 @@ async fn seed_vav(pool: &PgPool) {
             .await
             .expect("zone sample");
         }
+        crate::series_binding::bind_conventional_key(
+            pool,
+            VAV_READY,
+            &format!("{equipment_id}.zone_t"),
+        )
+        .await;
     }
     sqlx::query(
         "INSERT INTO sample (ts, site_id, openfdd_key, val) VALUES ($1, $2, 'VAV_LOOKALIKE.zone_t', 80)
@@ -614,6 +621,7 @@ async fn seed_vav(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("lookalike sample");
+    crate::series_binding::bind_conventional_key(pool, VAV_READY, "VAV_LOOKALIKE.zone_t").await;
 }
 
 async fn insert_equipment(pool: &PgPool, site: &str, equipment_id: &str, equip_type: &str) {

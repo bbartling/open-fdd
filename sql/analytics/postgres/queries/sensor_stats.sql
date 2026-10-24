@@ -1,30 +1,33 @@
--- Soft-OPEN analytics pack: per-equipment/role basic sensor statistics.
+-- Per-series sensor statistics. Two keys for one role stay separate rows.
 -- Parameters:
 --   $1 = site_id
 --   $2 = window start (timestamptz, NULL = open)
 --   $3 = window end   (timestamptz, NULL = open)
 --   $4 = equipment_ids (text[], NULL/empty = all)
--- Full hunting/staleness Soft-OPEN later.
 SELECT
-  split_part(openfdd_key, '.', 1) AS equipment_id,
-  split_part(openfdd_key, '.', 2) AS role,
+  a.equipment_id,
+  a.role,
+  a.openfdd_key,
   count(*)::bigint AS n,
-  min(val) AS min_val,
-  max(val) AS max_val,
-  avg(val) AS avg_val,
-  stddev_samp(val) AS stddev_val,
-  min(ts) AS first_ts,
-  max(ts) AS last_ts
-FROM sample
-WHERE site_id = $1
-  AND ($2::timestamptz IS NULL OR ts >= $2)
-  AND ($3::timestamptz IS NULL OR ts < $3)
+  min(s.val) AS min_val,
+  max(s.val) AS max_val,
+  avg(s.val) AS avg_val,
+  stddev_samp(s.val) AS stddev_val,
+  min(s.ts) AS first_ts,
+  max(s.ts) AS last_ts
+FROM sample s
+JOIN authorized_series a
+  ON a.site_id = s.site_id
+ AND a.openfdd_key = s.openfdd_key
+WHERE s.site_id = $1
+  AND ($2::timestamptz IS NULL OR s.ts >= $2)
+  AND ($3::timestamptz IS NULL OR s.ts < $3)
   AND (
     $4::text[] IS NULL
     OR cardinality($4) = 0
-    OR split_part(openfdd_key, '.', 1) = ANY ($4)
+    OR a.equipment_id = ANY ($4)
   )
-  AND val IS NOT NULL
-GROUP BY 1, 2
-ORDER BY 1, 2
+  AND s.val IS NOT NULL
+GROUP BY a.equipment_id, a.role, a.openfdd_key
+ORDER BY a.equipment_id, a.role, a.openfdd_key
 LIMIT 2000;

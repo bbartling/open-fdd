@@ -139,8 +139,8 @@ fn hours(seconds: f64) -> f64 {
     }
 }
 
-/// Timescale VAV matrix. Membership is `canonical_kind == "vav"`. Sample keys
-/// are exact `{equipment_id}.zone_t` and `{equipment_id}.damper_pct`.
+/// Timescale VAV matrix. Membership is `canonical_kind == "vav"`.
+/// Zone and damper series come from the current unique `authorized_series` binding.
 #[cfg(not(feature = "legacy-datafusion"))]
 async fn timescale_vav_matrix(
     building_id: &str,
@@ -228,7 +228,9 @@ async fn timescale_vav_matrix(
     }
 
     let role_rows = match sqlx::query(
-        "SELECT equipment_id, role FROM role_map WHERE building_id = $1 AND role IN ('zone_t', 'damper_pct')",
+        "SELECT equipment_id, role, openfdd_key
+         FROM authorized_series
+         WHERE site_id = $1 AND role IN ('zone_t', 'damper_pct')",
     )
     .bind(building_id)
     .fetch_all(tsdb.pool())
@@ -246,19 +248,25 @@ async fn timescale_vav_matrix(
     };
     let vav_ids: HashSet<String> = vav.iter().map(|(id, _)| id.clone()).collect();
     let mut roles: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut key_counts: HashMap<(String, String), usize> = HashMap::new();
+    let mut bound_keys: HashMap<(String, String), String> = HashMap::new();
     for row in role_rows {
         let equipment_id: String = row.try_get("equipment_id").unwrap_or_default();
         let role: String = row.try_get("role").unwrap_or_default();
-        if vav_ids.contains(&equipment_id) && !role.is_empty() {
-            roles.entry(equipment_id).or_default().insert(role);
+        let openfdd_key: String = row.try_get("openfdd_key").unwrap_or_default();
+        if vav_ids.contains(&equipment_id) && !role.is_empty() && !openfdd_key.is_empty() {
+            roles
+                .entry(equipment_id.clone())
+                .or_default()
+                .insert(role.clone());
+            let slot = (equipment_id, role);
+            *key_counts.entry(slot.clone()).or_default() += 1;
+            bound_keys.insert(slot, openfdd_key);
         }
     }
-
-    let mut keys: Vec<String> = Vec::new();
-    for (equipment_id, _) in &vav {
-        keys.push(format!("{equipment_id}.zone_t"));
-        keys.push(format!("{equipment_id}.damper_pct"));
-    }
+    // Two keys for one role are omitted. Averaging them would hide the conflict.
+    bound_keys.retain(|slot, _| key_counts.get(slot).copied().unwrap_or(0) == 1);
+    let keys: Vec<String> = bound_keys.values().cloned().collect();
     let sample_rows = match sqlx::query(
         r#"
         WITH ordered AS (
@@ -372,10 +380,16 @@ async fn timescale_vav_matrix(
     let mut n0 = 0u32;
     let mut nq = 0u32;
     for (equipment_id, stamped) in &vav {
-        let zone_key = format!("{equipment_id}.zone_t");
-        let damper_key = format!("{equipment_id}.damper_pct");
-        let zone = spans.get(&zone_key);
-        let damper = spans.get(&damper_key);
+        let zone_key = bound_keys
+            .get(&(equipment_id.clone(), "zone_t".to_string()))
+            .map(String::as_str)
+            .unwrap_or("");
+        let damper_key = bound_keys
+            .get(&(equipment_id.clone(), "damper_pct".to_string()))
+            .map(String::as_str)
+            .unwrap_or("");
+        let zone = spans.get(zone_key);
+        let damper = spans.get(damper_key);
         let zone_n = zone.map(|span| span.n).unwrap_or(0);
         let damper_n = damper.map(|span| span.n).unwrap_or(0);
         if zone_n <= 0 && damper_n <= 0 {

@@ -48,6 +48,7 @@ mod rule_catalog_fixtures;
 mod runtime_weekly_fixtures;
 #[cfg(test)]
 mod sat_pairing_fixtures;
+mod series_binding;
 mod sql_anomaly;
 #[cfg(test)]
 mod sql_anomaly_fixtures;

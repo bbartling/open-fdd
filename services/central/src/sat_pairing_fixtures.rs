@@ -716,4 +716,5 @@ async fn insert_sample(
     .execute(pool)
     .await
     .unwrap_or_else(|err| panic!("insert {key}: {err}"));
+    crate::series_binding::bind_conventional_key(pool, site, key).await;
 }

@@ -473,27 +473,33 @@ async fn project_weather(
         }));
     }
     create_weather_table(conn).await?;
-    let oa = fdd_core::sql_admit_val_expr("oa_t");
-    let web = fdd_core::sql_admit_val_expr("web_oa_t");
-    let dew = fdd_core::sql_admit_val_expr("web_oa_dp");
+    let oa = admitted_on_sample("oa_t");
+    let web = admitted_on_sample("web_oa_t");
+    let dew = admitted_on_sample("web_oa_dp");
     let insert = format!(
         "INSERT INTO weather (timestamp_utc, oa_t, web_oa_t, web_oa_dp, source_equipment_id)
-         SELECT ts,
-           MAX(CASE WHEN split_part(openfdd_key, '.', 2) = 'oa_t' THEN {oa} END),
-           MAX(CASE WHEN split_part(openfdd_key, '.', 2) = 'web_oa_t' THEN {web} END),
-           MAX(CASE WHEN split_part(openfdd_key, '.', 2) = 'web_oa_dp' THEN {dew} END),
-           split_part(openfdd_key, '.', 1)
-         FROM sample
-         WHERE site_id = $1
-           AND split_part(openfdd_key, '.', 2) IN ('oa_t', 'web_oa_t', 'web_oa_dp')
-           AND split_part(openfdd_key, '.', 1) IN (
-             SELECT equipment_id FROM equipment
-             WHERE building_id = $1
-               AND lower(btrim(coalesce(equip_type, ''))) = 'weather'
-           )
-           AND ($2::timestamptz IS NULL OR ts >= $2)
-           AND ($3::timestamptz IS NULL OR ts < $3)
-         GROUP BY split_part(openfdd_key, '.', 1), ts"
+         SELECT s.ts,
+           MAX(CASE WHEN a.role = 'oa_t' THEN {oa} END),
+           MAX(CASE WHEN a.role = 'web_oa_t' THEN {web} END),
+           MAX(CASE WHEN a.role = 'web_oa_dp' THEN {dew} END),
+           a.equipment_id
+         FROM sample s
+         JOIN authorized_series a
+           ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+         JOIN equipment e
+           ON e.building_id = $1 AND e.equipment_id = a.equipment_id
+         WHERE s.site_id = $1
+           AND a.role IN ('oa_t', 'web_oa_t', 'web_oa_dp')
+           AND lower(btrim(coalesce(e.equip_type, ''))) = 'weather'
+           AND (
+             SELECT count(*) FROM authorized_series c
+             WHERE c.site_id = a.site_id
+               AND c.equipment_id = a.equipment_id
+               AND c.role = a.role
+           ) = 1
+           AND ($2::timestamptz IS NULL OR s.ts >= $2)
+           AND ($3::timestamptz IS NULL OR s.ts < $3)
+         GROUP BY a.equipment_id, s.ts"
     );
     sqlx::query(&insert)
         .bind(building_id)
@@ -505,13 +511,29 @@ async fn project_weather(
     Ok(InputGate::Ready(relation_stats(conn, "weather").await?))
 }
 
+fn admitted_on_sample(role: &str) -> String {
+    // `authorized_series` also has `unit`. The sample columns are `s.val` and `s.unit`.
+    fdd_core::sql_admit_val_expr(role)
+        .replace("unit", "s.unit")
+        .replace("val", "s.val")
+}
+
 fn weather_scope_predicate() -> &'static str {
     "site_id = $1
-       AND split_part(openfdd_key, '.', 2) IN ('oa_t', 'web_oa_t', 'web_oa_dp')
-       AND split_part(openfdd_key, '.', 1) IN (
-         SELECT equipment_id FROM equipment
-         WHERE building_id = $1
-           AND lower(btrim(coalesce(equip_type, ''))) = 'weather'
+       AND openfdd_key IN (
+         SELECT a.openfdd_key
+         FROM authorized_series a
+         JOIN equipment e
+           ON e.building_id = $1 AND e.equipment_id = a.equipment_id
+         WHERE a.site_id = $1
+           AND a.role IN ('oa_t', 'web_oa_t', 'web_oa_dp')
+           AND lower(btrim(coalesce(e.equip_type, ''))) = 'weather'
+           AND (
+             SELECT count(*) FROM authorized_series c
+             WHERE c.site_id = a.site_id
+               AND c.equipment_id = a.equipment_id
+               AND c.role = a.role
+           ) = 1
        )
        AND ($2::timestamptz IS NULL OR ts >= $2)
        AND ($3::timestamptz IS NULL OR ts < $3)"
@@ -701,11 +723,20 @@ async fn project_utility(
 
 fn utility_scope_predicate() -> &'static str {
     "site_id = $1
-       AND split_part(openfdd_key, '.', 2) = $4
-       AND split_part(openfdd_key, '.', 1) IN (
-         SELECT equipment_id FROM equipment
-         WHERE building_id = $1
-           AND lower(btrim(coalesce(equip_type, ''))) = 'utility'
+       AND openfdd_key IN (
+         SELECT a.openfdd_key
+         FROM authorized_series a
+         JOIN equipment e
+           ON e.building_id = $1 AND e.equipment_id = a.equipment_id
+         WHERE a.site_id = $1
+           AND a.role = $4
+           AND lower(btrim(coalesce(e.equip_type, ''))) = 'utility'
+           AND (
+             SELECT count(*) FROM authorized_series c
+             WHERE c.site_id = a.site_id
+               AND c.equipment_id = a.equipment_id
+               AND c.role = a.role
+           ) = 1
        )
        AND ($2::timestamptz IS NULL OR ts >= $2)
        AND ($3::timestamptz IS NULL OR ts < $3)"
@@ -718,12 +749,26 @@ async fn utility_contributor_count(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<i64> {
-    let sql = format!(
-        "SELECT COUNT(DISTINCT split_part(openfdd_key, '.', 1))::bigint
-         FROM sample WHERE {}",
-        utility_scope_predicate()
-    );
-    let count: i64 = sqlx::query_scalar(&sql)
+    let sql = "SELECT COUNT(DISTINCT a.equipment_id)::bigint
+         FROM sample s
+         JOIN authorized_series a
+           ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+         WHERE s.site_id = $1
+           AND a.role = $4
+           AND a.equipment_id IN (
+             SELECT equipment_id FROM equipment
+             WHERE building_id = $1
+               AND lower(btrim(coalesce(equip_type, ''))) = 'utility'
+           )
+           AND (
+             SELECT count(*) FROM authorized_series c
+             WHERE c.site_id = a.site_id
+               AND c.equipment_id = a.equipment_id
+               AND c.role = a.role
+           ) = 1
+           AND ($2::timestamptz IS NULL OR s.ts >= $2)
+           AND ($3::timestamptz IS NULL OR s.ts < $3)";
+    let count: i64 = sqlx::query_scalar(sql)
         .bind(building_id)
         .bind(start)
         .bind(end)
@@ -776,14 +821,28 @@ async fn create_utility_interval(
     .execute(&mut *conn)
     .await
     .context("create scoped utility interval")?;
-    let sql = format!(
-        "INSERT INTO utility_interval (timestamp_utc, kwh, source_equipment_id)
-         SELECT ts, val, split_part(openfdd_key, '.', 1)
-         FROM sample
-         WHERE {} AND val IS NOT NULL",
-        utility_scope_predicate()
-    );
-    sqlx::query(&sql)
+    let sql = "INSERT INTO utility_interval (timestamp_utc, kwh, source_equipment_id)
+         SELECT s.ts, s.val, a.equipment_id
+         FROM sample s
+         JOIN authorized_series a
+           ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+         WHERE s.site_id = $1
+           AND a.role = $4
+           AND a.equipment_id IN (
+             SELECT equipment_id FROM equipment
+             WHERE building_id = $1
+               AND lower(btrim(coalesce(equip_type, ''))) = 'utility'
+           )
+           AND (
+             SELECT count(*) FROM authorized_series c
+             WHERE c.site_id = a.site_id
+               AND c.equipment_id = a.equipment_id
+               AND c.role = a.role
+           ) = 1
+           AND ($2::timestamptz IS NULL OR s.ts >= $2)
+           AND ($3::timestamptz IS NULL OR s.ts < $3)
+           AND s.val IS NOT NULL";
+    sqlx::query(sql)
         .bind(building_id)
         .bind(start)
         .bind(end)
@@ -810,17 +869,31 @@ async fn create_utility_monthly(
     .execute(&mut *conn)
     .await
     .context("create scoped utility monthly")?;
-    let sql = format!(
-        "INSERT INTO utility_monthly (billing_period, kwh, source_equipment_id)
-         SELECT to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM'),
-                SUM(val),
-                split_part(openfdd_key, '.', 1)
-         FROM sample
-         WHERE {} AND val IS NOT NULL
-         GROUP BY 1, 3",
-        utility_scope_predicate()
-    );
-    sqlx::query(&sql)
+    let sql = "INSERT INTO utility_monthly (billing_period, kwh, source_equipment_id)
+         SELECT to_char(s.ts AT TIME ZONE 'UTC', 'YYYY-MM'),
+                SUM(s.val),
+                a.equipment_id
+         FROM sample s
+         JOIN authorized_series a
+           ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+         WHERE s.site_id = $1
+           AND a.role = $4
+           AND a.equipment_id IN (
+             SELECT equipment_id FROM equipment
+             WHERE building_id = $1
+               AND lower(btrim(coalesce(equip_type, ''))) = 'utility'
+           )
+           AND (
+             SELECT count(*) FROM authorized_series c
+             WHERE c.site_id = a.site_id
+               AND c.equipment_id = a.equipment_id
+               AND c.role = a.role
+           ) = 1
+           AND ($2::timestamptz IS NULL OR s.ts >= $2)
+           AND ($3::timestamptz IS NULL OR s.ts < $3)
+           AND s.val IS NOT NULL
+         GROUP BY 1, a.equipment_id";
+    sqlx::query(sql)
         .bind(building_id)
         .bind(start)
         .bind(end)
@@ -1279,6 +1352,8 @@ mod tests {
         .execute(pool)
         .await
         .expect("sample");
+        crate::series_binding::bind_conventional_key(pool, site, &format!("{equipment_id}.{role}"))
+            .await;
     }
 
     fn row<'a>(body: &'a Value, rule_id: &str, equipment_id: &str) -> &'a Value {
