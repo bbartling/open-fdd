@@ -29,14 +29,30 @@ use plan::{
     auto_detect_mapping, infer_ut3_plan_from_session, is_weather_filename, plan_from_json,
     OutputRow,
 };
-use session::{create_session, load_session, save_session, stage_file};
+use session::{create_session_stamped, load_session, save_session, stage_file, SessionStamp};
 
 use plan::{append_rows, join_rows, parse_file_to_rows, preview_rows, JoinAlignment};
 use serde_json::{json, Value};
 use session::read_staged_file;
 use std::collections::BTreeMap;
 
+/// Session id carried by a multipart upload, if the body names one.
+/// Parsing does not stage files.
+pub fn staged_session_hint(content_type: &str, body: &[u8]) -> Result<Option<String>, String> {
+    let (_files, sid) = upload::parse_upload(content_type, body)?;
+    Ok(sid.filter(|s| !s.trim().is_empty()))
+}
+
 pub fn preview_handler(content_type: &str, body: &[u8], session_id_hint: Option<&str>) -> Value {
+    preview_handler_stamped(content_type, body, session_id_hint, None)
+}
+
+pub fn preview_handler_stamped(
+    content_type: &str,
+    body: &[u8],
+    session_id_hint: Option<&str>,
+    stamp: Option<&SessionStamp>,
+) -> Value {
     let (files, sid_hint) = match upload::parse_upload(content_type, body) {
         Ok(parsed) => parsed,
         Err(e) => return json!({"ok": false, "error": e}),
@@ -44,10 +60,14 @@ pub fn preview_handler(content_type: &str, body: &[u8], session_id_hint: Option<
     if files.is_empty() {
         return json!({"ok": false, "error": "no files in upload"});
     }
-    preview_upload_files(session_id_hint.or(sid_hint.as_deref()), files)
+    preview_upload_files(session_id_hint.or(sid_hint.as_deref()), files, stamp)
 }
 
 pub fn preview_json_handler(body: &Value) -> Value {
+    preview_json_handler_stamped(body, None)
+}
+
+pub fn preview_json_handler_stamped(body: &Value, stamp: Option<&SessionStamp>) -> Value {
     let session_id_hint = body
         .get("session_id")
         .and_then(|v| v.as_str())
@@ -76,7 +96,7 @@ pub fn preview_json_handler(body: &Value) -> Value {
         };
         uploads.push((name.to_string(), raw));
     }
-    let mut out = preview_upload_files(session_id_hint, uploads);
+    let mut out = preview_upload_files(session_id_hint, uploads, stamp);
     if let Some(arr) = out.get_mut("errors").and_then(|v| v.as_array_mut()) {
         arr.extend(errors);
         if !arr.is_empty() {
@@ -89,8 +109,12 @@ pub fn preview_json_handler(body: &Value) -> Value {
     out
 }
 
-fn preview_upload_files(session_id_hint: Option<&str>, files: Vec<(String, Vec<u8>)>) -> Value {
-    let (session, session_id) = match resolve_or_create_session(session_id_hint) {
+fn preview_upload_files(
+    session_id_hint: Option<&str>,
+    files: Vec<(String, Vec<u8>)>,
+    stamp: Option<&SessionStamp>,
+) -> Value {
+    let (session, session_id) = match resolve_or_create_session(session_id_hint, stamp) {
         Ok(v) => v,
         Err(e) => return json!({"ok": false, "error": e}),
     };
@@ -118,14 +142,17 @@ fn preview_upload_files(session_id_hint: Option<&str>, files: Vec<(String, Vec<u
     })
 }
 
-fn resolve_or_create_session(session_id_hint: Option<&str>) -> Result<(Value, String), String> {
+fn resolve_or_create_session(
+    session_id_hint: Option<&str>,
+    stamp: Option<&SessionStamp>,
+) -> Result<(Value, String), String> {
     if let Some(sid) = session_id_hint {
         let Some(session) = load_session(sid) else {
             return Err(format!("session not found: {sid}"));
         };
         return Ok((session, sid.to_string()));
     }
-    let session = create_session();
+    let session = create_session_stamped(stamp);
     let session_id = session
         .get("session_id")
         .and_then(|v| v.as_str())
@@ -378,7 +405,7 @@ pub fn execute_handler(body: &Value) -> Value {
     let confirm = body.get("confirm").and_then(|v| v.as_bool()) == Some(true);
     let delete_staged = body.get("delete_staged_files").and_then(|v| v.as_bool()) == Some(true);
     if !confirm {
-        return json!({"ok": false, "error": "confirm:true required to write Feather/Arrow store"});
+        return json!({"ok": false, "error": "confirm:true required"});
     }
     let Some(session) = load_session(session_id) else {
         return json!({"ok": false, "error": "session not found"});
@@ -422,17 +449,13 @@ pub fn execute_handler(body: &Value) -> Value {
     }
 
     let dataset_id = plan.output_dataset_name.clone();
-    match save_dataset(
-        &dataset_id,
-        &rows,
-        &validation_report,
-        &json!({"session_id": session_id}),
-    ) {
+    // Timescale package stage only. Arrow IPC and Parquet history are not written.
+    match parquet_bridge::stage_rows_for_timescale(&dataset_id, &rows) {
         Ok(mut result) => {
-            let parquet = parquet_bridge::ingest_rows_to_parquet(&dataset_id, &rows);
-            result["parquet_ingest"] = parquet;
+            result["validation_report"] = validation_report;
             let mut session = session;
-            session["status"] = json!("executed");
+            session["status"] = json!("staged");
+            session["building_id"] = json!(dataset_id);
             session["result"] = result.clone();
             let _ = save_session(session_id, &session);
             if delete_staged {
@@ -442,7 +465,7 @@ pub fn execute_handler(body: &Value) -> Value {
             }
             result
         }
-        Err(e) => json!({"ok": false, "error": e}),
+        Err(e) => json!({"ok": false, "error": e, "arrow": false, "parquet": false}),
     }
 }
 

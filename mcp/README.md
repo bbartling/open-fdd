@@ -131,7 +131,7 @@ docker run -i --rm --network host \
 | `openfdd_csv_import_preview` | Stage CSVs from host path or base64 |
 | `openfdd_csv_import_plan` | Append/join plan + validation preview |
 | `openfdd_csv_fusion_preview` | Merged grid preview |
-| `openfdd_csv_import_execute` | Save to Arrow (write gate) |
+| `openfdd_csv_import_execute` | Save to the Timescale historian (write gate) |
 | `openfdd_csv_package_append` | Hourly package history append (write gate) |
 | `openfdd_historian_query` | Historian pivot query |
 | `openfdd_historian_points` | Historian series per equipment (referenced or orphaned) |
