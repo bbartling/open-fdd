@@ -35,9 +35,11 @@ pub use afdd_window::{
     MAX_AFDD_BACKFILL_CHUNKS, MAX_AFDD_BACKFILL_DAYS,
 };
 pub use analytics_cache::{
-    config_hash, freshness_for_watermark, historian_watermark_order, order_key_to_rfc3339,
-    peek_result_provenance, read_plan, read_result, write_result, AnalyticsCacheKey,
-    AnalyticsResultTable, CacheFreshness, CacheProvenance, ReadPlan, StaleAction, SCHEMA_NAME,
+    config_hash, freshness_for_identity, freshness_for_watermark, historian_watermark_order,
+    order_key_to_rfc3339, peek_result_provenance, read_plan, read_result,
+    remove_derived_result_cache, write_result, AnalyticsCacheKey, AnalyticsResultTable,
+    CacheFreshness, CacheIdentity, CacheProvenance, InputWatermark, ReadPlan, StaleAction,
+    SCHEMA_NAME,
 };
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use building_session::{

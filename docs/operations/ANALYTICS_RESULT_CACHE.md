@@ -24,15 +24,21 @@ Nested objects and arrays are utf8 JSON cells. Provenance is Parquet key/value m
 
 ## Freshness
 
-The watermark is the newest historian part order key for that building (`part-YYYYMMDDTHHMMSSZ`, else `year=`/`month=` → first of that month, else mtime). Analytics result files are not part of the watermark.
+The cache key includes the result contract (`analytics-result-contract-v2`), the analytics SQL pack content hash plus the FDD pack fingerprint, and the site model revision (equipment stamps, role map, and point map). Storage layout stays `analytics-result-parquet-v2`. That schema name is not the result contract.
+
+When Timescale is the historian, freshness uses the scoped sample watermark and coverage for the request window: sample count, valued count, distinct series, min and max timestamps, and the value sum. Named equipment is an exact key-token match. A longer id is not a prefix match. Weather-stamped equipment stays in that scope. Parquet part order is not the Timescale watermark. `Ok(0)` from a Parquet scan means no parts were found. A failed or unreadable watermark read is `watermark_status: unavailable` and is never a fresh hit (`stale: true` when a prior envelope is served).
 
 | Condition | Behavior |
 | --- | --- |
-| No file, or version/config partition differs | Miss. Compute, write parquet, `cache.hit=false`. |
-| Historian order ≤ cached order | Hit. Do not recompute. |
-| Historian order > cached order | `stale: true` on the JSON body and `cache.stale`. Default serves the last rows. |
-| `refresh: true` on the request | Always recompute. |
+| No file, or version/config/contract/pack/model partition differs | Miss. Compute, write parquet, `cache.hit=false`. |
+| Persisted envelope has no contract, pack, model, or known watermark | Incompatible. Recompute. Do not serve it as fresh. |
+| Same identity and the same known watermark and coverage | Hit. Do not recompute. |
+| Same identity, known watermark or coverage moved | `stale: true` on the JSON body and `cache.stale`. Default serves the last rows. |
+| Watermark or model read failed | Not a hit. Default serves the last compatible rows with `stale: true` and `watermark_status: unavailable`. |
+| `refresh: true` on the request | Always recompute. A failed watermark read still reports `stale: true`. |
 | `OPENFDD_ANALYTICS_CACHE_ON_STALE=recompute` | Watermark advance recomputes instead of serving stale. |
+
+Derived cache repair removes `analytics_results/building_id={id}` and `analytics_result` rows for that building. It does not delete historian samples or labeled `fdd_run` / rule-result files.
 
 Stale is a structured flag. It is not copied into envelope `warnings`, so Overview does not grow a cache caption.
 
