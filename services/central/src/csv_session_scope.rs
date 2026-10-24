@@ -172,7 +172,7 @@ fn planned_building(body: &Value) -> Option<String> {
 
 pub async fn preview(state: &AppState, headers: &HeaderMap, body: Bytes) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::SiteAccess);
-    audit.target(TargetType::Route, "/api/csv/import/preview");
+    audit.target_route();
     let result = preview_inner(state, headers, body, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -193,6 +193,7 @@ async fn preview_inner(
     let result = if ct.contains("application/json") {
         let value: Value = serde_json::from_slice(&body).unwrap_or(json!({}));
         if let Some(sid) = session_id_of(&value) {
+            audit.target(TargetType::Route, &sid);
             load_visible(&ctx, &sid, audit)?;
         }
         open_fdd_edge_prototype::csv_ingest::preview_json_handler_stamped(&value, Some(&stamp))
@@ -200,6 +201,7 @@ async fn preview_inner(
         .ok()
         .flatten()
     {
+        audit.target(TargetType::Route, &sid);
         load_visible(&ctx, &sid, audit)?;
         open_fdd_edge_prototype::csv_ingest::preview_handler_stamped(&ct, &body, None, Some(&stamp))
     } else {
@@ -213,7 +215,7 @@ async fn preview_inner(
 
 pub async fn plan(state: &AppState, headers: &HeaderMap, body: Value) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::SiteAccess);
-    audit.target(TargetType::Route, "/api/csv/import/plan");
+    audit.target_route();
     let result = plan_inner(state, headers, body, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -232,6 +234,7 @@ async fn plan_inner(
             Json(json!({"ok": false, "error": "session_id required"})),
         ));
     };
+    audit.target(TargetType::Route, &sid);
     load_visible(&ctx, &sid, audit)?;
     let Some(building) = planned_building(&body) else {
         audit.reason(ReasonCode::SiteRequired);
@@ -254,7 +257,7 @@ async fn plan_inner(
 
 pub async fn preflight(state: &AppState, headers: &HeaderMap, body: Value) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::SiteAccess);
-    audit.target(TargetType::Route, "/api/csv/import/preflight");
+    audit.target_route();
     let result = preflight_inner(state, headers, body, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -273,6 +276,7 @@ async fn preflight_inner(
             Json(json!({"ok": false, "error": "session_id required"})),
         ));
     };
+    audit.target(TargetType::Route, &sid);
     load_visible(&ctx, &sid, audit)?;
     Ok(Json(
         open_fdd_edge_prototype::csv_ingest::preflight_handler(&body),
@@ -281,7 +285,7 @@ async fn preflight_inner(
 
 pub async fn execute(state: &AppState, headers: &HeaderMap, body: Value) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::PackageImport);
-    audit.target(TargetType::Route, "/api/csv/import/execute");
+    audit.target_route();
     let result = execute_inner(state, headers, body, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -300,6 +304,7 @@ async fn execute_inner(
             Json(json!({"ok": false, "error": "session_id required"})),
         ));
     };
+    audit.target(TargetType::Route, &sid);
     let session = load_visible(&ctx, &sid, audit)?;
     let Some(building) =
         open_fdd_edge_prototype::csv_ingest::session::session_building_id(&session)
@@ -458,7 +463,7 @@ fn mark_session(session_id: &str, status: &str, result: &Value) {
 
 pub async fn list(state: &AppState, headers: &HeaderMap, limit: usize) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::SiteAccess);
-    audit.target(TargetType::Route, "/api/csv/import/sessions");
+    audit.target_route();
     let result = list_inner(state, headers, limit, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -479,7 +484,7 @@ async fn list_inner(
 
 pub async fn latest(state: &AppState, headers: &HeaderMap) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::SiteAccess);
-    audit.target(TargetType::Route, "/api/csv/import/sessions/latest/planned");
+    audit.target_route();
     let result = latest_inner(state, headers, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -499,7 +504,7 @@ async fn latest_inner(
 
 pub async fn get(state: &AppState, headers: &HeaderMap, session_id: String) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::SiteAccess);
-    audit.target(TargetType::Route, "/api/csv/import/sessions/{session_id}");
+    audit.target_route().target(TargetType::Route, &session_id);
     let result = get_inner(state, headers, session_id, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -517,7 +522,7 @@ async fn get_inner(
 
 pub async fn delete(state: &AppState, headers: &HeaderMap, session_id: String) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::DatasetDelete);
-    audit.target(TargetType::Route, "/api/csv/import/sessions/{session_id}");
+    audit.target_route().target(TargetType::Route, &session_id);
     let result = delete_inner(state, headers, session_id, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -542,10 +547,7 @@ pub async fn fusion(
     limit: Option<usize>,
 ) -> HandlerResult {
     let mut audit = AuditEvent::new(AuditAction::SiteAccess);
-    audit.target(
-        TargetType::Route,
-        "/api/csv/import/sessions/{session_id}/fusion-preview",
-    );
+    audit.target_route().target(TargetType::Route, &session_id);
     let result = fusion_inner(state, headers, session_id, limit, &mut audit).await;
     emit(&mut audit, result)
 }
@@ -907,7 +909,9 @@ mod tests {
             viewer_tenant_ids: Vec::new(),
         };
         let state = Arc::new(state);
-        let app = crate::routes::router(Arc::clone(&state));
+        let app = crate::routes::router(Arc::clone(&state)).layer(axum::middleware::from_fn(
+            crate::contract::request_id_middleware,
+        ));
         let token = |sub: &str, role: Role, tenants: &[String]| {
             state
                 .auth
@@ -941,6 +945,9 @@ mod tests {
                 active_tenant_id: expired_claims.active_tenant_id,
                 session_version: expired_claims.session_version,
                 uid: expired_claims.uid,
+                sid: expired_claims.sid,
+                dlg: expired_claims.dlg,
+                ak: expired_claims.ak,
             },
             &jsonwebtoken::EncodingKey::from_secret(state.auth.secret.as_ref().unwrap().as_bytes()),
         )
