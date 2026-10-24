@@ -39,10 +39,6 @@ async function openOverviewDevMetrics(page: import("@playwright/test").Page) {
 }
 
 test.describe("react product workflows (real stack)", () => {
-  test.beforeEach(async ({ page, request }) => {
-    await ensureProductSession(page, request);
-  });
-
   test.beforeAll(async ({ request }) => {
     if (process.env.OPENFDD_PLAYWRIGHT_SKIP === "1") {
       failIfRequired("OPENFDD_PLAYWRIGHT_SKIP=1");

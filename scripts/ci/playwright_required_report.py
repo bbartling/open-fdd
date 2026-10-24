@@ -3,9 +3,10 @@
 
 Reads a Playwright JSON report plus the expect-step sidecar. The JSON reporter
 keeps only category "test.step", so expect counts come from the sidecar when
-the JSON steps do not carry them. Exit 0 only when no required test was
-skipped or failed and at least one expect step passed. A retry that ends
-passed is reported as flaky and still counts its passing expects.
+the JSON steps do not carry them. Exit 0 only when every required test passed
+on the first attempt and at least one expect step passed. A skip, a failure,
+or a retry that Playwright reports as flaky fails the run. The summary still
+prints tests_flaky and assertion_count.
 """
 
 from __future__ import annotations
@@ -151,15 +152,14 @@ def evaluate(report: dict[str, Any], expects: dict[str, int] | None = None) -> t
         if skipped_test:
             skipped += 1
             lines.append(f"SKIP {label}")
-        elif status == "flaky" and last_status == "passed":
+        elif status == "flaky":
             flaky += 1
-            finished_ok += 1
             detail = _redact(_first_error(results)).strip().splitlines()
             suffix = f" — {detail[0][:240]}" if detail else ""
             lines.append(f"FLAKY {label} assertions={test_assertions}{suffix}")
-        elif status == "flaky":
-            failed += 1
-            lines.append(f"FAIL {label} — flaky without a passing result")
+            if last_status != "passed":
+                failed += 1
+                lines.append(f"FAIL {label} — flaky without a passing result")
         elif status in {"unexpected", "failed"} or last_status in {"failed", "timedOut", "interrupted"}:
             failed += 1
             message = ""
@@ -218,6 +218,8 @@ def evaluate(report: dict[str, Any], expects: dict[str, int] | None = None) -> t
         problems.append(f"required tests skipped: {skipped}")
     if failed:
         problems.append(f"required tests failed: {failed}")
+    if flaky:
+        problems.append(f"required tests flaky: {flaky}")
     if finished_ok < 1:
         problems.append("required tests passed: 0")
     if assertions < 1:
@@ -322,8 +324,8 @@ def self_test() -> int:
     flaky_report = _stripped_playwright_report("flaky", "flaky-1", stats_flaky=1)
     code, lines = evaluate(flaky_report, {"flaky-1": 6})
     text = "\n".join(lines)
-    if code != 0 or "tests_flaky=1" not in text or "assertion_count=6" not in text or "tests_failed=0" not in text:
-        failures.append(f"flaky test with passing expects was rejected ({text})")
+    if code == 0 or "tests_flaky=1" not in text or "assertion_count=6" not in text:
+        failures.append(f"flaky test with a passing retry was accepted ({text})")
 
     code, lines = evaluate(_sample("skipped", 0, stats_skipped=1))
     if code == 0 or not any("skipped" in line for line in lines):
@@ -376,7 +378,7 @@ def self_test() -> int:
         for item in failures:
             print(f"  - {item}", file=sys.stderr)
         return 1
-    print("playwright_required_report --self-test OK (positive=3 negative=9)")
+    print("playwright_required_report --self-test OK (positive=2 negative=11)")
     return 0
 
 

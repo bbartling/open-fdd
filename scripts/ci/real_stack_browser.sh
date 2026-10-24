@@ -264,6 +264,7 @@ run_playwright() {
     cd frontend/web
     OPENFDD_EXPECT_COUNT_FILE="$expects" \
       npx playwright test "${REQUIRED_SPECS[@]}" \
+        --retries=0 \
         --reporter=json \
         --reporter="${ROOT}/scripts/ci/playwright_expect_reporter.cjs"
   ) >"$report"
