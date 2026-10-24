@@ -1,3 +1,4 @@
+#![cfg(test)]
 //! Two processes share one control-plane directory. One process runs a site
 //! purge. The other creates an account, disables an account, and shares a site
 //! after the purge has planned and before it deletes. Both identity updates and
