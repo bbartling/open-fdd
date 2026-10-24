@@ -12,6 +12,10 @@ use super::model::*;
 
 pub const SCHEMA_SQL: &str = include_str!("../../../../sql/schema/04_ingest_queue.sql");
 
+/// Serializes ingest-queue DDL. Concurrent `CREATE TABLE IF NOT EXISTS`
+/// races on `pg_type_typname_nsp_index` when several tests share one database.
+const INGEST_SCHEMA_LOCK: i64 = 0x0FDD_0401;
+
 pub const CLAIM_SELECT_SQL: &str = "\
 SELECT j.job_id
 FROM ingest_job j
@@ -73,10 +77,18 @@ pub fn statements(ddl: &str) -> Vec<String> {
 }
 
 pub async fn apply_schema(pool: &PgPool) -> Result<(), QueueError> {
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(INGEST_SCHEMA_LOCK)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
     for stmt in statements(SCHEMA_SQL) {
-        sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
+        sqlx::query(&stmt).execute(&mut *tx).await.map_err(db_err)?;
     }
-    migrate_idempotency_scope(pool).await
+    migrate_idempotency_scope(&mut tx).await?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(())
 }
 
 pub async fn enqueue(pool: &PgPool, job: &NewJob) -> Result<EnqueueOutcome, QueueError> {
@@ -1267,24 +1279,29 @@ async fn enqueue_tx(
     load_job_tx(tx, &id).await
 }
 
-async fn migrate_idempotency_scope(pool: &PgPool) -> Result<(), QueueError> {
+async fn migrate_idempotency_scope(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+) -> Result<(), QueueError> {
     sqlx::query(
         "DELETE FROM ingest_idempotency
          WHERE tenant_id IS NULL OR object_id IS NULL OR payload_hash IS NULL
             OR tenant_id = '' OR object_id = '' OR payload_hash = ''",
     )
-    .execute(pool)
+    .execute(&mut **tx)
     .await
     .map_err(db_err)?;
     for column in ["tenant_id", "object_id", "payload_hash"] {
         let stmt = format!("ALTER TABLE ingest_idempotency ALTER COLUMN {column} SET NOT NULL");
-        sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
+        sqlx::query(&stmt)
+            .execute(&mut **tx)
+            .await
+            .map_err(db_err)?;
     }
     let current: Option<String> = sqlx::query_scalar(
         "SELECT pg_get_constraintdef(oid) FROM pg_constraint
          WHERE conrelid = 'ingest_idempotency'::regclass AND contype = 'p'",
     )
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(db_err)?;
     let definition = current.unwrap_or_default();
@@ -1298,7 +1315,7 @@ async fn migrate_idempotency_scope(pool: &PgPool) -> Result<(), QueueError> {
         "SELECT conname FROM pg_constraint
          WHERE conrelid = 'ingest_idempotency'::regclass AND contype = 'p'",
     )
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(db_err)?;
     if let Some(name) = name {
@@ -1308,14 +1325,17 @@ async fn migrate_idempotency_scope(pool: &PgPool) -> Result<(), QueueError> {
             ));
         };
         let drop_sql = format!("ALTER TABLE ingest_idempotency DROP CONSTRAINT {ident}");
-        sqlx::query(&drop_sql).execute(pool).await.map_err(db_err)?;
+        sqlx::query(&drop_sql)
+            .execute(&mut **tx)
+            .await
+            .map_err(db_err)?;
     }
     sqlx::query(
         "ALTER TABLE ingest_idempotency
          ADD CONSTRAINT ingest_idempotency_pkey
          PRIMARY KEY (actor, tenant_id, action, idempotency_key)",
     )
-    .execute(pool)
+    .execute(&mut **tx)
     .await
     .map_err(db_err)?;
     Ok(())
