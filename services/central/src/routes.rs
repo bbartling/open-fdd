@@ -3076,17 +3076,12 @@ fn content_type(headers: &HeaderMap) -> String {
         .to_string()
 }
 
-pub async fn csv_preview(headers: HeaderMap, body: Bytes) -> Json<Value> {
-    let ct = content_type(&headers);
-    if ct.contains("application/json") {
-        let v: Value = serde_json::from_slice(&body).unwrap_or(json!({}));
-        return Json(open_fdd_edge_prototype::csv_ingest::preview_json_handler(
-            &v,
-        ));
-    }
-    Json(open_fdd_edge_prototype::csv_ingest::preview_handler(
-        &ct, &body, None,
-    ))
+pub async fn csv_preview(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::preview(&state, &headers, body).await
 }
 
 fn abort_import_staging(result: &Value) {
@@ -5396,18 +5391,28 @@ pub async fn csv_import_package_buildings(
     Ok(Json(filtered))
 }
 
-pub async fn csv_plan(Json(body): Json<Value>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::plan_handler(&body))
+pub async fn csv_plan(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::plan(&state, &headers, body).await
 }
 
-pub async fn csv_preflight(Json(body): Json<Value>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::preflight_handler(
-        &body,
-    ))
+pub async fn csv_preflight(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::preflight(&state, &headers, body).await
 }
 
-pub async fn csv_execute(Json(body): Json<Value>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::execute_handler(&body))
+pub async fn csv_execute(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::execute(&state, &headers, body).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -5415,26 +5420,35 @@ pub struct SessionListQuery {
     pub limit: Option<usize>,
 }
 
-pub async fn csv_list_sessions(Query(q): Query<SessionListQuery>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::list_sessions_handler(
-        q.limit.unwrap_or(50),
-    ))
+pub async fn csv_list_sessions(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<SessionListQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::list(&state, &headers, q.limit.unwrap_or(50)).await
 }
 
-pub async fn csv_latest_planned() -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::latest_planned_session_handler())
+pub async fn csv_latest_planned(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::latest(&state, &headers).await
 }
 
-pub async fn csv_get_session(Path(session_id): Path<String>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::get_session_handler(
-        &session_id,
-    ))
+pub async fn csv_get_session(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::get(&state, &headers, session_id).await
 }
 
-pub async fn csv_delete_session(Path(session_id): Path<String>) -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::delete_session_handler(
-        &session_id,
-    ))
+pub async fn csv_delete_session(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::delete(&state, &headers, session_id).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -5443,16 +5457,12 @@ pub struct FusionPreviewQuery {
 }
 
 pub async fn csv_fusion_preview(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(session_id): Path<String>,
     Query(q): Query<FusionPreviewQuery>,
-) -> Json<Value> {
-    let limit = open_fdd_edge_prototype::csv_ingest::fusion_preview_limit_from_query(
-        q.limit.map(|n| n.to_string()).as_deref(),
-    );
-    Json(open_fdd_edge_prototype::csv_ingest::fusion_preview_handler(
-        &session_id,
-        limit,
-    ))
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    crate::csv_session_scope::fusion(&state, &headers, session_id, q.limit).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -5618,15 +5628,35 @@ pub struct DatasetPreviewQuery {
     pub limit: Option<usize>,
 }
 
+/// Dataset ids are storage tokens. A filtered id would select a different object
+/// than the one the tenant check authorized.
+fn dataset_id_is_exact(raw: &str) -> bool {
+    !raw.is_empty()
+        && raw
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
 pub async fn csv_preview_dataset(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Path(dataset_id): Path<String>,
     Query(q): Query<DatasetPreviewQuery>,
-) -> Json<Value> {
-    Json(open_fdd_edge_prototype::csv_ingest::preview_dataset(
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    if !dataset_id_is_exact(&dataset_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid building id"})),
+        ));
+    }
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&dataset_id)) {
+        return Err(deny);
+    }
+    Ok(Json(open_fdd_edge_prototype::csv_ingest::preview_dataset(
         &dataset_id,
         q.offset.unwrap_or(0) as u64,
         q.limit.unwrap_or(100) as u64,
-    ))
+    )))
 }
 
 pub async fn health_stack() -> Json<Value> {
