@@ -38,7 +38,7 @@ impl AuthConfig {
 
         let secret = env::var("OFDD_AUTH_SECRET").unwrap_or_else(|_| {
             if required {
-                eprintln!("warning: OFDD_AUTH_SECRET missing; using insecure dev fallback");
+                tracing::warn!("OFDD_AUTH_SECRET missing; using insecure dev fallback");
             }
             "dev-change-me-openfdd-rust-edge".to_string()
         });
@@ -121,7 +121,7 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("auth.env.local");
         generate_auth_env(&GenerateOptions {
-            path: path.clone(),
+            path,
             force: true,
             show_secrets: false,
         })

@@ -45,8 +45,9 @@ thiserror = "2"
 url = "2"
 walkdir = "2"
 
-# Product crates opt in with `lints.workspace = true`.
-# OT archive trees (edge, openfdd_mqtt, fieldbus) do not.
+# Product crates, including the edge package/semantic helper, opt in with
+# `lints.workspace = true`. Archived OT trees under archive/ are not workspace
+# members and do not inherit these lints.
 # Standard: openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md
 [workspace.lints.rust]
 # Tombstone cfgs remain on retired branches until those call sites are deleted.

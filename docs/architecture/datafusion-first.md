@@ -6,7 +6,9 @@ nav_order: 10
 
 # DataFusion-first policy (historical)
 
-> **SUPERSEDED.** Product path is Timescale-only ([ADR-010](adr-010-timescale-hard-cutover.md)). Soft-OPEN ≠ FQ. Live page: [Timescale historian & SQL](storage-and-datafusion.html).
+> **SUPERSEDED. historical/non-executable.** Product path is Timescale-only ([ADR-010](adr-010-timescale-hard-cutover.md)), `architecture_epoch: portal-timescale-v1`. Soft-OPEN ≠ FQ. Do not add DataFusion because this page still names it.
+
+The tables under this heading record the retired engine. They are not requirements.
 
 
 For tabular building telemetry computation in the **product**:

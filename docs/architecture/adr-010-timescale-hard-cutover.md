@@ -4,6 +4,14 @@
 ([datafusion-first.md](datafusion-first.md)) and Parquet-as-canonical historian
 for the Open-FDD product path. Soft-OPEN ≠ FQ.
 
+**4.0 portal note:** decision item 3 below (fieldbus → MQTTS → central) is
+superseded on the product path. Ingest is the Normal Framework portal API and
+CSV. Fieldbus and MQTTS are an unqualified archive (`archive/ot-edge/`).
+Timescale remains the historian. This note does not withdraw the Timescale
+decision. The retired transport steps are
+`historical/non-executable` in
+[`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../archive/ai-agent/historical-3.5-ot-ops.md).
+
 **BPS reference (pattern only):** ADR 0009 in BPS
 (`docs/spec/ADR/0009-timescale-sql-fdd.md`) — Timescale + `.sql` FDD; pandas
 oracle test-only. BPS is Haystack-only; Open-FDD is not.

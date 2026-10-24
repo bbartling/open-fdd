@@ -742,9 +742,12 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
                 "hint": "rename equipment folders so each leaf directory name is unique",
             });
         }
-        let history = in_building
-            .get(&dir.join("history_wide.csv"))
-            .expect("discovered via history_wide.csv");
+        let Some(history) = in_building.get(&dir.join("history_wide.csv")) else {
+            warnings.push(format!(
+                "{equip_id}: history_wide.csv disappeared after discovery — skipped"
+            ));
+            continue;
+        };
         let headers = match csv_headers(history) {
             Ok(h) => h,
             Err(e) => {
@@ -1455,7 +1458,7 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
             "equipment_id": equipment_id,
             "roles": roles,
             "ignored_columns": ignored,
-            "scoped_equipment": [equipment_id.clone()],
+            "scoped_equipment": [equipment_id],
             "package_root": building_root.display().to_string(),
             "historian": "timescale",
             "needs_timescale_remap": true,

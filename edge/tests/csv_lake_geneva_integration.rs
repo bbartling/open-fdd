@@ -1,5 +1,14 @@
 //! Manual Lake Geneva CSV integration — set OPENFDD_CSV_FIXTURE_DIR to operator test folder.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::dbg_macro,
+    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
+)]
+
 use open_fdd_edge_prototype::csv_ingest::{
     parse::parse_csv_bytes,
     plan::{append_rows, join_rows, parse_file_to_rows, FileMapping, FillPolicy, JoinAlignment},

@@ -1,5 +1,14 @@
 //! CSV UT3 ingest unit and integration tests.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::dbg_macro,
+    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
+)]
+
 use open_fdd_edge_prototype::csv_ingest::{
     parse::{parse_csv_bytes, sanitize_filename},
     plan::{

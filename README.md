@@ -37,7 +37,7 @@
 </p>
 
 
-Open-FDD is a free, open-source building-to-cloud pipeline for HVAC analytics and fault detection. It is very friendly to AI agents. The same stack runs on-premises or in the cloud: a time-series database (Timescale on PostgreSQL) for faults, where analytics are produced, a Rust central service, React operator UI, Mosquitto MQTTS ingest, and fieldbus edge agents for BACnet, Modbus, and Haystack — plus REST APIs and CSV/zip import when you are not on live OT. The product services are written in Rust, with Python tooling for tests. Machine learning and clustering are on the roadmap for that same foundation.
+Open-FDD is a free, open-source building-analytics and fault-detection stack. It is friendly to AI agents. The product runs on-premises or in the cloud: Timescale on PostgreSQL, a Rust central service, and a React operator UI. Ingest is the Normal Framework portal API and CSV. The product services are written in Rust, with Python tooling for tests. MQTT and fieldbus recipes are an unqualified archive, not this stack.
 
 Python tooling is for tests. A PyPI package ships pandas FDD for notebooks and checks, plus report tools that write a PDF from mapped HVAC history. AI agents install that package, read the project skills, and run the CLI beside the live stack.
 
@@ -48,29 +48,29 @@ Python tooling is for tests. A PyPI package ships pandas FDD for notebooks and c
 
 | Image | Role |
 |-------|------|
-| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | MQTTS ingest, **Timescale** historian, SQL FDD, REST `/api` |
+| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | Normal Framework portal and CSV ingest, **Timescale** historian, SQL FDD, REST `/api` |
 | [`ghcr.io/bbartling/openfdd-web`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-web) | React operator SPA (browser → central `/api` only) |
-| [`ghcr.io/bbartling/openfdd-fieldbus`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-fieldbus) | BACnet / Modbus / Haystack / JSON edge |
-| [`ghcr.io/bbartling/openfdd-mqtt`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mqtt) | Mosquitto MQTTS broker |
 | [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Optional slim MCP stdio sidecar → central API |
+
+`openfdd-fieldbus` and `openfdd-mqtt` are not this product. Their recipes are historical/non-executable under [`archive/ot-edge/`](archive/ot-edge/).
 
 ### Run
 
 ```bash
 git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
-export OPENFDD_IMAGE_TAG=nightly
+./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web
+export OPENFDD_IMAGE_TAG=sha-<that>
 export OPENFDD_JWT_SECRET='change-me'
 export OPENFDD_ADMIN_PASSWORD='change-me'
 
-./scripts/openfdd_stack_up.sh react       # local CSV lab (ready today)
-./scripts/openfdd_stack_up.sh csv         # central + web only
-# Cloud hub path: openfdd-fieldbus → MQTTS (see docs/operations/RAILWAY_DEPLOYMENT.md)
+./scripts/openfdd_stack_up.sh portal      # central + web + Timescale
+./scripts/openfdd_stack_up.sh csv         # central + web, no portal provider env
 ```
 
-Update a running stack (pull, backup, rollback if health fails):
+Update a running portal stack (pull, backup, rollback if health fails):
 
 ```bash
-./scripts/openfdd_maint_update_resume.sh react nightly
+./scripts/openfdd_maint_update_resume.sh portal "$OPENFDD_IMAGE_TAG"
 ```
 
 AI Agent assistance : [AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md).

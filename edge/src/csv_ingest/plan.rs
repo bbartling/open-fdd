@@ -190,8 +190,8 @@ pub fn append_rows(mut batches: Vec<Vec<OutputRow>>) -> Vec<OutputRow> {
 fn floor_hour(dt: DateTime<Utc>) -> DateTime<Utc> {
     dt.date_naive()
         .and_hms_opt(dt.hour(), 0, 0)
-        .unwrap()
-        .and_utc()
+        .map(|naive| naive.and_utc())
+        .unwrap_or(dt)
 }
 
 pub fn join_rows(

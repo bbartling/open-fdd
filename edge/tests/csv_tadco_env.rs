@@ -1,6 +1,15 @@
 //! Optional operator-env TADCO smoke — no committed CSV in repo.
 //! Run: OPENFDD_TADCO_IMPORT_DIR=/path/to/hvac_systems_CLEANED cargo test tadco_env_preflight -- --ignored
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::print_stdout,
+    clippy::print_stderr,
+    clippy::dbg_macro,
+    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
+)]
+
 use open_fdd_edge_prototype::csv_ingest;
 use open_fdd_edge_prototype::test_support::with_temp_workspace;
 use serde_json::json;

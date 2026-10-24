@@ -241,8 +241,7 @@ mod tests {
     #[test]
     fn agent_can_activate_rules() {
         with_temp_workspace(|_| {
-            let rule = template_oa_rule();
-            let mut approved = rule.clone();
+            let mut approved = template_oa_rule();
             approved["review_status"] = json!("approved");
             let _ = save_rule(&approved, "integrator");
             let out = activate_rule("oa_temp_out_of_range", "agent", "agent");

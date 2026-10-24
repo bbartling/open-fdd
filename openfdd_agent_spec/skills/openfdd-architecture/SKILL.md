@@ -1,32 +1,37 @@
 ---
 name: openfdd-architecture
 description: >-
-  Use when enforcing Open-FDD product boundaries: production DataFusion SQL vs
-  pandas oracle, vibe19/vibe20 ownership, dual cookbooks, edge/os never-delete,
-  ownership.yaml, forbidden imports. Triggers on: architecture, ownership,
-  pandas fallback, cookbook delete, Milestone A Phase 0.
+  Use when enforcing Open-FDD product boundaries: Timescale and PostgreSQL SQL
+  versus the pandas oracle, Normal Framework portal and CSV ingest, Railway
+  central and web, vibe19/vibe20 ownership, dual cookbooks, and the edge helper
+  crate. Triggers on: architecture, ownership, pandas fallback, cookbook delete,
+  Milestone A Phase 0, architecture_epoch.
 ---
 
 # Open-FDD architecture
+
+`architecture_epoch: portal-timescale-v1`.
 
 Read [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and [`ownership.yaml`](../../ownership.yaml).
 
 ## Non-negotiables
 
-- Production FDD = DataFusion SQL (`sql_rules/`) — no silent pandas fallback in central.
-- Pandas oracle = `open_fdd.rules` + `analytics` — permanent.
-- Both cookbooks permanent — see [`docs/COOKBOOK_OWNERSHIP.md`](../../docs/COOKBOOK_OWNERSHIP.md).
+- Production FDD and analytics = Timescale / PostgreSQL (`sql/fdd/`) on central. No silent pandas fallback. No DataFusion or Parquet historian on the product path ([ADR-010](../../../docs/architecture/adr-010-timescale-hard-cutover.md)).
+- Ingest = Normal Framework portal API and CSV. MQTT, BACnet, Modbus, Haystack wire, and fieldbus are an unqualified archive.
+- Railway product services = central + web, with Timescale. Optional image: `openfdd-mcp`.
+- Pandas oracle = `open_fdd.rules` + `analytics` — permanent, outside the product request path.
+- Both cookbooks stay. The SQL cookbook filename `datafusion-sql-cookbook.md` is an expression record, not the engine. See [`docs/COOKBOOK_OWNERSHIP.md`](../../docs/COOKBOOK_OWNERSHIP.md).
 - Sole product UI = React SPA (`frontend/web` → `openfdd-web`) → central `/api` only.
-- Product central image = Rust/debian only — no Python runtime; WattLab export is offline opt-in.
-- Never delete `edge/` or `os/`.
-- Do not rename `open_fdd.rules` → `open_fdd.oracle` without product decision.
+- Product central image = Rust/debian only — no Python runtime.
+- `edge/` is the package, semantic, and SQL helper central links. Never delete `edge/` or `os/`. The edge process is under `archive/ot-edge/`.
+- Do not rename `open_fdd.rules` → `open_fdd.oracle` without a product decision.
 - Keep [`../../AGENTS.md`](../../AGENTS.md) / [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) / this skill honest when product truth changes.
-- Vendor dictionaries, campus names, and weather lat/lon stay in **preprocess zips**, never in product SQL/UI.
+- Vendor dictionaries, campus names, and weather lat/lon stay in preprocess zips, never in product SQL or UI.
+- Historical OT commands are `historical/non-executable`: [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../../../docs/archive/ai-agent/historical-3.5-ot-ops.md).
 
 ## Phase 0 coding (when executing)
 
-Add CI that validates `ownership.yaml` and fails on prohibited imports /
-missing cookbook paths / terminology regressions.
+Add CI that validates `ownership.yaml` and fails on prohibited imports, missing cookbook paths, or terminology regressions.
 
 ## Skill home
 
