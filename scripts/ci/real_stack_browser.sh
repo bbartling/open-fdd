@@ -130,6 +130,7 @@ EOF
   fi
 
   python3 "$ROOT/scripts/ci/playwright_required_report.py" --self-test || local_fail=1
+  node "$ROOT/scripts/ci/playwright_expect_reporter.cjs" --self-test || local_fail=1
   python3 "$ROOT/scripts/ci/browser_stack_health.py" --self-test || local_fail=1
 
   if [[ "$local_fail" -ne 0 ]]; then
@@ -254,16 +255,22 @@ wait_healthy() {
 
 run_playwright() {
   local report="$1"
+  local expects="${report}.expects.json"
   local status=0
   local report_status=0
+  rm -f "$expects"
   set +e
   (
     cd frontend/web
-    npx playwright test "${REQUIRED_SPECS[@]}" --reporter=json
+    OPENFDD_EXPECT_COUNT_FILE="$expects" \
+      npx playwright test "${REQUIRED_SPECS[@]}" \
+        --reporter=json \
+        --reporter="${ROOT}/scripts/ci/playwright_expect_reporter.cjs"
   ) >"$report"
   status=$?
-  python3 "$ROOT/scripts/ci/playwright_required_report.py" "$report"
+  python3 "$ROOT/scripts/ci/playwright_required_report.py" "$report" --expects "$expects"
   report_status=$?
+  rm -f "$expects"
   set -e
   echo "playwright exit ${status}; required specs: ${REQUIRED_SPECS[*]}"
   if [[ "$status" -ne 0 || "$report_status" -ne 0 ]]; then

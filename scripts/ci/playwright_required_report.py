@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Fail a required Playwright run that skipped, failed, or asserted nothing.
 
-Reads a Playwright JSON report. Prints passed, failed, skipped, flaky, and
-expect-step counts. Exit 0 only when every required test ran and at least one
-expect step passed.
+Reads a Playwright JSON report plus the expect-step sidecar. The JSON reporter
+keeps only category "test.step", so expect counts come from the sidecar when
+the JSON steps do not carry them. Exit 0 only when no required test was
+skipped or failed and at least one expect step passed. A retry that ends
+passed is reported as flaky and still counts its passing expects.
 """
 
 from __future__ import annotations
@@ -55,15 +57,57 @@ def _walk(suite: dict[str, Any], inherited_file: str, titles: list[str], found: 
         if not isinstance(spec, dict):
             continue
         spec_title = " :: ".join([*next_titles, str(spec.get("title") or "")])
+        spec_id = str(spec.get("id") or "")
         for test in spec.get("tests") or []:
             if isinstance(test, dict):
-                found.append({"file": file_name, "title": spec_title, "test": test})
+                found.append({"file": file_name, "title": spec_title, "id": spec_id, "test": test})
     for child in suite.get("suites") or []:
         if isinstance(child, dict):
             _walk(child, file_name, next_titles, found)
 
 
-def evaluate(report: dict[str, Any]) -> tuple[int, list[str]]:
+def _first_error(results: list[Any]) -> str:
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        if str(result.get("status") or "") == "passed":
+            continue
+        error = result.get("error")
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])
+        errors = result.get("errors")
+        if isinstance(errors, list) and errors:
+            first = errors[0]
+            if isinstance(first, dict) and first.get("message"):
+                return str(first["message"])
+            if isinstance(first, str):
+                return first
+    return ""
+
+
+def _coerce_expects(payload: Any) -> dict[str, int]:
+    if not isinstance(payload, dict):
+        raise ValueError("expect sidecar must be an object")
+    tests = payload.get("tests")
+    if not isinstance(tests, list):
+        raise ValueError("expect sidecar tests must be a list")
+    counts: dict[str, int] = {}
+    for item in tests:
+        if not isinstance(item, dict):
+            raise ValueError("expect sidecar test must be an object")
+        test_id = str(item.get("id") or "")
+        if not test_id:
+            raise ValueError("expect sidecar test id is missing")
+        if test_id in counts:
+            raise ValueError(f"expect sidecar duplicate id {test_id}")
+        raw = item.get("passed_expect_steps")
+        if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+            raise ValueError(f"expect sidecar count invalid for {test_id}")
+        counts[test_id] = raw
+    return counts
+
+
+def evaluate(report: dict[str, Any], expects: dict[str, int] | None = None) -> tuple[int, list[str]]:
     found: list[dict[str, Any]] = []
     for suite in report.get("suites") or []:
         if isinstance(suite, dict):
@@ -73,6 +117,7 @@ def evaluate(report: dict[str, Any]) -> tuple[int, list[str]]:
     failed = 0
     skipped = 0
     flaky = 0
+    finished_ok = 0
     assertions = 0
     lines: list[str] = []
 
@@ -84,15 +129,37 @@ def evaluate(report: dict[str, Any]) -> tuple[int, list[str]]:
         last = results[-1] if results else {}
         last_status = str(last.get("status") or "") if isinstance(last, dict) else ""
         label = item["title"] or item["file"] or "(unnamed)"
-        steps = last.get("steps") if isinstance(last, dict) else None
-        assertions += _expect_steps(steps if isinstance(steps, list) else [])
+        skipped_test = status == "skipped" or expected == "skipped" or last_status == "skipped"
+        json_count = 0
+        for result in results:
+            if not isinstance(result, dict) or str(result.get("status") or "") != "passed":
+                continue
+            steps = result.get("steps")
+            json_count += _expect_steps(steps if isinstance(steps, list) else [])
+        side_count = 0
+        test_id = str(item.get("id") or "")
+        if expects is not None and not skipped_test:
+            if not test_id or test_id not in expects:
+                failed += 1
+                lines.append(f"FAIL {label} — expect sidecar has no count")
+            else:
+                side_count = expects[test_id]
+        test_assertions = max(json_count, side_count)
+        if not skipped_test:
+            assertions += test_assertions
 
-        if status == "skipped" or expected == "skipped" or last_status == "skipped":
+        if skipped_test:
             skipped += 1
             lines.append(f"SKIP {label}")
-        elif status == "flaky":
+        elif status == "flaky" and last_status == "passed":
             flaky += 1
-            lines.append(f"FLAKY {label}")
+            finished_ok += 1
+            detail = _redact(_first_error(results)).strip().splitlines()
+            suffix = f" — {detail[0][:240]}" if detail else ""
+            lines.append(f"FLAKY {label} assertions={test_assertions}{suffix}")
+        elif status == "flaky":
+            failed += 1
+            lines.append(f"FAIL {label} — flaky without a passing result")
         elif status in {"unexpected", "failed"} or last_status in {"failed", "timedOut", "interrupted"}:
             failed += 1
             message = ""
@@ -100,12 +167,15 @@ def evaluate(report: dict[str, Any]) -> tuple[int, list[str]]:
                 error = last.get("error")
                 if isinstance(error, dict):
                     message = str(error.get("message") or "")
+            if not message:
+                message = _first_error(results)
             detail = _redact(message).strip().splitlines()
             suffix = f" — {detail[0][:240]}" if detail else ""
-            lines.append(f"FAIL {label}{suffix}")
+            lines.append(f"FAIL {label} assertions={test_assertions}{suffix}")
         elif status in {"expected", "passed"} or last_status == "passed":
             passed += 1
-            lines.append(f"PASS {label}")
+            finished_ok += 1
+            lines.append(f"PASS {label} assertions={test_assertions}")
         else:
             failed += 1
             lines.append(f"FAIL {label} — unrecognised status {status or last_status or 'missing'}")
@@ -117,12 +187,20 @@ def evaluate(report: dict[str, Any]) -> tuple[int, list[str]]:
         except (TypeError, ValueError):
             failed += 1
             lines.append("FAIL stats.skipped is not an integer")
+    walked_flaky = flaky
     if "flaky" in stats:
         try:
-            flaky = max(flaky, int(stats["flaky"]))
+            stats_flaky = int(stats["flaky"])
         except (TypeError, ValueError):
             failed += 1
             lines.append("FAIL stats.flaky is not an integer")
+        else:
+            if stats_flaky > walked_flaky:
+                failed += 1
+                lines.append(
+                    f"FAIL stats.flaky={stats_flaky} exceeds classified flaky tests ({walked_flaky})"
+                )
+            flaky = max(flaky, stats_flaky)
 
     lines.append(
         "playwright-required:"
@@ -140,9 +218,7 @@ def evaluate(report: dict[str, Any]) -> tuple[int, list[str]]:
         problems.append(f"required tests skipped: {skipped}")
     if failed:
         problems.append(f"required tests failed: {failed}")
-    if flaky:
-        problems.append(f"required tests flaky: {flaky}")
-    if passed < 1:
+    if finished_ok < 1:
         problems.append("required tests passed: 0")
     if assertions < 1:
         problems.append("assertion_count is 0")
@@ -165,7 +241,14 @@ def _write_summary(lines: list[str]) -> None:
         handle.write("\n")
 
 
-def _sample(status: str, expects: int, *, stats_skipped: int = 0, stats_flaky: int = 0) -> dict[str, Any]:
+def _sample(
+    status: str,
+    expects: int,
+    *,
+    stats_skipped: int = 0,
+    stats_flaky: int = 0,
+    test_id: str = "",
+) -> dict[str, Any]:
     steps = [{"title": f"Expect toBeVisible {index}", "category": "expect"} for index in range(expects)]
     result_status = {"expected": "passed", "unexpected": "failed", "skipped": "skipped", "flaky": "passed"}.get(
         status, status
@@ -190,6 +273,7 @@ def _sample(status: str, expects: int, *, stats_skipped: int = 0, stats_flaky: i
                 "specs": [
                     {
                         "title": "shell",
+                        "id": test_id,
                         "tests": [
                             {
                                 "status": status,
@@ -204,6 +288,23 @@ def _sample(status: str, expects: int, *, stats_skipped: int = 0, stats_flaky: i
     }
 
 
+def _stripped_playwright_report(status: str, test_id: str, *, stats_flaky: int = 0) -> dict[str, Any]:
+    """JSON reporter shape: expect steps removed, only test.step / pw:api remain."""
+    report = _sample(status, 0, stats_flaky=stats_flaky, test_id=test_id)
+    results = report["suites"][0]["specs"][0]["tests"][0]["results"]
+    if results:
+        results[-1]["steps"] = [
+            {
+                "title": "Before Hooks",
+                "category": "test.step",
+                "steps": [{"title": "Launch browser", "category": "pw:api"}],
+            }
+        ]
+    if status == "flaky" and results:
+        results.insert(0, {"status": "timedOut", "error": {"message": "Timeout 15000ms exceeded"}, "steps": []})
+    return report
+
+
 def self_test() -> int:
     failures: list[str] = []
 
@@ -211,6 +312,18 @@ def self_test() -> int:
     text = "\n".join(lines)
     if code != 0 or "assertion_count=3" not in text or "tests_passed=1" not in text:
         failures.append(f"positive passed report did not count assertions ({text})")
+
+    sidecar_report = _stripped_playwright_report("expected", "passed-1")
+    code, lines = evaluate(sidecar_report, {"passed-1": 5})
+    text = "\n".join(lines)
+    if code != 0 or "assertion_count=5" not in text:
+        failures.append(f"sidecar expect count was ignored ({text})")
+
+    flaky_report = _stripped_playwright_report("flaky", "flaky-1", stats_flaky=1)
+    code, lines = evaluate(flaky_report, {"flaky-1": 6})
+    text = "\n".join(lines)
+    if code != 0 or "tests_flaky=1" not in text or "assertion_count=6" not in text or "tests_failed=0" not in text:
+        failures.append(f"flaky test with passing expects was rejected ({text})")
 
     code, lines = evaluate(_sample("skipped", 0, stats_skipped=1))
     if code == 0 or not any("skipped" in line for line in lines):
@@ -225,30 +338,52 @@ def self_test() -> int:
     if code == 0:
         failures.append("zero assertions was accepted")
 
+    code, lines = evaluate(_stripped_playwright_report("expected", "empty-1"), {"empty-1": 0})
+    if code == 0:
+        failures.append("sidecar zero assertions was accepted")
+
+    code, lines = evaluate(_stripped_playwright_report("expected", "real-1"), {"other": 9})
+    if code == 0 or not any("expect sidecar has no count" in line for line in lines):
+        failures.append("unmatched expect sidecar was accepted")
+
     code, _lines = evaluate(_sample("unexpected", 1))
     if code == 0:
         failures.append("failed test was accepted")
 
     code, _lines = evaluate(_sample("expected", 1, stats_flaky=1))
     if code == 0:
-        failures.append("flaky stat was accepted")
+        failures.append("hidden flaky stat was accepted")
+
+    unresolved = _stripped_playwright_report("flaky", "flaky-bad", stats_flaky=1)
+    unresolved["suites"][0]["specs"][0]["tests"][0]["results"][-1]["status"] = "failed"
+    code, _lines = evaluate(unresolved, {"flaky-bad": 2})
+    if code == 0:
+        failures.append("flaky test without a passing result was accepted")
 
     empty_code, _lines = evaluate({"suites": [], "stats": {"skipped": 0, "flaky": 0}})
     if empty_code == 0:
         failures.append("empty report was accepted")
+
+    try:
+        _coerce_expects({"tests": [{"id": "a", "passed_expect_steps": True}]})
+    except ValueError:
+        pass
+    else:
+        failures.append("boolean expect count was accepted")
 
     if failures:
         print("playwright_required_report --self-test FAILED:", file=sys.stderr)
         for item in failures:
             print(f"  - {item}", file=sys.stderr)
         return 1
-    print("playwright_required_report --self-test OK (positive=1 negative=6)")
+    print("playwright_required_report --self-test OK (positive=3 negative=9)")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", nargs="?", type=Path)
+    parser.add_argument("--expects", type=Path)
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
     if args.self_test:
@@ -272,7 +407,17 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(report, dict):
         print("FAIL: Playwright JSON report must be an object", file=sys.stderr)
         return 1
-    code, lines = evaluate(report)
+    expects: dict[str, int] | None = None
+    if args.expects is not None:
+        if not args.expects.is_file():
+            print(f"FAIL: expect-count sidecar missing: {args.expects}", file=sys.stderr)
+            return 1
+        try:
+            expects = _coerce_expects(json.loads(args.expects.read_text(encoding="utf-8")))
+        except (json.JSONDecodeError, ValueError) as exc:
+            print(f"FAIL: expect-count sidecar ({exc})", file=sys.stderr)
+            return 1
+    code, lines = evaluate(report, expects)
     for line in lines:
         print(line)
     _write_summary(lines)
