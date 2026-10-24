@@ -25,7 +25,7 @@
 //!   `OPENFDD_AUDIT_LOG_KEEP`). Removing a generation increments `rotated_out`.
 //!   [`export_retained`] copies the files still on disk plus the loss ledger.
 //!
-//! Env:
+//! Env (copied onto each queued line; a later change does not retarget that line):
 //! - `OPENFDD_AUDIT_LOG_PATH` — override file path (default `workspace/logs/security_audit.jsonl`)
 //! - `OPENFDD_AUDIT_LOG_MAX_BYTES` — rotate threshold (default 10485760 = 10 MiB)
 //! - `OPENFDD_AUDIT_LOG_KEEP` — rotated files to keep (default 5)
@@ -71,12 +71,19 @@ struct AuditSink {
     thread: Option<JoinHandle<()>>,
 }
 
+struct QueuedLine {
+    body: String,
+    /// Destination captured on the caller. The writer must not re-read the
+    /// process environment: another test or request may already have changed it.
+    path: PathBuf,
+    max_bytes: u64,
+    keep: usize,
+    durable: bool,
+    ack: Option<SyncSender<bool>>,
+}
+
 enum WriterCmd {
-    Line {
-        body: String,
-        durable: bool,
-        ack: Option<SyncSender<bool>>,
-    },
+    Line(Box<QueuedLine>),
     /// Barrier: writer replies after every earlier `Line` has been written (or failed).
     Flush(SyncSender<()>),
     Shutdown(SyncSender<()>),
@@ -240,8 +247,12 @@ fn audit_log_path() -> PathBuf {
         .join("security_audit.jsonl")
 }
 
+fn loss_path_for(audit: &Path) -> PathBuf {
+    audit.with_file_name("security_audit.loss.json")
+}
+
 fn loss_path() -> PathBuf {
-    audit_log_path().with_file_name("security_audit.loss.json")
+    loss_path_for(&audit_log_path())
 }
 
 fn max_bytes() -> u64 {
@@ -283,8 +294,8 @@ fn load_ledger() -> LossLedger {
     serde_json::from_str(&text).unwrap_or_else(|_| LossLedger::empty())
 }
 
-fn persist_ledger(ledger: &LossLedger, sync: bool) {
-    let path = loss_path();
+fn persist_ledger_at(audit_path: &Path, ledger: &LossLedger, sync: bool) {
+    let path = loss_path_for(audit_path);
     if let Some(parent) = path.parent() {
         if fs::create_dir_all(parent).is_err() {
             return;
@@ -304,6 +315,10 @@ fn persist_ledger(ledger: &LossLedger, sync: bool) {
     if file.write_all(&body).is_ok() && sync {
         let _ = file.sync_data();
     }
+}
+
+fn persist_ledger(ledger: &LossLedger, sync: bool) {
+    persist_ledger_at(&audit_log_path(), ledger, sync);
 }
 
 fn mutate_ledger(update: impl FnOnce(&mut LossLedger)) {
@@ -331,13 +346,20 @@ fn set_write_error(code: &'static str) {
     });
 }
 
-fn clear_write_error() {
+fn set_write_error_at(audit_path: &Path, code: &'static str) {
+    let mut ledger = ledger_lock();
+    ledger.write_failures = ledger.write_failures.saturating_add(1);
+    ledger.last_write_error = Some(code.to_string());
+    persist_ledger_at(audit_path, &ledger, true);
+}
+
+fn clear_write_error_at(audit_path: &Path) {
     let mut ledger = ledger_lock();
     if ledger.last_write_error.is_none() {
         return;
     }
     ledger.last_write_error = None;
-    persist_ledger(&ledger, true);
+    persist_ledger_at(audit_path, &ledger, true);
 }
 
 fn note_queue_drop(detail: &Value) {
@@ -386,13 +408,13 @@ fn note_shutdown_drop(detail: &Value) {
     );
 }
 
-fn note_rotated(lines: u64) {
+fn note_rotated(audit_path: &Path, lines: u64) {
     if lines == 0 {
         return;
     }
-    mutate_ledger(|ledger| {
-        ledger.rotated_out = ledger.rotated_out.saturating_add(lines);
-    });
+    let mut ledger = ledger_lock();
+    ledger.rotated_out = ledger.rotated_out.saturating_add(lines);
+    persist_ledger_at(audit_path, &ledger, true);
 }
 
 fn enter() -> bool {
@@ -484,25 +506,26 @@ fn ensure_sink() -> Option<SyncSender<WriterCmd>> {
 }
 
 fn writer_loop(rx: Receiver<WriterCmd>) {
+    let mut dirty: Vec<PathBuf> = Vec::new();
     while let Ok(cmd) = rx.recv() {
         match cmd {
             WriterCmd::Shutdown(ack) => {
-                sync_log_file();
+                sync_paths(&dirty);
                 let _ = ack.send(());
                 break;
             }
             WriterCmd::Flush(ack) => {
-                sync_log_file();
+                sync_paths(&dirty);
                 let _ = ack.send(());
             }
-            WriterCmd::Line { body, durable, ack } => {
-                let ok = match append_line(&body, durable) {
+            WriterCmd::Line(line) => {
+                let ok = match append_line(&line) {
                     Ok(()) => {
-                        clear_write_error();
+                        clear_write_error_at(&line.path);
                         true
                     }
                     Err(code) => {
-                        set_write_error(code);
+                        set_write_error_at(&line.path, code);
                         tracing::error!(
                             target: "security_audit",
                             alert = "audit_sink",
@@ -512,7 +535,8 @@ fn writer_loop(rx: Receiver<WriterCmd>) {
                         false
                     }
                 };
-                if let Some(ack) = ack {
+                remember_path(&mut dirty, &line.path);
+                if let Some(ack) = line.ack {
                     let _ = ack.send(ok);
                 }
             }
@@ -520,11 +544,34 @@ fn writer_loop(rx: Receiver<WriterCmd>) {
     }
 }
 
-fn sync_log_file() {
-    let path = audit_log_path();
-    if let Ok(file) = OpenOptions::new().append(true).open(&path) {
+fn remember_path(paths: &mut Vec<PathBuf>, path: &Path) {
+    if paths.iter().any(|have| have == path) {
+        return;
+    }
+    paths.push(path.to_path_buf());
+}
+
+fn sync_paths(paths: &[PathBuf]) {
+    for path in paths {
+        sync_log_file(path);
+    }
+}
+
+fn sync_log_file(path: &Path) {
+    if let Ok(file) = OpenOptions::new().append(true).open(path) {
         let _ = file.sync_data();
     }
+}
+
+fn queued_line(body: String, durable: bool, ack: Option<SyncSender<bool>>) -> WriterCmd {
+    WriterCmd::Line(Box::new(QueuedLine {
+        body,
+        path: audit_log_path(),
+        max_bytes: max_bytes(),
+        keep: keep_count(),
+        durable,
+        ack,
+    }))
 }
 
 /// Block until every previously enqueued audit line has been processed.
@@ -621,19 +668,23 @@ fn classify_open_err(err: &io::Error) -> &'static str {
     }
 }
 
-fn append_line(line: &str, durable: bool) -> Result<(), &'static str> {
-    let path = audit_log_path();
+fn append_line(line: &QueuedLine) -> Result<(), &'static str> {
+    let path = &line.path;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|_| ERR_UNWRITABLE)?;
     }
-    rotate_if_needed(&path)?;
+    rotate_if_needed(path, line.max_bytes, line.keep)?;
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&path)
+        .open(path)
         .map_err(|e| classify_open_err(&e))?;
-    writeln!(file, "{line}").map_err(|_| ERR_IO)?;
-    if durable {
+    // One write keeps a JSONL record intact if another writer appends too.
+    let mut record = Vec::with_capacity(line.body.len() + 1);
+    record.extend_from_slice(line.body.as_bytes());
+    record.push(b'\n');
+    file.write_all(&record).map_err(|_| ERR_IO)?;
+    if line.durable {
         file.sync_data().map_err(|_| ERR_IO)?;
     }
     Ok(())
@@ -650,21 +701,20 @@ fn count_lines(path: &Path) -> u64 {
     buf.iter().filter(|byte| **byte == b'\n').count() as u64
 }
 
-fn rotate_if_needed(path: &Path) -> Result<(), &'static str> {
+fn rotate_if_needed(path: &Path, max_bytes: u64, keep: usize) -> Result<(), &'static str> {
     let meta = match fs::metadata(path) {
         Ok(m) => m,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(_) => return Err(ERR_IO),
     };
-    if meta.len() < max_bytes() {
+    if meta.len() < max_bytes {
         return Ok(());
     }
-    let keep = keep_count();
     let oldest = path.with_extension(format!("jsonl.{keep}"));
     if oldest.exists() {
         let removed = count_lines(&oldest);
         match fs::remove_file(&oldest) {
-            Ok(()) => note_rotated(removed),
+            Ok(()) => note_rotated(path, removed),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
             Err(_) => return Err(ERR_IO),
         }
@@ -731,11 +781,7 @@ pub fn log_event(event: &str, detail: Value) {
         return;
     };
     let payload = line.to_string();
-    match tx.try_send(WriterCmd::Line {
-        body: payload,
-        durable: false,
-        ack: None,
-    }) {
+    match tx.try_send(queued_line(payload, false, None)) {
         Ok(()) => {}
         Err(TrySendError::Full(_)) => note_queue_drop(&detail),
         Err(TrySendError::Disconnected(_)) => {
@@ -770,15 +816,7 @@ pub fn log_event_acknowledged(event: &str, detail: Value) -> bool {
     };
     let (ack_tx, ack_rx) = sync_channel(1);
     let payload = line.to_string();
-    let queued = send_until(
-        &tx,
-        WriterCmd::Line {
-            body: payload,
-            durable: true,
-            ack: Some(ack_tx),
-        },
-        ack_wait(),
-    );
+    let queued = send_until(&tx, queued_line(payload, true, Some(ack_tx)), ack_wait());
     leave();
     match queued {
         Ok(()) => match ack_rx.recv_timeout(ack_wait()) {
@@ -932,9 +970,33 @@ fn test_lock() -> std::sync::MutexGuard<'static, ()> {
 }
 
 #[cfg(test)]
+fn stop_writer_for_test() {
+    ADMISSION_OPEN.store(false, Ordering::Release);
+    let start = Instant::now();
+    while IN_FLIGHT.load(Ordering::Acquire) > 0 && start.elapsed() < Duration::from_secs(2) {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let Some(mut sink) = sink_lock().take() else {
+        return;
+    };
+    let (ack_tx, ack_rx) = sync_channel(1);
+    if send_until(
+        &sink.tx,
+        WriterCmd::Shutdown(ack_tx),
+        Duration::from_secs(5),
+    )
+    .is_ok()
+        && ack_rx.recv_timeout(Duration::from_secs(5)).is_ok()
+    {
+        if let Some(handle) = sink.thread.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+#[cfg(test)]
 fn reset_sink_for_test() {
-    let mut guard = sink_lock();
-    *guard = None;
+    stop_writer_for_test();
     ADMISSION_OPEN.store(true, Ordering::Release);
     IN_FLIGHT.store(0, Ordering::Release);
     *ledger_lock() = LossLedger::empty();
@@ -966,6 +1028,8 @@ mod tests {
     use tempfile::tempdir;
 
     fn clear_audit_env() {
+        // Stop the writer before mutating the environment it used to read.
+        stop_writer_for_test();
         std::env::remove_var("OPENFDD_AUDIT_LOG_PATH");
         std::env::remove_var("OPENFDD_AUDIT_LOG_MAX_BYTES");
         std::env::remove_var("OPENFDD_AUDIT_LOG_KEEP");
@@ -1176,6 +1240,59 @@ mod tests {
             found.missing_recorded_as_loss,
             vec!["after-close".to_string()]
         );
+        clear_audit_env();
+        reset_sink_for_test();
+    }
+
+    #[test]
+    fn queued_lines_keep_the_path_captured_at_enqueue() {
+        let _lock = test_lock();
+        reset_sink_for_test();
+        let dir = tempdir().unwrap();
+        let fifo = dir.path().join("audit.fifo");
+        let c_path =
+            std::ffi::CString::new(fifo.to_str().expect("fifo path is utf-8")).expect("fifo path");
+        let rc = unsafe { libc::mkfifo(c_path.as_ptr(), 0o600) };
+        assert_eq!(rc, 0, "mkfifo: {}", std::io::Error::last_os_error());
+        std::env::set_var("OPENFDD_AUDIT_LOG_PATH", fifo.to_str().unwrap());
+        std::env::set_var("OPENFDD_AUDIT_QUEUE_CAP", "64");
+        let opener = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(30));
+            let _reader = fs::File::open(&fifo).unwrap();
+            std::thread::sleep(Duration::from_millis(100));
+        });
+        log_event(
+            "unit_test_block",
+            serde_json::json!({"request_id": "blocked"}),
+        );
+        for i in 0..8 {
+            log_event(
+                "unit_test_queued",
+                serde_json::json!({"request_id": format!("q-{i}")}),
+            );
+        }
+        let real = dir.path().join("security_audit.jsonl");
+        std::env::set_var("OPENFDD_AUDIT_LOG_PATH", real.to_str().unwrap());
+        assert!(log_event_acknowledged(
+            "user.disable",
+            serde_json::json!({"request_id": "kept-1"})
+        ));
+        let _ = opener.join();
+        let body = fs::read_to_string(&real).unwrap();
+        assert!(
+            body.contains("kept-1"),
+            "acknowledged line must land in the path captured at enqueue"
+        );
+        assert!(
+            !body.contains("q-0"),
+            "a line queued for the previous path must not follow a later path change: {body}"
+        );
+        for line in body.lines() {
+            assert!(
+                serde_json::from_str::<serde_json::Value>(line).is_ok(),
+                "audit line must stay one JSON object: {line}"
+            );
+        }
         clear_audit_env();
         reset_sink_for_test();
     }
