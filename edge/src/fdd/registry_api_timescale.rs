@@ -290,8 +290,10 @@ enum RuleOutcome {
     Failed,
 }
 
-/// Runtime `ERROR` is a failure. Ineligible `SKIP_*` rows are not failures.
-/// A detected `FAULT` or a `METRIC` row is an evaluation, not an error.
+/// Runtime `ERROR` and `SCHEMA_INCOMPATIBLE` are failures.
+/// `SKIP_*` rows (missing input, unsupported capability, short history,
+/// no targets) are not failures. A detected `FAULT` or a `METRIC` row is an
+/// evaluation, not an error.
 fn rule_outcome(rows: &[Value]) -> RuleOutcome {
     if rows.is_empty() {
         return RuleOutcome::Skipped;
@@ -300,7 +302,7 @@ fn rule_outcome(rows: &[Value]) -> RuleOutcome {
     let mut evaluated = false;
     for row in rows {
         let status = row_status_token(row);
-        if status == "ERROR" {
+        if status == "ERROR" || status == "SCHEMA_INCOMPATIBLE" || status == "RUNTIME_FAILURE" {
             error = true;
         } else if status.starts_with("SKIP") {
             continue;
@@ -348,7 +350,10 @@ fn merge_scoped_rows(parent: &Value, fresh: &Value) -> Vec<Value> {
     let replace_rule = fresh_rows.is_some_and(|rows| {
         rows.iter().any(|row| {
             let status = row_status_token(row);
-            status == "SKIP_NO_TARGETS" || (status == "ERROR" && row_equipment_id(row).is_none())
+            status == "SKIP_NO_TARGETS"
+                || status == "SCHEMA_INCOMPATIBLE"
+                || ((status == "ERROR" || status == "RUNTIME_FAILURE")
+                    && row_equipment_id(row).is_none())
         })
     });
     if replace_rule {
@@ -414,6 +419,8 @@ pub struct RunGenerationCommit {
     pub window_end: Option<String>,
     pub watermark: Option<String>,
     pub poll_seconds: f64,
+    /// Pack contract recorded on this generation. One manifest per run.
+    pub pack: Value,
 }
 
 struct PreparedRule {
@@ -643,6 +650,7 @@ pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, Stri
         },
         "watermark": commit.watermark,
         "poll_seconds": commit.poll_seconds,
+        "pack": commit.pack,
         "completed_at": chrono::Utc::now().to_rfc3339(),
         "result_count": result_count,
         "rules_run": prepared.len(),
@@ -1919,6 +1927,11 @@ mod tests {
             window_end: Some("2026-07-02T00:00:00Z".into()),
             watermark: Some("2026-07-01T12:00:00Z".into()),
             poll_seconds: 300.0,
+            pack: json!({
+                "contract_id": "openfdd-postgres-pack",
+                "contract_version": "1",
+                "compatible": true,
+            }),
         })
         .expect("commit generation")
     }
@@ -2109,6 +2122,105 @@ mod tests {
             .expect("error row");
         assert_eq!(error["status"], "ERROR");
         assert_ne!(error["status"], "PASS");
+    }
+
+    #[test]
+    fn pack_states_stay_distinct_and_share_one_manifest() {
+        let _env = crate::test_support::workspace_env_lock();
+        let _dir = RuleResultsDirGuard::new();
+        let building = "PACK_STATES";
+        let committed = sample_commit(
+            building,
+            true,
+            &[("EQ_A", "ahu"), ("EQ_V", "vav")],
+            &[
+                (
+                    "ECON-6",
+                    json!({"rows":[{
+                        "equipment_id": "EQ_A",
+                        "fault_hours": 0.5,
+                        "status": "FAULT",
+                        "failure_class": null
+                    }]}),
+                ),
+                (
+                    "ECON-3",
+                    json!({"rows":[{
+                        "equipment_id": "EQ_A",
+                        "status": "SKIP_INPUT_MISSING",
+                        "failure_class": "input_missing",
+                        "input_condition": "absent",
+                        "notes": "weather input missing"
+                    }]}),
+                ),
+                (
+                    "UTIL-INTERVAL",
+                    json!({"rows":[{
+                        "equipment_id": "EQ_A",
+                        "status": "SKIP_UNSUPPORTED",
+                        "failure_class": "unsupported",
+                        "notes": "multiple utility equipment"
+                    }]}),
+                ),
+                (
+                    "VAV-1",
+                    json!({"rows":[{
+                        "status": "SCHEMA_INCOMPATIBLE",
+                        "failure_class": "schema_incompatible",
+                        "notes": "fdd.try_double is not installed"
+                    }]}),
+                ),
+                (
+                    "FC1",
+                    json!({"rows":[{
+                        "equipment_id": "EQ_A",
+                        "status": "ERROR",
+                        "failure_class": "runtime_failure",
+                        "notes": "division by zero"
+                    }]}),
+                ),
+            ],
+        );
+        assert_eq!(committed["rules_succeeded"], 1, "{committed}");
+        assert_eq!(committed["rules_failed"], 2, "{committed}");
+        assert_eq!(committed["rules_skipped"], 2, "{committed}");
+        assert_eq!(committed["run_status"], "partial", "{committed}");
+        assert_eq!(
+            committed["rules_succeeded"].as_u64().unwrap()
+                + committed["rules_failed"].as_u64().unwrap()
+                + committed["rules_skipped"].as_u64().unwrap(),
+            committed["rules_run"].as_u64().unwrap()
+        );
+        let run_id = committed["run_id"].as_str().expect("run id");
+        let base = std::env::var("OPENFDD_RULE_RESULTS_DIR").expect("results dir");
+        let manifest_path = PathBuf::from(base)
+            .join(format!("building={building}"))
+            .join("generations")
+            .join(run_id)
+            .join("manifest.json");
+        assert!(manifest_path.is_file(), "one manifest at {manifest_path:?}");
+        let manifest: Value =
+            serde_json::from_str(&std::fs::read_to_string(&manifest_path).expect("manifest"))
+                .expect("manifest json");
+        assert_eq!(manifest["run_id"], committed["run_id"]);
+        assert_eq!(manifest["pack"]["contract_id"], "openfdd-postgres-pack");
+        let results = committed["results"].as_array().expect("results");
+        let status = |rule: &str| {
+            results
+                .iter()
+                .find(|row| row["rule_id"] == rule)
+                .expect(rule)["status"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+        assert_eq!(status("ECON-6"), "FAULT");
+        assert_eq!(status("ECON-3"), "SKIP_INPUT_MISSING");
+        assert_eq!(status("UTIL-INTERVAL"), "SKIP_UNSUPPORTED");
+        assert_eq!(status("VAV-1"), "SCHEMA_INCOMPATIBLE");
+        assert_eq!(status("FC1"), "ERROR");
+        assert_ne!(status("VAV-1"), "PASS");
+        assert_ne!(status("ECON-3"), "PASS");
     }
 
     #[test]

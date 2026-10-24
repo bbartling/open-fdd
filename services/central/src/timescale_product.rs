@@ -1883,6 +1883,29 @@ async fn load_live_confirmed_fault(
         let _ = tx.rollback().await;
         return Ok(HashMap::new());
     }
+    match crate::sql_pack::prepare_rule_inputs(
+        &mut tx,
+        building_id,
+        window_start,
+        window_end,
+        &series_sql,
+        true,
+    )
+    .await
+    {
+        Ok(crate::sql_pack::InputGate::Ready(_)) => {}
+        Ok(crate::sql_pack::InputGate::Stop(stop)) => {
+            let _ = tx.rollback().await;
+            if stop.status == "SCHEMA_INCOMPATIBLE" {
+                return Err(anyhow!("{}", stop.notes));
+            }
+            return Ok(HashMap::new());
+        }
+        Err(err) => {
+            let _ = tx.rollback().await;
+            return Err(err);
+        }
+    }
     let rows = sqlx::query(&series_sql)
         .fetch_all(&mut *tx)
         .await
@@ -1910,6 +1933,22 @@ async fn load_live_confirmed_fault(
         map.insert(ts, flag);
     }
     Ok(map)
+}
+
+#[cfg(test)]
+pub(crate) async fn preview_confirmed_fault_for_rule(
+    building_id: &str,
+    equipment_id: &str,
+    rule_id: &str,
+) -> Result<HashMap<String, bool>> {
+    let reg = load_reg()?;
+    let rule = reg
+        .rules
+        .iter()
+        .find(|rule| rule.rule_id == rule_id)
+        .ok_or_else(|| anyhow!("missing rule {rule_id}"))?;
+    let tsdb = Tsdb::connect_from_env().await?;
+    load_live_confirmed_fault(&tsdb, &reg, rule, building_id, equipment_id, None, None).await
 }
 
 fn load_confirmed_fault_hint(
@@ -2518,6 +2557,8 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         }
     }
     let tsdb = Tsdb::connect_from_env().await?;
+    let pack = crate::sql_pack::pack_status(tsdb.pool()).await?;
+    let pack_json = pack.to_json();
     let inventory = list_equipment(&tsdb, &building_id).await?;
     // The committed model is the site inventory. An equipment filter narrows
     // the rows this call evaluates and must not drop the rest of the model.
@@ -2650,6 +2691,14 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 continue;
             }
         };
+        if let Some(stop) = crate::sql_pack::schema_stop(&sql_body, &pack) {
+            rule_files.push(rule_file(
+                &rule.rule_id,
+                &building_id,
+                vec![stop.to_json(None, metric)],
+            ));
+            continue;
+        }
 
         let roles = rule_history_roles(rule);
 
@@ -2698,6 +2747,39 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 let _ = tx.rollback().await;
                 continue;
             }
+            let gate = match crate::sql_pack::prepare_rule_inputs(
+                &mut tx,
+                &building_id,
+                window_start,
+                window_end,
+                &sql_body,
+                !metric,
+            )
+            .await
+            {
+                Ok(gate) => gate,
+                Err(err) => {
+                    let (status, class) =
+                        crate::sql_pack::classify_database_error(&err.to_string());
+                    rule_rows.push(json!({
+                        "equipment_id": eq_id,
+                        "status": status,
+                        "failure_class": class,
+                        "output_kind": if metric { "metric" } else { "diagnostic" },
+                        "notes": err.to_string(),
+                    }));
+                    let _ = tx.rollback().await;
+                    continue;
+                }
+            };
+            let scope = match gate {
+                crate::sql_pack::InputGate::Stop(stop) => {
+                    rule_rows.push(stop.to_json(Some(eq_id), metric));
+                    let _ = tx.rollback().await;
+                    continue;
+                }
+                crate::sql_pack::InputGate::Ready(scope) => scope,
+            };
             match sqlx::query(&sql_body).fetch_all(&mut *tx).await {
                 Ok(rows) => {
                     if metric {
@@ -2729,6 +2811,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                                 obj.insert(key, value);
                             }
                         }
+                        crate::sql_pack::attach_ready_scope(&mut row_json, &scope);
                         rule_rows.push(row_json);
                     } else {
                         let mut hours = 0.0_f64;
@@ -2758,7 +2841,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                             Some(value) => json!(value),
                             None => fault_pct_from_covered(hours, covered),
                         };
-                        rule_rows.push(json!({
+                        let mut row_json = json!({
                             "equipment_id": eq_id,
                             "fault_hours": hours,
                             "covered_hours": json_finite(covered),
@@ -2778,14 +2861,18 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                                 "status": status,
                                 "note": "confirm aggregate from eligible elapsed time"
                             },
-                        }));
+                        });
+                        crate::sql_pack::attach_ready_scope(&mut row_json, &scope);
+                        rule_rows.push(row_json);
                     }
                     let _ = tx.commit().await;
                 }
                 Err(e) => {
+                    let (status, class) = crate::sql_pack::classify_database_error(&e.to_string());
                     rule_rows.push(json!({
                         "equipment_id": eq_id,
-                        "status": "ERROR",
+                        "status": status,
+                        "failure_class": class,
                         "output_kind": if metric { "metric" } else { "diagnostic" },
                         "notes": e.to_string(),
                     }));
@@ -2814,6 +2901,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         window_end: window_end.map(str::to_string),
         watermark,
         poll_seconds: poll,
+        pack: pack_json,
     };
     let mut summary = open_fdd_edge_prototype::fdd::registry_api::commit_run_generation(&commit)
         .map_err(anyhow::Error::msg)?;

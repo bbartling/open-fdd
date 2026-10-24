@@ -27,6 +27,9 @@ const SCHEMA_SQL: &[&str] = &[
     include_str!("../../../sql/schema/04_provider_hourly_jobs.sql"),
     include_str!("../../../sql/schema/04_ingest_queue.sql"),
     include_str!("../../../sql/schema/05_portal_inventory.sql"),
+    // Canonical helper body. Installed on every fresh start and forward upgrade.
+    include_str!("../../../sql/fdd/postgres/postgres_helpers.sql"),
+    include_str!("../../../sql/schema/06_fdd_pack_runtime.sql"),
 ];
 
 /// Tables whose rows mean this database is already in use.
@@ -165,23 +168,90 @@ pub(crate) fn decide(input: DecideInput) -> StartupAction {
     StartupAction::BootstrapEmpty
 }
 
+fn dollar_delimiter(chars: &[char], start: usize) -> Option<usize> {
+    if chars.get(start) != Some(&'$') {
+        return None;
+    }
+    let mut end = start + 1;
+    while end < chars.len() && (chars[end].is_ascii_alphanumeric() || chars[end] == '_') {
+        end += 1;
+    }
+    if chars.get(end) == Some(&'$') {
+        Some(end - start + 1)
+    } else {
+        None
+    }
+}
+
+fn starts_with_chars(chars: &[char], start: usize, tag: &[char]) -> bool {
+    let end = start + tag.len();
+    end <= chars.len() && chars[start..end] == *tag
+}
+
+/// Split SQL on semicolons that are outside quotes, comments, and dollar bodies.
+///
+/// A PL/pgSQL helper has semicolons inside `$$ ... $$`. Those belong to one
+/// statement. A semicolon inside a string literal is not a boundary either.
 pub(crate) fn statements(ddl: &str) -> Vec<String> {
+    let chars: Vec<char> = ddl.chars().collect();
     let mut out = Vec::new();
     let mut current = String::new();
-    for line in ddl.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("--") {
+    let mut index = 0;
+    while index < chars.len() {
+        if let Some(len) = dollar_delimiter(&chars, index) {
+            let tag: Vec<char> = chars[index..index + len].to_vec();
+            for ch in &tag {
+                current.push(*ch);
+            }
+            index += len;
+            while index < chars.len() && !starts_with_chars(&chars, index, &tag) {
+                current.push(chars[index]);
+                index += 1;
+            }
+            if starts_with_chars(&chars, index, &tag) {
+                for ch in &tag {
+                    current.push(*ch);
+                }
+                index += tag.len();
+            }
             continue;
         }
-        current.push_str(line);
-        current.push('\n');
-        if trimmed.ends_with(';') {
-            let stmt = current.trim().trim_end_matches(';').trim().to_string();
+        if chars[index] == '-' && chars.get(index + 1) == Some(&'-') {
+            while index < chars.len() && chars[index] != '\n' {
+                index += 1;
+            }
+            current.push('\n');
+            continue;
+        }
+        if chars[index] == '\'' {
+            current.push('\'');
+            index += 1;
+            while index < chars.len() {
+                current.push(chars[index]);
+                if chars[index] == '\'' {
+                    index += 1;
+                    if chars.get(index) == Some(&'\'') {
+                        current.push('\'');
+                        index += 1;
+                        continue;
+                    }
+                    break;
+                }
+                index += 1;
+            }
+            continue;
+        }
+        if chars[index] == ';' {
+            let stmt = current.trim().to_string();
             if !stmt.is_empty() {
                 out.push(stmt);
             }
             current.clear();
+            index += 1;
+            continue;
         }
+        current.push(chars[index]);
+        index += 1;
     }
     out
 }
@@ -776,5 +846,50 @@ mod tests {
     fn refuse_plan_runs_no_sql() {
         assert!(plan_statements(StartupAction::RefuseDestructive).is_empty());
         assert!(plan_statements(StartupAction::Skip).is_empty());
+    }
+
+    #[test]
+    fn plpgsql_helper_is_one_statement_and_string_semicolons_stay_inside() {
+        let ddl = "\
+CREATE SCHEMA IF NOT EXISTS fdd;
+CREATE OR REPLACE FUNCTION fdd.try_double(value text)
+RETURNS double precision
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN trim(value)::double precision;
+EXCEPTION
+  WHEN invalid_text_representation THEN RETURN NULL;
+END;
+$$;
+INSERT INTO seed_meta(key, value) VALUES ('a', 'b;c');
+";
+        let parsed = statements(ddl);
+        assert_eq!(parsed.len(), 3, "{parsed:?}");
+        assert!(parsed[1].contains("EXCEPTION"), "{}", parsed[1]);
+        assert!(parsed[1].contains("RETURN NULL"), "{}", parsed[1]);
+        assert!(
+            !parsed[1].contains("INSERT INTO seed_meta"),
+            "helper swallowed the next statement: {}",
+            parsed[1]
+        );
+        assert!(parsed[2].contains("'b;c'"), "{}", parsed[2]);
+        let forward = forward_statements();
+        let helper = forward
+            .iter()
+            .find(|stmt| stmt.contains("FUNCTION fdd.try_double"))
+            .expect("startup installs fdd.try_double");
+        assert!(helper.contains("EXCEPTION"), "{helper}");
+        assert!(helper.contains("RETURN NULL"), "{helper}");
+        assert!(
+            forward.iter().any(|stmt| stmt.contains("fdd.pack_runtime")),
+            "startup records the pack contract"
+        );
+        assert!(
+            forward
+                .iter()
+                .any(|stmt| stmt.contains("SET search_path = pg_catalog")),
+            "helper search_path is pinned"
+        );
     }
 }
