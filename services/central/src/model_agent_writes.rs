@@ -715,6 +715,7 @@ mod tests {
                 .exists(),
             "a denied write reached the model"
         );
+        open_fdd_edge_prototype::auth::audit::flush_sink();
         assert_eq!(
             audit_events(workspace.path(), "agent_write_denied").len(),
             8,
@@ -752,6 +753,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::OK, "dry run needs no confirm: {json}");
 
+        open_fdd_edge_prototype::auth::audit::flush_sink();
         let events = audit_events(workspace.path(), "model_agent_write");
         assert_eq!(
             events.len(),
