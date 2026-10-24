@@ -194,25 +194,121 @@ impl NfPortalDriver {
         parse_point_query_json(text)
     }
 
-    /// Portal inventory through the same read-only point query. History stays
+    /// Portal inventory through the read-only point query, one page at a time.
+    ///
+    /// Normal Framework `GetPoints` (`POST /api/v1/point/query`) pages with
+    /// `pageSize` and `pageOffset` and reports `totalCount`. `version` is the
+    /// snapshot token when the portal sends one. History stays
     /// `GET /api/v1/point/data`.
+    ///
+    /// The walk stops when `totalCount` is reached, when a short page ends a
+    /// result that did not advertise a total, or when the byte, time, or page
+    /// budget is exhausted. A later-page failure returns the pages already
+    /// accepted and `complete: false`. The first page's failure is an error,
+    /// so a transport failure with no page does not look like an empty inventory.
     pub async fn query_inventory(
         &mut self,
         page_size: u32,
     ) -> Result<super::inventory_sync::InventorySnapshot, ProviderError> {
-        let page_size = page_size.clamp(1, 500);
+        let page_size = page_size.clamp(1, MAX_INVENTORY_PAGE_SIZE);
         let url = format!("{}/api/v1/point/query", self.endpoint);
-        let (status, bytes, retry_after) = self
-            .send(
-                &url,
-                Some(serde_json::json!({ "pageSize": page_size })),
-                true,
-                true,
-            )
-            .await?;
-        self.ensure_success(status, retry_after)?;
-        let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
-        parse_inventory_json(text, page_size)
+        let deadline = tokio::time::Instant::now() + self.limits.total;
+        let budget = self.limits.max_body_bytes;
+        let mut pages: Vec<String> = Vec::new();
+        let mut bytes_read: usize = 0;
+        let mut offset: u64 = 0;
+        loop {
+            if pages.len() >= MAX_INVENTORY_PAGES {
+                return annotate_inventory(
+                    &pages,
+                    page_size,
+                    bytes_read,
+                    Some("budget_pages".to_string()),
+                );
+            }
+            if tokio::time::Instant::now() >= deadline {
+                if pages.is_empty() {
+                    return Err(ProviderError::new(ProviderErrorCode::DeadlineExceeded));
+                }
+                return annotate_inventory(
+                    &pages,
+                    page_size,
+                    bytes_read,
+                    Some("budget_time".to_string()),
+                );
+            }
+            if bytes_read >= budget {
+                if pages.is_empty() {
+                    return Err(ProviderError::new(ProviderErrorCode::BodyTooLarge));
+                }
+                return annotate_inventory(
+                    &pages,
+                    page_size,
+                    bytes_read,
+                    Some("budget_bytes".to_string()),
+                );
+            }
+            let remaining = budget.saturating_sub(bytes_read);
+            let body = serde_json::json!({
+                "pageSize": page_size,
+                "pageOffset": offset.to_string(),
+                "sortField": "uuid",
+                "sortOrder": "ASC",
+            });
+            let fetched = self
+                .send_bounded(&url, Some(body), true, true, deadline, remaining)
+                .await;
+            let bytes = match fetched {
+                Ok((_status, bytes, _retry)) => bytes,
+                Err(err) => {
+                    if pages.is_empty() {
+                        return Err(err);
+                    }
+                    return annotate_inventory(
+                        &pages,
+                        page_size,
+                        bytes_read,
+                        Some(later_page_reason(&err).to_string()),
+                    );
+                }
+            };
+            bytes_read = bytes_read.saturating_add(bytes.len());
+            let text = match std::str::from_utf8(&bytes) {
+                Ok(text) => text.to_string(),
+                Err(_) => {
+                    if pages.is_empty() {
+                        return Err(ProviderError::contract());
+                    }
+                    return annotate_inventory(
+                        &pages,
+                        page_size,
+                        bytes_read,
+                        Some("contract".to_string()),
+                    );
+                }
+            };
+            pages.push(text);
+            let snap = match fold_inventory_pages(&pages, page_size) {
+                Ok(snap) => snap,
+                Err(err) => {
+                    pages.pop();
+                    if pages.is_empty() {
+                        return Err(err);
+                    }
+                    return annotate_inventory(
+                        &pages,
+                        page_size,
+                        bytes_read,
+                        Some("contract".to_string()),
+                    );
+                }
+            };
+            let waiting = !snap.complete && snap.diagnostics.reason.as_deref() == Some("truncated");
+            if !waiting {
+                return Ok(stamp_inventory_bytes(snap, bytes_read));
+            }
+            offset = u64::try_from(snap.source_points).unwrap_or(u64::MAX);
+        }
     }
 
     /// Read history via GetData (`GET /api/v1/point/data`).
@@ -296,13 +392,48 @@ impl NfPortalDriver {
         bearer: bool,
         allow_auth_retry: bool,
     ) -> Result<(reqwest::StatusCode, Vec<u8>, Option<u64>), ProviderError> {
+        let deadline = tokio::time::Instant::now() + self.limits.total;
+        self.send_bounded(
+            url,
+            json_body,
+            bearer,
+            allow_auth_retry,
+            deadline,
+            self.limits.max_body_bytes,
+        )
+        .await
+    }
+
+    /// One request under an explicit deadline and byte cap. Inventory pages
+    /// share one deadline and one total byte budget.
+    async fn send_bounded(
+        &mut self,
+        url: &str,
+        json_body: Option<Value>,
+        bearer: bool,
+        allow_auth_retry: bool,
+        deadline: tokio::time::Instant,
+        max_bytes: usize,
+    ) -> Result<(reqwest::StatusCode, Vec<u8>, Option<u64>), ProviderError> {
         let attempts = if allow_auth_retry { 2 } else { 1 };
         for attempt in 0..attempts {
+            if tokio::time::Instant::now() >= deadline {
+                return Err(ProviderError::new(ProviderErrorCode::DeadlineExceeded));
+            }
             if bearer && !self.anonymous && !self.token_fresh() {
                 self.authenticate_force().await?;
             }
-            let deadline = tokio::time::Instant::now() + self.limits.total;
-            let response = self.dispatch(url, json_body.clone(), bearer).await?;
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            let response = match tokio::time::timeout(
+                remaining,
+                self.dispatch(url, json_body.clone(), bearer),
+            )
+            .await
+            {
+                Ok(Ok(response)) => response,
+                Ok(Err(err)) => return Err(err),
+                Err(_) => return Err(ProviderError::new(ProviderErrorCode::DeadlineExceeded)),
+            };
             let status = response.status();
             let retry_after = response
                 .headers()
@@ -329,7 +460,7 @@ impl NfPortalDriver {
             if status.is_redirection() {
                 return Err(status_error(status, None));
             }
-            let bytes = read_body_bounded(response, self.limits.max_body_bytes, deadline).await?;
+            let bytes = read_body_bounded(response, max_bytes, deadline).await?;
             if !status.is_success() {
                 return Err(status_error(status, retry_after));
             }
@@ -524,6 +655,13 @@ pub fn parse_token_json(text: &str) -> Result<(String, Option<i64>), ProviderErr
 struct PointQueryResponse {
     #[serde(default)]
     points: Vec<NfPoint>,
+    /// Portal result size. NF sends this as a string. Absent means this page
+    /// does not prove how many points exist.
+    #[serde(default, rename = "totalCount", alias = "total_count")]
+    total_count: Option<Value>,
+    /// Snapshot token. Every page of one walk must carry the same value.
+    #[serde(default, alias = "snapshotVersion")]
+    version: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -597,32 +735,286 @@ pub fn parse_point_query_json(text: &str) -> Result<Vec<RawProviderPoint>, Provi
     Ok(out)
 }
 
+const MAX_INVENTORY_PAGE_SIZE: u32 = 500;
+const MAX_INVENTORY_PAGES: usize = 64;
+const MAX_SNAPSHOT_VERSION_LEN: usize = 128;
+
+struct ParsedInventoryPage {
+    points: Vec<super::inventory_sync::InventoryPoint>,
+    source_points: usize,
+    total_count: Option<u64>,
+    version: Option<String>,
+    /// The same portal point id appeared twice in this page.
+    duplicate: bool,
+}
+
+#[derive(Default)]
+struct InventoryWalk {
+    pages: Vec<ParsedInventoryPage>,
+    source_points: u64,
+    total_count: Option<u64>,
+    version: Option<String>,
+    seen: std::collections::HashSet<String>,
+}
+
+impl InventoryWalk {
+    /// Accept one page or reject it without merging. A rejected page leaves
+    /// the pages already accepted unchanged.
+    fn integrate(&mut self, page: ParsedInventoryPage, page_size: u32) -> Result<(), String> {
+        if page.duplicate {
+            return Err("duplicate_point".to_string());
+        }
+        let after = self.source_points.saturating_add(page.source_points as u64);
+        let total = match (self.pages.is_empty(), self.total_count, page.total_count) {
+            (true, _, total) => total,
+            (false, None, None) => None,
+            (false, None, Some(total)) if total == after => Some(total),
+            (false, Some(prev), Some(total)) if prev == total => Some(prev),
+            _ => return Err("snapshot_changed".to_string()),
+        };
+        let version = match (self.pages.is_empty(), &self.version, &page.version) {
+            (true, _, version) => version.clone(),
+            (false, None, None) => None,
+            (false, None, Some(version)) => Some(version.clone()),
+            (false, Some(prev), Some(version)) if prev == version => Some(prev.clone()),
+            _ => return Err("snapshot_changed".to_string()),
+        };
+        if page.source_points > page_size as usize && total != Some(after) {
+            return Err("page_overflow".to_string());
+        }
+        if total.is_some_and(|total| after > total) {
+            return Err("count_mismatch".to_string());
+        }
+        // A short page before the advertised total is not a place to resume.
+        if page.source_points < page_size as usize && total.is_some_and(|total| after < total) {
+            return Err("short_page".to_string());
+        }
+        for point in &page.points {
+            if self.seen.contains(&point.portal_point_id) {
+                return Err("duplicate_point".to_string());
+            }
+        }
+        for point in &page.points {
+            self.seen.insert(point.portal_point_id.clone());
+        }
+        self.total_count = total;
+        self.version = version;
+        self.source_points = after;
+        self.pages.push(page);
+        Ok(())
+    }
+
+    fn finish(
+        self,
+        page_size: u32,
+        bytes_read: usize,
+        forced: Option<String>,
+    ) -> super::inventory_sync::InventorySnapshot {
+        use super::inventory_sync::{InventoryDiagnostics, InventorySnapshot};
+        let complete = forced.is_none() && sequence_complete(&self, page_size);
+        let reason = if complete {
+            None
+        } else {
+            Some(forced.unwrap_or_else(|| infer_incomplete_reason(&self)))
+        };
+        let pages_fetched = u32::try_from(self.pages.len()).unwrap_or(u32::MAX);
+        let mut points = Vec::new();
+        for page in self.pages {
+            points.extend(page.points);
+        }
+        InventorySnapshot {
+            points,
+            source_points: usize::try_from(self.source_points).unwrap_or(usize::MAX),
+            complete,
+            diagnostics: InventoryDiagnostics {
+                pages_fetched,
+                bytes_read: u64::try_from(bytes_read).unwrap_or(u64::MAX),
+                total_count: self.total_count,
+                snapshot_version: self.version,
+                reason,
+            },
+        }
+    }
+}
+
+fn sequence_complete(walk: &InventoryWalk, page_size: u32) -> bool {
+    if walk.pages.is_empty() {
+        return false;
+    }
+    if let Some(total) = walk.total_count {
+        return walk.source_points == total;
+    }
+    let last_short = walk
+        .pages
+        .last()
+        .is_some_and(|page| page.source_points < page_size as usize);
+    walk.source_points > 0 && last_short
+}
+
+fn infer_incomplete_reason(walk: &InventoryWalk) -> String {
+    if walk.pages.is_empty() || walk.source_points == 0 {
+        return "missing_total".to_string();
+    }
+    if let Some(total) = walk.total_count {
+        if walk.source_points > total {
+            return "count_mismatch".to_string();
+        }
+    }
+    "truncated".to_string()
+}
+
+fn later_page_reason(err: &ProviderError) -> &'static str {
+    match err.code {
+        ProviderErrorCode::DeadlineExceeded => "budget_time",
+        ProviderErrorCode::BodyTooLarge => "budget_bytes",
+        ProviderErrorCode::Contract | ProviderErrorCode::InvalidSample => "contract",
+        _ => "interrupted",
+    }
+}
+
+fn optional_count(value: Option<Value>) -> Result<Option<u64>, ProviderError> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(number)) => number
+            .as_u64()
+            .map(Some)
+            .ok_or_else(ProviderError::contract),
+        Some(Value::String(text)) => {
+            let text = text.trim();
+            if text.is_empty() {
+                Ok(None)
+            } else {
+                text.parse::<u64>()
+                    .map(Some)
+                    .map_err(|_| ProviderError::contract())
+            }
+        }
+        Some(_) => Err(ProviderError::contract()),
+    }
+}
+
+fn snapshot_version(raw: Option<String>) -> Result<Option<String>, ProviderError> {
+    let Some(text) = raw else {
+        return Ok(None);
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    if text.len() > MAX_SNAPSHOT_VERSION_LEN || text.chars().any(char::is_control) {
+        return Err(ProviderError::contract());
+    }
+    Ok(Some(text.to_string()))
+}
+
+fn fold_inventory_pages(
+    pages: &[String],
+    page_size: u32,
+) -> Result<super::inventory_sync::InventorySnapshot, ProviderError> {
+    if let [only] = pages {
+        parse_inventory_json(only, page_size)
+    } else {
+        let refs: Vec<&str> = pages.iter().map(String::as_str).collect();
+        assemble_inventory_pages(&refs, page_size)
+    }
+}
+
+fn annotate_inventory(
+    pages: &[String],
+    page_size: u32,
+    bytes_read: usize,
+    reason: Option<String>,
+) -> Result<super::inventory_sync::InventorySnapshot, ProviderError> {
+    let mut snap = fold_inventory_pages(pages, page_size)?;
+    snap.complete = false;
+    if let Some(reason) = reason {
+        snap.diagnostics.reason = Some(reason);
+    }
+    Ok(stamp_inventory_bytes(snap, bytes_read))
+}
+
+fn stamp_inventory_bytes(
+    mut snap: super::inventory_sync::InventorySnapshot,
+    bytes_read: usize,
+) -> super::inventory_sync::InventorySnapshot {
+    snap.diagnostics.bytes_read = u64::try_from(bytes_read).unwrap_or(u64::MAX);
+    snap
+}
+
+/// Fold already-fetched portal pages with the same acceptance rules as the
+/// live walk: stable `totalCount` and `version`, no duplicate point ids, and
+/// completeness only when the total is proven or a short page ends the result.
+pub(crate) fn assemble_inventory_pages(
+    bodies: &[&str],
+    page_size: u32,
+) -> Result<super::inventory_sync::InventorySnapshot, ProviderError> {
+    let page_size = page_size.clamp(1, MAX_INVENTORY_PAGE_SIZE);
+    let mut walk = InventoryWalk::default();
+    let mut forced = None;
+    for body in bodies {
+        if sequence_complete(&walk, page_size) {
+            break;
+        }
+        let page = parse_inventory_page(body)?;
+        if let Err(reason) = walk.integrate(page, page_size) {
+            forced = Some(reason);
+            break;
+        }
+        if sequence_complete(&walk, page_size) || last_page_is_short(&walk, page_size) {
+            break;
+        }
+    }
+    Ok(walk.finish(page_size, 0, forced))
+}
+
+fn last_page_is_short(walk: &InventoryWalk, page_size: u32) -> bool {
+    walk.pages
+        .last()
+        .is_some_and(|page| page.source_points < page_size as usize)
+}
+
 /// Point query response → inventory snapshot. Unlike the latest-value parser,
 /// a point needs no `latestValue`; identity and portal tags are enough.
 ///
 /// A point joins the model when its attrs carry `equipRef`. A custom `role`
 /// is optional: a point with Haystack markers and no role stays in the
 /// inventory. Typed `kind`, `tz`, `his`, `hisMode`, `enum`, and `airRef` are
-/// kept. A full page may be truncated, so it is marked incomplete and sync
-/// does not remove anything from it.
+/// kept.
+///
+/// One response is complete when `totalCount` equals the points in that
+/// response, including `totalCount: 0` (an empty inventory the portal
+/// finished on purpose). A response with no `totalCount` is complete only
+/// when it is a short page (`0 < points < pageSize`). A full page without a
+/// total is truncated. An empty body with no total is not an empty inventory.
 pub fn parse_inventory_json(
     text: &str,
     page_size: u32,
 ) -> Result<super::inventory_sync::InventorySnapshot, ProviderError> {
-    use super::inventory_sync::{InventoryPoint, InventorySnapshot};
+    assemble_inventory_pages(&[text], page_size)
+}
+
+fn parse_inventory_page(text: &str) -> Result<ParsedInventoryPage, ProviderError> {
+    use super::inventory_sync::InventoryPoint;
     let parsed: PointQueryResponse =
         serde_json::from_str(text).map_err(|_| ProviderError::contract())?;
     let source_points = parsed.points.len();
     if source_points > MAX_SAMPLES_PER_RESPONSE {
         return Err(ProviderError::new(ProviderErrorCode::BodyTooLarge));
     }
+    let total_count = optional_count(parsed.total_count)?;
+    let version = snapshot_version(parsed.version)?;
     let mut points = Vec::new();
     let mut seen = std::collections::HashSet::new();
+    let mut duplicate = false;
     for pt in parsed.points {
         let Some(portal_point_id) = pt.uuid.or(pt.id).map(|s| s.trim().to_string()) else {
             continue;
         };
-        if !valid_point_id(&portal_point_id) || !seen.insert(portal_point_id.clone()) {
+        if !valid_point_id(&portal_point_id) {
+            continue;
+        }
+        if !seen.insert(portal_point_id.clone()) {
+            duplicate = true;
             continue;
         }
         let attrs = pt.attrs.unwrap_or_default();
@@ -674,10 +1066,12 @@ pub fn parse_inventory_json(
             ref_id,
         });
     }
-    Ok(InventorySnapshot {
+    Ok(ParsedInventoryPage {
         points,
         source_points,
-        complete: source_points > 0 && source_points < page_size as usize,
+        total_count,
+        version,
+        duplicate,
     })
 }
 
@@ -851,6 +1245,51 @@ pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, Provider
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+pub(crate) fn synthetic_inventory_bodies(n: usize, page_size: usize) -> Vec<String> {
+    let page_size = page_size.max(1);
+    let points: Vec<serde_json::Value> = (0..n)
+        .map(|index| {
+            let last = index + 1 == n;
+            let equip = if last { "EQ_FINAL" } else { "EQ_MAIN" };
+            let role = if last {
+                "sat".to_string()
+            } else {
+                format!("r{index:03}")
+            };
+            serde_json::json!({
+                "uuid": format!("pt-{index:04}"),
+                "attrs": {
+                    "equipRef": equip,
+                    "equipType": "ahu",
+                    "role": role,
+                    "kind": "Number",
+                    "markers": "sensor"
+                }
+            })
+        })
+        .collect();
+    if n == 0 {
+        return vec![serde_json::json!({
+            "points": [],
+            "totalCount": "0",
+            "version": "snap-1"
+        })
+        .to_string()];
+    }
+    points
+        .chunks(page_size)
+        .map(|chunk| {
+            serde_json::json!({
+                "points": chunk,
+                "totalCount": n.to_string(),
+                "version": "snap-1"
+            })
+            .to_string()
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -1258,5 +1697,287 @@ mod tests {
         let req = seen.lock().await.clone();
         assert!(req.starts_with("GET /api/v1/point/data?"), "{req}");
         assert!(!req.starts_with("POST"));
+    }
+
+    fn bodies_of(n: usize) -> Vec<String> {
+        synthetic_inventory_bodies(n, 500)
+    }
+
+    #[test]
+    fn page_boundaries_match_total_count() {
+        for n in [1_usize, 499, 500] {
+            let bodies = bodies_of(n);
+            assert_eq!(bodies.len(), 1, "{n}");
+            let snap = assemble_inventory_pages(&[&bodies[0]], 500).unwrap();
+            assert!(snap.complete, "{n}");
+            assert_eq!(snap.source_points, n);
+            assert_eq!(snap.diagnostics.pages_fetched, 1);
+            assert_eq!(snap.diagnostics.total_count, Some(n as u64));
+            assert_eq!(snap.diagnostics.snapshot_version.as_deref(), Some("snap-1"));
+            assert!(snap.diagnostics.reason.is_none());
+            assert!(snap.points.iter().any(|pt| pt.equipment_id == "EQ_FINAL"));
+        }
+        let empty = bodies_of(0);
+        let snap = assemble_inventory_pages(&[&empty[0]], 500).unwrap();
+        assert!(snap.complete, "totalCount 0 is a finished empty inventory");
+        assert_eq!(snap.source_points, 0);
+        assert!(snap.points.is_empty());
+
+        let unspecified = assemble_inventory_pages(&[r#"{"points":[]}"#], 500).unwrap();
+        assert!(!unspecified.complete);
+        assert_eq!(
+            unspecified.diagnostics.reason.as_deref(),
+            Some("missing_total")
+        );
+
+        let full = bodies_of(500);
+        let mut bare: serde_json::Value = serde_json::from_str(&full[0]).unwrap();
+        bare.as_object_mut().unwrap().remove("totalCount");
+        bare.as_object_mut().unwrap().remove("version");
+        let bare = bare.to_string();
+        let truncated = assemble_inventory_pages(&[&bare], 500).unwrap();
+        assert!(!truncated.complete);
+        assert_eq!(truncated.diagnostics.reason.as_deref(), Some("truncated"));
+        let proved = assemble_inventory_pages(&[&bare, r#"{"points":[]}"#], 500).unwrap();
+        assert!(proved.complete, "empty next page ends a 500-point result");
+        assert_eq!(proved.source_points, 500);
+        assert_eq!(proved.diagnostics.pages_fetched, 2);
+    }
+
+    #[test]
+    fn multipage_keeps_the_final_device_and_rejects_a_moved_snapshot() {
+        let bodies = bodies_of(501);
+        assert_eq!(bodies.len(), 2);
+        assert!(!bodies[0].contains("EQ_FINAL"));
+        assert!(bodies[1].contains("EQ_FINAL"));
+        let snap = assemble_inventory_pages(&[&bodies[0], &bodies[1]], 500).unwrap();
+        assert!(snap.complete);
+        assert_eq!(snap.source_points, 501);
+        assert_eq!(snap.points.len(), 501);
+        assert_eq!(snap.diagnostics.pages_fetched, 2);
+        assert!(snap.points.iter().any(|pt| pt.equipment_id == "EQ_FINAL"));
+
+        let only_first = assemble_inventory_pages(&[&bodies[0]], 500).unwrap();
+        assert!(!only_first.complete);
+        assert!(!only_first
+            .points
+            .iter()
+            .any(|pt| pt.equipment_id == "EQ_FINAL"));
+
+        let mut moved: serde_json::Value = serde_json::from_str(&bodies[1]).unwrap();
+        moved["version"] = serde_json::json!("snap-2");
+        let moved = moved.to_string();
+        let changed = assemble_inventory_pages(&[&bodies[0], &moved], 500).unwrap();
+        assert!(!changed.complete);
+        assert_eq!(
+            changed.diagnostics.reason.as_deref(),
+            Some("snapshot_changed")
+        );
+        assert_eq!(changed.diagnostics.pages_fetched, 1);
+
+        let mut dup: serde_json::Value = serde_json::from_str(&bodies[1]).unwrap();
+        dup["points"][0]["uuid"] = serde_json::json!("pt-0000");
+        let dup = dup.to_string();
+        let duplicate = assemble_inventory_pages(&[&bodies[0], &dup], 500).unwrap();
+        assert!(!duplicate.complete);
+        assert_eq!(
+            duplicate.diagnostics.reason.as_deref(),
+            Some("duplicate_point")
+        );
+        assert!(!duplicate
+            .points
+            .iter()
+            .any(|pt| pt.equipment_id == "EQ_FINAL"));
+    }
+
+    async fn read_http_message(sock: &mut tokio::net::TcpStream) -> (String, Vec<u8>) {
+        let mut buf = Vec::new();
+        let mut tmp = [0u8; 4096];
+        let header_end = loop {
+            let n = tokio::time::timeout(Duration::from_secs(2), sock.read(&mut tmp))
+                .await
+                .expect("header timeout")
+                .expect("header read");
+            if n == 0 {
+                break 0;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+            if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                break pos + 4;
+            }
+        };
+        let headers = String::from_utf8_lossy(&buf[..header_end]).to_string();
+        let len = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                if name.eq_ignore_ascii_case("content-length") {
+                    value.trim().parse::<usize>().ok()
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+        while buf.len() < header_end + len {
+            let n = tokio::time::timeout(Duration::from_secs(2), sock.read(&mut tmp))
+                .await
+                .expect("body timeout")
+                .expect("body read");
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+        }
+        let body = buf
+            .get(header_end..header_end + len)
+            .unwrap_or(&[])
+            .to_vec();
+        (headers, body)
+    }
+
+    fn write_http(status: &str, body: &str) -> Vec<u8> {
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .into_bytes()
+    }
+
+    #[derive(Clone, Copy)]
+    enum LaterPage {
+        Ok,
+        Interrupt,
+        Delay,
+    }
+
+    struct PagePortal {
+        port: u16,
+        offsets: std::sync::Arc<tokio::sync::Mutex<Vec<u64>>>,
+    }
+
+    impl PagePortal {
+        async fn start(pages: Vec<String>, page_size: u64, later: LaterPage) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let offsets = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
+            let recorded = std::sync::Arc::clone(&offsets);
+            tokio::spawn(async move {
+                loop {
+                    let Ok((mut sock, _)) = listener.accept().await else {
+                        break;
+                    };
+                    let (headers, body) = read_http_message(&mut sock).await;
+                    if !headers.starts_with("POST /api/v1/point/query") {
+                        let _ = sock
+                            .write_all(&write_http("404 Not Found", r#"{"points":[]}"#))
+                            .await;
+                        continue;
+                    }
+                    let parsed: serde_json::Value =
+                        serde_json::from_slice(&body).unwrap_or_default();
+                    let offset = parsed
+                        .get("pageOffset")
+                        .and_then(|v| v.as_str())
+                        .and_then(|v| v.parse::<u64>().ok())
+                        .unwrap_or(0);
+                    recorded.lock().await.push(offset);
+                    if offset > 0 {
+                        match later {
+                            LaterPage::Interrupt => {
+                                let _ = sock
+                                    .write_all(&write_http(
+                                        "503 Service Unavailable",
+                                        r#"{"points":[]}"#,
+                                    ))
+                                    .await;
+                                continue;
+                            }
+                            LaterPage::Delay => {
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                            }
+                            LaterPage::Ok => {}
+                        }
+                    }
+                    let index = usize::try_from(offset / page_size).unwrap_or(usize::MAX);
+                    let payload = pages
+                        .get(index)
+                        .map(String::as_str)
+                        .unwrap_or(r#"{"points":[]}"#);
+                    let _ = sock.write_all(&write_http("200 OK", payload)).await;
+                }
+            });
+            Self { port, offsets }
+        }
+    }
+
+    fn anon_driver(port: u16, limits: HttpLimits) -> NfPortalDriver {
+        NfPortalDriver::new(
+            "nf:test",
+            format!("http://127.0.0.1:{port}"),
+            None,
+            None,
+            true,
+            limits,
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn driver_pages_501_points_and_stops_on_a_failed_later_page() {
+        let pages = bodies_of(501);
+        let portal = PagePortal::start(pages, 500, LaterPage::Ok).await;
+        let mut driver = anon_driver(portal.port, HttpLimits::default());
+        let snap = driver.query_inventory(500).await.unwrap();
+        assert!(snap.complete);
+        assert_eq!(snap.source_points, 501);
+        assert_eq!(snap.diagnostics.pages_fetched, 2);
+        assert!(snap.points.iter().any(|pt| pt.equipment_id == "EQ_FINAL"));
+        let offsets = portal.offsets.lock().await.clone();
+        assert_eq!(offsets, vec![0, 500]);
+
+        let failed = PagePortal::start(bodies_of(501), 500, LaterPage::Interrupt).await;
+        let mut driver = anon_driver(failed.port, HttpLimits::default());
+        let partial = driver.query_inventory(500).await.unwrap();
+        assert!(!partial.complete);
+        assert_eq!(partial.diagnostics.reason.as_deref(), Some("interrupted"));
+        assert_eq!(partial.diagnostics.pages_fetched, 1);
+        assert!(!partial
+            .points
+            .iter()
+            .any(|pt| pt.equipment_id == "EQ_FINAL"));
+    }
+
+    #[tokio::test]
+    async fn later_page_respects_time_and_byte_budgets() {
+        let delayed =
+            PagePortal::start(synthetic_inventory_bodies(2, 1), 1, LaterPage::Delay).await;
+        let mut driver = anon_driver(
+            delayed.port,
+            HttpLimits {
+                connect: Duration::from_millis(200),
+                total: Duration::from_millis(300),
+                max_body_bytes: 1024 * 1024,
+            },
+        );
+        let snap = driver.query_inventory(1).await.unwrap();
+        assert!(!snap.complete);
+        assert_eq!(snap.diagnostics.reason.as_deref(), Some("budget_time"));
+        assert_eq!(snap.diagnostics.pages_fetched, 1);
+
+        let pages = synthetic_inventory_bodies(2, 1);
+        let budget = pages[0].len();
+        let limited = PagePortal::start(pages, 1, LaterPage::Ok).await;
+        let mut driver = anon_driver(
+            limited.port,
+            HttpLimits {
+                max_body_bytes: budget,
+                ..HttpLimits::default()
+            },
+        );
+        let snap = driver.query_inventory(1).await.unwrap();
+        assert!(!snap.complete);
+        assert_eq!(snap.diagnostics.reason.as_deref(), Some("budget_bytes"));
+        assert_eq!(snap.source_points, 1);
+        assert_eq!(limited.offsets.lock().await.clone(), vec![0]);
     }
 }
