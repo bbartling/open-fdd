@@ -239,7 +239,7 @@ export function SitesPanel() {
         title="Delete site"
         message={
           deleteTarget
-            ? `Permanently delete site "${deleteTarget}"? This removes feathers, FDD rule results, analytics parquet, csv package data, and jobs linked to this site. This cannot be undone.`
+            ? `Permanently delete site "${deleteTarget}"? This removes Timescale samples for the site, FDD rule results, analytics result cache, csv package data, and jobs linked to this site. This cannot be undone.`
             : "Delete this site?"
         }
         confirmLabel="Delete site"

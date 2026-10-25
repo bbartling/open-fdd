@@ -169,8 +169,12 @@ function parseInstant(value: unknown): number | null {
 }
 
 /**
- * A week bucket is partial when the historian says so, or when the requested
- * window does not cover that bucket's Monday-start through the next Monday.
+ * Historian completeness for one ISO week bucket.
+ *
+ * `partial_week` from central means the observed sample span is shorter than
+ * six days (`MAX(ts) - MIN(ts) < interval '6 days'`). A short span is never a
+ * full week. Separately, a request window that clips the Monday→next-Monday
+ * bucket also marks the week partial even when the historian span is complete.
  */
 export function weekBucketIsPartial(
   row: Record<string, unknown>,
@@ -186,6 +190,15 @@ export function weekBucketIsPartial(
   if (from != null && from > start) return true;
   if (to != null && to < end) return true;
   return false;
+}
+
+/** True only when the historian span is complete and the request does not clip. */
+export function weekBucketIsComplete(
+  row: Record<string, unknown>,
+  windowStart?: string | null,
+  windowEnd?: string | null,
+): boolean {
+  return !weekBucketIsPartial(row, windowStart, windowEnd);
 }
 
 export function partialWeekLabel(label: string, partial: boolean): string {

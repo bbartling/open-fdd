@@ -167,8 +167,16 @@ describe("fddApi", () => {
           name: "avg_zone_temp",
           value: 72.4,
           unit: "degF",
-          window: { start: "2026-06-01T00:00:00Z", end: null, watermark: "2026-06-01T01:00:00Z" },
+          window: {
+            start: "2026-06-01T00:00:00Z",
+            end: "2026-06-01T01:00:00Z",
+            observed_start: "2026-06-01T00:00:00Z",
+            observed_end: "2026-06-01T01:00:00Z",
+            watermark: "2026-06-01T01:00:00Z",
+            unknown: false,
+          },
           coverage: { sample_rows: 2 },
+          provenance: { source: "timescale", config_fingerprint: "cfghash" },
         },
       },
     ]);
@@ -176,6 +184,33 @@ describe("fddApi", () => {
     expect(metricCsv).toContain("avg_zone_temp");
     expect(metricCsv).toContain("72.4");
     expect(metricCsv).toContain("degF");
+    expect(metricCsv).toContain("metric_window_unknown");
+    expect(metricCsv).toContain("false");
+    expect(metricCsv).toContain("timescale");
+    expect(metricCsv).toContain("cfghash");
+    const unknownCsv = resultsToCsvArtifact([
+      {
+        rule_id: "AVG-ZONE-TEMP",
+        equipment_id: "AHU_1",
+        status: "METRIC",
+        output_kind: "metric",
+        metric: {
+          name: "avg_zone_temp",
+          value: 72.4,
+          unit: "degF",
+          window: { start: null, end: null, unknown: true },
+          coverage: { sample_rows: 2 },
+        },
+      },
+    ]);
+    const unknownLine = unknownCsv.split("\n")[1] ?? "";
+    const unknownCols = unknownLine.split(",");
+    const headers = unknownCsv.split("\n")[0]?.split(",") ?? [];
+    const unknownIdx = headers.indexOf("metric_window_unknown");
+    expect(unknownIdx).toBeGreaterThan(0);
+    expect(unknownCols[unknownIdx]).toBe("true");
+    expect(unknownCols[headers.indexOf("metric_window_start")]).toBe("");
+    expect(unknownCols[headers.indexOf("metric_window_end")]).toBe("");
   });
 
   it("loads rule params and clamps payloads", async () => {
