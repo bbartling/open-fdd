@@ -20,6 +20,12 @@ import {
   setStoredActiveTenant,
   type TenantsListResponse,
 } from "../api/tenantApi";
+import {
+  initialCollapsed,
+  SIDEBAR_NARROW_MQ,
+  sidebarShellFlags,
+  writeCollapsedPreference,
+} from "../lib/sidebarLayout";
 
 /** Keep wheel scrolling inside a pane so the document does not chain-scroll. */
 function useWheelScrollContainment(ref: React.RefObject<HTMLElement | null>) {
@@ -80,7 +86,20 @@ export function AppShell({
   hideHeader = false,
   hideSectionTabs = false,
 }: AppShellProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [isNarrow, setIsNarrow] = useState<boolean>(() => {
+    try {
+      return window.matchMedia(SIDEBAR_NARROW_MQ).matches;
+    } catch {
+      return false;
+    }
+  });
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return initialCollapsed(window.matchMedia(SIDEBAR_NARROW_MQ).matches);
+    } catch {
+      return initialCollapsed(false);
+    }
+  });
   const [sidebarWidthPx, setSidebarWidthPx] = useState<number>(() => {
     try {
       const raw = localStorage.getItem("openfdd.ui.sidebar_width_px");
@@ -244,6 +263,37 @@ export function AppShell({
   }, [sidebarRight]);
 
   useEffect(() => {
+    let mq: MediaQueryList;
+    try {
+      mq = window.matchMedia(SIDEBAR_NARROW_MQ);
+    } catch {
+      return;
+    }
+    const sync = () => setIsNarrow(mq.matches);
+    sync();
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", sync);
+      return () => mq.removeEventListener("change", sync);
+    }
+    mq.addListener(sync);
+    return () => mq.removeListener(sync);
+  }, []);
+
+  useEffect(() => {
+    writeCollapsedPreference(collapsed);
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (!isNarrow || collapsed) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setCollapsed(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isNarrow, collapsed]);
+
+  useEffect(() => {
     let cancelled = false;
     const reloadKey = "openfdd.ui.version_reload_at";
     void (async () => {
@@ -403,16 +453,23 @@ export function AppShell({
     multiTenant &&
     !hubAdmin &&
     (tenantListDenied || (tenantIds.length === 0 && memberships.length === 0));
+  const layoutFlags = sidebarShellFlags({ collapsed, isNarrow });
+  const shellClass = [
+    "app-shell",
+    ...layoutFlags.classNames,
+    sidebarRight ? "app-shell--sidebar-right" : "",
+    sidebarResizing ? "app-shell--sidebar-resizing" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div
-      className={`app-shell${
-        collapsed ? " app-shell--sidebar-collapsed" : ""
-      }${sidebarRight ? " app-shell--sidebar-right" : ""}${
-        sidebarResizing ? " app-shell--sidebar-resizing" : ""
-      }`}
+      className={shellClass}
       data-testid="app-shell"
       data-sidebar-collapsed={collapsed ? "true" : "false"}
+      data-sidebar-viewport={layoutFlags.mode}
+      data-sidebar-narrow-expanded={layoutFlags.narrowExpanded ? "true" : "false"}
       style={
         {
           "--sidebar-width": `${sidebarWidthPx}px`,

@@ -7,6 +7,10 @@ import { MemoryRouter } from "react-router";
 import { AppShell } from "./AppShell";
 import { MAIN_SECTIONS } from "../nav/sections";
 import { apiFetch } from "../api/client";
+import {
+  SIDEBAR_COLLAPSED_KEY,
+  SIDEBAR_NARROW_MQ,
+} from "../lib/sidebarLayout";
 
 const appCss = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../styles/app.css"),
@@ -99,11 +103,32 @@ function membershipResponse(active: string) {
   };
 }
 
+function mockMatchMedia(matchesNarrow: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => {
+      const matches = query === SIDEBAR_NARROW_MQ ? matchesNarrow : false;
+      return {
+        matches,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      };
+    }),
+  });
+}
+
 describe("AppShell layout parity", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
     localStorage.clear();
+    mockMatchMedia(false);
     if (originalFetch) vi.mocked(apiFetch).mockImplementation(originalFetch);
   });
 
@@ -173,7 +198,91 @@ describe("AppShell layout parity", () => {
     expect(await screen.findByTestId("app-revision")).toBeTruthy();
     fireEvent.click(screen.getByTestId("sidebar-collapse"));
     expect(shell.getAttribute("data-sidebar-collapsed")).toBe("true");
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe("1");
     expect(screen.getByTestId("app-revision").textContent).toBe("+abcdef1");
+  });
+
+  it("restores the persisted collapse state across remounts", async () => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
+    const { unmount } = render(
+      <MemoryRouter>
+        <AppShell title="Jobs">
+          <div data-testid="main-body">body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("app-shell").getAttribute("data-sidebar-collapsed")).toBe(
+      "true",
+    );
+    unmount();
+
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "0");
+    render(
+      <MemoryRouter>
+        <AppShell title="Jobs">
+          <div data-testid="main-body">body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("app-shell").getAttribute("data-sidebar-collapsed")).toBe(
+      "false",
+    );
+    expect(await screen.findByTestId("sidebar-collapse")).toBeTruthy();
+    expect(screen.getByTestId("main-body")).toBeTruthy();
+  });
+
+  it("defaults to collapsed on a narrow viewport and keeps main reachable", async () => {
+    mockMatchMedia(true);
+    render(
+      <MemoryRouter>
+        <AppShell title="Narrow">
+          <button type="button" data-testid="main-focus-target">
+            Main action
+          </button>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const shell = screen.getByTestId("app-shell");
+    expect(shell.getAttribute("data-sidebar-viewport")).toBe("narrow");
+    expect(shell.getAttribute("data-sidebar-collapsed")).toBe("true");
+    expect(shell.classList.contains("app-shell--sidebar-narrow")).toBe(true);
+    expect(shell.classList.contains("app-shell--sidebar-narrow-expanded")).toBe(
+      false,
+    );
+
+    fireEvent.click(screen.getByTestId("sidebar-collapse"));
+    expect(shell.getAttribute("data-sidebar-collapsed")).toBe("false");
+    expect(shell.getAttribute("data-sidebar-narrow-expanded")).toBe("true");
+    expect(shell.classList.contains("app-shell--sidebar-narrow-expanded")).toBe(
+      true,
+    );
+    expect(localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe("0");
+
+    // Both panes stay in the tree for keyboard/focus — no inert / aria-hidden.
+    const sidebar = document.getElementById("app-sidebar-oracle");
+    const main = screen.getByTestId("app-main");
+    expect(sidebar?.getAttribute("aria-hidden")).not.toBe("true");
+    expect(main.getAttribute("aria-hidden")).not.toBe("true");
+    expect(main.hasAttribute("inert")).toBe(false);
+    expect(screen.getByTestId("main-focus-target")).toBeTruthy();
+    expect(screen.getByTestId("sidebar-collapse")).toBeTruthy();
+  });
+
+  it("keeps a wide expanded layout free of narrow-expanded chrome", async () => {
+    mockMatchMedia(false);
+    render(
+      <MemoryRouter>
+        <AppShell title="Wide">
+          <div>body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+    const shell = screen.getByTestId("app-shell");
+    expect(shell.getAttribute("data-sidebar-viewport")).toBe("wide");
+    expect(shell.getAttribute("data-sidebar-narrow-expanded")).toBe("false");
+    expect(shell.classList.contains("app-shell--sidebar-narrow")).toBe(false);
+    expect(await screen.findByTestId("sidebar-collapse")).toBeTruthy();
   });
 
   it("switches the active tenant and clears tenant-scoped client state", async () => {
@@ -402,6 +511,27 @@ describe("AppShell layout parity", () => {
     expect(mainBlock).toMatch(/min-height:\s*0/);
     expect(mainBlock).toMatch(/overflow-y:\s*auto/);
     expect(mainBlock).toMatch(/overscroll-behavior:\s*contain/);
+  });
+
+  it("keeps narrow layout side-by-side with capped sidebar and scrollable Lab rules", () => {
+    const narrowMq =
+      appCss.match(/@media\s*\(max-width:\s*768px\)\s*\{[\s\S]*?(?=\n@media|\n\/\* ——|$)/)?.[0] ??
+      "";
+    expect(narrowMq).toMatch(/app-shell--sidebar-narrow/);
+    expect(narrowMq).toMatch(/max-width:\s*18rem/);
+    expect(narrowMq).toMatch(/\.app-main/);
+    // Shell stays a row so the working surface is not stacked under a full-width rail.
+    const shellFlex =
+      narrowMq.match(
+        /\.app-shell(?:,\s*\.app-shell--sidebar-narrow)?\s*\{[^}]*flex-direction:\s*([^;]+);/s,
+      )?.[1] ?? "";
+    expect(shellFlex.trim()).toBe("row");
+
+    const rulesBlock =
+      appCss.match(/\.oracle-sidebar__rules\s*\{[^}]+\}/s)?.[0] ?? "";
+    expect(rulesBlock).toMatch(/max-height:/);
+    expect(rulesBlock).toMatch(/overflow-y:\s*auto/);
+    expect(rulesBlock).toMatch(/box-shadow:\s*inset/);
   });
 
   it("stops wheel propagation from sidebar and main scroll panes", () => {
