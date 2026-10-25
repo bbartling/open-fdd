@@ -38,6 +38,8 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(test)]
+use std::sync::mpsc::TryRecvError;
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use std::sync::Mutex;
 use std::thread::JoinHandle;
@@ -416,27 +418,144 @@ enum SendWaitError {
     Disconnected,
 }
 
+/// Poll interval for the acknowledged enqueue wait. `SyncSender::send_timeout`
+/// is unstable, so the wait is a short park plus `try_send`.
+const ACK_POLL: Duration = Duration::from_millis(5);
+
+#[cfg(test)]
+static MANUAL_ACK_WAIT: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static VIRTUAL_ACK_WAIT_NS: AtomicU64 = AtomicU64::new(0);
+
+/// Virtual clock for [`send_until`] and the writer-reply wait.
+///
+/// Production code and every other test keep `Instant` and `thread::sleep`.
+/// One test installs this so the ack budget is exact: a wall-clock cap also
+/// counts ledger fsync time and scheduler delay on a loaded runner.
+#[cfg(test)]
+#[must_use]
+struct ManualAckWait;
+
+#[cfg(test)]
+fn manual_ack_wait() -> ManualAckWait {
+    VIRTUAL_ACK_WAIT_NS.store(0, Ordering::Release);
+    MANUAL_ACK_WAIT.store(true, Ordering::Release);
+    ManualAckWait
+}
+
+#[cfg(test)]
+impl Drop for ManualAckWait {
+    fn drop(&mut self) {
+        MANUAL_ACK_WAIT.store(false, Ordering::Release);
+    }
+}
+
+#[cfg(test)]
+fn manual_ack_wait_active() -> bool {
+    MANUAL_ACK_WAIT.load(Ordering::Acquire)
+}
+
+#[cfg(test)]
+fn virtual_ack_wait_ns() -> u64 {
+    VIRTUAL_ACK_WAIT_NS.load(Ordering::Acquire)
+}
+
+#[cfg(test)]
+fn advance_manual_ack_wait(slice: Duration) {
+    let add = u64::try_from(slice.as_nanos()).unwrap_or(u64::MAX);
+    VIRTUAL_ACK_WAIT_NS.fetch_add(add, Ordering::AcqRel);
+}
+
+#[cfg(test)]
+fn manual_ack_wait_elapsed() -> Duration {
+    Duration::from_nanos(virtual_ack_wait_ns())
+}
+
+struct WaitOrigin {
+    wall: Instant,
+    #[cfg(test)]
+    virtual_ns: u64,
+}
+
+fn wait_origin() -> WaitOrigin {
+    WaitOrigin {
+        wall: Instant::now(),
+        #[cfg(test)]
+        virtual_ns: virtual_ack_wait_ns(),
+    }
+}
+
+fn wait_elapsed(origin: &WaitOrigin) -> Duration {
+    #[cfg(test)]
+    if manual_ack_wait_active() {
+        return Duration::from_nanos(virtual_ack_wait_ns().saturating_sub(origin.virtual_ns));
+    }
+    origin.wall.elapsed()
+}
+
+fn wait_park(slice: Duration) {
+    #[cfg(test)]
+    if manual_ack_wait_active() {
+        advance_manual_ack_wait(slice);
+        return;
+    }
+    std::thread::sleep(slice);
+}
+
+/// Park one poll slice inside `budget`. `false` means the budget is spent.
+fn park_within(origin: &WaitOrigin, budget: Duration) -> bool {
+    let waited = wait_elapsed(origin);
+    if waited >= budget {
+        return false;
+    }
+    let slice = ACK_POLL.min(budget.saturating_sub(waited));
+    if slice.is_zero() {
+        return false;
+    }
+    wait_park(slice);
+    true
+}
+
 /// `SyncSender::send_timeout` is unstable. Poll `try_send` until `budget` elapses.
 fn send_until(
     tx: &SyncSender<WriterCmd>,
     mut value: WriterCmd,
     budget: Duration,
 ) -> Result<(), SendWaitError> {
-    let start = Instant::now();
+    let origin = wait_origin();
     loop {
         match tx.try_send(value) {
             Ok(()) => return Ok(()),
             Err(TrySendError::Disconnected(_)) => return Err(SendWaitError::Disconnected),
             Err(TrySendError::Full(returned)) => {
-                if start.elapsed() >= budget {
-                    return Err(SendWaitError::Timeout);
-                }
                 value = returned;
-                let slice = Duration::from_millis(5).min(budget.saturating_sub(start.elapsed()));
-                if slice.is_zero() {
+                if !park_within(&origin, budget) {
                     return Err(SendWaitError::Timeout);
                 }
-                std::thread::sleep(slice);
+            }
+        }
+    }
+}
+
+fn recv_ack(rx: &Receiver<bool>, budget: Duration) -> Result<bool, RecvTimeoutError> {
+    #[cfg(test)]
+    if manual_ack_wait_active() {
+        return recv_ack_virtual(rx, budget);
+    }
+    rx.recv_timeout(budget)
+}
+
+#[cfg(test)]
+fn recv_ack_virtual(rx: &Receiver<bool>, budget: Duration) -> Result<bool, RecvTimeoutError> {
+    let origin = wait_origin();
+    loop {
+        match rx.try_recv() {
+            Ok(wrote) => return Ok(wrote),
+            Err(TryRecvError::Disconnected) => return Err(RecvTimeoutError::Disconnected),
+            Err(TryRecvError::Empty) => {
+                if !park_within(&origin, budget) {
+                    return Err(RecvTimeoutError::Timeout);
+                }
             }
         }
     }
@@ -781,7 +900,7 @@ pub fn log_event_acknowledged(event: &str, detail: Value) -> bool {
     );
     leave();
     match queued {
-        Ok(()) => match ack_rx.recv_timeout(ack_wait()) {
+        Ok(()) => match recv_ack(&ack_rx, ack_wait()) {
             Ok(true) => true,
             Ok(false) => {
                 mutate_ledger(|ledger| note_lost_id(ledger, &detail));
@@ -1190,26 +1309,48 @@ mod tests {
         std::env::set_var("OPENFDD_AUDIT_LOG_PATH", fifo.to_str().unwrap());
         std::env::set_var("OPENFDD_AUDIT_QUEUE_CAP", "32");
         std::env::set_var("OPENFDD_AUDIT_ACK_MS", "150");
+        let budget = ack_wait();
+        assert_eq!(budget, Duration::from_millis(150));
         log_event("unit_test_block", serde_json::json!({"n": 0}));
         std::thread::sleep(Duration::from_millis(50));
+        let dropped_before_flood = sink_status().dropped;
         for i in 1..80 {
             log_event("unit_test_flood", serde_json::json!({"n": i}));
         }
-        let start = Instant::now();
+        assert!(
+            sink_status().dropped > dropped_before_flood,
+            "a stuck writer must fill the queue before the acknowledged event"
+        );
+        let dropped_before = sink_status().dropped;
+        let failures_before = sink_status().write_failures;
+        // The product budget is the clock. Wall time also includes the loss
+        // ledger fsync and any park overshoot, which blew an 800ms cap on a
+        // loaded runner (measured 1.07s) after the same SHA had passed.
+        let clock = manual_ack_wait();
         let ok = log_event_acknowledged(
             "package.import",
             serde_json::json!({"request_id": "lost-ack"}),
         );
-        let elapsed = start.elapsed();
+        let waited = manual_ack_wait_elapsed();
+        drop(clock);
         assert!(!ok, "a stuck sink must not report an acknowledged write");
         assert!(
-            elapsed < Duration::from_millis(800),
-            "acknowledged backpressure must stay bounded (took {elapsed:?})"
+            waited >= budget && waited <= budget.saturating_add(budget),
+            "loss follows the product ack budget, once to enqueue and once for the writer reply (waited {waited:?}, budget {budget:?})"
         );
-        assert!(sink_status().degraded);
-        assert!(sink_status().dropped > 0 || sink_status().write_failures > 0);
+        let status = sink_status();
+        assert!(status.degraded);
+        assert!(
+            status.dropped > dropped_before,
+            "the bounded wait must record a queue loss"
+        );
+        assert_eq!(
+            status.write_failures, failures_before,
+            "a full queue keeps the pre-call write-failure count"
+        );
         let found = reconcile_request_ids(&["lost-ack".into()]);
-        assert!(found.missing.contains(&"lost-ack".to_string()) || found.present.is_empty());
+        assert_eq!(found.missing_recorded_as_loss, vec!["lost-ack".to_string()]);
+        assert!(found.present.is_empty(), "the line must stay off disk");
         let _reader = fs::File::open(&fifo);
         std::thread::sleep(Duration::from_millis(50));
         reset_sink_for_test();
