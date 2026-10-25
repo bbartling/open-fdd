@@ -12,6 +12,8 @@ use super::model::*;
 
 pub const SCHEMA_SQL: &str = include_str!("../../../../sql/schema/04_ingest_queue.sql");
 
+/// Serializes ingest-queue DDL. Concurrent `CREATE TABLE IF NOT EXISTS`
+/// races on `pg_type_typname_nsp_index` when several tests share one database.
 pub const CLAIM_SELECT_SQL: &str = "\
 SELECT j.job_id
 FROM ingest_job j
