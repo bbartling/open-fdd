@@ -1405,6 +1405,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize ingest schema DDL with the other queue fixtures"
+    )]
     async fn server_request_id_round_trips_through_postgres_and_stays_on_conflict() {
         let required = std::env::var("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED")
             .ok()
@@ -1419,6 +1423,7 @@ mod tests {
             }
             return;
         };
+        let _env = crate::test_env_lock::lock_env();
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&url)

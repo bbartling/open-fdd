@@ -203,7 +203,7 @@ impl Server {
             tool("openfdd_csv_fusion_preview", "GET /api/csv/import/sessions/{id}/fusion-preview — merged CSV grid for browser review", json!({"session_id": {"type": "string"}, "limit": {"type": "integer"}})),
             tool("openfdd_csv_latest_planned", "GET /api/csv/import/sessions/latest/planned — most recent UT3 plan ready for fusion preview", json!({})),
             tool("openfdd_csv_sessions", "GET /api/csv/import/sessions — list recent import sessions", json!({"limit": {"type": "integer"}})),
-            tool("openfdd_csv_import_execute", "POST /api/csv/import/execute — save planned session to Arrow + historian (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+            tool("openfdd_csv_import_execute", "POST /api/csv/import/execute — save planned session to the Timescale historian (write: confirm:true + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
                 "session_id": {"type": "string"},
                 "confirm": {"type": "boolean", "description": "Must be true"}
             })),

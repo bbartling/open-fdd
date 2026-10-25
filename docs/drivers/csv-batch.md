@@ -13,7 +13,7 @@ CSV is a **headless batch driver** — load pre-shaped telemetry into the histor
 1. Prepare CSV off-box (pandas, vendor export, or daily API pull script on the host OS).
 2. Drop files into a watched directory or call the import API directly.
 3. Preflight validates timestamps, columns, and duplicates (fail-closed).
-4. Execute writes Arrow/Feather historian rows with `source_driver: csv`.
+4. Execute stages the planned session and seeds the Timescale historian. It does not write Arrow or Parquet history.
 
 ## API
 
