@@ -1,12 +1,26 @@
 /**
  * vibe19 equipment_inspection_chart — stacked domain axes of raw historian columns.
  * Parity lock: charts.contract.json inspectChart + open_fdd.analytics.charts.
+ *
+ * Axis labels use the raw stored role unit. Unknown columns stay unlabeled —
+ * values are not auto-converted.
  */
 import chartContract from "./charts.contract.json";
 import { fingerprintJson, type PlotlyFigure, type PlotlyTrace } from "./plotDataset";
 import { rainbowColor } from "./plotlyTheme";
+import { DEFAULT_ROLE_UNITS } from "./roleUnits";
 
 const INSPECT = chartContract.inspectChart;
+
+/** Raw stored unit for a role, or null when the role is not in the unit table. */
+export function inspectRawUnit(role: string): string | null {
+  const unit = DEFAULT_ROLE_UNITS[role];
+  return unit ? unit : null;
+}
+
+export function inspectAxisTitle(role: string, unit: string | null = inspectRawUnit(role)): string {
+  return unit ? `${role} (${unit})` : role;
+}
 
 export function equipmentInspectionChart(
   points: Array<Record<string, unknown>>,
@@ -15,6 +29,8 @@ export function equipmentInspectionChart(
     columns: string[];
     rowHeight?: number;
     maxHeight?: number;
+    /** Override raw unit lookup; return null for unknown columns. */
+    unitFor?: (role: string) => string | null;
   },
 ): PlotlyFigure | null {
   if (!points.length || !opts.columns.length) return null;
@@ -46,9 +62,11 @@ export function equipmentInspectionChart(
     uirevision: `inspect:${opts.equipmentId}:${fingerprintJson(cols)}`,
   };
 
+  const unitFor = opts.unitFor ?? inspectRawUnit;
   cols.forEach((col, i) => {
     const axis = i === 0 ? "y" : `y${i + 1}`;
     const xaxis = i === 0 ? "x" : `x${i + 1}`;
+    const unit = unitFor(col);
     data.push({
       type: "scatter",
       mode: "lines",
@@ -73,7 +91,7 @@ export function equipmentInspectionChart(
     const y0 = 1 - (i + 1) * domainH + 0.02;
     const y1 = 1 - i * domainH - 0.01;
     layout[axis === "y" ? "yaxis" : `yaxis${i + 1}`] = {
-      title: col,
+      title: inspectAxisTitle(col, unit),
       domain: [Math.max(0, y0), Math.min(1, y1)],
       autorange: true,
       showgrid: true,

@@ -102,7 +102,7 @@ export interface OverviewPopulatedProps {
   unitSystem: "imperial" | "metric";
 }
 
-/** Vibe Overview — metrics, tables, and plant health matrices (central DataFusion). */
+/** Vibe Overview — metrics, tables, and plant health matrices (central Timescale). */
 export function OverviewPopulated({
   buildingId,
   equipment,

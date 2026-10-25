@@ -8,7 +8,7 @@ import { postInspect, type AnalyticsEnvelope } from "../api/analyticsApi";
 import { getPackageMapping, type MappingEquipment } from "../api/mappingApi";
 import { equipmentInspectionChart } from "../api/inspectChart";
 import { buildInspectSampleExport, downloadJson } from "../api/inspectExport";
-import { resolveRoleUnit } from "../api/roleUnits";
+import { inspectRawUnit } from "../api/inspectChart";
 import { naturalCompare } from "../lib/naturalSort";
 import type { PlotlyFigure } from "../api/plotDataset";
 import { useScopedLoad } from "../session/scopedLoad";
@@ -221,10 +221,7 @@ export function InspectPage() {
                 source: "POST /api/analytics/inspect",
                 window: { first: snap.first, last: snap.last },
                 traces: snap.figure.data,
-                unitFor: (name) => {
-                  const unit = resolveRoleUnit(name);
-                  return unit ? unit : null;
-                },
+                unitFor: (name) => inspectRawUnit(name),
               });
               downloadJson(`${selectValue || "equipment"}_inspect.json`, payload);
             }}

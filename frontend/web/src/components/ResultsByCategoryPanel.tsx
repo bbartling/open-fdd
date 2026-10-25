@@ -50,16 +50,36 @@ type ResultTableRow = Record<string, unknown> & {
   fault_pct: string;
   metric: string;
   metric_window: string;
+  metric_provenance: string;
 };
 
-function metricWindow(row: FddResultRow): string {
+/** Effective evaluated window + coverage. Unknown when the historian did not supply bounds. */
+export function metricWindow(row: FddResultRow): string {
   const window = row.metric?.window;
-  if (!window) return "—";
-  const start = window.start || "—";
-  const end = window.end || "—";
+  if (!window) return "unknown";
+  const unknown =
+    window.unknown === true || window.start == null || window.end == null;
+  if (unknown) {
+    const samples = row.metric?.coverage?.sample_rows;
+    const coverage = samples == null ? "" : ` · ${samples} samples`;
+    return `unknown${coverage}`;
+  }
+  const start = window.start;
+  const end = window.end;
   const samples = row.metric?.coverage?.sample_rows;
   const coverage = samples == null ? "" : ` · ${samples} samples`;
   return `${start} → ${end}${coverage}`;
+}
+
+export function metricProvenance(row: FddResultRow): string {
+  const provenance = row.metric?.provenance;
+  if (!provenance?.source) return "—";
+  const watermark = provenance.watermark ?? row.metric?.window?.watermark;
+  const fingerprint = provenance.config_fingerprint;
+  const parts = [provenance.source];
+  if (watermark) parts.push(`watermark ${watermark}`);
+  if (fingerprint) parts.push(`config ${fingerprint.slice(0, 12)}`);
+  return parts.join(" · ");
 }
 
 /** FDD results grouped by rule family — embedded under Data Model. */
@@ -181,6 +201,7 @@ export function ResultsByCategoryPanel() {
       fault_pct: r.fault_pct != null ? String(r.fault_pct) : "—",
       metric: metricCell(r),
       metric_window: metricWindow(r),
+      metric_provenance: metricProvenance(r),
     })),
   [filtered]);
 
@@ -192,6 +213,7 @@ export function ResultsByCategoryPanel() {
       { key: "status", header: "status" },
       { key: "metric", header: "metric" },
       { key: "metric_window", header: "window" },
+      { key: "metric_provenance", header: "provenance" },
       { key: "fault_hours", header: "fault_hours" },
       { key: "fault_pct", header: "fault_pct" },
     ],

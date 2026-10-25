@@ -133,6 +133,8 @@ export function AppShell({
   const [memberships, setMemberships] = useState<TenantOption[]>([]);
   const [multiTenant, setMultiTenant] = useState(false);
   const [hubAdmin, setHubAdmin] = useState(false);
+  const [tenantIds, setTenantIds] = useState<string[]>([]);
+  const [tenantListDenied, setTenantListDenied] = useState(false);
   const [tenantSwitching, setTenantSwitching] = useState(false);
   const [tenantSwitchError, setTenantSwitchError] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<string | null>(null);
@@ -143,18 +145,28 @@ export function AppShell({
     let cancelled = false;
     if (!getStoredToken()) {
       setSessionUser(null);
+      setTenantIds([]);
       return;
     }
     void getAuthMe()
       .then((me: AuthMe) => {
         if (cancelled) return;
         setHubAdmin(me.hub_admin === true);
+        if (typeof me.multi_tenant === "boolean") {
+          setMultiTenant(me.multi_tenant);
+        }
+        setTenantIds(
+          Array.isArray(me.tenant_ids)
+            ? me.tenant_ids.map((id) => String(id).trim()).filter(Boolean)
+            : [],
+        );
         if (me.username) setSessionUser(me.username);
       })
       .catch(() => {
         if (!cancelled) {
           setSessionUser(null);
           setHubAdmin(false);
+          setTenantIds([]);
         }
       });
     return () => {
@@ -347,6 +359,7 @@ export function AppShell({
     void apiFetch<TenantsListResponse>("/api/tenants")
       .then((t) => {
         if (cancelled) return;
+        setTenantListDenied(false);
         const id = (t.active_tenant_id || "legacy").trim();
         setActiveTenantId(id);
         setStoredActiveTenant(id);
@@ -358,8 +371,21 @@ export function AppShell({
           })),
         );
       })
-      .catch(() => {
-        /* keep stored / null */
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const status =
+          err && typeof err === "object" && "status" in err
+            ? Number((err as { status?: unknown }).status)
+            : NaN;
+        const message = err instanceof Error ? err.message : String(err ?? "");
+        const membershipDenied =
+          status === 403 ||
+          /membership|tenant/i.test(message);
+        setTenantListDenied(membershipDenied);
+        if (membershipDenied) {
+          setMemberships([]);
+        }
+        /* otherwise keep stored / null */
       });
     return () => {
       cancelled = true;
@@ -422,6 +448,11 @@ export function AppShell({
   const showTenantLabel = Boolean(activeTenantId && activeTenantId !== "legacy");
   const showTenantSwitcher =
     !collapsed && multiTenant && !hubAdmin && memberships.length > 1;
+  /** Operator/viewer with multi-tenant on and no membership needs hub-admin assignment. */
+  const needsTenantAssignment =
+    multiTenant &&
+    !hubAdmin &&
+    (tenantListDenied || (tenantIds.length === 0 && memberships.length === 0));
   const layoutFlags = sidebarShellFlags({ collapsed, isNarrow });
   const shellClass = [
     "app-shell",
@@ -645,6 +676,17 @@ export function AppShell({
         {hideSectionTabs ? null : (
           <SectionTabs activeSectionId={activeSectionId} />
         )}
+        {needsTenantAssignment ? (
+          <div
+            className="inline-alert"
+            role="status"
+            data-testid="tenant-assignment-guidance"
+          >
+            This account has no tenant assignment. Ask a hub admin to add you to
+            a tenant under Admin → Users, then sign out and sign back in. Sites
+            and analytics stay unavailable until a tenant is assigned.
+          </div>
+        ) : null}
         <main className="app-content">{children}</main>
       </div>
     </div>
