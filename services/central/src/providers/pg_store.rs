@@ -11,10 +11,16 @@ use super::store::{
 };
 
 pub async fn ensure_schema(pool: &sqlx::PgPool) -> Result<(), String> {
+    // Hourly jobs carry the lifecycle fence (`fencing_token`). Same lock key
+    // as ingest schema init and the startup migration.
+    let mut tx = crate::db_lifecycle::begin_schema_ddl(pool)
+        .await
+        .map_err(db_err)?;
     let sql = include_str!("../../../../sql/schema/04_provider_hourly_jobs.sql");
     for stmt in statements(sql) {
-        sqlx::query(&stmt).execute(pool).await.map_err(db_err)?;
+        sqlx::query(&stmt).execute(&mut *tx).await.map_err(db_err)?;
     }
+    tx.commit().await.map_err(db_err)?;
     Ok(())
 }
 
