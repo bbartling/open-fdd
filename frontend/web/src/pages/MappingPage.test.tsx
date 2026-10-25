@@ -381,7 +381,11 @@ describe("MappingPage", () => {
     });
     renderMapping();
     await waitFor(() => screen.getByTestId("mapping-revision-saved"));
+    // Read-only model page: no draft editors; quiet draft chrome stays out of
+    // the saved-model validation block.
     expect(screen.queryByTestId("mapping-revision-draft")).toBeNull();
+    expect(screen.queryByTestId("mapping-role-editors")).toBeNull();
+    expect(screen.queryByTestId("map-save")).toBeNull();
     expect(screen.getByTestId("mapping-revision-saved").textContent).toContain(
       "Saved column map",
     );
@@ -389,6 +393,14 @@ describe("MappingPage", () => {
     expect(screen.getByTestId("mapping-revision-active").textContent).toBe(
       "Active ingest: rev-ingest-1",
     );
+    expect(screen.getByTestId("mapping-revision-saved").textContent).not.toMatch(
+      /^Draft:/,
+    );
+    const validation = screen.queryByTestId("mapping-validation-summary");
+    if (validation) {
+      expect(validation.textContent).toMatch(/Validation:/);
+      expect(validation.textContent).not.toMatch(/Draft:/);
+    }
 
     const cell = within(columnRow("DA_T")).getAllByRole("cell");
     expect(cell[1]?.textContent).toBe("sat");
