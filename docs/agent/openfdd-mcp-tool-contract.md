@@ -83,7 +83,7 @@ Requires **`OPENFDD_MCP_ALLOW_WRITES=1`** and **`confirm: true`** on each tool c
 
 | Tool | REST | Risk |
 |------|------|------|
-| `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | Arrow/historian write (preflight pass required) |
+| `openfdd_csv_import_execute` | `POST /api/csv/import/execute` | Timescale historian write (preflight pass required) |
 | `openfdd_model_commissioning_import` | `POST /api/model/commissioning-import` | Model + rules import |
 | `openfdd_rules_batch` | `POST /api/rules/batch` | Run saved FDD rules |
 | `openfdd_fdd_rules_save` | `POST /api/fdd-rules` | Save SQL rule |

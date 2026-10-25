@@ -54,13 +54,26 @@ export interface FddRunTiming {
 }
 
 export interface FddMetricWindow {
+  /** Effective evaluated bounds (observed historian span). Null when unknown. */
   start?: string | null;
   end?: string | null;
+  requested_start?: string | null;
+  requested_end?: string | null;
+  observed_start?: string | null;
+  observed_end?: string | null;
   watermark?: string | null;
+  /** True when the historian did not supply observed bounds — do not invent. */
+  unknown?: boolean;
 }
 
 export interface FddMetricCoverage {
   sample_rows?: number | null;
+}
+
+export interface FddMetricProvenance {
+  source?: string | null;
+  config_fingerprint?: string | null;
+  watermark?: string | null;
 }
 
 export interface FddMetricValue {
@@ -69,6 +82,7 @@ export interface FddMetricValue {
   unit?: string;
   window?: FddMetricWindow;
   coverage?: FddMetricCoverage;
+  provenance?: FddMetricProvenance;
 }
 
 export interface FddResultRow {
@@ -394,8 +408,15 @@ export function resultsToCsvArtifact(rows: FddResultRow[]): string {
     "metric_unit",
     "metric_window_start",
     "metric_window_end",
+    "metric_window_unknown",
+    "metric_requested_start",
+    "metric_requested_end",
+    "metric_observed_start",
+    "metric_observed_end",
     "metric_watermark",
     "metric_sample_rows",
+    "metric_provenance_source",
+    "metric_config_fingerprint",
   ];
   const escape = (v: unknown) => {
     const s = v == null ? "" : String(v);
@@ -404,6 +425,10 @@ export function resultsToCsvArtifact(rows: FddResultRow[]): string {
   };
   const lines = [header.join(",")];
   for (const r of rows) {
+    const windowUnknown =
+      r.metric?.window?.unknown === true ||
+      (r.metric?.window != null &&
+        (r.metric.window.start == null || r.metric.window.end == null));
     lines.push(
       [
         r.rule_id,
@@ -420,8 +445,15 @@ export function resultsToCsvArtifact(rows: FddResultRow[]): string {
         r.metric?.unit ?? "",
         r.metric?.window?.start ?? "",
         r.metric?.window?.end ?? "",
+        windowUnknown ? "true" : r.metric?.window ? "false" : "",
+        r.metric?.window?.requested_start ?? "",
+        r.metric?.window?.requested_end ?? "",
+        r.metric?.window?.observed_start ?? "",
+        r.metric?.window?.observed_end ?? "",
         r.metric?.window?.watermark ?? "",
         r.metric?.coverage?.sample_rows ?? "",
+        r.metric?.provenance?.source ?? "",
+        r.metric?.provenance?.config_fingerprint ?? "",
       ]
         .map(escape)
         .join(","),

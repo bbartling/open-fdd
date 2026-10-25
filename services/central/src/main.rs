@@ -11,6 +11,7 @@ mod building_sessions;
 mod canonical_state;
 mod capabilities;
 mod contract;
+mod csv_session_scope;
 mod csv_site_export;
 mod cutover;
 mod db_lifecycle;

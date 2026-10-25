@@ -2673,13 +2673,50 @@ fn numeric_column_map(row: &sqlx::postgres::PgRow) -> serde_json::Map<String, Va
     values
 }
 
+/// Observed first/last TEMP `history` timestamps for the equipment just filled.
+/// Empty history yields `(None, None)` — callers must not invent a window.
+async fn history_observed_bounds(
+    conn: &mut PgConnection,
+) -> Result<(Option<String>, Option<String>)> {
+    let row = sqlx::query(
+        "SELECT min(timestamp_utc) AS first_ts, max(timestamp_utc) AS last_ts FROM history",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .context("history observed bounds")?;
+    let first = row
+        .try_get::<Option<DateTime<Utc>>, _>("first_ts")
+        .ok()
+        .flatten()
+        .map(|ts| ts.to_rfc3339());
+    let last = row
+        .try_get::<Option<DateTime<Utc>>, _>("last_ts")
+        .ok()
+        .flatten()
+        .map(|ts| ts.to_rfc3339());
+    Ok((first, last))
+}
+
+struct MetricWindowFacts<'a> {
+    requested_start: Option<&'a str>,
+    requested_end: Option<&'a str>,
+    observed_start: Option<&'a str>,
+    observed_end: Option<&'a str>,
+    watermark: Option<&'a str>,
+    sample_rows: i64,
+    config_fingerprint: &'a str,
+}
+
+/// Metric window / coverage / provenance returned to the UI.
+///
+/// `window.start` / `window.end` are the **effective** bounds actually evaluated
+/// (observed historian span). Requested bounds stay separate. When the historian
+/// did not supply observed timestamps, start/end stay null and `unknown` is true
+/// — never invent a window from the request alone.
 fn metric_payload(
     rule: &RuleSpec,
     values: &serde_json::Map<String, Value>,
-    window_start: Option<&str>,
-    window_end: Option<&str>,
-    watermark: Option<&str>,
-    sample_rows: i64,
+    facts: MetricWindowFacts<'_>,
 ) -> Value {
     let name = rule
         .output_columns
@@ -2692,16 +2729,27 @@ fn metric_payload(
     } else {
         values.get(name).cloned().unwrap_or(Value::Null)
     };
+    let unknown = facts.observed_start.is_none() || facts.observed_end.is_none();
     json!({
         "name": name,
         "value": value,
         "unit": metric_unit_for_column(name),
         "window": {
-            "start": window_start,
-            "end": window_end,
-            "watermark": watermark,
+            "start": if unknown { Value::Null } else { json!(facts.observed_start) },
+            "end": if unknown { Value::Null } else { json!(facts.observed_end) },
+            "requested_start": facts.requested_start,
+            "requested_end": facts.requested_end,
+            "observed_start": facts.observed_start,
+            "observed_end": facts.observed_end,
+            "watermark": facts.watermark,
+            "unknown": unknown,
         },
-        "coverage": { "sample_rows": sample_rows },
+        "coverage": { "sample_rows": facts.sample_rows },
+        "provenance": {
+            "source": "timescale",
+            "config_fingerprint": facts.config_fingerprint,
+            "watermark": facts.watermark,
+        },
     })
 }
 
@@ -3297,6 +3345,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 let _ = tx.rollback().await;
                 continue;
             }
+            let (observed_start, observed_end) = history_observed_bounds(&mut tx).await?;
             let missing = missing_required_roles(&mut tx, &rule.required_roles).await?;
             if !missing.is_empty() {
                 rule_rows.push(json!({
@@ -3342,6 +3391,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 }
                 crate::sql_pack::InputGate::Ready(scope) => scope,
             };
+            let config_fp = config_fingerprint(payload, poll);
             match sqlx::query(&sql_body).fetch_all(&mut *tx).await {
                 Ok(rows) => {
                     if metric {
@@ -3349,10 +3399,15 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                         let metric_doc = metric_payload(
                             rule,
                             &values,
-                            window_start,
-                            window_end,
-                            watermark.as_deref(),
-                            n,
+                            MetricWindowFacts {
+                                requested_start: window_start,
+                                requested_end: window_end,
+                                observed_start: observed_start.as_deref(),
+                                observed_end: observed_end.as_deref(),
+                                watermark: watermark.as_deref(),
+                                sample_rows: n,
+                                config_fingerprint: &config_fp,
+                            },
                         );
                         let mut row_json = json!({
                             "equipment_id": eq_id,
@@ -4948,6 +5003,42 @@ rules:
             .as_str()
             .unwrap_or("")
             .contains("2026-06-01"));
+        // Effective window is the observed historian span, not an invented request.
+        assert_eq!(metric_rest["metric"]["window"]["unknown"], json!(false));
+        assert!(
+            metric_rest["metric"]["window"]["start"]
+                .as_str()
+                .unwrap_or("")
+                .contains("2026-06-01"),
+            "effective start: {metric_rest}"
+        );
+        assert!(
+            metric_rest["metric"]["window"]["end"]
+                .as_str()
+                .unwrap_or("")
+                .contains("2026-06-01"),
+            "effective end: {metric_rest}"
+        );
+        assert_eq!(
+            metric_rest["metric"]["window"]["observed_start"],
+            metric_rest["metric"]["window"]["start"]
+        );
+        assert_eq!(
+            metric_rest["metric"]["window"]["observed_end"],
+            metric_rest["metric"]["window"]["end"]
+        );
+        assert_eq!(metric_rest["metric"]["coverage"]["sample_rows"], json!(2));
+        assert_eq!(
+            metric_rest["metric"]["provenance"]["source"],
+            json!("timescale")
+        );
+        assert!(
+            metric_rest["metric"]["provenance"]["config_fingerprint"]
+                .as_str()
+                .map(|s| !s.is_empty())
+                .unwrap_or(false),
+            "provenance config fingerprint: {metric_rest}"
+        );
 
         let parent_manifest = std::fs::read_to_string(results.path().join(format!(
             "building={site_a}/generations/{second_run}/manifest.json"

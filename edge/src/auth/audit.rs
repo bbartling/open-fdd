@@ -996,10 +996,19 @@ fn stop_writer_for_test() {
 
 #[cfg(test)]
 fn reset_sink_for_test() {
+    // `AuditSink::drop` detaches the writer so a blocked FIFO cannot hang a
+    // process exit. Unit tests share that thread and the process environment,
+    // so stop it and join when the shutdown ack arrives before the next test
+    // replaces the log path.
     stop_writer_for_test();
     ADMISSION_OPEN.store(true, Ordering::Release);
     IN_FLIGHT.store(0, Ordering::Release);
     *ledger_lock() = LossLedger::empty();
+    std::env::remove_var("OPENFDD_AUDIT_LOG_PATH");
+    std::env::remove_var("OPENFDD_AUDIT_LOG_MAX_BYTES");
+    std::env::remove_var("OPENFDD_AUDIT_LOG_KEEP");
+    std::env::remove_var("OPENFDD_AUDIT_QUEUE_CAP");
+    std::env::remove_var("OPENFDD_AUDIT_ACK_MS");
 }
 
 /// Drop in-memory counters without deleting the JSONL or loss files.
@@ -1026,16 +1035,6 @@ mod tests {
     use super::*;
     use std::time::Duration;
     use tempfile::tempdir;
-
-    fn clear_audit_env() {
-        // Stop the writer before mutating the environment it used to read.
-        stop_writer_for_test();
-        std::env::remove_var("OPENFDD_AUDIT_LOG_PATH");
-        std::env::remove_var("OPENFDD_AUDIT_LOG_MAX_BYTES");
-        std::env::remove_var("OPENFDD_AUDIT_LOG_KEEP");
-        std::env::remove_var("OPENFDD_AUDIT_QUEUE_CAP");
-        std::env::remove_var("OPENFDD_AUDIT_ACK_MS");
-    }
 
     #[test]
     fn redacts_password_fields_in_audit() {
@@ -1115,7 +1114,6 @@ mod tests {
             !dir.path().join("auth_audit.jsonl").exists(),
             "legacy dual-write must not create auth_audit.jsonl"
         );
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1137,7 +1135,6 @@ mod tests {
             },
             Duration::from_secs(2)
         ));
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1172,7 +1169,6 @@ mod tests {
         assert!(sink_status().degraded);
         let _reader = fs::File::open(&fifo);
         std::thread::sleep(Duration::from_millis(50));
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1206,7 +1202,6 @@ mod tests {
         let interrupt = shutdown_for_signal("SIGINT", Duration::from_secs(2));
         assert_eq!(interrupt.signal, "SIGINT");
         assert!(interrupt.drained);
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1240,7 +1235,6 @@ mod tests {
             found.missing_recorded_as_loss,
             vec!["after-close".to_string()]
         );
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1293,7 +1287,6 @@ mod tests {
                 "audit line must stay one JSON object: {line}"
             );
         }
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1332,7 +1325,6 @@ mod tests {
         assert!(found.missing.contains(&"lost-ack".to_string()) || found.present.is_empty());
         let _reader = fs::File::open(&fifo);
         std::thread::sleep(Duration::from_millis(50));
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1369,7 +1361,6 @@ mod tests {
             report.drained || fifo.is_file(),
             "SIGTERM should drain once the writer can finish"
         );
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1419,7 +1410,6 @@ mod tests {
         assert!(!body.contains("pw-canary-hunter2"));
         assert!(!body.contains("opaque-bearer-canary-77"));
         assert!(body.contains("***REDACTED***"));
-        clear_audit_env();
         reset_sink_for_test();
     }
 
@@ -1444,7 +1434,6 @@ mod tests {
         assert_eq!(status.last_write_error, Some(ERR_UNWRITABLE));
         let found = reconcile_request_ids(&["disk-fail".into()]);
         assert_eq!(found.present, Vec::<String>::new());
-        clear_audit_env();
         reset_sink_for_test();
     }
 }

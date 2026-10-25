@@ -5,6 +5,7 @@ use chrono::Utc;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::parse;
 
@@ -39,8 +40,25 @@ pub fn session_dir(id: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
+/// Caller bound onto a session at creation. Absent tenant means the session
+/// was created outside multi-tenant mode (or by a hub admin).
+#[derive(Debug, Clone)]
+pub struct SessionStamp {
+    pub owner_sub: String,
+    pub tenant_id: Option<String>,
+}
+
 pub fn create_session() -> Value {
-    let id = format!("csv-{}", Utc::now().timestamp_millis());
+    create_session_stamped(None)
+}
+
+pub fn create_session_stamped(stamp: Option<&SessionStamp>) -> Value {
+    static SESSION_SEQ: AtomicU64 = AtomicU64::new(0);
+    let id = format!(
+        "csv-{}-{}",
+        Utc::now().timestamp_millis(),
+        SESSION_SEQ.fetch_add(1, Ordering::Relaxed)
+    );
     let dir = match session_dir(&id) {
         Ok(dir) => dir,
         Err(e) => return json!({"ok": false, "error": e}),
@@ -48,7 +66,7 @@ pub fn create_session() -> Value {
     if let Err(e) = fs::create_dir_all(dir.join("files")) {
         return json!({"ok": false, "error": e.to_string()});
     }
-    let session = json!({
+    let mut session = json!({
         "ok": true,
         "session_id": id,
         "status": "created",
@@ -56,12 +74,55 @@ pub fn create_session() -> Value {
         "created_at": Utc::now().to_rfc3339(),
         "plan": Value::Null,
         "validation_report": Value::Null,
-        "result": Value::Null
+        "result": Value::Null,
+        "owner_sub": Value::Null,
+        "tenant_id": Value::Null,
+        "building_id": Value::Null
     });
+    if let Some(stamp) = stamp {
+        apply_stamp(&mut session, stamp);
+    }
     if let Err(e) = save_session(&id, &session) {
         return json!({"ok": false, "error": e});
     }
     session
+}
+
+pub fn apply_stamp(session: &mut Value, stamp: &SessionStamp) {
+    session["owner_sub"] = json!(stamp.owner_sub);
+    session["tenant_id"] = match stamp
+        .tenant_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(tid) => json!(tid),
+        None => Value::Null,
+    };
+}
+
+pub fn session_tenant_id(session: &Value) -> Option<&str> {
+    session
+        .get("tenant_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
+pub fn session_building_id(session: &Value) -> Option<&str> {
+    session
+        .get("building_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            session
+                .get("plan")
+                .and_then(|p| p.get("output_dataset_name"))
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
 }
 
 pub fn save_session(id: &str, session: &Value) -> Result<(), String> {
@@ -173,6 +234,11 @@ pub fn session_path_ok(path: &Path) -> bool {
 
 /// Recent import sessions (newest first) for agent/UI pickers.
 pub fn list_sessions_handler(limit: usize) -> Value {
+    list_sessions_where(limit, |_| true)
+}
+
+/// Same list as [`list_sessions_handler`], keeping sessions the predicate accepts.
+pub fn list_sessions_where(limit: usize, allow: impl Fn(&Value) -> bool) -> Value {
     let root = sessions_root();
     let mut sessions = Vec::new();
     if let Ok(entries) = fs::read_dir(&root) {
@@ -182,23 +248,16 @@ pub fn list_sessions_handler(limit: usize) -> Value {
                 continue;
             }
             let id = entry.file_name().to_string_lossy().to_string();
-            let Some(session) = load_session(&id) else {
+            let Some(mut session) = load_session(&id) else {
                 continue;
             };
-            sessions.push(json!({
-                "session_id": id,
-                "status": session.get("status").cloned().unwrap_or(json!(null)),
-                "created_at": session.get("created_at").cloned().unwrap_or(json!(null)),
-                "file_count": session.get("files").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
-                "dataset_name": session.get("plan")
-                    .and_then(|p| p.get("output_dataset_name"))
-                    .cloned()
-                    .unwrap_or(json!(null)),
-                "row_count": session.get("preview_summary")
-                    .and_then(|p| p.get("row_count"))
-                    .cloned()
-                    .unwrap_or(json!(null)),
-            }));
+            if session.get("session_id").and_then(|v| v.as_str()).is_none() {
+                session["session_id"] = json!(id);
+            }
+            if !allow(&session) {
+                continue;
+            }
+            sessions.push(session_summary(&id, &session));
         }
     }
     sessions.sort_by(|a, b| {
@@ -207,18 +266,42 @@ pub fn list_sessions_handler(limit: usize) -> Value {
         tb.cmp(ta)
     });
     sessions.truncate(limit.clamp(1, 100));
-    json!({"ok": true, "sessions": sessions})
+    let count = sessions.len();
+    json!({"ok": true, "sessions": sessions, "count": count})
+}
+
+fn session_summary(id: &str, session: &Value) -> Value {
+    json!({
+        "session_id": id,
+        "status": session.get("status").cloned().unwrap_or(json!(null)),
+        "created_at": session.get("created_at").cloned().unwrap_or(json!(null)),
+        "file_count": session.get("files").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0),
+        "dataset_name": session.get("plan")
+            .and_then(|p| p.get("output_dataset_name"))
+            .cloned()
+            .unwrap_or(json!(null)),
+        "building_id": session_building_id(session).map(|s| json!(s)).unwrap_or(json!(null)),
+        "tenant_id": session_tenant_id(session).map(|s| json!(s)).unwrap_or(json!(null)),
+        "row_count": session.get("preview_summary")
+            .and_then(|p| p.get("row_count"))
+            .cloned()
+            .unwrap_or(json!(null)),
+    })
 }
 
 pub fn latest_planned_session_handler() -> Value {
-    let listed = list_sessions_handler(20);
+    latest_planned_where(|_| true)
+}
+
+pub fn latest_planned_where(allow: impl Fn(&Value) -> bool) -> Value {
+    let listed = list_sessions_where(20, allow);
     let empty = json!({"ok": false, "error": "no import session found — POST /api/csv/import/preview then preflight"});
     let Some(arr) = listed.get("sessions").and_then(|v| v.as_array()) else {
         return empty;
     };
     for s in arr {
         let status = s.get("status").and_then(|v| v.as_str()).unwrap_or("");
-        if matches!(status, "planned" | "previewed" | "executed") {
+        if matches!(status, "planned" | "previewed" | "executed" | "staged") {
             return json!({
                 "ok": true,
                 "session": s.clone(),

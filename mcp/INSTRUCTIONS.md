@@ -77,7 +77,7 @@ Use existing `openfdd_csv_import_*` + `openfdd_csv_package_append`. SCAFFOLD `pa
 3. **`openfdd_csv_import_preview`** — `files: [{filename, path}]` from host or `content_base64`.
 4. **`openfdd_csv_import_plan`** — `session_id` + `plan` (mode, files, timezone, value_columns).
 5. **`openfdd_csv_import_preflight`** — **required**; loop until `verdict: "pass"` (read `validation.checks` + `agent_hints`).
-6. **`openfdd_csv_import_execute`** — `confirm: true` + write gate → Arrow + historian (fail-closed unless preflight pass).
+6. **`openfdd_csv_import_execute`** — `confirm: true` + write gate → Timescale historian (fail-closed unless preflight pass).
 7. **Hourly IoT** — seed package then **`openfdd_csv_package_append`** (`confirm: true`, `building_id`, `equipment_id`, `csv`).
 8. **AFDD routine (after append)** — `openfdd_fdd_session_config` PUT `params` → **`openfdd_fdd_run`** (`mode: registry`, `building_id`, optional `rule_ids`).
 9. Optional **`openfdd_model_commissioning_import`** — sites/equipment/points/assignments/rules bundle.
@@ -109,7 +109,7 @@ Set **`OPENFDD_MCP_ALLOW_WRITES=1`** on the MCP server and pass **`confirm: true
 
 | Tool | Action |
 |------|--------|
-| `openfdd_csv_import_execute` | Save CSV session to Arrow/historian (preflight must pass) |
+| `openfdd_csv_import_execute` | Save CSV session to the Timescale historian (preflight must pass) |
 | `openfdd_model_commissioning_import` | Import commissioning bundle |
 | `openfdd_rules_batch` | Run all active saved FDD SQL rules |
 | `openfdd_fdd_rules_save` | Save SQL fault rule |

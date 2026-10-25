@@ -4,6 +4,7 @@ import {
   occupiedHoursPerWeek,
   scheduleReferenceClause,
   scheduleReferenceFromSession,
+  weekBucketIsComplete,
   weekBucketIsPartial,
 } from "./occupancySchedule";
 
@@ -95,5 +96,44 @@ describe("occupancy schedule reference", () => {
         "2026-07-01T00:00:00Z",
       ),
     ).toBe(true);
+  });
+
+  it("does not treat a short historian span as a full week", () => {
+    // 2016 five-minute samples ≈ one full week. A span under six days
+    // (6 * 24 * 12 = 1728 samples at 5 min) must stay partial.
+    const fullWeekSamples = 2016;
+    const shortWeekSamples = 1008; // 3.5 days at 5-minute cadence
+    expect(fullWeekSamples).toBe(7 * 24 * 12);
+    expect(shortWeekSamples).toBeLessThan(6 * 24 * 12);
+    const shortSpan = {
+      week_start: "2026-06-01T00:00:00Z",
+      partial_week: true,
+      n_observations: shortWeekSamples,
+    };
+    const sixDayComplete = {
+      week_start: "2026-06-01T00:00:00Z",
+      partial_week: false,
+      n_observations: fullWeekSamples,
+    };
+    expect(
+      weekBucketIsPartial(shortSpan, "2026-05-01T00:00:00Z", "2026-07-01T00:00:00Z"),
+    ).toBe(true);
+    expect(
+      weekBucketIsComplete(shortSpan, "2026-05-01T00:00:00Z", "2026-07-01T00:00:00Z"),
+    ).toBe(false);
+    expect(
+      weekBucketIsComplete(
+        sixDayComplete,
+        "2026-05-01T00:00:00Z",
+        "2026-07-01T00:00:00Z",
+      ),
+    ).toBe(true);
+    expect(
+      weekBucketIsComplete(
+        sixDayComplete,
+        "2026-06-01T00:00:00Z",
+        "2026-06-05T00:00:00Z",
+      ),
+    ).toBe(false);
   });
 });

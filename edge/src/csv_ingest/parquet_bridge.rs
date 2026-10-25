@@ -1,103 +1,114 @@
-//! After CSV execute, materialize a building package and ingest under
-//! `OPENFDD_STORAGE_URL` (file:// / plain path) or legacy `OPENFDD_PARQUET_ROOT`
-//! so `/api/fdd/run` registry mode can run immediately on uploaded data.
+//! Stage a CSV session as a package directory for the Timescale importer.
+//!
+//! This path does not write Arrow IPC or Parquet history.
 
 use crate::csv_ingest::plan::OutputRow;
 use crate::historian::store::workspace_dir;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-fn parquet_out_dir() -> PathBuf {
-    if let Some(p) = fdd_store::local_file_root_from_env() {
-        return p;
+/// Keep an id only when it is already a single storage token.
+/// Stripping characters would alias two different ids onto one directory.
+fn exact_storage_id(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty()
+        || !trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err("invalid id".into());
     }
-    let candidates = [
-        PathBuf::from(".cache/parquet"),
-        workspace_dir().join(".cache/parquet"),
-        PathBuf::from("/var/openfdd/workspace/.cache/parquet"),
-    ];
-    for c in candidates {
-        if c.is_dir() {
-            return c;
-        }
-    }
-    workspace_dir().join(".cache/parquet")
+    Ok(trimmed.to_string())
 }
 
-fn sanitize_id(id: &str) -> String {
-    let s: String = id
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .collect();
-    if s.is_empty() {
-        "csv_job".into()
-    } else {
-        s
-    }
-}
-
-/// Write building package under `workspace/data/csv_buildings/<id>/` and run ingest.
-pub fn ingest_rows_to_parquet(dataset_id: &str, rows: &[OutputRow]) -> Value {
+/// Stage rows for Timescale import. Does not write Parquet or Arrow history.
+///
+/// The directory is `<building_id>.incoming` so the HTTP layer can commit it
+/// after the historian write or remove it when the write does not run.
+pub fn stage_rows_for_timescale(building_id: &str, rows: &[OutputRow]) -> Result<Value, String> {
     if rows.is_empty() {
-        return json!({"ok": false, "error": "no rows to ingest to parquet"});
+        return Err("no rows to stage".into());
     }
-    let building_id = sanitize_id(dataset_id);
-    let equip_id = building_id.clone();
+    let building_id = exact_storage_id(building_id)?;
+    let grouped = group_by_equipment(rows)?;
     let data_root = workspace_dir().join("data").join("csv_buildings");
-    let building_root = data_root.join(&building_id);
-    let equip_dir = building_root.join(&equip_id);
-    if let Err(e) = fs::create_dir_all(&equip_dir) {
-        return json!({"ok": false, "error": format!("mkdir {}: {e}", equip_dir.display())});
+    let building_root = data_root.join(format!("{building_id}.incoming"));
+    if building_root.exists() {
+        fs::remove_dir_all(&building_root).map_err(|e| e.to_string())?;
     }
-
-    let mut value_keys: Vec<String> = rows.iter().flat_map(|r| r.values.keys().cloned()).collect();
-    value_keys.sort();
-    value_keys.dedup();
+    fs::create_dir_all(&building_root).map_err(|e| e.to_string())?;
 
     let grid_minutes = infer_grid_minutes(rows).unwrap_or(5);
     let manifest = json!({
         "grid_minutes": grid_minutes,
         "export_metadata": {
             "source": "csv_import",
-            "dataset_id": dataset_id,
+            "building_id": building_id,
             "inferred_grid_minutes": grid_minutes,
         }
     });
-    if let Err(e) = fs::write(
+    fs::write(
         building_root.join("manifest.json"),
         serde_json::to_string_pretty(&manifest).unwrap_or_default(),
-    ) {
-        return json!({"ok": false, "error": format!("manifest write: {e}")});
+    )
+    .map_err(|e| format!("manifest write: {e}"))?;
+
+    let mut equipment_written = 0usize;
+    for (equipment_id, equip_rows) in &grouped {
+        let equip_dir = building_root.join(equipment_id);
+        fs::create_dir_all(&equip_dir).map_err(|e| e.to_string())?;
+        let mut value_keys: Vec<String> = equip_rows
+            .iter()
+            .flat_map(|r| r.values.keys().cloned())
+            .filter(|k| k != "equipment_id")
+            .collect();
+        value_keys.sort();
+        value_keys.dedup();
+        write_history_wide(&equip_dir.join("history_wide.csv"), equip_rows, &value_keys)?;
+        write_columns_csv(&equip_dir.join("columns.csv"), &value_keys)?;
+        equipment_written += 1;
     }
 
-    if let Err(e) = write_history_wide(&equip_dir.join("history_wide.csv"), rows, &value_keys) {
-        return json!({"ok": false, "error": e});
-    }
-    if let Err(e) = write_columns_csv(&equip_dir.join("columns.csv"), &value_keys) {
-        return json!({"ok": false, "error": e});
-    }
+    Ok(json!({
+        "ok": true,
+        "building_id": building_id,
+        "package_root": building_root.display().to_string(),
+        "equipment_written": equipment_written,
+        "total_rows": rows.len(),
+        "grid_minutes": grid_minutes,
+        "staged": true,
+        "needs_timescale_seed": true,
+        "historian": "timescale",
+        "arrow": false,
+        "parquet": false,
+        "parquet_ingest": {"ok": false, "skipped": true, "historian": "timescale"},
+    }))
+}
 
-    let out_dir = parquet_out_dir();
-    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
-        Ok(report) => json!({
-            "ok": true,
-            "building_id": report.building_id,
-            "out_dir": report.out_dir,
-            "equipment_written": report.equipment_written,
-            "total_rows": report.total_rows,
-            "total_ms": report.total_ms,
-            "grid_minutes": grid_minutes,
-            "package_root": building_root.display().to_string(),
-        }),
-        Err(e) => json!({
-            "ok": false,
-            "error": format!("parquet ingest failed: {e:#}"),
-            "package_root": building_root.display().to_string(),
-            "out_dir": out_dir.display().to_string(),
-        }),
+/// Historical name. Stages a Timescale package and does not write Parquet.
+pub fn ingest_rows_to_parquet(dataset_id: &str, rows: &[OutputRow]) -> Value {
+    match stage_rows_for_timescale(dataset_id, rows) {
+        Ok(result) => result,
+        Err(e) => json!({"ok": false, "error": e, "arrow": false, "parquet": false}),
     }
+}
+
+fn group_by_equipment(rows: &[OutputRow]) -> Result<BTreeMap<String, Vec<&OutputRow>>, String> {
+    let mut grouped: BTreeMap<String, Vec<&OutputRow>> = BTreeMap::new();
+    for row in rows {
+        let equipment_id = match row.values.get("equipment_id").map(String::as_str) {
+            Some(raw) if !raw.trim().is_empty() => exact_storage_id(raw)?,
+            _ => "equipment".to_string(),
+        };
+        grouped.entry(equipment_id).or_default().push(row);
+    }
+    if grouped.is_empty() {
+        return Err("no rows to stage".into());
+    }
+    Ok(grouped)
 }
 
 /// Median positive Δt between consecutive UTC timestamps, rounded to whole minutes (≥1).
@@ -130,7 +141,7 @@ fn infer_grid_minutes(rows: &[OutputRow]) -> Option<u32> {
 
 fn write_history_wide(
     path: &Path,
-    rows: &[OutputRow],
+    rows: &[&OutputRow],
     value_keys: &[String],
 ) -> Result<(), String> {
     let mut f = fs::File::create(path).map_err(|e| e.to_string())?;
@@ -167,9 +178,8 @@ fn write_columns_csv(path: &Path, value_keys: &[String]) -> Result<(), String> {
     let mut f = fs::File::create(path).map_err(|e| e.to_string())?;
     writeln!(f, "column,role").map_err(|e| e.to_string())?;
     for k in value_keys {
-        // Role left blank; fdd_core::infer_role_from_column_name maps identity
-        // cookbook names (fan_cmd, duct_static, …) at parquet ingest (#525).
-        writeln!(f, "{k},").map_err(|e| e.to_string())?;
+        let role = exact_storage_id(k)?;
+        writeln!(f, "{k},{role}").map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -210,11 +220,25 @@ mod tests {
             .collect();
         let out = ingest_rows_to_parquet("fc1_job", &rows);
         assert_eq!(out.get("ok"), Some(&json!(true)), "{out}");
+        assert_eq!(out.get("arrow"), Some(&json!(false)), "{out}");
+        assert_eq!(out.get("parquet"), Some(&json!(false)), "{out}");
         assert_eq!(out.get("grid_minutes"), Some(&json!(1)), "{out}");
-        let pq = tmp.join(".cache/parquet/building=fc1_job/equipment=fc1_job/history.parquet");
-        assert!(pq.is_file(), "missing {}", pq.display());
-        let cols =
-            fs::read_to_string(tmp.join("data/csv_buildings/fc1_job/fc1_job/columns.csv")).unwrap();
+        assert!(
+            !tmp.join(".cache/parquet").exists() || !walk_has_name(&tmp, "history.parquet"),
+            "parquet history was written"
+        );
+        assert!(
+            !walk_has_name(&tmp, "data.arrow"),
+            "arrow history was written"
+        );
+        assert!(
+            !walk_has_name(&tmp, "history.parquet"),
+            "parquet history was written"
+        );
+        let cols = fs::read_to_string(
+            tmp.join("data/csv_buildings/fc1_job.incoming/equipment/columns.csv"),
+        )
+        .unwrap();
         assert!(cols.contains("fan_cmd"), "{cols}");
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -269,9 +293,36 @@ mod tests {
         }];
         let out = ingest_rows_to_parquet("storage_job", &rows);
         assert_eq!(out.get("ok"), Some(&json!(true)), "{out}");
-        let pq = storage.join("building=storage_job/equipment=storage_job/history.parquet");
-        assert!(pq.is_file(), "missing {}", pq.display());
+        assert_eq!(out.get("parquet"), Some(&json!(false)), "{out}");
+        assert!(
+            !walk_has_name(&storage, "history.parquet"),
+            "storage url received parquet history"
+        );
+        assert!(!walk_has_name(&tmp, "data.arrow"));
+        assert!(
+            tmp.join("data/csv_buildings/storage_job.incoming/equipment/history_wide.csv")
+                .is_file(),
+            "{out}"
+        );
         std::env::remove_var("OPENFDD_STORAGE_URL");
         let _ = fs::remove_dir_all(&tmp);
+    }
+
+    fn walk_has_name(root: &Path, name: &str) -> bool {
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(rd) = fs::read_dir(&dir) else {
+                continue;
+            };
+            for ent in rd.flatten() {
+                let path = ent.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.file_name().and_then(|n| n.to_str()) == Some(name) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }

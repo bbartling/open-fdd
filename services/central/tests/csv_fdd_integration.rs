@@ -156,6 +156,24 @@ fn http_raw(method: &str, url: &str, body: Option<&str>, bearer: Option<&str>) -
     (status, resp[body_start..].to_string())
 }
 
+fn walk_named(root: &std::path::Path, name: &str) -> bool {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for ent in rd.flatten() {
+            let path = ent.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.file_name().and_then(|n| n.to_str()) == Some(name) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn post_json(url: &str, body: &str) -> (u16, Value) {
     let (status, text) = http_raw("POST", url, Some(body), None);
     assert_ne!(status, 0, "HTTP connect failed for POST {url}");
@@ -217,13 +235,33 @@ fn csv_upload_execute_then_fc1_registry_run() {
     let execute_body = json!({ "session_id": session_id, "confirm": true }).to_string();
     let (status, execute) = post_json(&srv.url("/api/csv/import/execute"), &execute_body);
     assert_eq!(status, 200, "execute: {execute}");
-    assert_eq!(execute.get("ok"), Some(&json!(true)), "execute: {execute}");
-    let parquet = execute.get("parquet_ingest").expect("parquet_ingest");
     assert_eq!(
-        parquet.get("ok"),
-        Some(&json!(true)),
-        "parquet_ingest: {parquet}"
+        execute.get("arrow"),
+        Some(&json!(false)),
+        "execute: {execute}"
     );
+    assert_eq!(
+        execute.get("parquet"),
+        Some(&json!(false)),
+        "execute: {execute}"
+    );
+    assert!(
+        !walk_named(&srv.workspace, "history.parquet") && !walk_named(&srv.workspace, "data.arrow"),
+        "session execute wrote legacy history files"
+    );
+    let err = execute.get("error").and_then(|v| v.as_str()).unwrap_or("");
+    if execute.get("ok") == Some(&json!(true)) {
+        assert_eq!(
+            execute.get("historian").and_then(|v| v.as_str()),
+            Some("timescale"),
+            "execute: {execute}"
+        );
+    } else {
+        assert!(
+            err.contains("Timescale") || err.contains("timescale"),
+            "execute: {execute}"
+        );
+    }
 
     let fdd_body = json!({
         "mode": "registry",
