@@ -19,6 +19,31 @@ or set OPENFDD_ALLOW_DESTRUCTIVE_DB=1 together with a one-shot OPENFDD_RESET_DB 
 
 const RESET_TOKEN_KEY: &str = "destructive_reset_token";
 
+/// One advisory-lock key for every product schema-init path.
+///
+/// `pg_advisory_xact_lock` and `pg_advisory_lock` conflict on this key, so a
+/// queue connect, an hourly-job connect, and a startup migration cannot run
+/// `CREATE TABLE` / `CREATE TYPE` at the same time. The key stays fixed: a
+/// second key would let mixed versions race again during a rolling restart.
+pub(crate) const SCHEMA_DDL_ADVISORY_LOCK_KEY: i64 = 4_040_530_001;
+
+/// Open a transaction and take [`SCHEMA_DDL_ADVISORY_LOCK_KEY`] until commit
+/// or rollback. Callers run their DDL on the returned transaction.
+///
+/// The lock has to live in this transaction. An autocommit
+/// `pg_advisory_xact_lock` releases at the end of that one statement and does
+/// not cover the following DDL.
+pub(crate) async fn begin_schema_ddl(
+    pool: &PgPool,
+) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(SCHEMA_DDL_ADVISORY_LOCK_KEY)
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
+}
+
 const SCHEMA_SQL: &[&str] = &[
     include_str!("../../../sql/schema/00_extensions.sql"),
     include_str!("../../../sql/schema/01_bps_core.sql"),
@@ -552,14 +577,46 @@ async fn relation_exists(pool: &PgPool, table: &str) -> anyhow::Result<bool> {
 }
 
 async fn apply_forward(pool: &PgPool) -> anyhow::Result<()> {
+    // Session lock, same key as `begin_schema_ddl`. Each statement stays in
+    // autocommit: `CREATE EXTENSION timescaledb` and `create_hypertable` are
+    // not wrapped in an explicit transaction block. This connection is closed
+    // instead of returned to the pool, so a dropped startup cannot leave the
+    // session lock checked out.
+    let mut conn = pool
+        .acquire()
+        .await
+        .context("acquire connection for schema migration")?;
+    conn.close_on_drop();
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(SCHEMA_DDL_ADVISORY_LOCK_KEY)
+        .execute(&mut *conn)
+        .await
+        .context("acquire schema advisory lock")?;
+    let applied = apply_forward_statements(&mut conn).await;
+    let unlocked = sqlx::query("SELECT pg_advisory_unlock($1)")
+        .bind(SCHEMA_DDL_ADVISORY_LOCK_KEY)
+        .execute(&mut *conn)
+        .await
+        .context("release schema advisory lock");
+    match (applied, unlocked) {
+        (Ok(()), Ok(_)) => Ok(()),
+        (Err(err), _) => Err(err),
+        (Ok(()), Err(err)) => Err(err),
+    }
+}
+
+async fn apply_forward_statements(conn: &mut sqlx::PgConnection) -> anyhow::Result<()> {
     for stmt in forward_statements() {
         if let Some(kind) = statement_destructive_kind(&stmt) {
             bail!("refusing {kind} statement during forward schema");
         }
-        sqlx::query(&stmt).execute(pool).await.with_context(|| {
-            let preview: String = stmt.chars().take(80).collect();
-            format!("forward schema statement failed: {preview}")
-        })?;
+        sqlx::query(&stmt)
+            .execute(&mut *conn)
+            .await
+            .with_context(|| {
+                let preview: String = stmt.chars().take(80).collect();
+                format!("forward schema statement failed: {preview}")
+            })?;
     }
     Ok(())
 }
@@ -892,5 +949,83 @@ INSERT INTO seed_meta(key, value) VALUES ('a', 'b;c');
                 .any(|stmt| stmt.contains("SET search_path = pg_catalog")),
             "helper search_path is pinned"
         );
+    }
+
+    /// Startup migration on eight fresh connections. Without Timescale every
+    /// call stops on `CREATE EXTENSION`. None of them may be the catalog race,
+    /// and a leaked session lock must surface as `lock_timeout` instead of a hang.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+    async fn concurrent_forward_schema_does_not_race_the_catalog() {
+        let Some(url) = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+        else {
+            return;
+        };
+        let mut admin = url::Url::parse(&url).expect("database url");
+        admin.set_path("/postgres");
+        let name = format!("schemarace{}", uuid::Uuid::new_v4().simple());
+        assert!(name
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit()));
+        let admin_pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(admin.as_str())
+            .await
+            .expect("admin connection");
+        sqlx::query(&format!("CREATE DATABASE {name}"))
+            .execute(&admin_pool)
+            .await
+            .expect("create database");
+        sqlx::query(&format!("ALTER DATABASE {name} SET lock_timeout = '15s'"))
+            .execute(&admin_pool)
+            .await
+            .expect("lock timeout");
+        let mut fresh = url::Url::parse(&url).expect("database url");
+        fresh.set_path(&format!("/{name}"));
+        let fresh_url = fresh.to_string();
+        let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(8));
+        let mut tasks = Vec::new();
+        for _ in 0..8 {
+            let fresh_url = fresh_url.clone();
+            let barrier = std::sync::Arc::clone(&barrier);
+            tasks.push(tokio::spawn(async move {
+                let pool = sqlx::postgres::PgPoolOptions::new()
+                    .max_connections(1)
+                    .connect(&fresh_url)
+                    .await
+                    .expect("fresh connection");
+                barrier.wait().await;
+                apply_forward(&pool).await
+            }));
+        }
+        let mut ok = 0usize;
+        let mut missing_extension = 0usize;
+        for task in tasks {
+            match task.await.expect("forward schema task") {
+                Ok(()) => ok += 1,
+                Err(err) => {
+                    let text = format!("{err:#}");
+                    assert!(
+                        !text.contains("pg_type_typname_nsp_index"),
+                        "catalog race: {text}"
+                    );
+                    assert!(
+                        text.contains("timescaledb") || text.contains("extension"),
+                        "forward schema failed: {text}"
+                    );
+                    missing_extension += 1;
+                }
+            }
+        }
+        assert!(
+            ok == 8 || missing_extension == 8,
+            "mixed forward schema results ok={ok} missing_extension={missing_extension}"
+        );
+        sqlx::query(&format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+            .execute(&admin_pool)
+            .await
+            .expect("drop database");
     }
 }
