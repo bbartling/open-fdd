@@ -96,6 +96,10 @@ SELECT
      THEN dt_seconds ELSE 0.0::double precision
    END) / 3600.0) AS runtime_hours,
   COUNT(*)::bigint AS n_observations,
+  -- Completeness vs a calendar week: a bucket whose observed span is shorter
+  -- than six days is partial. Do not treat a short span as a full week.
+  -- Request-window clipping is applied separately by the SPA
+  -- (weekBucketIsPartial); this flag is historian span only.
   COALESCE((MAX(ts) - MIN(ts)) < interval '6 days', true) AS partial_week
 FROM ordered
 GROUP BY 1, 3, 4, 5, 6

@@ -198,6 +198,7 @@ describe("AppShell layout parity", () => {
           auth_required: true,
           hub_admin: false,
           multi_tenant: true,
+          tenant_ids: ["tenant_a", "tenant_b"],
         };
       }
       if (path === "/api/tenants") return membershipResponse(active);
@@ -261,6 +262,8 @@ describe("AppShell layout parity", () => {
           role: "operator",
           auth_required: true,
           hub_admin: false,
+          multi_tenant: true,
+          tenant_ids: ["tenant_a", "tenant_b"],
         };
       }
       if (path === "/api/tenants") return membershipResponse("tenant_a");
@@ -316,6 +319,55 @@ describe("AppShell layout parity", () => {
     );
 
     expect(await screen.findByTestId("app-tenant")).toBeTruthy();
+    expect(screen.queryByTestId("app-tenant-select")).toBeNull();
+  });
+
+  it("guides an operator with no tenant toward hub-admin assignment", async () => {
+    sessionStorage.setItem("openfdd.auth.token", "tok-none");
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/health") {
+        return {
+          ok: true,
+          version: "3.3.2+abcdef123456",
+          historian: "timescale",
+          timescale_ok: true,
+        };
+      }
+      if (path === "/api/auth/me") {
+        return {
+          ok: true,
+          username: "operator",
+          role: "operator",
+          auth_required: true,
+          hub_admin: false,
+          multi_tenant: true,
+          tenant_ids: [],
+          active_tenant_id: null,
+        };
+      }
+      if (path === "/api/tenants") {
+        const err = Object.assign(
+          new Error("multi-tenant mode requires tenant membership claims"),
+          { status: 403 },
+        );
+        throw err;
+      }
+      return {};
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell title="Home">
+          <div data-testid="home-body">body</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const guidance = await screen.findByTestId("tenant-assignment-guidance");
+    expect(guidance.textContent).toMatch(/no tenant assignment/i);
+    expect(guidance.textContent).toMatch(/hub admin/i);
+    expect(guidance.textContent).toMatch(/Admin → Users/i);
+    expect(screen.getByTestId("home-body")).toBeTruthy();
     expect(screen.queryByTestId("app-tenant-select")).toBeNull();
   });
 

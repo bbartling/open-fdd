@@ -162,7 +162,7 @@ function fanSummaryTables(
   return out;
 }
 
-/** vibe19 RCx Plots — preset picker + DataFusion historian series. */
+/** vibe19 RCx Plots — preset picker + Timescale analytics series. */
 export function RcxPage() {
   const { query } = useSessionQuery();
   const buildingId = query.siteId ?? "";

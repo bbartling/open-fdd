@@ -7,6 +7,18 @@ import {
 } from "./rcxOverviewPresets";
 
 describe("inspectChart", () => {
+  it("labels known raw units and leaves unknown columns unlabeled", () => {
+    const fig = equipmentInspectionChart(
+      [
+        { timestamp_utc: "2026-01-01T00:00:00Z", sat: 55, custom_col: 1 },
+        { timestamp_utc: "2026-01-01T01:00:00Z", sat: 56, custom_col: 2 },
+      ],
+      { equipmentId: "AHU_1", columns: ["sat", "custom_col"] },
+    );
+    expect((fig?.layout?.yaxis as { title?: string })?.title).toBe("sat (°F)");
+    expect((fig?.layout?.yaxis2 as { title?: string })?.title).toBe("custom_col");
+  });
+
   it("stacks domain axes with Inspection title from contract", () => {
     const fig = equipmentInspectionChart(
       [
@@ -21,9 +33,9 @@ describe("inspectChart", () => {
       "AHU_1",
     );
     expect(fig?.layout?.title).toBe(expected);
-    expect((fig?.layout?.yaxis as { title?: string })?.title).toBe("sat");
+    expect((fig?.layout?.yaxis as { title?: string })?.title).toBe("sat (°F)");
     expect((fig?.layout?.yaxis2 as { title?: string })?.title).toBe(
-      "fan_status",
+      "fan_status (bool)",
     );
     expect((fig?.layout?.yaxis as { domain?: number[] })?.domain?.[0]).toBeGreaterThan(
       (fig?.layout?.yaxis2 as { domain?: number[] })?.domain?.[0] ?? 1,

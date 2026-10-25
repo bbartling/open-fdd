@@ -473,17 +473,35 @@ function AfddPanel() {
       </div>
 
       <h3>Historian health</h3>
-      <p className="muted">Read-only values from Central data-management health. Missing values are reported as unavailable rather than synthesized.</p>
+      <p className="muted">
+        Product historian is Timescale. Optional analytics-result cache figures (files, bytes,
+        compaction) are not telemetry and appear only when Central reports them. Missing values
+        stay unavailable rather than synthesized.
+      </p>
       <div className="summary-grid">
         {metric(
           "Timescale",
           timescaleOk == null ? "Not reported" : timescaleOk ? "Connected" : "Not connected",
         )}
         {metric("Backend", historianBackend ?? "Not reported")}
-        {metric("Files / parts", historianFiles ?? "Not reported")}
-        {metric("Bytes", historianBytes ?? "Not reported")}
-        {metric("Small files", smallFiles ?? "Not reported")}
-        {metric("Compaction", compaction ?? "Not reported")}
+        {metric(
+          "Analytics cache files",
+          historianFiles ?? "Not reported",
+        )}
+        {metric(
+          "Analytics cache bytes",
+          historianBytes ?? "Not reported",
+        )}
+        {metric(
+          "Analytics cache small files",
+          smallFiles ?? "Not reported",
+        )}
+        {metric(
+          "Analytics cache compaction",
+          timescaleOk
+            ? "Not applicable (Timescale historian)"
+            : compaction ?? "Not reported",
+        )}
       </div>
 
       <h3>Recent AFDD cycles</h3>

@@ -1595,7 +1595,8 @@ mod pack_version_tests {
             "weekly runtime must report the chosen-signal sample count"
         );
         assert!(
-            MOTOR_WEEKLY_SQL.contains("AS partial_week"),
+            MOTOR_WEEKLY_SQL.contains("AS partial_week")
+                && MOTOR_WEEKLY_SQL.contains("interval '6 days'"),
             "weekly runtime must mark buckets that do not span the week"
         );
     }
