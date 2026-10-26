@@ -39,6 +39,8 @@ from data_safe import (  # noqa: E402
 # Keep aligned with services/central/src/db_lifecycle.rs RESET_TABLES.
 RESET_TABLES = (
     "sample",
+    "sample_changed_range",
+    "data_revision",
     "fdd_run",
     "analytics_result",
     "point_map",
