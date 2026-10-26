@@ -51,6 +51,10 @@ pub struct SiteConfigRaw {
     pub binding_set_path: Option<String>,
     #[serde(default)]
     pub binding_set_inline: Option<String>,
+    /// NF history transport: `rest` (default, portal HTTPS) or `grpc`
+    /// (PointManager over TLS). One per site. There is no automatic fallback.
+    #[serde(default)]
+    pub transport: Option<String>,
     /// Decimal degrees. Required for `open_meteo`.
     #[serde(default)]
     pub latitude: Option<f64>,
@@ -63,6 +67,36 @@ fn default_poll_secs() -> u64 {
     300
 }
 
+/// History transport for one NF site. Both feed the same queue and writer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SiteTransport {
+    /// `GET /api/v1/point/data` on the portal HTTPS origin.
+    #[default]
+    Rest,
+    /// `PointManager.GetData` over TLS on the same origin.
+    Grpc,
+}
+
+impl SiteTransport {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Rest => "rest",
+            Self::Grpc => "grpc",
+        }
+    }
+}
+
+/// Parse `transport`. Unknown values fail the site instead of picking one.
+pub fn parse_transport(raw: Option<&str>) -> Result<SiteTransport, String> {
+    match raw.map(str::trim) {
+        None | Some("") => Ok(SiteTransport::Rest),
+        Some(value) if value.eq_ignore_ascii_case("rest") => Ok(SiteTransport::Rest),
+        Some(value) if value.eq_ignore_ascii_case("grpc") => Ok(SiteTransport::Grpc),
+        Some(_) => Err("transport_invalid".into()),
+    }
+}
+
 pub struct SiteConfig {
     pub building_id: String,
     pub tenant_id: String,
@@ -73,6 +107,7 @@ pub struct SiteConfig {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
     pub anonymous: bool,
+    pub transport: SiteTransport,
     pub poll_secs: u64,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
@@ -92,6 +127,7 @@ impl fmt::Debug for SiteConfig {
             .field("client_id", &redacted(self.client_id.as_deref()))
             .field("client_secret", &redacted(self.client_secret.as_deref()))
             .field("anonymous", &self.anonymous)
+            .field("transport", &self.transport)
             .field("poll_secs", &self.poll_secs)
             .field("latitude", &self.latitude)
             .field("longitude", &self.longitude)
@@ -111,6 +147,7 @@ impl Clone for SiteConfig {
             client_id: self.client_id.clone(),
             client_secret: self.client_secret.clone(),
             anonymous: self.anonymous,
+            transport: self.transport,
             poll_secs: self.poll_secs,
             latitude: self.latitude,
             longitude: self.longitude,
@@ -284,6 +321,15 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
     if raw.allow_insecure_http && !anonymous {
         return Err("insecure_http_with_credentials".into());
     }
+    let transport = parse_transport(raw.transport.as_deref())?;
+    if transport == SiteTransport::Grpc {
+        if !matches!(kind, ProviderKind::Nf) {
+            return Err("transport_unsupported".into());
+        }
+        if anonymous || raw.allow_insecure_http {
+            return Err("grpc_requires_credentials".into());
+        }
+    }
     let allow_private = raw
         .network_scope
         .as_deref()
@@ -294,6 +340,9 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         raw.allow_insecure_http && anonymous,
         allow_private,
     )?;
+    if transport == SiteTransport::Grpc && !endpoint.starts_with("https://") {
+        return Err("grpc_tls_required".into());
+    }
     let kind_slug = match kind {
         ProviderKind::Nf => "nf",
         ProviderKind::AceIot => "ace_iot",
@@ -363,6 +412,7 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         client_id,
         client_secret,
         anonymous,
+        transport,
         poll_secs,
         latitude,
         longitude,
@@ -637,5 +687,74 @@ mod tests {
         let loaded = load_sites_json_owned(raw).unwrap();
         assert!(loaded.sites.is_empty());
         assert_eq!(loaded.failures[0].code, "truncated_model");
+    }
+
+    fn nf_site(endpoint: &str, extra: &str) -> String {
+        format!(
+            r#"{{"building_id":"SITE","tenant_id":"tenant-a","provider":"nf","endpoint":"{endpoint}","client_id":"id","client_secret":"sek"{extra}}}"#
+        )
+    }
+
+    fn only_failure(json: &str) -> String {
+        let loaded = load_sites_json_owned(json).unwrap();
+        assert!(loaded.sites.is_empty(), "site should fail: {json}");
+        loaded.failures[0].code.clone()
+    }
+
+    #[test]
+    fn transport_defaults_to_rest_and_accepts_grpc() {
+        let _guard = crate::test_env_lock::lock_env();
+        std::env::remove_var("OPENFDD_NF_ALLOW_ANONYMOUS");
+        let rest = load_sites_json_owned(&nf_site("https://portal.example", "")).unwrap();
+        assert_eq!(rest.sites[0].transport, SiteTransport::Rest);
+        let explicit =
+            load_sites_json_owned(&nf_site("https://portal.example", r#","transport":"REST""#))
+                .unwrap();
+        assert_eq!(explicit.sites[0].transport, SiteTransport::Rest);
+        let grpc =
+            load_sites_json_owned(&nf_site("https://portal.example", r#","transport":"grpc""#))
+                .unwrap();
+        assert_eq!(grpc.sites[0].transport, SiteTransport::Grpc);
+        assert_eq!(grpc.sites[0].transport.as_str(), "grpc");
+        // Same connection id either way: one queue identity per site.
+        assert_eq!(
+            rest.sites[0].provider_instance_id,
+            grpc.sites[0].provider_instance_id
+        );
+        let debug = format!("{:?}", grpc.sites[0]);
+        assert!(debug.contains("Grpc"));
+        assert!(!debug.contains("sek"));
+    }
+
+    #[test]
+    fn transport_rejects_unknown_and_unsafe_combinations() {
+        let _guard = crate::test_env_lock::lock_env();
+        std::env::remove_var("OPENFDD_NF_ALLOW_ANONYMOUS");
+        for bad in ["mqtt", "grpc-web", "auto", "rest,grpc"] {
+            assert_eq!(
+                only_failure(&nf_site(
+                    "https://portal.example",
+                    &format!(r#","transport":"{bad}""#)
+                )),
+                "transport_invalid",
+                "{bad}"
+            );
+        }
+        assert_eq!(
+            only_failure(&anon_site("https://portal.example").replace(
+                r#""auth_mode":"anonymous""#,
+                r#""auth_mode":"anonymous","transport":"grpc""#
+            )),
+            "grpc_requires_credentials"
+        );
+        assert_eq!(
+            only_failure(
+                r#"{"building_id":"SITE","tenant_id":"tenant-a","provider":"open_meteo","endpoint":"https://api.open-meteo.com","latitude":1.0,"longitude":2.0,"transport":"grpc","point_map":[{"provider_point_id":"temperature_2m","equipment_id":"WEATHER","role":"web-outside-air-temp"}]}"#
+            ),
+            "transport_unsupported"
+        );
+        assert_eq!(parse_transport(None), Ok(SiteTransport::Rest));
+        assert_eq!(parse_transport(Some(" ")), Ok(SiteTransport::Rest));
+        assert_eq!(parse_transport(Some("Grpc")), Ok(SiteTransport::Grpc));
     }
 }

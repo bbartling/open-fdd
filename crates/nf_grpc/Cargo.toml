@@ -13,6 +13,12 @@ prost = "0.13"
 prost-types = "0.13"
 tokio = { version = "1", features = ["rt", "time", "macros", "net"] }
 tonic = { version = "0.12.3", features = ["tls", "tls-native-roots", "tls-webpki-roots"] }
+tokio-stream = { version = "0.1", features = ["net"], optional = true }
+
+[features]
+default = []
+# In-process PointManager fake for downstream tests. Dev-dependencies only.
+test-support = ["dep:tokio-stream"]
 
 [build-dependencies]
 protoc-bin-vendored = "3"
