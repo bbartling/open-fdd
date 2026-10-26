@@ -1,0 +1,34 @@
+{
+  "application": {
+    "id": "open-meteo-weather",
+    "name": "Open-Meteo Weather",
+    "description": "Open-FDD: Open-Meteo outdoor air weather every 20 min (source of truth: open-fdd scripts/nf/hooks)",
+    "runtime": "RUNTIME_NODE_JS",
+    "auth": {
+      "apiKey": {
+        "scopes": ["normalgw.hpl.v1.readwrite", "normalgw.hpl.v2.readwrite", "normalgw.automation.v1.readonly"]
+      }
+    }
+  },
+  "files": {
+    "/hooks/open_meteo_weather.js": "open_meteo_weather.js"
+  },
+  "hooks": [
+    {
+      "id": "open-meteo-weather",
+      "name": "open-meteo-weather",
+      "entryPoint": "/hooks/open_meteo_weather.js",
+      "points": {
+        "noPoints": true,
+        "globalVariables": [
+          {"label": "oa_dry_bulb_web", "attrs": {"description": "Outdoor air dry bulb (Open-Meteo, Madison WI)", "units": "degF", "source": "open-meteo"}},
+          {"label": "oa_rh_web", "attrs": {"description": "Outdoor air relative humidity (Open-Meteo, Madison WI)", "units": "%", "source": "open-meteo"}},
+          {"label": "oa_dewpoint_web", "attrs": {"description": "Outdoor air dewpoint (Open-Meteo, Magnus fallback, Madison WI)", "units": "degF", "source": "open-meteo"}}
+        ]
+      },
+      "schedule": {"rrule": "DTSTART:20261026T140000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"},
+      "mode": "MODE_SCHEDULED",
+      "invokeTimeout": "60s"
+    }
+  ]
+}
