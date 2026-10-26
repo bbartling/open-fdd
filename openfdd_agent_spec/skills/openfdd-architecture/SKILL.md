@@ -23,7 +23,7 @@ Read [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and [`ownership.yaml`](../../own
   - Haystack RDF / parsed SPARQL, durable job and coverage metadata, audit logs, model snapshots and on-demand exports stay; none may become another raw telemetry store.
   - Known gap, not permitted: the remaining `crates/fdd_store` Arrow / Parquet modules (historian sidecar, compaction, disk budget), removed in Wave P2. The analytics result cache is the PostgreSQL `analytics_result` table.
 - Production FDD and analytics = Timescale / PostgreSQL (`sql/fdd/`) on central. No silent pandas fallback ([ADR-010](../../../docs/architecture/adr-010-timescale-hard-cutover.md)).
-- Ingest = Normal Framework portal API and CSV. MQTT, BACnet, Modbus, Haystack wire, and fieldbus are an unqualified archive.
+- Ingest = Normal Framework portal API and CSV. MQTT ingest is disabled by default in 4.x. MQTT, BACnet, Modbus, Haystack wire, and fieldbus are an unqualified archive. Historical, superseded by the Timescale-only mandate: MQTTS once kept a small ingest buffer keyed by the envelope site id. That buffer is not a live path and is not a second telemetry store.
 - Railway product services = central + web, with Timescale. Optional image: `openfdd-mcp`.
 - Pandas oracle = `open_fdd.rules` + `analytics` — permanent, outside the product request path.
 - Both cookbooks stay. The SQL cookbook filename `datafusion-sql-cookbook.md` is an expression record, not the engine. See [`docs/COOKBOOK_OWNERSHIP.md`](../../docs/COOKBOOK_OWNERSHIP.md).
