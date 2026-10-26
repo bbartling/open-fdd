@@ -11,7 +11,7 @@ historian, dual-write false. Soft-OPEN is not full qualification.
 
 **Soft-OPEN R8d tip-safe:** no Soft-OPEN agent Railway/DB/volume backups; Parquet
 compaction/budget Soft-OPEN N/A on Timescale tip (the remaining `crates/fdd_store`
-Parquet compaction, budget and analytics cache code is a known gap being removed in Wave P2, not permitted); Timescale WAL/PITR/restore
+Parquet compaction and budget code is a known gap being removed in Wave P2, not permitted); Timescale WAL/PITR/restore
 remain FQ-open. See [`docs/softopen/SOFTOPEN_WAL_RESTORE_R8d.md`](../softopen/SOFTOPEN_WAL_RESTORE_R8d.md).
 
 **Morning / reboot:** ART one-pager

@@ -1,13 +1,13 @@
-//! Serve analytics envelopes from the parquet result cache when the key matches.
+//! Serve analytics envelopes from the PostgreSQL result cache when the key matches.
 //!
 //! The key covers the result contract, SQL pack, and model revision. Freshness
 //! compares the scoped historian watermark and coverage. A failed or missing
 //! watermark read is explicit and is never a fresh hit. A newer watermark is
 //! `stale` (default) or recomputed when `OPENFDD_ANALYTICS_CACHE_ON_STALE=recompute`
 //! or the request sets `refresh: true`. AFDD `{rule_id}.json` files are not
-//! this cache. Storage layout stays `analytics-result-parquet-v2`.
+//! this cache. Rows live in `analytics_result` (see `result_store`). Without a
+//! configured Timescale historian the cache is skipped; nothing is written to disk.
 
-use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -15,26 +15,23 @@ use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, SecondsFormat, Utc};
 use fdd_store::{
-    config_hash, freshness_for_identity, historian_watermark_order, order_key_to_rfc3339,
-    peek_result_provenance, read_plan, read_result, write_result, AnalyticsCacheKey,
-    AnalyticsResultTable, CacheFreshness, CacheIdentity, CacheProvenance, InputWatermark,
-    SessionBook, SessionError, SessionKind, StaleAction,
+    config_hash, freshness_for_identity, read_plan, AnalyticsCacheKey, AnalyticsResultTable,
+    CacheFreshness, CacheIdentity, CacheProvenance, InputWatermark, SessionBook, SessionError,
+    SessionKind, StaleAction,
 };
 use serde_json::{json, Value};
 
+use super::result_store::{ResultStore, STORE_SCHEMA};
 use super::{AnalyticsEnvelope, AnalyticsRequest, SCHEMA_VERSION};
 
-/// Semantic result contract. Distinct from storage schema `analytics-result-parquet-v2`.
+/// Semantic result contract. Distinct from storage schema [`STORE_SCHEMA`].
 /// Unstamped envelopes written before this field existed are incompatible.
 pub const ANALYTICS_RESULT_CONTRACT: &str = "analytics-result-contract-v2";
 
 /// How `serve_with` learns the computation identity.
 pub enum CacheWatch {
-    /// Production path: Timescale scope when that historian is active, else Parquet.
+    /// Production path: scoped Timescale watermark, coverage, and model revision.
     Resolve,
-    /// Parquet part order only. A read error is unavailable, not order 0.
-    #[cfg(test)]
-    Parquet,
     /// Caller-supplied identity (tests and already-resolved input).
     #[cfg(test)]
     Resolved(CacheIdentity),
@@ -150,9 +147,20 @@ pub async fn serve(
     req: &AnalyticsRequest,
     compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
 ) -> Result<ServedAnalytics, (StatusCode, Json<Value>)> {
-    let root = storage_root();
+    let store = match super::result_store::store_from_env().await {
+        Ok(store) => store,
+        Err(reason) => {
+            let started = Instant::now();
+            let envelope = compute_with_admission(compute).await?;
+            return Ok(skipped(
+                envelope,
+                started,
+                &format!("analytics result cache unavailable: {reason}"),
+            ));
+        }
+    };
     serve_with(
-        &root,
+        &store,
         crate::building_sessions::book(),
         (query_id, query_version),
         req,
@@ -164,7 +172,7 @@ pub async fn serve(
 }
 
 pub async fn serve_with(
-    root: &Path,
+    store: &ResultStore,
     sessions: &Mutex<SessionBook>,
     query: (&str, &str),
     req: &AnalyticsRequest,
@@ -193,9 +201,7 @@ pub async fn serve_with(
     };
 
     let identity = match watch {
-        CacheWatch::Resolve => resolve_cache_identity(root, building_id, req).await,
-        #[cfg(test)]
-        CacheWatch::Parquet => parquet_identity(root, building_id),
+        CacheWatch::Resolve => resolve_cache_identity(building_id, req).await,
         #[cfg(test)]
         CacheWatch::Resolved(identity) => identity,
     };
@@ -216,9 +222,15 @@ pub async fn serve_with(
         }
     }
 
-    // Soft-OPEN 371 T1c: peek provenance only — never materialize Parquet rows
+    // Soft-OPEN 371 T1c: peek provenance only — never materialize cached rows
     // before compute admission when serving a durable cache hit.
-    let peeked = peek_result_provenance(root, &key).ok().flatten();
+    let peeked = match store.peek(&key).await {
+        Ok(peeked) => peeked,
+        Err(err) => {
+            tracing::warn!(error = %err, query_id, "analytics result cache peek failed");
+            None
+        }
+    };
     let freshness = match &peeked {
         Some(prov) => freshness_for_identity(prov, &identity),
         None => CacheFreshness::Miss,
@@ -227,12 +239,12 @@ pub async fn serve_with(
     if plan.serve_cached && peeked.is_some() {
         let _permit = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
             .ok_or_else(analytics_admission_busy)?;
-        if let Some((table, prov)) = read_result(root, &key).ok().flatten() {
+        if let Some((table, prov)) = store.read(&key).await.ok().flatten() {
             let envelope = envelope_from_table(&table, &prov, req);
             let cache = cache_status(true, plan.stale, started, &key, &prov, &identity);
             return Ok(ServedAnalytics { envelope, cache });
         }
-        // Rare race: cache file vanished after peek — fall through to recompute.
+        // Rare race: row was trimmed after peek — fall through to recompute.
     }
 
     {
@@ -249,10 +261,8 @@ pub async fn serve_with(
     let envelope = compute_with_admission(compute).await?;
     let table = table_from_envelope(&envelope);
     let provenance = provenance_for(&key, &envelope, &identity);
-    if let Err(err) = write_result(root, &key, &table, &provenance) {
-        tracing::warn!(error = %err, query_id, "analytics result parquet write failed");
-    } else if let Err(err) = fdd_store::enforce_budget_throttled(root, 60) {
-        tracing::warn!(error = %err, "local data budget enforcement failed");
+    if let Err(err) = store.write(&key, &table, &provenance).await {
+        tracing::warn!(error = %err, query_id, "analytics result cache write failed");
     }
     // A just-computed envelope is fresh only when the input read succeeded.
     let cache = cache_status(
@@ -293,16 +303,6 @@ pub fn json_body(served: &ServedAnalytics) -> Json<Value> {
         "analytics": served.envelope.to_json(),
         "cache": served.cache,
     }))
-}
-
-fn storage_root() -> PathBuf {
-    if let Ok(raw) = std::env::var("OPENFDD_ANALYTICS_CACHE_ROOT") {
-        let trimmed = raw.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
-        }
-    }
-    fdd_store::local_file_root_from_env().unwrap_or_else(super::historian::parquet_root_base)
 }
 
 fn stale_action_from_env() -> StaleAction {
@@ -488,7 +488,7 @@ fn cache_status(
         "hit": hit,
         "stale": stale,
         "elapsed_ms": started.elapsed().as_millis() as u64,
-        "schema": fdd_store::SCHEMA_NAME,
+        "schema": STORE_SCHEMA,
         "query_id": key.query_id,
         "query_version": key.query_version,
         "config_hash": key.config_hash,
@@ -563,34 +563,7 @@ fn provenance_for(
     }
 }
 
-fn parquet_identity(root: &Path, building_id: &str) -> CacheIdentity {
-    let watermark = match historian_watermark_order(root, building_id) {
-        Ok(order) => InputWatermark::Known {
-            source: "parquet".into(),
-            order,
-            utc: order_key_to_rfc3339(order),
-            coverage: format!("parquet-parts:{order}"),
-        },
-        Err(err) => InputWatermark::Unavailable {
-            reason: format!("parquet watermark read failed: {err}"),
-        },
-    };
-    CacheIdentity {
-        result_contract: ANALYTICS_RESULT_CONTRACT.into(),
-        sql_pack: crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default(),
-        model_revision: "parquet-historian".into(),
-        watermark,
-    }
-}
-
-async fn resolve_cache_identity(
-    root: &Path,
-    building_id: &str,
-    req: &AnalyticsRequest,
-) -> CacheIdentity {
-    if !crate::timescale_historian::historian_is_timescale() {
-        return parquet_identity(root, building_id);
-    }
+async fn resolve_cache_identity(building_id: &str, req: &AnalyticsRequest) -> CacheIdentity {
     let sql_pack = crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default();
     let equipment = req.query.equipment_ids.clone().unwrap_or_default();
     let input = crate::timescale_product::read_analytics_cache_input(
@@ -650,6 +623,7 @@ fn session_error(err: SessionError) -> (StatusCode, Json<Value>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analytics::result_store::memory::MemoryStore;
     use crate::analytics::{envelope, AnalyticsQuery};
     use crate::test_env_lock::lock_env;
     use fdd_store::SessionLimits;
@@ -702,6 +676,10 @@ mod tests {
         }
     }
 
+    fn mem_store() -> ResultStore {
+        ResultStore::Memory(Arc::new(MemoryStore::new(64)))
+    }
+
     fn limits() -> SessionLimits {
         SessionLimits {
             max_interactive: 2,
@@ -714,17 +692,17 @@ mod tests {
     #[tokio::test]
     async fn cache_hit_does_not_recompute_and_records_elapsed() {
         let _cg = CgroupTestEnv::low_pressure();
-        let tmp = tempfile::tempdir().unwrap();
+        let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let calls = Arc::new(AtomicUsize::new(0));
         let calls_hit = calls.clone();
         let first = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("runtime", "runtime-v1"),
             &req("site-a"),
             StaleAction::ServeStale,
-            CacheWatch::Parquet,
+            CacheWatch::Resolved(timescale_identity("model-a", 1, "samples=1;series=1")),
             async || {
                 calls_hit.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("runtime-v1", &req("site-a").query, Vec::new());
@@ -742,12 +720,12 @@ mod tests {
 
         let calls_second = calls.clone();
         let second = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("runtime", "runtime-v1"),
             &req("site-a"),
             StaleAction::ServeStale,
-            CacheWatch::Parquet,
+            CacheWatch::Resolved(timescale_identity("model-a", 1, "samples=1;series=1")),
             async || {
                 calls_second.fetch_add(1, Ordering::SeqCst);
                 envelope("runtime-v1", &req("site-a").query, Vec::new())
@@ -766,17 +744,17 @@ mod tests {
     #[tokio::test]
     async fn watermark_advance_is_stale_until_refresh() {
         let _cg = CgroupTestEnv::low_pressure();
-        let tmp = tempfile::tempdir().unwrap();
+        let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let calls = Arc::new(AtomicUsize::new(0));
         let c1 = calls.clone();
         let _ = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("sensor-faults", "sensor-faults-v1"),
             &req("site-a"),
             StaleAction::ServeStale,
-            CacheWatch::Parquet,
+            CacheWatch::Resolved(timescale_identity("model-a", 1, "samples=1;series=1")),
             async || {
                 c1.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("sensor-faults-v1", &req("site-a").query, Vec::new());
@@ -787,19 +765,14 @@ mod tests {
         )
         .await
         .unwrap();
-        let hist = tmp
-            .path()
-            .join("history/building_id=site-a/equipment_id=ahu/year=2026/month=03");
-        fs::create_dir_all(&hist).unwrap();
-        fs::write(hist.join("part-20260301T000000Z-live.parquet"), b"x").unwrap();
         let c2 = calls.clone();
         let stale = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("sensor-faults", "sensor-faults-v1"),
             &req("site-a"),
             StaleAction::ServeStale,
-            CacheWatch::Parquet,
+            CacheWatch::Resolved(timescale_identity("model-a", 2, "samples=2;series=1")),
             async || {
                 c2.fetch_add(1, Ordering::SeqCst);
                 envelope("sensor-faults-v1", &req("site-a").query, Vec::new())
@@ -816,12 +789,12 @@ mod tests {
         refresh.refresh = true;
         let c3 = calls.clone();
         let fresh = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("sensor-faults", "sensor-faults-v1"),
             &refresh,
             StaleAction::ServeStale,
-            CacheWatch::Parquet,
+            CacheWatch::Resolved(timescale_identity("model-a", 2, "samples=2;series=1")),
             async || {
                 c3.fetch_add(1, Ordering::SeqCst);
                 let mut env = envelope("sensor-faults-v1", &req("site-a").query, Vec::new());
@@ -851,15 +824,15 @@ mod tests {
                 panic!("semaphore did not saturate");
             }
         }
-        let tmp = tempfile::tempdir().unwrap();
+        let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let err = match serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("runtime", "runtime-v1"),
             &req("site-busy"),
             StaleAction::ServeStale,
-            CacheWatch::Parquet,
+            CacheWatch::Resolved(timescale_identity("model-a", 1, "samples=1;series=1")),
             async || envelope("runtime-v1", &req("site-busy").query, Vec::new()),
         )
         .await
@@ -916,7 +889,7 @@ mod tests {
         env
     }
 
-    fn write_legacy_scatter(root: &Path, request: &AnalyticsRequest) {
+    async fn write_legacy_scatter(store: &ResultStore, request: &AnalyticsRequest) {
         let hash = config_hash(&legacy_request_material(request));
         let key = AnalyticsCacheKey {
             building_id: "site-a".into(),
@@ -955,25 +928,15 @@ mod tests {
             watermark_status: String::new(),
             coverage: String::new(),
         };
-        write_result(root, &key, &table, &provenance).unwrap();
+        store.write(&key, &table, &provenance).await.unwrap();
     }
 
     #[tokio::test]
     async fn preupgrade_envelope_recomputes_and_refresh_survives_restart() {
         let _cg = CgroupTestEnv::low_pressure();
-        let tmp = tempfile::tempdir().unwrap();
-        let history = tmp
-            .path()
-            .join("history/building_id=site-a/equipment_id=ahu/year=2026/month=06");
-        fs::create_dir_all(&history).unwrap();
-        let sample = history.join("part-20260601T000000Z-live.parquet");
-        fs::write(&sample, b"historian-sample").unwrap();
-        let labeled = tmp.path().join("rule_results/site-a");
-        fs::create_dir_all(&labeled).unwrap();
-        let rule = labeled.join("FC1.json");
-        fs::write(&rule, br#"{"rule_id":"FC1","status":"PASS"}"#).unwrap();
+        let store = mem_store();
         let request = req("site-a");
-        write_legacy_scatter(tmp.path(), &request);
+        write_legacy_scatter(&store, &request).await;
         let legacy_hash = config_hash(&legacy_request_material(&request));
         let identity = timescale_identity("model-a", 20260601000000, "samples=4;series=2");
         let current_hash = config_hash(&config_material(&request, &identity));
@@ -983,7 +946,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let calls_first = calls.clone();
         let first = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -999,17 +962,15 @@ mod tests {
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(first.cache["hit"], false);
         assert_eq!(first.cache["stale"], false);
-        assert_eq!(first.cache["schema"], json!(fdd_store::SCHEMA_NAME));
-        assert_eq!(fdd_store::SCHEMA_NAME, "analytics-result-parquet-v2");
+        assert_eq!(first.cache["schema"], json!(STORE_SCHEMA));
+        assert_eq!(STORE_SCHEMA, "analytics-result-postgres-v1");
         assert_eq!(first.envelope.points.len(), 1);
         assert_eq!(first.envelope.points[0]["x_role"], "web_oa_t");
-        assert!(sample.is_file());
-        assert!(rule.is_file());
 
         let restarted = Mutex::new(SessionBook::new(limits()));
         let calls_second = calls.clone();
         let second = serve_with(
-            tmp.path(),
+            &store,
             &restarted,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1035,7 +996,7 @@ mod tests {
         refresh.refresh = true;
         let calls_refresh = calls.clone();
         let refreshed = serve_with(
-            tmp.path(),
+            &store,
             &restarted,
             ("rcx-preset", "rcx-preset-v1"),
             &refresh,
@@ -1060,7 +1021,7 @@ mod tests {
         let again = Mutex::new(SessionBook::new(limits()));
         let calls_again = calls.clone();
         let persisted = serve_with(
-            tmp.path(),
+            &store,
             &again,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1081,14 +1042,12 @@ mod tests {
             persisted.envelope.generated_at,
             refreshed.envelope.generated_at
         );
-        assert!(sample.is_file());
-        assert!(rule.is_file());
     }
 
     #[tokio::test]
     async fn incompatible_stamp_on_the_current_partition_recomputes() {
         let _cg = CgroupTestEnv::low_pressure();
-        let tmp = tempfile::tempdir().unwrap();
+        let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let request = req("site-a");
         let identity = timescale_identity("model-a", 1, "samples=1;series=1");
@@ -1110,10 +1069,10 @@ mod tests {
         provenance.watermark_status.clear();
         provenance.coverage.clear();
         provenance.watermark_order = 0;
-        write_result(tmp.path(), &key, &table, &provenance).unwrap();
+        store.write(&key, &table, &provenance).await.unwrap();
 
         let served = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1130,16 +1089,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn timescale_advance_without_parquet_is_stale() {
+    async fn timescale_advance_is_stale() {
         let _cg = CgroupTestEnv::low_pressure();
-        let tmp = tempfile::tempdir().unwrap();
+        let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let calls = Arc::new(AtomicUsize::new(0));
         let request = req("site-a");
         let first_id = timescale_identity("model-a", 20260601000000, "samples=4;series=2");
         let c1 = calls.clone();
         let _ = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1152,11 +1111,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(!tmp.path().join("history").exists());
         let c2 = calls.clone();
         let advanced = timescale_identity("model-a", 20260602000000, "samples=5;series=2");
         let stale = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1174,20 +1132,19 @@ mod tests {
         assert_eq!(stale.cache["stale"], true);
         assert_eq!(stale.cache["watermark_status"], json!("known"));
         assert_eq!(stale.envelope.points[0]["oat_f"], 60.0);
-        assert!(!tmp.path().join("history").exists());
     }
 
     #[tokio::test]
     async fn model_remap_and_sql_pack_are_distinct_identities() {
         let _cg = CgroupTestEnv::low_pressure();
-        let tmp = tempfile::tempdir().unwrap();
+        let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let request = req("site-a");
         let calls = Arc::new(AtomicUsize::new(0));
         let original = timescale_identity("model-a", 1, "samples=1;series=1");
         let c1 = calls.clone();
         let _ = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1204,7 +1161,7 @@ mod tests {
         remapped.model_revision = "model-b".into();
         let c2 = calls.clone();
         let remapped_hit = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1230,7 +1187,7 @@ mod tests {
         other_pack.sql_pack = "analytics=other;fdd=other".into();
         let c3 = calls.clone();
         let pack_hit = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1257,14 +1214,14 @@ mod tests {
     #[tokio::test]
     async fn broken_watermark_is_never_a_fresh_hit() {
         let _cg = CgroupTestEnv::low_pressure();
-        let tmp = tempfile::tempdir().unwrap();
+        let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let request = req("site-a");
         let calls = Arc::new(AtomicUsize::new(0));
         let known = timescale_identity("model-a", 1, "samples=1;series=1");
         let c1 = calls.clone();
         let _ = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1283,7 +1240,7 @@ mod tests {
         };
         let c2 = calls.clone();
         let stale = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1308,7 +1265,7 @@ mod tests {
 
         let c3 = calls.clone();
         let again = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &request,
@@ -1334,13 +1291,13 @@ mod tests {
     #[tokio::test]
     async fn tenants_do_not_share_a_cache_hit() {
         let _cg = CgroupTestEnv::low_pressure();
-        let tmp = tempfile::tempdir().unwrap();
+        let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let identity = timescale_identity("model-a", 1, "samples=1;series=1");
         let mut site_a = req("site-a");
         site_a.read_tenant_id = Some("tenant-a".into());
         let _ = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &site_a,
@@ -1355,7 +1312,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let calls_b = calls.clone();
         let other = serve_with(
-            tmp.path(),
+            &store,
             &sessions,
             ("rcx-preset", "rcx-preset-v1"),
             &site_b,

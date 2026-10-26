@@ -42,10 +42,10 @@ Current code does not yet meet the mandate. These are defects being removed in
 Wave P2, not exceptions. Do not extend them, rely on them, or describe them as
 allowed behavior. A change that touches them removes or shrinks them.
 
-- `crates/fdd_store` analytics result cache: Parquet files under
-  `analytics_results/` (schema `analytics-result-parquet-v2`,
-  `analytics_cache.rs`), read by `services/central/src/analytics/result_cache.rs`,
-  plus the crate's Arrow / Parquet sidecar, compaction and disk-budget modules.
+- `crates/fdd_store`: the now-unused Parquet result-cache writer in
+  `analytics_cache.rs` (the product cache is the PostgreSQL `analytics_result`
+  table), plus the crate's Arrow / Parquet sidecar, compaction and disk-budget
+  modules.
 - `edge/` Arrow IPC pages for package CSV datasets.
 - Workspace dependencies `arrow`, `arrow-schema`, `parquet` and `datafusion` in
   the root `Cargo.toml`, and the `legacy-datafusion` / `legacy-parquet`
@@ -134,7 +134,7 @@ Target shape (Phase 4 hardening):
 | API | `POST /api/fdd/run` (Timescale / PostgreSQL) |
 | Registry | `sql/fdd/registry.yaml` |
 | Rules | `sql/fdd/postgres/rules/*.sql` |
-| Storage | Timescale / PostgreSQL. Rule results persist in PostgreSQL or bounded memory. A file-format result cache is not permitted (known gap: `crates/fdd_store` Parquet cache, removal in Wave P2). |
+| Storage | Timescale / PostgreSQL. Rule results persist in PostgreSQL or bounded memory. A file-format result cache is not permitted; the result cache is the PostgreSQL `analytics_result` table. |
 | Units | °F canonical. Metric inputs convert at query (`unit_system=metric\|si`). |
 | Time | UTC `timestamptz`. Fault duration uses the forward timestamp delta. A gap longer than `MAX_GAP_HOURS` (default 1) is unknown: not fault time and not covered time. |
 | Ingest | Normal Framework portal API and CSV packages only |

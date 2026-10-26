@@ -56,6 +56,7 @@ const SCHEMA_SQL: &[&str] = &[
     include_str!("../../../sql/fdd/postgres/postgres_helpers.sql"),
     include_str!("../../../sql/schema/06_fdd_pack_runtime.sql"),
     include_str!("../../../sql/schema/07_opaque_series_binding.sql"),
+    include_str!("../../../sql/schema/08_analytics_result_cache.sql"),
 ];
 
 /// Tables whose rows mean this database is already in use.

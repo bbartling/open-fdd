@@ -18,8 +18,8 @@ Apache Arrow, Arrow IPC, Feather and DataFusion are prohibited in active product
 storage, caching, execution and dependencies — not only on the historian path.
 Derived FDD / analytics results persist in PostgreSQL or bounded memory. NF
 REST, local NF gRPC (planned) and CSV share one validated, idempotent Timescale
-telemetry writer. Canonical text and known gaps (the `crates/fdd_store` Parquet
-analytics cache, removed in Wave P2):
+telemetry writer. Canonical text and known gaps (the remaining `crates/fdd_store`
+Parquet modules, removed in Wave P2):
 [`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory).
 
 **BPS reference (pattern only):** ADR 0009 in BPS

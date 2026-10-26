@@ -25,7 +25,7 @@ Order key: `part-YYYYMMDDTHHMMSSZ`, else `year=`/`month=` (first of that month),
 
 ## API
 
-Current code (known gap) also applies the budget after a historian flush and after an analytics result write, at most once a minute, when the budget is enabled. That scan uses the hub pool, including `tenants/{id}/…`, not one tenant directory alone.
+Current code (known gap) also applies the budget after a historian flush, at most once a minute, when the budget is enabled. That scan uses the hub pool, including `tenants/{id}/…`, not one tenant directory alone.
 
 Hub admin:
 
