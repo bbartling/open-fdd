@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Host disk preflight for the 100 GiB oldest-first data budget.
 
-Mirrors ``preflight_update`` in ``crates/fdd_store/src/disk_budget.rs``.
+The Rust mirror (`fdd_store::disk_budget`) was removed with the Parquet store.
 Run this before an on-box backup or patch. A ~200 GiB edge must not be
 assumed to hold 100 GiB of live parquet plus a second full copy.
 

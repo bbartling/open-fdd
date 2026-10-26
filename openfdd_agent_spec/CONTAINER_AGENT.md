@@ -108,7 +108,7 @@ Timescale is the historian. Analytics/RCx/fault result cache is the PostgreSQL `
 
 **Memory:** prefer lookback-bounded Timescale SQL. DataFusion spill-pool variables are not the tip path ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)). See [`AFDD_MODES.md`](../docs/operations/AFDD_MODES.md).
 
-Local/edge data budget defaults to 100 GiB oldest-first across `history/` and `analytics_results/`. Before an on-box full backup or patch, run `scripts/openfdd_disk_preflight.py`. Do not plan 100 GiB live plus another 100 GiB backup on a ~200 GiB disk. Test deploys skip backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Railway eviction is a separate knob (`OPENFDD_DATA_BUDGET_ENABLED`). Soft-OPEN lab program: **no backups** unless Ben asks — keep historian volumes live across image refresh. Docs: [`ANALYTICS_RESULT_CACHE.md`](../docs/operations/ANALYTICS_RESULT_CACHE.md), [`DATA_RETENTION_BUDGET.md`](../docs/operations/DATA_RETENTION_BUDGET.md).
+Central writes no Parquet/Arrow/Feather, so there is no file eviction budget; database size is a PostgreSQL concern. Before an on-box full backup or patch, run `scripts/openfdd_disk_preflight.py`. Do not plan 100 GiB live plus another 100 GiB backup on a ~200 GiB disk. Test deploys skip backups unless `OPENFDD_BACKUP_ON_UPDATE=1`. Soft-OPEN lab program: **no backups** unless Ben asks — keep historian volumes live across image refresh. Docs: [`ANALYTICS_RESULT_CACHE.md`](../docs/operations/ANALYTICS_RESULT_CACHE.md), [`DATA_RETENTION_BUDGET.md`](../docs/operations/DATA_RETENTION_BUDGET.md).
 
 ## Ops patch cycle (portal)
 
