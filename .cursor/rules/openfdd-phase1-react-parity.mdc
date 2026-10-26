@@ -30,7 +30,7 @@ cookbooks, GHCR, ECM, or ownership.
 
 - React presentation only (`frontend/web`).
 - APIs/jobs/persistence = `services/central` (Rust).
-- Deterministic FDD/analytics = DataFusion / `sql_rules/`.
+- Deterministic FDD/analytics = Timescale / PostgreSQL + `sql/fdd/*.sql`. Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing; Parquet, Arrow, Feather and DataFusion are prohibited (`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate). `sql_rules/` / DataFusion is historical.
 - Python = oracle/characterization only in Phase 1.
 - **No FastAPI** and no Python browser sidecar.
 - No BACnet writes from React.

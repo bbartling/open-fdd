@@ -116,7 +116,7 @@ Set **`OPENFDD_MCP_ALLOW_WRITES=1`** on the MCP server and pass **`confirm: true
 | `openfdd_fdd_rules_activate` | Activate saved rule |
 | `openfdd_reports_from_fdd_sql_run` | PDF from SQL FDD run |
 | `openfdd_integration_smoke` | Optional write steps when `confirm: true` |
-| `openfdd_fdd_run` | Run ad-hoc DataFusion FDD SQL |
+| `openfdd_fdd_run` | Run ad-hoc FDD SQL on Timescale / PostgreSQL |
 | `openfdd_model_assignments_save` | Persist Haystack assignments |
 | `openfdd_reports_draft` | Create report draft |
 | `openfdd_reports_patch` | Update report sections |

@@ -68,9 +68,11 @@ Deprecated alias: `POST /api/jobs/{job_id}/wattlab/dumps`
 
 ## Pandas quick joins
 
+Offline tooling only, on an on-demand export bundle. A `.parquet` file in an old bundle is a historical export artifact: read it locally, never load it back into central as telemetry. Product telemetry is Timescale only ([storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 ```python
 import pandas as pd
-hist = pd.read_parquet("data/telemetry/AHU_1.parquet")  # when present in bundle
+hist = pd.read_parquet("data/telemetry/AHU_1.parquet")  # historical bundles only
 bills = pd.read_csv("summaries/utility_monthly_electric.csv")
 ```
 
