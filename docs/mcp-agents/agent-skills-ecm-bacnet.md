@@ -17,7 +17,7 @@ pip install "open-fdd[oracle]"
 - Math on GH Pages: [ECM_ENGINEERING_MATH](../operations/ECM_ENGINEERING_MATH.html)
 - Release: [PYPI_RELEASE_CHECKLIST](../ecm/PYPI_RELEASE_CHECKLIST.html)
 
-Do **not** treat the wheel as the product FDD runtime (that is GHCR DataFusion).
+Do **not** treat the wheel as the product FDD runtime (that is GHCR Timescale SQL).
 
 ## MCP hosts
 

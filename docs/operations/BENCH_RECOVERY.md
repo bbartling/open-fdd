@@ -22,7 +22,7 @@ Rev loop: [`PATCH_CYCLE.md`](PATCH_CYCLE.md).
 |-------|--------|------|
 | Product source + scripts | `github.com/bbartling/open-fdd` `master` | Clone fresh |
 | Stack images | `ghcr.io/bbartling/openfdd-{central,web,mqtt,fieldbus}:sha-<7>` | Pull only — never local docker build on low-RAM |
-| Hub data | Railway volume `/workspace` | Restore from `~/openfdd-backups/railway/<UTC>/` **if you copied backups off-box**; else hub Parquet may still be on Railway |
+| Hub data | Railway volume `/workspace` | Restore from `~/openfdd-backups/railway/<UTC>/` **if you copied backups off-box**; else hub data may still be on Railway |
 | MQTT edge kit | **Not in git** | Re-issue via `POST /api/mqtt/edge-kits` **only if** Railway mqtt volume has CA **key**; today often **reuse `pi-1` kit** (CA key absent) — see BUG_REPORT |
 | Railway CLI token | Operator secret | `railway login` / `RAILWAY_TOKEN` |
 | GH token | Operator secret | `gh auth login` |

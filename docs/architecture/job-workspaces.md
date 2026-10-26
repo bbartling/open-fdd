@@ -38,7 +38,7 @@ workspace/jobs/<job_id>/
   artifacts/
 ```
 
-Telemetry stays in Feather / parquet (site historian). Jobs hold **pointers**, configs, run outputs, and findings — not full historian copies.
+Telemetry stays in the Timescale historian (Timescale/PostgreSQL only; no Feather or Parquet). Jobs hold **pointers**, configs, run outputs, and findings — not full historian copies.
 
 ## Identifiers
 

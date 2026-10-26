@@ -13,7 +13,7 @@ Open-FDD’s **PyPI** package (`open-fdd`) exists so an **AI agent** (or enginee
 2. Write those inputs into a **real Excel workbook** with **live formulas** the engineer reviews.
 3. Optionally attach **EnergyPlus / twin cascade** results and export **honesty** sheets — so the workbook compares spreadsheet savings to modeled kWh without pretending they are the same thing.
 
-This is **ECM / ROI engineering tooling**. Product **fault detection** stays on the [GHCR stack]({{ site.baseurl }}/quick-start/docker-ghcr.html) (DataFusion SQL). Do not treat the wheel as the FDD runtime.
+This is **ECM / ROI engineering tooling**. Product **fault detection** stays on the [GHCR stack]({{ site.baseurl }}/quick-start/docker-ghcr.html) (Timescale SQL). Do not treat the wheel as the FDD runtime.
 
 ---
 

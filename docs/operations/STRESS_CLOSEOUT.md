@@ -34,7 +34,7 @@ Entry point + profiles: [`scripts/qualification/README.md`](../../scripts/qualif
 
 Railway workspace plan is **Pro**. The `openfdd-central` replica memory limit is **24 GB**. The previous Hobby plan hard-capped replicas at **8 GB**. The 2026-09-28 crash was an OOM at that 8 GB cap under Overview / RCx analytics.
 
-Closeout keeps the Pro headroom and watches metrics. Do not retune DataFusion, lookback, or query memory to squeeze the service back under the Hobby cap.
+Closeout keeps the Pro headroom and watches metrics. Do not retune lookback (DataFusion is retired and prohibited), or query memory to squeeze the service back under the Hobby cap.
 
 During Overview, RCx, and AFDD (including the ACME lab cycle), record:
 
@@ -121,7 +121,7 @@ Gate 21 only checks that `ingest_ok` moved. Gate **39** (`39_mqtts_gap_blame.sh`
 | --- | --- | --- |
 | **EDGE** | Poll did not run, the MQTT session was down, or the publish never got a broker ack while the cloud is equally short | Field edge: BACnet poll, fieldbus MQTT session, `publish_fails` / `publish_no_session` |
 | **TRANSIT** | Edge attempted publish, no QoS 1 broker ack, Railway mqtt ingress quiet | Internet hop from the field edge to the Railway broker |
-| **RAILWAY** | Broker acked the publisher, or `/api/mqtt/monitor` saw the message, but ingest / historian is gapped | Central subscriber, `ingest_reject` bucket `historian_persist`, parquet flush |
+| **RAILWAY** | Broker acked the publisher, or `/api/mqtt/monitor` saw the message, but ingest / historian is gapped | Central subscriber, `ingest_reject` bucket `historian_persist`, parquet flush (historical MQTT path, superseded by the Timescale-only mandate) |
 | **SPARSE_OK** | Cadence is intact and the PV did not change, or poll/heartbeat succeeded and the point was not published (health-role omit) while transit and historian are also empty | Not a gap. Full-snapshot publish still sends unchanged PVs; a flat trace with timestamps is not loss |
 | **INCONCLUSIVE** | A layer has no probe | The scorecard names it |
 

@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Keep Z-score and MAD free of sklearn/statsmodels imports (DataFusion SQL portability later).
+- Keep Z-score and MAD free of sklearn/statsmodels imports (Timescale / PostgreSQL SQL portability later).
 - v1 points = `column_map.json` AHU IO roles only (not all zone temps).
 - Default CLI: `--top-n 5 --max-days 10 --methods zscore,mad,stl,iforest`.
 - Support plots (line, hist, box) for every screened non-skipped point; day zooms only for top-N.

@@ -13,7 +13,7 @@ Open-FDD can export the **package Mapping inventory** as RDF Turtle. This is a
 
 | Layer | Role |
 | --- | --- |
-| Package zip maps → `columns.csv` roles | **SoT** for DataFusion FDD / analytics |
+| Package zip maps → `columns.csv` roles | **SoT** for Timescale SQL FDD / analytics |
 | Mapping JSON export | Same inventory as JSON |
 | Mapping **Export TTL** / **View TTL as text** | Same inventory as compact Turtle (`text/turtle`) |
 | `GET /api/csv/import/package/mapping/ttl?building_id=…` | JWT + building ACL; agents/MCP can fetch without SPA |

@@ -31,7 +31,7 @@ curl -s -X POST http://127.0.0.1:8080/api/csv/import/package/append \
   -d '{"confirm":true,"building_id":"BUILDING_50","equipment_id":"AHU_1","csv":"timestamp_utc,sat\n2026-01-01T01:00:00Z,55\n"}'
 ```
 
-Write your own vendor puller; OpenFDD only merges + re-ingests parquet. Same-hour replay is idempotent (last-write-wins on timestamp).
+Write your own vendor puller; OpenFDD only merges + re-ingests through the one Timescale telemetry writer. Same-hour replay is idempotent (last-write-wins on timestamp).
 
 ### AFDD routine after append (real-world pattern)
 
