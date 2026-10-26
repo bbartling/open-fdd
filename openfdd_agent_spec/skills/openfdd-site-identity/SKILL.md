@@ -50,6 +50,12 @@ Unit tests, integration tests, stress and ops scripts, migrate helpers, and lab 
 
 Docs and the external BUILDING_100 kit may name maintainer datasets. Do not copy those names into a product default.
 
+## Tenant membership
+
+A site id is added to a tenant only when no other tenant already lists that id. `ControlPlane::upsert_tenant` reports the conflicting site and tenant ids and leaves the control plane unchanged. Memberships already stored stay as they are, including a site id that more than one tenant already lists. Saving a tenant again may keep those ids. Other tenants' rows stay as stored.
+
+`TenantContext::allow_building` still allows a site on the caller's tenant and denies a site that is not. Comparison at creation trims surrounding whitespace. Access checks stay exact.
+
 ## Historian identity
 
 Timescale rows for the caller `building_id` are the historian (ADR-010). Do not branch on a lab name. Parquet dual-read is retired. Do not restore it, and do not add any dual read or dual write ([storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). The old tree comparison is `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../../../docs/archive/ai-agent/historical-3.5-ot-ops.md).
