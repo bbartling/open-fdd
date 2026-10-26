@@ -1,5 +1,11 @@
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
+## 2026-10-26 — 4.0.5 W7e guidance cleanup
+
+- Rule 63 in `openfdd_agent_spec/AGENTS.md` marks the MQTTS ingest buffer as historical. MQTT ingest is disabled by default in 4.x. The Normal Framework portal API and CSV are the live paths. The buffer is not a second telemetry store.
+- Dated DataFusion checkpoints in `BUILD_CHECKPOINTS.md` (2026-07-28 Milestone C and D, 2026-08-04 turnkey cutover, 2026-08-06 product truth, 2026-08-21 historian program) and the linked acceptance, closeout, rule-parity, and ADR-001 engine lines are superseded by the Timescale/PostgreSQL-only, one-writer mandate. Past checklist rows are unchanged.
+- Docs and skills only. No VERSION bump. No product code.
+
 ## 2026-10-26 — Tenant site identity at creation (W3c)
 
 - A new tenant site assignment is accepted only when no other tenant already lists that site id. The write reports the conflict and does not change stored memberships.
