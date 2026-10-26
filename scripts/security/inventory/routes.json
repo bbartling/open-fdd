@@ -4,10 +4,10 @@
   "source_commit_hint": "4a5c11e50b921df83f2ca3a59c52d4e99908157f",
   "source_file": "services/central/src/routes.rs",
   "generated_note": "Honesty model: PLANNED | IMPLEMENTED | BLOCKED_POLICY. Never label COVERED without suite emission. Single policy source with profile_required_v1.json + cross_cutting_checks.json (Astra A05).",
-  "route_count": 193,
+  "route_count": 194,
   "disposition_counts": {
     "IMPLEMENTED": 38,
-    "PLANNED": 122,
+    "PLANNED": 123,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 4
   },
@@ -1184,6 +1184,44 @@
         "identity"
       ],
       "notes": "COVERED removed; IMPLEMENTED only when suite emits check_id"
+    },
+    {
+      "method": "GET",
+      "path": "/api/health/diagnostics",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "hub_admin",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_health_diagnostics",
+        "y.authz.get_api_health_diagnostics"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_health_diagnostics",
+        "y.authz.get_api_health_diagnostics"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Hub-admin health detail. Public liveness stays on GET /api/health. PLANNED until a suite emits the check ids."
     },
     {
       "method": "GET",
