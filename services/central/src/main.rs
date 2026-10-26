@@ -92,6 +92,7 @@ async fn main() -> anyhow::Result<()> {
 
     durable_storage::assert_authoritative_storage()?;
     db_lifecycle::apply_on_startup().await?;
+    timescale_analytics::reconcile_catalogue_on_startup().await?;
     starter_seed::spawn();
 
     let state = Arc::new(AppState::new());

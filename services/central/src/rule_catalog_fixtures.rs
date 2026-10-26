@@ -411,6 +411,10 @@ fn assert_safe_schema(schema: &str) {
 }
 
 async fn private_catalogue_pool(url: &str) -> (sqlx::PgPool, String) {
+    private_catalogue_pool_sized(url, 1).await
+}
+
+async fn private_catalogue_pool_sized(url: &str, max_connections: u32) -> (sqlx::PgPool, String) {
     let schema = format!("w2a_{}", uuid::Uuid::new_v4().simple());
     assert_safe_schema(&schema);
     let admin = sqlx::postgres::PgPoolOptions::new()
@@ -425,7 +429,7 @@ async fn private_catalogue_pool(url: &str) -> (sqlx::PgPool, String) {
     admin.close().await;
     let search_path = schema.clone();
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(1)
+        .max_connections(max_connections)
         .after_connect(move |conn, _| {
             let search_path = search_path.clone();
             Box::pin(async move {
@@ -526,7 +530,7 @@ async fn catalogue_startup_reconciles_fresh_upgraded_override_and_series() {
     };
     let tsdb = fdd_tsdb::Tsdb::from_pool(pool.clone());
 
-    let fresh_version = crate::timescale_analytics::reconcile_rule_catalogue(&tsdb)
+    let fresh_version = crate::timescale_analytics::reconcile_catalogue_on_startup_with(&tsdb)
         .await
         .expect("fresh startup");
     let listed = crate::timescale_analytics::fdd_registry(&tsdb)
@@ -545,7 +549,7 @@ async fn catalogue_startup_reconciles_fresh_upgraded_override_and_series() {
                 .is_some_and(|obj| obj.is_empty())
     }));
     let fresh_snap = catalogue_snapshot(&pool).await;
-    let repeated = crate::timescale_analytics::reconcile_rule_catalogue(&tsdb)
+    let repeated = crate::timescale_analytics::reconcile_catalogue_on_startup_with(&tsdb)
         .await
         .expect("repeated startup");
     assert_eq!(repeated, fresh_version);
@@ -582,7 +586,7 @@ async fn catalogue_startup_reconciles_fresh_upgraded_override_and_series() {
     .await
     .expect("upgraded row");
 
-    let upgraded_version = crate::timescale_analytics::reconcile_rule_catalogue(&tsdb)
+    let upgraded_version = crate::timescale_analytics::reconcile_catalogue_on_startup_with(&tsdb)
         .await
         .expect("upgraded startup");
     assert_ne!(upgraded_version, "");
@@ -636,7 +640,7 @@ async fn catalogue_startup_reconciles_fresh_upgraded_override_and_series() {
     .await
     .expect("operator row");
 
-    crate::timescale_analytics::reconcile_rule_catalogue(&tsdb)
+    crate::timescale_analytics::reconcile_catalogue_on_startup_with(&tsdb)
         .await
         .expect("reconcile after edit");
     let edited_list = crate::timescale_analytics::fdd_registry(&tsdb)
@@ -673,7 +677,7 @@ async fn catalogue_startup_reconciles_fresh_upgraded_override_and_series() {
     assert!(retired_enabled, "removal does not rewrite enabled");
 
     let after_edit = catalogue_snapshot(&pool).await;
-    crate::timescale_analytics::reconcile_rule_catalogue(&tsdb)
+    crate::timescale_analytics::reconcile_catalogue_on_startup_with(&tsdb)
         .await
         .expect("startup again");
     assert_eq!(catalogue_snapshot(&pool).await, after_edit);
@@ -779,6 +783,93 @@ async fn catalogue_startup_reconciles_fresh_upgraded_override_and_series() {
     .expect("pack series");
     assert_eq!(selected, from_pack);
     assert!(!selected.is_empty());
+}
+
+#[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize OPENFDD_SQL_ROOT while concurrent catalogue startups share one database"
+)]
+async fn catalogue_repeated_startup_and_concurrent_lists_do_not_duplicate() {
+    let Some(url) = test_database_url() else {
+        return;
+    };
+    let _lock = crate::test_env_lock::lock_env();
+    let pack = fdd_rules::load_registry(&crate::timescale_product::sql_root_for_registry())
+        .expect("canonical rule pack");
+    let (pool, schema) = private_catalogue_pool_sized(&url, 4).await;
+    let _schema = SchemaDrop {
+        url: url.clone(),
+        schema,
+    };
+    let tsdb = fdd_tsdb::Tsdb::from_pool(pool.clone());
+
+    let (first, second) = tokio::join!(
+        crate::timescale_analytics::reconcile_catalogue_on_startup_with(&tsdb),
+        crate::timescale_analytics::reconcile_catalogue_on_startup_with(&tsdb),
+    );
+    let first = first.expect("concurrent startup");
+    let second = second.expect("concurrent startup peer");
+    assert_eq!(first, second);
+    let listed = crate::timescale_analytics::fdd_registry(&tsdb)
+        .await
+        .expect("list after concurrent startup");
+    assert_eq!(listed["count"], json!(pack.rules.len()), "{listed}");
+    let rows: i64 = sqlx::query_scalar("SELECT count(*)::bigint FROM fdd_rule_registry")
+        .fetch_one(&pool)
+        .await
+        .expect("row count");
+    let distinct: i64 =
+        sqlx::query_scalar("SELECT count(DISTINCT rule_id)::bigint FROM fdd_rule_registry")
+            .fetch_one(&pool)
+            .await
+            .expect("distinct rules");
+    assert_eq!(
+        rows, distinct,
+        "catalogue primary key kept one row per rule"
+    );
+    assert_eq!(rows as usize, pack.rules.len());
+
+    let snap = catalogue_snapshot(&pool).await;
+    let again = crate::timescale_analytics::reconcile_catalogue_on_startup_with(&tsdb)
+        .await
+        .expect("repeated startup");
+    assert_eq!(again, first);
+    assert_eq!(catalogue_snapshot(&pool).await, snap);
+
+    let stamp = catalogue_version_stamp(&pool).await;
+    let (left, right) = tokio::join!(
+        crate::timescale_analytics::fdd_registry(&tsdb),
+        crate::timescale_analytics::fdd_registry(&tsdb),
+    );
+    let left = left.expect("concurrent list");
+    let right = right.expect("concurrent list peer");
+    assert_eq!(left["count"], json!(pack.rules.len()));
+    assert_eq!(right["count"], json!(pack.rules.len()));
+    assert_eq!(left["catalogue_version"], json!(first));
+    assert_eq!(catalogue_snapshot(&pool).await, snap);
+    assert_eq!(
+        catalogue_version_stamp(&pool).await,
+        stamp,
+        "a current catalogue list must not rewrite rows"
+    );
+    let held: i64 = sqlx::query_scalar(
+        "SELECT count(*)::bigint FROM pg_locks WHERE locktype = 'advisory' AND classid = 0 AND objid = 4040530042",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("advisory locks");
+    assert_eq!(held, 0, "catalogue lock is transaction scoped");
+}
+
+async fn catalogue_version_stamp(pool: &PgPool) -> (String, String) {
+    let row = sqlx::query(
+        "SELECT value, updated_at::text AS updated_at FROM seed_meta WHERE key = 'fdd_rule_catalogue_version'",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("catalogue version stamp");
+    (row.get("value"), row.get("updated_at"))
 }
 
 #[tokio::test]

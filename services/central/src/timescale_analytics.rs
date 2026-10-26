@@ -1152,6 +1152,11 @@ fn text_array(row: &sqlx::postgres::PgRow, column: &str) -> Option<Vec<String>> 
 
 const CATALOGUE_VERSION_KEY: &str = "fdd_rule_catalogue_version";
 
+/// Serializes catalogue writers only. Schema migration keeps its own advisory
+/// key so a rules read does not queue behind `CREATE TABLE`, and a migration
+/// does not wait on the catalogue.
+const CATALOGUE_ADVISORY_LOCK_KEY: i64 = 4_040_530_042;
+
 const CATALOGUE_DDL: &[&str] = &[
     r#"CREATE TABLE IF NOT EXISTS fdd_rule_registry (
       rule_id text PRIMARY KEY,
@@ -1237,9 +1242,7 @@ async fn read_catalogue_rows(
     Ok(existing)
 }
 
-/// Insert or refresh the shipped rule pack. Operator `enabled` and `overrides`
-/// stay. Pack rules that disappeared are marked removed and kept.
-pub(crate) async fn reconcile_rule_catalogue(tsdb: &Tsdb) -> Result<String> {
+fn load_catalogue_pack() -> Result<fdd_rules::RuleRegistry> {
     let root = crate::timescale_product::sql_root_for_registry();
     let reg = fdd_rules::load_registry(&root)
         .with_context(|| format!("rule catalogue unavailable: {}", root.display()))?;
@@ -1249,11 +1252,78 @@ pub(crate) async fn reconcile_rule_catalogue(tsdb: &Tsdb) -> Result<String> {
             root.display()
         );
     }
+    Ok(reg)
+}
+
+fn expected_catalogue_version(reg: &fdd_rules::RuleRegistry) -> String {
+    open_fdd_edge_prototype::fdd::registry_api::plan_catalogue_reconcile(&reg.rules, &[])
+        .catalogue_version
+}
+
+async fn stored_catalogue_version(pool: &sqlx::PgPool) -> Result<Option<String>> {
+    let ready: bool = sqlx::query_scalar(
+        "SELECT to_regclass('fdd_rule_registry') IS NOT NULL AND to_regclass('seed_meta') IS NOT NULL",
+    )
+    .fetch_one(pool)
+    .await
+    .context("rule catalogue unavailable: version")?;
+    if !ready {
+        return Ok(None);
+    }
+    sqlx::query_scalar("SELECT value FROM seed_meta WHERE key = $1")
+        .bind(CATALOGUE_VERSION_KEY)
+        .fetch_optional(pool)
+        .await
+        .context("rule catalogue unavailable: version")
+}
+
+/// Startup entry. One idempotent reconcile after schema apply, before the
+/// listener accepts rules requests. No database URL skips it. A database that
+/// cannot be reached does not block boot; the rules API still fails visibly.
+pub(crate) async fn reconcile_catalogue_on_startup() -> Result<()> {
+    if !crate::timescale_historian::historian_is_timescale() {
+        return Ok(());
+    }
+    let url = std::env::var("OPENFDD_DATABASE_URL").unwrap_or_default();
+    if url.trim().is_empty() {
+        return Ok(());
+    }
+    let tsdb = match fdd_tsdb::Tsdb::connect_from_env().await {
+        Ok(tsdb) => tsdb,
+        Err(err) => {
+            tracing::warn!(
+                %err,
+                "rule catalogue startup left unchanged; database unreachable"
+            );
+            return Ok(());
+        }
+    };
+    let version = reconcile_catalogue_on_startup_with(&tsdb).await?;
+    tracing::info!(catalogue_version = %version, "rule catalogue reconciled");
+    Ok(())
+}
+
+/// Same reconcile `reconcile_catalogue_on_startup` runs, against a caller pool.
+pub(crate) async fn reconcile_catalogue_on_startup_with(tsdb: &Tsdb) -> Result<String> {
+    reconcile_rule_catalogue(tsdb).await
+}
+
+/// Insert or refresh the shipped rule pack. Operator `enabled` and `overrides`
+/// stay. Pack rules that disappeared are marked removed and kept.
+/// Writers take one transaction advisory lock so concurrent startups cannot
+/// insert the same rule twice or pile DDL locks.
+pub(crate) async fn reconcile_rule_catalogue(tsdb: &Tsdb) -> Result<String> {
+    let reg = load_catalogue_pack()?;
     let mut tx = tsdb
         .pool()
         .begin()
         .await
         .context("rule catalogue unavailable: begin")?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(CATALOGUE_ADVISORY_LOCK_KEY)
+        .execute(&mut *tx)
+        .await
+        .context("rule catalogue unavailable: lock")?;
     ensure_catalogue_schema(&mut tx).await?;
     let existing = read_catalogue_rows(&mut tx).await?;
     let plan =
@@ -1347,7 +1417,14 @@ pub(crate) async fn reconcile_rule_catalogue(tsdb: &Tsdb) -> Result<String> {
 }
 
 pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
-    let catalogue_version = reconcile_rule_catalogue(tsdb).await?;
+    let reg = load_catalogue_pack()?;
+    let expected = expected_catalogue_version(&reg);
+    // A current version is a read. Reconcile, including its DDL, runs only when
+    // startup has not caught up yet so concurrent lists do not lock the catalogue.
+    let catalogue_version = match stored_catalogue_version(tsdb.pool()).await? {
+        Some(stored) if stored == expected => stored,
+        _ => reconcile_rule_catalogue(tsdb).await?,
+    };
     let rows = sqlx::query(
         r#"
         SELECT rule_id, sql_file, title, enabled, detail,
@@ -1360,18 +1437,11 @@ pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
     .await
     .context("rule catalogue unavailable: list")?;
 
-    let root = crate::timescale_product::sql_root_for_registry();
-    let specs: std::collections::HashMap<String, fdd_rules::RuleSpec> =
-        match fdd_rules::load_registry(&root) {
-            Ok(reg) => reg
-                .rules
-                .into_iter()
-                .map(|rule| (rule.rule_id.clone(), rule))
-                .collect(),
-            Err(err) => {
-                anyhow::bail!("rule catalogue unavailable: {err}");
-            }
-        };
+    let specs: std::collections::HashMap<String, fdd_rules::RuleSpec> = reg
+        .rules
+        .into_iter()
+        .map(|rule| (rule.rule_id.clone(), rule))
+        .collect();
 
     let mut out = Vec::new();
     let mut alias_count = 0usize;
