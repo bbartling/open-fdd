@@ -1,0 +1,14 @@
+# Crate-local copy of the workspace clippy.toml (clippy reads the nearest
+# file only, so the workspace settings are repeated here).
+# Production crates deny clippy::unwrap_used and clippy::expect_used.
+# Tests stay exempt. expect_used has its own switch; unwrap's switch does not cover it.
+# See openfdd_agent_spec/docs/RUST_BEST_PRACTICES.md.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+# tonic-generated PointManager client/server methods return
+# Result<_, tonic::Status> (176 bytes on tonic 0.12). Newer clippy flags that
+# as result_large_err inside OUT_DIR code we cannot edit. The status type is
+# fixed by tonic, so the threshold is raised for this crate only.
+large-error-threshold = 256
