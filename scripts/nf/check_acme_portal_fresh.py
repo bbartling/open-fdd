@@ -184,6 +184,11 @@ def parse_ts(raw: str) -> datetime:
     return datetime.fromisoformat(raw)
 
 
+def format_minutes(value: float) -> str:
+    """Print a threshold the way it was configured, including a fraction."""
+    return f"{value:g}"
+
+
 def freshness_age_findings(
     name: str,
     age_min: float,
@@ -197,11 +202,11 @@ def freshness_age_findings(
     if is_weather and age_min > warn_min:
         warn = (
             f"{name}: last record {age_min:.1f} min old "
-            f"(> {warn_min:.0f}; one hook interval plus margin)"
+            f"(> {format_minutes(warn_min)}; one hook interval plus margin)"
         )
     fail = None
     if age_min > fail_min:
-        fail = f"{name}: last record {age_min:.1f} min old (> {fail_min:.0f})"
+        fail = f"{name}: last record {age_min:.1f} min old (> {format_minutes(fail_min)})"
     return warn, fail
 
 
@@ -229,6 +234,26 @@ def run_freshness_self_test() -> int:
         if warn is not None and "> 25" not in warn:
             print(f"SELF-TEST FAIL warn text {warn}")
             return 1
+    frac_warn, frac_fail = freshness_age_findings(
+        "weather/web-outside-air-temp",
+        25.6,
+        is_weather=True,
+        warn_min=25.5,
+        fail_min=30.5,
+    )
+    if frac_warn is None or "> 25.5" not in frac_warn or frac_fail is not None:
+        print(f"SELF-TEST FAIL fractional warn {frac_warn!r} {frac_fail!r}")
+        return 1
+    _, frac_fail = freshness_age_findings(
+        "rtu_01/supply-air-temp",
+        30.6,
+        is_weather=False,
+        warn_min=25.5,
+        fail_min=30.5,
+    )
+    if frac_fail is None or "> 30.5" not in frac_fail:
+        print(f"SELF-TEST FAIL fractional fail {frac_fail!r}")
+        return 1
     if DEFAULT_WARN_AGE_MIN != 25.0:
         print(f"SELF-TEST FAIL DEFAULT_WARN_AGE_MIN={DEFAULT_WARN_AGE_MIN}")
         return 1
