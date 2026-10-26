@@ -7,7 +7,6 @@ import {
   ingestGapsPath,
   ingestJobsPath,
   type CoverageLedgerView,
-  type ProviderRegistrationView,
   type ProviderSiteConfig,
   type ProviderSiteHealth,
 } from "../api/providersApi";
@@ -20,7 +19,6 @@ import {
   providerLabel,
   providerStatusView,
   sanitizeProviderOrigin,
-  staticDriverNotes,
   windowStateLabel,
   windowTone,
   type ProviderRow,
@@ -66,7 +64,6 @@ function modelHref(buildingId: string, row: ProviderWindowRow): string {
 export function ProvidersPanel() {
   const requestGen = useRef(0);
   const [pollEnabled, setPollEnabled] = useState<boolean | null>(null);
-  const [registry, setRegistry] = useState<ProviderRegistrationView[]>([]);
   const [coverageSites, setCoverageSites] = useState<
     Array<{ key: string; buildingId: string; provider: string; ledger: CoverageLedgerView | null }>
   >([]);
@@ -102,9 +99,6 @@ export function ProvidersPanel() {
             : null,
       );
       setRows(mergeProviderRows(healthSites, configs));
-      setRegistry(
-        (health.registry ?? []).filter((entry) => !isArchivedFieldDriver(entry.kind)),
-      );
       setCoverageSites(
         healthSites.map((site) => ({
           key: `${site.building_id ?? "site"}-${site.provider ?? "provider"}`,
@@ -117,7 +111,6 @@ export function ProvidersPanel() {
     } catch (err) {
       if (ticket !== requestGen.current) return;
       setRows([]);
-      setRegistry([]);
       setCoverageSites([]);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -198,36 +191,10 @@ export function ProvidersPanel() {
           onClick={() => void refresh()}
         />
       </div>
-      <p className="muted">
-        Portal connections for this account. Green means the last poll reported success with no
-        consecutive errors. It does not mean a completed hour was committed without gaps.
-      </p>
-      <p data-testid="providers-ingest">
-        Ingest is the NF portal and CSV packages. Archived field drivers are not available.
-      </p>
+      <p className="muted">Poll status is separate from history coverage.</p>
       <p data-testid="providers-poll-enabled">
-        Poll loop:{" "}
-        {pollEnabled == null ? "not reported" : pollEnabled ? "enabled" : "disabled"}
-        {pollEnabled === false
-          ? " — disabled does not mean the last window was committed."
-          : ""}
+        Polling: {pollEnabled == null ? "not reported" : pollEnabled ? "enabled" : "disabled"}
       </p>
-      {registry.length > 0 ? (
-        <ul data-testid="provider-registry">
-          {registry.map((entry) => (
-            <li key={entry.kind} data-testid={`provider-registry-${entry.kind}`}>
-              {entry.kind}:{" "}
-              {entry.capabilities
-                .map((cap) =>
-                  cap.http_method
-                    ? `${cap.name} ${cap.support} ${cap.http_method}`
-                    : `${cap.name} ${cap.support}`,
-                )
-                .join("; ")}
-            </li>
-          ))}
-        </ul>
-      ) : null}
       {coverageSites.map((site) => {
         const ledger = site.ledger;
         if (!ledger) {
@@ -272,9 +239,7 @@ export function ProvidersPanel() {
       ) : null}
       {!loading && rows.length === 0 && !error ? (
         <p className="muted" data-testid="providers-empty">
-          No provider sites for this account. Central publishes sites from server configuration
-          (`OPENFDD_PROVIDER_SITES`). A CSV zip is not required to discover a portal site, and none
-          are configured here.
+          No provider sites are configured.
         </p>
       ) : null}
       {rows.length > 0 ? (
@@ -367,12 +332,6 @@ export function ProvidersPanel() {
               message: selected.message,
             }).detail}
           </p>
-          <ul data-testid="provider-driver-notes">
-            {staticDriverNotes(selected.provider).map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-
           <h3 id="provider-ledger-heading">Window ledger</h3>
           {ledgerError ? (
             <p className="error" data-testid="provider-ledger-error">
@@ -388,11 +347,6 @@ export function ProvidersPanel() {
               <p data-testid="provider-ledger-coverage">{ledger.coverageLabel}</p>
               <p data-testid="provider-ledger-jobs-note">{ledger.jobsNote}</p>
               <p data-testid="provider-ledger-gaps-note">{ledger.gapsNote}</p>
-              <p data-testid="provider-backfill-note">
-                Bounded backfill and retry are not submitted from this screen. Progress and cancel
-                appear when the server publishes them. An expired upstream window stays
-                unrecoverable; this panel does not spin or turn green while waiting.
-              </p>
               <label>
                 Search windows
                 <input
