@@ -18,3 +18,16 @@ live in `provider_sites.bosspi.example.json` (`provider_point_id`) and
 `bosspi_semantic_meta.json` (`point_id`).
 
 Product path is the Rust `DataProvider` NF driver ([Wave-NF plan](../../.cursor/plans/nf_portal_ingest_mega_rev_20261018.plan.md)). This script is the human/agent smoke only. History reads on the product path are `GET /api/v1/point/data`.
+
+## Site files
+
+| File | Site |
+| --- | --- |
+| `provider_sites.bosspi.json` | Bench Pi, 5 points |
+| `provider_sites.bosspi.example.json` | Placeholder template |
+| `provider_sites.acme.json` | ACME, 230 bare-minimum HVAC points (NF trend period 300 s) |
+
+Credentials stay in a `chmod 600` env file outside git; the JSON uses
+`env:NF_CLIENT_ID` / `env:NF_CLIENT_SECRET`. How to add a site, the hourly pull,
+and the 7-day NF window: [`openfdd-nf-provider`](../../openfdd_agent_spec/skills/openfdd-nf-provider/SKILL.md).
+Edge install, licensing, and trend periods: [`openfdd-nf-edge-bench`](../../openfdd_agent_spec/skills/openfdd-nf-edge-bench/SKILL.md).

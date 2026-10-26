@@ -139,6 +139,8 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 
 ### Railway cloud lab
 
+> **`historical/non-executable`.** The Railway lab was deleted. The notes below are kept for history only. To add a live site, use NF at the edge and a `provider_sites` file: [`openfdd-nf-provider`](openfdd_agent_spec/skills/openfdd-nf-provider/SKILL.md) · [`openfdd-nf-edge-bench`](openfdd_agent_spec/skills/openfdd-nf-edge-bench/SKILL.md).
+
 Railway is an **experimental cloud path**, not a replacement for the LAN/VPN/OT deployment contract or a claim of production public-internet hardening.
 
 **Agent ops (bensbench):** use the **Railway CLI** for backup + hub tip re-pin — [`openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md`](openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) · [`docs/operations/RAILWAY_DEPLOYMENT.md`](docs/operations/RAILWAY_DEPLOYMENT.md). Do **not** confuse Railway CLI / Railway MCP with **`openfdd-mcp`** FDD tools. Resolve the image with `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web`. Do not reuse a 3.5.x pin. Retired pins are `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](docs/archive/ai-agent/historical-3.5-ot-ops.md).
