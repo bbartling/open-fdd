@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use crate::portal::{upsert_portal_point, PortalPointUpsert};
 use crate::sample::{SampleRow, UpsertBatch};
+use crate::writer::{write_samples, SampleWrite};
 
 #[derive(Debug, Error)]
 pub enum TsdbError {
@@ -165,7 +166,8 @@ impl Tsdb {
     /// overwritten in place. Unchanged rows were identical and left alone.
     ///
     /// Rows with a `portal_point_id` resolve their key through `point_map`, so
-    /// a re-poll lands on the series the first poll created.
+    /// a re-poll lands on the series the first poll created. Samples are
+    /// written by [`crate::writer::write_samples`], the single sample writer.
     pub async fn upsert_samples_stats(
         &self,
         batch: &UpsertBatch,
@@ -174,8 +176,8 @@ impl Tsdb {
             return Ok(SampleUpsertStats::default());
         }
         let mut tx = self.pool.begin().await?;
-        let mut stats = SampleUpsertStats::default();
         let mut portal_keys: HashMap<(String, String), String> = HashMap::new();
+        let mut keys: Vec<String> = Vec::with_capacity(batch.rows.len());
         for row in &batch.rows {
             let portal = match (&row.portal_point_id, &row.equipment_id, &row.role) {
                 (Some(pid), Some(equip), Some(role)) if !pid.trim().is_empty() => {
@@ -210,41 +212,7 @@ impl Tsdb {
                 }
                 None => row.openfdd_key.clone(),
             };
-            // Identical rows return nothing. xmax = 0 on a returned tuple means
-            // this command inserted it.
-            let outcome: Option<i32> = sqlx::query_scalar(
-                r#"
-                INSERT INTO sample(ts, site_id, openfdd_key, haystack_id, val, unit, quality)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                ON CONFLICT (site_id, openfdd_key, ts) DO UPDATE SET
-                  val = EXCLUDED.val,
-                  unit = COALESCE(EXCLUDED.unit, sample.unit),
-                  quality = COALESCE(EXCLUDED.quality, sample.quality),
-                  haystack_id = COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
-                WHERE (sample.val, sample.unit, sample.quality, sample.haystack_id)
-                  IS DISTINCT FROM (
-                    EXCLUDED.val,
-                    COALESCE(EXCLUDED.unit, sample.unit),
-                    COALESCE(EXCLUDED.quality, sample.quality),
-                    COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
-                  )
-                RETURNING (CASE WHEN xmax = 0 THEN 1 ELSE 0 END)
-                "#,
-            )
-            .bind(row.ts)
-            .bind(&row.site_id)
-            .bind(&key)
-            .bind(&row.haystack_id)
-            .bind(row.val)
-            .bind(&row.unit)
-            .bind(&row.quality)
-            .fetch_optional(&mut *tx)
-            .await?;
-            match outcome {
-                Some(1) => stats.inserted += 1,
-                Some(_) => stats.updated += 1,
-                None => stats.unchanged += 1,
-            }
+            keys.push(key);
             if portal.is_some() {
                 continue;
             }
@@ -286,6 +254,21 @@ impl Tsdb {
                 .await?;
             }
         }
+        let writes: Vec<SampleWrite<'_>> = batch
+            .rows
+            .iter()
+            .zip(&keys)
+            .map(|(row, key)| SampleWrite {
+                ts: row.ts,
+                site_id: &row.site_id,
+                openfdd_key: key,
+                haystack_id: row.haystack_id.as_deref(),
+                val: row.val,
+                unit: row.unit.as_deref(),
+                quality: row.quality.as_deref(),
+            })
+            .collect();
+        let stats = write_samples(&mut tx, &writes).await?;
         tx.commit().await?;
         Ok(stats)
     }

@@ -647,23 +647,9 @@ async fn promote_staged_package(
             "package seed aborted after partial writes for {building_id}; transaction rolled back"
         );
     }
-    let inserted = sqlx::query(
-        r#"
-        INSERT INTO sample (ts, site_id, openfdd_key, haystack_id, val)
-        SELECT ts, site_id, openfdd_key, haystack_id, val
-        FROM sample_import_stage
-        WHERE import_id = $1 AND site_id = $2
-        ON CONFLICT (site_id, openfdd_key, ts) DO UPDATE SET
-          val = EXCLUDED.val,
-          haystack_id = COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
-        "#,
-    )
-    .bind(import_id)
-    .bind(building_id)
-    .execute(&mut *tx)
-    .await
-    .context("promote stage → sample")?
-    .rows_affected();
+    let inserted = crate::writer::promote_stage(&mut tx, import_id, building_id)
+        .await
+        .context("promote stage → sample")?;
     for (equipment_id, _et, roles) in role_sets {
         upsert_roles_tx(&mut tx, building_id, equipment_id, roles).await?;
     }
