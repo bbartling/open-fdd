@@ -12,7 +12,7 @@ The shipped [FCU / zone_other rule family](../rules/cookbook/fcu-zone-other.md)
 covers coil delivery, passing valves, ventilation feedback, sensor loss,
 deadband, and heat/cool mode cycling for these controllers. Per-rule SQL and
 pandas live in the
-[DataFusion cookbook](../rules/cookbook/datafusion-sql-cookbook.md#fan-coil--zone_other)
+[SQL cookbook](../rules/cookbook/datafusion-sql-cookbook.md#fan-coil--zone_other)
 and the
 [Pandas cookbook](../rules/cookbook/pandas-cookbook.md#fan-coil--zone_other).
 Haystack tags for each rule are on the
@@ -135,7 +135,7 @@ Commands may be 0–1 or 0–100. Fan proof prefers `fan_status`. `fan_cmd` abov
 
 ### Per-rule roles both engines need
 
-Use this table to map a package before tip stress. The Haystack tag is the pandas column. The SQL role is the DataFusion column. Required roles are required on both engines. Fan proof is optional on both duration rules. The last column is registry `optional_roles` that the shared SQL CTE selects and the pandas predicate does not read; DataFusion injects NULL when they are absent.
+Use this table to map a package before tip stress. The Haystack tag is the pandas column. The SQL role is the Timescale SQL column. Required roles are required on both engines. Fan proof is optional on both duration rules. The last column is registry `optional_roles` that the shared SQL CTE selects and the pandas predicate does not read; DataFusion injects NULL when they are absent.
 
 Parity stays `sql_screening` until tip and field stress on issue-mapped gates. A green CI run does not close Soft-OPEN for this family.
 

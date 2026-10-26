@@ -1,5 +1,7 @@
 # Cursor handoff: issue 1127 memory and ingest resilience
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Published audit and acceptance criteria: [issue #1127 comment](https://github.com/bbartling/open-fdd/issues/1127#issuecomment-5981855374). Root verified the posted body against the reviewed local draft. Implementation remains pending.
 
 Date: 2026-10-04. Requested review: GPT-6.1 Sol ultra. Planning only.

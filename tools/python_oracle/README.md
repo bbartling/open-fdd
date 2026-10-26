@@ -1,6 +1,6 @@
 # Python oracle tooling (CI / bench only)
 
-**Not** part of the product request path. Product FDD is Rust/DataFusion on GHCR.
+**Not** part of the product request path. Product FDD is Rust + Timescale SQL on GHCR.
 
 ## Scripts
 

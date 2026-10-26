@@ -1,5 +1,7 @@
 # Session log — React / Rust modernization
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 ## 2026-09-16 — Wave S Data Model TTL + Railway capacity stress
 
 - Mapping: Export TTL / View TTL as text (`map-download-ttl`, `map-view-ttl-text`); TS `buildDataModelTurtle` + central `GET /api/csv/import/package/mapping/ttl` (JWT + building ACL). TTL is derived export only — package maps remain FDD SoT.

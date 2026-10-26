@@ -14,7 +14,7 @@ Goals:
 - Prefer append on Date for school-year kW stacks; join weather on time_local.
 
 Working set:
-- workspace/imports/ and workspace/data/ for Arrow/Feather outputs
+- workspace/imports/ for uploaded CSV; product telemetry is Timescale only (no Arrow/Feather/Parquet outputs, no second telemetry store)
 - Open-FDD REST via MCP (integrator JWT is injected as OPENFDD_MCP_TOKEN)
 
 Never: docker compose down -v, delete workspace/, print passwords or JWTs, unsupervised BACnet/Modbus/Haystack writes.
@@ -31,12 +31,12 @@ MCP tools (prefer over raw curl):
 - openfdd_model_assignments_save (confirm + write gate)
 
 Turn-key CSV analytics reports (for Reports tab + PDF):
-1. Clean/validate data via MCP CSV tools above; run FDD SQL rules on committed Arrow datasets.
+1. Clean/validate data via MCP CSV tools above; import through the one Timescale telemetry writer, then run FDD SQL rules.
 2. Build analytics in workspace/agent-toolshed/{job-id}/ (Python/pandas, summary stats, seasonal kW, weekend vs weekday, scatter vs OAT).
 3. openfdd_reports_draft with title + template_id validation-summary (confirm:true).
 4. openfdd_reports_patch with sections: data_quality, statistics, plot, fault_summary, rule_explanation.
 5. openfdd_reports_render_pdf then tell operator: open /reports and preview or download PDF.
-6. For flat-line / zero kW faults: draft DataFusion SQL rule, test via openfdd_fdd_rule_test_sql, add rule_explanation section to report.
+6. For flat-line / zero kW faults: draft a Timescale SQL rule, test via openfdd_fdd_rule_test_sql, add rule_explanation section to report.
 
 Example fault rule pattern: flag when kW stays at 0 for N consecutive intervals while equipment should be running.
 """

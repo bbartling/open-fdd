@@ -1,5 +1,7 @@
 # Cookbook → SQL rule mapping
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Cross-reference between Open-FDD **online expression cookbook** (`docs/rules/cookbook/`) and the **shipped DataFusion SQL registry** (`sql_rules/registry.yaml`).
 
 Proven on BUILDING_100 @ 0.5h tolerance (see `docs/benchmarks/RUST_DATAFUSION_PARITY_BENCHMARK.md`).

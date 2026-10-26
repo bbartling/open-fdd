@@ -6,6 +6,8 @@ nav_order: 6
 
 # Open-FDD historian architecture
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 > **SUPERSEDED (Wave-X 3.6.0+ / [ADR-010](adr-010-timescale-hard-cutover.md)):** Product historian is **TimescaleDB only** — no dual-write, no Parquet/DataFusion co-canonical path. Soft-OPEN ≠ FQ. Live ops: [`../operations/TIMESCALE_WAVE_X.md`](../operations/TIMESCALE_WAVE_X.md). The H1–H10 Parquet/Arrow/DataFusion narrative below is **historical** and must not guide new work.
 
 > Historical status (pre-3.6.0): H1–H4 merged the local Parquet contract, immutable micro-batch writer, DataFusion registration/query safeguards, and offline local compactor. H5 added S3-compatible backend wiring.

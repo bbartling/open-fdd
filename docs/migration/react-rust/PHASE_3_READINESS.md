@@ -1,5 +1,7 @@
 # Phase 3 readiness + skill compliance
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Date:** 2026-08-01  
 **Modernization tip:** `7ba35fc` (Phase 2 exit) + this pack on merge.  
 **Phase 3 status:** **Outlook only** — not started. No `PHASE_3_LOOP_PROMPTS.md`.  

@@ -1,5 +1,7 @@
 # Fork customization map — ~70% built, vibe the rest
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Open FDD Vibe Coder is a **template**: data loading, FDD rules, charts, tune API, and deploy packaging are done. Forks change branding, pages, rules, and UI chrome — not the pandas engine from scratch.
 
 ## Modes

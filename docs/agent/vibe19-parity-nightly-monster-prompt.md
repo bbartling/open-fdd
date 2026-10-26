@@ -1,5 +1,7 @@
 # Vibe19 product parity — monster nightly agent prompt
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Repo:** [bbartling/open-fdd](https://github.com/bbartling/open-fdd)  
 **Host:** `/home/ben/open-fdd` (WSL product agent — ships code, not bench validation)
 

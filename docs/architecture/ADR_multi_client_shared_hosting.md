@@ -6,6 +6,8 @@ nav_order: 12
 
 # ADR — Multi-client shared hosting (Wave L Phase 0)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 > **SUPERSEDED historian lock (Wave-X 3.6.0+ / [ADR-010](adr-010-timescale-hard-cutover.md)):** Product historian is **TimescaleDB only** — no dual-write, no Parquet/DataFusion co-canonical path. Soft-OPEN ≠ FQ. Live ops: [`../operations/TIMESCALE_WAVE_X.md`](../operations/TIMESCALE_WAVE_X.md). Tenant-isolation goals below may still inform Wave L scaffolding, but **do not** treat Parquet/DataFusion decision text as current product law.
 
 - **Status:** Accepted for Wave L Phase 1 scaffolding (mode **OFF** by default; Tier-2 enablement still gated). **Historian decision superseded by ADR-010.**

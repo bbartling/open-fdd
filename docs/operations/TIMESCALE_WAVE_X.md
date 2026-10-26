@@ -1,6 +1,8 @@
 # Wave-X Timescale 3.6.0 — bring-up
 
-Soft-OPEN ≠ FQ. Fieldbus BACnet/Modbus unchanged. No dual-write
+> **Mandate (current, 4.0+):** **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing.** Parquet, Arrow, Arrow IPC, Feather and DataFusion are prohibited in product storage, caching, execution and dependencies. Canonical text: [`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory). The 3.6.0 notes below are kept as history; where they differ, the mandate wins.
+
+Soft-OPEN ≠ FQ. Historical (3.6.0): "Fieldbus BACnet/Modbus unchanged" — fieldbus is archived on 4.0. No dual-write
 (`dual_write` / dual-path false). Default binary Timescale-only
 (`legacy-datafusion` / `legacy-parquet` OFF).
 
@@ -8,7 +10,8 @@ Soft-OPEN ≠ FQ. Fieldbus BACnet/Modbus unchanged. No dual-write
 historian, dual-write false. Soft-OPEN is not full qualification.
 
 **Soft-OPEN R8d tip-safe:** no Soft-OPEN agent Railway/DB/volume backups; Parquet
-compaction/budget Soft-OPEN N/A on Timescale tip; Timescale WAL/PITR/restore
+compaction/budget Soft-OPEN N/A on Timescale tip (the remaining `crates/fdd_store`
+Parquet compaction and budget code is a known gap being removed in Wave P2, not permitted); Timescale WAL/PITR/restore
 remain FQ-open. See [`docs/softopen/SOFTOPEN_WAL_RESTORE_R8d.md`](../softopen/SOFTOPEN_WAL_RESTORE_R8d.md).
 
 **Morning / reboot:** ART one-pager

@@ -1,5 +1,7 @@
 # Railway AFDD resource validation — config decision (2026-09-23)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Source tip (in flight):** `tip/acme-afdd-24h-qual` @ PR #995 (+ memory-wire follow-up commits)  
 **Deployed hub (at audit):** `ghcr.io/bbartling/openfdd-central:sha-f885fe4` / health `3.5.49+f885fe4066c0`  
 **Do not claim FQ / OPS PINNED from this report.**

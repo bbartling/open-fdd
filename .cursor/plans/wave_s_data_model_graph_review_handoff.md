@@ -6,6 +6,8 @@ isProject: false
 
 # Cursor prompt — finish the data model and graph contract
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Integrated (2026-09-19):** Master [`wave_s_master_ecb88a61.plan.md`](/home/ben/.cursor/plans/wave_s_master_ecb88a61.plan.md) owns this via child **S5** [`wave_s5_data_model_graph_ecm.plan.md`](wave_s5_data_model_graph_ecm.plan.md) + evidence [`wave_s_data_model_evidence.md`](wave_s_data_model_evidence.md). ADR/DM-06 start on **S2**; FQ for model/ECM gate only on **S4**. Order: S1→S2→S3→S5→S4. Do not duplicate S1 or launch another FQ MEGA for this handoff alone.
 
 Continue the existing Wave S work in `/home/ben/Desktop/open-fdd`. Preserve work in progress; use one agent on bensbench. Follow the master’s authorized release sequence and stress windows.

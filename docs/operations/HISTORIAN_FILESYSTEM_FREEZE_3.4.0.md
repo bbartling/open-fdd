@@ -8,6 +8,8 @@ nav_exclude: true
 
 # Historian filesystem freeze — 3.4.0
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Wave K **K2** contract pin for the single-tenant Parquet / DataFusion historian.
 Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md).
 Patch trains: [`PATCH_CYCLE.md`](PATCH_CYCLE.md). Stress closeout: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md).

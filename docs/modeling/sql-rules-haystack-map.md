@@ -7,6 +7,8 @@ permalink: /modeling/sql-rules-haystack-map.html
 
 # SQL FDD rules → Haystack / data-model roles
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Every production **DataFusion SQL** rule in [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) and the **Haystack point names** (or package map keys) that ingest into the SQL roles those rules need.
 
 Ingest maps Haystack tags → SQL roles via `haystack_point_to_role` in [`crates/fdd_core/src/columns.rs`](https://github.com/bbartling/open-fdd/blob/master/crates/fdd_core/src/columns.rs). Blank / missing Haystack tags in a package = empty Overview / FDD / RCx — not a broken engine. See [Package authoring](../agent/PACKAGE_AUTHORING.md) and [Rule readiness](rule-readiness.html).

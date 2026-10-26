@@ -1,5 +1,7 @@
 # Public-safe reference — BPS UX / RDF steal patterns (2026-10-14)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Neutral notes only.** Private Azure DevOps / Blackstone product names, client overlays, and ADO remotes are out of scope here. Use this as a pattern checklist when aligning **public open-fdd (Rust)** with the private Python Timescale app on Windows.
 
 Source of patterns (private plan, not copied verbatim): Haystack RDF model CRUD + TTL download, Model UI polish, SPARQL marker tree, confirmed_fault Plotly lane, metric-default units, zone comfort band.

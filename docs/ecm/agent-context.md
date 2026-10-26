@@ -14,7 +14,7 @@ Open-FDD does **not** ship an embedded chatbot. Any AI agent that can read markd
 | Human need | Agent capability |
 |------------|------------------|
 | Commission a site package | Map Haystack / CSV columns → SQL roles; stamp `equipType`; prove Overview/RCx/FDD nonempty |
-| Run / tune FDD | `POST /api/fdd/run`, Lab tuners, series overlays — DataFusion on central |
+| Run / tune FDD | `POST /api/fdd/run`, Lab tuners, series overlays — Timescale SQL on central |
 | ECM / savings workbook | Fill **input cells only** via `open_fdd.ecm_engineering.ECMJob`; Excel keeps formulas |
 | EnergyPlus honesty | Attach twin compare; label FITTED / BALLPARK / NO_EP — never greenwash |
 | OT debug (read-first) | BACnet Who-Is / RP via companion MCP — **no writes** without explicit human approval |

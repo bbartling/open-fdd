@@ -7,6 +7,8 @@ permalink: /operations/thrift-advisory.html
 
 # Transitive dependency advisory tracking (Open-FDD 3.2.x)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 ## thrift (CVE-2026-43868) — medium
 
 **Chain (pre-3.3.15):** `open_fdd_edge_prototype` → `datafusion 43` → `parquet 53` → `thrift 0.17.0`

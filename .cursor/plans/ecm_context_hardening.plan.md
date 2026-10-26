@@ -25,6 +25,8 @@ isProject: false
 
 # Generic ECM context and calculation hardening
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Agent brief:** [`.cursor/agents/openfdd-generic-ecm-context-hardening.md`](../agents/openfdd-generic-ecm-context-hardening.md)
 
 **Parent schedule:** [wave_u_post-fq_remainder](wave_u_post-fq_remainder.plan.md) cycle **W4 / ECM-ADAPT** (does not replace V6 FQ tip).

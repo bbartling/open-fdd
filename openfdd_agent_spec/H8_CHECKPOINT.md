@@ -1,5 +1,7 @@
 # H8 — Continuous AFDD scheduler / findings / API
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Status: active after H7 merge `07f59e98`.
 
 This checkpoint starts H8 from updated `master`; H8 is not stacked on the H7 branch.

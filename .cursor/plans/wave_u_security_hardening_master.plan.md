@@ -37,6 +37,8 @@ isProject: false
 
 # Wave U — Security-first master (supersedes Wave T)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 ## Acceptance correction — 2026-09-20
 
 Read [the independent acceptance audit](wave_u_independent_acceptance_audit.plan.md) and [root milestones](../../MILESTONES.md) before continuing closeout. The audit reproduced 14 additional false qualifications despite 55 security and 16 qualification tests passing. Existing E01–E08 fixes remain useful, but do not establish complete evaluator integrity.
