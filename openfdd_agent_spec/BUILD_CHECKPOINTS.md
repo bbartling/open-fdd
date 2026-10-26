@@ -10,8 +10,8 @@ blocker, or intentional exception). Detail:
 
 Legend: `[x]` done · `[~]` partial / residual · `[ ]` remaining
 
-**Product truth (2026-08-06):** React SPA + DataFusion central (no Python in
-product image/request path). Overview/RCx/FDD analytics via `/api/analytics/*` +
+**Recorded 2026-08-06, superseded by the Timescale/PostgreSQL-only mandate:** React SPA + DataFusion central (no Python in
+product image/request path). That DataFusion checkpoint is not current guidance. Current product FDD is Timescale/PostgreSQL SQL (`sql/fdd`), one canonical telemetry write path, no dual record writing. Overview/RCx/FDD analytics via `/api/analytics/*` +
 `/api/fdd/*`. PyPI `open_fdd` + dual cookbooks remain for third-party/oracle use.
 SPA skill: [`skills/openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md).
 
@@ -83,7 +83,9 @@ SPA skill: [`skills/openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md).
 
 # Milestone C — DataFusion analytics cutover (2026-07-28)
 
-**Status:** **Partial** on branch `milestone-c/c1-c2-analytics-runtime`.
+> **Superseded by the Timescale/PostgreSQL-only, one-writer mandate.** This dated DataFusion checkpoint is not current guidance. Product FDD is Timescale/PostgreSQL SQL (`sql/fdd`), one canonical telemetry write path, no dual record writing.
+
+**Status (recorded 2026-07-28):** **Partial** on branch `milestone-c/c1-c2-analytics-runtime`.
 Engine label: `central-analytics-v1` (DF SQL MemTable follow-up).
 Docs: [`MILESTONE_C_CLOSEOUT.md`](../docs/migration/MILESTONE_C_CLOSEOUT.md),
 [`MILESTONE_C_ACCEPTANCE.md`](../docs/migration/MILESTONE_C_ACCEPTANCE.md),
@@ -108,7 +110,9 @@ Docs: [`MILESTONE_C_CLOSEOUT.md`](../docs/migration/MILESTONE_C_CLOSEOUT.md),
 
 # Milestone D — Gaps bridge + WattLab / E+ (2026-07-28)
 
-**Status:** **Partial** on branch `milestone-d/d1-historian-datafusion-runtime`.
+> **Superseded by the Timescale/PostgreSQL-only, one-writer mandate.** The historian DataFusion bridge in this dated checkpoint is not current guidance. Product history and FDD are Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing.
+
+**Status (recorded 2026-07-28):** **Partial** on branch `milestone-d/d1-historian-datafusion-runtime`.
 Docs: [`MILESTONE_D_CLOSEOUT.md`](../docs/migration/MILESTONE_D_CLOSEOUT.md),
 [`MILESTONE_D_ACCEPTANCE.md`](../docs/migration/MILESTONE_D_ACCEPTANCE.md),
 [`MILESTONE_D_RULE_PARITY.md`](../docs/migration/MILESTONE_D_RULE_PARITY.md),
@@ -208,7 +212,9 @@ tracks the recovery program evidence gates.
 
 # Turnkey Rust cutover (2026-08-04)
 
-Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec honesty.
+> **Superseded by the Timescale/PostgreSQL-only, one-writer mandate.** "React + DataFusion only" below is a past checkpoint, not current guidance. Product FDD is Timescale/PostgreSQL SQL, one canonical telemetry write path, no dual record writing.
+
+Product voice recorded then = React + DataFusion only. Track deletion / GHCR / agent_spec honesty.
 
 - [x] Overview analytics path = central `/api/analytics/*` + client Plotly (no overview-oracle product call)
 - [x] Runtime weekly plant bins (`runtime-weekly-v1`) + React plant charts
@@ -225,6 +231,8 @@ Product voice = React + DataFusion only. Track deletion / GHCR / agent_spec hone
 ---
 
 # Historian / Railway program checkpoint (2026-08-21)
+
+> **Superseded by the Timescale/PostgreSQL-only, one-writer mandate.** DataFusion historian registration, object-store tuning, spill, and Parquet conversion items below are a past checkpoint, not current guidance. Product history is Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing.
 
 - [x] P1-M7-00 — H1/H2 merged; H3 DataFusion historian registration/query-safety merged via #758 (`c5974abd`)
 - [x] P1-M7-01 — H4 bounded offline local historian compaction merged via #760 (`32eabc68`) after exact-head CI + review passed
