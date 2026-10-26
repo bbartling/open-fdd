@@ -5,17 +5,8 @@
 //! provenance stamped on each row, and the freshness rules that decide hit,
 //! stale, miss, incompatible, or unavailable.
 
-use std::fs;
-use std::path::Path;
-
-use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-
-use crate::historian::safe_partition_value;
-
-/// Directory of the retired Parquet result cache. Central never writes it.
-pub const RESULTS_DIR: &str = "analytics_results";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheFreshness {
@@ -224,47 +215,6 @@ fn stamped_identity_matches(cached: &CacheProvenance, current: &CacheIdentity) -
         && cached.watermark_status == "known"
 }
 
-/// Delete one building's derived analytics parquet cache.
-///
-/// Historian parts and labeled rule-result files live outside `analytics_results/`
-/// and are not removed.
-pub fn remove_derived_result_cache(storage_root: &Path, building_id: &str) -> Result<u64> {
-    let building = safe_partition_value(building_id, "building_id")?;
-    let dir = storage_root
-        .join(RESULTS_DIR)
-        .join(format!("building_id={building}"));
-    if !dir.exists() {
-        return Ok(0);
-    }
-    if !dir.is_dir() {
-        bail!("derived cache path is not a directory: {}", dir.display());
-    }
-    let removed = count_files(&dir)?;
-    fs::remove_dir_all(&dir).with_context(|| format!("remove derived cache {}", dir.display()))?;
-    Ok(removed)
-}
-
-fn count_files(dir: &Path) -> Result<u64> {
-    let mut count = 0u64;
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let rd = fs::read_dir(&dir).with_context(|| format!("read {}", dir.display()))?;
-        for ent in rd {
-            let ent = ent.with_context(|| format!("read entry under {}", dir.display()))?;
-            let path = ent.path();
-            let meta = ent
-                .metadata()
-                .with_context(|| format!("stat {}", path.display()))?;
-            if meta.is_dir() {
-                stack.push(path);
-            } else if meta.is_file() {
-                count += 1;
-            }
-        }
-    }
-    Ok(count)
-}
-
 fn hex_encode(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
@@ -410,41 +360,5 @@ mod tests {
         assert!(plan.serve_cached && plan.stale && !plan.recompute);
         let incompatible = read_plan(CacheFreshness::Incompatible, false, StaleAction::ServeStale);
         assert!(incompatible.recompute && !incompatible.serve_cached);
-    }
-
-    #[test]
-    fn derived_cache_repair_keeps_historian_and_labeled_results() {
-        let tmp = tempfile::tempdir().unwrap();
-        let history = tmp
-            .path()
-            .join("history/building_id=site-a/equipment_id=ahu/year=2026/month=06");
-        fs::create_dir_all(&history).unwrap();
-        let sample = history.join("part-20260601T000000Z-live.parquet");
-        fs::write(&sample, b"sample").unwrap();
-        let labeled = tmp.path().join("rule_results/site-a");
-        fs::create_dir_all(&labeled).unwrap();
-        let rule = labeled.join("FC1.json");
-        fs::write(&rule, br#"{"rule_id":"FC1","rows":[{"status":"PASS"}]}"#).unwrap();
-        let other = tmp
-            .path()
-            .join("analytics_results/building_id=site-b/query_id=runtime");
-        fs::create_dir_all(&other).unwrap();
-        fs::write(other.join("results.parquet"), b"other").unwrap();
-        let mine = tmp
-            .path()
-            .join("analytics_results/building_id=site-a/query_id=runtime");
-        fs::create_dir_all(&mine).unwrap();
-        fs::write(mine.join("results.parquet"), b"mine").unwrap();
-
-        let removed = remove_derived_result_cache(tmp.path(), "site-a").unwrap();
-        assert!(removed >= 1);
-        assert!(sample.is_file());
-        assert!(rule.is_file());
-        assert!(other.join("results.parquet").is_file());
-        assert!(!mine.exists());
-        assert_eq!(
-            remove_derived_result_cache(tmp.path(), "site-a").unwrap(),
-            0
-        );
     }
 }

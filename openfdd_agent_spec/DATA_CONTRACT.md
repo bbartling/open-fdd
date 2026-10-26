@@ -42,17 +42,9 @@ Current code does not yet meet the mandate. These are defects being removed in
 Wave P2, not exceptions. Do not extend them, rely on them, or describe them as
 allowed behavior. A change that touches them removes or shrinks them.
 
-- `crates/fdd_store`: the now-unused Parquet result-cache writer in
-  `analytics_cache.rs` (the product cache is the PostgreSQL `analytics_result`
-  table), plus the crate's Arrow / Parquet sidecar, compaction and disk-budget
-  modules.
-- `edge/` Arrow IPC pages for package CSV datasets.
-- Workspace dependencies `arrow`, `arrow-schema`, `parquet` and `datafusion` in
-  the root `Cargo.toml`, and the `legacy-datafusion` / `legacy-parquet`
-  check-cfg tombstones.
-- Source trees `crates/fdd_sql`, `crates/fdd_cli` and `crates/fdd_bench`
-  (DataFusion). They are already out of the workspace but still outside
-  `archive/`.
+- `edge/` data-management status still reports `arrow_ipc_bytes` for a
+  `telemetry_pivot.arrow` file that nothing writes, and the edge dashboard
+  still labels its rule engine "Arrow + DataFusion".
 
 ---
 
