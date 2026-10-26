@@ -11,6 +11,12 @@
 - A new tenant site assignment is accepted only when no other tenant already lists that site id. The write reports the conflict and does not change stored memberships.
 - Rows already on disk stay as stored. No migration. Own-site access and foreign-site denial are unchanged.
 
+## 2026-10-26 — Overview freshness (4.0.5 W4c)
+
+- Timescale Overview DTOs carry `stale`, `watermark` (latest sample time used), and `generation` (sample identity). A failed watermark read is stale and does not invent a time or a generation. This does not change the telemetry writer or its data revision.
+- The SPA uses one refresh policy. Opening a site does not send `refresh: true`. Update / Force refresh recomputes Overview once. A single-rule completion recomputes only the queries whose scope includes that rule. Switching sites does not paint the previous site.
+- No VERSION bump.
+
 ## 2026-10-26 — NF ingest unit normalization (UNITS-NF-405-01)
 
 - Portal samples convert to canonical `degF` before the existing Timescale writer. The site-file `units` field fills in when NF reports an unknown unit. NF and site-file disagreements are withheld and logged. Source unit stays on the point. No second write path. No VERSION bump.

@@ -62,10 +62,12 @@ How the code is written (hooks, keys, abort, TypeScript, accessibility) is [`doc
     `ruleLabels` helpers (planned); merge `GET /api/fdd/rules` into `cookbookRuleCatalog`
     at boot instead of duplicating static maps.
 15. **Site-switch performance (Wave O7):** Cache Overview + health per `buildingId`.
-    Do **not** re-fan-out all analytics POSTs on every `?site=` change or thrash
-    matrices twice. Invalidate on `RULES_UPDATED` / existing explicit refresh only.
-    Prefer durable `GET /api/fdd/results` for flags. Serving SPA from Rust does
-    **not** fix this — packaging ≠ UX.
+    Do **not** paint another site's rows, and do **not** re-fan-out all analytics
+    POSTs on every `?site=` change. One refresh policy: opening a site omits
+    `refresh: true`; Update analytics / Force refresh recomputes Overview once;
+    a single-rule completion recomputes only queries whose scope includes that
+    rule. Prefer durable `GET /api/fdd/results` for flags. Serving SPA from Rust
+    does **not** fix this — packaging ≠ UX.
 16. **No agent UI chrome:** Never add banners, tips, froofy grey captions, or
     “we optimized / cached / AI …” copy. Section **titles** and control labels
     must be enough for an engineer — one heading per matrix/table (no redundant

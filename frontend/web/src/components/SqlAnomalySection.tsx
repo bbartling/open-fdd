@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, InlineAlert } from "./widgets";
 import { postSqlAnomaly } from "../api/analyticsApi";
-import { useExplicitAnalyticsRefresh } from "../session/useExplicitAnalyticsRefresh";
+import {
+  overviewQueryRequestsRefresh,
+  useOverviewQueryEpoch,
+} from "../session/overviewQueryPolicy";
 import {
   SQL_ANOMALY_QUERY_VERSION,
   anomalyEdgeNote,
@@ -35,7 +38,17 @@ export function SqlAnomalySection({
   const [note, setNote] = useState<string | null>(null);
   const [edgeNote, setEdgeNote] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
-  const refresh = useExplicitAnalyticsRefresh(buildingId, refreshToken);
+  const [scopeId, setScopeId] = useState(buildingId);
+  const queryEpoch = useOverviewQueryEpoch(buildingId, "sql-anomaly");
+  if (scopeId !== buildingId) {
+    setScopeId(buildingId);
+    setRows([]);
+    setErr(null);
+    setNote(null);
+    setEdgeNote(null);
+    setTruncated(false);
+    setLoading(true);
+  }
   const windowRows = parseWindowRows(windowText);
   const threshold = parseZThreshold(thresholdText);
 
@@ -65,6 +78,7 @@ export function SqlAnomalySection({
     setEdgeNote(null);
     void (async () => {
       try {
+        const refresh = overviewQueryRequestsRefresh(buildingId, "sql-anomaly");
         const env = await postSqlAnomaly(
           {
             building_id: buildingId,
@@ -97,7 +111,7 @@ export function SqlAnomalySection({
       }
     })();
     return () => ctrl.abort();
-  }, [buildingId, edgesOnly, refresh, threshold, windowRows]);
+  }, [buildingId, edgesOnly, queryEpoch, refreshToken, threshold, windowRows]);
 
   const tableRows = useMemo(
     () =>

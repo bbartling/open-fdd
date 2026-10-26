@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { assignDataTableRowKeys, DataTable } from "./widgets/DataTable";
 import {
   HealthMatrixSection,
@@ -10,6 +10,10 @@ import {
   tri,
 } from "./HealthMatrixSection";
 import type { AnalyticsEnvelope } from "../api/analyticsApi";
+import {
+  noteOverviewRuleCompletion,
+  resetOverviewQueryPolicyForTests,
+} from "../session/overviewQueryPolicy";
 
 function emptyEnvelope(): AnalyticsEnvelope {
   return {
@@ -140,12 +144,10 @@ describe("health matrix tint", () => {
     await waitFor(() => {
       expect(fetchHealth).toHaveBeenLastCalledWith(
         "site-a",
-        expect.objectContaining({
-          refresh: true,
-          signal: expect.any(AbortSignal),
-        }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
+    expect(fetchHealth.mock.calls.at(-1)?.[1]?.refresh).toBeUndefined();
     view.rerender(
       <HealthMatrixSection {...props} buildingId="site-b" refreshToken={1} />,
     );
@@ -157,6 +159,36 @@ describe("health matrix tint", () => {
     });
     const last = fetchHealth.mock.calls.at(-1)?.[1];
     expect(last?.refresh).toBeUndefined();
+  });
+
+  it("recomputes only the query that depends on the finished rule", async () => {
+    resetOverviewQueryPolicyForTests();
+    const fetchHealth = vi.fn(async () => emptyEnvelope());
+    const props = {
+      family: "sensor",
+      title: "Sensor faults",
+      queryId: "sensor-faults",
+      flagColumns: [{ key: "flatline", ruleId: "SV-FLATLINE" }],
+      fetchHealth,
+    };
+    render(<HealthMatrixSection {...props} buildingId="site-a" refreshToken={0} />);
+    await waitFor(() => {
+      expect(fetchHealth).toHaveBeenCalledTimes(1);
+    });
+    act(() => {
+      noteOverviewRuleCompletion("site-a", { mode: "single", rule_id: "CHW-1" });
+    });
+    expect(fetchHealth).toHaveBeenCalledTimes(1);
+    act(() => {
+      noteOverviewRuleCompletion("site-a", { mode: "single", rule_id: "SV-FLATLINE" });
+    });
+    await waitFor(() => {
+      expect(fetchHealth).toHaveBeenLastCalledWith(
+        "site-a",
+        expect.objectContaining({ refresh: true }),
+      );
+    });
+    expect(fetchHealth).toHaveBeenCalledTimes(2);
   });
 });
 

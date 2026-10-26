@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import {
   OverviewPopulated,
@@ -7,6 +7,7 @@ import {
   detectedTimeZone,
 } from "./OverviewPopulated";
 import { getSessionConfig } from "../api/mappingApi";
+import { resetOverviewQueryPolicyForTests } from "../session/overviewQueryPolicy";
 
 const emptyOverview = {
   ok: true,
@@ -227,6 +228,7 @@ describe("OverviewPopulated metric isolation", () => {
   beforeEach(() => {
     localStorage.clear();
     clearOverviewSiteCacheForTests();
+    resetOverviewQueryPolicyForTests();
     fetchCentralOverview.mockClear();
     fetchCentralOverview.mockResolvedValue(emptyOverview);
     vi.mocked(getSessionConfig).mockReset();
@@ -526,6 +528,85 @@ describe("OverviewPopulated metric isolation", () => {
       expect(screen.getByTestId("overview-readiness")).toBeTruthy();
     });
     expect(fetchCentralOverview).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows stale and the latest data time from the overview DTO", async () => {
+    fetchCentralOverview.mockResolvedValue({
+      ...emptyOverview,
+      stale: true,
+      watermark: null,
+      generation: null,
+    });
+    renderOverview();
+    expect(await screen.findByTestId("overview-stale")).toBeTruthy();
+    expect(screen.getByTestId("overview-stale").textContent).toMatch(/unavailable/i);
+    expect(screen.getByTestId("overview-populated").getAttribute("data-stale")).toBe("true");
+  });
+
+  it("does not show the previous site after switching", async () => {
+    let releaseSiteA: (value: typeof emptyOverview) => void = () => undefined;
+    const siteA = new Promise<typeof emptyOverview>((resolve) => {
+      releaseSiteA = resolve;
+    });
+    fetchCentralOverview.mockImplementation(async (opts: { building_id?: string }) => {
+      if (opts.building_id === "SITE_A") return siteA;
+      return {
+        ...emptyOverview,
+        building_id: "SITE_B",
+        source: "from-site-b",
+        equipment_count: 3,
+        stale: false,
+        watermark: "2026-05-02T00:00:00Z",
+        generation: "gen-b",
+      };
+    });
+    const view = render(
+      <MemoryRouter>
+        <OverviewPopulated
+          buildingId="SITE_A"
+          equipmentId="AHU_1"
+          equipment={EQUIPMENT}
+          unitSystem="imperial"
+          onEquipmentChange={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    view.rerender(
+      <MemoryRouter>
+        <OverviewPopulated
+          buildingId="SITE_B"
+          equipmentId="AHU_1"
+          equipment={EQUIPMENT}
+          unitSystem="imperial"
+          onEquipmentChange={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-populated").getAttribute("data-overview-site")).toBe(
+        "SITE_B",
+      );
+    });
+    await act(async () => {
+      releaseSiteA({
+        ...emptyOverview,
+        building_id: "SITE_A",
+        source: "from-site-a",
+        equipment_count: 9,
+        stale: false,
+        watermark: "2026-05-01T00:00:00Z",
+        generation: "gen-a",
+      });
+      await siteA;
+    });
+    expect(screen.queryByText(/from-site-a/)).toBeNull();
+    expect(screen.getByText(/from-site-b/)).toBeTruthy();
+    expect(screen.getByTestId("overview-populated").getAttribute("data-overview-site")).toBe(
+      "SITE_B",
+    );
+    expect(screen.getByTestId("overview-populated").getAttribute("data-generation")).toBe("gen-b");
+    expect(screen.getByTestId("overview-eq-count").textContent).toContain("3");
+    expect(screen.getByTestId("overview-eq-count").textContent).not.toContain("9");
   });
 
   it("does not render an Overview equipment picker", async () => {

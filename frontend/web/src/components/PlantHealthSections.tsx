@@ -84,6 +84,7 @@ export function PlantHealthSections({
         title="AHU temperature health"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="ahu-temperature-health"
         fetchHealth={fetchAhuTemperature}
         renderEmptyTable
         pendingFlags={pendingFlags}
@@ -112,6 +113,7 @@ export function PlantHealthSections({
         title="AHU pressure / fan health"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="ahu-pressure-health"
         fetchHealth={fetchAhuPressure}
         renderEmptyTable
         pendingFlags={pendingFlags}
@@ -143,6 +145,7 @@ export function PlantHealthSections({
         title="AHU economizer health"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="ahu-economizer-health"
         fetchHealth={fetchAhuEconomizer}
         renderEmptyTable
         pendingFlags={pendingFlags}
@@ -190,6 +193,7 @@ export function PlantHealthSections({
         title="Chiller plant health"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="chiller-health"
         fetchHealth={fetchChiller}
         renderEmptyTable
         pendingFlags={pendingFlags}
@@ -224,6 +228,7 @@ export function PlantHealthSections({
         title="Cooling-tower health"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="cooling-tower-health"
         fetchHealth={fetchCoolingTower}
         renderEmptyTable
         pendingFlags={pendingFlags}
@@ -247,6 +252,7 @@ export function PlantHealthSections({
         title="Heat-pump health"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="hp-health"
         fetchHealth={fetchHp}
         renderEmptyTable
         pendingFlags={pendingFlags}
@@ -274,6 +280,7 @@ export function PlantHealthSections({
         title="PID Hunting"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="pid-hunting"
         fetchHealth={fetchPid}
         renderEmptyTable
         pendingFlags={pendingFlags}
@@ -288,6 +295,7 @@ export function PlantHealthSections({
         title="Sensor faults"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="sensor-faults"
         fetchHealth={fetchSensors}
         flagColumns={[
           { key: "flatline", ruleId: "SV-FLATLINE" },
@@ -306,6 +314,7 @@ export function PlantHealthSections({
         title="Generic zone monitoring"
         buildingId={buildingId}
         refreshToken={refreshToken}
+        queryId="zone-other-health"
         fetchHealth={fetchZoneOther}
         renderEmptyTable
         pendingFlags={pendingFlags}

@@ -62,4 +62,10 @@ export interface OverviewVibe19Response {
   };
   devices_by_type: Array<{ type: string; count: number }>;
   error?: string;
+  /** True when a source DTO could not certify its sample time. */
+  stale?: boolean | null;
+  /** Latest sample time used by the source DTOs. */
+  watermark?: string | null;
+  /** Sample identity of the source DTOs. Not a telemetry write revision. */
+  generation?: string | null;
 }

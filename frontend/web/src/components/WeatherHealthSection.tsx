@@ -5,7 +5,10 @@ import { postBasVsWebOat } from "../api/analyticsApi";
 import { plantEquipmentFamilies } from "../lib/plantEquipment";
 import { isWeatherEquipment, pickWeatherFaultRow } from "../lib/overviewMetrics";
 import type { FddEquipmentItem } from "../api/analyticsApi";
-import { useExplicitAnalyticsRefresh } from "../session/useExplicitAnalyticsRefresh";
+import {
+  overviewQueryRequestsRefresh,
+  useOverviewQueryEpoch,
+} from "../session/overviewQueryPolicy";
 
 function fmtHours(v: unknown): string {
   if (v == null || v === "") return "—";
@@ -37,7 +40,15 @@ export function WeatherHealthSection({
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const refresh = useExplicitAnalyticsRefresh(buildingId, refreshToken);
+  const [scopeId, setScopeId] = useState(buildingId);
+  const queryEpoch = useOverviewQueryEpoch(buildingId, "weather-health");
+  if (scopeId !== buildingId) {
+    setScopeId(buildingId);
+    setRows([]);
+    setErr(null);
+    setNote(null);
+    setLoading(true);
+  }
 
   useEffect(() => {
     if (!buildingId) {
@@ -59,6 +70,7 @@ export function WeatherHealthSection({
           }
           return;
         }
+        const refresh = overviewQueryRequestsRefresh(buildingId, "weather-health");
         const [fddRows, bas] = await Promise.all([
           getFddResults(buildingId).catch(() => [] as Array<Record<string, unknown>>),
           postBasVsWebOat({
@@ -158,7 +170,7 @@ export function WeatherHealthSection({
     return () => {
       cancelled = true;
     };
-  }, [buildingId, refreshToken, families.hasWeather, refresh, equipment]);
+  }, [buildingId, refreshToken, families.hasWeather, equipment, queryEpoch]);
 
   return (
     <section className="overview-section" data-testid="overview-weather-health">

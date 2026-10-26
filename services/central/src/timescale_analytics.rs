@@ -263,14 +263,15 @@ pub async fn motor_weekly_runtime(
             "partial_week": r.try_get::<bool, _>("partial_week").ok(),
         }));
     }
-    Ok(finish_row_envelope(
+    let body = finish_row_envelope(
         "motor-weekly-runtime",
         building_id,
         out,
         scope,
         "runtime",
         None,
-    ))
+    );
+    Ok(stamp_overview_dto(tsdb, building_id, scope, body).await)
 }
 
 pub async fn bas_vs_web_oat(
@@ -298,14 +299,15 @@ pub async fn bas_vs_web_oat(
             "delta_f": r.try_get::<f64, _>("delta_f").ok(),
         }));
     }
-    Ok(finish_row_envelope(
+    let body = finish_row_envelope(
         "bas-vs-web-oat",
         building_id,
         out,
         scope,
         "bas-vs-web-oat",
         None,
-    ))
+    );
+    Ok(stamp_overview_dto(tsdb, building_id, scope, body).await)
 }
 
 pub async fn role_timeseries(
@@ -1518,6 +1520,89 @@ pub async fn historian_stats(tsdb: &Tsdb, building_id: &str) -> Result<Value> {
     }))
 }
 
+/// Sample identity on an Overview DTO. Not the telemetry write revision.
+struct OverviewFreshness {
+    stale: bool,
+    watermark: Option<String>,
+    generation: Option<String>,
+}
+
+fn overview_freshness_unavailable() -> OverviewFreshness {
+    OverviewFreshness {
+        stale: true,
+        watermark: None,
+        generation: None,
+    }
+}
+
+fn overview_freshness_known(
+    building_id: &str,
+    order: u64,
+    utc: &str,
+    coverage: &str,
+) -> OverviewFreshness {
+    OverviewFreshness {
+        stale: false,
+        watermark: (!utc.is_empty()).then(|| utc.to_string()),
+        generation: Some(sample_generation(building_id, order, utc, coverage)),
+    }
+}
+
+fn sample_generation(building_id: &str, order: u64, utc: &str, coverage: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"overview-sample-generation-v1");
+    hasher.update([0]);
+    hasher.update(building_id.as_bytes());
+    hasher.update([0]);
+    hasher.update(order.to_le_bytes());
+    hasher.update([0]);
+    hasher.update(utc.as_bytes());
+    hasher.update([0]);
+    hasher.update(coverage.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn apply_overview_freshness(mut body: Value, freshness: &OverviewFreshness) -> Value {
+    let Some(obj) = body.as_object_mut() else {
+        return body;
+    };
+    obj.insert("stale".to_string(), json!(freshness.stale));
+    obj.insert("watermark".to_string(), json!(freshness.watermark));
+    obj.insert("generation".to_string(), json!(freshness.generation));
+    body
+}
+
+/// Attach the latest sample time this DTO used. A failed read is stale and
+/// does not invent a timestamp or a generation.
+async fn stamp_overview_dto(
+    tsdb: &Tsdb,
+    building_id: &str,
+    scope: &AnalyticsSqlScope,
+    body: Value,
+) -> Value {
+    let input = crate::timescale_product::read_analytics_cache_input_from(
+        tsdb,
+        building_id,
+        scope.start,
+        scope.end,
+        &scope.equipment_ids,
+    )
+    .await;
+    let freshness = match input.watermark {
+        Ok(watermark) => overview_freshness_known(
+            building_id,
+            watermark.order,
+            &watermark.utc,
+            &watermark.coverage,
+        ),
+        Err(reason) => {
+            tracing::warn!(%reason, "overview watermark unavailable");
+            overview_freshness_unavailable()
+        }
+    };
+    apply_overview_freshness(body, &freshness)
+}
+
 fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
     json!({
         "query_id": query_id,
@@ -1525,7 +1610,6 @@ fn envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> Value {
         "engine": "timescale-sql",
         "analytics_pack": "openfdd-analytics-sql-v1",
         "pack_version": analytics_pack_version(),
-        "stale": false,
         "rows": rows,
     })
 }
@@ -1670,13 +1754,12 @@ pub async fn respond_query(
             "engine": "timescale-sql",
             "analytics_pack": "openfdd-analytics-sql-v1",
             "pack_version": analytics_pack_version(),
-            "stale": false,
             "rows": [],
             "note": "Wave-X Timescale dispatch — query SQL port pending; DataFusion disabled",
         })),
     };
 
-    result.map_err(|e| {
+    let body = result.map_err(|e| {
         (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             axum::Json(json!({
@@ -1685,7 +1768,13 @@ pub async fn respond_query(
                 "engine": "timescale-sql",
             })),
         )
-    })
+    })?;
+    // runtime and bas-vs-web-oat stamp inside their query functions because
+    // those routes return the function value directly.
+    if matches!(query_id, "runtime" | "bas-vs-web-oat") {
+        return Ok(body);
+    }
+    Ok(stamp_overview_dto(&tsdb, &building, &scope, body).await)
 }
 
 #[cfg(test)]
@@ -1884,5 +1973,69 @@ mod pack_version_tests {
                 && MOTOR_WEEKLY_SQL.contains("interval '6 days'"),
             "weekly runtime must mark buckets that do not span the week"
         );
+    }
+}
+
+#[cfg(test)]
+mod overview_freshness_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn failed_watermark_is_stale_without_a_time_or_generation() {
+        let body = apply_overview_freshness(
+            json!({"rows": [1], "building_id": "site-a"}),
+            &overview_freshness_unavailable(),
+        );
+        assert_eq!(body["stale"], true);
+        assert!(body["watermark"].is_null());
+        assert!(body["generation"].is_null());
+        assert_eq!(body["rows"], json!([1]));
+    }
+
+    #[test]
+    fn known_watermark_names_the_latest_data_time_and_generation() {
+        let timed = overview_freshness_known(
+            "site-a",
+            20260401000000,
+            "2026-04-01T00:00:00Z",
+            "samples=2",
+        );
+        let body = apply_overview_freshness(json!({"rows": []}), &timed);
+        assert_eq!(body["stale"], false);
+        assert_eq!(body["watermark"], "2026-04-01T00:00:00Z");
+        let generation = body["generation"].as_str().expect("generation");
+        assert!(!generation.is_empty());
+
+        let later = overview_freshness_known(
+            "site-a",
+            20260402000000,
+            "2026-04-02T00:00:00Z",
+            "samples=3",
+        );
+        assert_ne!(later.generation.as_deref(), Some(generation));
+
+        let other_site = overview_freshness_known(
+            "site-b",
+            20260401000000,
+            "2026-04-01T00:00:00Z",
+            "samples=2",
+        );
+        assert_ne!(other_site.generation, timed.generation);
+    }
+
+    #[test]
+    fn empty_scope_is_not_stale_and_has_no_data_time() {
+        let empty = overview_freshness_known("site-a", 0, "", "samples=0");
+        let body = apply_overview_freshness(json!({}), &empty);
+        assert_eq!(body["stale"], false);
+        assert!(body["watermark"].is_null());
+        assert!(body["generation"].is_string());
+    }
+
+    #[test]
+    fn non_object_body_is_left_unchanged() {
+        let body = apply_overview_freshness(json!([1, 2]), &overview_freshness_unavailable());
+        assert_eq!(body, json!([1, 2]));
     }
 }

@@ -46,7 +46,9 @@ Rows written before `08_analytics_result_cache.sql` carry empty stamps and are i
 
 Stale is a structured flag. It is not copied into envelope `warnings`, so Overview does not grow a cache caption.
 
-Routine opens omit `refresh` and use the cache. Explicit operator actions send `refresh: true`: Overview **Update analytics** / **Force refresh analytics** (including the health, weather, and SQL-anomaly sections whose token advanced), a rules-updated refetch of those sections, and **Refresh RCx preset**. Opening a building or an RCx preset does not.
+Routine opens omit `refresh` and use the cache. Explicit operator actions send `refresh: true` through one Overview policy: **Update analytics** / **Force refresh analytics** (historian charts plus the health, weather, and SQL-anomaly queries) and **Refresh RCx preset**. A single-rule completion sends `refresh: true` only for Overview queries whose flag scope includes that rule. A full rule run refreshes those rule-scoped queries and does not recompute historian charts. Opening a building or an RCx preset does not send `refresh: true`.
+
+Timescale Overview DTOs carry `stale`, `watermark` (latest sample time used), and `generation` (identity of those samples). A failed watermark read is `stale: true` with a null watermark and a null generation. `generation` is not the telemetry write revision.
 
 `elapsed_ms` on `cache` is the server time for that read or recompute (hit vs miss).
 

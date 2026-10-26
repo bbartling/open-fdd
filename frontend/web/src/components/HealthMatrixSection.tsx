@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useExplicitAnalyticsRefresh } from "../session/useExplicitAnalyticsRefresh";
+import {
+  overviewQueryRequestsRefresh,
+  useOverviewQueryEpoch,
+} from "../session/overviewQueryPolicy";
 import { DataTable, InlineAlert } from "./widgets";
 import type { DataTableColumn } from "./widgets/DataTable";
 import type { AnalyticsEnvelope } from "../api/analyticsApi";
@@ -147,6 +150,8 @@ export interface HealthMatrixSectionProps {
   caption?: string;
   buildingId: string;
   refreshToken: number;
+  /** Analytics query this matrix reads. Defaults to `family`. */
+  queryId?: string;
   fetchHealth: (
     buildingId: string,
     opts?: HealthFetchOptions,
@@ -168,6 +173,7 @@ export function HealthMatrixSection({
   title,
   buildingId,
   refreshToken,
+  queryId,
   fetchHealth,
   flagColumns,
   emptyMessage,
@@ -187,7 +193,8 @@ export function HealthMatrixSection({
 
   const test = (suffix: string) => `${family}-health-${suffix}`;
   const sectionId = `overview-${family}-health`;
-  const refresh = useExplicitAnalyticsRefresh(buildingId, refreshToken);
+  const resolvedQueryId = queryId ?? family;
+  const queryEpoch = useOverviewQueryEpoch(buildingId, resolvedQueryId);
 
   useEffect(() => {
     if (!buildingId) {
@@ -201,7 +208,7 @@ export function HealthMatrixSection({
     setLoading(true);
     setErr(null);
     const opts: HealthFetchOptions = { signal: controller.signal };
-    if (refresh) opts.refresh = true;
+    if (overviewQueryRequestsRefresh(buildingId, resolvedQueryId)) opts.refresh = true;
     void fetchHealth(buildingId, opts)
       .then((envelope) => {
         if (!active || controller.signal.aborted) return;
@@ -221,7 +228,7 @@ export function HealthMatrixSection({
       active = false;
       controller.abort();
     };
-  }, [buildingId, refreshToken, fetchHealth, refresh]);
+  }, [buildingId, refreshToken, fetchHealth, resolvedQueryId, queryEpoch]);
 
   const rows = useMemo(() => {
     const kept = (env?.rows ?? []).filter((row) => {

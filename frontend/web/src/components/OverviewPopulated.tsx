@@ -39,6 +39,12 @@ import { SqlAnomalySection } from "./SqlAnomalySection";
 import { DataHealthCard } from "./DataHealthCard";
 import { mergeRuleDescriptionsFromApi } from "../lib/ruleLabels";
 import { RULES_UPDATED_EVENT } from "./RuleTuningPanel";
+import {
+  noteOverviewRuleCompletion,
+  peekOverviewHistorianRefresh,
+  releaseOverviewHistorianRefresh,
+  requestExplicitOverviewRefresh,
+} from "../session/overviewQueryPolicy";
 import { naturalCompare } from "../lib/naturalSort";
 import { displayScalar, storeScalar } from "../api/roleUnits";
 import {
@@ -153,6 +159,28 @@ export function OverviewPopulated({
     setLastRuleResultCount(null);
     setRulesNote(null);
   }
+  if (lastBuildingId.current !== buildingId) {
+    lastBuildingId.current = buildingId;
+    setAnalyticsClean(false);
+    setForceRules(false);
+    const hit = buildingId ? overviewSiteCache.get(buildingId) : undefined;
+    if (hit && hit.body.building_id === buildingId) {
+      setOverview(hit.body);
+      if (hit.lastRuleResultCount != null) {
+        setLastRuleResultCount(hit.lastRuleResultCount);
+      }
+      hasOverview.current = true;
+      setOverviewErr(null);
+      setLoadingOverview(false);
+      setAnalyticsClean(true);
+    } else {
+      hasOverview.current = false;
+      setOverview(null);
+      setOverviewErr(null);
+      setLoadingOverview(Boolean(buildingId));
+    }
+  }
+  const overviewForSite = overview?.building_id === buildingId ? overview : null;
 
   const sortedEquipment = useMemo(
     () =>
@@ -170,8 +198,8 @@ export function OverviewPopulated({
   const comfortStep = unitSystem === "metric" ? 0.3 : 0.5;
   const bareMin = occupiedHoursPerWeek(week);
   const spanH =
-    overview?.span?.span_hours != null
-      ? Math.round(Number(overview.span.span_hours) * 10) / 10
+    overviewForSite?.span?.span_hours != null
+      ? Math.round(Number(overviewForSite.span.span_hours) * 10) / 10
       : spanHoursBetween(firstTs, lastTs);
 
   const devicesByType = useMemo(() => {
@@ -187,8 +215,8 @@ export function OverviewPopulated({
     ];
     const map = new Map<string, number>();
     for (const t of CHROME_TYPES) map.set(t, 0);
-    const raw = overview?.devices_by_type?.length
-      ? overview.devices_by_type.map((r) => ({
+    const raw = overviewForSite?.devices_by_type?.length
+      ? overviewForSite.devices_by_type.map((r) => ({
           equipment_type: String(r.type || "unknown"),
           count: Number(r.count) || 0,
         }))
@@ -210,7 +238,7 @@ export function OverviewPopulated({
     return [...map.entries()]
       .map(([equipment_type, count]) => ({ equipment_type, count }))
       .sort((a, b) => a.equipment_type.localeCompare(b.equipment_type));
-  }, [equipment, overview?.devices_by_type]);
+  }, [equipment, overviewForSite?.devices_by_type]);
 
   const equipmentIdRef = useRef(equipmentId);
   const selectedTypeRef = useRef(selected?.equipment_type);
@@ -295,10 +323,11 @@ export function OverviewPopulated({
   const refreshOverview = useCallback(
     async (opts?: { force?: boolean }) => {
       if (!buildingId) return;
-      const force = opts?.force === true;
-      if (!force) {
+      const refresh =
+        opts?.force === true || peekOverviewHistorianRefresh(buildingId);
+      if (!refresh) {
         const hit = overviewSiteCache.get(buildingId);
-        if (hit) {
+        if (hit && hit.body.building_id === buildingId) {
           setOverview(hit.body);
           if (hit.lastRuleResultCount != null) {
             setLastRuleResultCount(hit.lastRuleResultCount);
@@ -320,9 +349,11 @@ export function OverviewPopulated({
           building_id: buildingId,
           equipment: equipmentRef.current,
           signal: ac.signal,
-          refresh: force,
+          refresh,
         });
-        if (ac.signal.aborted) return;
+        if (ac.signal.aborted || readinessSiteRef.current !== buildingId) return;
+        releaseOverviewHistorianRefresh(buildingId);
+        if (body.building_id !== buildingId) return;
         if (!body.ok) {
           throw new Error(body.error || "Central analytics failed");
         }
@@ -337,6 +368,7 @@ export function OverviewPopulated({
         setAnalyticsClean(true);
       } catch (err) {
         if (ac.signal.aborted) return;
+        releaseOverviewHistorianRefresh(buildingId);
         setOverviewErr(formatErr(err));
         if (!hasOverview.current) {
           setOverview(null);
@@ -408,29 +440,6 @@ export function OverviewPopulated({
   }, [equipmentId, selected?.equipment_type, paintFrames]);
 
   useEffect(() => {
-    if (lastBuildingId.current !== buildingId) {
-      lastBuildingId.current = buildingId;
-      setAnalyticsClean(false);
-      setForceRules(false);
-      const hit = buildingId ? overviewSiteCache.get(buildingId) : undefined;
-      if (hit) {
-        setOverview(hit.body);
-        if (hit.lastRuleResultCount != null) {
-          setLastRuleResultCount(hit.lastRuleResultCount);
-        }
-        hasOverview.current = true;
-        setOverviewErr(null);
-        setLoadingOverview(false);
-        setAnalyticsClean(true);
-      } else {
-        hasOverview.current = false;
-        setOverview(null);
-        setOverviewErr(null);
-      }
-    }
-  }, [buildingId]);
-
-  useEffect(() => {
     void getSessionConfig(buildingId)
       .then((body) => {
         const p = body.config?.params ?? {};
@@ -443,11 +452,12 @@ export function OverviewPopulated({
 
   useEffect(() => {
     const onRules = (ev: Event) => {
-      const detail = (ev as CustomEvent).detail as {
+      const detail = (ev as CustomEvent<{
         mode?: string;
         rule_id?: string;
+        building_id?: string;
         count?: number;
-      };
+      }>).detail;
       const n = detail?.count;
       const single = detail?.mode === "single";
       setRulesNote(
@@ -455,17 +465,16 @@ export function OverviewPopulated({
           ? `Rule ${detail.rule_id} updated · ${n ?? "—"} result row(s)`
           : `Rules updated · ${n ?? "—"} result row(s)`,
       );
-      // Matrices join FDD results — bump refresh so health cells leave stale/unknown.
-      setVavHealthToken((t) => t + 1);
       void refreshReadiness();
-      // Lab single-rule: keep Run-all grey if meta still clean; still refresh analytics.
-      if (buildingId) overviewSiteCache.delete(buildingId);
-      setAnalyticsClean(false);
-      void refreshOverview({ force: true });
+      noteOverviewRuleCompletion(buildingId, {
+        mode: detail?.mode,
+        rule_id: detail?.rule_id,
+        building_id: detail?.building_id,
+      });
     };
     window.addEventListener(RULES_UPDATED_EVENT, onRules);
     return () => window.removeEventListener(RULES_UPDATED_EVENT, onRules);
-  }, [buildingId, refreshOverview, refreshReadiness]);
+  }, [buildingId, refreshReadiness]);
 
   const saveSchedule = async () => {
     setScheduleBusy(true);
@@ -513,8 +522,9 @@ export function OverviewPopulated({
         `Schedule saved (tz ${tz}, ${bareMin} occ h/wk). Calendar persisted to session config.`,
       );
       setAnalyticsClean(false);
+      requestExplicitOverviewRefresh(buildingId);
       void refreshReadiness();
-      void refreshOverview({ force: true });
+      void refreshOverview();
     } catch (err) {
       setScheduleNote(formatErr(err));
     } finally {
@@ -586,14 +596,14 @@ export function OverviewPopulated({
     }
   };
 
-  const busy = loadingOverview && !overview;
+  const busy = loadingOverview && !overviewForSite;
   const resultRows =
     fddReadiness?.result_count ?? lastRuleResultCount ?? 0;
   const fddPending = resultRows === 0;
   const runAllGrey =
     (afddOwnsRefresh || (Boolean(fddReadiness?.clean) && !forceRules)) &&
     resultRows > 0;
-  const updateAnalyticsGrey = analyticsClean && Boolean(overview) && !busy;
+  const updateAnalyticsGrey = analyticsClean && Boolean(overviewForSite) && !busy;
   const readinessLabel = (() => {
     if (rulesBusy) return "Running all rules…";
     if (busy || loadingOverview) return "Updating analytics…";
@@ -610,14 +620,14 @@ export function OverviewPopulated({
     if (fddReadiness?.clean && resultRows > 0) {
       return `Results current (${resultRows} result rows)`;
     }
-    if (overview && fddPending) return "Needs Run all rules";
-    if (overview && resultRows > 0) {
+    if (overviewForSite && fddPending) return "Needs Run all rules";
+    if (overviewForSite && resultRows > 0) {
       return `Ready (${resultRows} result rows)`;
     }
     return "Idle";
   })();
-  const datasetStart = formatOverviewTs(overview?.span?.start ?? firstTs);
-  const datasetEnd = formatOverviewTs(overview?.span?.end ?? lastTs);
+  const datasetStart = formatOverviewTs(overviewForSite?.span?.start ?? firstTs);
+  const datasetEnd = formatOverviewTs(overviewForSite?.span?.end ?? lastTs);
 
   useEffect(() => {
     if (!busy) {
@@ -645,6 +655,16 @@ export function OverviewPopulated({
     <div
       className={`overview-populated${busy ? " overview-populated--busy" : ""}`}
       data-testid="overview-populated"
+      data-overview-site={overviewForSite?.building_id ?? ""}
+      data-stale={
+        overviewForSite?.stale === true
+          ? "true"
+          : overviewForSite?.stale === false
+            ? "false"
+            : "unknown"
+      }
+      data-watermark={overviewForSite?.watermark ?? ""}
+      data-generation={overviewForSite?.generation ?? ""}
       aria-busy={busy || undefined}
     >
       {busy ? (
@@ -666,7 +686,16 @@ export function OverviewPopulated({
         </div>
       ) : null}
 
-      {loadingOverview && overview ? (
+      {overviewForSite?.stale === true ? (
+        <InlineAlert id="overview-stale" variant="warning" testId="overview-stale">
+          Overview is stale.{" "}
+          {overviewForSite.watermark
+            ? `Latest data time ${overviewForSite.watermark}.`
+            : "Latest data time is unavailable."}
+        </InlineAlert>
+      ) : null}
+
+      {loadingOverview && overviewForSite ? (
         <InlineAlert
           id="overview-refreshing"
           variant="info"
@@ -688,7 +717,7 @@ export function OverviewPopulated({
         testId="overview-readiness"
       >
         Overview status: <strong data-testid="overview-readiness-label">{readinessLabel}</strong>
-        {overview && fddPending && !rulesBusy
+        {overviewForSite && fddPending && !rulesBusy
           ? " — run Run all rules for health matrices."
           : null}
       </InlineAlert>
@@ -711,8 +740,9 @@ export function OverviewPopulated({
             onClick={() => {
               setAnalyticsClean(false);
               setVavHealthToken((t) => t + 1);
+              requestExplicitOverviewRefresh(buildingId);
               void refreshMeta();
-              void refreshOverview({ force: true });
+              void refreshOverview();
             }}
             testId="overview-refresh"
           />
@@ -725,8 +755,9 @@ export function OverviewPopulated({
               onClick={() => {
                 setAnalyticsClean(false);
                 setVavHealthToken((t) => t + 1);
+                requestExplicitOverviewRefresh(buildingId);
                 void refreshMeta();
-                void refreshOverview({ force: true });
+                void refreshOverview();
               }}
               testId="overview-force-analytics"
             />
@@ -765,10 +796,10 @@ export function OverviewPopulated({
             />
           ) : null}
         </div>
-        {overview ? (
+        {overviewForSite ? (
           <span className="oracle-sidebar__caption">
-            {overview.elapsed_s}s · {overview.equipment_count} equip ·{" "}
-            {overview.source}
+            {overviewForSite.elapsed_s}s · {overviewForSite.equipment_count} equip ·{" "}
+            {overviewForSite.source}
           </span>
         ) : (
           <InlineAlert id="overview-idle" variant="info" testId="overview-idle-hint">
@@ -791,13 +822,13 @@ export function OverviewPopulated({
           id="ov-eq"
           label="Equipment"
           description={
-            (overview?.weather_excluded ?? 0) > 0
+            (overviewForSite?.weather_excluded ?? 0) > 0
               ? "Weather is not counted as equipment"
               : undefined
           }
           value={String(
-            overview?.equipment_count && overview.equipment_count > 0
-              ? overview.equipment_count
+            overviewForSite?.equipment_count && overviewForSite.equipment_count > 0
+              ? overviewForSite.equipment_count
               : equipment.length,
           )}
           testId="overview-eq-count"
