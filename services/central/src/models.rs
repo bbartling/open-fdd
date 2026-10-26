@@ -4,6 +4,30 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::ToSchema;
 
+/// Liveness fields process checks read from `GET /api/health` and `GET /health`.
+/// Build, provider, count, and sink detail is `GET /api/health/diagnostics`.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PublicHealthResponse {
+    pub ok: bool,
+    pub service: String,
+    /// Product historian name. Always `timescale` when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub historian: Option<String>,
+    /// True when the Timescale pool answers `SELECT 1`.
+    #[serde(default)]
+    pub timescale_ok: bool,
+    /// Empty-database starter seed status code (`disabled`, `seeded`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub starter_seed: Option<String>,
+    /// Product FDD engine. Always `postgres-sql` when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fdd_engine: Option<String>,
+    /// Always false after the Timescale cutover.
+    #[serde(default)]
+    pub dual_write: bool,
+}
+
+/// Hub-admin health detail (`GET /api/health/diagnostics`).
 #[derive(Debug, Serialize, ToSchema)]
 pub struct OkHealthResponse {
     pub ok: bool,

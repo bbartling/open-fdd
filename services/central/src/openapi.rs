@@ -329,6 +329,7 @@ mod live_routes {
 #[openapi(
     paths(
         crate::routes::health,
+        crate::routes::health_diagnostics,
         crate::routes::list_tenants,
         crate::routes::select_tenant,
         crate::routes::list_tenant_budgets,
@@ -384,6 +385,7 @@ mod live_routes {
     ),
     components(schemas(
         OkHealthResponse,
+        PublicHealthResponse,
         AuditSinkHealth,
         crate::tenant::TenantsListResponse,
         crate::tenant::TenantRecord,
