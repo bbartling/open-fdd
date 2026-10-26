@@ -3171,7 +3171,7 @@ fn public_db_error(kind: &str, err: &impl std::fmt::Display) -> String {
     }
 }
 
-/// Drop derived analytics cache rows and parquet for one building.
+/// Drop derived `analytics_result` rows for one building.
 /// Historian samples, `fdd_run`, and labeled rule-result files are kept.
 #[cfg_attr(
     not(test),
@@ -3182,11 +3182,8 @@ fn public_db_error(kind: &str, err: &impl std::fmt::Display) -> String {
 )]
 pub(crate) async fn repair_derived_analytics_cache(
     tsdb: &Tsdb,
-    storage_root: &Path,
     building_id: &str,
 ) -> Result<Value, String> {
-    let removed = fdd_store::remove_derived_result_cache(storage_root, building_id)
-        .map_err(|err| format!("derived cache repair failed: {err}"))?;
     let deleted = sqlx::query("DELETE FROM analytics_result WHERE building_id = $1")
         .bind(building_id)
         .execute(tsdb.pool())
@@ -3206,7 +3203,6 @@ pub(crate) async fn repair_derived_analytics_cache(
         .map_err(|err| public_db_error("fdd_run count", &err))?;
     Ok(json!({
         "ok": true,
-        "derived_files_removed": removed,
         "analytics_result_rows_deleted": deleted.rows_affected(),
         "samples_remaining": samples,
         "fdd_runs_remaining": fdd_runs,
@@ -5404,23 +5400,6 @@ mod analytics_cache_identity {
         .await
         .expect("analytics_result");
 
-        let root = tempfile::tempdir().expect("root");
-        let history = root
-            .path()
-            .join(format!("history/building_id={site}/year=2026/month=06"));
-        std::fs::create_dir_all(&history).expect("history");
-        let sample_file = history.join("part-20260601T000000Z-live.parquet");
-        std::fs::write(&sample_file, b"sample").expect("sample file");
-        let labeled = root.path().join(format!("rule_results/{site}"));
-        std::fs::create_dir_all(&labeled).expect("labels");
-        let rule_file = labeled.join("FC1.json");
-        std::fs::write(&rule_file, br#"{"rule_id":"FC1","status":"PASS"}"#).expect("label");
-        let cache_dir = root.path().join(format!(
-            "analytics_results/building_id={site}/query_id=rcx-preset"
-        ));
-        std::fs::create_dir_all(&cache_dir).expect("cache dir");
-        std::fs::write(cache_dir.join("results.parquet"), b"derived").expect("cache file");
-
         let scoped = read_analytics_cache_input_from(
             &tsdb,
             &site,
@@ -5500,7 +5479,7 @@ mod analytics_cache_identity {
         assert_ne!(remapped, model);
 
         let before_samples = tsdb.sample_count(&site).await.expect("count");
-        let repair = repair_derived_analytics_cache(&tsdb, root.path(), &site)
+        let repair = repair_derived_analytics_cache(&tsdb, &site)
             .await
             .expect("repair");
         assert_eq!(
@@ -5512,14 +5491,11 @@ mod analytics_cache_identity {
             repair["analytics_result_rows_deleted"],
             serde_json::json!(1)
         );
-        assert!(repair["derived_files_removed"].as_u64().unwrap_or(0) >= 1);
+        assert!(repair.get("derived_files_removed").is_none());
         assert_eq!(
             tsdb.sample_count(&site).await.expect("samples stay"),
             before_samples
         );
-        assert!(sample_file.is_file(), "historian sample file stays");
-        assert!(rule_file.is_file(), "labeled result stays");
-        assert!(!cache_dir.join("results.parquet").exists());
         let runs: i64 =
             sqlx::query_scalar("SELECT count(*)::bigint FROM fdd_run WHERE site_id = $1")
                 .bind(&site)

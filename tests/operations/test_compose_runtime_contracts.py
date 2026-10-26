@@ -5,15 +5,14 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPOSE_WITH_CENTRAL = (
     ROOT / "docker/compose.react.yml",
     ROOT / "docker/compose.central.yml",
-    ROOT / "docker/compose.standalone.yml",
 )
-HISTORIAN_ENV = (
+HISTORIAN_ENV = ("OPENFDD_QUERY_MEMORY_MB",)
+RETIRED_HISTORIAN_ENV = (
     "OPENFDD_PARQUET_FLUSH_ROWS",
     "OPENFDD_PARQUET_FLUSH_SECONDS",
     "OPENFDD_PARQUET_TARGET_FILE_MB",
     "OPENFDD_COMPACTION_ENABLED",
     "OPENFDD_COMPACTION_MIN_FILES",
-    "OPENFDD_QUERY_MEMORY_MB",
     "OPENFDD_DATAFUSION_SPILL_DIR",
 )
 
@@ -23,6 +22,8 @@ def test_central_compose_recipes_forward_historian_tuning() -> None:
         text = path.read_text()
         for name in HISTORIAN_ENV:
             assert f"{name}: ${{{name}:-" in text, f"{path}: missing {name}"
+        for name in RETIRED_HISTORIAN_ENV:
+            assert name not in text, f"{path}: retired Parquet/DataFusion env {name}"
 
 
 def test_mqtt_compose_recipes_use_single_certs_mount_for_acl() -> None:

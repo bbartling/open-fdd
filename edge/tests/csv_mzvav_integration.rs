@@ -182,41 +182,18 @@ fn mzvav_fdd_eval_and_purge() {
         let out = commit_csv("MZVAV-2-1.csv", &content);
         assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
 
-        // Wave-X: DF SessionContext FDD is legacy-only. Default Timescale product
-        // path retires run_rule_sql_from_historian; still prove commit + purge.
-        #[cfg(feature = "legacy-datafusion")]
-        {
-            let sql = "SELECT timestamp, equipment_id, oa_t, CASE WHEN oa_t > 75.0 THEN true ELSE false END AS raw_fault FROM telemetry_pivot WHERE oa_t IS NOT NULL";
-            let eval = execution::run_rule_sql_from_historian(sql, 0, &json!({}));
-            assert_eq!(eval.get("ok").and_then(|v| v.as_bool()), Some(true));
-            let fault_rows = eval
-                .get("rows")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
-            assert!(
-                !fault_rows.is_empty(),
-                "OAT > 75 rule should match MZVAV samples"
-            );
-
-            let sat_sql = "SELECT timestamp, equipment_id, sat, sat_sp, fan_cmd, CASE WHEN sat IS NOT NULL AND sat_sp IS NOT NULL AND ABS(sat - sat_sp) > 10 THEN true ELSE false END AS raw_fault FROM telemetry_pivot";
-            let sat_eval = execution::run_rule_sql_from_historian(sat_sql, 0, &json!({}));
-            assert_eq!(sat_eval.get("ok").and_then(|v| v.as_bool()), Some(true));
-        }
-        #[cfg(not(feature = "legacy-datafusion"))]
-        {
-            let eval = execution::run_rule_sql_from_historian("SELECT 1", 0, &json!({}));
-            assert_eq!(eval.get("ok").and_then(|v| v.as_bool()), Some(false));
-            assert!(
-                eval.get("error").and_then(|v| v.as_str()).is_some_and(|e| {
-                    e.contains("retired")
-                        || e.contains("deleted")
-                        || e.contains("Timescale")
-                        || e.contains("DataFusion")
-                }),
-                "expected Timescale/DF-deleted message, got {eval}"
-            );
-        }
+        // The Timescale product path retires run_rule_sql_from_historian.
+        let eval = execution::run_rule_sql_from_historian("SELECT 1", 0, &json!({}));
+        assert_eq!(eval.get("ok").and_then(|v| v.as_bool()), Some(false));
+        assert!(
+            eval.get("error").and_then(|v| v.as_str()).is_some_and(|e| {
+                e.contains("retired")
+                    || e.contains("deleted")
+                    || e.contains("Timescale")
+                    || e.contains("DataFusion")
+            }),
+            "expected Timescale/DF-deleted message, got {eval}"
+        );
 
         let preview = data_management::preview_purge(&json!({"all": true}));
         assert!(

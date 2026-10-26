@@ -1,15 +1,9 @@
-//! Central HTTP integration: openfdd_package_v1 zip upload → parquet ingest → FC1 registry run.
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::print_stdout,
-    clippy::print_stderr,
-    clippy::dbg_macro,
-    reason = "integration tests are not cfg(test); allow-unwrap-in-tests does not cover tests/ binaries"
-)]
+#![cfg(test)]
+//! Central HTTP integration: openfdd_package_v1 zip upload → Timescale seed → FC1 registry run.
 //!
-//! Wave-X Soft-OPEN: product FDD is Timescale `sql/fdd` only. Without
-//! `OPENFDD_DATABASE_URL`, `/api/fdd/run` must fail closed (no dual-write DF).
+//! Timescale is the only historian. With `OPENFDD_TEST_DATABASE_URL` the
+//! server seeds `sample` and runs FC1. Without it, package import fails
+//! closed with 503 and leaves nothing under `data/csv_buildings/`.
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -19,6 +13,13 @@ use std::thread;
 use std::time::Duration;
 
 use serde_json::{json, Value};
+
+fn test_database_url() -> Option<String> {
+    std::env::var("OPENFDD_TEST_DATABASE_URL")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
 
 fn pick_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
@@ -41,8 +42,6 @@ impl Server {
             std::env::temp_dir().join(format!("openfdd-central-zip-it-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&workspace);
         std::fs::create_dir_all(&workspace).unwrap();
-        let parquet_root = workspace.join(".cache/parquet");
-        std::fs::create_dir_all(&parquet_root).unwrap();
 
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let repo_root = manifest_dir.join("../..");
@@ -53,15 +52,21 @@ impl Server {
         );
 
         let bin = env!("CARGO_BIN_EXE_openfdd-central");
-        let mut child = Command::new(bin)
+        let mut command = Command::new(bin);
+        command
             .env("OPENFDD_CENTRAL_HOST", "127.0.0.1")
             .env("OPENFDD_CENTRAL_PORT", port.to_string())
             .env("OPENFDD_MQTT_ENABLED", "0")
             .env("OPENFDD_WORKSPACE", &workspace)
-            .env("OPENFDD_PARQUET_ROOT", &parquet_root)
             .env("OPENFDD_SQL_RULES_DIR", &sql_rules)
-            .spawn()
-            .expect("start openfdd-central");
+            .env_remove("OPENFDD_DATABASE_URL")
+            .env_remove("OPENFDD_HISTORIAN");
+        if let Some(url) = test_database_url() {
+            command
+                .env("OPENFDD_DATABASE_URL", url)
+                .env("OPENFDD_HISTORIAN", "timescale");
+        }
+        let mut child = command.spawn().expect("start openfdd-central");
 
         for _ in 0..80 {
             let (status, body) = http_raw("GET", port, "/api/health", None, "application/json");
@@ -210,8 +215,20 @@ fn zip_package_upload_then_fc1_registry_run() {
         &zip_bytes,
         "application/zip",
     );
+    if test_database_url().is_none() {
+        assert_eq!(status, 503, "package without Timescale: {pkg}");
+        assert_eq!(pkg.get("ok"), Some(&json!(false)), "package: {pkg}");
+        let buildings = srv.workspace.join("data/csv_buildings");
+        assert!(
+            !buildings.join("ZIP_BUILDING_1").exists()
+                && !buildings.join("ZIP_BUILDING_1.incoming").exists(),
+            "import without Timescale left a package on disk"
+        );
+        return;
+    }
     assert_eq!(status, 200, "package status: {pkg}");
     assert_eq!(pkg.get("ok"), Some(&json!(true)), "package: {pkg}");
+    assert_eq!(pkg["historian"], json!("timescale"), "{pkg}");
     assert_eq!(pkg["building_id"], json!("ZIP_BUILDING_1"), "{pkg}");
     assert_eq!(pkg["grid_minutes"], json!(1), "{pkg}");
     assert_eq!(pkg["poll_seconds"], json!(60), "{pkg}");
@@ -301,6 +318,7 @@ fn zip_package_upload_then_fc1_registry_run() {
 
     let fdd_body = json!({
         "mode": "registry",
+        "building_id": "ZIP_BUILDING_1",
         "rule_ids": ["FC1"],
         "params": {
             "FC1": { "confirm_seconds": 60 }
@@ -314,20 +332,9 @@ fn zip_package_upload_then_fc1_registry_run() {
         "application/json",
     );
     assert_eq!(status, 200, "fdd run: {fdd}");
-    // No OPENFDD_DATABASE_URL in this harness → Timescale path unavailable;
-    // DF run_registry is retired. Soft-OPEN must not pretend registry green.
-    if std::env::var("OPENFDD_DATABASE_URL").is_ok() {
-        assert_eq!(fdd.get("ok"), Some(&json!(true)), "fdd run: {fdd}");
-        assert!(
-            fdd.get("rules_run").and_then(|v| v.as_u64()).unwrap_or(0) >= 1,
-            "expected FC1 to run: {fdd}"
-        );
-    } else {
-        assert_eq!(fdd.get("ok"), Some(&json!(false)), "fdd run: {fdd}");
-        let err = fdd.get("error").and_then(|v| v.as_str()).unwrap_or("");
-        assert!(
-            err.contains("Timescale") || err.contains("DataFusion run_registry retired"),
-            "expected Wave-X Timescale fail-closed: {fdd}"
-        );
-    }
+    assert_eq!(fdd.get("ok"), Some(&json!(true)), "fdd run: {fdd}");
+    assert!(
+        fdd.get("rules_run").and_then(|v| v.as_u64()).unwrap_or(0) >= 1,
+        "expected FC1 to run: {fdd}"
+    );
 }

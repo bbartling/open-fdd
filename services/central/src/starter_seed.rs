@@ -393,20 +393,28 @@ async fn flush_samples(
     hs: &[String],
     vals: &[f64],
 ) -> Result<u64> {
-    let res = sqlx::query(
-        "INSERT INTO sample (ts, site_id, openfdd_key, haystack_id, val)
-         SELECT * FROM UNNEST($1::timestamptz[], $2::text[], $3::text[], $4::text[], $5::float8[])
-         ON CONFLICT (site_id, openfdd_key, ts) DO NOTHING",
-    )
-    .bind(ts)
-    .bind(sites)
-    .bind(keys)
-    .bind(hs)
-    .bind(vals)
-    .execute(&mut **tx)
-    .await
-    .context("insert sample batch")?;
-    Ok(res.rows_affected())
+    let rows: Vec<fdd_tsdb::writer::SampleWrite<'_>> = ts
+        .iter()
+        .zip(sites)
+        .zip(keys)
+        .zip(hs)
+        .zip(vals)
+        .map(
+            |((((ts, site), key), hs), val)| fdd_tsdb::writer::SampleWrite {
+                ts: *ts,
+                site_id: site,
+                openfdd_key: key,
+                haystack_id: Some(hs),
+                val: Some(*val),
+                unit: None,
+                quality: None,
+            },
+        )
+        .collect();
+    let stats = fdd_tsdb::writer::write_samples(tx, &rows)
+        .await
+        .context("insert sample batch")?;
+    Ok(stats.inserted + stats.updated)
 }
 
 async fn upsert_points(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>, pack: &Value) -> Result<()> {

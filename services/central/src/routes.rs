@@ -3215,11 +3215,10 @@ async fn csv_import_package_inner(
     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     if ok {
         // Wave-X: seed Timescale from materialized package_root (no Parquet).
-        if crate::timescale_historian::historian_is_timescale()
-            && result
-                .get("needs_timescale_seed")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true)
+        if result
+            .get("needs_timescale_seed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true)
         {
             if let (Some(bid), Some(root)) = (
                 result
@@ -3461,7 +3460,6 @@ async fn csv_import_package_append_inner(
     }
     // Wave-X C4: CSV merge alone is not success — commit Timescale upsert first.
     if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false)
-        && crate::timescale_historian::historian_is_timescale()
         && result
             .get("needs_timescale_seed")
             .and_then(|v| v.as_bool())
@@ -3604,9 +3602,7 @@ pub async fn csv_import_package_roles(
     })
     .await
     .unwrap_or_else(|e| json!({"ok": false, "error": format!("package roles task: {e}")}));
-    if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false)
-        && crate::timescale_historian::historian_is_timescale()
-    {
+    if result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false) {
         let bid = result
             .get("building_id")
             .and_then(|v| v.as_str())
@@ -5705,119 +5701,43 @@ pub async fn data_management_summary() -> Json<Value> {
     Json(open_fdd_edge_prototype::data_management::storage_summary())
 }
 
-fn data_budget_root() -> std::path::PathBuf {
-    crate::analytics::historian::parquet_root_base()
-}
-
 pub async fn data_management_budget(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
-    // Soft-OPEN R8d: do not present Parquet hive budget as Timescale product historian retention.
-    if crate::timescale_historian::historian_is_timescale() {
-        let budget = fdd_store::DataBudget::from_env();
-        return Ok(Json(json!({
-            "ok": true,
-            "engine": "timescale-sql",
-            "soft_open_neq_fq": true,
-            "parquet_historian_budget": "not_applicable",
-            "enabled": budget.enabled,
-            "budget_bytes": budget.budget_bytes,
-            "budget_gib": budget.budget_bytes / fdd_store::GIB,
-            "default_budget_gib": fdd_store::DEFAULT_LOCAL_DATA_BUDGET_GIB,
-            "reserved_free_percent": budget.reserved_free_percent,
-            "used_bytes": 0,
-            "bytes_over_budget": 0,
-            "object_count": 0,
-            "would_drop_count": 0,
-            "would_drop_bytes": 0,
-            "keep_bytes": 0,
-            "policy": "Timescale product historian — Parquet oldest-first Soft-OPEN N/A (≠ FQ WAL/retention)",
-            "storage_root": null,
-        })));
-    }
-    let budget = fdd_store::DataBudget::from_env();
-    let root = data_budget_root();
-    let objects = fdd_store::collect_budget_objects(&root);
-    let used: u64 = objects.iter().map(|o| o.bytes).sum();
-    let plan = fdd_store::plan_oldest_first(&objects, budget.budget_bytes);
     Ok(Json(json!({
         "ok": true,
-        "enabled": budget.enabled,
-        "budget_bytes": budget.budget_bytes,
-        "budget_gib": budget.budget_bytes / fdd_store::GIB,
-        "default_budget_gib": fdd_store::DEFAULT_LOCAL_DATA_BUDGET_GIB,
-        "reserved_free_percent": budget.reserved_free_percent,
-        "used_bytes": used,
-        "bytes_over_budget": fdd_store::bytes_over_budget(used, budget.budget_bytes),
-        "object_count": objects.len(),
-        "would_drop_count": plan.drop.len(),
-        "would_drop_bytes": plan.drop_bytes,
-        "keep_bytes": plan.keep_bytes,
-        "policy": "oldest-first; newest parquet kept; backups and archives excluded",
-        "storage_root": root.display().to_string(),
+        "engine": "timescale-sql",
+        "soft_open_neq_fq": true,
+        "parquet_historian_budget": "not_applicable",
+        "enabled": false,
+        "used_bytes": 0,
+        "bytes_over_budget": 0,
+        "object_count": 0,
+        "would_drop_count": 0,
+        "would_drop_bytes": 0,
+        "keep_bytes": 0,
+        "policy": "Timescale product historian; no file-tier data budget (≠ FQ WAL/retention)",
+        "storage_root": null,
     })))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DataBudgetApplyBody {
-    /// Exact confirm phrase: `APPLY DATA BUDGET`.
-    #[serde(default)]
-    pub confirm: String,
 }
 
 pub async fn data_management_retention_apply(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<DataBudgetApplyBody>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminMaintenance)?;
-    if crate::timescale_historian::historian_is_timescale() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "ok": false,
-                "engine": "timescale-sql",
-                "soft_open_neq_fq": true,
-                "parquet_historian_budget": "not_applicable",
-                "error": "Parquet data-budget apply Soft-OPEN N/A when OPENFDD_HISTORIAN=timescale (≠ FQ WAL/retention)",
-            })),
-        ));
-    }
-    if body.confirm.trim() != "APPLY DATA BUDGET" {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "ok": false,
-                "error": "confirm must be the phrase APPLY DATA BUDGET",
-            })),
-        ));
-    }
-    let budget = fdd_store::DataBudget::from_env();
-    let root = data_budget_root();
-    tracing::info!(
-        target: "security_audit",
-        event = "data_budget_apply",
-        subject = %admin.sub,
-        enabled = budget.enabled,
-        budget_bytes = budget.budget_bytes,
-        "hub admin requested oldest-first data budget eviction"
-    );
-    let report = fdd_store::apply_data_budget(&root, &budget).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-    })?;
-    Ok(Json(json!({
-        "ok": true,
-        "applied": report.applied,
-        "reason": report.reason,
-        "dropped_count": report.dropped.len(),
-        "dropped_bytes": report.dropped_bytes,
-        "keep_bytes": report.keep_bytes,
-    })))
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminMaintenance)?;
+    Err((
+        StatusCode::BAD_REQUEST,
+        Json(json!({
+            "ok": false,
+            "engine": "timescale-sql",
+            "soft_open_neq_fq": true,
+            "parquet_historian_budget": "not_applicable",
+            "error": "data-budget apply is not applicable: the product historian is Timescale (≠ FQ WAL/retention)",
+        })),
+    ))
 }
 
 pub async fn building_sessions_list(
@@ -5868,40 +5788,7 @@ pub async fn building_session_leave(
 }
 
 pub async fn host_stats() -> Json<Value> {
-    let mut body = open_fdd_edge_prototype::ops::host_stats::stats_json();
-    if let Some(obj) = body.as_object_mut() {
-        let status = fdd_store::shared_compaction_coordinator().status();
-        obj.insert(
-            "compaction_coordinator".to_string(),
-            json!({
-                "mode": status.mode,
-                "scanners": status.scanners,
-                "compacting": status.compacting,
-            }),
-        );
-        if let Some(dm) = obj
-            .get_mut("data_management")
-            .and_then(|v| v.as_object_mut())
-        {
-            if let Some(parquet) = dm.get_mut("parquet").and_then(|v| v.as_object_mut()) {
-                parquet.insert("compaction_status".to_string(), json!(status.mode));
-            }
-        }
-    }
-    Json(body)
-}
-
-#[derive(Debug, Deserialize)]
-pub struct HistorianCompactionBody {
-    /// Required write confirm (matches other mutating admin APIs).
-    #[serde(default)]
-    pub confirm: bool,
-    /// Wait for DataFusion scan leases to drain (default: fail closed).
-    #[serde(default)]
-    pub wait: bool,
-    /// Plan only — do not mutate Parquet.
-    #[serde(default)]
-    pub plan_only: bool,
+    Json(open_fdd_edge_prototype::ops::host_stats::stats_json())
 }
 
 pub async fn historian_compaction_status(
@@ -5909,128 +5796,36 @@ pub async fn historian_compaction_status(
     headers: HeaderMap,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
-    // Soft-OPEN R8d: Timescale tip must not advertise empty Parquet compaction as product.
-    if crate::timescale_historian::historian_is_timescale() {
-        return Ok(Json(json!({
-            "ok": true,
-            "engine": "timescale-sql",
-            "soft_open_neq_fq": true,
-            "parquet_compaction": "not_applicable",
-            "note": "Product historian is Timescale; Parquet compaction Soft-OPEN N/A (≠ FQ WAL/restore)",
-            "coordinator": {
-                "mode": "n/a",
-                "scanners": 0,
-                "compacting": false,
-            },
-            "historian": Value::Null,
-        })));
-    }
-    let coord = fdd_store::shared_compaction_coordinator().status();
-    let stats = fdd_store::HistorianConfig::from_env()
-        .ok()
-        .and_then(|cfg| fdd_store::local_historian_stats_from_config(&cfg).ok());
     Ok(Json(json!({
         "ok": true,
+        "engine": "timescale-sql",
+        "soft_open_neq_fq": true,
+        "parquet_compaction": "not_applicable",
+        "note": "Product historian is Timescale; file compaction is not applicable (≠ FQ WAL/restore)",
         "coordinator": {
-            "mode": coord.mode,
-            "scanners": coord.scanners,
-            "compacting": coord.compacting,
+            "mode": "n/a",
+            "scanners": 0,
+            "compacting": false,
         },
-        "historian": stats,
+        "historian": Value::Null,
     })))
 }
 
 pub async fn historian_compaction_run(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Json(body): Json<HistorianCompactionBody>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminMaintenance)?;
-    if crate::timescale_historian::historian_is_timescale() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "ok": false,
-                "engine": "timescale-sql",
-                "soft_open_neq_fq": true,
-                "parquet_compaction": "not_applicable",
-                "error": "Parquet historian compaction Soft-OPEN N/A when OPENFDD_HISTORIAN=timescale (≠ FQ WAL/restore)",
-            })),
-        ));
-    }
-    if !body.confirm {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "confirm:true required"})),
-        ));
-    }
-    tracing::info!(
-        target: "security_audit",
-        event = "historian_compaction_requested",
-        subject = %admin.sub,
-        plan_only = body.plan_only,
-        wait = body.wait,
-        "hub admin requested historian compaction"
-    );
-
-    let config = fdd_store::HistorianConfig::from_env().map_err(|e| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-    })?;
-    let compactor = fdd_store::ParquetCompactor::from_config(&config).map_err(|e| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-    })?;
-
-    if body.plan_only {
-        let plans = compactor.plan_history().map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"ok": false, "error": e.to_string()})),
-            )
-        })?;
-        return Ok(Json(json!({
-            "ok": true,
-            "plan_only": true,
-            "plans": plans,
-            "coordinator": fdd_store::shared_compaction_coordinator().status(),
-        })));
-    }
-
-    let run = if body.wait {
-        tokio::task::spawn_blocking(move || fdd_store::compact_history_wait(&compactor))
-    } else {
-        tokio::task::spawn_blocking(move || fdd_store::compact_history_fail_closed(&compactor))
-    }
-    .await
-    .map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": format!("compaction join: {e}")})),
-        )
-    })?;
-
-    match run {
-        Ok((results, summary)) => Ok(Json(json!({
-            "ok": true,
-            "results": results,
-            "summary": summary,
-            "coordinator": fdd_store::shared_compaction_coordinator().status(),
-        }))),
-        Err(e) => {
-            let msg = e.to_string();
-            let status = if msg.contains("scan") || msg.contains("compaction in progress") {
-                StatusCode::CONFLICT
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            Err((status, Json(json!({"ok": false, "error": msg}))))
-        }
-    }
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminMaintenance)?;
+    Err((
+        StatusCode::BAD_REQUEST,
+        Json(json!({
+            "ok": false,
+            "engine": "timescale-sql",
+            "soft_open_neq_fq": true,
+            "parquet_compaction": "not_applicable",
+            "error": "historian compaction is not applicable: the product historian is Timescale (≠ FQ WAL/restore)",
+        })),
+    ))
 }
 
 pub async fn fdd_schema_tables() -> Json<Value> {
@@ -8580,11 +8375,9 @@ mod version_tests {
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
-        let parquet = workspace.path().join(".cache/parquet");
         let audit_dir = tempfile::tempdir().unwrap();
         let audit_path = audit_dir.path().join("security_audit.jsonl");
-        let _historian =
-            HistorianEnv::isolate(parquet.to_str().unwrap(), audit_path.to_str().unwrap());
+        let _historian = HistorianEnv::isolate(audit_path.to_str().unwrap());
 
         let tenant_a = "w1b_tenant_a";
         let plane = crate::tenant::ControlPlane {
@@ -8730,21 +8523,6 @@ mod version_tests {
             "W1B_FOREIGN"
         );
 
-        let (status, body) = dispatch(&app, &operator, WriteOp::Import, "W1B_OWN").await;
-        assert_eq!(status, StatusCode::OK, "operator own import {body}");
-        assert_eq!(
-            body.get("ok").and_then(|v| v.as_bool()),
-            Some(true),
-            "{body}"
-        );
-        let event = last_audit_event(&audit_path);
-        assert_eq!(event["action"], "package.import", "{event}");
-        assert_eq!(event["decision"], "allow", "{event}");
-        assert_eq!(event["outcome"], "ok", "{event}");
-        assert_eq!(event["target_type"], "site", "{event}");
-        assert_eq!(event["site_id"], "W1B_OWN", "{event}");
-        assert_eq!(event["change"]["kind"], "package", "{event}");
-
         let response = app
             .clone()
             .oneshot(
@@ -8764,13 +8542,68 @@ mod version_tests {
         assert_eq!(event["outcome"], "failed", "{event}");
         assert_eq!(event["reason"], "invalid_request", "{event}");
         assert_eq!(event["http_status"], 400, "{event}");
-        assert!(
-            workspace
+
+        let own_history = workspace
+            .path()
+            .join("data/csv_buildings/W1B_OWN/AHU_1/history_wide.csv");
+        let Some(url) = pg_url else {
+            // Timescale is the only historian: an allowed import with no database
+            // fails closed and leaves nothing on disk.
+            let (status, body) = dispatch(&app, &operator, WriteOp::Import, "W1B_OWN").await;
+            assert_eq!(
+                status,
+                StatusCode::SERVICE_UNAVAILABLE,
+                "operator own import without Timescale {body}"
+            );
+            assert_eq!(body.get("ok").and_then(|v| v.as_bool()), Some(false));
+            let event = last_audit_event(&audit_path);
+            assert_eq!(event["action"], "package.import", "{event}");
+            assert_eq!(event["decision"], "allow", "{event}");
+            assert_eq!(event["outcome"], "failed", "{event}");
+            assert!(
+                !own_history.exists(),
+                "import without Timescale wrote a package"
+            );
+            assert!(!workspace
                 .path()
-                .join("data/csv_buildings/W1B_OWN/AHU_1/history_wide.csv")
-                .is_file(),
+                .join("data/csv_buildings/W1B_OWN.incoming")
+                .exists());
+            return;
+        };
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        fdd_tsdb::clear_shared_pool();
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&url)
+            .await
+            .unwrap();
+        crate::package_preflight_fixtures::apply_schema(&pool).await;
+        let owned_sites = ["W1B_OWN", "W1B_ADMIN", "W1B_HUB"];
+        for site in owned_sites {
+            crate::package_preflight_fixtures::purge_site(&pool, site).await;
+        }
+
+        let (status, body) = dispatch(&app, &operator, WriteOp::Import, "W1B_OWN").await;
+        assert_eq!(status, StatusCode::OK, "operator own import {body}");
+        assert_eq!(
+            body.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "{body}"
+        );
+        assert_eq!(body["historian"], "timescale", "{body}");
+        let event = last_audit_event(&audit_path);
+        assert_eq!(event["action"], "package.import", "{event}");
+        assert_eq!(event["decision"], "allow", "{event}");
+        assert_eq!(event["outcome"], "ok", "{event}");
+        assert_eq!(event["target_type"], "site", "{event}");
+        assert_eq!(event["site_id"], "W1B_OWN", "{event}");
+        assert_eq!(event["change"]["kind"], "package", "{event}");
+        assert!(
+            own_history.is_file(),
             "operator import did not materialize the package"
         );
+        assert!(sample_count(&pool, "W1B_OWN").await > 0);
 
         let (status, body) = dispatch(&app, &operator, WriteOp::Append, "W1B_OWN").await;
         assert_eq!(status, StatusCode::OK, "operator own append {body}");
@@ -8852,9 +8685,11 @@ mod version_tests {
             "{body}"
         );
 
-        if let Some(url) = pg_url {
-            assert_timescale_purge_gate(&app, &viewer, &operator, &url).await;
+        assert_timescale_purge_gate(&app, &viewer, &operator, &url).await;
+        for site in owned_sites {
+            crate::package_preflight_fixtures::purge_site(&pool, site).await;
         }
+        fdd_tsdb::clear_shared_pool();
     }
 
     async fn dispatch(
@@ -9021,13 +8856,12 @@ mod version_tests {
     }
 
     impl HistorianEnv {
-        fn isolate(parquet: &str, audit: &str) -> Self {
+        fn isolate(audit: &str) -> Self {
             let keys = [
                 ("OPENFDD_MULTI_TENANT", Some("1")),
-                ("OPENFDD_HISTORIAN", Some("parquet")),
+                ("OPENFDD_HISTORIAN", None),
                 ("OPENFDD_STORAGE_URL", None),
                 ("OPENFDD_DATABASE_URL", None),
-                ("OPENFDD_PARQUET_ROOT", Some(parquet)),
                 ("OPENFDD_AUDIT_LOG_PATH", Some(audit)),
             ];
             let prev = keys
@@ -9097,10 +8931,7 @@ mod version_tests {
         let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
         let audit_dir = tempfile::tempdir().unwrap();
         let audit_path = audit_dir.path().join("security_audit.jsonl");
-        let _historian = HistorianEnv::isolate(
-            workspace.path().join("parquet").to_str().unwrap(),
-            audit_path.to_str().unwrap(),
-        );
+        let _historian = HistorianEnv::isolate(audit_path.to_str().unwrap());
         struct BudgetEnv(Option<String>);
         impl Drop for BudgetEnv {
             fn drop(&mut self) {

@@ -3,10 +3,7 @@
 
 use open_fdd_edge_prototype::csv_ingest::{
     parse::{parse_csv_bytes, sanitize_filename},
-    plan::{
-        append_rows, auto_detect_mapping, join_rows, parse_file_to_rows, FileMapping, FillPolicy,
-        JoinAlignment,
-    },
+    plan::{append_rows, join_rows, parse_file_to_rows, FileMapping, FillPolicy, JoinAlignment},
     timestamp::{detect_timestamp_columns, localize_timestamp, parse_timestamp_loose, ParseStatus},
 };
 use open_fdd_edge_prototype::test_support::with_temp_workspace;
@@ -89,23 +86,37 @@ fn join_weather_floor_hour() {
 }
 
 #[test]
-fn dataset_save_and_list() {
-    with_temp_workspace(|_| {
-        let csv = include_str!("fixtures/csv_ingest/school_kw_sample.csv");
-        let mapping = auto_detect_mapping("school.csv", &["Date".into(), "kW".into()]);
-        let rows = parse_file_to_rows(csv, &mapping, ',', "first").unwrap();
-        let report = json!({"warnings": []});
-        let out = open_fdd_edge_prototype::csv_ingest::save_dataset(
+fn dataset_register_list_and_preview_keep_rows_in_timescale() {
+    with_temp_workspace(|ws| {
+        open_fdd_edge_prototype::csv_ingest::register_package_dataset(
             "test_school_kw",
-            &rows,
-            &report,
+            12,
+            1,
             &json!({}),
         )
         .unwrap();
-        assert_eq!(out.get("ok").and_then(|v| v.as_bool()), Some(true));
         let list = open_fdd_edge_prototype::csv_ingest::list_datasets();
         let datasets = list.get("datasets").and_then(|d| d.as_array()).unwrap();
         assert!(!datasets.is_empty());
+        let preview = open_fdd_edge_prototype::csv_ingest::preview_dataset("test_school_kw", 0, 10);
+        assert_eq!(preview["ok"], true);
+        assert_eq!(preview["rows_source"], "timescale");
+        assert_eq!(preview["rows"].as_array().map(Vec::len), Some(0));
+        assert_eq!(preview["metadata"]["row_count"], 12);
+        let arrow_files = walkdir::WalkDir::new(ws)
+            .into_iter()
+            .flatten()
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .and_then(|x| x.to_str())
+                    .is_some_and(|x| matches!(x, "arrow" | "parquet" | "feather"))
+            })
+            .count();
+        assert_eq!(
+            arrow_files, 0,
+            "dataset registry must not write columnar files"
+        );
     });
 }
 

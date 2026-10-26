@@ -15,8 +15,6 @@ default = []
 workspace = true
 
 [dependencies]
-# Arrow IPC remains for package CSV dataset pages (not product FDD engine).
-arrow.workspace = true
 base64 = "0.22"
 bcrypt = "0.16"
 bytes = "1"

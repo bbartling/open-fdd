@@ -10,7 +10,7 @@
 //! An explicit historical range is `POST /api/afdd/scheduler/backfill`.
 
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
@@ -176,51 +176,29 @@ impl AfddSchedulerRuntime {
     }
 
     /// Scoped watermark from Timescale `sample` max(ts) (Wave-X C6 / R8e).
-    /// Scope `all` uses global max(ts) across sites (not the Parquet file watermark).
-    /// Falls back to live-telemetry file only when Timescale is offline.
+    /// Scope `all` uses global max(ts) across sites. Only `all` falls back to
+    /// the live-telemetry watermark file when Timescale is offline; a failed
+    /// per-site read is an error, never an empty watermark.
     fn latest_telemetry_for_scope(&self, scope: &str) -> Result<Option<DateTime<Utc>>> {
-        if crate::timescale_historian::historian_is_timescale() {
-            let scope_owned = scope.to_string();
-            let run_query = || -> Result<Option<DateTime<Utc>>> {
-                let scope_owned = scope_owned.clone();
-                block_on_async(async move {
-                    let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
-                    let ts = if scope_owned == "all" {
-                        tsdb.max_sample_ts_global().await?
-                    } else {
-                        tsdb.max_sample_ts(&scope_owned).await?
-                    };
-                    Ok(ts)
-                })
-                .context("Timescale AFDD watermark query")
+        let scope_owned = scope.to_string();
+        let result = block_on_async(async move {
+            let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
+            let ts = if scope_owned == "all" {
+                tsdb.max_sample_ts_global().await?
+            } else {
+                tsdb.max_sample_ts(&scope_owned).await?
             };
-            match run_query() {
-                Ok(ts) => return Ok(ts),
-                Err(error) => {
-                    warn!(%error, %scope, "Timescale AFDD watermark failed; trying file fallback");
-                }
+            Ok(ts)
+        })
+        .context("Timescale AFDD watermark query");
+        match result {
+            Ok(ts) => Ok(ts),
+            Err(error) if scope == "all" => {
+                warn!(%error, "Timescale AFDD watermark failed; using live telemetry watermark");
+                self.latest_telemetry()
             }
+            Err(error) => Err(error),
         }
-        if scope == "all" {
-            return self.latest_telemetry();
-        }
-        // Legacy Parquet order path retained only when Timescale is not product historian.
-        let workspace = PathBuf::from(
-            std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),
-        );
-        let root = workspace.join("openfdd");
-        let order = fdd_store::historian_watermark_order(&root, scope)?;
-        if order == 0 {
-            return Ok(None);
-        }
-        let ts = fdd_store::order_key_to_rfc3339(order);
-        if ts.is_empty() {
-            return Ok(None);
-        }
-        let parsed = DateTime::parse_from_rfc3339(&ts.replace('Z', "+00:00"))
-            .map(|d| d.with_timezone(&Utc))
-            .with_context(|| format!("parse historian watermark order {order} as RFC3339"))?;
-        Ok(Some(parsed))
     }
 
     fn no_data_cycle_record(

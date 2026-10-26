@@ -29,38 +29,7 @@ async fn build_site_csv_bytes(
     building_id: &str,
     include_faults: bool,
 ) -> Result<Vec<u8>, JobError> {
-    if let Some(csv) = historian_csv_async(building_id).await? {
-        return maybe_join_faults(csv, building_id, include_faults);
-    }
     package_fallback_csv(building_id, include_faults)
-}
-
-async fn historian_csv_async(building_id: &str) -> Result<Option<Vec<u8>>, JobError> {
-    #[cfg(not(feature = "legacy-datafusion"))]
-    {
-        let _ = building_id;
-        // Wave-X: Parquet/DF historian export retired — package CSV fallback.
-        Ok(None)
-    }
-    #[cfg(feature = "legacy-datafusion")]
-    {
-        use fdd_sql::QueryResult;
-        let ctx = historian::new_bounded_session().map_err(|e| JobError::Io(e.to_string()))?;
-        let (ok, _scan) = historian::open_history_scan(&ctx, Some(building_id))
-            .await
-            .map_err(|e| JobError::Io(e.to_string()))?;
-        if !ok {
-            return Ok(None);
-        }
-        let sql = "SELECT * FROM history";
-        let result = fdd_sql::run_sql(&ctx, sql)
-            .await
-            .map_err(|e| JobError::Io(e.to_string()))?;
-        if result.row_count == 0 {
-            return Ok(None);
-        }
-        Ok(Some(query_result_to_csv(&result)?))
-    }
 }
 
 fn package_fallback_csv(building_id: &str, include_faults: bool) -> Result<Vec<u8>, JobError> {
@@ -175,83 +144,6 @@ fn collect_history_wide(
         }
     }
     Ok(())
-}
-
-#[cfg(feature = "legacy-datafusion")]
-fn query_result_to_csv(result: &fdd_sql::QueryResult) -> Result<Vec<u8>, JobError> {
-    let mut wtr = WriterBuilder::new()
-        .has_headers(true)
-        .from_writer(Vec::new());
-    wtr.write_record(&result.columns)
-        .map_err(|e| JobError::Io(e.to_string()))?;
-    for row in &result.rows {
-        let record: Vec<String> = result
-            .columns
-            .iter()
-            .map(|c| json_cell_string(row.get(c)))
-            .collect();
-        wtr.write_record(&record)
-            .map_err(|e| JobError::Io(e.to_string()))?;
-    }
-    wtr.into_inner().map_err(|e| JobError::Io(e.to_string()))
-}
-
-fn maybe_join_faults(
-    csv_bytes: Vec<u8>,
-    building_id: &str,
-    include_faults: bool,
-) -> Result<Vec<u8>, JobError> {
-    if !include_faults {
-        return Ok(csv_bytes);
-    }
-    let text = String::from_utf8(csv_bytes).map_err(|e| JobError::Io(e.to_string()))?;
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(text.as_bytes());
-    let headers: Vec<String> = rdr
-        .headers()
-        .map_err(|e| JobError::Io(e.to_string()))?
-        .iter()
-        .map(str::to_string)
-        .collect();
-    let ts_col = headers
-        .iter()
-        .position(|h| h == "timestamp_utc" || h == "timestamp" || h == "ts")
-        .ok_or_else(|| JobError::Invalid("historian CSV missing timestamp column".into()))?;
-    let eq_col = headers
-        .iter()
-        .position(|h| h == "equipment_id")
-        .ok_or_else(|| JobError::Invalid("historian CSV missing equipment_id column".into()))?;
-    let fault_index = load_confirmed_fault_index(building_id);
-    let mut out_headers = headers;
-    out_headers.push("fault".into());
-    out_headers.push("fault_rules".into());
-    let mut wtr = WriterBuilder::new()
-        .has_headers(true)
-        .from_writer(Vec::new());
-    wtr.write_record(&out_headers)
-        .map_err(|e| JobError::Io(e.to_string()))?;
-    for rec in rdr.records() {
-        let rec = rec.map_err(|e| JobError::Io(e.to_string()))?;
-        let mut row: Vec<String> = rec.iter().map(str::to_string).collect();
-        let eq = row.get(eq_col).cloned().unwrap_or_default();
-        let ts = row.get(ts_col).cloned().unwrap_or_default();
-        let (fault, rules) = fault_at_row(&fault_index, &eq, &ts);
-        row.push(if fault { "1" } else { "0" }.into());
-        row.push(rules);
-        wtr.write_record(&row)
-            .map_err(|e| JobError::Io(e.to_string()))?;
-    }
-    wtr.into_inner().map_err(|e| JobError::Io(e.to_string()))
-}
-
-#[cfg(feature = "legacy-datafusion")]
-fn json_cell_string(value: Option<&Value>) -> String {
-    match value {
-        None | Some(Value::Null) => String::new(),
-        Some(Value::String(s)) => s.clone(),
-        Some(v) => v.to_string(),
-    }
 }
 
 /// `(equipment_id, ts_key) -> confirmed rule ids at that timestamp`.
@@ -424,16 +316,5 @@ mod tests {
         assert_eq!(rules, "FC1");
         let (no, _) = fault_at_row(&idx, "AHU_1", "2024-06-01T13:00:00Z");
         assert!(!no);
-    }
-
-    #[test]
-    fn maybe_join_faults_appends_columns() {
-        let csv = b"timestamp_utc,equipment_id,oa_t\n2024-06-01T12:00:00Z,AHU_1,72\n";
-        let out = maybe_join_faults(csv.to_vec(), "NONE", false).unwrap();
-        assert_eq!(out, csv);
-        let joined = maybe_join_faults(csv.to_vec(), "NONE", true).unwrap();
-        let text = String::from_utf8(joined).unwrap();
-        assert!(text.contains("fault,fault_rules"));
-        assert!(text.contains(",0,"));
     }
 }

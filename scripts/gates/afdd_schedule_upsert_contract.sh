@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # AFDD schedule + lookback-upsert contract (#1034, #1035).
 #
-# File checks always run. `--cargo` also runs the planner, merge, and
-# DataFrame lookback tests. This does not claim field qualification.
+# File checks always run. `--cargo` also runs the planner and merge tests. This does not claim field qualification.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -30,7 +29,6 @@ require crates/fdd_store/src/afdd_scheduler.rs "wall_clock_downtime_is_one_lookb
 require crates/fdd_store/src/afdd_window.rs "fn merge_windowed_rule_result"
 require crates/fdd_store/src/afdd_window.rs "fn rule_result_window_fingerprints"
 require crates/fdd_store/src/afdd_window.rs '"update_all"'
-require crates/fdd_rules/src/runner.rs "fn scope_table_to_time_window"
 require services/central/src/afdd_scheduler.rs "result-slices"
 require services/central/src/afdd_scheduler.rs "lookback_matches_cadence"
 python3 scripts/gates/afdd_slice_identity.py
@@ -41,8 +39,6 @@ if [[ "$CARGO" -eq 1 ]]; then
     exit 1
   fi
   cargo test -p fdd_store --lib afdd_ -- --test-threads=8
-  cargo test -p fdd_rules --lib time_window_prunes -- --test-threads=8
-  cargo test -p fdd_rules --lib missing_file_starts_a_window -- --test-threads=8
 fi
 
 echo "PASS: afdd_schedule_upsert_contract"

@@ -420,7 +420,7 @@ fn equipment_ids(body: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-async fn apply_schema(pool: &PgPool) {
+pub(crate) async fn apply_schema(pool: &PgPool) {
     for statement in [
         "CREATE TABLE IF NOT EXISTS site (
             site_id text PRIMARY KEY,
@@ -479,7 +479,7 @@ async fn apply_schema(pool: &PgPool) {
     }
 }
 
-async fn purge_site(pool: &PgPool, site: &str) {
+pub(crate) async fn purge_site(pool: &PgPool, site: &str) {
     let _ = sqlx::query("DELETE FROM sample_import_stage WHERE site_id = $1")
         .bind(site)
         .execute(pool)
