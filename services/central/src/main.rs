@@ -34,6 +34,8 @@ mod mapping_revision;
 mod metering_scope_fixtures;
 mod model_agent_writes;
 mod models;
+#[cfg(test)]
+mod one_writer_fixtures;
 mod openapi;
 #[cfg(test)]
 mod package_preflight_fixtures;

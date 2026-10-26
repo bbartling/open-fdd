@@ -187,7 +187,6 @@ pub fn storage_summary() -> Value {
                 "historian_subdir": sub,
                 "row_count": rows.len(),
                 "jsonl_bytes": bytes,
-                "arrow_ipc_bytes": fs::metadata(dir.join("telemetry_pivot.arrow")).map(|m| m.len()).unwrap_or(0)
             }),
         );
         for row in &rows {

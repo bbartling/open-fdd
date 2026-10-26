@@ -125,9 +125,9 @@ fn stack_health_inner(include_sensitive: bool) -> Value {
         ),
         service_status("csv-sidecars", csv_on, "CSV sidecars", csv_detail),
         service_status(
-            "arrow-datafusion",
+            "timescale-sql",
             true,
-            "Arrow + DataFusion",
+            "Timescale SQL",
             "Rule SQL engine ready",
         ),
         service_status_link(
