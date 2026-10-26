@@ -473,9 +473,11 @@ async fn project_weather(
         }));
     }
     create_weather_table(conn).await?;
-    let oa = admitted_on_sample("oa_t");
-    let web = admitted_on_sample("web_oa_t");
-    let dew = admitted_on_sample("web_oa_dp");
+    // $1..$3 are building, start, and end. Admission binds follow those.
+    let mut admit = crate::admitted_sample::AdmitBuilder::after_occupied(3);
+    let oa = admit.admitted_on_sample("oa_t");
+    let web = admit.admitted_on_sample("web_oa_t");
+    let dew = admit.admitted_on_sample("web_oa_dp");
     let insert = format!(
         "INSERT INTO weather (timestamp_utc, oa_t, web_oa_t, web_oa_dp, source_equipment_id)
          SELECT s.ts,
@@ -501,21 +503,14 @@ async fn project_weather(
            AND ($3::timestamptz IS NULL OR s.ts < $3)
          GROUP BY a.equipment_id, s.ts"
     );
-    sqlx::query(&insert)
-        .bind(building_id)
-        .bind(start)
-        .bind(end)
-        .execute(&mut *conn)
-        .await
-        .context("insert scoped weather projection")?;
+    crate::admitted_sample::apply_binds(
+        sqlx::query(&insert).bind(building_id).bind(start).bind(end),
+        admit.binds(),
+    )
+    .execute(&mut *conn)
+    .await
+    .context("insert scoped weather projection")?;
     Ok(InputGate::Ready(relation_stats(conn, "weather").await?))
-}
-
-fn admitted_on_sample(role: &str) -> String {
-    // `authorized_series` also has `unit`. The sample columns are `s.val` and `s.unit`.
-    fdd_core::sql_admit_val_expr(role)
-        .replace("unit", "s.unit")
-        .replace("val", "s.val")
 }
 
 fn weather_scope_predicate() -> &'static str {

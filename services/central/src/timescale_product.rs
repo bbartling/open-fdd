@@ -2463,13 +2463,6 @@ fn poll_seconds_from_payload(payload: &Value) -> f64 {
     300.0
 }
 
-fn admitted_on_sample(role: &str) -> String {
-    // `authorized_series` also has `unit`. The sample columns are `s.val` and `s.unit`.
-    fdd_core::sql_admit_val_expr(role)
-        .replace("unit", "s.unit")
-        .replace("val", "s.val")
-}
-
 fn is_chw_plant_role(role: &str) -> bool {
     matches!(
         role,
@@ -2540,9 +2533,11 @@ async fn fill_history_for_equipment(
     // Columns come from the current unique binding. A second key for the same
     // role is left out. Weather and CHW fall back to one stamped equipment,
     // the lexicographically first unique binding, when the target has none.
+    // $1..$3 are building, equipment, and roles. Admission binds follow those.
+    let mut admit = crate::admitted_sample::AdmitBuilder::after_occupied(3);
     let mut max_cols = String::new();
     for role in roles {
-        let admitted = admitted_on_sample(role);
+        let admitted = admit.admitted_on_sample(role);
         let alias = crate::series_binding::quote_ident(role);
         let role_lit = role.replace('\'', "''");
         let local = format!(
@@ -2655,13 +2650,16 @@ WHERE s.site_id = $1
 GROUP BY s.ts
 "#
     );
-    let res = sqlx::query(&sql)
-        .bind(building_id)
-        .bind(equipment_id)
-        .bind(roles)
-        .execute(&mut *conn)
-        .await
-        .context("fill history")?;
+    let res = crate::admitted_sample::apply_binds(
+        sqlx::query(&sql)
+            .bind(building_id)
+            .bind(equipment_id)
+            .bind(roles),
+        admit.binds(),
+    )
+    .execute(&mut *conn)
+    .await
+    .context("fill history")?;
     Ok(res.rows_affected() as i64)
 }
 
