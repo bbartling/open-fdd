@@ -383,13 +383,15 @@ impl Tsdb {
             tx.commit().await?;
             return Ok(report);
         }
-        report.samples_deleted =
-            sqlx::query("DELETE FROM sample WHERE site_id = $1 AND openfdd_key = ANY($2)")
-                .bind(site_id)
-                .bind(&keys)
-                .execute(&mut *tx)
-                .await?
-                .rows_affected();
+        let key_refs: Vec<&str> = keys.iter().map(String::as_str).collect();
+        report.samples_deleted = crate::writer::delete_samples(
+            &mut tx,
+            crate::writer::DeleteScope::Keys {
+                site_id,
+                openfdd_keys: &key_refs,
+            },
+        )
+        .await?;
         report.point_map_deleted =
             sqlx::query("DELETE FROM point_map WHERE site_id = $1 AND openfdd_key = ANY($2)")
                 .bind(site_id)

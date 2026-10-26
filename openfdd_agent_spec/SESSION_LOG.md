@@ -1,5 +1,10 @@
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
+## 2026-10-26 — Data revision and changed ranges (W4a)
+
+- The Timescale sample writer records changed series spans in the same transaction as the sample write. The site data revision advances on an insert, a same-timestamp correction, or a delete. An identical replay does not advance it and records no span.
+- `fdd_tsdb::FddResultIdentity` is the data revision, model revision, rule parameters, pack version, window, and quality and schedule policy. `changed_ranges_after` is the read API for a later incremental FDD consumer. No VERSION bump.
+
 ## 2026-10-26 — 4.0.5 W7e guidance cleanup
 
 - Rule 63 in `openfdd_agent_spec/AGENTS.md` marks the MQTTS ingest buffer as historical. MQTT ingest is disabled by default in 4.x. The Normal Framework portal API and CSV are the live paths. The buffer is not a second telemetry store.

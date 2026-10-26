@@ -20,6 +20,10 @@ description: >-
 
 Storage mandate: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([`DATA_CONTRACT.md` § Storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). Rule results persist in PostgreSQL or bounded memory — never a Parquet, Arrow or Feather file, and never DataFusion execution.
 
+## Result identity
+
+One FDD result is `fdd_tsdb::FddResultIdentity`: data revision, model revision, rule parameters, pack version, half-open window, quality policy, and schedule policy. The sample writer advances the data revision and stores `fdd_tsdb::ChangedRange` only when a sample row is inserted, corrected at the same timestamp, or removed. An identical replay does not. Read them with `current_data_revision` and `changed_ranges_after`. Do not detect a change with a sum, a count, or `max(ts)`. SCHED-1 occupancy for that identity is `sched1_unoccupied` (numeric values at or below 0.05, plus the unoccupied token family). This API does not run incremental FDD.
+
 ## Typed unit and time contract
 
 - Temperatures are °F in SQL. Metric CSV values convert at query (`unit_system=metric|si`). Do not store a second copy of every rule for Celsius.

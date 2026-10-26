@@ -634,12 +634,9 @@ async fn promote_staged_package(
         )
         .await?;
     }
-    let deleted = sqlx::query("DELETE FROM sample WHERE site_id = $1")
-        .bind(building_id)
-        .execute(&mut *tx)
+    let deleted = crate::writer::delete_samples_outside_stage(&mut tx, import_id, building_id)
         .await
-        .context("delete prior samples in promote txn")?
-        .rows_affected();
+        .context("delete prior samples in promote txn")?;
     if abort_after_sample_delete() {
         // Dropping `tx` rolls back this package's equipment rows and the
         // sample delete. The caller discards stage rows after the error.

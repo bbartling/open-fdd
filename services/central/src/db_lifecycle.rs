@@ -57,6 +57,7 @@ const SCHEMA_SQL: &[&str] = &[
     include_str!("../../../sql/schema/06_fdd_pack_runtime.sql"),
     include_str!("../../../sql/schema/07_opaque_series_binding.sql"),
     include_str!("../../../sql/schema/08_analytics_result_cache.sql"),
+    include_str!("../../../sql/schema/09_data_revision.sql"),
 ];
 
 /// Tables whose rows mean this database is already in use.
@@ -76,6 +77,8 @@ const PRESENCE_TABLES: &[&str] = &[
 
 const RESET_TABLES: &[&str] = &[
     "sample",
+    "sample_changed_range",
+    "data_revision",
     "fdd_run",
     "analytics_result",
     "point_map",
@@ -851,6 +854,12 @@ mod tests {
                 .iter()
                 .any(|stmt| stmt.contains("CREATE TABLE IF NOT EXISTS sample")),
             "sample table SQL missing"
+        );
+        assert!(
+            forward
+                .iter()
+                .any(|stmt| stmt.contains("CREATE TABLE IF NOT EXISTS data_revision")),
+            "data revision SQL missing"
         );
         for action in [
             StartupAction::Skip,

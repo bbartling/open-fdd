@@ -375,6 +375,8 @@ impl Tsdb {
             ("provider_hourly_checkpoint", "canonical_site"),
             ("ingest_receipt", "canonical_site"),
             ("ingest_job", "canonical_site"),
+            ("sample_changed_range", "site_id"),
+            ("data_revision", "site_id"),
             ("sample", "site_id"),
             ("fdd_run", "site_id"),
             ("analytics_result", "building_id"),
