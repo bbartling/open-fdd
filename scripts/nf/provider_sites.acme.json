@@ -1388,6 +1388,24 @@
         "equipment_id": "tracer_sc_01",
         "role": "outside-air-humidity",
         "equip_type": "controller"
+      },
+      {
+        "provider_point_id": "6add01fc-4495-3bd2-9585-d761048e0289",
+        "equipment_id": "weather",
+        "role": "web-outside-air-temp",
+        "equip_type": "weather"
+      },
+      {
+        "provider_point_id": "7a3095df-3fe7-3bce-9adc-33712b3cf950",
+        "equipment_id": "weather",
+        "role": "web-outside-air-humidity",
+        "equip_type": "weather"
+      },
+      {
+        "provider_point_id": "d1049ebb-cc7a-3371-979c-7e59a3f3c5ce",
+        "equipment_id": "weather",
+        "role": "web-outside-air-dewpoint",
+        "equip_type": "weather"
       }
     ]
   }
