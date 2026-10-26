@@ -58,6 +58,7 @@ const SCHEMA_SQL: &[&str] = &[
     include_str!("../../../sql/schema/07_opaque_series_binding.sql"),
     include_str!("../../../sql/schema/08_analytics_result_cache.sql"),
     include_str!("../../../sql/schema/09_data_revision.sql"),
+    include_str!("../../../sql/schema/10_incremental_fdd.sql"),
 ];
 
 /// Tables whose rows mean this database is already in use.
@@ -79,6 +80,8 @@ const RESET_TABLES: &[&str] = &[
     "sample",
     "sample_changed_range",
     "data_revision",
+    "fdd_interval_result",
+    "fdd_incremental_checkpoint",
     "fdd_run",
     "analytics_result",
     "point_map",

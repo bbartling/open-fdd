@@ -377,6 +377,8 @@ impl Tsdb {
             ("ingest_job", "canonical_site"),
             ("sample_changed_range", "site_id"),
             ("data_revision", "site_id"),
+            ("fdd_interval_result", "site_id"),
+            ("fdd_incremental_checkpoint", "site_id"),
             ("sample", "site_id"),
             ("fdd_run", "site_id"),
             ("analytics_result", "building_id"),

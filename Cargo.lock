@@ -906,6 +906,7 @@ version = "4.0.4"
 dependencies = [
  "anyhow",
  "chrono",
+ "chrono-tz",
  "csv",
  "serde",
  "serde_json",

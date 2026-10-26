@@ -307,7 +307,7 @@ fn push_field(out: &mut String, name: &str, value: &str) {
     out.push('\n');
 }
 
-fn quote(value: &str) -> String {
+pub(crate) fn quote(value: &str) -> String {
     let mut out = String::from("\"");
     for ch in value.chars() {
         match ch {
@@ -435,19 +435,16 @@ pub(crate) async fn record_bounds(
     Ok(())
 }
 
-fn schema_statements() -> impl Iterator<Item = &'static str> {
-    REVISION_SCHEMA_SQL
-        .split(';')
-        .map(str::trim)
-        .filter(|statement| {
-            statement.lines().any(|line| {
-                let code = match line.split_once("--") {
-                    Some((code, _)) => code,
-                    None => line,
-                };
-                !code.trim().is_empty()
-            })
+pub(crate) fn schema_statements(sql: &'static str) -> impl Iterator<Item = &'static str> {
+    sql.split(';').map(str::trim).filter(|statement| {
+        statement.lines().any(|line| {
+            let code = match line.split_once("--") {
+                Some((code, _)) => code,
+                None => line,
+            };
+            !code.trim().is_empty()
         })
+    })
 }
 
 async fn ensure_revision_schema_tx(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
@@ -460,7 +457,7 @@ async fn ensure_revision_schema_tx(tx: &mut Transaction<'_, Postgres>) -> Result
     if ready {
         return Ok(());
     }
-    for statement in schema_statements() {
+    for statement in schema_statements(REVISION_SCHEMA_SQL) {
         sqlx::query("SAVEPOINT openfdd_revision_ddl")
             .execute(&mut **tx)
             .await?;
@@ -484,7 +481,7 @@ async fn ensure_revision_schema_tx(tx: &mut Transaction<'_, Postgres>) -> Result
     Ok(())
 }
 
-fn ignorable_catalog_race(err: &sqlx::Error) -> bool {
+pub(crate) fn ignorable_catalog_race(err: &sqlx::Error) -> bool {
     err.as_database_error()
         .and_then(|db| db.code())
         .is_some_and(|code| code == "42P07" || code == "42710" || code == "23505")

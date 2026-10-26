@@ -8,6 +8,7 @@ description = "Open-FDD TimescaleDB historian + SQL FDD runner (Wave-X 3.6.0)"
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
+chrono-tz = "0.10"
 csv.workspace = true
 serde.workspace = true
 serde_json.workspace = true

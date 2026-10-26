@@ -5,6 +5,8 @@
 //! No Parquet / DataFusion here.
 
 mod client;
+mod incremental;
+mod incremental_store;
 mod package_seed;
 mod portal;
 mod revision;
@@ -13,6 +15,14 @@ mod sample;
 pub mod writer;
 
 pub use client::{clear_shared_pool, database_url_from_env, SampleUpsertStats, Tsdb, TsdbError};
+pub use incremental::{
+    plan_dirty_buckets, BucketGrid, BucketResult, IncrementalError, IncrementalPlan, PlanInput,
+    ResultScope, RuleHorizon,
+};
+pub use incremental_store::{
+    claim, ensure_incremental_schema, load_results, publish, release, run_incremental, Claim,
+    RunReport,
+};
 pub use package_seed::{append_package_equipment, remap_equipment_roles, seed_package_dir};
 pub use portal::{
     HistorianPoint, PortalInventoryPoint, PortalInventoryReport, PurgeReport, PurgeTarget,
