@@ -19,7 +19,15 @@ repo polls BACnet any more.
 
 Never write hostnames, LAN or tailnet IPs, passwords, client secrets, or license
 JWTs into git. Keep them in `chmod 600` env files outside the repo and refer to
-them by path.
+them by path. Hook runtimes, `GET /api/v1/apps`, and the platform env (it can
+include a backup SAS URL) echo secrets. Do not print those bodies. If one leaks,
+rotate it immediately.
+
+Before replacing a legacy edge host, export the data model (devices, object ids,
+point names, roles, equipment mapping, poll interval) and confirm the file parses.
+Wipe the host only when the operator asks. Do not `docker compose down -v` or
+prune NF volumes. Trend that preserved list at the old period, one-to-one. Add
+points only when the operator asks.
 
 ## Preflight
 
@@ -95,7 +103,13 @@ curl -s 'localhost:8080/api/v1/bacnet/scan?status_filter=ANY'   # wait for all D
   To trend only your list, set those to `"0s"` and confirm with a period count.
 - Samples land on period boundaries. Verify with `GET /api/v1/point/data?from.seconds=&to.seconds=&uuids=`
   after two or three periods. `POST` on `/point/data` is a write; never use it to read.
+- Check units per device. One vendor may report zone temperature in °C and another
+  in °F. Flag the mix so Open-FDD ingest converts it. Also flag constant or
+  impossible readings, such as a negative relative humidity.
 - No BACnet writes unless the owner asks. Periods, tags and quality rules are fine.
+- A health-page WARN or error rate is often one device (BACnet gateway timeouts on
+  a single controller). Use `diagnose` before treating the site as down. A red
+  device with zero errors is usually unpolled or disabled.
 
 ## Console auth and API keys
 
@@ -104,6 +118,8 @@ curl -s 'localhost:8080/api/v1/bacnet/scan?status_filter=ANY'   # wait for all D
   with a `docker-compose.auth.yml` override, then
   `docker compose -f docker-compose.yml -f docker-compose.auth.yml up -d`.
   `/api/v1/platform/info` stays public; data APIs return 401 without a token.
+  A browser that already has a Normal session opens the portal UI; an
+  unauthenticated API call still returns 401. That split is expected.
 - Write root-owned files with `sudo install -m 600 <tmpfile> <dest>`. Do not pipe a
   sudo password and file content through the same stdin (`echo pw | sudo -S tee`):
   when sudo has cached credentials, `tee` writes the password into the file.
@@ -129,9 +145,9 @@ Re-run that whenever a call says "No site connected".
 | Health | `diagnose` `overview`, then `errors` (`window_seconds`) and `device_status` (`error_filter: YELLOW`/`RED`). `system_info` gives version and license |
 | Find points | `search_points` `layers`, `facets`, `query` |
 | Freshness / values | `read_values` `latest`, `history`, `stats` |
-| Hooks | Read `nf://docs/hooks-guide`. `deploy_hook` creates the app, writes code, registers the hook (`mode: scheduled`, `schedule_rrule: "DTSTART:...Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"`), and restarts |
-| Run now / history | `manage_hooks` `run` (waits, returns console output), `runs`, `logs`, `status` |
-| Code on the box | `manage_app` `read_file`, `write_file`, `restart`, `git_status` / `git_commit` |
+| Hooks | Read `nf://docs/hooks-guide`. `deploy_hook` creates the app, writes code, registers the hook (`mode`: `on_request`, `on_data`, or `scheduled` with an rrule such as `DTSTART:...Z\nRRULE:FREQ=MINUTELY;INTERVAL=20`), and restarts |
+| Run now / history | `manage_hooks` `run` (run now; waits and returns console output), `runs`, `logs`, `status`. `stop` a pid that stays running with no end time, then `run` once |
+| Code on the box | `manage_app` `read_file` (strip the wrapper lines around the file body), `write_file`, `restart`, `git_status` / `git_commit` |
 
 Rules: read before you write. Never use `control` (BACnet writes) or `delete_points`
 on HVAC points unless the owner asks. Only hook variables may be written. The repo
@@ -155,13 +171,17 @@ config with mode, rrule and variables, and `nf_app_sync.py`).
    `nf_app_sync.py --env ~/.secrets/nf_<site>_console.env push <manifest>`.
 3. Confirm the app has `auth.apiKey.scopes` (below), then run it now with
    `manage_hooks run` (or `nf_app_sync.py run`).
-4. Pull back with `manage_app read_file` (or `nf_app_sync.py diff`/`pull`) and
-   commit, so the repo copy is byte-identical to what runs.
+4. Pull back with `manage_app read_file` (strip the wrapper lines around the file
+   body) or `nf_app_sync.py diff`/`pull`, and commit, so the repo copy is
+   byte-identical to what runs.
 
 **rrule / DTSTART:** the schedule must carry a `DTSTART` line in UTC, e.g.
 `DTSTART:20261026T140000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20`. It fires on the grid
-from DTSTART (:00/:20/:40), not from deploy time. `manage_hooks status` shows
-`scheduler.lastRun`. Runs show `TRIGGER_SCHEDULE` versus `TRIGGER_REQUEST` (run now).
+from DTSTART (:00/:20/:40), not from deploy time. NF rewrites DTSTART to the last
+run time. `manage_hooks status` shows `scheduler.lastRun`. Runs show
+`TRIGGER_SCHEDULE` versus `TRIGGER_REQUEST` (run now). The console Run button,
+`POST /api/v1/apps/<app>/hooks/<hook>` with `{}`, and `manage_hooks run` are the
+same run-now path.
 
 **Points and trending:** each `globalVariables` label becomes an NF point
 (`pointType VARIABLE`, attrs `application_id`/`hook_id`/`label`) with a stable
@@ -170,7 +190,8 @@ label). Every write is stored as a sample, so do **not** set a trend period. The
 points are readable through the portal (`/api/v1/point/data`) with the read-only
 Open-FDD key. Units are `UNITS_UNKNOWN`; put `units` in the variable attrs.
 Map them in `provider_sites.<site>.json` with distinct roles (weather uses
-`web-outside-air-*`, equip `weather`).
+`web-outside-air-*`, equip `weather`). Record any manual or debug write on those
+points; do not leave a test value unnoted.
 
 **Gotchas:**
 - The app needs `auth.apiKey.scopes` (`normalgw.hpl.v1.readwrite`,
@@ -182,20 +203,37 @@ Map them in `provider_sites.<site>.json` with distinct roles (weather uses
   throw on error, and log a summary with `sdk.logEvent`.
 - New code only loads after `manage_app restart` (`PATCH /api/v1/apps/{app}/restart`).
 - `sdk.http` (axios) rejects with a plain object. Wrap it in an `Error`.
-- Outbound HTTPS works from the runtime. Send a `User-Agent`, use a timeout shorter
-  than `invokeTimeout` (60 s), and log both the API and the computed value when you
-  derive one (e.g. Magnus dewpoint as a fallback).
+- **Put hard deadlines on every await.** A socket idle timeout alone is not enough:
+  a scheduled run can hang forever (stuck running, no end time) and block every
+  later run. Wrap the outbound fetch (about 20 s per attempt, one retry on errors
+  that are not HTTP 4xx), each point write (about 10 s), and the whole run (about
+  60 s, matching `invokeTimeout`) in a `Promise.race` deadline that destroys the
+  request on timeout. Send a `User-Agent`. If a run hangs, `manage_hooks stop` its
+  pid, then `run` once. Log both the API value and any value you compute (Magnus
+  dewpoint as a fallback). The weather hook in `scripts/nf/hooks/open_meteo_weather.js`
+  does this with `withDeadline` (`HTTP_TIMEOUT_MS`, `HTTP_RETRIES`,
+  `WRITE_TIMEOUT_MS`, `RUN_DEADLINE_MS`, body in `runOnce`).
 - Console API shapes: WriteFile's body is a JSON *string* of base64, UpdateHook's
   body is the hook object itself, and runtime `RUNTIME_NODE_JS`. A wrapped
   `{applicationId, hook}` body creates a blank, disabled hook.
-- `GET /api/v1/apps` and `GET .../hooks/{hook}/runtimes` return the app's client
-  secret. Never print them. If it leaks, re-push to rotate it.
+- `GET /api/v1/apps`, `GET .../hooks/{hook}/runtimes`, and the platform env (backup
+  SAS URL) echo secrets. Never print them. If one leaks, rotate it immediately.
+  Re-setting the app scopes creates a new internal client; that is also how a
+  re-push rotates the hook secret.
 - No SSH is needed. The MCP or the console API covers create, write, schedule, run and logs.
 
 **Validate:** run it now and get `STATE_SUCCESS` with your log line. Wait for two
 `TRIGGER_SCHEDULE` runs one interval apart. Check `read_values latest` on the variable
 UUIDs, then run `python3 scripts/nf/check_acme_portal_fresh.py`; it must PASS on the
-remote portal. Spot-check that existing BACnet points kept their period.
+remote portal. Warn when a hook point is older than one hook interval plus a margin
+(25 min for a 20 min hook, `--warn-age-min`) even while it is still under the 30 min
+fail. Spot-check that existing BACnet points kept their period.
+
+## Managed backup
+
+NF runs a managed daily backup by default (every 86,400 s, keeps 5). Turn it off
+when the operator does not want those backups. The platform env that holds the
+backup location can echo a SAS URL; do not print it.
 
 ## Do not
 

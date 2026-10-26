@@ -83,6 +83,11 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
 - NF portal history is kept about **7 days**. Hours older than the retention edge
   are explicit, unrecoverable gaps. A central outage longer than 7 days loses data;
   there is no update-log cursor (`/api/v1/point/updates/data` returned 403).
+- A central restart resets the provider poller. Health reads `awaiting_poll` until
+  the next hourly pull. `scripts/nf/validate_live.py` may report an unclean pull
+  when the hourly path recorded samples under `samples_handed_off` (a success
+  still sets a health message such as `committed`). Trust the Timescale row counts
+  for that hour.
 - `poll_secs` is the loop cadence. Use `3600` for NF (one completed hour per tick).
   The NF trend period (e.g. 60 s or 300 s) is set in NF, not here.
 - Env knobs: `OPENFDD_HOURLY_BOOTSTRAP_HOURS` (max 720), `OPENFDD_HOURLY_RETENTION_HOURS`
@@ -112,7 +117,12 @@ After onboarding, and whenever charts look stale, run the portal freshness check
 `--env ~/.secrets/nf_<site>.env --sites scripts/nf/provider_sites.<site>.json` and
 `--sample EQUIP:ROLE` as needed. It reads the remote portal only, never prints
 secrets, and needs PASS: every sampled BACnet point and every `weather` point newer
-than 30 min, numeric and plausible. ACME notes:
+than 30 min (`--max-age-min`), numeric and plausible. Warn when a hook point is
+older than one hook interval plus a margin (25 min for a 20 min hook,
+`--warn-age-min`), even while it is still under the fail threshold. That catches
+a hung hook early. WARN does not change the exit code. Check units per device
+before trusting a range: some devices report °C and others °F, and a constant or
+impossible reading (a negative relative humidity) is a bad sensor. ACME notes:
 - All 8 Trane VAVs report zone temp in **°C** (NF units `DEGREES_CELSIUS`). The
   check converts it; FDD rules must too.
 - The Tracer SC `outside-air-humidity` point reads a constant −0.37 %, so that

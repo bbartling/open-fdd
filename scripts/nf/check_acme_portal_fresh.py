@@ -14,8 +14,10 @@ Points checked come from the site's provider_sites JSON (``--sites``):
 
 Every checked point must have a numeric value newer than ``--max-age-min``
 (default 30, which covers the 5 min BACnet trend and the 20 min weather hook)
-and pass a plausibility range. Exit 0 prints PASS; otherwise a FAIL list and
-exit 1. Secrets are never printed.
+and pass a plausibility range. A ``equip_type: weather`` point older than
+``--warn-age-min`` (default 25: one 20 min hook interval plus margin) prints
+WARN and does not fail by itself. Exit 0 prints PASS (WARN lines may precede
+it); a FAIL list exits 1. Secrets are never printed.
 
 Units come from the NF point (``GET /api/v1/point/points-id``). Points NF
 reports in DEGREES_CELSIUS (all ACME Trane VAVs) are converted to degF before
@@ -24,6 +26,7 @@ the range check, so a 21 degC zone temp is checked as 70 degF.
     python3 scripts/nf/check_acme_portal_fresh.py
     python3 scripts/nf/check_acme_portal_fresh.py --env ~/.secrets/nf_other.env \
         --sites scripts/nf/provider_sites.other.json
+    python3 scripts/nf/check_acme_portal_fresh.py --self-test
 """
 
 from __future__ import annotations
@@ -45,6 +48,9 @@ DEFAULT_ENV = Path.home() / ".secrets" / "nf_acme.env"
 # The portal answers 403 to Python's default User-Agent.
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 openfdd-nf-fresh/1.0"
 CHICAGO = ZoneInfo("America/Chicago")
+# One 20-minute weather-hook interval plus margin. Older than this WARNs.
+# --max-age-min (default 30) remains the fail threshold.
+DEFAULT_WARN_AGE_MIN = 25.0
 
 # (equipment_id, role) samples; missing ones are skipped with a note, so the
 # script stays usable for other sites (pass --sample to replace the list).
@@ -178,11 +184,99 @@ def parse_ts(raw: str) -> datetime:
     return datetime.fromisoformat(raw)
 
 
+def format_minutes(value: float) -> str:
+    """Print a threshold the way it was configured, including a fraction."""
+    return f"{value:g}"
+
+
+def freshness_age_findings(
+    name: str,
+    age_min: float,
+    *,
+    is_weather: bool,
+    warn_min: float,
+    fail_min: float,
+) -> tuple[str | None, str | None]:
+    """Return (warn, fail) for one point. Weather warns above warn_min; any point fails above fail_min."""
+    warn = None
+    if is_weather and age_min > warn_min:
+        warn = (
+            f"{name}: last record {age_min:.1f} min old "
+            f"(> {format_minutes(warn_min)}; one hook interval plus margin)"
+        )
+    fail = None
+    if age_min > fail_min:
+        fail = f"{name}: last record {age_min:.1f} min old (> {format_minutes(fail_min)})"
+    return warn, fail
+
+
+def run_freshness_self_test() -> int:
+    """Offline checks for the 25 min weather WARN and the 30 min fail threshold."""
+    cases = [
+        ("weather/web-outside-air-temp", 26.0, True, True, False),
+        ("weather/web-outside-air-humidity", 31.2, True, True, True),
+        ("weather/web-outside-air-dewpoint", 25.0, True, False, False),
+        ("rtu_01/supply-air-temp", 26.0, False, False, False),
+        ("rtu_01/supply-air-temp", 30.0, False, False, False),
+        ("rtu_01/supply-air-temp", 30.1, False, False, True),
+    ]
+    for name, age, is_weather, expect_warn, expect_fail in cases:
+        warn, fail = freshness_age_findings(
+            name,
+            age,
+            is_weather=is_weather,
+            warn_min=DEFAULT_WARN_AGE_MIN,
+            fail_min=30.0,
+        )
+        if (warn is not None) != expect_warn or (fail is not None) != expect_fail:
+            print(f"SELF-TEST FAIL {name} age={age} warn={warn!r} fail={fail!r}")
+            return 1
+        if warn is not None and "> 25" not in warn:
+            print(f"SELF-TEST FAIL warn text {warn}")
+            return 1
+    frac_warn, frac_fail = freshness_age_findings(
+        "weather/web-outside-air-temp",
+        25.6,
+        is_weather=True,
+        warn_min=25.5,
+        fail_min=30.5,
+    )
+    if frac_warn is None or "> 25.5" not in frac_warn or frac_fail is not None:
+        print(f"SELF-TEST FAIL fractional warn {frac_warn!r} {frac_fail!r}")
+        return 1
+    _, frac_fail = freshness_age_findings(
+        "rtu_01/supply-air-temp",
+        30.6,
+        is_weather=False,
+        warn_min=25.5,
+        fail_min=30.5,
+    )
+    if frac_fail is None or "> 30.5" not in frac_fail:
+        print(f"SELF-TEST FAIL fractional fail {frac_fail!r}")
+        return 1
+    if DEFAULT_WARN_AGE_MIN != 25.0:
+        print(f"SELF-TEST FAIL DEFAULT_WARN_AGE_MIN={DEFAULT_WARN_AGE_MIN}")
+        return 1
+    print("SELF-TEST PASS")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--env", type=Path, default=DEFAULT_ENV)
     ap.add_argument("--sites", type=Path, default=DEFAULT_SITES)
     ap.add_argument("--max-age-min", type=float, default=30.0)
+    ap.add_argument(
+        "--warn-age-min",
+        type=float,
+        default=DEFAULT_WARN_AGE_MIN,
+        help="WARN, do not fail, when a weather hook point is older than this many minutes (default 25)",
+    )
+    ap.add_argument(
+        "--self-test",
+        action="store_true",
+        help="run the offline weather-age checks and exit (no portal access)",
+    )
     ap.add_argument("--lookback-min", type=float, default=120.0)
     ap.add_argument(
         "--sample",
@@ -191,6 +285,8 @@ def main() -> int:
         help="replace the default BACnet sample (repeatable), e.g. rtu_01:supply-air-temp",
     )
     args = ap.parse_args()
+    if args.self_test:
+        return run_freshness_self_test()
 
     sample = DEFAULT_SAMPLE
     if args.sample:
@@ -227,7 +323,7 @@ def main() -> int:
     print(f"portal {host}  checked {len(points)} points  now {now.astimezone(CHICAGO):%Y-%m-%d %H:%M:%S %Z}")
     for n in notes:
         print(n)
-    rows, fails = [], []
+    rows, fails, warns = [], [], []
     latest_by_role: dict[str, float] = {}
     for p in points:
         name = f"{p['equipment_id']}/{p['role']}"
@@ -243,8 +339,17 @@ def main() -> int:
         unit = units.get(p["provider_point_id"], "")
         rows.append((name, "null" if v is None else f"{v:.2f}", UNIT_LABEL.get(unit, "?" if unit in ("", "UNITS_UNKNOWN") else unit.lower()),
                      f"{ts.astimezone(CHICAGO):%Y-%m-%d %H:%M:%S %Z}", f"{age:.1f}"))
-        if age > args.max_age_min:
-            fails.append(f"{name}: last record {age:.1f} min old (> {args.max_age_min:.0f})")
+        warn, age_fail = freshness_age_findings(
+            name,
+            age,
+            is_weather=p.get("equip_type") == "weather",
+            warn_min=args.warn_age_min,
+            fail_min=args.max_age_min,
+        )
+        if warn:
+            warns.append(warn)
+        if age_fail:
+            fails.append(age_fail)
         if v is None or math.isnan(v) or math.isinf(v):
             fails.append(f"{name}: last value is null or non-numeric")
             continue
@@ -264,10 +369,14 @@ def main() -> int:
     print(f"{'point':<{w}}  {'last value':>10}  {'units':<5}  {'last timestamp (America/Chicago)':<32}  {'age min':>7}")
     for r in rows:
         print(f"{r[0]:<{w}}  {r[1]:>10}  {r[2]:<5}  {r[3]:<32}  {r[4]:>7}")
+    if warns:
+        print("WARN")
+        for item in warns:
+            print(f"  - {item}")
     if fails:
         print("FAIL")
-        for f in fails:
-            print(f"  - {f}")
+        for item in fails:
+            print(f"  - {item}")
         return 1
     print("PASS")
     return 0
