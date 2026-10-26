@@ -23,7 +23,7 @@ Authoritative text:
 
 Product code is the NF portal API and CSV ingest. No legacy protocol code (MQTT, BACnet, Haystack, Modbus, fieldbus, edge wire) and no dual-write paths belong in product code. Archived code lives in `archive/` and is not a workspace member. Do not review or restyle `archive/`. `services/central/src/ingest.rs` and `live_historian.rs` are the portal and CSV writer and are in scope.
 
-Storage mandate ([`DATA_CONTRACT.md` § Storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)): **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing.** Flag as a blocking finding any diff that adds or extends a Parquet, Arrow, Arrow IPC, Feather or DataFusion dependency, store, cache, or execution path; writes telemetry anywhere but the one Timescale writer; or persists derived results outside PostgreSQL or bounded memory. The `crates/fdd_store` Parquet analytics cache is a known gap (Wave P2): a diff may shrink or remove it, never grow it.
+Storage mandate ([`DATA_CONTRACT.md` § Storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)): **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing.** Flag as a blocking finding any diff that adds or extends a Parquet, Arrow, Arrow IPC, Feather or DataFusion dependency, store, cache, or execution path; writes telemetry anywhere but the one Timescale writer; or persists derived results outside PostgreSQL or bounded memory.
 
 ## Review steps
 
