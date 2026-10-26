@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option go_package = "github.com/normalframework/nf/src/proto/gen/go/normalgw/hpl/v1;hplv1";
+package normalgw.hpl.v1;
+
+import "google/protobuf/duration.proto";
+
+
+message ResampleOptions {
+  enum ResampleMethod {
+    NONE = 0;
+    MIN = 1;
+    MAX = 2;
+    AVERAGE = 3;
+    SUM = 4;
+    FIRST = 5;
+    LAST = 6;
+    COUNT = 7;
+  }
+  ResampleMethod method = 1;
+  google.protobuf.Duration window = 2;
+}

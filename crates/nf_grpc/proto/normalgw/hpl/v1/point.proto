@@ -1,0 +1,1576 @@
+/*
+ *  package
+ */
+
+syntax = "proto3";
+
+option go_package = "github.com/normalframework/nf/src/proto/gen/go/normalgw/hpl/v1;hplv1";
+package normalgw.hpl.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/any.proto";
+
+import "google/protobuf/descriptor.proto";
+
+import "normalgw/annotations/auth.proto";
+import "normalgw/hpl/v1/unit.proto";
+import "normalgw/hpl/v1/timeseries.proto";
+
+extend google.protobuf.FieldOptions {
+  bool not_updatable = 60000;
+}
+
+enum PointType {
+  UNKNOWN = 0;
+  POINT = 1;
+  DEVICE = 2;
+  VARIABLE = 3;
+  EQUIPMENT = 4;
+  SITE = 5;
+}
+
+// QualityFlag enumerates data-quality verdicts produced by the DQ classifier
+// (the "projector") and materialized on Point.quality_flags. Values are grouped
+// by category with numeric gaps so each group can grow without renumbering.
+// A point may carry several flags at once (see Point.quality_flags).
+enum QualityFlag {
+  QUALITY_FLAG_UNSPECIFIED = 0;
+
+  // --- Liveness / temporal (the priority signals) ---
+  // Point exists but has never received a sample.
+  QUALITY_FLAG_NEVER_REPORTED = 1;
+  // No update within k * expected reporting period. PRIMARY signal.
+  QUALITY_FLAG_STALE = 2;
+  // No update for a long multiple of the expected period.
+  QUALITY_FLAG_DEAD = 3;
+  // Reporting far less often than expected (gaps / drops in and out).
+  QUALITY_FLAG_INTERMITTENT = 4;
+
+  // --- Value plausibility / "non-physical" ---
+  // Value equals a known sensor fault / sentinel magic number
+  // (open-thermistor rail, -9999, int16/ADC rails, NaN, etc.).
+  QUALITY_FLAG_SENTINEL_VALUE = 10;
+  // Value outside hard physical / unit limits.
+  QUALITY_FLAG_OUT_OF_RANGE_HARD = 11;
+  // Pinned at the sensor range maximum over a window (e.g. open thermistor).
+  QUALITY_FLAG_RAILED_HIGH = 12;
+  // Pinned at the sensor range minimum over a window (e.g. short).
+  QUALITY_FLAG_RAILED_LOW = 13;
+  // Outside a learned/expected operating band (softer than _HARD). (v2)
+  QUALITY_FLAG_OUT_OF_RANGE_SOFT = 14;
+
+  // --- Dynamics / behavior ---
+  // Value not changing (range ~= 0 / std ~= 0) where variation is expected.
+  QUALITY_FLAG_FLATLINE = 20;
+  // A counter/totalizer decreased (meter rollover or reset).
+  QUALITY_FLAG_NON_MONOTONIC = 21;
+  // Excessive variance / jitter beyond expectation. (v2)
+  QUALITY_FLAG_NOISY = 22;
+  // Sample beyond a rate-of-change or n-sigma bound (outlier). (v2)
+  QUALITY_FLAG_SPIKE = 23;
+
+  // --- Lifecycle ---
+  // Too little history to render a verdict (new / just-commissioned point).
+  QUALITY_FLAG_INSUFFICIENT_DATA = 30;
+}
+
+// Writability says whether a point accepts writes, as far as its driver can
+// tell from the protocol. See Point.writability.
+enum Writability {
+  // The protocol does not advertise writability for this point, or the driver
+  // has no rule for it. This is NOT the same as read-only: a write may well
+  // succeed. A plain BACnet AV with no priority array lands here.
+  WRITABILITY_UNKNOWN = 0;
+  // The protocol says the point is commandable: a BACnet object with a
+  // priority array, a Niagara *Writable type, a Modbus coil or holding
+  // register.
+  WRITABILITY_WRITABLE = 1;
+  // The protocol says the point is not commandable: a BACnet input object, a
+  // Niagara *Point type, a Modbus discrete or input register.
+  WRITABILITY_READ_ONLY = 2;
+}
+
+message LayeredAttributes {
+  string layer = 1;
+  map <string, string> attrs = 2;
+}
+
+message Point {
+  string uuid = 1 [(not_updatable) = true];  // durable node id
+  string name = 2;                        // BACnet Object name by default
+  string layer = 3;                       // hpl layer name of owner. probably hpl:bacnet:1
+
+  string version = 5 [(not_updatable) = true];
+  map <string, string> attrs = 6; // fields.  some of these may be indexed
+  repeated LayeredAttributes split_attrs = 16 [(not_updatable) = true];
+
+  // blank field the HPL can use
+  google.protobuf.Any hpldata = 7;
+
+  // the configured polling period (or nil if disabled)
+  google.protobuf.Duration period = 8;
+  // settings for subscribing to COVs on this point.
+  CovSettings cov = 9;
+
+  Value latest_value = 10 [(not_updatable) = true];
+  Error latest_error = 22 [(not_updatable) = true];
+  string display_units = 11;
+  Units units = 19;
+
+  PointEnum enum = 12;
+
+  string parent_uuid = 13;
+  string protocol_id  = 14;
+  PointType point_type = 15;
+  string description = 17;
+  string parent_name = 18;
+
+  message DataAttributes {
+    float max = 1;
+    float min = 2;
+    float median = 3 [deprecated = true];  // not a native TS aggregation; use mean
+    float mean = 4;
+  }
+  // Value statistics over a window, computed on the read path (native TS
+  // aggregation) only when GetPoints[ById]Request.data_attrs_window is set.
+  DataAttributes data_attrs = 20 [(not_updatable) = true];
+  string hpl_driver = 21;
+
+  // Data-quality classifier verdicts set by the DQ projector. Serialized to the
+  // point hash as a comma-joined list of enum names and indexed as a
+  // multi-valued RediSearch TAG, so points can be filtered/faceted by quality
+  // state (e.g. @quality_flags:{QUALITY_FLAG_STALE}). Updatable so the projector
+  // can maintain it through the normal update path (indexing + update events);
+  // device drivers never set it.
+  repeated QualityFlag quality_flags = 25;
+
+  // ID of a Conversion to apply on read. Empty means no conversion.
+  string conversion_id = 23;
+
+  // Original device metadata preserved when a conversion overrides the
+  // presentation fields (display_units, units, enum). Populated automatically
+  // when conversion_id is set; restored when cleared. Not directly writable.
+  RawPointMetadata raw_metadata = 24 [(not_updatable) = true];
+
+  // Whether the point accepts writes. Derived on every read from the driver's
+  // hpldata and attributes, so it is never stored and cannot be set through
+  // UpdatePoints. Because it is derived from the stored hash rather than from
+  // the masked reply, it is populated even when the caller masks hpldata out.
+  Writability writability = 26 [(not_updatable) = true];
+
+  // Archiving (WP-D). When true, the point is administratively archived:
+  // GetPoints ANDs -@archived:{true} into its query by default, so every reader
+  // that selects pollable points through GetPoints (BACnet, generic poller,
+  // Fox, Modbus, plugins), the status rollup, and the DQ projector drop it with
+  // NO driver changes. Indexed as a RediSearch TAG (see point/layers.go).
+  //
+  // A point is *effectively* archived if it OR its PointType_DEVICE parent
+  // carries archived=true; the ingestion guard in addBatchData and the status
+  // rollup both apply that parent cascade. Unlike most fields, `archived` is
+  // clearable back to its default through UpdatePoints (see buildUpdateOps) so
+  // Unarchive and rediscovery can lift an archive.
+  bool archived = 27;
+  google.protobuf.Timestamp archived_at = 28;
+  string archived_by = 29;
+  string archived_reason = 30;
+}
+
+message PointEnum {
+  repeated string values = 1;
+  // if the present value is a zero-indexed value into this list (instead of 1, like BACnet)
+  bool is_zero_indexed = 2;
+}
+
+message CovSettings {
+  bool enabled = 1;
+  // how large a change must be to be considered a "change"
+  float threshold = 2;
+}
+
+message Value {
+  google.protobuf.Timestamp ts = 1;
+  oneof ValueType {
+    bool null = 2;
+    bool boolean = 3;
+    uint32 unsigned = 4;
+    int32 signed = 5;
+    float real = 6;
+    double double = 7;
+    bytes octet_string = 8;
+    string character_string = 9;
+  };
+  google.protobuf.Any meta = 10;
+}
+
+message Error {
+  google.protobuf.Timestamp ts = 1;
+  string message = 2;
+  google.protobuf.Any error = 3;
+}
+
+message Data {
+  repeated Value data = 1;
+}
+
+enum LayerKind {
+  LAYER_BASE = 0;
+  LAYER_UNION = 1;
+}
+
+enum FieldType {
+  TEXT = 0;
+  NUMERIC = 1;
+  TAG = 2;
+  GEO = 3;
+  REFERENCE = 4;
+  LAYER = 5;
+  PATH=6;
+}
+
+message LayerComponent {
+  // component name
+  string name = 1;
+
+  // component type
+  FieldType type = 2;
+
+  // list of options which defines how to index this component
+  repeated string options = 3;
+
+  // what SQL data type to use for this field
+  string sql_type = 4;
+}
+
+message Layer {
+  message HplDriver {
+    message Url {
+      string read = 1;
+      string write = 2;
+      string status = 3;
+    }
+    message Hook {
+      string application_id = 1;
+      string read_hook_id = 2;
+      string write_hook_id = 3;
+    }
+    oneof driver {
+      string grpc_service = 1;
+      Hook hook = 2;
+      Url url = 3;
+    }
+    bool polled = 4;
+
+    // Maximum number of writes the command service will dispatch to this
+    // driver concurrently. 0 (default) means no command-side limit — the
+    // driver's own concurrency control (e.g. BACnet's per-device workers or
+    // Modbus's connection pool) is the gate. Set a positive value for drivers
+    // that don't self-limit (e.g. plugin drivers) to avoid flooding them.
+    int32 concurrency = 5;
+  }
+
+  // The name of the layer
+  // there is always a layer named "default", which unqualified 
+  string name = 1;
+
+  // Description of the layer
+  string description = 2;
+
+  LayerKind kind = 3;
+  
+  // for base layers, the components are indexed (searchable) fields
+  // for union layers, the components are other layer names.
+  // Deprecated: use structured_components instead
+  repeated string components = 4 [deprecated=true];
+
+  // Deprecated: use structured_components instead
+  repeated string component_options = 8 [deprecated=true];
+
+  // Deprecated: use structured_components instead
+  repeated FieldType component_types = 10 [deprecated=true];
+  
+  // a list of attribute names which don't generate updates in the
+  // update stream.
+  repeated string update_attr_mask = 5;
+
+  // layer-specific configuration which can be stored here.
+  google.protobuf.Any configuration = 6;
+
+  // how many points are in the layer
+  int64 point_count = 7;
+
+  // if true, the layer is indexed for full-text search and queries
+  bool indexed = 9;
+
+  // suggested attributes to extract from the layer
+  repeated string suggested_extraction_attrs = 11;
+
+  // default attributes to display in the UI
+  repeated string default_display_attrs = 12;
+
+  // default attributes to group by in the UI
+  repeated string default_grouping_attrs = 13;
+
+  // components of layer index
+  repeated LayerComponent structured_components = 14;
+
+  // the driver to use for this layer if it is a HPL layer
+  HplDriver driver = 15;
+}
+
+message GetLayersRequest{
+  string name = 1;
+}
+
+message GetLayersReply {
+  repeated Layer layers = 1;
+  int64 total_count = 2;
+}
+
+message CreateLayerRequest {
+  Layer layer = 1;
+}
+
+message CreateLayerReply{}
+message DeleteLayerRequest {
+  string name = 1;
+}
+message DeleteLayerReply {
+}
+message UpdateLayerRequest {}
+message UpdateLayerReply{}
+
+message LayerMigration {
+
+  // apply changes if the version in the database is less than the
+  // version in this record.
+  repeated Layer ensure_layers = 1;
+  repeated string delete_layers = 2;
+}
+
+message FieldQuery {
+  string property = 1;
+  string text = 2;
+  NumericQuery numeric = 3;
+  string layer = 4;
+  bool wildcard = 5;
+};
+
+message ReferenceQuery {
+  string property = 1;
+  string target_property = 2;
+  Query query = 3;
+}
+
+message NumericQuery {
+  double min_value = 2;
+  bool min_infinity = 4;
+  double max_value = 3;
+  bool max_infinity = 5;
+};
+
+message Query {
+    // oneof {
+    FieldQuery field = 1;
+    // filter by properties of a reference
+    ReferenceQuery reference = 2;
+    repeated Query and = 3;
+    repeated Query or = 4;
+    Query not = 5;
+    // }
+};
+
+message AnnotationPathComponent {
+  string source_property = 1;
+  string target_property = 2;  // must be indexed and a tag field.  default is "id".
+  string value_property = 3;
+};
+
+message Annotation {
+   string layer = 1;
+   string field_name = 2;
+   // default is __ separated concatenation of source_propertys
+   repeated AnnotationPathComponent path = 3; 
+};
+
+enum GetPointsResponseFormat {
+  LAYERS_COLLAPSED = 0;
+  LAYERS_SPLIT = 1;
+}
+
+message PointMask {
+  // applies to attributes: if blank 
+  repeated string attr_include_mask = 1;
+  repeated string attr_exclude_mask = 2;
+  // applies to proto fields
+  repeated string field_mask = 3;
+  repeated string field_exclude_mask = 4;
+}
+
+message GetPointsRequest {
+  // 
+  // filtering options
+
+  // which layer to query the index on
+  string layer = 1;
+
+  // if set, only return results which are from this layer.
+  //  this impacts the behavior of the pagination fields, since
+  //  since these are applied first during the query lookup.  However, 
+  //  it can be used to query keys which appear in multiple layers
+  //  without duplicates
+  string result_layer = 2;
+
+  // text query to search for in the database
+  //  deprecated in 1.6; use structured_query instead
+  string query = 4 [deprecated=true];
+  Query structured_query = 6;
+  repeated Annotation annotations = 7;
+
+  GetPointsResponseFormat response_format = 5;
+
+  PointMask masks = 8;
+
+  //
+  // pagination options
+  int64 page_offset = 10;
+  int64 page_size = 11;
+  string sort_field = 12 [deprecated = true];
+  string sort_order = 13 [deprecated = true];
+  Sort sort = 14;
+
+  // If set (> 0) and the data_attrs mask is included, compute Point.data_attrs
+  // (min/max/mean) live over [now - data_attrs_window, now] via native TS
+  // aggregation, pipelined across the page. Unset/zero = do not compute (no cost).
+  google.protobuf.Duration data_attrs_window = 15;
+
+  // When false (default), archived points are excluded: GetPoints ANDs
+  // -@archived:{true} into the query so pollers/rollups/projectors never see
+  // them. Set true to include archived points (e.g. an admin "show archived"
+  // view). Has no effect on GetPointsById, which is an explicit by-uuid lookup.
+  bool include_archived = 16;
+}
+
+message Sort {
+  string field = 1;
+  string order = 2;
+  string layer = 3;
+}
+
+message GetPointsByIdRequest {
+  string layer = 1;
+  repeated string uuids = 2;
+  GetPointsResponseFormat response_format = 3;
+  PointMask masks = 4;
+  repeated Annotation annotations = 5;
+
+  // See GetPointsRequest.data_attrs_window.
+  google.protobuf.Duration data_attrs_window = 6;
+}
+
+message GetPointsReply {
+  repeated Point points = 1;
+  int64 total_count = 2;
+}
+
+message GetDistinctAttrsRequest {
+  repeated string attrs = 1;
+  string query = 2;
+  Query structured_query = 4;
+  string layer = 3;
+  string query_layer = 5;
+  int64 page_offset = 6;
+  int64 page_size = 7;
+}
+
+message GetDistinctAttrsReply {
+  message AttrValues {
+    string key = 1;
+    repeated string values = 2;
+    repeated uint32 counts = 3;
+    uint32 total_count = 4;
+  }
+  repeated AttrValues attrs = 1;
+}
+
+
+enum PointAggregatorType {
+  // Count Points
+  COUNT = 0;
+  // Count distinct values by `field`
+  COUNT_DISTINCT = 1;
+  // Sum values from `field`
+  SUM = 2;
+  // Min value from `field`
+  MIN = 3;
+  // Max value from `field`
+  MAX = 4;
+  // Avg value from `field`
+  AVG = 5;
+  // List values from `field`
+  LIST = 6;
+}
+
+message PointAggregator {
+  PointAggregatorType type = 1;
+  // field to aggregate on
+  string field = 2;
+}
+
+message AggregatePointsRequest {
+  // attributes to group by
+  repeated string attrs = 1;
+  // aggregators to apply
+  repeated PointAggregator aggregators = 2;
+  string layer = 3;
+  // optional query to filter rows
+  Query query = 4;
+}
+
+message AggregationValue {
+  oneof value {
+    bool null = 1;
+    uint32 unsigned = 2;
+    int32 signed = 3;
+    float real = 4;
+    string character_string = 5;
+  }
+  repeated string list = 6;
+}
+
+message AggregationAttrValue {
+  // aggregation group keys 1 for each attr
+  repeated string keys = 1;
+  // aggregation values 1 for each aggregator
+  repeated AggregationValue values = 2;
+}
+
+message AggregatePointsReply {
+  repeated AggregationAttrValue values = 1;
+}
+
+message UpdatePointsRequest {
+  // Update points in the database.  The UUID is mandatory.  Other
+  // fields will be updated if not null. 
+  repeated Point points = 1;
+  bool is_async = 2;
+}
+
+message UpdatePointsReply {
+  message UpdateResult {
+    string uuid = 1;
+    bool success = 2;
+    string new_version = 3;
+    string task_uuid = 4;
+
+  }
+  repeated UpdateResult results = 1;
+}
+
+message RenamePointRequest {
+  string layer = 1;
+  string old_uuid = 2;
+  string new_uuid = 3;
+}
+
+message RenamePointReply {
+
+}
+
+message CreateExportRequest {
+  enum ExportFormat {
+    FORMAT_CSV = 0;
+    FORMAT_JSONL = 1;
+ }
+  // layer to export
+  string layer = 1;
+  // optional query to filter rows 
+  Query structured_query = 2;
+  // optional masks to determine which columns + column order
+  PointMask masks = 3;
+  // format
+  ExportFormat format = 4;
+}
+
+message CreateExportReply {
+  string download_path = 1;
+}
+
+message CreateDataExportRequest {
+  enum ExportFormat {
+    FORMAT_CSV = 0;
+    FORMAT_JSONL = 1;
+ }
+  // optional query to filter rows 
+  Query structured_query = 1;
+  // column to use as the header
+  repeated string column_headers = 2;
+  string headers_separator = 3;
+  // file format
+  ExportFormat format = 4;
+  google.protobuf.Timestamp from = 5;
+  google.protobuf.Timestamp to = 6;
+  google.protobuf.Duration window = 7;
+  ResampleOptions.ResampleMethod method = 8;
+  string group_key = 9;
+}
+
+message CreateDataExportReply {
+  string download_path = 1;
+}
+
+message ObservePointsUpdatesRequest {
+  // only include updates for a particular layer
+  string layer = 1;
+  // only include updates for a set of uuids
+  repeated string uuids = 2;
+
+  // only retrieve changes since this version 
+  string version = 3;
+
+  // how many records to send before closing the connection.  if zero,
+  // never close the connection.
+  int32 limit = 4;
+  // whether to wait for new records
+  bool wait = 5;
+
+  Query structured_query = 6;
+
+  bool with_metadata = 7;
+}
+
+message ObservePointsUpdatesReply {
+  // old and new versions of a point.  Only the UUID is guaranteed to
+  // be filled in; other fields are populated if they are changed.
+  google.protobuf.Timestamp ts = 1;
+  string version = 2;
+  Point old = 3;
+  Point new = 4;
+  Point current = 7;
+
+  // list of changed fields and attributes
+  repeated string fields = 5;
+
+  // list of layers affected by update
+  repeated string layers = 6;
+}
+
+
+message AddPointsDataRequest {
+  // Not used starting from 3.0
+  string layer = 1 [deprecated=true];
+  string uuid = 2;
+  repeated Value values = 3;
+  repeated Error errors = 4;
+  bool is_async = 5;
+}
+
+message AddPointsDataReply {
+  bool success = 1;
+  string task_uuid = 2;
+}
+
+// AddDataRequest is the multi-UUID form of AddPointsData. One call carries
+// data for any number of points; the server pipelines all writes into a
+// single redis round trip. Use this in preference to AddPointsData whenever
+// you have more than one point to write — it eliminates the per-point gRPC
+// + queue-enqueue + queue-dequeue overhead that dominated the old path.
+message AddDataRequest {
+  message PointData {
+    string uuid = 1;
+    repeated Value values = 2;
+    repeated Error errors = 3;
+  }
+  repeated PointData points = 1;
+  bool is_async = 2;
+  // Layer is propagated into each ObserveDataUpdatesReply so that
+  // subscribers filtering by layer/components see only their points.
+  // All points in this batch share the same layer; mix-and-match
+  // requires multiple calls.
+  string layer = 3;
+}
+
+message AddDataReply {
+  bool success = 1;
+  string task_uuid = 2;
+}
+
+message ObserveDataUpdatesRequest {
+  string layer = 1;
+  repeated string uuids = 2;
+
+  string version = 3;
+  int32 limit = 4;
+  // whether to wait for new records
+  bool wait = 5;
+
+  // if point metadata should be included with each reply value.
+  bool with_metadata = 6;
+  Query structured_query = 7;
+
+}
+
+message ObserveDataUpdatesReply {
+  enum ChangeType {
+    VALUE = 0;
+    ADDED = 1;
+    DELETED = 2;
+    METADATA = 3;
+  }
+  string uuid = 1;
+  string version = 2;
+  Value value = 3;
+  Point point = 4;
+  string layer = 5;
+  ChangeType type = 6;
+}
+
+message ObserveErrorUpdatesRequest {
+  string layer = 1;
+  repeated string uuids = 2;
+  string version = 3;
+  int32 limit = 4;
+  // whether to wait for new records
+  bool wait = 5;
+  bool with_metadata = 6;
+  Query structured_query = 7;
+}
+
+message ObserveErrorUpdatesReply {
+  string uuid = 1;
+  string version = 2;
+  Error error = 3;
+  Point point = 4;
+  string layer = 5;
+}
+
+message GetVersionsRequest {}
+message GetVersionsReply {
+  // the last version returned by ObserveDataUpdates
+  string data_version = 1;
+  // the last version returned by ObservePointUpdates
+  string points_version = 2;
+  // the last version returned by ObserveErrorUpdates
+  string errors_version = 3;
+}
+
+message GetDataRequest {
+  // Not used starting from 3.0
+  string layer = 1 [deprecated=true];
+  repeated string uuids = 2;
+
+  // start and end of the window for filtering
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+  google.protobuf.Duration window = 5;
+  ResampleOptions.ResampleMethod method = 6;
+
+  // if true, return data from the error series and not the data series
+  bool error_data = 7;
+  int32 count = 8;
+  bool reverse = 9;
+}
+
+message DataVector {
+  string uuid = 1;
+  repeated Value values = 2;
+}
+
+message GetDataReply {
+  repeated DataVector data = 1;
+}
+
+message GetDataSummaryRequest {
+  string layer = 1;
+  repeated string uuids = 2;
+
+  // statistics window.  if not provided will be over all available.
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+
+  // if not empty, bucket edges for the histogram.
+  //  can be used to use the same edges for all points
+  //  in the request
+  repeated float bucket_edges = 5;
+  uint32 bucket_count = 6;
+}
+
+message DataSummary {
+  enum DataType {
+      Discrete = 0;
+      Continuous = 1;
+  }
+  string uuid = 1;
+
+  // basic statistics
+  float mean = 2;
+  float min = 3;
+  float max = 4;
+  uint32 count = 5;
+
+  // histogram with dynamic buckets
+  repeated float bin_edges = 6;
+  repeated uint32 bin_counts = 7;
+
+  // first and last timestamps that were processed
+  google.protobuf.Timestamp first = 8;
+  google.protobuf.Timestamp last = 9;
+
+  float median= 10;
+  uint32 distinct_count = 11;
+  DataType data_type = 12;
+}
+
+message GetDataSummaryReply {
+  repeated DataSummary summaries = 1;
+}
+
+message DeletePointsRequest {
+  // points will be deleted in these layers.  you can only delete
+  // points from a base layer.  if the list is empty, the point will
+  // be deleted in all layers
+  repeated string layers = 1 [deprecated=true];
+  // delete these uuids
+  repeated string uuids = 2;
+
+  // delete points matching this query
+  string index_layer = 3;
+  Query structured_query = 4;
+}
+
+message DeletePointsReply {
+  int64 delete_count = 1;
+}
+
+message Tag {
+  string key = 1;
+  string tag = 2;
+}
+
+message AddTagsRequest {
+  repeated string uuids = 1;
+  string layer = 2;
+  repeated Tag tags = 3;
+}
+
+message AddTagsReply {
+
+}
+
+message DeleteTagsRequest {
+  repeated string uuids = 1;
+  string layer = 2;
+  repeated Tag tags = 3;
+}
+
+message DeleteTagsReply {
+
+}
+
+message ConversionUpdate {
+  string conversion_id = 1;
+}
+
+message CopyAttributesRequest {
+  // layer to read values from.  may be a base layer
+  string input_layer = 1;
+  // layer to write values to.  may be a base layer
+  string output_layer = 2;
+  // layer to perform search query against.  if blank, the input layer is used.
+  string index_layer = 3;
+  // list of attribute names to copy
+  repeated string attributes = 4;
+  // if present, a list of corresponding attribute names to map in the output layer
+  repeated string mapped_attributes = 5;
+
+  // any attributes set here will be set to the static value in the
+  // map instead of the input layer value.  if all attributes are in the map, the input layer is ignored and may be blank,
+  // and only the output layer is written to.
+  //
+  // this can be used, for instance, to set an attribute to a constant text string based on a query, or to clear an attribute.
+  map <string, string> static_attributes = 6;
+
+  // the copy operation is applied to all points matching the query or in the list of uuids
+  string query = 7;
+  Query structured_query = 11;
+  // any UUIDs specified in this list are also consider matched.
+  repeated string uuids = 8;
+
+  // if present, update the matching points with this period
+  google.protobuf.Duration period = 9;
+  // if present, update the COV settings
+  CovSettings cov = 10;
+  // if present, update the conversion_id on matching points
+  ConversionUpdate conversion = 12;
+}
+
+message CopyAttributesReply {
+  uint32 update_count = 1;
+}
+
+message GetConfigKeysRequest {
+  repeated string keys = 1;
+}
+
+message GetConfigKeysReply {
+  map<string, bytes> values = 1;
+}
+
+message SetConfigKeyRequest {
+  string key = 1;
+  bytes value = 2;
+}
+
+message SetConfigKeyReply{}
+message DeleteConfigKeysRequest{
+  repeated string keys = 1;
+}
+message DeleteConfigKeysReply{
+  repeated string keys = 1;
+}
+
+message ErrorsVector {
+  string uuid = 1;
+  repeated Error errors = 2;
+}
+
+message GetPointErrorsRequest {
+  repeated string uuids = 1;
+}
+
+message GetPointErrorsReply {
+  repeated ErrorsVector errors = 1;
+}
+
+// Original device metadata preserved when a conversion overrides the
+// presentation fields on a Point. Not directly writable by clients.
+message RawPointMetadata {
+  string display_units = 1;
+  Units units = 2;
+  PointEnum enum = 3;
+}
+
+// Conversion definitions — reusable value transforms applied on the read path.
+// Raw timeseries values are always preserved; conversions are applied when
+// returning data via GetData, GetPoints, GetDataSummary, or ObserveDataUpdates.
+
+message Conversion {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  repeated ConversionStep steps = 4;
+
+  // Output metadata — written to the point's presentation fields when this
+  // conversion is associated. Leave empty to skip metadata update.
+  Units output_units = 5;
+  string output_display_units = 6;
+  PointEnum output_enum = 7;
+
+  // Grouping category for the standard library (e.g. "Temperature", "Pressure")
+  string category = 8;
+}
+
+message ConversionStep {
+  oneof step {
+    LinearConversion linear = 1;
+    BooleanInversion boolean_inversion = 2;
+    JSConversion js = 3;
+    EnumMapping enum_mapping = 4;
+  }
+}
+
+message LinearConversion {
+  double scale = 1;   // result = raw * scale + offset
+  double offset = 2;
+}
+
+message BooleanInversion {}
+
+message JSConversion {
+  // Must define: function convert(value) { return ...; }
+  string function = 1;
+}
+
+// Maps numeric values to new numeric values via a lookup table.
+// Values not in the map pass through unchanged.
+message EnumMapping {
+  map<int32, int32> mapping = 1;
+}
+
+message CreateConversionRequest {
+  Conversion conversion = 1;
+}
+
+message CreateConversionReply {
+  Conversion conversion = 1;
+}
+
+message GetConversionsRequest {
+  repeated string ids = 1;  // empty = return all
+}
+
+message GetConversionsReply {
+  repeated Conversion conversions = 1;
+}
+
+message UpdateConversionRequest {
+  Conversion conversion = 1;
+}
+
+message UpdateConversionReply {
+  Conversion conversion = 1;
+}
+
+message DeleteConversionRequest {
+  string id = 1;
+}
+
+message DeleteConversionReply {}
+
+// ---- Data-quality rules ----
+//
+// A QualityRule binds a Detector to a set of points via a selector query. When
+// the detector fires, emit_flag is stamped onto Point.quality_flags. Rules are
+// evaluated by the DQ projector; a point accumulates flags from every matching
+// rule. Definitions are stored at dq_rules:<id>. See docs/data-quality-design.md.
+
+// Severity a rule contributes when it fires; a point's overall severity is the
+// max across its active flags.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_OK = 1;
+  SEVERITY_INFO = 2;
+  SEVERITY_WARN = 3;
+  SEVERITY_ERROR = 4;
+}
+
+// Where a RangeDetector's expected bounds come from — a fallback chain of
+// increasing point knowledge (self-learned needs none; unit-default needs only
+// units; class/model need the model layer).
+enum BoundsSource {
+  BOUNDS_SOURCE_UNSPECIFIED = 0;
+  BOUNDS_SOURCE_STATIC = 1;        // explicit min/max on the detector
+  BOUNDS_SOURCE_UNIT_DEFAULT = 2;  // built-in per-unit physical table (non_physical)
+  BOUNDS_SOURCE_LEARNED = 3;       // point's own rolling baseline (v2)
+  BOUNDS_SOURCE_CLASS = 4;         // by model point class
+}
+
+// Liveness -> NEVER_REPORTED / STALE / DEAD (needs last_ts / count).
+message StalenessDetector {
+  google.protobuf.Duration max_age = 1;  // absolute age floor
+  double period_multiplier = 2;          // stale if age > k * point.period
+  bool never_reported = 3;               // emit if count == 0 instead of age-based
+}
+
+// Non-physical / sentinel values -> SENTINEL_VALUE / OUT_OF_RANGE_HARD. Uses the
+// built-in per-unit physical range table + global sentinel list, keyed on units.
+message NonPhysicalDetector {
+  bool use_window_minmax = 1;  // check window min/max instead of just the last value
+}
+
+// -> RAILED_HIGH / RAILED_LOW (no preset — needs a sensor selector).
+message RailedDetector {
+  google.protobuf.Duration window = 1;
+}
+
+// -> FLATLINE (no preset — needs a continuous-sensor selector).
+message FlatlineDetector {
+  google.protobuf.Duration window = 1;
+  double min_std = 2;  // flatline if std over window <= min_std
+}
+
+// -> OUT_OF_RANGE_SOFT / _HARD depending on source.
+message RangeDetector {
+  BoundsSource source = 1;
+  double min = 2;  // used when source = STATIC
+  double max = 3;
+}
+
+// -> NON_MONOTONIC (no preset — needs a totalizer selector).
+message MonotonicDetector {}
+
+// Reduced reporting rate / gap over a window -> INTERMITTENT. For polled points
+// (period > 0): fires when actual sample count / expected (window / period) is
+// below min_ratio, once at least min_readings are expected. Distinct from
+// staleness (reduced rate vs. no data at all).
+message IntermittentDetector {
+  google.protobuf.Duration window = 1;
+  double min_ratio = 2;      // fire if count/expected < min_ratio (e.g. 0.8)
+  uint32 min_readings = 3;   // require >= this many expected readings to judge
+}
+
+// The signal to compute + how to interpret it. The oneof is the extension
+// point: a new signal = a new member + a Go DetectorImpl.
+message Detector {
+  oneof kind {
+    StalenessDetector    staleness    = 1;
+    NonPhysicalDetector  non_physical = 2;
+    RailedDetector       railed       = 3;
+    FlatlineDetector     flatline     = 4;
+    RangeDetector        range        = 5;
+    MonotonicDetector    monotonic    = 6;
+    IntermittentDetector intermittent = 7;
+  }
+}
+
+message QualityRule {
+  string id = 1;               // uuid, or "preset:stale"
+  string name = 2;
+  string description = 3;
+  bool enabled = 4;
+  Query selector = 5;          // which points (FT.SEARCH); empty = all
+  Detector detector = 6;
+  QualityFlag emit_flag = 7;
+  Severity severity = 8;
+}
+
+message CreateQualityRuleRequest { QualityRule rule = 1; }
+message CreateQualityRuleReply   { QualityRule rule = 1; }
+message GetQualityRulesRequest   { repeated string ids = 1; }  // empty = all
+message GetQualityRulesReply     { repeated QualityRule rules = 1; }
+message UpdateQualityRuleRequest { QualityRule rule = 1; }
+message UpdateQualityRuleReply   { QualityRule rule = 1; }
+message DeleteQualityRuleRequest { string id = 1; }
+message DeleteQualityRuleReply {}
+
+// Backtest evaluates a (possibly unsaved) rule against current data without
+// writing any flags. It runs the rule's selector, then runs the detector over
+// each matched point exactly as the projector would, and reports how many
+// points match and how many the detector fires on, plus a sample of results.
+message BacktestQualityRuleRequest {
+  QualityRule rule = 1;
+  uint32 sample_limit = 2;   // max points to sample/evaluate (default 200)
+}
+message BacktestSample {
+  string uuid = 1;
+  string name = 2;
+  bool fired = 3;
+  double last_value = 4;
+  string units = 5;
+  // has_value is false when the point has no timeseries data (never reported).
+  // Value detectors (range/non-physical/railed) cannot evaluate such points, so
+  // last_value is meaningless and the UI should show "no data" rather than 0.
+  bool has_value = 6;
+}
+message BacktestQualityRuleReply {
+  uint32 matched_points = 1;   // points the selector matched (capped at sample_limit)
+  uint32 evaluated_points = 2; // points actually evaluated
+  uint32 fired_points = 3;     // of evaluated, how many the detector fired on
+  bool truncated = 4;          // true if more points matched than were evaluated
+  repeated BacktestSample samples = 5;
+}
+
+/**
+ * Point Service
+ *
+ * The point service is the main interface into the configuration
+ * state stored on the device. It provides full-text search of all
+ * objects, layered attribute storage, and timeseries data access.
+ */
+service PointManager {
+
+  /** Searches for points using the RediSearch full-text index on the specified layer. The layer must
+   * be indexed; defaults to "default" (a union of all base layers). Supports structured queries,
+   * pagination, sorting (sort field must be indexed), attribute/field masks, and annotation joins. */
+  rpc GetPoints (GetPointsRequest) returns (GetPointsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/points"
+      additional_bindings: {
+	post: "/api/v1/point/query"
+      }
+      body: "*"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Returns all layers if no name is given, or a single layer by name. Each layer includes a live
+   * point_count computed at query time via FT.SEARCH. */
+  rpc GetLayers (GetLayersRequest) returns (GetLayersReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/layers"
+      additional_bindings: {
+        get: "/api/v1/point/layers/{name}"
+      }
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  }
+
+  /** Creates a new BASE or UNION layer. Layer names must be alphanumeric with colons only.
+   * If indexed is true, a RediSearch index is created synchronously before returning. Creating
+   * a BASE layer triggers an async rebuild of the "default" union layer. Returns AlreadyExists
+   * if the layer name is taken. */
+  rpc CreateLayer(CreateLayerRequest) returns (CreateLayerReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/layers"
+      body: "*"
+    };
+  }
+
+  /**
+   * Not implemented. Calling this RPC returns UNIMPLEMENTED.
+   */
+  rpc UpdateLayer(UpdateLayerRequest) returns (UpdateLayerReply) {
+
+  }
+
+  /** Drops the layer's RediSearch index and removes its definition from Redis. Underlying point
+   * data (hashes and timeseries) are always preserved (KEEPDOCS). Deleting a non-"default" layer
+   * triggers an async rebuild of the "default" union layer. */
+  rpc DeleteLayer(DeleteLayerRequest) returns (DeleteLayerReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/point/layers/{name}"
+    };
+  }
+
+  /** Looks up points by UUID list. Skips any UUIDs that are not found rather than returning an error.
+   * Does not support pagination or sorting; total_count reflects only the points actually returned. */
+  rpc GetPointsById (GetPointsByIdRequest) returns (GetPointsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/points-id"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Returns distinct values and their counts for the requested attributes using FT.AGGREGATE
+   * GROUPBY on the search index. Supports pagination via page_offset/page_size on the aggregation
+   * results. If query_layer differs from layer, the query runs against query_layer's index but
+   * reads attribute values from layer. */
+  rpc GetDistinctAttrs(GetDistinctAttrsRequest) returns (GetDistinctAttrsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/attributes"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Returns distinct attribute key names and how many points have each key set to a non-blank value.
+   * Uses precomputed sorted sets in Redis (not a full scan), so it is fast but counts may lag
+   * behind real-time. If an attribute list is provided, only those keys are returned. */
+  rpc GetDistinctAttrKeys(GetDistinctAttrsRequest) returns (GetDistinctAttrsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/keys"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Queries timeseries data from Redis TimeSeries. Default retention is 7 days (configurable via
+   * TIMESERIES_RETENTION). Supports resampling via method/window, reverse ordering, and a max
+   * count capped at 10,000 per UUID. Set error_data=true to read the error timeseries instead. */
+  rpc GetData(GetDataRequest) returns (GetDataReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/data"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Ingests timeseries values and/or errors for a single point UUID. Values are written to Redis
+   * TimeSeries and the on-disk WAL (for ObserveDataUpdates). Errors are written to a separate WAL
+   * and kept in a per-point Redis list capped at POINT_ERRORS_RETENTION (default 5). Supports
+   * is_async mode which enqueues the work and returns a task_uuid immediately. */
+  rpc AddPointsData(AddPointsDataRequest) returns (AddPointsDataReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/data"
+      body: "*"
+    };
+  }
+
+  /** Batched form of AddPointsData. Carries any number of (uuid, values,
+   * errors) tuples in one request; the server pipelines all writes into a
+   * single redis round trip and (in is_async mode) one queue task. This is
+   * the right call for any producer that already has a batch on hand — a
+   * 1000-point poll cycle goes from ~4000 RTTs to ~4. */
+  rpc AddData(AddDataRequest) returns (AddDataReply) {
+    option (google.api.http) = {
+      post: "/api/v1/points/data"
+      body: "*"
+    };
+  }
+
+  /** Computes statistics (min, max, mean, median, distinct count, histogram) over timeseries data
+   * for the given UUIDs and time range. Histogram bins are auto-computed from distinct values or
+   * bucket_count; for enum points, bins map 1:1 to enum values. Loads all data into memory so
+   * performance depends on the data volume in the time window. */
+  rpc GetDataSummary(GetDataSummaryRequest) returns (GetDataSummaryReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/summary"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  }
+
+  /** Creates or updates point metadata. Updates are enqueued to an internal work queue and executed
+   * with optimistic concurrency (Redis WATCH). By default the call blocks until the update is
+   * applied; set is_async=true to return immediately with a task_uuid. Fields marked not_updatable
+   * in the Point message are silently ignored. */
+  rpc UpdatePoints(UpdatePointsRequest) returns (UpdatePointsReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/points"
+      body: "*"
+    };
+  }
+
+  /** Changes a point's UUID, atomically renaming the metadata hash and timeseries key in Redis.
+   * Publishes an update record with old and new UUIDs to the points update stream. This can be
+   * disruptive as not all consumers handle UUID changes gracefully. */
+  rpc RenamePoint(RenamePointRequest) returns (RenamePointReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/rename"
+      body: "*"
+    };
+  }
+
+  /**
+   * Copies attributes from one layer to another for points matching a query or UUID list. Can also
+   * set static attribute values, remap attribute names via mapped_attributes, and update period/COV
+   * settings. Requires an output_layer; if no input_layer is given, only static_attributes are
+   * applied.
+   */
+  rpc CopyAttributes(CopyAttributesRequest) returns (CopyAttributesReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/copy"
+      body: "*"
+    };
+  }
+
+
+  /** Deletes points by UUID list and/or structured query. Removes the point hash, timeseries keys,
+   * and distinct-value counters, and appends a deletion record (old set, new nil) to the update
+   * stream. The deprecated layers field is no longer supported and returns InvalidArgument if set. */
+  rpc DeletePoints(DeletePointsRequest) returns (DeletePointsReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/point/points"
+    };
+  }
+
+
+  /** Atomically adds individual tag values within comma-separated tag fields, avoiding the need for
+   * client-side read-modify-write. The layer must be a BASE layer. Tags are deduplicated and sorted
+   * alphabetically on write. */
+  rpc AddTags(AddTagsRequest) returns (AddTagsReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/tags"
+      body: "*"
+    };
+  }
+
+  /** Removes tag values from comma-separated tag fields. Passing a tag with an empty value string
+   * clears all tags for that key. Uses the same underlying mechanism as AddTags. */
+  rpc DeleteTags(DeleteTagsRequest) returns (DeleteTagsReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/point/tags"
+      body: "*"
+    };
+  }
+
+  /** Retrieves arbitrary key-value configuration data stored in Redis. If no keys are specified,
+   * returns all config keys. Values are opaque byte arrays. */
+  rpc GetConfigKeys(GetConfigKeysRequest) returns (GetConfigKeysReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/configkeys"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  }
+
+  /** Sets a single configuration key to the given byte value, stored persistently in Redis with
+   * no expiration. */
+  rpc SetConfigKey(SetConfigKeyRequest) returns (SetConfigKeyReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/configkeys"
+      body: "*"
+    };
+  }
+
+  /**
+   * Deletes one or more configuration keys. Returns the list of keys that were successfully
+   * deleted.
+   */
+  rpc DeleteConfigKeys(DeleteConfigKeysRequest) returns (DeleteConfigKeysReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/point/configkeys"
+    };
+  }
+
+  /** Creates a point metadata export job and returns a download_path. The actual CSV file is generated
+   * on demand when the download path is fetched. If no mask is provided, all attribute keys across the
+   * layer's components are included. Export requests expire after 24 hours. */
+  rpc CreateExport(CreateExportRequest) returns (CreateExportReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/export"
+    };
+  }
+
+  /** Creates a timeseries data export job and returns a download_path. Exports resampled data as
+   * gzipped CSV (optionally grouped into a ZIP by group_key). Export requests expire after 24 hours. */
+  rpc CreateDataExport(CreateDataExportRequest) returns (CreateDataExportReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/data-export"
+    };
+  }
+
+  /** Server-streaming RPC that emits point metadata changes from a Redis Stream. Each message
+   * contains old/new point snapshots and the list of changed fields. By default starts at the
+   * stream head ($); set version to "0-0" to replay from the beginning. Supports filtering by
+   * layer, UUIDs, or structured_query (via a background QueryWatcher). Set wait=false for a
+   * non-blocking one-shot read. */
+  rpc ObservePointsUpdates(ObservePointsUpdatesRequest) returns (stream ObservePointsUpdatesReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/updates/points"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Server-streaming RPC that emits new data values from an on-disk WAL. Designed for reliable
+   * archival to external databases; default WAL retention is one month. Also emits synthetic
+   * ADDED/DELETED/METADATA events when a structured_query filter's membership changes. If
+   * with_metadata is set, point metadata is fetched at send time (not at collection time), so
+   * it may not reflect the state when the value was recorded. */
+  rpc ObserveDataUpdates(ObserveDataUpdatesRequest) returns (stream ObserveDataUpdatesReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/updates/data"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Server-streaming RPC that emits polling errors from an on-disk WAL. Default WAL retention
+   * is one month. Supports the same version/limit/wait/layer/UUID/query filtering as
+   * ObserveDataUpdates. */
+  rpc ObserveErrorUpdates(ObserveErrorUpdatesRequest) returns (stream ObserveErrorUpdatesReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/updates/errors"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Returns the latest version IDs for the three update streams (data, points, errors). Use these
+   * as the starting point for Observe* RPCs to avoid replaying old records. */
+  rpc GetVersions(GetVersionsRequest) returns (GetVersionsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/updates/version"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  }
+
+  /** Runs FT.AGGREGATE with GROUPBY on the specified attributes and applies the given aggregators
+   * (COUNT, SUM, AVG, MIN, MAX, COUNT_DISTINCT, LIST). Only works on BASE layers; returns
+   * InvalidArgument for UNION layers. Requires at least one attribute and one aggregator. */
+  rpc AggregatePoints(AggregatePointsRequest) returns (AggregatePointsReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/aggregate"
+      body: "*"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Returns the most recent errors stored for each UUID, from a per-point Redis list. The default
+   * retention is the last 5 errors per point (configurable via POINT_ERRORS_RETENTION). */
+  rpc GetPointErrors(GetPointErrorsRequest) returns (GetPointErrorsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/errors"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  };
+
+  /** Creates a reusable value conversion definition. Conversions are applied on the read path
+   * to transform raw timeseries values (e.g. linear scaling, boolean inversion, or arbitrary JS).
+   * Associate a conversion with points by setting conversion_id via UpdatePoints. */
+  rpc CreateConversion(CreateConversionRequest) returns (CreateConversionReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/conversions"
+      body: "*"
+    };
+  }
+
+  /** Lists conversion definitions. If ids are provided, returns only those; otherwise returns all. */
+  rpc GetConversions(GetConversionsRequest) returns (GetConversionsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/conversions"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  }
+
+  /** Updates a conversion definition. All points referencing this conversion will see the
+   * updated transform on their next read. */
+  rpc UpdateConversion(UpdateConversionRequest) returns (UpdateConversionReply) {
+    option (google.api.http) = {
+      put: "/api/v1/point/conversions"
+      body: "*"
+    };
+  }
+
+  /** Deletes a conversion definition and clears conversion_id on any associated points. */
+  rpc DeleteConversion(DeleteConversionRequest) returns (DeleteConversionReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/point/conversions/{id}"
+    };
+  }
+
+  /** Creates a data-quality rule: a Detector bound to points via a selector query, which stamps a
+   * QualityFlag onto Point.quality_flags when it fires. Rules are evaluated by the DQ projector. */
+  rpc CreateQualityRule(CreateQualityRuleRequest) returns (CreateQualityRuleReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/quality-rules"
+      body: "*"
+    };
+  }
+
+  /** Lists data-quality rules. If ids are provided, returns only those; otherwise returns all. */
+  rpc GetQualityRules(GetQualityRulesRequest) returns (GetQualityRulesReply) {
+    option (google.api.http) = {
+      get: "/api/v1/point/quality-rules"
+    };
+    option (normalgw.annotations.auth) = {
+      readonly: true
+    };
+  }
+
+  /** Updates a data-quality rule definition. The projector picks up the change on its next sweep. */
+  rpc UpdateQualityRule(UpdateQualityRuleRequest) returns (UpdateQualityRuleReply) {
+    option (google.api.http) = {
+      put: "/api/v1/point/quality-rules"
+      body: "*"
+    };
+  }
+
+  /** Deletes a data-quality rule. Flags it previously set are cleared on the projector's next sweep. */
+  rpc DeleteQualityRule(DeleteQualityRuleRequest) returns (DeleteQualityRuleReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/point/quality-rules/{id}"
+    };
+  }
+
+  rpc BacktestQualityRule(BacktestQualityRuleRequest) returns (BacktestQualityRuleReply) {
+    option (google.api.http) = {
+      post: "/api/v1/point/quality-rules/backtest"
+      body: "*"
+    };
+  }
+}

@@ -10,6 +10,7 @@ members = [
     "crates/fdd_tsdb",
     "crates/fdd_rules",
     "crates/openfdd_contracts",
+    "crates/nf_grpc",
     "services/central",
 ]
 # OT field containers, the MQTT broker, the MQTT client, and the edge process
