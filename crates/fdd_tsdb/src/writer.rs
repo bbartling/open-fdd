@@ -38,7 +38,9 @@ macro_rules! sample_on_conflict {
     };
 }
 
-const WRITE_ROWS_SQL: &str = concat!(
+/// Batch upsert for resolved rows. One-writer fixtures match `current_query()`
+/// on `sample` against this text, so it is part of the writer contract.
+pub const WRITE_ROWS_SQL: &str = concat!(
     sample_insert_columns!(),
     "SELECT * FROM UNNEST($1::timestamptz[], $2::text[], $3::text[], $4::text[], \
      $5::float8[], $6::text[], $7::text[])",
@@ -46,7 +48,8 @@ const WRITE_ROWS_SQL: &str = concat!(
     "RETURNING (xmax = 0) AS inserted"
 );
 
-const PROMOTE_STAGE_SQL: &str = concat!(
+/// Staged CSV package promote. Same contract as [`WRITE_ROWS_SQL`].
+pub const PROMOTE_STAGE_SQL: &str = concat!(
     sample_insert_columns!(),
     "SELECT ts, site_id, openfdd_key, haystack_id, val, NULL::text, NULL::text \
      FROM sample_import_stage WHERE import_id = $1 AND site_id = $2",
@@ -153,5 +156,140 @@ mod tests {
         assert!(WRITE_ROWS_SQL.starts_with(sample_insert_columns!()));
         assert!(PROMOTE_STAGE_SQL.starts_with(sample_insert_columns!()));
         assert!(rule.contains("IS DISTINCT FROM"));
+    }
+
+    /// Runs when `OPENFDD_TEST_DATABASE_URL` is set; otherwise returns early.
+    #[tokio::test]
+    async fn replay_is_unchanged_and_promote_follows_the_same_rule() {
+        let Some(url) = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+        else {
+            return;
+        };
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .connect(&url)
+            .await
+            .unwrap();
+        for ddl in [
+            "CREATE TABLE IF NOT EXISTS sample (
+                ts timestamptz NOT NULL,
+                site_id text NOT NULL,
+                openfdd_key text NOT NULL,
+                haystack_id text,
+                val double precision,
+                unit text,
+                quality text,
+                PRIMARY KEY (site_id, openfdd_key, ts)
+            )",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS haystack_id text",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS unit text",
+            "ALTER TABLE sample ADD COLUMN IF NOT EXISTS quality text",
+            "CREATE TABLE IF NOT EXISTS sample_import_stage (
+                import_id uuid NOT NULL,
+                ts timestamptz NOT NULL,
+                site_id text NOT NULL,
+                openfdd_key text NOT NULL,
+                haystack_id text,
+                val double precision,
+                PRIMARY KEY (import_id, site_id, openfdd_key, ts)
+            )",
+        ] {
+            // Concurrent fixtures may race on the catalog; the table exists either way.
+            if let Err(err) = sqlx::query(ddl).execute(&pool).await {
+                assert!(
+                    err.as_database_error()
+                        .and_then(|db| db.code())
+                        .is_some_and(|code| code == "23505" || code == "42P07"),
+                    "{ddl}: {err}"
+                );
+            }
+        }
+        let site = format!("wp2c-writer-{}", uuid::Uuid::new_v4().simple());
+        let ts = chrono::DateTime::parse_from_rfc3339("2024-03-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let rows = [
+            SampleWrite {
+                ts,
+                site_id: &site,
+                openfdd_key: "AHU_1.sat",
+                haystack_id: Some("p-sat"),
+                val: Some(55.0),
+                unit: Some("degF"),
+                quality: None,
+            },
+            SampleWrite {
+                ts,
+                site_id: &site,
+                openfdd_key: "AHU_1.rat",
+                haystack_id: None,
+                val: Some(72.0),
+                unit: None,
+                quality: None,
+            },
+        ];
+
+        let mut tx = pool.begin().await.unwrap();
+        let first = write_samples(&mut tx, &rows).await.unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!((first.inserted, first.updated, first.unchanged), (2, 0, 0));
+
+        let mut tx = pool.begin().await.unwrap();
+        let replay = write_samples(&mut tx, &rows).await.unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(
+            (replay.inserted, replay.updated, replay.unchanged),
+            (0, 0, 2)
+        );
+
+        // A staged import of the same value without unit keeps the stored unit.
+        let import_id = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO sample_import_stage (import_id, ts, site_id, openfdd_key, val)
+             VALUES ($1, $2, $3, 'AHU_1.sat', 55.0), ($1, $2, $3, 'AHU_1.rat', 73.0)",
+        )
+        .bind(import_id)
+        .bind(ts)
+        .bind(&site)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        let promoted = promote_stage(&mut tx, import_id, &site).await.unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(promoted, 1, "only the changed value is rewritten");
+
+        let stored: Vec<(String, Option<f64>, Option<String>)> = sqlx::query_as(
+            "SELECT openfdd_key, val, unit FROM sample WHERE site_id = $1 ORDER BY openfdd_key",
+        )
+        .bind(&site)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            stored,
+            vec![
+                ("AHU_1.rat".to_string(), Some(73.0), None),
+                (
+                    "AHU_1.sat".to_string(),
+                    Some(55.0),
+                    Some("degF".to_string())
+                ),
+            ]
+        );
+
+        sqlx::query("DELETE FROM sample_import_stage WHERE import_id = $1")
+            .bind(import_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM sample WHERE site_id = $1")
+            .bind(&site)
+            .execute(&pool)
+            .await
+            .unwrap();
     }
 }
