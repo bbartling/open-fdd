@@ -120,6 +120,8 @@ describe("unwrapAnalyticsEnvelope", () => {
     });
     expect(env.note).toBe("full metering SQL port pending");
     expect(env.stale).toBe(true);
+    expect(env.watermark).toBeNull();
+    expect(env.generation).toBeNull();
     expect(env.cache).toEqual({ hit: true });
     expect(env.query_id).toBe("metering");
     expect(env.sample_count).toBe(12);

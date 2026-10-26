@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fetchCentralOverview } from "./centralOverview";
+import { combineOverviewFreshness, fetchCentralOverview } from "./centralOverview";
 import { RAINBOW_PALETTE } from "./plotlyTheme";
 
 vi.mock("./mappingApi", () => ({
@@ -549,6 +549,30 @@ describe("mechFigure history_rows honesty", () => {
     });
     expect(vi.mocked(postEconomizer).mock.calls.at(-1)?.[0]).toMatchObject({
       refresh: true,
+    });
+  });
+});
+
+describe("combineOverviewFreshness", () => {
+  it("is stale when any source could not certify its sample time", () => {
+    const folded = combineOverviewFreshness([
+      { stale: false, watermark: "2026-04-01T00:00:00Z", generation: "a" },
+      { stale: true, watermark: null, generation: null },
+    ]);
+    expect(folded.stale).toBe(true);
+    expect(folded.watermark).toBe("2026-04-01T00:00:00Z");
+    expect(folded.generation).toBeNull();
+  });
+
+  it("keeps the latest data time and every generation when all sources are fresh", () => {
+    const folded = combineOverviewFreshness([
+      { stale: false, watermark: "2026-04-01T00:00:00Z", generation: "a" },
+      { stale: false, watermark: "2026-04-03T00:00:00Z", generation: "b" },
+    ]);
+    expect(folded).toEqual({
+      stale: false,
+      watermark: "2026-04-03T00:00:00Z",
+      generation: "a|b",
     });
   });
 });

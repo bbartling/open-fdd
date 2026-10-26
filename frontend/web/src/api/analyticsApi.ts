@@ -43,6 +43,10 @@ export interface AnalyticsEnvelope {
   building_id?: string | null;
   sample_count?: number | null;
   stale?: boolean;
+  /** Latest sample time this result was computed against. */
+  watermark?: string | null;
+  /** Identity of the samples used. Not a telemetry write revision. */
+  generation?: string | null;
   cache?: Record<string, unknown> | null;
   pack_version?: string | null;
 }
@@ -56,6 +60,21 @@ export interface AnalyticsApiResponse {
   cache?: Record<string, unknown>;
   error?: string;
   note?: string;
+}
+
+function textField(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function cacheField(cache: unknown, key: string): unknown {
+  if (!cache || typeof cache !== "object" || Array.isArray(cache)) return undefined;
+  if (!Object.prototype.hasOwnProperty.call(cache, key)) return undefined;
+  return Reflect.get(cache, key);
+}
+
+function cacheFlag(cache: unknown): boolean | undefined {
+  const value = cacheField(cache, "stale");
+  return typeof value === "boolean" ? value : undefined;
 }
 
 /** Normalize flat envelope or `{ok,analytics}` wrapper into a usable envelope. */
@@ -110,7 +129,11 @@ export function unwrapAnalyticsEnvelope(
         ? nested.stale
         : typeof wrapper.stale === "boolean"
           ? wrapper.stale
-          : undefined,
+          : cacheFlag(wrapper.cache),
+    watermark:
+      textField(nested.watermark) ??
+      textField(cacheField(wrapper.cache, "watermark_utc")),
+    generation: textField(nested.generation),
     cache:
       (nested.cache && typeof nested.cache === "object"
         ? nested.cache

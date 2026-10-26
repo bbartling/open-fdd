@@ -914,6 +914,7 @@ export async function fetchCentralOverview(opts: {
   const basHistFig = basHist(bas.rows ?? []);
 
   const elapsed_s = Math.round(((performance.now() - t0) / 1000) * 10) / 10;
+  const freshness = combineOverviewFreshness([runtime, mech, econ, bas]);
 
   return {
     ok: true,
@@ -998,5 +999,39 @@ export async function fetchCentralOverview(opts: {
       oat_err: oatErr,
     },
     devices_by_type: devices,
+    stale: freshness.stale,
+    watermark: freshness.watermark,
+    generation: freshness.generation,
+  };
+}
+
+/** Fold per-query DTO freshness into one Overview payload. */
+export function combineOverviewFreshness(
+  envelopes: Array<Pick<AnalyticsEnvelope, "stale" | "watermark" | "generation">>,
+): { stale: boolean | null; watermark: string | null; generation: string | null } {
+  let sawStale = false;
+  let sawFresh = false;
+  let sawMissing = false;
+  let watermark: string | null = null;
+  const generations: string[] = [];
+  let missingGeneration = false;
+  for (const env of envelopes) {
+    if (env.stale === true) sawStale = true;
+    else if (env.stale === false) sawFresh = true;
+    else sawMissing = true;
+    const mark = typeof env.watermark === "string" ? env.watermark.trim() : "";
+    if (mark && (!watermark || mark > watermark)) watermark = mark;
+    const generation = typeof env.generation === "string" ? env.generation.trim() : "";
+    if (generation) generations.push(generation);
+    else missingGeneration = true;
+  }
+  const stale = sawStale ? true : sawFresh && !sawMissing ? false : null;
+  return {
+    stale,
+    watermark,
+    generation:
+      !missingGeneration && generations.length === envelopes.length
+        ? generations.join("|")
+        : null,
   };
 }

@@ -26,6 +26,7 @@ export function VavHealthSection({
       title="VAV zone health"
       buildingId={buildingId}
       refreshToken={refreshToken}
+      queryId="vav-health"
       fetchHealth={fetchHealth}
       renderEmptyTable
       pendingFlags={pendingFlags}
