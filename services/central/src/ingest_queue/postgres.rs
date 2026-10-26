@@ -304,6 +304,51 @@ pub async fn apply_samples(
     Ok(stats)
 }
 
+/// Canonical rows for one claimed device window and the ledger rows that
+/// record them. Rows belong to `job.canonical_site` / `job.device_id`.
+pub struct CanonicalWindow<'a> {
+    pub equip_type: Option<&'a str>,
+    pub rows: &'a fdd_tsdb::UpsertBatch,
+    pub applied: &'a [AppliedSample],
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WindowWrite {
+    pub samples: fdd_tsdb::SampleUpsertStats,
+    pub ledger: ApplyStats,
+}
+
+pub async fn commit_window(
+    pool: &PgPool,
+    job: &JobView,
+    now: DateTime<Utc>,
+    window: &CanonicalWindow<'_>,
+) -> Result<WindowWrite, QueueError> {
+    let _ = now;
+    let tsdb = fdd_tsdb::Tsdb::from_pool(pool.clone());
+    if !window.rows.is_empty() {
+        tsdb.ensure_site_building(&job.canonical_site)
+            .await
+            .map_err(tsdb_err)?;
+        tsdb.upsert_equipment(&job.canonical_site, &job.device_id, window.equip_type)
+            .await
+            .map_err(tsdb_err)?;
+    }
+    let samples = tsdb
+        .upsert_samples_stats(window.rows)
+        .await
+        .map_err(tsdb_err)?;
+    let ledger = apply_samples(pool, job, window.applied).await?;
+    Ok(WindowWrite { samples, ledger })
+}
+
+fn tsdb_err(err: fdd_tsdb::TsdbError) -> QueueError {
+    match err {
+        fdd_tsdb::TsdbError::Sqlx(inner) => db_err(inner),
+        other => QueueError::Db(other.to_string()),
+    }
+}
+
 pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<ReceiptView>, QueueError> {
     let job_id = req.job_id.to_string();
     let exists: Option<(String, Option<String>)> = sqlx::query_as(
