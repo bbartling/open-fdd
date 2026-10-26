@@ -36,7 +36,7 @@ clap = { version = "4", features = ["derive"] }
 csv = "1"
 datafusion = "55"
 object_store = { version = "0.13", features = ["aws"] }
-parquet = "59"
+parquet = { version = "59", default-features = false, features = ["snap"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
