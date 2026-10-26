@@ -39,6 +39,7 @@ jobs:
           ./scripts/check_version_sync.sh
           bash -n scripts/test_ghcr_prune_archive_keep.sh
           ./scripts/test_ghcr_prune_archive_keep.sh
+          python3 scripts/test_ghcr_newest_by_created.py
           bash -n scripts/test_data_safe_defaults.sh
           ./scripts/test_data_safe_defaults.sh
           python3 scripts/timescale/test_data_safe_seed.py
