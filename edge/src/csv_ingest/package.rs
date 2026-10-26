@@ -10,9 +10,13 @@
 //! Central seeds Timescale from `package_root` (`needs_timescale_seed: true`) and
 //! publishes the tree only after that transaction commits. No dual-write.
 
+use crate::csv_ingest::portal_ingest_sparql::{
+    compile_bindings_from_snapshot, validate_slug, IngestSparqlScope,
+};
 use crate::historian::store::workspace_dir;
 use fdd_core::haystack_point_to_role;
 use serde_json::{json, Map, Value};
+use sqlx::Row;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -1578,7 +1582,7 @@ pub fn get_package_mapping_handler_scoped(
     let data_root = workspace_dir().join("data").join("csv_buildings");
     let building_root = data_root.join(&building_id);
     if !building_root.is_dir() {
-        // MQTT / historian-only sites have no csv_buildings tree.
+        // Portal sites have no csv_buildings tree. Inventory is Timescale.
         return mapping_from_historian_equipment(&building_id, equipment_id, preferred_tenant);
     }
 
@@ -1733,9 +1737,9 @@ pub fn get_package_mapping_handler_scoped(
         }));
     }
 
-    // Package trees can be a partial CSV rematerialization (e.g. AHU-only fixture)
-    // while MQTT/historian still holds the full site (meters, heat pumps, …).
-    // Merge historian-only equipment so Data Model / Metering maps stay complete.
+    // Package trees can be a partial CSV rematerialization (for example an
+    // air-handler-only fixture) while Timescale still holds the rest of the
+    // site. Merge historian-only equipment so Data Model maps stay complete.
     let hist = mapping_from_historian_equipment(&building_id, equipment_id, preferred_tenant);
     if hist.get("ok").and_then(|v| v.as_bool()) == Some(true) {
         let hist_equips = hist
@@ -1801,36 +1805,476 @@ pub fn get_package_mapping_handler_scoped(
     })
 }
 
-/// Historian-only / MQTT data model for Data Model export when no csv_buildings tree.
+const HISTORIAN_MAPPING_HINT: &str =
+    "upload an openfdd_package_v1 zip or ingest the site through the Normal Framework portal";
+
+const NF_TEMPLATE_SCHEMA: &str = "ofdd_portal_committed_model_v1";
+
+const FORBIDDEN_TEMPLATE_KEYS: &[&str] = &[
+    "url",
+    "request_url",
+    "requesturl",
+    "http_method",
+    "httpmethod",
+    "http_verb",
+    "httpverb",
+    "authorization",
+    "credential",
+    "credentials",
+    "secret",
+    "password",
+    "sql",
+    "script",
+];
+
+/// One equipment row from the Timescale `equipment` + `role_map` tables.
+///
+/// `roles` is `openfdd_key` → role. Keys are exact. A role with two keys is
+/// ambiguous and is not collapsed by prefix.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TimescaleInventoryEquipment {
+    pub equipment_id: String,
+    pub equip_type: Option<String>,
+    pub roles: BTreeMap<String, String>,
+}
+
+/// Reads site inventory from Timescale. `tenant_id` is the caller's read
+/// scope when the adapter partitions rows. The product table has no tenant
+/// column; building id is the historian key, and NF metadata carries the owner.
+pub trait TimescaleInventoryAdapter {
+    fn equipment(
+        &self,
+        building_id: &str,
+        tenant_id: Option<&str>,
+    ) -> Result<Vec<TimescaleInventoryEquipment>, String>;
+}
+
+/// NF model document the scoped consumer compiles. TTL is the ingest Turtle
+/// snapshot. Template is `ofdd_portal_committed_model_v1` JSON.
+pub enum NfMetadata<'a> {
+    Ttl {
+        turtle: &'a str,
+        tenant_id: &'a str,
+        provider_instance_id: &'a str,
+        graph: &'a str,
+    },
+    Template(&'a str),
+}
+
+struct NfEquip {
+    equipment_id: String,
+    equip_type: String,
+    roles: BTreeSet<String>,
+}
+
+struct NfModel {
+    tenant_id: String,
+    site_id: String,
+    equipment: Vec<NfEquip>,
+}
+
+struct DatabaseTimescaleInventory;
+
+impl TimescaleInventoryAdapter for DatabaseTimescaleInventory {
+    fn equipment(
+        &self,
+        building_id: &str,
+        _tenant_id: Option<&str>,
+    ) -> Result<Vec<TimescaleInventoryEquipment>, String> {
+        let url = std::env::var("OPENFDD_DATABASE_URL").unwrap_or_default();
+        if url.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        // A new thread has no Tokio context, so the query is safe from an
+        // async worker and from spawn_blocking. The pool dies with the thread.
+        // Connection failures stay a static message: driver errors can echo the URL.
+        let building_id = building_id.to_string();
+        let joined = std::thread::Builder::new()
+            .name("openfdd-timescale-inventory".into())
+            .spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|_| "timescale inventory unavailable".to_string())?;
+                rt.block_on(query_timescale_equipment(&building_id))
+            })
+            .map_err(|_| "timescale inventory unavailable".to_string())?;
+        match joined.join() {
+            Ok(result) => result,
+            Err(_) => Err("timescale inventory unavailable".into()),
+        }
+    }
+}
+
+async fn query_timescale_equipment(
+    building_id: &str,
+) -> Result<Vec<TimescaleInventoryEquipment>, String> {
+    let url = fdd_tsdb::database_url_from_env()
+        .map_err(|_| "timescale inventory unavailable".to_string())?;
+    let tsdb = fdd_tsdb::Tsdb::connect(&url)
+        .await
+        .map_err(|_| "timescale inventory unavailable".to_string())?;
+    let rows = sqlx::query(
+        r#"
+        SELECT e.equipment_id,
+               e.equip_type,
+               r.openfdd_key,
+               r.role
+        FROM equipment e
+        LEFT JOIN role_map r
+          ON r.building_id = e.building_id
+         AND r.equipment_id = e.equipment_id
+        WHERE e.building_id = $1
+        ORDER BY e.equipment_id, r.openfdd_key
+        "#,
+    )
+    .bind(building_id)
+    .fetch_all(tsdb.pool())
+    .await
+    .map_err(|_| "timescale inventory unavailable".to_string())?;
+    let mut grouped: BTreeMap<String, TimescaleInventoryEquipment> = BTreeMap::new();
+    for row in rows {
+        let id: String = row
+            .try_get("equipment_id")
+            .map_err(|_| "timescale inventory unavailable".to_string())?;
+        if id.is_empty() {
+            continue;
+        }
+        let equip_type = row
+            .try_get::<Option<String>, _>("equip_type")
+            .ok()
+            .flatten()
+            .filter(|value| !value.is_empty());
+        let entry = grouped
+            .entry(id.clone())
+            .or_insert_with(|| TimescaleInventoryEquipment {
+                equipment_id: id,
+                equip_type: equip_type.clone(),
+                roles: BTreeMap::new(),
+            });
+        if entry.equip_type.is_none() {
+            entry.equip_type = equip_type;
+        }
+        let key = row
+            .try_get::<Option<String>, _>("openfdd_key")
+            .ok()
+            .flatten()
+            .filter(|value| !value.is_empty());
+        let role = row
+            .try_get::<Option<String>, _>("role")
+            .ok()
+            .flatten()
+            .filter(|value| !value.is_empty());
+        if let (Some(key), Some(role)) = (key, role) {
+            entry.roles.insert(key, role);
+        }
+    }
+    Ok(grouped.into_values().collect())
+}
+
+/// Historian inventory for Data Model export when no csv_buildings tree exists.
+///
+/// Equipment and roles come from Timescale. A missing database is an empty
+/// inventory, not a directory scan.
 fn mapping_from_historian_equipment(
     building_id: &str,
     equipment_id: Option<&str>,
     preferred_tenant: Option<&str>,
 ) -> Value {
-    let inv =
-        crate::fdd::registry_api::equipment_response_scoped(Some(building_id), preferred_tenant);
-    let mut all: Vec<Value> = inv
-        .get("equipment")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    if all.is_empty() {
+    let inventory = DatabaseTimescaleInventory;
+    let loaded = match inventory.equipment(building_id, preferred_tenant) {
+        Ok(rows) => rows,
+        Err(error) => {
+            return json!({
+                "ok": false,
+                "error": error,
+                "building_id": building_id,
+            })
+        }
+    };
+    mapping_from_timescale_rows(
+        building_id,
+        equipment_id,
+        preferred_tenant,
+        &loaded,
+        None,
+        "timescale",
+    )
+}
+
+/// Compile NF metadata (TTL snapshot or committed-model template) and keep
+/// only equipment that the Timescale adapter lists for this site.
+///
+/// A caller tenant that is not the document owner is denied before the
+/// adapter is read. An absent caller tenant is the unscoped hub read.
+pub fn nf_scoped_consumer(
+    building_id: &str,
+    equipment_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    metadata: NfMetadata<'_>,
+    inventory: &dyn TimescaleInventoryAdapter,
+) -> Value {
+    let building_id = match validate_id(building_id) {
+        Ok(id) => id,
+        Err(error) => return json!({"ok": false, "error": format!("building_id: {error}")}),
+    };
+    let kind = match &metadata {
+        NfMetadata::Ttl { .. } => "ttl",
+        NfMetadata::Template(_) => "template",
+    };
+    let model = match metadata {
+        NfMetadata::Ttl {
+            turtle,
+            tenant_id,
+            provider_instance_id,
+            graph,
+        } => bindings_from_ttl(&building_id, turtle, tenant_id, provider_instance_id, graph),
+        NfMetadata::Template(template) => bindings_from_template(&building_id, template),
+    };
+    let model = match model {
+        Ok(model) => model,
+        Err(error) => {
+            return json!({
+                "ok": false,
+                "error": error,
+                "building_id": building_id,
+            })
+        }
+    };
+    if model.site_id != building_id {
         return json!({
             "ok": false,
-            "error": format!(
-                "building {building_id:?} not found under csv_buildings and no historian equipment"
-            ),
-            "hint": "upload an openfdd_package_v1 zip or wait for MQTT ingest",
+            "error": "NF metadata does not match the building",
             "building_id": building_id,
         });
     }
+    if let Some(caller) = preferred_tenant.map(str::trim).filter(|s| !s.is_empty()) {
+        if caller != model.tenant_id {
+            return json!({
+                "ok": false,
+                "error": "foreign tenant cannot read this site",
+                "code": "foreign_tenant",
+                "building_id": building_id,
+            });
+        }
+    }
+    let tenant_filter = preferred_tenant
+        .map(str::trim)
+        .filter(|tenant| !tenant.is_empty());
+    let loaded = match inventory.equipment(&building_id, tenant_filter) {
+        Ok(rows) => rows,
+        Err(error) => {
+            return json!({
+                "ok": false,
+                "error": error,
+                "building_id": building_id,
+            })
+        }
+    };
+    let scope = if tenant_filter.is_some() {
+        "scoped"
+    } else {
+        "unscoped"
+    };
+    let mut body = mapping_from_timescale_rows(
+        &building_id,
+        equipment_id,
+        preferred_tenant,
+        &loaded,
+        Some(&model),
+        "nf_metadata",
+    );
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("metadata".into(), json!(kind));
+        obj.insert("scope".into(), json!(scope));
+        obj.insert("consumer".into(), json!("nf_scoped"));
+    }
+    body
+}
+
+fn bindings_from_ttl(
+    building_id: &str,
+    turtle: &str,
+    tenant_id: &str,
+    provider_instance_id: &str,
+    graph: &str,
+) -> Result<NfModel, String> {
+    validate_slug("tenant_id", tenant_id, 128)?;
+    validate_slug("provider_instance_id", provider_instance_id, 128)?;
+    let scope = IngestSparqlScope::new(tenant_id, building_id, graph, provider_instance_id);
+    let rows = compile_bindings_from_snapshot(turtle, &scope).map_err(|error| {
+        if error.contains("wrong-tenant")
+            || error.contains("wrong-site")
+            || error.contains("wrong-provider")
+        {
+            "NF metadata snapshot does not match the declared scope".to_string()
+        } else {
+            error
+        }
+    })?;
+    let mut equipment: BTreeMap<String, NfEquip> = BTreeMap::new();
+    for row in rows {
+        if row.selection_status != "approved" || row.provisional {
+            continue;
+        }
+        if row.site_id != building_id {
+            return Err("NF metadata snapshot does not match the declared scope".into());
+        }
+        match equipment.get_mut(&row.equipment_id) {
+            Some(equip) => {
+                if equip.equip_type != row.equip_type {
+                    return Err(format!("conflicting equip type on {}", row.equipment_id));
+                }
+                equip.roles.insert(row.canonical_role);
+            }
+            None => {
+                equipment.insert(
+                    row.equipment_id.clone(),
+                    NfEquip {
+                        equipment_id: row.equipment_id,
+                        equip_type: row.equip_type,
+                        roles: BTreeSet::from([row.canonical_role]),
+                    },
+                );
+            }
+        }
+    }
+    Ok(NfModel {
+        tenant_id: tenant_id.to_string(),
+        site_id: building_id.to_string(),
+        equipment: equipment.into_values().collect(),
+    })
+}
+
+fn bindings_from_template(building_id: &str, template: &str) -> Result<NfModel, String> {
+    let value: Value = serde_json::from_str(template)
+        .map_err(|error| format!("NF metadata template is not valid JSON: {error}"))?;
+    reject_forbidden_template_keys(&value)?;
+    let schema = value
+        .get("schema")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if schema != NF_TEMPLATE_SCHEMA {
+        return Err(format!(
+            "NF metadata template schema is not {NF_TEMPLATE_SCHEMA}"
+        ));
+    }
+    let tenant_id = required_template_slug(&value, "tenant_id")?;
+    let site_id = required_template_slug(&value, "site_id")?;
+    let _provider = required_template_slug(&value, "provider_instance_id")?;
+    if site_id != building_id {
+        return Err("NF metadata template site does not match the building".into());
+    }
+    let points = value
+        .get("equipment")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "NF metadata template is missing equipment".to_string())?;
+    let mut equipment: BTreeMap<String, NfEquip> = BTreeMap::new();
+    for item in points {
+        let equipment_id = required_template_slug(item, "equipment_id")?;
+        let equip_type = required_template_slug(item, "equip_type")?;
+        let Some(point_rows) = item.get("points").and_then(Value::as_array) else {
+            return Err(format!(
+                "NF metadata template equipment {equipment_id} is missing points"
+            ));
+        };
+        let mut roles = BTreeSet::new();
+        for point in point_rows {
+            if !point_is_active(point) {
+                continue;
+            }
+            let role = required_template_slug(point, "canonical_role")?;
+            roles.insert(role);
+        }
+        match equipment.get_mut(&equipment_id) {
+            Some(equip) => {
+                if equip.equip_type != equip_type {
+                    return Err(format!("conflicting equip type on {equipment_id}"));
+                }
+                equip.roles.extend(roles);
+            }
+            None => {
+                equipment.insert(
+                    equipment_id.clone(),
+                    NfEquip {
+                        equipment_id,
+                        equip_type,
+                        roles,
+                    },
+                );
+            }
+        }
+    }
+    Ok(NfModel {
+        tenant_id,
+        site_id,
+        equipment: equipment.into_values().collect(),
+    })
+}
+
+fn point_is_active(point: &Value) -> bool {
+    let approved = point
+        .get("selection_status")
+        .and_then(Value::as_str)
+        .is_some_and(|status| status == "approved");
+    let ready = point
+        .get("fdd_ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let provisional = point
+        .get("provisional")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    approved && ready && !provisional
+}
+
+fn required_template_slug(value: &Value, field: &str) -> Result<String, String> {
+    let raw = value
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .ok_or_else(|| format!("NF metadata template is missing {field}"))?;
+    validate_slug(field, raw, 128)?;
+    Ok(raw.to_string())
+}
+
+fn reject_forbidden_template_keys(value: &Value) -> Result<(), String> {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                let lower = key.to_ascii_lowercase();
+                if FORBIDDEN_TEMPLATE_KEYS.iter().any(|name| *name == lower) {
+                    return Err("NF metadata template contains a forbidden field".into());
+                }
+                reject_forbidden_template_keys(child)?;
+            }
+            Ok(())
+        }
+        Value::Array(items) => {
+            for item in items {
+                reject_forbidden_template_keys(item)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn mapping_from_timescale_rows(
+    building_id: &str,
+    equipment_id: Option<&str>,
+    preferred_tenant: Option<&str>,
+    loaded: &[TimescaleInventoryEquipment],
+    model: Option<&NfModel>,
+    type_source: &str,
+) -> Value {
+    let mut selected: Vec<&TimescaleInventoryEquipment> = loaded.iter().collect();
     if let Some(eq) = equipment_id.map(str::trim).filter(|s| !s.is_empty()) {
         match validate_id(eq) {
             Ok(id) => {
-                all.retain(|row| {
-                    row.get("equipment_id").and_then(Value::as_str) == Some(id.as_str())
-                });
-                if all.is_empty() {
+                selected.retain(|row| row.equipment_id == id);
+                if selected.is_empty() {
                     return json!({
                         "ok": false,
                         "error": format!("equipment {id:?} not found under historian building {building_id}"),
@@ -1838,8 +2282,26 @@ fn mapping_from_historian_equipment(
                     });
                 }
             }
-            Err(e) => return json!({"ok": false, "error": format!("equipment_id: {e}")}),
+            Err(error) => return json!({"ok": false, "error": format!("equipment_id: {error}")}),
         }
+    }
+    if let Some(model) = model {
+        selected.retain(|row| {
+            model
+                .equipment
+                .iter()
+                .any(|equip| equip.equipment_id == row.equipment_id)
+        });
+    }
+    if selected.is_empty() {
+        return json!({
+            "ok": false,
+            "error": format!(
+                "building {building_id:?} not found under csv_buildings and no historian equipment"
+            ),
+            "hint": HISTORIAN_MAPPING_HINT,
+            "building_id": building_id,
+        });
     }
     let session = crate::fdd::session_config::get_session_config_scoped(
         &crate::fdd::session_config::SessionConfigScope::new(preferred_tenant, Some(building_id)),
@@ -1854,52 +2316,34 @@ fn mapping_from_historian_equipment(
         .and_then(|c| c.get("role_map"))
         .cloned()
         .unwrap_or(json!({}));
-    let equipment: Vec<Value> = all
-        .into_iter()
-        .map(|row| {
-            let eq_id = row
-                .get("equipment_id")
+    let equipment: Vec<Value> = selected
+        .iter()
+        .map(|row| timescale_equipment_json(row, model, type_source))
+        .collect();
+    let equipment_ids: Vec<String> = equipment
+        .iter()
+        .filter_map(|row| {
+            row.get("equipment_id")
                 .and_then(Value::as_str)
-                .unwrap_or("unknown")
-                .to_string();
-            let eq_type = row
-                .get("equipment_type")
-                .cloned()
-                .unwrap_or(json!("GENERAL"));
-            let warnings = vec![
-                "historian data model — no package columns.csv; roles come from the Timescale role map"
-                    .to_string(),
-            ];
-            json!({
-                "equipment_id": eq_id,
-                "equipment_type": eq_type,
-                "parent_ahu": Value::Null,
-                "ok": true,
-                "columns": [],
-                "roles": {},
-                "unmapped_columns": [],
-                "ambiguous_roles": {},
-                "blockers": [],
-                "warnings": warnings,
-                "sampling": Value::Null,
-            })
+                .map(str::to_string)
         })
         .collect();
     let n = equipment.len();
     let warning_count: usize = equipment
         .iter()
-        .map(|e| {
-            e.get("warnings")
+        .map(|row| {
+            row.get("warnings")
                 .and_then(Value::as_array)
-                .map(|a| a.len())
+                .map(|items| items.len())
                 .unwrap_or(0)
         })
         .sum();
     json!({
         "ok": true,
         "building_id": building_id,
+        "source": "timescale",
         "unit_system": unit_system,
-        "equipment_ids": equipment.iter().filter_map(|e| e.get("equipment_id").and_then(Value::as_str).map(str::to_string)).collect::<Vec<_>>(),
+        "equipment_ids": equipment_ids,
         "equipment": equipment,
         "session_role_map": session_role_map,
         "warnings": ["historian-backed mapping (no csv_buildings package tree)"],
@@ -1908,6 +2352,78 @@ fn mapping_from_historian_equipment(
             "warning_count": warning_count,
             "equipment_count": n,
         },
+    })
+}
+
+fn timescale_equipment_json(
+    row: &TimescaleInventoryEquipment,
+    model: Option<&NfModel>,
+    type_source: &str,
+) -> Value {
+    let model_equip = model.and_then(|model| {
+        model
+            .equipment
+            .iter()
+            .find(|equip| equip.equipment_id == row.equipment_id)
+    });
+    let stamp = model_equip
+        .map(|equip| equip.equip_type.as_str())
+        .or(row.equip_type.as_deref());
+    let display = crate::equipment_types::api_equipment_type_for("", stamp);
+    let mut roles = Map::new();
+    let mut role_to_cols: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (key, role) in &row.roles {
+        if let Some(equip) = model_equip {
+            if !equip.roles.contains(role) {
+                continue;
+            }
+        }
+        roles.insert(key.clone(), json!(role));
+        role_to_cols
+            .entry(role.clone())
+            .or_default()
+            .push(key.clone());
+    }
+    let ambiguous: BTreeMap<String, Vec<String>> = role_to_cols
+        .iter()
+        .filter(|(_, cols)| cols.len() > 1)
+        .map(|(role, cols)| (role.clone(), cols.clone()))
+        .collect();
+    let columns: Vec<Value> = role_to_cols
+        .iter()
+        .flat_map(|(role, cols)| {
+            let status = if cols.len() > 1 {
+                "ambiguous"
+            } else {
+                "mapped"
+            };
+            cols.iter()
+                .map(|column| {
+                    json!({
+                        "column": column,
+                        "role": role,
+                        "status": status,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    json!({
+        "equipment_id": row.equipment_id,
+        "equipment_type": display,
+        "equipment_type_raw": stamp,
+        "equipment_type_source": type_source,
+        "parent_ahu": Value::Null,
+        "ok": ambiguous.is_empty(),
+        "columns": columns,
+        "roles": roles,
+        "unmapped_columns": [],
+        "ambiguous_roles": ambiguous,
+        "blockers": [],
+        "warnings": [
+            "historian data model — no package columns.csv; roles come from the Timescale inventory"
+        ],
+        "sampling": Value::Null,
     })
 }
 
@@ -2531,11 +3047,97 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    struct FixtureInventory;
+
+    impl TimescaleInventoryAdapter for FixtureInventory {
+        fn equipment(
+            &self,
+            building_id: &str,
+            tenant_id: Option<&str>,
+        ) -> Result<Vec<TimescaleInventoryEquipment>, String> {
+            let body: Value =
+                serde_json::from_str(include_str!("fixtures/w2d_timescale_inventory.json"))
+                    .expect("timescale fixture");
+            if body.get("building_id").and_then(Value::as_str) != Some(building_id) {
+                return Ok(Vec::new());
+            }
+            let owner = body
+                .get("tenant_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if let Some(tenant) = tenant_id {
+                if tenant != owner {
+                    return Ok(Vec::new());
+                }
+            }
+            let mut rows = Vec::new();
+            for item in body
+                .get("equipment")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                let Some(equipment_id) = item.get("equipment_id").and_then(Value::as_str) else {
+                    continue;
+                };
+                let mut roles = BTreeMap::new();
+                if let Some(map) = item.get("roles").and_then(Value::as_object) {
+                    for (key, role) in map {
+                        if let Some(role) = role.as_str() {
+                            roles.insert(key.clone(), role.to_string());
+                        }
+                    }
+                }
+                rows.push(TimescaleInventoryEquipment {
+                    equipment_id: equipment_id.to_string(),
+                    equip_type: item
+                        .get("equip_type")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    roles,
+                });
+            }
+            Ok(rows)
+        }
+    }
+
+    struct DenyProbe;
+
+    impl TimescaleInventoryAdapter for DenyProbe {
+        fn equipment(
+            &self,
+            _building_id: &str,
+            _tenant_id: Option<&str>,
+        ) -> Result<Vec<TimescaleInventoryEquipment>, String> {
+            panic!("foreign tenant read the timescale inventory");
+        }
+    }
+
+    fn assert_no_mqtt(value: &Value) {
+        let text = value.to_string().to_ascii_lowercase();
+        assert!(!text.contains("mqtt"), "{value}");
+    }
+
+    fn w2d_metadata(kind: &str) -> NfMetadata<'static> {
+        match kind {
+            "ttl" => NfMetadata::Ttl {
+                turtle: include_str!("fixtures/w2d_nf_scoped.ttl"),
+                tenant_id: "tenant-w2d",
+                provider_instance_id: "nf-w2d",
+                graph: "urn:openfdd:ingest:v1:graph/tenant-w2d/site-w2d",
+            },
+            "template" => {
+                NfMetadata::Template(include_str!("fixtures/w2d_nf_scoped.template.json"))
+            }
+            _ => panic!("unknown metadata kind {kind}"),
+        }
+    }
+
     #[test]
-    fn historian_mapping_follows_preferred_tenant_not_process_env() {
+    fn nf_scoped_consumer_covers_ttl_and_template_scopes() {
         let _env = crate::test_support::workspace_env_lock();
         let tmp = std::env::temp_dir().join(format!(
-            "openfdd_map_tenant_{}_{}",
+            "openfdd_w2d_nf_{}_{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2543,47 +3145,124 @@ mod tests {
                 .as_nanos()
         ));
         let _ = std::fs::remove_dir_all(&tmp);
-        let equip = tmp.join(
-            "tenants/acme/history/building_id=bldg2/equipment_id=bldg2-zone-loopback/year=2026/month=09",
-        );
-        std::fs::create_dir_all(&equip).unwrap();
-        std::fs::write(equip.join("part-20260901T000000Z.parquet"), b"PAR1").unwrap();
-        let prev_root = std::env::var("OPENFDD_PARQUET_ROOT").ok();
-        let prev_storage = std::env::var("OPENFDD_STORAGE_URL").ok();
-        let prev_tenant = std::env::var("OPENFDD_TENANT_ID").ok();
+        std::fs::create_dir_all(&tmp).unwrap();
         let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
-        std::env::remove_var("OPENFDD_STORAGE_URL");
-        std::env::set_var("OPENFDD_PARQUET_ROOT", &tmp);
         std::env::set_var("OPENFDD_WORKSPACE", &tmp);
-        std::env::set_var("OPENFDD_TENANT_ID", "other-tenant");
+        let inventory = FixtureInventory;
 
-        let scoped = get_package_mapping_handler_scoped("bldg2", None, Some("acme"));
-        let via_env = get_package_mapping_handler("bldg2", None);
+        for kind in ["ttl", "template"] {
+            for scoped in [true, false] {
+                let preferred = if scoped { Some("tenant-w2d") } else { None };
+                let out = nf_scoped_consumer(
+                    "site-w2d",
+                    Some("EQ_7"),
+                    preferred,
+                    w2d_metadata(kind),
+                    &inventory,
+                );
+                assert_eq!(out["ok"], json!(true), "{kind} scoped={scoped}: {out}");
+                assert_eq!(out["metadata"], json!(kind), "{out}");
+                assert_eq!(
+                    out["scope"],
+                    json!(if scoped { "scoped" } else { "unscoped" }),
+                    "{out}"
+                );
+                assert_eq!(out["source"], json!("timescale"), "{out}");
+                assert_eq!(out["equipment_ids"], json!(["EQ_7"]), "{out}");
+                let roles = &out["equipment"][0]["roles"];
+                assert_eq!(roles["series-sat"], json!("sat"), "{out}");
+                assert_eq!(roles["series-fan"], json!("fan_status"), "{out}");
+                assert!(roles.get("series-duct").is_none(), "{out}");
+                assert!(roles.get("oa_t").is_none(), "{out}");
+                assert_eq!(out["equipment"][0]["equipment_type"], json!("AHU"), "{out}");
+                assert_no_mqtt(&out);
+            }
+        }
 
-        match prev_root {
-            Some(v) => std::env::set_var("OPENFDD_PARQUET_ROOT", v),
-            None => std::env::remove_var("OPENFDD_PARQUET_ROOT"),
-        }
-        match prev_storage {
-            Some(v) => std::env::set_var("OPENFDD_STORAGE_URL", v),
-            None => std::env::remove_var("OPENFDD_STORAGE_URL"),
-        }
-        match prev_tenant {
-            Some(v) => std::env::set_var("OPENFDD_TENANT_ID", v),
-            None => std::env::remove_var("OPENFDD_TENANT_ID"),
-        }
+        let listed = nf_scoped_consumer(
+            "site-w2d",
+            None,
+            Some("tenant-w2d"),
+            w2d_metadata("ttl"),
+            &inventory,
+        );
+        assert_eq!(listed["ok"], json!(true), "{listed}");
+        let ids = listed["equipment_ids"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert!(ids.iter().any(|id| id.as_str() == Some("EQ_7")), "{listed}");
+        assert!(
+            ids.iter().any(|id| id.as_str() == Some("EQ_70")),
+            "{listed}"
+        );
+        assert_no_mqtt(&listed);
+
         match prev_ws {
-            Some(v) => std::env::set_var("OPENFDD_WORKSPACE", v),
+            Some(value) => std::env::set_var("OPENFDD_WORKSPACE", value),
             None => std::env::remove_var("OPENFDD_WORKSPACE"),
         }
         let _ = std::fs::remove_dir_all(&tmp);
+    }
 
-        assert_eq!(scoped["ok"], json!(true), "{scoped}");
+    #[test]
+    fn nf_scoped_consumer_denies_foreign_tenant() {
+        let _env = crate::test_support::workspace_env_lock();
+        for kind in ["ttl", "template"] {
+            let out = nf_scoped_consumer(
+                "site-w2d",
+                None,
+                Some("tenant-other"),
+                w2d_metadata(kind),
+                &DenyProbe,
+            );
+            assert_eq!(out["ok"], json!(false), "{kind}: {out}");
+            assert_eq!(out["code"], json!("foreign_tenant"), "{out}");
+            assert!(out.get("equipment").is_none(), "{out}");
+            assert!(!out.to_string().contains("EQ_7"), "{out}");
+            assert!(!out.to_string().contains("EQ_70"), "{out}");
+            assert_no_mqtt(&out);
+        }
+    }
+
+    #[test]
+    fn historian_mapping_hint_does_not_mention_mqtt() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_w2d_hint_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
+        let prev_db = std::env::var("OPENFDD_DATABASE_URL").ok();
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+        std::env::remove_var("OPENFDD_DATABASE_URL");
+
+        let missing = get_package_mapping_handler_scoped("site-w2d", None, None);
+        assert_eq!(missing["ok"], json!(false), "{missing}");
         assert_eq!(
-            scoped["equipment"][0]["equipment_id"],
-            json!("bldg2-zone-loopback")
+            missing["hint"],
+            json!(
+                "upload an openfdd_package_v1 zip or ingest the site through the Normal Framework portal"
+            ),
+            "{missing}"
         );
-        assert_eq!(via_env["ok"], json!(false), "{via_env}");
+        assert_no_mqtt(&missing);
+
+        match prev_ws {
+            Some(value) => std::env::set_var("OPENFDD_WORKSPACE", value),
+            None => std::env::remove_var("OPENFDD_WORKSPACE"),
+        }
+        match prev_db {
+            Some(value) => std::env::set_var("OPENFDD_DATABASE_URL", value),
+            None => std::env::remove_var("OPENFDD_DATABASE_URL"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]

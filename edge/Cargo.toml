@@ -43,6 +43,13 @@ fdd_core = { path = "../crates/fdd_core" }
 fdd_rules = { path = "../crates/fdd_rules" }
 fdd_resources = { path = "../crates/fdd_resources" }
 fdd_store = { path = "../crates/fdd_store" }
+fdd_tsdb = { path = "../crates/fdd_tsdb" }
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio",
+  "postgres",
+  "chrono",
+  "json",
+] }
 walkdir = "2"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 tracing = "0.1"
