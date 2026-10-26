@@ -104,7 +104,7 @@ required for health, FDD, or Overview analytics.
 
 ## Analytics RAM and local disk budget
 
-Timescale is the historian. Analytics/RCx/fault result cache may be Parquet partitions under `analytics_results/` and is not telemetry. CSV buildings load for a query and unload when the job finishes, the SPA leaves the site, or the idle timer fires. Max interactive sessions default to 2. There is no MQTTS ingest buffer on the product path.
+Timescale is the historian. Analytics/RCx/fault result cache is the PostgreSQL `analytics_result` table and is not telemetry. CSV buildings load for a query and unload when the job finishes, the SPA leaves the site, or the idle timer fires. Max interactive sessions default to 2. There is no MQTTS ingest buffer on the product path.
 
 **Memory:** prefer lookback-bounded Timescale SQL. DataFusion spill-pool variables are not the tip path ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)). See [`AFDD_MODES.md`](../docs/operations/AFDD_MODES.md).
 

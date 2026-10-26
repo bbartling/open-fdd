@@ -15,6 +15,7 @@ pub mod plant_health;
 pub mod rcx;
 pub mod rcx_presets;
 pub mod result_cache;
+pub mod result_store;
 pub mod runtime;
 pub mod schedule;
 pub mod sensor_health;
