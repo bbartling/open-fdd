@@ -5,13 +5,19 @@
 //! package promotion (`promote_stage`), and the starter seed. One conflict rule
 //! applies to all of them, so a replayed sample is left unchanged and a changed
 //! value is overwritten in place. No other product code inserts into `sample`.
+//!
+//! A real insert, same-timestamp correction, or delete records its changed
+//! ranges and advances the site data revision in the same transaction.
+//! An identical replay does neither. Change detection is the row returned by
+//! the write, not a count, a sum, or `max(ts)`.
 
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use sqlx::{Postgres, Transaction};
+use sqlx::{Postgres, Row, Transaction};
 
 use crate::client::SampleUpsertStats;
+use crate::revision::{fold_bound, record_bounds, ChangeBounds, ChangeKind};
 
 macro_rules! sample_insert_columns {
     () => {
@@ -45,7 +51,7 @@ pub const WRITE_ROWS_SQL: &str = concat!(
     "SELECT * FROM UNNEST($1::timestamptz[], $2::text[], $3::text[], $4::text[], \
      $5::float8[], $6::text[], $7::text[])",
     sample_on_conflict!(),
-    "RETURNING (xmax = 0) AS inserted"
+    "RETURNING site_id, openfdd_key, ts, (xmax = 0) AS inserted"
 );
 
 /// Staged CSV package promote. Same contract as [`WRITE_ROWS_SQL`].
@@ -53,8 +59,44 @@ pub const PROMOTE_STAGE_SQL: &str = concat!(
     sample_insert_columns!(),
     "SELECT ts, site_id, openfdd_key, haystack_id, val, NULL::text, NULL::text \
      FROM sample_import_stage WHERE import_id = $1 AND site_id = $2",
-    sample_on_conflict!()
+    sample_on_conflict!(),
+    "RETURNING site_id, openfdd_key, ts"
 );
+
+/// Remove every sample at one site. The returned rows advance the data revision.
+pub const DELETE_SITE_SQL: &str =
+    "DELETE FROM sample WHERE site_id = $1 RETURNING site_id, openfdd_key, ts";
+
+/// Remove exact series keys at one site.
+pub const DELETE_KEYS_SQL: &str = "\
+DELETE FROM sample
+WHERE site_id = $1 AND openfdd_key = ANY($2)
+RETURNING site_id, openfdd_key, ts";
+
+/// Remove exact samples. Each triple is one `(site_id, openfdd_key, ts)`.
+pub const DELETE_SAMPLES_SQL: &str = "\
+DELETE FROM sample AS s
+USING (
+  SELECT * FROM UNNEST($1::text[], $2::text[], $3::timestamptz[])
+    AS d(site_id, openfdd_key, ts)
+) AS d
+WHERE s.site_id = d.site_id
+  AND s.openfdd_key = d.openfdd_key
+  AND s.ts = d.ts
+RETURNING s.site_id, s.openfdd_key, s.ts";
+
+/// Remove site samples that this staged import does not replace.
+pub const DELETE_OUTSIDE_STAGE_SQL: &str = "\
+DELETE FROM sample AS s
+WHERE s.site_id = $2
+  AND NOT EXISTS (
+    SELECT 1 FROM sample_import_stage AS st
+    WHERE st.import_id = $1
+      AND st.site_id = s.site_id
+      AND st.openfdd_key = s.openfdd_key
+      AND st.ts = s.ts
+  )
+RETURNING s.site_id, s.openfdd_key, s.ts";
 
 /// Rows per statement. Bounds the bind arrays sent in one round trip.
 const CHUNK_ROWS: usize = 5_000;
@@ -93,6 +135,7 @@ pub async fn write_samples(
     let mut unique: Vec<usize> = last_index.into_values().collect();
     unique.sort_unstable();
 
+    let mut bounds = ChangeBounds::new();
     for chunk in unique.chunks(CHUNK_ROWS) {
         let mut ts = Vec::with_capacity(chunk.len());
         let mut sites = Vec::with_capacity(chunk.len());
@@ -111,7 +154,7 @@ pub async fn write_samples(
             units.push(row.unit);
             qualities.push(row.quality);
         }
-        let written: Vec<bool> = sqlx::query_scalar(WRITE_ROWS_SQL)
+        let written = sqlx::query(WRITE_ROWS_SQL)
             .bind(&ts)
             .bind(&sites)
             .bind(&keys)
@@ -121,27 +164,139 @@ pub async fn write_samples(
             .bind(&qualities)
             .fetch_all(&mut **tx)
             .await?;
-        let inserted = written.iter().filter(|new| **new).count() as u64;
+        let mut inserted = 0u64;
+        for row in &written {
+            let is_insert: bool = row.try_get("inserted")?;
+            if is_insert {
+                inserted += 1;
+            }
+            let site_id: String = row.try_get("site_id")?;
+            let openfdd_key: String = row.try_get("openfdd_key")?;
+            let changed_at: DateTime<Utc> = row.try_get("ts")?;
+            fold_bound(&mut bounds, &site_id, &openfdd_key, changed_at);
+        }
         let returned = written.len() as u64;
         stats.inserted += inserted;
         stats.updated += returned - inserted;
         stats.unchanged += chunk.len() as u64 - returned;
     }
+    record_bounds(tx, ChangeKind::Upsert, &bounds).await?;
     Ok(stats)
 }
 
 /// Promote one staged CSV package import into `sample` with the shared rule.
+///
+/// The count is rows inserted or corrected. An identical staged row is not counted.
 pub async fn promote_stage(
     tx: &mut Transaction<'_, Postgres>,
     import_id: uuid::Uuid,
     site_id: &str,
 ) -> Result<u64, sqlx::Error> {
-    let done = sqlx::query(PROMOTE_STAGE_SQL)
+    let written = sqlx::query(PROMOTE_STAGE_SQL)
         .bind(import_id)
         .bind(site_id)
-        .execute(&mut **tx)
+        .fetch_all(&mut **tx)
         .await?;
-    Ok(done.rows_affected())
+    record_returned(tx, ChangeKind::Upsert, &written).await?;
+    Ok(written.len() as u64)
+}
+
+/// One sample to remove. The key and timestamp are exact.
+#[derive(Debug, Clone, Copy)]
+pub struct SampleDelete<'a> {
+    pub site_id: &'a str,
+    pub openfdd_key: &'a str,
+    pub ts: DateTime<Utc>,
+}
+
+/// Which samples to remove. An empty key list or sample list removes nothing.
+#[derive(Debug, Clone, Copy)]
+pub enum DeleteScope<'a> {
+    Site(&'a str),
+    Keys {
+        site_id: &'a str,
+        openfdd_keys: &'a [&'a str],
+    },
+    Samples(&'a [SampleDelete<'a>]),
+}
+
+/// Remove samples and, when a row was stored, record that span in this transaction.
+pub async fn delete_samples(
+    tx: &mut Transaction<'_, Postgres>,
+    scope: DeleteScope<'_>,
+) -> Result<u64, sqlx::Error> {
+    let written = match scope {
+        DeleteScope::Site(site_id) => {
+            sqlx::query(DELETE_SITE_SQL)
+                .bind(site_id)
+                .fetch_all(&mut **tx)
+                .await?
+        }
+        DeleteScope::Keys {
+            site_id,
+            openfdd_keys,
+        } => {
+            if openfdd_keys.is_empty() {
+                return Ok(0);
+            }
+            sqlx::query(DELETE_KEYS_SQL)
+                .bind(site_id)
+                .bind(openfdd_keys)
+                .fetch_all(&mut **tx)
+                .await?
+        }
+        DeleteScope::Samples(samples) => {
+            if samples.is_empty() {
+                return Ok(0);
+            }
+            let mut sites = Vec::with_capacity(samples.len());
+            let mut keys = Vec::with_capacity(samples.len());
+            let mut stamps = Vec::with_capacity(samples.len());
+            for sample in samples {
+                sites.push(sample.site_id);
+                keys.push(sample.openfdd_key);
+                stamps.push(sample.ts);
+            }
+            sqlx::query(DELETE_SAMPLES_SQL)
+                .bind(&sites)
+                .bind(&keys)
+                .bind(&stamps)
+                .fetch_all(&mut **tx)
+                .await?
+        }
+    };
+    record_returned(tx, ChangeKind::Delete, &written).await?;
+    Ok(written.len() as u64)
+}
+
+/// Drop stored samples this staged import does not contain, and record those spans.
+pub async fn delete_samples_outside_stage(
+    tx: &mut Transaction<'_, Postgres>,
+    import_id: uuid::Uuid,
+    site_id: &str,
+) -> Result<u64, sqlx::Error> {
+    let written = sqlx::query(DELETE_OUTSIDE_STAGE_SQL)
+        .bind(import_id)
+        .bind(site_id)
+        .fetch_all(&mut **tx)
+        .await?;
+    record_returned(tx, ChangeKind::Delete, &written).await?;
+    Ok(written.len() as u64)
+}
+
+async fn record_returned(
+    tx: &mut Transaction<'_, Postgres>,
+    kind: ChangeKind,
+    written: &[sqlx::postgres::PgRow],
+) -> Result<(), sqlx::Error> {
+    let mut bounds = ChangeBounds::new();
+    for row in written {
+        let site_id: String = row.try_get("site_id")?;
+        let openfdd_key: String = row.try_get("openfdd_key")?;
+        let changed_at: DateTime<Utc> = row.try_get("ts")?;
+        fold_bound(&mut bounds, &site_id, &openfdd_key, changed_at);
+    }
+    record_bounds(tx, kind, &bounds).await
 }
 
 #[cfg(test)]
@@ -156,6 +311,8 @@ mod tests {
         assert!(WRITE_ROWS_SQL.starts_with(sample_insert_columns!()));
         assert!(PROMOTE_STAGE_SQL.starts_with(sample_insert_columns!()));
         assert!(rule.contains("IS DISTINCT FROM"));
+        assert!(WRITE_ROWS_SQL.contains("RETURNING site_id, openfdd_key, ts"));
+        assert!(PROMOTE_STAGE_SQL.contains("RETURNING site_id, openfdd_key, ts"));
     }
 
     /// Runs when `OPENFDD_TEST_DATABASE_URL` is set; otherwise returns early.

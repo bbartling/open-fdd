@@ -43,6 +43,21 @@ dependency graph contains a Parquet, Arrow, DataFusion or Feather crate, when
 product Rust names a columnar file or crate path, or when product Rust writes
 the `sample` table outside `crates/fdd_tsdb/src/writer.rs`.
 
+### Data revision and FDD result identity
+
+The sample writer records changed ranges in the same transaction as the sample
+write. A site `data_revision` advances when that write inserts a row, corrects
+a stored row at the same timestamp, or removes a row. An identical replay
+leaves the revision and the ranges unchanged. The writer decides that from the
+rows the statement returns. It does not use a sum, a count, or `max(ts)`.
+
+One FDD result is the data revision, the model revision, the rule parameters,
+the pack version, the half-open window, and the quality and schedule policy.
+That identity is `fdd_tsdb::FddResultIdentity`. Changed ranges are
+`fdd_tsdb::ChangedRange`, read with `current_data_revision` and
+`changed_ranges_after`. Incremental rule execution is a later consumer of this
+API.
+
 ---
 
 ## WattLab dump
