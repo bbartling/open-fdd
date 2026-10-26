@@ -1430,60 +1430,6 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    #[cfg(feature = "legacy-parquet")]
-    #[expect(
-        clippy::await_holding_lock,
-        reason = "serialize process environment while the writer thread reads flush settings"
-    )]
-    async fn row_flush_commits_the_buffered_edge_not_only_the_triggering_edge() {
-        let _env = crate::test_env_lock::lock_env();
-        let temp = tempfile::tempdir().unwrap();
-        std::env::set_var("OPENFDD_WORKSPACE", temp.path());
-        std::env::set_var(
-            "OPENFDD_STORAGE_URL",
-            format!("file://{}", temp.path().join("history").display()),
-        );
-        std::env::set_var("OPENFDD_PARQUET_FLUSH_ROWS", "2");
-        std::env::set_var("OPENFDD_PARQUET_FLUSH_SECONDS", "3600");
-        std::env::set_var("OPENFDD_MULTI_TENANT", "0");
-        let state = AppState::new();
-        let scope = "tenant=-;building=building-local";
-        let edge_a = local_envelope("edge-a", "equipment-local");
-        let edge_b = local_envelope("edge-b", "equipment-local");
-        let edge_a_id = edge_a.message_id;
-        let edge_b_id = edge_b.message_id;
-        assert!(state.reserve_receipt_at(scope, edge_a.clone()).await);
-        assert!(state.reserve_receipt_at(scope, edge_b.clone()).await);
-        let first = state.ingest_live(scope, &edge_a).await.unwrap();
-        assert!(first.persisted_message_groups.is_empty());
-        let second = state.ingest_live(scope, &edge_b).await.unwrap();
-        assert_eq!(second.persisted_message_groups.len(), 2);
-        assert_eq!(
-            state.receipt_status(scope, "edge-a", edge_a_id).await,
-            Some(IngestReceiptStatus::Committed)
-        );
-        assert_eq!(
-            state.receipt_status(scope, "edge-b", edge_b_id).await,
-            Some(IngestReceiptStatus::Committed)
-        );
-        assert_eq!(
-            state
-                .receipt_persisted_rows(scope, "edge-a", edge_a_id)
-                .await,
-            Some(1)
-        );
-        for key in [
-            "OPENFDD_WORKSPACE",
-            "OPENFDD_STORAGE_URL",
-            "OPENFDD_PARQUET_FLUSH_ROWS",
-            "OPENFDD_PARQUET_FLUSH_SECONDS",
-            "OPENFDD_MULTI_TENANT",
-        ] {
-            std::env::remove_var(key);
-        }
-    }
-
     #[test]
     fn load_receipts_missing_journal_is_empty_not_found() {
         let temp = tempfile::tempdir().unwrap();

@@ -1,5 +1,4 @@
 //! Wave-X default historian surface — DataFusion retired (ADR-010).
-//! Full Parquet/DF implementation: `historian_datafusion.rs` behind `legacy-datafusion`.
 
 #![expect(
     dead_code,
@@ -51,7 +50,7 @@ pub struct SqlAnomalyRequest<'a> {
 }
 
 fn retired<T>() -> Result<T> {
-    bail!("Wave-X 3.6.0: DataFusion historian retired (enable feature legacy-datafusion)")
+    bail!("Wave-X 3.6.0: DataFusion historian retired; use the Timescale analytics path")
 }
 
 pub fn parquet_root() -> PathBuf {

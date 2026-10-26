@@ -92,8 +92,6 @@ async fn main() -> anyhow::Result<()> {
     db_lifecycle::apply_on_startup().await?;
     starter_seed::spawn();
 
-    initialize_s3_scope_index().await?;
-
     let state = Arc::new(AppState::new());
     // Joinable boot line for ART / Railway log windows around started_at flips (Q1a).
     info!(
@@ -218,47 +216,5 @@ async fn wait_for_shutdown_signal() -> &'static str {
             warn!(%error, "failed to install graceful shutdown signal handler");
         }
         "SIGINT"
-    }
-}
-
-async fn initialize_s3_scope_index() -> anyhow::Result<()> {
-    #[cfg(not(feature = "legacy-datafusion"))]
-    {
-        // Wave-X: Parquet/DF S3 scope index retired with DataFusion.
-        Ok(())
-    }
-    #[cfg(feature = "legacy-datafusion")]
-    {
-        let Some(buildings) = fdd_sql::refresh_s3_scope_index_from_env().await? else {
-            return Ok(());
-        };
-        info!(
-            buildings,
-            "refreshed S3 historian building scope index (scratch metadata only)"
-        );
-
-        let refresh_seconds = std::env::var("OPENFDD_S3_SCOPE_REFRESH_SECONDS")
-            .ok()
-            .and_then(|raw| raw.parse::<u64>().ok())
-            .filter(|seconds| *seconds > 0)
-            .unwrap_or(60);
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(refresh_seconds));
-            interval.tick().await;
-            loop {
-                interval.tick().await;
-                match fdd_sql::refresh_s3_scope_index_from_env().await {
-                    Ok(Some(buildings)) => {
-                        tracing::debug!(buildings, "refreshed S3 historian building scope index")
-                    }
-                    Ok(None) => break,
-                    Err(error) => tracing::warn!(
-                        %error,
-                        "S3 historian building scope refresh failed; retaining last index"
-                    ),
-                }
-            }
-        });
-        Ok(())
     }
 }

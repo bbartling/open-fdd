@@ -2,8 +2,6 @@
 
 use crate::data_management;
 use chrono::Utc;
-use fdd_store::stats::HistorianStats;
-use fdd_store::HistorianConfig;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
@@ -228,29 +226,10 @@ fn cgroup_pressure_block() -> Value {
 fn effective_compute_settings() -> Value {
     let query_mb = env::var("OPENFDD_QUERY_MEMORY_MB").ok();
     let compute_mb = env::var("OPENFDD_COMPUTE_MEMORY_MB").ok();
-    let spill = env::var("OPENFDD_DATAFUSION_SPILL_DIR").ok();
-    let batch = env::var("OPENFDD_DATAFUSION_BATCH_SIZE").ok();
-    let partitions = env::var("OPENFDD_DATAFUSION_TARGET_PARTITIONS").ok();
-    let flush_rows = env::var("OPENFDD_PARQUET_FLUSH_ROWS").ok();
-    let flush_secs = env::var("OPENFDD_PARQUET_FLUSH_SECS")
-        .or_else(|_| env::var("OPENFDD_PARQUET_FLUSH_SECONDS"))
-        .ok();
-    #[cfg(feature = "legacy-datafusion")]
-    let shared = HistorianConfig::from_env()
-        .ok()
-        .and_then(|cfg| fdd_sql::shared_runtime_info(&cfg).ok());
-    #[cfg(not(feature = "legacy-datafusion"))]
-    let shared = None::<serde_json::Value>;
     json!({
         "OPENFDD_QUERY_MEMORY_MB": query_mb,
         "OPENFDD_COMPUTE_MEMORY_MB": compute_mb,
-        "OPENFDD_DATAFUSION_SPILL_DIR_set": spill.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false),
-        "OPENFDD_DATAFUSION_BATCH_SIZE": batch,
-        "OPENFDD_DATAFUSION_TARGET_PARTITIONS": partitions,
-        "OPENFDD_PARQUET_FLUSH_ROWS": flush_rows,
-        "OPENFDD_PARQUET_FLUSH_SECS": flush_secs,
-        "shared_runtime": shared,
-        "note": "Aggregate FairSpillPool = (cgroup−reserves)×OPENFDD_COMPUTE_MEMORY_FRACTION (or COMPUTE_MEMORY_MB); QUERY_MEMORY is per-request ceiling, not the pool size (#1179)"
+        "note": "QUERY_MEMORY is a per-request ceiling, not the pool size (#1179)"
     })
 }
 
@@ -334,38 +313,6 @@ fn uptime_seconds() -> Option<u64> {
     })
 }
 
-fn parquet_historian_summary() -> Value {
-    let Ok(config) = HistorianConfig::from_env() else {
-        return json!({"available": false, "note": "Historian config unavailable"});
-    };
-    match fdd_store::local_historian_stats_from_config(&config) {
-        Ok(HistorianStats {
-            parquet_files,
-            total_bytes,
-            small_files,
-            ..
-        }) => json!({
-            "available": true,
-            "file_count": parquet_files,
-            "small_file_count": small_files,
-            "estimated_bytes": total_bytes,
-            "target_file_mb": config.target_file_mb,
-        }),
-        Err(err) => json!({
-            "available": false,
-            "note": err.to_string(),
-        }),
-    }
-}
-
-fn merged_data_management() -> Value {
-    let mut dm = data_management::storage_summary();
-    if let Some(obj) = dm.as_object_mut() {
-        obj.insert("parquet".to_string(), parquet_historian_summary());
-    }
-    dm
-}
-
 pub fn stats_json() -> Value {
     let collected_at = Utc::now().to_rfc3339();
     let hostname = env::var("HOSTNAME")
@@ -376,7 +323,7 @@ pub fn stats_json() -> Value {
     let usage_percent = load_1.map(|l| ((l / cores as f64) * 100.0).min(100.0));
     let workspace = crate::historian::store::workspace_dir();
     let storage = disk_for_path(&workspace);
-    let dm = merged_data_management();
+    let dm = data_management::storage_summary();
 
     json!({
         "ok": true,

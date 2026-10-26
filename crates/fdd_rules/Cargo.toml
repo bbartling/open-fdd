@@ -12,15 +12,10 @@ default = []
 anyhow.workspace = true
 chrono.workspace = true
 fdd_core = { path = "../fdd_core" }
-fdd_store = { path = "../fdd_store" }
 serde.workspace = true
 serde_yaml.workspace = true
 serde_json.workspace = true
 walkdir.workspace = true
-
-[dev-dependencies]
-tempfile = "3"
-tokio = { version = "1", features = ["rt", "macros"] }
 
 [lints]
 workspace = true

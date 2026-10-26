@@ -5,13 +5,10 @@
 //! column map (`history_wide.json` / `history_wide.column_map.json` / `column_map.json`),
 //! optional root `column_map.json`, `session_config.json`, and `weather/history_wide.csv`.
 //!
-//! The package is materialized under `workspace/data/csv_buildings/<building_id>/`
-//! (the layout `fdd_store::ingest_building` already validates: manifest `grid_minutes`
-//! → poll_seconds, per-equipment `columns.csv` role map).
-//!
-//! Wave-X 3.6.0: when `OPENFDD_DATABASE_URL` is set (or `OPENFDD_HISTORIAN=timescale`),
-//! Parquet ingest is **skipped** — central seeds Timescale from `package_root`
-//! (`needs_timescale_seed: true`). No dual-write.
+//! The package is staged under `workspace/data/csv_buildings/<building_id>.incoming/`
+//! (manifest `grid_minutes` → poll_seconds, per-equipment `columns.csv` role map).
+//! Central seeds Timescale from `package_root` (`needs_timescale_seed: true`) and
+//! publishes the tree only after that transaction commits. No dual-write.
 
 use crate::historian::store::workspace_dir;
 use fdd_core::haystack_point_to_role;
@@ -21,17 +18,6 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 pub const PACKAGE_SCHEMA: &str = "openfdd_package_v1";
-
-/// Wave-X: Timescale-only product path — do not write Parquet historian parts.
-pub fn timescale_historian_active() -> bool {
-    match std::env::var("OPENFDD_HISTORIAN") {
-        Ok(raw) => matches!(
-            raw.to_ascii_lowercase().as_str(),
-            "timescale" | "tsdb" | "postgres" | "sql"
-        ),
-        Err(_) => std::env::var("OPENFDD_DATABASE_URL").is_ok(),
-    }
-}
 
 fn is_incoming_root(root: &Path) -> bool {
     root.file_name()
@@ -624,29 +610,16 @@ fn write_columns_csv(
     std::fs::write(path, body).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
-fn parquet_out_dir() -> PathBuf {
+/// Root for JSON sidecars (equipment type maps) shared with central.
+fn sidecar_root() -> PathBuf {
     if let Some(p) = fdd_store::local_file_root_from_env() {
         return p;
     }
     workspace_dir().join(".cache/parquet")
 }
 
-fn sync_equipment_types_cache(
-    building_root: &Path,
-    out_dir: &Path,
-    building_id: &str,
-) -> Result<(), String> {
-    let path = building_root.join(crate::equipment_types::EQUIPMENT_TYPES_FILE);
-    let Ok(body) = std::fs::read_to_string(path) else {
-        return Ok(());
-    };
-    let types: BTreeMap<String, String> =
-        serde_json::from_str(&body).map_err(|e| format!("equipment type registry parse: {e}"))?;
-    crate::equipment_types::write_type_map(out_dir, building_id, &types)
-}
-
 /// Load `openfdd_package_v1` zip bytes: validate, materialize under
-/// `workspace/data/csv_buildings/<building_id>/`, ingest to parquet.
+/// `workspace/data/csv_buildings/<building_id>.incoming/` for the central Timescale seed.
 pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     let entries = match read_zip_entries(zip_bytes) {
         Ok(e) => e,
@@ -869,12 +842,7 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
     let data_root = workspace_dir().join("data").join("csv_buildings");
     // Timescale imports land in `<id>.incoming` until the historian transaction
     // commits. The live tree is not removed on a rejected or failed package.
-    let stage_for_seed = timescale_historian_active();
-    let building_root = if stage_for_seed {
-        data_root.join(format!("{building_id}.incoming"))
-    } else {
-        data_root.join(&building_id)
-    };
+    let building_root = data_root.join(format!("{building_id}.incoming"));
     let _ = std::fs::remove_dir_all(&building_root);
     if let Err(e) = std::fs::create_dir_all(&building_root) {
         abort_staged_package(&building_root);
@@ -902,28 +870,10 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
             building_root.join("session_config.json"),
             serde_json::to_string_pretty(cfg).unwrap_or_default(),
         );
-        // Honor packaged session config (#515): persist workspace-wide so the
-        // Lab sliders pick it up. Invalid configs only warn — never block ingest.
-        // A staged Timescale import activates this only after the historian commit.
+        // Honor packaged session config (#515). Invalid configs only warn — never
+        // block ingest. The staged config activates only after the historian commit.
         match crate::fdd::session_config::normalize_session_config(cfg) {
-            Ok((normalized, mut cfg_warnings)) => {
-                if !stage_for_seed {
-                    let scope = crate::fdd::session_config::SessionConfigScope::new(
-                        None,
-                        Some(manifest.building_id.as_str()),
-                    );
-                    if let Err(e) =
-                        crate::fdd::session_config::save_session_config_scoped(&scope, &normalized)
-                    {
-                        warnings.push(format!("session_config.json not persisted: {e}"));
-                    } else if scope.tenant_id.is_none() {
-                        // #515: unscoped Lab GET reads hub-global bytes on single-tenant hubs.
-                        if let Err(e) = crate::fdd::session_config::save_session_config(&normalized)
-                        {
-                            warnings.push(format!("session_config hub mirror not persisted: {e}"));
-                        }
-                    }
-                }
+            Ok((_, mut cfg_warnings)) => {
                 warnings.append(&mut cfg_warnings);
             }
             Err(e) => warnings.push(format!("session_config.json invalid: {e}")),
@@ -1052,87 +1002,30 @@ pub fn import_package_zip(zip_bytes: &[u8]) -> Value {
         }
     }
 
-    // Wave-X: Timescale sole historian — never dual-write Parquet.
-    // Files stay under `<id>.incoming` until central commits the seed transaction.
-    if stage_for_seed {
-        let equipment_written = equipment_report.len();
-        warnings.push(
-            "Wave-X: Parquet ingest skipped; central seeds Timescale from the staged package"
-                .into(),
-        );
-        return json!({
-            "ok": true,
-            "schema_version": PACKAGE_SCHEMA,
-            "building_id": building_id,
-            "grid_minutes": manifest.grid_minutes,
-            "poll_seconds": manifest.grid_minutes.saturating_mul(60),
-            "timezone": manifest.timezone,
-            "equipment": equipment_report,
-            "equipment_written": equipment_written,
-            "total_rows": 0,
-            "total_ms": 0,
-            "out_dir": Value::Null,
-            "package_root": building_root.display().to_string(),
-            "session_config": session_config,
-            "utilities_written": utilities_written,
-            "semantic_meta": semantic_meta_result,
-            "warnings": warnings,
-            "historian": "timescale",
-            "needs_timescale_seed": true,
-            "staged": true,
-            "dual_write": false,
-        });
-    }
-
-    let out_dir = parquet_out_dir();
-    match fdd_store::ingest_building(&data_root, &building_id, &out_dir) {
-        Ok(report) => {
-            if let Err(e) = sync_equipment_types_cache(&building_root, &out_dir, &building_id) {
-                warnings.push(e);
-            }
-            if let Err(e) =
-                crate::equipment_types::write_parent_map(&out_dir, &building_id, &parents_out)
-            {
-                warnings.push(e);
-            }
-            if let Err(e) = crate::csv_ingest::dataset::register_package_dataset(
-                &building_id,
-                report.total_rows,
-                report.equipment_written,
-                &json!({
-                    "package_root": building_root.display().to_string(),
-                }),
-            ) {
-                warnings.push(format!("dataset registry: {e}"));
-            }
-            json!({
-                "ok": true,
-                "schema_version": PACKAGE_SCHEMA,
-                "building_id": building_id,
-                "grid_minutes": manifest.grid_minutes,
-                "poll_seconds": manifest.grid_minutes.saturating_mul(60),
-                "timezone": manifest.timezone,
-                "equipment": equipment_report,
-                "equipment_written": report.equipment_written,
-                "total_rows": report.total_rows,
-                "total_ms": report.total_ms,
-                "out_dir": report.out_dir,
-                "package_root": building_root.display().to_string(),
-                "session_config": session_config,
-                "utilities_written": utilities_written,
-                "semantic_meta": semantic_meta_result,
-                "warnings": warnings,
-            })
-        }
-        Err(e) => json!({
-            "ok": false,
-            "error": format!("parquet ingest failed: {e:#}"),
-            "equipment": equipment_report,
-            "warnings": warnings,
-            "semantic_meta": semantic_meta_result,
-            "package_root": building_root.display().to_string(),
-        }),
-    }
+    // Files stay under `<id>.incoming` until central commits the Timescale seed.
+    let equipment_written = equipment_report.len();
+    json!({
+        "ok": true,
+        "schema_version": PACKAGE_SCHEMA,
+        "building_id": building_id,
+        "grid_minutes": manifest.grid_minutes,
+        "poll_seconds": manifest.grid_minutes.saturating_mul(60),
+        "timezone": manifest.timezone,
+        "equipment": equipment_report,
+        "equipment_written": equipment_written,
+        "total_rows": 0,
+        "total_ms": 0,
+        "out_dir": Value::Null,
+        "package_root": building_root.display().to_string(),
+        "session_config": session_config,
+        "utilities_written": utilities_written,
+        "semantic_meta": semantic_meta_result,
+        "warnings": warnings,
+        "historian": "timescale",
+        "needs_timescale_seed": true,
+        "staged": true,
+        "dual_write": false,
+    })
 }
 
 fn extract_package_zip_bytes(content_type: &str, body: &[u8]) -> Result<Vec<u8>, String> {
@@ -1354,35 +1247,18 @@ fn append_package_json(body: &Value) -> Value {
             Err(e) => return json!({"ok": false, "error": e.to_string()}),
         }
     }
-    if timescale_historian_active() {
-        return json!({
-            "ok": true,
-            "building_id": building_id,
-            "merges": merges,
-            "equipment_written": touched.len(),
-            "total_rows": 0,
-            "scoped_equipment": touched,
-            "historian": "timescale",
-            "needs_timescale_seed": true,
-            "package_root": building_root.display().to_string(),
-            "dual_write": false,
-            "warnings": ["Wave-X: Parquet append skipped; re-seed Timescale from package_root"],
-        });
-    }
-    let out_dir = parquet_out_dir();
-    // Touched equipment only — no full-building / weather rebuild (M70-04).
-    match fdd_store::ingest_building_equipment(&data_root, &building_id, &out_dir, &touched) {
-        Ok(report) => json!({
-            "ok": true,
-            "building_id": building_id,
-            "merges": merges,
-            "equipment_written": report.equipment_written,
-            "total_rows": report.total_rows,
-            "total_ms": report.total_ms,
-            "scoped_equipment": touched,
-        }),
-        Err(e) => json!({"ok": false, "error": format!("parquet ingest: {e:#}")}),
-    }
+    json!({
+        "ok": true,
+        "building_id": building_id,
+        "merges": merges,
+        "equipment_written": touched.len(),
+        "total_rows": 0,
+        "scoped_equipment": touched,
+        "historian": "timescale",
+        "needs_timescale_seed": true,
+        "package_root": building_root.display().to_string(),
+        "dual_write": false,
+    })
 }
 
 fn append_package_zip(zip_bytes: &[u8]) -> Value {
@@ -1450,43 +1326,20 @@ pub fn update_package_roles_handler(body: &Value) -> Value {
     if let Err(e) = write_columns_csv(&eq_dir.join("columns.csv"), &headers, &roles) {
         return json!({"ok": false, "error": e});
     }
-    // Wave-X C4: Timescale product path — columns.csv only; central remaps SQL.
-    if timescale_historian_active() {
-        return json!({
-            "ok": true,
-            "building_id": building_id,
-            "equipment_id": equipment_id,
-            "roles": roles,
-            "ignored_columns": ignored,
-            "scoped_equipment": [equipment_id],
-            "package_root": building_root.display().to_string(),
-            "historian": "timescale",
-            "needs_timescale_remap": true,
-            "parquet_ingest": false,
-            "equipment_written": 0,
-            "total_rows": 0,
-        });
-    }
-    let out_dir = parquet_out_dir();
-    // Legacy Parquet path only when Timescale is not the product historian.
-    match fdd_store::ingest_building_equipment(
-        &data_root,
-        &building_id,
-        &out_dir,
-        std::slice::from_ref(&equipment_id),
-    ) {
-        Ok(report) => json!({
-            "ok": true,
-            "building_id": building_id,
-            "equipment_id": equipment_id,
-            "roles": roles,
-            "ignored_columns": ignored,
-            "equipment_written": report.equipment_written,
-            "total_rows": report.total_rows,
-            "scoped_equipment": [equipment_id],
-        }),
-        Err(e) => json!({"ok": false, "error": format!("re-ingest failed: {e:#}")}),
-    }
+    // Central remaps the SQL roles from columns.csv.
+    json!({
+        "ok": true,
+        "building_id": building_id,
+        "equipment_id": equipment_id,
+        "roles": roles,
+        "ignored_columns": ignored,
+        "scoped_equipment": [equipment_id],
+        "package_root": building_root.display().to_string(),
+        "historian": "timescale",
+        "needs_timescale_remap": true,
+        "equipment_written": 0,
+        "total_rows": 0,
+    })
 }
 
 fn find_equipment_dir(building_root: &Path, equipment_id: &str) -> Option<PathBuf> {
@@ -1525,7 +1378,7 @@ fn load_stamped_types_for_building(
             }
         }
     }
-    for (k, v) in crate::equipment_types::load_type_map(&parquet_out_dir(), Some(building_id)) {
+    for (k, v) in crate::equipment_types::load_type_map(&sidecar_root(), Some(building_id)) {
         types.entry(k).or_insert(v);
     }
     types
@@ -2013,42 +1866,17 @@ fn mapping_from_historian_equipment(
                 .get("equipment_type")
                 .cloned()
                 .unwrap_or(json!("GENERAL"));
-            let pq = crate::fdd::registry_api::parquet_root();
-            let root = fdd_store::resolve_building_read_root(&pq, preferred_tenant, building_id)
-                .map(|resolved| resolved.root)
-                .unwrap_or(pq);
-            let cols = fdd_store::peek_equipment_history_columns(&root, building_id, &eq_id);
-            let mut roles = serde_json::Map::new();
-            let column_rows: Vec<Value> = cols
-                .iter()
-                .map(|col| {
-                    // MQTT/historian wide Parquet already uses cookbook role names as columns.
-                    roles.insert(col.clone(), json!(col));
-                    json!({
-                        "column": col,
-                        "role": col,
-                        "status": "mapped",
-                    })
-                })
-                .collect();
-            let warnings = if column_rows.is_empty() {
-                vec![
-                    "MQTT/historian data model — no Parquet columns discovered yet; roles empty until telemetry arrives"
-                        .to_string(),
-                ]
-            } else {
-                vec![
-                    "MQTT/historian data model — roles inferred from Parquet columns (not CSV columns.csv / not live Haystack browse)"
-                        .to_string(),
-                ]
-            };
+            let warnings = vec![
+                "historian data model — no package columns.csv; roles come from the Timescale role map"
+                    .to_string(),
+            ];
             json!({
                 "equipment_id": eq_id,
                 "equipment_type": eq_type,
                 "parent_ahu": Value::Null,
                 "ok": true,
-                "columns": column_rows,
-                "roles": Value::Object(roles),
+                "columns": [],
+                "roles": {},
                 "unmapped_columns": [],
                 "ambiguous_roles": {},
                 "blockers": [],
@@ -2131,6 +1959,21 @@ pub fn list_package_buildings_handler() -> Value {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    fn assert_no_columnar_files(root: &std::path::Path) {
+        let columnar: Vec<_> = walkdir::WalkDir::new(root)
+            .into_iter()
+            .flatten()
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .and_then(|x| x.to_str())
+                    .is_some_and(|x| matches!(x, "parquet" | "arrow" | "feather"))
+            })
+            .map(|e| e.path().to_path_buf())
+            .collect();
+        assert!(columnar.is_empty(), "columnar files written: {columnar:?}");
+    }
 
     fn build_zip(files: &[(&str, &str)]) -> Vec<u8> {
         let mut cursor = std::io::Cursor::new(Vec::new());
@@ -2446,12 +2289,14 @@ mod tests {
             json!("imperial"),
             "{out}"
         );
-        // Prefer package_root from the import response — parallel env-mutating
-        // tests can still race OPENFDD_WORKSPACE after the lock is taken.
-        let pkg_root = out["package_root"]
+        assert_eq!(out["needs_timescale_seed"], json!(true), "{out}");
+        assert_eq!(out["staged"], json!(true), "{out}");
+        // Central publishes the staged tree after its Timescale seed commits.
+        let staged_root = out["package_root"]
             .as_str()
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| tmp.join("data/csv_buildings/BUILDING_9"));
+            .unwrap_or_else(|| tmp.join("data/csv_buildings/BUILDING_9.incoming"));
+        let pkg_root = commit_staged_package(&staged_root, 0, 1).unwrap();
         let cols_path = pkg_root.join("AHU_1/columns.csv");
         let cols = std::fs::read_to_string(&cols_path).unwrap_or_else(|e| {
             panic!(
@@ -2465,14 +2310,7 @@ mod tests {
             )
         });
         assert!(cols.contains("SF_SPD,fan_cmd"), "{cols}");
-        let parquet =
-            tmp.join(".cache/parquet/building=BUILDING_9/equipment=AHU_1/history.parquet");
-        let parquet_alt = std::path::PathBuf::from(out["out_dir"].as_str().unwrap_or(""))
-            .join("building=BUILDING_9/equipment=AHU_1/history.parquet");
-        assert!(
-            parquet.is_file() || parquet_alt.is_file(),
-            "missing history parquet; out={out}"
-        );
+        assert_no_columnar_files(&tmp);
 
         // Role update rewrites columns.csv and re-ingests.
         // Bind workspace to the import's package_root parents — parallel tests that
@@ -2659,6 +2497,8 @@ mod tests {
         ]);
         let seed = import_package_zip(&zip);
         assert_eq!(seed["ok"], json!(true), "{seed}");
+        let staged = std::path::PathBuf::from(seed["package_root"].as_str().unwrap());
+        commit_staged_package(&staged, 0, 1).unwrap();
 
         let deny = append_package_json(&json!({
             "building_id": "B_APPEND",
@@ -2685,6 +2525,8 @@ mod tests {
         assert_eq!(replay["ok"], json!(true), "{replay}");
         assert_eq!(replay["merges"][0]["rows_added"], json!(0), "{replay}");
         assert_eq!(replay["merges"][0]["rows_duped"], json!(1), "{replay}");
+        assert_eq!(replay["needs_timescale_seed"], json!(true), "{replay}");
+        assert_no_columnar_files(&tmp);
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

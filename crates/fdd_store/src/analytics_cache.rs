@@ -1,53 +1,21 @@
-//! Parquet analytics / RCx / fault result cache.
+//! Analytics / RCx / fault result cache identity and freshness.
 //!
-//! Result tables are Arrow columns under `analytics_results/`, keyed by
-//! building, query id, query version, time window, and config hash. This is
-//! not an AFDD `{rule_id}.json` envelope dump: scalar fields are typed
-//! columns. Provenance (watermark, config hash) lives in Parquet key/value
-//! metadata.
-//!
-//! Layout:
-//! ```text
-//! {storage}/analytics_results/building_id={id}/query_id={query}/query_version={ver}/window={start}__{end}/config={hash16}/results.parquet
-//! ```
-//!
-//! Schema `analytics-result-parquet-v2`:
-//! - `section` (utf8): `rows` | `equipment` | `points` | `skipped` | `warning` | `coverage`
-//! - `row_index` (uint32)
-//! - one nullable column per scalar field (float64, bool, or utf8)
-//!
-//! Explicit JSON nulls (for example an unknown `{flag}_fault_h`) stay on the
-//! object that set them. `openfdd.section_keys` records those keys per section
-//! so a null cell is not dropped on read and is not copied onto other sections.
-//! Files stamped `analytics-result-parquet-v1` are cache misses.
-//!
-//! Nested objects and arrays are utf8 JSON cells because Arrow has no single
-//! dynamic struct for mixed analytics families. The file is still a columnar
-//! table, not one JSON blob column.
+//! The cache rows live in the PostgreSQL `analytics_result` table (central
+//! `analytics::result_store`). This module only defines the cache key, the
+//! provenance stamped on each row, and the freshness rules that decide hit,
+//! stale, miss, incompatible, or unavailable.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::fs;
+use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
-use arrow::array::{Array, ArrayRef, BooleanArray, Float64Array, StringArray, UInt32Array};
-use arrow::datatypes::{DataType, Field, Schema};
-use arrow::record_batch::RecordBatch;
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use parquet::arrow::ArrowWriter;
-use parquet::file::metadata::KeyValue;
-use parquet::file::properties::WriterProperties;
-use serde_json::{json, Map, Value};
+use anyhow::{bail, Context, Result};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::historian::safe_partition_value;
 
-pub const SCHEMA_NAME: &str = "analytics-result-parquet-v2";
+/// Directory of the retired Parquet result cache. Central never writes it.
 pub const RESULTS_DIR: &str = "analytics_results";
-
-const COL_SECTION: &str = "section";
-const COL_ROW_INDEX: &str = "row_index";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheFreshness {
@@ -256,309 +224,6 @@ fn stamped_identity_matches(cached: &CacheProvenance, current: &CacheIdentity) -
         && cached.watermark_status == "known"
 }
 
-/// Newest historian parquet order key for one building, or 0 when none exist.
-///
-/// `Ok(0)` is a successful scan that found no eligible part. A missing root is
-/// that empty scan. An unreadable root or directory is `Err` and must not be
-/// folded into 0. Order keys are `YYYYMMDDHHMMSS` from part stamps, else
-/// `year=`/`month=`, else file mtime. Analytics result files are not part of
-/// the watermark.
-pub fn historian_watermark_order(storage_root: &Path, building_id: &str) -> Result<u64> {
-    let building_id = safe_partition_value(building_id, "building_id")?;
-    if !storage_root.exists() {
-        return Ok(0);
-    }
-    if !storage_root.is_dir() {
-        bail!(
-            "historian root is not a readable directory: {}",
-            storage_root.display()
-        );
-    }
-    let mut best = 0u64;
-    let mut stack = vec![storage_root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let rd = match fs::read_dir(&dir) {
-            Ok(rd) => rd,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(err) => {
-                return Err(err)
-                    .with_context(|| format!("read historian directory {}", dir.display()));
-            }
-        };
-        for ent in rd {
-            let ent =
-                ent.with_context(|| format!("read historian entry under {}", dir.display()))?;
-            let path = ent.path();
-            let Ok(meta) = ent.metadata() else {
-                continue;
-            };
-            if meta.is_dir() {
-                if path_is_analytics_results(&path) {
-                    continue;
-                }
-                stack.push(path);
-                continue;
-            }
-            if !meta.is_file() {
-                continue;
-            }
-            if !path
-                .extension()
-                .and_then(|e| e.to_str())
-                .is_some_and(|e| e.eq_ignore_ascii_case("parquet"))
-            {
-                continue;
-            }
-            if !path_belongs_to_building(&path, &building_id) {
-                continue;
-            }
-            let mtime = meta
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-            best = best.max(crate::disk_budget::order_key_from_path(&path, mtime));
-        }
-    }
-    Ok(best)
-}
-
-pub fn order_key_to_rfc3339(key: u64) -> String {
-    if key < 10_000_000_000_000 {
-        return String::new();
-    }
-    let year = key / 10_000_000_000;
-    let mut rest = key % 10_000_000_000;
-    let month = rest / 100_000_000;
-    rest %= 100_000_000;
-    let day = rest / 1_000_000;
-    rest %= 1_000_000;
-    let hour = rest / 10_000;
-    rest %= 10_000;
-    let minute = rest / 100;
-    let second = rest % 100;
-    if !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
-        || hour > 23
-        || minute > 59
-        || second > 59
-    {
-        return String::new();
-    }
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
-}
-
-pub fn partition_dir(storage_root: &Path, key: &AnalyticsCacheKey) -> Result<PathBuf> {
-    let building = safe_partition_value(&key.building_id, "building_id")?;
-    let query = safe_partition_value(&key.query_id, "query_id")?;
-    let version = safe_partition_value(&key.query_version, "query_version")?;
-    let start = safe_window_token(&key.window_start)?;
-    let end = safe_window_token(&key.window_end)?;
-    let hash = short_hash(&key.config_hash);
-    let window = format!("{start}__{end}");
-    safe_partition_value(&window, "window")?;
-    Ok(storage_root
-        .join(RESULTS_DIR)
-        .join(format!("building_id={building}"))
-        .join(format!("query_id={query}"))
-        .join(format!("query_version={version}"))
-        .join(format!("window={window}"))
-        .join(format!("config={hash}")))
-}
-
-pub fn write_result(
-    storage_root: &Path,
-    key: &AnalyticsCacheKey,
-    table: &AnalyticsResultTable,
-    provenance: &CacheProvenance,
-) -> Result<PathBuf> {
-    let dir = partition_dir(storage_root, key)?;
-    fs::create_dir_all(&dir).with_context(|| format!("mkdir {}", dir.display()))?;
-    let batch = table_to_batch(table)?;
-    let mut kvs = provenance_kvs(provenance);
-    kvs.push(KeyValue::new(
-        "openfdd.section_keys".to_string(),
-        Some(section_keys_json(table)),
-    ));
-    let props = WriterProperties::builder()
-        .set_key_value_metadata(Some(kvs))
-        .build();
-    let final_path = dir.join("results.parquet");
-    let tmp_path = dir.join("results.parquet.tmp");
-    {
-        let file =
-            File::create(&tmp_path).with_context(|| format!("create {}", tmp_path.display()))?;
-        let mut writer = ArrowWriter::try_new(file, batch.schema(), Some(props))?;
-        writer.write(&batch)?;
-        writer.close()?;
-    }
-    fs::rename(&tmp_path, &final_path)
-        .with_context(|| format!("rename {}", final_path.display()))?;
-    Ok(final_path)
-}
-
-/// Read only Parquet key/value provenance without materializing Arrow batches.
-///
-/// Soft-OPEN 371 T1c: callers must acquire compute admission before
-/// [`read_result`] materializes durable cache rows.
-pub fn peek_result_provenance(
-    storage_root: &Path,
-    key: &AnalyticsCacheKey,
-) -> Result<Option<CacheProvenance>> {
-    let path = partition_dir(storage_root, key)?.join("results.parquet");
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let file = File::open(&path).with_context(|| format!("open {}", path.display()))?;
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-    let meta = metadata_map(builder.metadata().file_metadata().key_value_metadata());
-    if !cache_meta_matches_key(&meta, key) {
-        return Ok(None);
-    }
-    Ok(Some(provenance_from_meta(&meta)?))
-}
-
-fn cache_meta_matches_key(meta: &HashMap<String, String>, key: &AnalyticsCacheKey) -> bool {
-    meta.get("openfdd.schema").map(String::as_str) == Some(SCHEMA_NAME)
-        && meta.get("openfdd.config_hash").map(String::as_str) == Some(key.config_hash.as_str())
-        && meta.get("openfdd.building_id").map(String::as_str) == Some(key.building_id.as_str())
-}
-
-pub fn read_result(
-    storage_root: &Path,
-    key: &AnalyticsCacheKey,
-) -> Result<Option<(AnalyticsResultTable, CacheProvenance)>> {
-    let path = partition_dir(storage_root, key)?.join("results.parquet");
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let file = File::open(&path).with_context(|| format!("open {}", path.display()))?;
-    let builder = ParquetRecordBatchReaderBuilder::try_new(file)?;
-    let meta = metadata_map(builder.metadata().file_metadata().key_value_metadata());
-    if !cache_meta_matches_key(&meta, key) {
-        return Ok(None);
-    }
-    let schema = builder.schema().clone();
-    let reader = builder.build()?;
-    let mut batches = Vec::new();
-    for batch in reader {
-        batches.push(batch?);
-    }
-    let batch = if batches.is_empty() {
-        RecordBatch::new_empty(schema)
-    } else if batches.len() == 1 {
-        match batches.pop() {
-            Some(batch) => batch,
-            None => RecordBatch::new_empty(schema),
-        }
-    } else {
-        arrow::compute::concat_batches(&batches[0].schema(), &batches)?
-    };
-    let table = batch_to_table(&batch, &meta)?;
-    let provenance = provenance_from_meta(&meta)?;
-    Ok(Some((table, provenance)))
-}
-
-fn provenance_kvs(p: &CacheProvenance) -> Vec<KeyValue> {
-    let pairs = [
-        ("openfdd.schema", SCHEMA_NAME.to_string()),
-        ("openfdd.building_id", p.building_id.clone()),
-        ("openfdd.query_id", p.query_id.clone()),
-        ("openfdd.query_version", p.query_version.clone()),
-        ("openfdd.window_start", p.window_start.clone()),
-        ("openfdd.window_end", p.window_end.clone()),
-        ("openfdd.config_hash", p.config_hash.clone()),
-        ("openfdd.watermark_order", p.watermark_order.to_string()),
-        ("openfdd.watermark_utc", p.watermark_utc.clone()),
-        ("openfdd.generated_at", p.generated_at.clone()),
-        ("openfdd.engine", p.engine.clone()),
-        (
-            "openfdd.result_query_version",
-            p.result_query_version.clone(),
-        ),
-        ("openfdd.result_contract", p.result_contract.clone()),
-        ("openfdd.sql_pack", p.sql_pack.clone()),
-        ("openfdd.model_revision", p.model_revision.clone()),
-        ("openfdd.watermark_source", p.watermark_source.clone()),
-        ("openfdd.watermark_status", p.watermark_status.clone()),
-        ("openfdd.coverage", p.coverage.clone()),
-    ];
-    pairs
-        .into_iter()
-        .map(|(k, v)| KeyValue::new(k.to_string(), Some(v)))
-        .collect()
-}
-
-fn metadata_map(kvs: Option<&Vec<KeyValue>>) -> HashMap<String, String> {
-    let mut out = HashMap::new();
-    if let Some(kvs) = kvs {
-        for kv in kvs {
-            if let Some(value) = kv.value.clone() {
-                out.insert(kv.key.clone(), value);
-            }
-        }
-    }
-    out
-}
-
-fn provenance_from_meta(meta: &HashMap<String, String>) -> Result<CacheProvenance> {
-    let order = meta
-        .get("openfdd.watermark_order")
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(0);
-    Ok(CacheProvenance {
-        building_id: meta.get("openfdd.building_id").cloned().unwrap_or_default(),
-        query_id: meta.get("openfdd.query_id").cloned().unwrap_or_default(),
-        query_version: meta
-            .get("openfdd.query_version")
-            .cloned()
-            .unwrap_or_default(),
-        window_start: meta
-            .get("openfdd.window_start")
-            .cloned()
-            .unwrap_or_default(),
-        window_end: meta.get("openfdd.window_end").cloned().unwrap_or_default(),
-        config_hash: meta.get("openfdd.config_hash").cloned().unwrap_or_default(),
-        watermark_order: order,
-        watermark_utc: meta
-            .get("openfdd.watermark_utc")
-            .cloned()
-            .unwrap_or_else(|| order_key_to_rfc3339(order)),
-        generated_at: meta
-            .get("openfdd.generated_at")
-            .cloned()
-            .unwrap_or_default(),
-        engine: meta.get("openfdd.engine").cloned().unwrap_or_default(),
-        result_query_version: meta
-            .get("openfdd.result_query_version")
-            .cloned()
-            .unwrap_or_else(|| {
-                meta.get("openfdd.query_version")
-                    .cloned()
-                    .unwrap_or_default()
-            }),
-        result_contract: meta
-            .get("openfdd.result_contract")
-            .cloned()
-            .unwrap_or_default(),
-        sql_pack: meta.get("openfdd.sql_pack").cloned().unwrap_or_default(),
-        model_revision: meta
-            .get("openfdd.model_revision")
-            .cloned()
-            .unwrap_or_default(),
-        watermark_source: meta
-            .get("openfdd.watermark_source")
-            .cloned()
-            .unwrap_or_default(),
-        watermark_status: meta
-            .get("openfdd.watermark_status")
-            .cloned()
-            .unwrap_or_default(),
-        coverage: meta.get("openfdd.coverage").cloned().unwrap_or_default(),
-    })
-}
-
 /// Delete one building's derived analytics parquet cache.
 ///
 /// Historian parts and labeled rule-result files live outside `analytics_results/`
@@ -600,432 +265,6 @@ fn count_files(dir: &Path) -> Result<u64> {
     Ok(count)
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ColKind {
-    Empty,
-    Float,
-    Bool,
-    Utf8,
-}
-
-enum Cell {
-    Null,
-    Float(f64),
-    Bool(bool),
-    Text(String),
-}
-
-struct ColAcc {
-    kind: ColKind,
-    cells: Vec<Cell>,
-}
-
-fn table_to_batch(table: &AnalyticsResultTable) -> Result<RecordBatch> {
-    let mut records: Vec<(String, Value)> = Vec::new();
-    push_section(&mut records, "rows", &table.rows);
-    push_section(&mut records, "equipment", &table.equipment);
-    push_section(&mut records, "points", &table.points);
-    push_section(&mut records, "skipped", &table.skipped);
-    for warning in &table.warnings {
-        let mut obj = Map::new();
-        obj.insert("message".into(), Value::String(warning.clone()));
-        records.push(("warning".into(), Value::Object(obj)));
-    }
-    if let Some(coverage) = &table.coverage {
-        records.push(("coverage".into(), coverage.clone()));
-    }
-
-    let mut columns: BTreeMap<String, ColAcc> = BTreeMap::new();
-    for (_section, value) in &records {
-        let obj = value.as_object();
-        if let Some(map) = obj {
-            for (k, v) in map {
-                if k == COL_SECTION || k == COL_ROW_INDEX {
-                    continue;
-                }
-                let acc = columns.entry(k.clone()).or_insert_with(|| ColAcc {
-                    kind: ColKind::Empty,
-                    cells: Vec::new(),
-                });
-                // Pad later; kind is updated when we fill in order below.
-                let _ = acc;
-                let _ = v;
-            }
-        }
-    }
-
-    // Second pass fills cells in record order so lengths match.
-    for (_section, value) in &records {
-        let map = value.as_object();
-        for (name, acc) in columns.iter_mut() {
-            let cell_value = map.and_then(|m| m.get(name));
-            push_cell(acc, cell_value);
-        }
-    }
-
-    let mut fields = vec![
-        Field::new(COL_SECTION, DataType::Utf8, false),
-        Field::new(COL_ROW_INDEX, DataType::UInt32, false),
-    ];
-    let mut arrays: Vec<ArrayRef> = vec![
-        Arc::new(StringArray::from(
-            records
-                .iter()
-                .map(|(section, _)| section.as_str())
-                .collect::<Vec<_>>(),
-        )),
-        Arc::new(UInt32Array::from(
-            records
-                .iter()
-                .enumerate()
-                .map(|(i, _)| i as u32)
-                .collect::<Vec<_>>(),
-        )),
-    ];
-
-    // row_index above is global. Rebuild per-section indexes.
-    let mut per_section: HashMap<String, u32> = HashMap::new();
-    let indexes: Vec<u32> = records
-        .iter()
-        .map(|(section, _)| {
-            let n = per_section.entry(section.clone()).or_insert(0);
-            let cur = *n;
-            *n += 1;
-            cur
-        })
-        .collect();
-    arrays[1] = Arc::new(UInt32Array::from(indexes));
-
-    for (name, acc) in columns {
-        fields.push(Field::new(&name, kind_dtype(acc.kind), true));
-        arrays.push(cells_to_array(acc));
-    }
-
-    let schema = Arc::new(Schema::new(fields));
-    RecordBatch::try_new(schema, arrays).map_err(|e| anyhow!("analytics result batch: {e}"))
-}
-
-fn push_section(out: &mut Vec<(String, Value)>, section: &str, rows: &[Value]) {
-    for row in rows {
-        out.push((section.to_string(), row.clone()));
-    }
-}
-
-fn push_cell(acc: &mut ColAcc, value: Option<&Value>) {
-    let cell = match value {
-        None | Some(Value::Null) => Cell::Null,
-        Some(Value::Bool(b)) => Cell::Bool(*b),
-        Some(Value::Number(n)) => {
-            if let Some(f) = n.as_f64() {
-                Cell::Float(f)
-            } else {
-                Cell::Text(n.to_string())
-            }
-        }
-        Some(Value::String(s)) => Cell::Text(s.clone()),
-        Some(other) => Cell::Text(other.to_string()),
-    };
-    acc.kind = promote(acc.kind, &cell);
-    acc.cells.push(cell);
-    if acc.kind == ColKind::Utf8 {
-        coerce_utf8(acc);
-    }
-}
-
-fn promote(kind: ColKind, cell: &Cell) -> ColKind {
-    let incoming = match cell {
-        Cell::Null => return kind,
-        Cell::Float(_) => ColKind::Float,
-        Cell::Bool(_) => ColKind::Bool,
-        Cell::Text(_) => ColKind::Utf8,
-    };
-    match (kind, incoming) {
-        (ColKind::Empty, k) => k,
-        (k, ColKind::Empty) => k,
-        (a, b) if a == b => a,
-        _ => ColKind::Utf8,
-    }
-}
-
-fn coerce_utf8(acc: &mut ColAcc) {
-    if acc.kind != ColKind::Utf8 {
-        return;
-    }
-    for cell in &mut acc.cells {
-        match cell {
-            Cell::Float(f) => *cell = Cell::Text(format_float(*f)),
-            Cell::Bool(b) => *cell = Cell::Text(if *b { "true" } else { "false" }.into()),
-            Cell::Null | Cell::Text(_) => {}
-        }
-    }
-}
-
-fn format_float(f: f64) -> String {
-    if f.is_finite() && f.fract() == 0.0 && f.abs() < 1e15 {
-        format!("{}", f as i64)
-    } else {
-        serde_json::Number::from_f64(f)
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| f.to_string())
-    }
-}
-
-fn kind_dtype(kind: ColKind) -> DataType {
-    match kind {
-        ColKind::Bool => DataType::Boolean,
-        ColKind::Float => DataType::Float64,
-        ColKind::Empty | ColKind::Utf8 => DataType::Utf8,
-    }
-}
-
-fn cells_to_array(acc: ColAcc) -> ArrayRef {
-    match acc.kind {
-        ColKind::Bool => {
-            let values = acc
-                .cells
-                .into_iter()
-                .map(|c| match c {
-                    Cell::Bool(b) => Some(b),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            Arc::new(BooleanArray::from(values))
-        }
-        ColKind::Float => {
-            let values = acc
-                .cells
-                .into_iter()
-                .map(|c| match c {
-                    Cell::Float(f) => Some(f),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            Arc::new(Float64Array::from(values))
-        }
-        ColKind::Empty | ColKind::Utf8 => {
-            let values = acc
-                .cells
-                .into_iter()
-                .map(|c| match c {
-                    Cell::Text(s) => Some(s),
-                    Cell::Float(f) => Some(format_float(f)),
-                    Cell::Bool(b) => Some(if b { "true" } else { "false" }.into()),
-                    Cell::Null => None,
-                })
-                .collect::<Vec<_>>();
-            Arc::new(StringArray::from(values))
-        }
-    }
-}
-
-fn batch_to_table(
-    batch: &RecordBatch,
-    meta: &HashMap<String, String>,
-) -> Result<AnalyticsResultTable> {
-    let mut grouped: BTreeMap<(String, u32), Map<String, Value>> = BTreeMap::new();
-    let section_col = string_col(batch, COL_SECTION)?;
-    let index_col = batch
-        .column_by_name(COL_ROW_INDEX)
-        .ok_or_else(|| anyhow!("missing row_index"))?
-        .as_any()
-        .downcast_ref::<UInt32Array>()
-        .ok_or_else(|| anyhow!("row_index is not uint32"))?;
-
-    let section_keys = section_keys_from_meta(meta);
-    let schema = batch.schema();
-    for row in 0..batch.num_rows() {
-        let section = section_col.value(row).to_string();
-        let idx = index_col.value(row);
-        let entry = grouped.entry((section.clone(), idx)).or_default();
-        for col_idx in 0..batch.num_columns() {
-            let name = schema.field(col_idx).name();
-            if name == COL_SECTION || name == COL_ROW_INDEX {
-                continue;
-            }
-            let array = batch.column(col_idx).as_ref();
-            if array.is_null(row) {
-                if section_keys
-                    .get(&section)
-                    .is_some_and(|keys| keys.contains(name))
-                {
-                    entry.insert(name.clone(), Value::Null);
-                }
-                continue;
-            }
-            if let Some(value) = cell_to_json(array, row) {
-                entry.insert(name.clone(), value);
-            }
-        }
-    }
-
-    let mut table = AnalyticsResultTable {
-        rows: Vec::new(),
-        equipment: Vec::new(),
-        points: Vec::new(),
-        skipped: Vec::new(),
-        warnings: Vec::new(),
-        coverage: None,
-        engine: meta.get("openfdd.engine").cloned().unwrap_or_default(),
-        result_query_version: meta
-            .get("openfdd.result_query_version")
-            .cloned()
-            .unwrap_or_default(),
-    };
-    for ((section, _), map) in grouped {
-        match section.as_str() {
-            "warning" => {
-                if let Some(msg) = map.get("message").and_then(|v| v.as_str()) {
-                    table.warnings.push(msg.to_string());
-                }
-            }
-            "coverage" => {
-                table.coverage = Some(Value::Object(map));
-            }
-            "rows" => table.rows.push(Value::Object(map)),
-            "equipment" => table.equipment.push(Value::Object(map)),
-            "points" => table.points.push(Value::Object(map)),
-            "skipped" => table.skipped.push(Value::Object(map)),
-            _ => {}
-        }
-    }
-    Ok(table)
-}
-
-fn string_col<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a StringArray> {
-    batch
-        .column_by_name(name)
-        .ok_or_else(|| anyhow!("missing {name}"))?
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .ok_or_else(|| anyhow!("{name} is not utf8"))
-}
-
-fn object_keys(rows: &[Value]) -> Vec<String> {
-    let mut keys = BTreeSet::new();
-    for row in rows {
-        if let Some(map) = row.as_object() {
-            keys.extend(map.keys().cloned());
-        }
-    }
-    keys.into_iter().collect()
-}
-
-fn section_keys_json(table: &AnalyticsResultTable) -> String {
-    let coverage_keys = table
-        .coverage
-        .as_ref()
-        .map(|value| object_keys(std::slice::from_ref(value)))
-        .unwrap_or_default();
-    let warning_keys: Vec<&str> = if table.warnings.is_empty() {
-        Vec::new()
-    } else {
-        vec!["message"]
-    };
-    json!({
-        "rows": object_keys(&table.rows),
-        "equipment": object_keys(&table.equipment),
-        "points": object_keys(&table.points),
-        "skipped": object_keys(&table.skipped),
-        "warning": warning_keys,
-        "coverage": coverage_keys,
-    })
-    .to_string()
-}
-
-fn section_keys_from_meta(meta: &HashMap<String, String>) -> HashMap<String, HashSet<String>> {
-    let Some(raw) = meta.get("openfdd.section_keys") else {
-        return HashMap::new();
-    };
-    let Ok(value) = serde_json::from_str::<Value>(raw) else {
-        return HashMap::new();
-    };
-    let Some(obj) = value.as_object() else {
-        return HashMap::new();
-    };
-    let mut out = HashMap::new();
-    for (section, keys) in obj {
-        let Some(arr) = keys.as_array() else {
-            continue;
-        };
-        let set = arr
-            .iter()
-            .filter_map(|item| item.as_str().map(str::to_string))
-            .collect();
-        out.insert(section.clone(), set);
-    }
-    out
-}
-
-fn cell_to_json(array: &dyn Array, row: usize) -> Option<Value> {
-    if array.is_null(row) {
-        return None;
-    }
-    if let Some(col) = array.as_any().downcast_ref::<Float64Array>() {
-        let n = col.value(row);
-        if n.is_finite() && n.fract() == 0.0 && n.abs() < 1e15 {
-            return Some(Value::Number((n as i64).into()));
-        }
-        return serde_json::Number::from_f64(n).map(Value::Number);
-    }
-    if let Some(col) = array.as_any().downcast_ref::<BooleanArray>() {
-        return Some(Value::Bool(col.value(row)));
-    }
-    if let Some(col) = array.as_any().downcast_ref::<StringArray>() {
-        let text = col.value(row);
-        if (text.starts_with('{') && text.ends_with('}'))
-            || (text.starts_with('[') && text.ends_with(']'))
-        {
-            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                if parsed.is_object() || parsed.is_array() {
-                    return Some(parsed);
-                }
-            }
-        }
-        return Some(Value::String(text.to_string()));
-    }
-    None
-}
-
-fn path_is_analytics_results(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|n| n.to_str())
-        .is_some_and(|n| n == RESULTS_DIR)
-}
-
-/// Hive partition match only. `equipment_id=…` text is not a building key.
-fn path_belongs_to_building(path: &Path, building_id: &str) -> bool {
-    let text = path.to_string_lossy();
-    let hive = format!("building_id={building_id}");
-    let legacy = format!("building={building_id}");
-    text.split(['/', '\\'])
-        .any(|seg| seg == hive || seg == legacy)
-}
-
-fn safe_window_token(raw: &str) -> Result<String> {
-    let token = if raw.trim().is_empty() {
-        "open".to_string()
-    } else {
-        raw.trim().to_string()
-    };
-    if token.contains('/') || token.contains('\\') || token.contains("..") || token.contains('=') {
-        bail!("unsafe window token");
-    }
-    Ok(token)
-}
-
-fn short_hash(full: &str) -> String {
-    let hex: String = full
-        .chars()
-        .filter(|c| c.is_ascii_hexdigit())
-        .take(16)
-        .collect();
-    if hex.len() >= 8 {
-        hex
-    } else {
-        config_hash(full).chars().take(16).collect()
-    }
-}
-
 fn hex_encode(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
@@ -1039,7 +278,6 @@ fn hex_encode(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn key(hash: &str) -> AnalyticsCacheKey {
         AnalyticsCacheKey {
@@ -1052,19 +290,6 @@ mod tests {
         }
     }
 
-    fn sample_table() -> AnalyticsResultTable {
-        AnalyticsResultTable {
-            rows: vec![json!({"equipment_id": "AHU_1", "run_hours": 12.5, "on": true})],
-            equipment: vec![json!({"equipment_id": "AHU_1", "plant_group": "ahu"})],
-            points: vec![],
-            skipped: vec![json!({"equipment_id": "VAV_2", "reason": "no fan"})],
-            warnings: vec!["thin coverage".into()],
-            coverage: Some(json!({"samples": 4})),
-            engine: "datafusion".into(),
-            result_query_version: "runtime-v1".into(),
-        }
-    }
-
     fn provenance(key: &AnalyticsCacheKey, hash: &str, order: u64) -> CacheProvenance {
         CacheProvenance {
             building_id: key.building_id.clone(),
@@ -1074,115 +299,17 @@ mod tests {
             window_end: key.window_end.clone(),
             config_hash: hash.to_string(),
             watermark_order: order,
-            watermark_utc: order_key_to_rfc3339(order),
+            watermark_utc: String::new(),
             generated_at: "t".into(),
-            engine: "datafusion".into(),
+            engine: "timescale-sql".into(),
             result_query_version: key.query_version.clone(),
             result_contract: "analytics-result-contract-v2".into(),
             sql_pack: "pack".into(),
             model_revision: "model".into(),
-            watermark_source: "parquet".into(),
+            watermark_source: "timescale".into(),
             watermark_status: "known".into(),
-            coverage: format!("parquet-parts:{order}"),
+            coverage: format!("samples={order};series=1"),
         }
-    }
-
-    #[test]
-    fn parquet_roundtrip_is_columnar_not_json_blob() {
-        let tmp = tempfile::tempdir().unwrap();
-        let hash = config_hash("comfort=70");
-        let key = key(&hash);
-        let mut provenance = provenance(&key, &hash, 20260108000000);
-        provenance.generated_at = "2026-01-08T00:00:00Z".into();
-        let path = write_result(tmp.path(), &key, &sample_table(), &provenance).unwrap();
-        assert!(path.ends_with("results.parquet"));
-        assert!(path
-            .to_string_lossy()
-            .contains("analytics_results/building_id=site-a"));
-
-        let file = File::open(&path).unwrap();
-        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-        let names: Vec<_> = builder
-            .schema()
-            .fields()
-            .iter()
-            .map(|f| f.name().clone())
-            .collect();
-        assert!(names.contains(&"equipment_id".to_string()));
-        assert!(names.contains(&"run_hours".to_string()));
-        assert!(names.contains(&"on".to_string()));
-        assert!(!names.iter().any(|n| n == "payload" || n == "envelope_json"));
-
-        let peeked = peek_result_provenance(tmp.path(), &key).unwrap().unwrap();
-        assert_eq!(peeked.watermark_order, 20260108000000);
-        assert_eq!(peeked.config_hash, hash);
-
-        let (table, got) = read_result(tmp.path(), &key).unwrap().unwrap();
-        assert_eq!(table.rows[0]["equipment_id"], "AHU_1");
-        assert_eq!(table.rows[0]["run_hours"], 12.5);
-        assert_eq!(table.rows[0]["on"], true);
-        assert_eq!(table.equipment[0]["plant_group"], "ahu");
-        assert_eq!(table.skipped[0]["reason"], "no fan");
-        assert_eq!(table.warnings, vec!["thin coverage".to_string()]);
-        assert_eq!(table.coverage.unwrap()["samples"], 4);
-        assert_eq!(got.watermark_order, 20260108000000);
-        assert_eq!(got.config_hash, hash);
-        assert_eq!(got.result_contract, "analytics-result-contract-v2");
-        assert_eq!(got.sql_pack, "pack");
-        assert_eq!(got.model_revision, "model");
-        assert_eq!(got.watermark_status, "known");
-        assert_eq!(got.coverage, "parquet-parts:20260108000000");
-        assert_eq!(table.engine, "datafusion");
-        let file = File::open(&path).unwrap();
-        let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-        let meta = metadata_map(builder.metadata().file_metadata().key_value_metadata());
-        assert_eq!(
-            meta.get("openfdd.schema").map(String::as_str),
-            Some(SCHEMA_NAME)
-        );
-        assert_eq!(SCHEMA_NAME, "analytics-result-parquet-v2");
-    }
-
-    #[test]
-    fn explicit_null_fault_hours_roundtrip_on_the_row_only() {
-        let tmp = tempfile::tempdir().unwrap();
-        let hash = config_hash("chiller");
-        let key = key(&hash);
-        let mut table = sample_table();
-        table.rows = vec![json!({
-            "equipment_id": "CHW_1",
-            "low_delta_t_fault_h": 1.5,
-            "no_load": null,
-            "no_load_fault_h": null
-        })];
-        table.warnings = vec!["flags unknown until rules run".into()];
-        let mut provenance = provenance(&key, &hash, 1);
-        provenance.result_query_version = "chiller-health-v2".into();
-        write_result(tmp.path(), &key, &table, &provenance).unwrap();
-        let (got, _) = read_result(tmp.path(), &key).unwrap().unwrap();
-        let row = got.rows[0].as_object().unwrap();
-        assert!(row.contains_key("no_load_fault_h"));
-        assert!(row["no_load_fault_h"].is_null());
-        assert!(row.contains_key("no_load"));
-        assert!(row["no_load"].is_null());
-        assert_eq!(row["low_delta_t_fault_h"], 1.5);
-        assert_eq!(
-            got.warnings,
-            vec!["flags unknown until rules run".to_string()]
-        );
-        assert!(!got.warnings.iter().any(|w| w.contains("no_load")));
-    }
-
-    #[test]
-    fn config_mismatch_is_a_miss() {
-        let tmp = tempfile::tempdir().unwrap();
-        let hash = config_hash("a");
-        let key = key(&hash);
-        let provenance = provenance(&key, &hash, 1);
-        write_result(tmp.path(), &key, &sample_table(), &provenance).unwrap();
-        let mut other = key;
-        other.config_hash = config_hash("b");
-        assert!(read_result(tmp.path(), &other).unwrap().is_none());
     }
 
     #[test]
@@ -1201,67 +328,6 @@ mod tests {
         assert!(refresh.recompute && !refresh.stale);
         let recompute = read_plan(CacheFreshness::Stale, false, StaleAction::Recompute);
         assert!(recompute.recompute && !recompute.serve_cached);
-    }
-
-    #[test]
-    fn query_version_change_is_a_different_partition() {
-        let tmp = tempfile::tempdir().unwrap();
-        let hash = config_hash("same");
-        let key = key(&hash);
-        let provenance = provenance(&key, &hash, 10);
-        write_result(tmp.path(), &key, &sample_table(), &provenance).unwrap();
-        let mut next = key.clone();
-        next.query_version = "runtime-v2".into();
-        assert!(read_result(tmp.path(), &next).unwrap().is_none());
-        assert!(read_result(tmp.path(), &key).unwrap().is_some());
-    }
-
-    #[test]
-    fn historian_watermark_ignores_analytics_results_and_other_buildings() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mine = tmp
-            .path()
-            .join("history/building_id=site-a/equipment_id=ahu/year=2026/month=01");
-        fs::create_dir_all(&mine).unwrap();
-        fs::write(mine.join("part-20260115T120000Z-live.parquet"), b"x").unwrap();
-        let other = tmp
-            .path()
-            .join("history/building_id=site-b/year=2026/month=06");
-        fs::create_dir_all(&other).unwrap();
-        fs::write(other.join("part-20260601T000000Z-live.parquet"), b"x").unwrap();
-        let cache = tmp.path().join(
-            "analytics_results/building_id=site-a/query_id=runtime/part-20261201T000000Z.parquet",
-        );
-        fs::create_dir_all(cache.parent().unwrap()).unwrap();
-        fs::write(&cache, b"x").unwrap();
-        let order = historian_watermark_order(tmp.path(), "site-a").unwrap();
-        assert_eq!(order, 20260115120000);
-        assert_eq!(order_key_to_rfc3339(order), "2026-01-15T12:00:00Z");
-    }
-
-    #[test]
-    fn watermark_ignores_equipment_id_text_and_id_prefixes() {
-        let tmp = tempfile::tempdir().unwrap();
-        let by_equipment = tmp.path().join("history/equipment_id=site-a");
-        fs::create_dir_all(&by_equipment).unwrap();
-        fs::write(
-            by_equipment.join("part-20260301T000000Z-live.parquet"),
-            b"x",
-        )
-        .unwrap();
-        let prefix = tmp
-            .path()
-            .join("history/building_id=site-ab/equipment_id=AHU_1");
-        fs::create_dir_all(&prefix).unwrap();
-        fs::write(prefix.join("part-20260601T000000Z-live.parquet"), b"x").unwrap();
-        assert_eq!(historian_watermark_order(tmp.path(), "site-a").unwrap(), 0);
-    }
-
-    #[test]
-    fn unsafe_building_id_is_rejected() {
-        let mut key = key("abcdabcdabcdabcd");
-        key.building_id = "../escape".into();
-        assert!(partition_dir(Path::new("/tmp"), &key).is_err());
     }
 
     fn known_identity(model: &str, order: u64, coverage: &str) -> CacheIdentity {
@@ -1292,8 +358,10 @@ mod tests {
             freshness_for_identity(&unstamped, &current),
             CacheFreshness::Incompatible
         );
+        let mut other_source = cached.clone();
+        other_source.watermark_source = "legacy".into();
         assert_eq!(
-            freshness_for_identity(&cached, &known_identity("model", 0, "parquet-parts:0")),
+            freshness_for_identity(&other_source, &current),
             CacheFreshness::Incompatible
         );
         let mut timescale = cached;
@@ -1345,19 +413,6 @@ mod tests {
     }
 
     #[test]
-    fn unreadable_historian_root_is_an_error() {
-        let tmp = tempfile::tempdir().unwrap();
-        let file = tmp.path().join("not-a-directory");
-        fs::write(&file, b"x").unwrap();
-        let err = historian_watermark_order(&file, "site-a").unwrap_err();
-        assert!(err.to_string().contains("not a readable directory"));
-        assert_eq!(
-            historian_watermark_order(&tmp.path().join("missing"), "site-a").unwrap(),
-            0
-        );
-    }
-
-    #[test]
     fn derived_cache_repair_keeps_historian_and_labeled_results() {
         let tmp = tempfile::tempdir().unwrap();
         let history = tmp
@@ -1375,22 +430,18 @@ mod tests {
             .join("analytics_results/building_id=site-b/query_id=runtime");
         fs::create_dir_all(&other).unwrap();
         fs::write(other.join("results.parquet"), b"other").unwrap();
-        let hash = config_hash("repair");
-        let key = key(&hash);
-        write_result(
-            tmp.path(),
-            &key,
-            &sample_table(),
-            &provenance(&key, &hash, 1),
-        )
-        .unwrap();
+        let mine = tmp
+            .path()
+            .join("analytics_results/building_id=site-a/query_id=runtime");
+        fs::create_dir_all(&mine).unwrap();
+        fs::write(mine.join("results.parquet"), b"mine").unwrap();
 
         let removed = remove_derived_result_cache(tmp.path(), "site-a").unwrap();
         assert!(removed >= 1);
         assert!(sample.is_file());
         assert!(rule.is_file());
         assert!(other.join("results.parquet").is_file());
-        assert!(read_result(tmp.path(), &key).unwrap().is_none());
+        assert!(!mine.exists());
         assert_eq!(
             remove_derived_result_cache(tmp.path(), "site-a").unwrap(),
             0

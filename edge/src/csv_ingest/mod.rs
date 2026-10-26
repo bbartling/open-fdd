@@ -11,19 +11,17 @@ pub mod haystack_projection;
 pub mod haystack_sparql_bindings;
 pub mod model_overlay;
 pub mod package;
-pub mod parquet_bridge;
 pub mod parse;
 pub mod plan;
 pub mod portal_ingest_sparql;
 pub mod semantic_meta;
 pub mod semantic_selector;
 pub mod session;
+pub mod timescale_stage;
 pub mod timestamp;
 mod upload;
 
-pub use dataset::{
-    delete_dataset, list_datasets, preview_dataset, register_package_dataset, save_dataset,
-};
+pub use dataset::{delete_dataset, list_datasets, preview_dataset, register_package_dataset};
 
 use plan::{
     auto_detect_mapping, infer_ut3_plan_from_session, is_weather_filename, plan_from_json,
@@ -450,7 +448,7 @@ pub fn execute_handler(body: &Value) -> Value {
 
     let dataset_id = plan.output_dataset_name;
     // Timescale package stage only. Arrow IPC and Parquet history are not written.
-    match parquet_bridge::stage_rows_for_timescale(&dataset_id, &rows) {
+    match timescale_stage::stage_rows_for_timescale(&dataset_id, &rows) {
         Ok(mut result) => {
             result["validation_report"] = validation_report;
             let mut session = session;

@@ -1,4 +1,6 @@
-//! Parquet historian and sidecar storage helpers.
+//! Storage helpers that need no columnar file format: AFDD scheduling
+//! windows, building sessions, CSV history merge, tenant paths, and the
+//! analytics result-cache identity.
 
 pub mod afdd;
 pub mod afdd_scheduler;
@@ -6,18 +8,7 @@ pub mod afdd_window;
 pub mod analytics_cache;
 pub mod append;
 pub mod building_session;
-pub mod compaction;
-pub mod compaction_coord;
-pub mod disk_budget;
 pub mod historian;
-pub mod ingest;
-pub(crate) mod legacy_formats;
-pub mod meta;
-pub mod micro_batch;
-pub mod migration;
-pub mod migration_exec;
-pub mod parquet_parts;
-pub mod stats;
 
 pub use afdd::{
     wall_clock_local_rfc3339, AfddConfig, AfddLookbackUnit, AfddMode, AfddOperatorSchedule,
@@ -35,11 +26,9 @@ pub use afdd_window::{
     MAX_AFDD_BACKFILL_CHUNKS, MAX_AFDD_BACKFILL_DAYS,
 };
 pub use analytics_cache::{
-    config_hash, freshness_for_identity, freshness_for_watermark, historian_watermark_order,
-    order_key_to_rfc3339, peek_result_provenance, read_plan, read_result,
-    remove_derived_result_cache, write_result, AnalyticsCacheKey, AnalyticsResultTable,
-    CacheFreshness, CacheIdentity, CacheProvenance, InputWatermark, ReadPlan, StaleAction,
-    SCHEMA_NAME,
+    config_hash, freshness_for_identity, freshness_for_watermark, read_plan,
+    remove_derived_result_cache, AnalyticsCacheKey, AnalyticsResultTable, CacheFreshness,
+    CacheIdentity, CacheProvenance, InputWatermark, ReadPlan, StaleAction,
 };
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use building_session::{
@@ -47,45 +36,9 @@ pub use building_session::{
     SessionRecord, DEFAULT_IDLE_TIMEOUT_SECS, DEFAULT_MAX_INTERACTIVE_SESSIONS,
     DEFAULT_MQTT_BUFFER_ROWS,
 };
-pub use compaction::{CompactionPlan, CompactionResult, CompactionSummary, ParquetCompactor};
-pub use compaction_coord::{
-    assert_compaction_safe_for_offline, compact_history_fail_closed, compact_history_wait,
-    historian_scan_permit_wait, shared_compaction_coordinator, try_historian_scan_permit,
-    CompactPermit, CompactionCoordinator, CompactionCoordinatorStatus, HistorianIoBusy, ScanPermit,
-};
-pub use disk_budget::{
-    apply_data_budget, bytes_over_budget, collect_budget_objects, enforce_budget_throttled,
-    order_key_from_path, plan_oldest_first, preflight_update, BudgetObject, DataBudget,
-    EvictionPlan, EvictionReport, PreflightDecision, PreflightInput, DEFAULT_LOCAL_DATA_BUDGET_GIB,
-    DEFAULT_RESERVED_FREE_PERCENT, GIB,
-};
 pub use historian::{
     building_history_present, history_partition_path, list_building_ids, local_file_root_from_env,
     resolve_building_read_root, safe_partition_value, tenant_storage_prefix, tenant_storage_root,
     weather_partition_path, BuildingReadRoot, BuildingReadSource, HistorianConfig, LocalStorage,
     ObjectMetadata, StorageUrl,
-};
-pub use ingest::{
-    ingest_building, ingest_building_equipment, ingest_building_with_batch_hook, IngestReport,
-    IngestTiming,
-};
-pub use meta::SidecarMeta;
-pub use micro_batch::{
-    process_pending_bytes, BatchProvenance, FlushReason, HistorianBatchKey, MicroBatchFlush,
-    MicroBatchHistorian,
-};
-pub use migration::{
-    discover_legacy_historian, LegacyHistorianCandidate, LegacyHistorianFormat,
-    MigrationDryRunReport, MigrationInventory,
-};
-pub use migration_exec::{
-    migrate_legacy_historian, migrate_legacy_parquet, MigrationPart, MigrationRunReport,
-    MigrationSourceReport, MigrationSourceStatus,
-};
-pub use parquet_parts::{
-    CompletePartPublisher, ParquetPart, ParquetPartWriter, DEFAULT_ROW_GROUP_ROWS,
-};
-pub use stats::{
-    local_historian_stats, local_historian_stats_from_config, peek_equipment_history_columns,
-    HistorianStats,
 };
