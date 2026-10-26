@@ -138,16 +138,20 @@ def skip_attributes(mask: str, pos: int) -> int:
         pos = k + 1
 
 
-def test_regions(mask: str) -> tuple[list[tuple[int, int]], list[str]]:
-    """Spans of ``#[cfg(test)]`` / ``#[test]`` items and names of test-only ``mod x;``."""
+PATH_ATTR = re.compile(r'#\s*\[\s*path\s*=\s*"([^"]+)"\s*\]')
+
+
+def test_regions(code: str, mask: str) -> tuple[list[tuple[int, int]], list[tuple[str, str | None]]]:
+    """Spans of ``#[cfg(test)]`` / ``#[test]`` items and test-only ``mod x;`` (name, ``#[path]``)."""
     regions: list[tuple[int, int]] = []
-    test_mods: list[str] = []
+    test_mods: list[tuple[str, str | None]] = []
     for pattern in (CFG_TEST, TEST_FN_ATTR):
         for m in pattern.finditer(mask):
             item = skip_attributes(mask, m.start())
             mod_decl = re.compile(r"\s*(pub(\([^)]*\))?\s+)?mod\s+(\w+)\s*;").match(mask, item)
             if mod_decl:
-                test_mods.append(mod_decl.group(3))
+                path_attr = PATH_ATTR.search(code, m.start(), item)
+                test_mods.append((mod_decl.group(3), path_attr.group(1) if path_attr else None))
                 regions.append((m.start(), mod_decl.end()))
                 continue
             brace = mask.find("{", item)
@@ -160,7 +164,9 @@ def test_regions(mask: str) -> tuple[list[tuple[int, int]], list[str]]:
     return regions, test_mods
 
 
-def child_module_paths(path: Path, name: str) -> list[Path]:
+def child_module_paths(path: Path, name: str, path_attr: str | None) -> list[Path]:
+    if path_attr is not None:
+        return [path.parent / path_attr]
     base = path.parent if path.name in ("main.rs", "lib.rs", "mod.rs") else path.parent / path.stem
     return [base / f"{name}.rs", base / name / "mod.rs", base / name]
 
@@ -185,10 +191,10 @@ def scan_sources(root: Path) -> list[str]:
     for path in files:
         src = path.read_text(encoding="utf-8", errors="replace")
         code, mask, strings = lex(src)
-        regions, test_mods = test_regions(mask)
+        regions, test_mods = test_regions(code, mask)
         parsed[path] = (code, mask, strings, regions)
-        for name in test_mods:
-            test_only.update(p.resolve() for p in child_module_paths(path, name))
+        for name, path_attr in test_mods:
+            test_only.update(p.resolve() for p in child_module_paths(path, name, path_attr))
 
     def excluded(path: Path) -> bool:
         resolved = path.resolve()
@@ -332,6 +338,24 @@ def self_test() -> int:
                 ),
                 "services/central/src/main.rs": "#[cfg(test)]\nmod fixtures;\nfn main() {}\n",
                 "services/central/src/fixtures.rs": 'pub const F: &str = "INSERT INTO sample (ts) VALUES (now())";\n',
+            },
+            CLEAN_TREE,
+        ),
+        (
+            "test-only mod with #[path] is ignored",
+            True,
+            {
+                "services/central/src/product.rs": '#[cfg(test)]\n#[path = "product_fixture.rs"]\nmod fixture;\npub fn p() {}\n',
+                "services/central/src/product_fixture.rs": 'pub const F: &str = "INSERT INTO sample (ts) VALUES (now())";\n',
+            },
+            CLEAN_TREE,
+        ),
+        (
+            "non-test mod with #[path] is scanned",
+            False,
+            {
+                "services/central/src/product.rs": '#[path = "product_writer.rs"]\nmod writer;\npub fn p() {}\n',
+                "services/central/src/product_writer.rs": 'pub const F: &str = "INSERT INTO sample (ts) VALUES (now())";\n',
             },
             CLEAN_TREE,
         ),
