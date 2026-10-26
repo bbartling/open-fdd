@@ -1,5 +1,7 @@
 # Removals during Vibe19 port
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Checkpoint commit **`4fe1dc99`** recorded the gutted Open-FDD tree before port.
 
 ## Removed (531 files)

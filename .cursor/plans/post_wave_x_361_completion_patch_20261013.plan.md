@@ -49,6 +49,8 @@ isProject: true
 
 # Wave-X 3.6.1+ completion patch train — 2026-10-13 (double-checked)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status: SUPERSEDED (2026-10-14) by [post_wave_x_363_softopen_residuals_20261014.plan.md](post_wave_x_363_softopen_residuals_20261014.plan.md).** Done Soft-OPEN on tip **`sha-eacdf79` / 3.6.2** retained as evidence; unfinished work (C5/C10/C11/C12 polish/C13 probes/pandas/X2b/A0–A9) lives in the 3.6.3 residuals plan. Soft-OPEN ≠ FQ.
 
 **Prior status (archived):** Soft-OPEN ≠ FQ. Hub tip **`sha-eacdf79` / 3.6.2+eacdf79cede8**. Residuals: C5 gate39/OT + central 8.5GiB **UI-only**, C10 Grok ART missing after 2× `--send`, C11 no AC closes.

@@ -1,5 +1,7 @@
 # Historian / Continuous AFDD architecture contract
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 > **SUPERSEDED HARD LOCKS (Wave-X 3.6.0+ / ADR-010):** Product historian is **TimescaleDB only**.
 > **FORBIDDEN:** DataFusion product path, Arrow historian, Parquet co-canonical, Feather, dual-write,
 > dual-read, “Parquet if Timescale miss”, sidecar mirror. Soft-OPEN ≠ FQ.

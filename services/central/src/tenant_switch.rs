@@ -65,12 +65,11 @@ impl Drop for SharedPoolReset {
     }
 }
 
-fn postgres_url() -> String {
+fn postgres_url() -> Option<String> {
     std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".into())
 }
 
 fn operator(username: &str, tenant_ids: Vec<String>) -> UserRecord {
@@ -133,6 +132,10 @@ async fn equipment_count(pool: &sqlx::PgPool, building_id: &str) -> i64 {
     reason = "OPENFDD_WORKSPACE and the multi-tenant flag are process-global for these handler calls"
 )]
 async fn switch_active_tenant_keeps_membership_and_denies_foreign_reads() {
+    let Some(url) = postgres_url() else {
+        eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
+        return;
+    };
     let _env_lock = lock_env();
     let workspace = tempfile::tempdir().expect("workspace");
     let _workspace_env = WorkspaceEnv::set(workspace.path());
@@ -215,7 +218,6 @@ async fn switch_active_tenant_keeps_membership_and_denies_foreign_reads() {
         Some(tenant_a.as_str())
     );
 
-    let url = postgres_url();
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(2)
         .connect(&url)

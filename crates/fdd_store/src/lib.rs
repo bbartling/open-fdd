@@ -26,9 +26,9 @@ pub use afdd_window::{
     MAX_AFDD_BACKFILL_CHUNKS, MAX_AFDD_BACKFILL_DAYS,
 };
 pub use analytics_cache::{
-    config_hash, freshness_for_identity, freshness_for_watermark, read_plan,
-    remove_derived_result_cache, AnalyticsCacheKey, AnalyticsResultTable, CacheFreshness,
-    CacheIdentity, CacheProvenance, InputWatermark, ReadPlan, StaleAction,
+    config_hash, freshness_for_identity, freshness_for_watermark, read_plan, AnalyticsCacheKey,
+    AnalyticsResultTable, CacheFreshness, CacheIdentity, CacheProvenance, InputWatermark, ReadPlan,
+    StaleAction,
 };
 pub use append::{merge_history_wide_csv, merge_history_wide_text, MergeReport};
 pub use building_session::{

@@ -64,6 +64,8 @@ isProject: true
 
 # Haystack RDF / SPARQL C2–C6 audit train (2026-10-04)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status:** **DONE via master finish** (tip `sha-215e159` / 3.5.65). H0–H18 Cursor impl/hygiene/VERSION/GHCR complete. **Left = live Soft-OPEN only:** C6 smoke + close/evidence on #997/#1003/#1004/#1123 (Grok window) — not unchecked H8–H18 code tips.
 
 **GitHub:** [#1123](https://github.com/bbartling/open-fdd/issues/1123) (audit refinements) · [#997](https://github.com/bbartling/open-fdd/issues/997) master · [#1000](https://github.com/bbartling/open-fdd/issues/1000)–[#1004](https://github.com/bbartling/open-fdd/issues/1004) C2–C6

@@ -28,14 +28,14 @@ Standalone stack UI (Caddy) reverse-proxies `/api*` → `central:8080`.
 | GET | `/api/fdd/rules` | Registry from `sql_rules/registry.yaml` |
 | GET | `/api/fdd/rules/{id}/params` | Tuning schema (`control` field per parameter) |
 | POST | `/api/fdd/run` | Execute registry rules — `{ "mode": "registry", "rule_ids": [...], "params": {...} }` only. **Raw SQL is rejected** (integrator SQL lab: `/api/rules`). |
-| GET | `/api/fdd/cache/status` | Parquet ingest / results status |
+| GET | `/api/fdd/cache/status` | Ingest / results status (Parquet wording historical) |
 | GET | `/api/fdd/roles` | Column role mappings |
 | GET | `/api/fdd/status` | Registry count + rules dir |
 
 Env:
 
 - `OPENFDD_SQL_RULES_DIR` (default `/app/sql_rules` in images)
-- `OPENFDD_PARQUET_ROOT` (default `.cache/parquet`)
+- `OPENFDD_PARQUET_ROOT` — historical, superseded by the Timescale-only mandate; do not set
 - `OPENFDD_RULE_RESULTS_DIR` (default `.cache/rule_results`)
 
 See `docs/migration/vibe19/SQL_RULE_TUNING_CONTRACT.md` for parameter schema (`control`, not only `frontend_control`).

@@ -213,7 +213,7 @@ OPENFDD_ADMIN_PASSWORD=<strong deployment-unique password — human browser UI o
 OPENFDD_AGENT_PASSWORD=<strong password for external FDD AI / MCP — not the admin password>
 OPENFDD_WORKSPACE=/workspace
 OPENFDD_STORAGE_URL=file:///workspace/openfdd
-# Legacy alias (prefer STORAGE_URL on new deploys): OPENFDD_PARQUET_ROOT=/workspace/.cache/parquet
+# Historical, superseded by the Timescale-only mandate: OPENFDD_PARQUET_ROOT (do not set)
 OPENFDD_REACT_UI=1
 OPENFDD_UI_GENERATION_DEFAULT=react
 ```

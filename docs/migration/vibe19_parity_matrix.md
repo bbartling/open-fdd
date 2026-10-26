@@ -6,6 +6,8 @@ nav_order: 2
 
 # Vibe19 presentation parity → Open-FDD (DataFusion)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Open-FDD product Overview / FDD Plots / RCx use **central DataFusion**
 (`/api/analytics/*`, `/api/fdd/*`) + **React client Plotly**. vibe19 remains an
 external pandas demo for cookbook/oracle work — not the product runtime.

@@ -15,14 +15,14 @@ permalink: /ecm/overview.html
 
 Works with any AI agent that can read markdown skills and run the PyPI CLI. Skill source of truth: `openfdd_agent_spec/skills/` (`./scripts/openfdd_install_agent_skills.sh --sync`).
 
-AI agent reporting can consume FDD and analytics that DataFusion SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
+AI agent reporting can consume FDD and analytics that Timescale SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
 
 **Why it exists:** agents put industry-method calcs into **Excel** for human audit, then optionally **compare honesty against EnergyPlus** — see [Purpose: Excel + EnergyPlus](purpose-excel-energyplus.html).
 
 The ECM API fills the same workbook input cells a human engineer would fill.
 It does not replace the visible spreadsheet calculations.
 
-**Production FDD** (DataFusion SQL fault detection) lives in the [GHCR container stack]({{ site.baseurl }}/quick-start/docker-ghcr.html), not this wheel.
+**Production FDD** (Timescale SQL fault detection) lives in the [GHCR container stack]({{ site.baseurl }}/quick-start/docker-ghcr.html), not this wheel.
 
 **Product freeze / upsell:** [Engineer upsell brief](ENGINEER_UPSELL_BRIEF.html) — customers see ECM via **PyPI → open-fdd**, not vibe tip churn.
 

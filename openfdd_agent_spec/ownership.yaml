@@ -35,6 +35,9 @@ components:
       - python_request_path
       - datafusion_product_path
       - mqtt_or_fieldbus_product_path
+      - parquet_arrow_feather_datafusion_storage_cache_or_dependency
+      - dual_record_write
+      - second_telemetry_writer
 
   production_analytics:
     canonical_owner: openfdd-central
@@ -44,6 +47,7 @@ components:
     forbidden:
       - pandas_overview_oracle
       - python_in_central_image
+      - file_format_result_cache  # results persist in PostgreSQL or bounded memory
 
   generic_ecm_math:
     canonical_owner: open_fdd.ecm_engineering
@@ -129,8 +133,7 @@ protected_docs:
     required_markers:
       - "FDD Rule Cookbook"
       - "pypi.org/project/open-fdd"
-      - "Apache DataFusion"
-      - "Apache Arrow"
+      - "Timescale"
       - "datafusion-sql-cookbook"
       - "pandas-cookbook"
   pandas_cookbook:

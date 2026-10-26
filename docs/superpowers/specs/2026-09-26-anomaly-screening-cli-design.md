@@ -13,12 +13,12 @@ Ship a **PR-ready** offline screening tool in the Open-FDD Python package that:
 1. Reads a device folder with wide historian CSV + column map.
 2. Runs per-point anomaly detectors inspired by the Tiger Data guide (Z-score, MAD, STL residual, Isolation Forest) with alert deduplication.
 3. Writes a scoreboard, a stacked bar chart of accumulated anomaly minutes, and up to **10 full-day zoom PNGs** for each of the **top-N** noisiest points (Open-FDD fault-strip plot style).
-4. Keeps **SQL-portable** detectors (especially MAD / later Z-score) separable so they can later be re-expressed in DataFusion SQL; sklearn/STL remain Python-only.
+4. Keeps **SQL-portable** detectors (especially MAD / later Z-score) separable so they can later be re-expressed in Timescale / PostgreSQL SQL; sklearn/STL remain Python-only.
 
 ## Non-goals (v1)
 
 - Live Timescale / PostgreSQL connectors or continuous aggregates.
-- Baking detectors into the DataFusion/Rust central stack in this PR (document portability only).
+- Baking detectors into the Rust central / Timescale SQL stack in this PR (document portability only).
 - Screening every zone space-temp column (v1 uses AHU IO from `column_map` only).
 - Supervised / labeled training loops.
 
@@ -113,11 +113,11 @@ open_fdd/analytics/anomaly/
 - Optional deps: `statsmodels`, `scikit-learn` under extras e.g. `anomaly` (and include in `dev`/`test` as appropriate).
 - Tests: small synthetic series (injected spike / stuck / seasonal jump) asserting flags + scoreboard columns; plot smoke optional/light.
 
-## SQL / DataFusion portability note
+## SQL portability note (Timescale / PostgreSQL)
 
 | Method | v1 home | Later port |
 | --- | --- | --- |
-| Z-score + MAD | Python, pure rolling stats | DataFusion SQL / continuous-aggregate style windows |
+| Z-score + MAD | Python, pure rolling stats | Timescale SQL / continuous-aggregate style windows |
 | STL | Python (`statsmodels`) | Stay Python or approximate with seasonal baselines in SQL later |
 | Isolation Forest | Python (`sklearn`) | Stay Python batch / offline |
 

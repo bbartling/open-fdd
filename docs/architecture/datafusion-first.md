@@ -6,6 +6,8 @@ nav_order: 10
 
 # DataFusion-first policy (historical)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 > **SUPERSEDED. historical/non-executable.** Product path is Timescale-only ([ADR-010](adr-010-timescale-hard-cutover.md)), `architecture_epoch: portal-timescale-v1`. Soft-OPEN ≠ FQ. Do not add DataFusion because this page still names it.
 
 The tables under this heading record the retired engine. They are not requirements.

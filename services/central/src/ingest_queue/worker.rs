@@ -22,7 +22,7 @@ use super::coverage::{
 };
 use super::model::{
     points_digest, revision_still_owns, AppliedSample, FinishOutcome, FinishRequest, JobCounts,
-    JobView,
+    JobView, QueueError,
 };
 use super::schedule::{self, ScheduleDevice};
 
@@ -311,37 +311,20 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
         }
     };
     let device = device_for_write(&plan, job);
-    let written = if let Some(device) = device.as_ref() {
-        match poller::write_device_window(
-            state,
-            site,
-            device,
-            &page,
-            job.logical_window_start,
-            job.logical_window_end,
-        )
-        .await
-        {
-            Ok(receipt) => receipt,
-            Err(err) => {
-                return WindowDecision::bare(finish_for_poll_error(state, job, &err).await);
-            }
+    let applied = applied_samples(&page, job.logical_window_start, job.logical_window_end);
+    let written = match persist_window(state, site, device.as_ref(), job, &page, &applied).await {
+        Ok(receipt) => receipt,
+        Err(PersistFailure::StaleFence) => {
+            warn!(job_id = %job.job_id, "ingest lease lost before the canonical write; nothing written");
+            return WindowDecision::bare(FinishOutcome::Retry {
+                code: "stale_fence".into(),
+                not_before: Utc::now(),
+            });
         }
-    } else {
-        crate::providers::writer::ProviderIngestReceipt {
-            submitted: 0,
-            eligible: 0,
-            skipped: 0,
-            persisted_rows: 0,
-            inserted_rows: 0,
-            updated_rows: 0,
+        Err(PersistFailure::Poll(err)) => {
+            return WindowDecision::bare(finish_for_poll_error(state, job, &err).await);
         }
     };
-    let applied = applied_samples(&page, job.logical_window_start, job.logical_window_end);
-    if let Err(err) = state.ingest_queue.apply_samples(job, &applied).await {
-        warn!(job_id = %job.job_id, error = %err, "ingest apply ledger rejected");
-        return WindowDecision::bare(finish_for_poll_error(state, job, "persistence").await);
-    }
     let outcome = decide_window(&DecideWindow {
         job_revision: &job.model_revision,
         active_revision: Some(plan.revision_id.as_str()),
@@ -381,6 +364,117 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
         active_model_revision: active_revision,
         active_points_digest: active_digest,
     }
+}
+
+enum PersistFailure {
+    /// The claim no longer owns the window. Nothing reached canonical history.
+    StaleFence,
+    Poll(String),
+}
+
+const EMPTY_RECEIPT: crate::providers::writer::ProviderIngestReceipt =
+    crate::providers::writer::ProviderIngestReceipt {
+        submitted: 0,
+        eligible: 0,
+        skipped: 0,
+        persisted_rows: 0,
+        inserted_rows: 0,
+        updated_rows: 0,
+    };
+
+/// Canonical samples and ledger rows for one claimed window. With a shared
+/// Postgres queue the lease check, the Timescale upsert, and the ledger rows
+/// commit in one transaction. The process-memory queue has no shared fence
+/// and keeps the live-writer path.
+async fn persist_window(
+    state: &Arc<AppState>,
+    site: &crate::providers::config::SiteConfig,
+    device: Option<&crate::providers::map::DevicePoints>,
+    job: &JobView,
+    page: &[crate::providers::map::HistorySeries],
+    applied: &[AppliedSample],
+) -> Result<crate::providers::writer::ProviderIngestReceipt, PersistFailure> {
+    if crate::timescale_historian::historian_is_timescale() {
+        let accepted = device.map(|device| {
+            poller::accept_device_window(
+                &site.building_id,
+                &site.provider_instance_id,
+                device,
+                page,
+                crate::providers::hourly::LogicalWindow {
+                    start: job.logical_window_start,
+                    end: job.logical_window_end,
+                },
+            )
+            .samples
+        });
+        let samples = accepted.unwrap_or_default();
+        let projected = crate::providers::writer::canonical_rows(&site.building_id, &samples)
+            .map_err(|err| PersistFailure::Poll(err.code.as_str().to_string()))?;
+        let equip_type = device.and_then(|device| {
+            device
+                .points
+                .iter()
+                .find_map(|point| point.equip_type.as_deref())
+        });
+        let window = super::postgres::CanonicalWindow {
+            equip_type,
+            rows: &projected.rows,
+            applied,
+        };
+        match state
+            .ingest_queue
+            .commit_window(job, Utc::now(), &window)
+            .await
+        {
+            Ok(Some(write)) => {
+                if !samples.is_empty() {
+                    state.note_ingest_ok();
+                }
+                return Ok(crate::providers::writer::ProviderIngestReceipt {
+                    submitted: samples.len(),
+                    eligible: projected.rows.len(),
+                    skipped: projected.skipped,
+                    persisted_rows: usize::try_from(write.samples.persisted())
+                        .unwrap_or(usize::MAX),
+                    inserted_rows: usize::try_from(write.samples.inserted).unwrap_or(usize::MAX),
+                    updated_rows: usize::try_from(write.samples.updated).unwrap_or(usize::MAX),
+                });
+            }
+            Ok(None) => {}
+            Err(QueueError::StaleFence) => return Err(PersistFailure::StaleFence),
+            Err(err) => {
+                warn!(job_id = %job.job_id, error = %err, "fenced canonical write failed");
+                state
+                    .providers
+                    .record_error(
+                        &site.building_id,
+                        crate::providers::types::ProviderHealthStatus::Error,
+                        Some("persistence".into()),
+                    )
+                    .await;
+                return Err(PersistFailure::Poll("persistence".into()));
+            }
+        }
+    }
+    let written = match device {
+        Some(device) => poller::write_device_window(
+            state,
+            site,
+            device,
+            page,
+            job.logical_window_start,
+            job.logical_window_end,
+        )
+        .await
+        .map_err(PersistFailure::Poll)?,
+        None => EMPTY_RECEIPT,
+    };
+    if let Err(err) = state.ingest_queue.apply_samples(job, applied).await {
+        warn!(job_id = %job.job_id, error = %err, "ingest apply ledger rejected");
+        return Err(PersistFailure::Poll("persistence".into()));
+    }
+    Ok(written)
 }
 
 fn expectations_for(plan: &IngestPlan, job: &JobView) -> Vec<PointExpectation> {

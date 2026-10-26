@@ -1,5 +1,7 @@
 # BUG REPORT — OT Modbus / Haystack / BACnet / MQTT (low-RAM GHCR loop)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 ## 4.0.1 platform patch (2026-10-20)
 
 Workspace **4.0.1** on master `04673e4f` (prior workspace **4.0.0**). This row is the release note for the patch. It is not a new gate FAIL and it is not an ops pin.

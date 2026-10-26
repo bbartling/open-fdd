@@ -1,5 +1,7 @@
 # BUG REPORT — Wave N Multi-Tenant Security + ACME MQTTS
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Date:** 2026-09-13 (Wave N kickoff) · **updated:** 2026-09-14T02:51Z  
 **Platform:** Railway hub (`gleaming-cooperation` / `production`) + ACME on-prem fieldbus OT edge (private; not in GH)  
 **OPS PINNED:** `sha-9072e0b` / **3.5.10+9072e0b9fcf6** · `multi_tenant=true` · ACME streaming · ACL trio+mapping/series PASS (`reports/wave_n_tip_pin_3510_20260914T052952Z`) · continuity pending/see evidence  

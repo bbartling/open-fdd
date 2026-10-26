@@ -43,6 +43,8 @@ isProject: false
 
 # Wave K — 3.4.0 filesystem-historian pin (master)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Active.** Ops Railway hub **`sha-5aed663`** / 3.3.41. K2/K3 docs **#885 MERGED**. Next tip: **[#886](https://github.com/bbartling/open-fdd/pull/886)** plot-span. Cursor live board: `~/.cursor/plans/wave_k_340_filesystem_pin_master.plan.md`.
 
 **Why 3.4.0:** Last fully qualified **single-tenant Parquet + DataFusion** product line before Wave L **multi-client shared hosting**. Freeze the historian contract so Wave L partitions storage — it does **not** replace Parquet with Postgres time-series.

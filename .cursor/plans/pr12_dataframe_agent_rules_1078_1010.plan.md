@@ -31,6 +31,8 @@ isProject: false
 
 # PR-12 — DataFrame API + agent custom rules (#1078 + #1010)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Parent:** [`patch_all_open_issues_master.plan.md`](patch_all_open_issues_master.plan.md)  
 **Depends on:** PR-01 preferred (auth/tenant surface stable)  
 **Branch:** `feat/dataframe-api-agent-rules-1078-1010`  

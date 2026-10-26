@@ -1,5 +1,7 @@
 # Stage 2 — Parity and wiring
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 > **Historical snapshots:** Numbers below are point-in-time BUILDING_100 parity runs. For the current benchmark, see [RUST_DATAFUSION_PARITY_BENCHMARK.md](../../benchmarks/RUST_DATAFUSION_PARITY_BENCHMARK.md) (commit/date labeled there).
 
 > **Stage 3 update (2026-07-09):** VAV_7 `zone_t` ranked resolution + SQL tunable parameters. Snapshot @ 0.5h: **314 pass / 54 fail** (was 228/52 @ `bdb8881`).

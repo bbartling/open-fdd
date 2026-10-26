@@ -1,5 +1,7 @@
 # SUPERSEDED — 2026-07-28 pandas UI inventory
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status:** historical tombstone (Wave J Stage A, 2026-09-08).
 
 This inventory classified `frontend/web/app/*.py` files as React product runtime.

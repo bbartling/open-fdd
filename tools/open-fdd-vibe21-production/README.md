@@ -1,5 +1,7 @@
 # Open-FDD production recovery and Vibe 21 digital-twin program
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Program status:** proposed execution plan based on a static audit of Open-FDD
 `b3ff921ec981c3381b24bbfdde55c9c4d6f0ba9c` and Vibe 21
 `bcc189a2ae3f3e374b8ffc1ea056971f3032ed7a` on 2026-08-01.

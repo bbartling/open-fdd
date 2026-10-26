@@ -98,7 +98,35 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
 | --- | --- |
 | [`scripts/nf/provider_sites.bosspi.json`](../../../scripts/nf/provider_sites.bosspi.json) | Bench Pi with one FEC, AHU-style roles, `poll_secs: 3600` |
 | [`scripts/nf/provider_sites.bosspi.example.json`](../../../scripts/nf/provider_sites.bosspi.example.json) | Placeholder UUID template |
-| [`scripts/nf/provider_sites.acme.json`](../../../scripts/nf/provider_sites.acme.json) | ACME: 230 points on 33 equipment (VAVs, RTU, hot-water plant, Tracer SC OA). The bare-minimum set the retired edge poll used, trended in NF at 300 s |
+| [`scripts/nf/provider_sites.acme.json`](../../../scripts/nf/provider_sites.acme.json) | ACME: 233 points. 230 BACnet points on 33 equipment (VAVs, RTU, hot-water plant, Tracer SC OA) are the bare-minimum set the retired edge poll used, trended in NF at 300 s. 3 Open-Meteo weather points (equip `weather`, roles `web-outside-air-temp`, `web-outside-air-humidity` and `web-outside-air-dewpoint`) are written by the NF hook every 20 min |
+
+## Verify a site (freshness check)
+
+With the NF MCP connected (see `openfdd-nf-edge-bench`), use `read_values` `latest`
+on the provider UUIDs and `diagnose` `overview` for a quick look. The script below is
+the scripted, repeatable check that must PASS.
+
+
+After onboarding, and whenever charts look stale, run the portal freshness check:
+`python3 scripts/nf/check_acme_portal_fresh.py` (ACME defaults). For another site pass
+`--env ~/.secrets/nf_<site>.env --sites scripts/nf/provider_sites.<site>.json` and
+`--sample EQUIP:ROLE` as needed. It reads the remote portal only, never prints
+secrets, and needs PASS: every sampled BACnet point and every `weather` point newer
+than 30 min, numeric and plausible. ACME notes:
+- All 8 Trane VAVs report zone temp in **°C** (NF units `DEGREES_CELSIUS`). The
+  check converts it; FDD rules must too.
+- The Tracer SC `outside-air-humidity` point reads a constant −0.37 %, so that
+  sensor is bad. Use `rtu_01` OA or the web weather points for humidity.
+
+## Weather and other NF hooks
+
+Internet weather comes from an NF JavaScript hook. Open-FDD does not fetch it.
+The code is kept in this repo: [`scripts/nf/hooks/`](../../../scripts/nf/hooks/README.md)
+holds the hook source, its manifest, and `nf_app_sync.py` (push, run now, status,
+diff, pull). The hook's global variables are ordinary NF points. Add their UUIDs
+with `equip_type: weather` and the `web-outside-air-*` roles from
+[`sql/fdd/role_map.json`](../../../sql/fdd/role_map.json), so they never shadow
+the site's own OA sensors.
 
 ## Do not
 
@@ -106,4 +134,5 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
   site. Those are `historical/non-executable` (see
   [`openfdd-bacnet-ot-debug`](../openfdd-bacnet-ot-debug/SKILL.md)).
 - Do not commit NF client secrets, portal passwords, or license material.
+- Do not edit hook JS only in the NF console. Pull it back into `scripts/nf/hooks/` and commit it.
 - Empty charts with rows in Timescale are a role gap: [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md).

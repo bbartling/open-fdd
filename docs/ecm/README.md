@@ -10,7 +10,7 @@
 
 Works with any AI agent that can read markdown skills and run the PyPI CLI. Skills live in `openfdd_agent_spec/skills/` (not only `.cursor/`). Sync them with `./scripts/openfdd_install_agent_skills.sh --sync`.
 
-AI agent reporting can consume FDD and analytics that DataFusion SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
+AI agent reporting can consume FDD and analytics that Timescale SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
 
 ```bash
 pip install "open-fdd[anomaly]" "open-fdd[reporting]"
@@ -23,7 +23,7 @@ open-fdd-anomaly report ./AHU_1 --out ./ahu1_report --month 2026-06 --compile \
 The ECM API fills the same workbook input cells a human engineer would fill.
 It does not replace the visible spreadsheet calculations.
 
-**Production FDD** (DataFusion SQL fault detection) lives in the [GHCR container stack](https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html), not this wheel.
+**Production FDD** (Timescale SQL fault detection) lives in the [GHCR container stack](https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html), not this wheel.
 
 **Product freeze / upsell:** [Engineer upsell brief — open-fdd + PyPI (vibe freeze)](ENGINEER_UPSELL_BRIEF.md) — after 2026-07-30, customers see ECM via **PyPI → open-fdd**, not vibe19/vibe20 tip churn.
 

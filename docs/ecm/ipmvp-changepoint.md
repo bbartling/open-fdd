@@ -9,7 +9,7 @@ permalink: /ecm/ipmvp-changepoint.html
 
 PyPI helpers for **Option C–style** weather-normalized baselines and **Guideline 14**
 calibration scores. Live in `open_fdd.ecm_engineering` (also re-exported from
-`open_fdd.analytics`). **Not** product DataFusion FDD — notebooks, twin honesty,
+`open_fdd.analytics`). **Not** product Timescale SQL FDD — notebooks, twin honesty,
 and Wave S4 SQL twin characterization only.
 
 Install: `pip install "open-fdd[oracle]"` (needs `numpy` for change-point fits).
@@ -101,7 +101,7 @@ runtime adapter.
 | Energy \(Y\) (gas) | gas / therms | `gas-flow` / `gas-rate`, UTIL gas bills |
 | Period grain | daily / monthly | package utilities monthly; historian resample in oracle |
 | Fit quality | CVRMSE / NMBE | `score_g14*` / model `.cvrmse_pct` |
-| Product charts | Camber UI / serve | **Metering** radios + future DataFusion `/api/analytics/*` (S4) |
+| Product charts | Camber UI / serve | **Metering** radios + future Timescale SQL `/api/analytics/*` (S4) |
 
 ---
 
@@ -110,7 +110,7 @@ runtime adapter.
 | Layer | Owns |
 |-------|------|
 | This module (PyPI) | Clean-room math + twin honesty helpers |
-| Product GHCR | DataFusion SQL FDD / analytics — no pandas in request path |
+| Product GHCR | Timescale SQL FDD / analytics — no pandas in request path |
 | Soft-OPEN | Full Camber family ports, PyPI publish tip, SQL twins (Wave S4) |
 
 Related: [Engineering calcs](engineering-calcs.html) · [Pandas FDD cookbook](../rules/cookbook/pandas-cookbook.html) · [Purpose — Excel + EnergyPlus](purpose-excel-energyplus.html)

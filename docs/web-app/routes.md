@@ -30,8 +30,8 @@ Routes are defined in `workspace/dashboard/src/App.tsx`. Sidebar sections come f
 | Route | Tab | Description |
 |-------|-----|-------------|
 | `/model` | Model & FDD assignments | Haystack model, assignments, SPARQL, import/export |
-| `/sql-fdd` | SQL FDD Rules | DataFusion SQL rule workbench |
-| `/plot` | Plots | Feather trend charts, fault overlays |
+| `/sql-fdd` | SQL FDD Rules | SQL rule workbench (Timescale) |
+| `/plot` | Plots | Trend charts, fault overlays |
 | `/reports` | Reports | Section editor, PDF preview/download |
 
 **Model sub-tabs** (in-page): Import/export · Explorer · FDD mapping · Haystack RDF · Advanced

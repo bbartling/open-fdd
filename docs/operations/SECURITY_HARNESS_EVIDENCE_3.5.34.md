@@ -1,5 +1,7 @@
 # Security harness evidence — Wave U (3.5.34)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Supersedes tip cites on [`SECURITY_HARNESS_EVIDENCE_3.5.30.md`](SECURITY_HARNESS_EVIDENCE_3.5.30.md) for evaluator integrity.
 
 ## U1 evaluator integrity

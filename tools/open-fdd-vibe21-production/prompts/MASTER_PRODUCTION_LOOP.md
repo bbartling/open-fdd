@@ -1,5 +1,7 @@
 # Master production loop prompt — Open-FDD recovery through Vibe 21 digital twin
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Copy this prompt into an engineering agent working in a clean Open-FDD clone.
 Set `REQUESTED_PHASE_OR_PR` if a human has selected a bounded item. If it is
 blank, the agent must find the earliest unmet dependency gate and execute only

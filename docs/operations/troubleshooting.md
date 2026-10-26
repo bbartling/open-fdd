@@ -27,7 +27,7 @@ curl -s http://127.0.0.1:8080/api/health | jq .
 
 1. Confirm driver poll status (`/api/bacnet/poll/status` or Modbus equivalent)
 2. Verify assignments in **Model → FDD mapping**
-3. Check `workspace/data/historian/` for Feather files
+3. Check Timescale for rows for that `building_id` (Feather files under `workspace/data/historian/` are historical, superseded by the Timescale-only mandate)
 4. Use **Historian storage** tab for partition summary
 
 ## CSV import rejected

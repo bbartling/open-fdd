@@ -35,6 +35,7 @@ VIEWER_WRITE_CHECK_IDS = frozenset(
     for action in ("import", "append", "purge", "delete")
     for scope in ("own", "foreign")
 )
+LEGACY_VIEWER_MUTATION_CHECK_ID = "y.authz.viewer_mutation_denied"
 
 
 def new_secret(nbytes: int = JWT_SECRET_BYTES) -> str:
@@ -274,6 +275,11 @@ def validate_viewer_write_assertions(checks: Any) -> tuple[bool, str]:
         if not isinstance(check, dict):
             continue
         check_id = check.get("check_id")
+        # The security producer still emits this separate agent-token denial
+        # probe. It is accounted for by the security report verdict, but it is
+        # not one of the eight viewer-write matrix cells validated here.
+        if check_id == LEGACY_VIEWER_MUTATION_CHECK_ID:
+            continue
         if isinstance(check_id, str) and check_id.startswith("y.authz.viewer_"):
             observed.setdefault(check_id, []).append(check.get("status"))
 

@@ -21,7 +21,7 @@ ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 
 | Container | Image | Role |
 |-----------|-------|------|
-| `central` | `openfdd-central` | REST API (`:8080`), JWT auth, historian, DataFusion FDD engine, reports, MCP API surface |
+| `central` | `openfdd-central` | REST API (`:8080`), JWT auth, Timescale historian, Timescale SQL FDD engine, reports, MCP API surface |
 | `ui` | `openfdd-web` | React product SPA (`:3000`); talks to central REST for SQL FDD |
 | `fieldbus` | `openfdd-fieldbus` | Fixed 300 s health-only field poll; publishes the full versioned snapshot over MQTTS, local authenticated HTTP, or both |
 | `mqtt` | `openfdd-mqtt` | Mosquitto broker, MQTTS on `:8883` |

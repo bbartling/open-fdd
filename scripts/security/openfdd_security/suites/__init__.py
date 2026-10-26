@@ -102,6 +102,31 @@ def _nonempty_own_control(
     return False
 
 
+def _datasets_own_control(body: bytes, building_id: str) -> bool:
+    """Require the /api/datasets envelope to contain only the requested site."""
+    if not building_id or not body or _looks_html(body):
+        return False
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except Exception:
+        return False
+    if not isinstance(data, dict) or data.get("ok") is False:
+        return False
+    rows = data.get("datasets")
+    if not isinstance(rows, list) or not rows:
+        return False
+    # The filtered endpoint's current schema has id + building_id. Reject
+    # malformed and foreign rows instead of treating a generic nonempty list
+    # as proof that this principal owns the requested site.
+    for row in rows:
+        if not isinstance(row, dict):
+            return False
+        declared = [row[key] for key in ("id", "building_id") if key in row]
+        if not declared or any(value != building_id for value in declared):
+            return False
+    return True
+
+
 def _own_building_outcome(
     status: int,
     body: bytes,
@@ -1206,8 +1231,12 @@ def run_suite_y(ctx: SuiteContext) -> None:
             r_own = ctx.client.request("GET", f"{path}?{q_own}", token=tok_a)
             if r_own.status == 401:
                 own_st = "ERROR"
-            elif r_own.status == 200 and _nonempty_own_control(
-                r_own.body, fx.canary_a, require_canary=False
+            elif r_own.status == 200 and (
+                _datasets_own_control(r_own.body, fx.building_a)
+                if path == "/api/datasets"
+                else _nonempty_own_control(
+                    r_own.body, fx.canary_a, require_canary=False
+                )
             ):
                 own_st = "PASS"
             elif r_own.status == 200:
