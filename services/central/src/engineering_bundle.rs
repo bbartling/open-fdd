@@ -389,7 +389,7 @@ pub async fn create_export(
 
     let (profile, filename, schema_version, size_bytes) = if kind == "csv" {
         fs::create_dir_all(&root).map_err(|e| JobError::Io(e.to_string()))?;
-        let filename = format!("openfdd_csv_{building_id}.zip");
+        let filename = crate::csv_site_export::site_history_zip_filename(&building_id);
         let zip_path = root.join(&filename);
         let size_bytes =
             crate::csv_site_export::build_csv_zip(&building_id, request.include_faults, &zip_path)

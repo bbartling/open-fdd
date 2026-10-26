@@ -4,6 +4,12 @@
 
 - Portal samples convert to canonical `degF` before the existing Timescale writer. The site-file `units` field fills in when NF reports an unknown unit. NF and site-file disagreements are withheld and logged. Source unit stays on the point. No second write path. No VERSION bump.
 
+## 2026-10-26 — Site history CSV export (W2b)
+
+- CSV export reads authorized Timescale samples (`sample` joined to `authorized_series`) into a rectangular long file: timestamp, equipment, point, role, unit, value. Missing unit or value cells stay blank. The read is bounded by span, row, and byte budgets and stops when the request is dropped.
+- Package `history_wide.csv` is the fallback when that read is empty. Columns follow each file's header. The download is `site_history_<building>.zip` and the entry is `site_history.csv`.
+- Read-only. No VERSION bump.
+
 ## 2026-10-22 — FDD run generation and metric results
 
 - Each Timescale registry run commits an immutable generation (run id, site, model, rules, config hash, window, watermark) and switches the active pointer with a rename. Older generations stay on disk.
