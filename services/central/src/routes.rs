@@ -33,7 +33,7 @@ use crate::jobs;
 use crate::models::{
     AgentTool, AgentToolsResponse, AuthAgentTokenRequest, AuthLoginRequest, AuthLoginResponse,
     AuthMeResponse, AuthStatusResponse, FddRunRequest, FddStatusResponse, IngestStatsResponse,
-    OkHealthResponse, TenantSelectRequest, TenantSelectResponse,
+    OkHealthResponse, PublicHealthResponse, TenantSelectRequest, TenantSelectResponse,
 };
 use crate::providers;
 use crate::state::AppState;
@@ -121,6 +121,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         // Kali O2c / Wave P2c: was public; leaks plane + topology when unauthenticated.
         .route("/api/capabilities", get(capabilities))
         .route("/api/health/stack", get(health_stack))
+        .route("/api/health/diagnostics", get(health_diagnostics))
         .route("/api/providers/health", get(providers::providers_health))
         .route("/api/providers/sites", get(providers::providers_sites))
         .route("/api/ingest/jobs", get(ingest_queue::http::list_jobs))
@@ -592,9 +593,31 @@ fn short_sha(sha: &str) -> String {
     get,
     path = "/api/health",
     tag = "central",
-    responses((status = 200, description = "Central health", body = OkHealthResponse))
+    responses((status = 200, description = "Central liveness", body = PublicHealthResponse))
 )]
-pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse> {
+pub async fn health(State(state): State<Arc<AppState>>) -> Json<PublicHealthResponse> {
+    Json(public_health_from(&health_report(&state).await))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/health/diagnostics",
+    tag = "central",
+    responses(
+        (status = 200, description = "Hub-admin health detail", body = OkHealthResponse),
+        (status = 401, description = "Authentication required"),
+        (status = 403, description = "Hub admin required")
+    )
+)]
+pub async fn health_diagnostics(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<OkHealthResponse>, (StatusCode, Json<Value>)> {
+    let _admin = require_hub_admin_or_audit_deny(&state, &headers, AuditAction::AdminRead)?;
+    Ok(Json(health_report(&state).await))
+}
+
+async fn health_report(state: &AppState) -> OkHealthResponse {
     let now = chrono::Utc::now();
     let uptime_secs = (now - state.started_at).num_seconds().max(0) as u64;
     let last_ingest_at = state
@@ -618,7 +641,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
         .load(std::sync::atomic::Ordering::Relaxed);
     // #1168: never hard-code ok when the durable receipt ledger is saturated.
     let ok = !ledger.high_water;
-    Json(OkHealthResponse {
+    OkHealthResponse {
         ok,
         service: "openfdd-central".into(),
         version: resolve_build_version(),
@@ -653,7 +676,21 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<OkHealthResponse
                 last_write_error: s.last_write_error.map(str::to_string),
             })
         },
-    })
+    }
+}
+
+/// Fields Docker, Compose, and stack scripts read. No build id, host, provider
+/// row, counter, or writer error.
+fn public_health_from(report: &OkHealthResponse) -> PublicHealthResponse {
+    PublicHealthResponse {
+        ok: report.ok,
+        service: report.service.clone(),
+        historian: report.historian.clone(),
+        timescale_ok: report.timescale_ok,
+        starter_seed: report.starter_seed.clone(),
+        fdd_engine: report.fdd_engine.clone(),
+        dual_write: report.dual_write,
+    }
 }
 
 /// Wave L — list tenants from file control plane (legacy singleton when mode OFF).
@@ -8356,6 +8393,139 @@ mod version_tests {
         assert!(version.starts_with(env!("CARGO_PKG_VERSION")), "{version}");
         assert!(body.get("token").is_none());
         assert!(body.get("password").is_none());
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE while the health router test mints tokens"
+    )]
+    async fn public_health_is_minimal_and_diagnostics_follow_role() {
+        let _env_lock = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().unwrap();
+        let _workspace = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let mut state = AppState::new();
+        state.auth = crate::auth::AuthConfig {
+            secret: Some("w3b-public-health-test-secret-32b".into()),
+            admin_password: None,
+            agent_password: None,
+            viewer_password: None,
+            viewer_tenant_ids: Vec::new(),
+        };
+        let state = Arc::new(state);
+        let agent = state
+            .auth
+            .issue_token_with_tenants("agent", crate::auth::Role::Operator, 60, &[])
+            .unwrap();
+        let admin = state
+            .auth
+            .issue_token_with_tenants("admin", crate::auth::Role::Admin, 60, &[])
+            .unwrap();
+        let app = router(state);
+
+        for (label, token) in [
+            ("anonymous", None),
+            ("agent", Some(agent.as_str())),
+            ("hub-admin", Some(admin.as_str())),
+        ] {
+            for path in ["/api/health", "/health"] {
+                let (status, body) = get_json(&app, path, token).await;
+                assert_eq!(status, StatusCode::OK, "{label} {path} {body}");
+                assert_public_liveness(&body, label, path);
+            }
+        }
+
+        let (status, body) = get_json(&app, "/api/health/diagnostics", None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+        assert!(body.get("version").is_none(), "{body}");
+        assert!(body.get("portal_providers").is_none(), "{body}");
+
+        let (status, body) = get_json(&app, "/api/health/diagnostics", Some(&agent)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        assert!(body.get("version").is_none(), "{body}");
+        assert!(body.get("portal_providers").is_none(), "{body}");
+        assert!(body.get("audit_sink").is_none(), "{body}");
+
+        let (status, body) = get_json(&app, "/api/health/diagnostics", Some(&admin)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let version = body["version"].as_str().unwrap();
+        assert!(version.starts_with(env!("CARGO_PKG_VERSION")), "{version}");
+        assert!(body["portal_providers"].is_number(), "{body}");
+        assert!(body["audit_sink"].is_object(), "{body}");
+        assert!(body.get("memory_budget").is_some(), "{body}");
+        assert_eq!(body["service"], "openfdd-central");
+        assert_eq!(body["historian"], "timescale");
+        assert_eq!(body["fdd_engine"], "postgres-sql");
+        assert_eq!(body["dual_write"], false);
+    }
+
+    fn assert_public_liveness(body: &serde_json::Value, label: &str, path: &str) {
+        let obj = body
+            .as_object()
+            .unwrap_or_else(|| panic!("{label} {path} is not an object"));
+        const ALLOWED: &[&str] = &[
+            "ok",
+            "service",
+            "historian",
+            "timescale_ok",
+            "starter_seed",
+            "fdd_engine",
+            "dual_write",
+        ];
+        for key in obj.keys() {
+            assert!(
+                ALLOWED.contains(&key.as_str()),
+                "{label} {path} unexpected {key}: {body}"
+            );
+        }
+        assert!(body["ok"].is_boolean(), "{label} {path}");
+        assert_eq!(body["service"], "openfdd-central", "{label} {path}");
+        assert_eq!(body["historian"], "timescale", "{label} {path}");
+        assert!(body["timescale_ok"].is_boolean(), "{label} {path}");
+        assert_eq!(body["fdd_engine"], "postgres-sql", "{label} {path}");
+        assert_eq!(body["dual_write"], false, "{label} {path}");
+        let text = body.to_string();
+        assert!(
+            !text.contains(env!("CARGO_PKG_VERSION")),
+            "{label} {path} included the build id: {text}"
+        );
+        for needle in [
+            "portal_providers",
+            "csv_ingest",
+            "receipts_",
+            "memory_budget",
+            "audit_sink",
+            "last_write_error",
+            "http://",
+            "https://",
+        ] {
+            assert!(
+                !text.contains(needle),
+                "{label} {path} included {needle}: {text}"
+            );
+        }
+    }
+
+    async fn get_json(
+        app: &axum::Router,
+        path: &str,
+        bearer: Option<&str>,
+    ) -> (StatusCode, serde_json::Value) {
+        let mut request = Request::get(path);
+        if let Some(token) = bearer {
+            request = request.header("authorization", format!("Bearer {token}"));
+        }
+        let response = app
+            .clone()
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+        (status, body)
     }
 
     /// Import, append, and dataset delete (workspace delete + historian purge)
