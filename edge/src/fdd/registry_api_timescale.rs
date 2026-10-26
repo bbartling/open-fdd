@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use fdd_rules::{load_registry, RuleRegistry, RuleSpec};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
 fn sql_rules_dir() -> PathBuf {
     if let Ok(p) = std::env::var("OPENFDD_SQL_RULES_DIR") {
@@ -193,7 +194,6 @@ fn manifest_registry_dir() -> PathBuf {
 }
 
 fn rule_set_hash() -> String {
-    use sha2::{Digest, Sha256};
     let mut ids: Vec<String> = load_registry(&manifest_registry_dir())
         .map(|reg| reg.rules.into_iter().map(|rule| rule.rule_id).collect())
         .unwrap_or_default();
@@ -1015,8 +1015,8 @@ pub fn readiness_response(building_id: Option<&str>) -> Value {
 }
 
 fn load_reg() -> Result<RuleRegistry, String> {
-    let dir = sql_rules_dir();
-    load_registry(&dir).map_err(|e| format!("load registry {}: {e}", dir.display()))
+    let dir = manifest_registry_dir();
+    load_registry(&dir).map_err(|e| format!("rule catalogue unavailable: {e}"))
 }
 
 /// Registry rules keyed by rule_id and aliases (empty map when registry is unavailable).
@@ -1091,6 +1091,7 @@ fn rule_summary(rule: &RuleSpec) -> Value {
         "rule_id": rule.rule_id,
         "sql_file": rule.sql_file,
         "description": rule.description,
+        "equipment_kinds": rule.equipment_kinds,
         "required_roles": rule.required_roles,
         "optional_roles": rule.optional_roles,
         "output_columns": rule.output_columns,
@@ -1100,23 +1101,268 @@ fn rule_summary(rule: &RuleSpec) -> Value {
         "dashboard_wired": rule.dashboard_wired,
         "parameter_count": rule.parameters.len(),
         "aliases": rule.aliases,
+        "pack_version": rule_pack_version(rule),
+        "enabled": true,
+        "removed": false,
+        "overrides": {},
     })
 }
 
-/// `GET /api/fdd/rules` - full registry catalog.
-pub fn list_registry_rules() -> Value {
-    match load_reg() {
+/// Plot role budget shared with the Timescale FDD series response.
+pub const SERIES_ROLE_CAP: usize = 6;
+
+/// One catalogue row already stored. `enabled` and `overrides` belong to the
+/// operator. Reconcile copies `overrides` forward and does not write `enabled`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatalogueExisting {
+    pub rule_id: String,
+    pub enabled: bool,
+    pub catalogue_source: Option<String>,
+    pub pack_version: Option<String>,
+    pub removed: bool,
+    pub overrides: Map<String, Value>,
+}
+
+/// Pack fields to insert or refresh. `enabled` is insert-only and is absent here
+/// so an operator disable survives an upgrade.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatalogueUpsert {
+    pub rule_id: String,
+    pub sql_file: String,
+    pub title: String,
+    pub equipment_kinds: Vec<String>,
+    pub required_roles: Vec<String>,
+    pub optional_roles: Vec<String>,
+    pub parity_status: String,
+    pub pack_version: String,
+    pub overrides: Map<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogueDetail {
+    pub catalogue_source: Option<String>,
+    pub pack_version: Option<String>,
+    pub removed: bool,
+    pub overrides: Map<String, Value>,
+}
+
+/// Idempotent diff of the shipped pack against catalogue rows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatalogueReconcilePlan {
+    pub catalogue_version: String,
+    pub upserts: Vec<CatalogueUpsert>,
+    /// Pack-sourced ids that are no longer in the pack and are not yet marked removed.
+    pub removed_rule_ids: Vec<String>,
+}
+
+fn sorted_join(mut values: Vec<String>) -> String {
+    values.sort();
+    values.join(",")
+}
+
+/// Content hash of one pack rule. A description, role, or default change bumps it.
+pub fn rule_pack_version(rule: &RuleSpec) -> String {
+    let mut params: Vec<String> = rule
+        .parameters
+        .iter()
+        .map(|(key, def)| format!("{key}={}", def.default))
+        .collect();
+    params.sort();
+    let body = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        rule.rule_id,
+        rule.sql_file,
+        rule.description,
+        rule.parity_status,
+        rule.confirm_seconds,
+        rule.dashboard_wired,
+        sorted_join(rule.aliases.clone()),
+        sorted_join(rule.equipment_kinds.clone()),
+        sorted_join(rule.required_roles.clone()),
+        sorted_join(rule.optional_roles.clone()),
+        params.join(","),
+    );
+    sha256_hex(body.as_bytes())
+}
+
+pub fn catalogue_detail_from_json(detail: Option<&Value>) -> CatalogueDetail {
+    let obj = detail.and_then(Value::as_object);
+    let text = |key: &str| {
+        obj.and_then(|fields| fields.get(key))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    };
+    let removed = obj
+        .and_then(|fields| fields.get("removed"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let overrides = obj
+        .and_then(|fields| fields.get("overrides"))
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    CatalogueDetail {
+        catalogue_source: text("catalogue_source"),
+        pack_version: text("pack_version"),
+        removed,
+        overrides,
+    }
+}
+
+/// Plan the catalogue write. Caller applies it. Running the plan twice against
+/// the post-state yields the same version and no new removals.
+pub fn plan_catalogue_reconcile(
+    rules: &[RuleSpec],
+    existing: &[CatalogueExisting],
+) -> CatalogueReconcilePlan {
+    let mut by_id: HashMap<&str, &CatalogueExisting> = HashMap::new();
+    for row in existing {
+        by_id.insert(row.rule_id.as_str(), row);
+    }
+    let mut version_lines = Vec::with_capacity(rules.len());
+    let mut upserts = Vec::with_capacity(rules.len());
+    for rule in rules {
+        let pack_version = rule_pack_version(rule);
+        version_lines.push(format!("{}\u{1f}{pack_version}", rule.rule_id));
+        let overrides = by_id
+            .get(rule.rule_id.as_str())
+            .map(|row| row.overrides.clone())
+            .unwrap_or_default();
+        upserts.push(CatalogueUpsert {
+            rule_id: rule.rule_id.clone(),
+            sql_file: rule.sql_file.clone(),
+            title: rule.description.clone(),
+            equipment_kinds: rule.equipment_kinds.clone(),
+            required_roles: rule.required_roles.clone(),
+            optional_roles: rule.optional_roles.clone(),
+            parity_status: rule.parity_status.clone(),
+            pack_version,
+            overrides,
+        });
+    }
+    version_lines.sort();
+    let catalogue_version = sha256_hex(version_lines.join("\n").as_bytes());
+    let pack_ids: BTreeSet<&str> = rules.iter().map(|rule| rule.rule_id.as_str()).collect();
+    let mut removed_rule_ids = Vec::new();
+    for row in existing {
+        let from_pack = row.catalogue_source.as_deref() == Some("pack");
+        if from_pack && !row.removed && !pack_ids.contains(row.rule_id.as_str()) {
+            removed_rule_ids.push(row.rule_id.clone());
+        }
+    }
+    removed_rule_ids.sort();
+    CatalogueReconcilePlan {
+        catalogue_version,
+        upserts,
+        removed_rule_ids,
+    }
+}
+
+fn safe_override_key(key: &str) -> bool {
+    !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Tuner edit. Unknown keys and values outside the pack slider are refused.
+pub fn edit_rule_override(
+    rule: &RuleSpec,
+    overrides: &mut Map<String, Value>,
+    key: &str,
+    value: f64,
+) -> Result<(), String> {
+    let key = key.trim();
+    if !safe_override_key(key) {
+        return Err(format!("unknown catalogue parameter {key}"));
+    }
+    if !value.is_finite() {
+        return Err(format!("override {key} is not a finite number"));
+    }
+    if key == "confirm_min" {
+        if value < 0.0 {
+            return Err("override confirm_min is outside 0..".into());
+        }
+    } else {
+        match rule.parameters.get(key) {
+            Some(def) if value < def.min || value > def.max => {
+                return Err(format!(
+                    "override {key} is outside {}..{}",
+                    def.min, def.max
+                ));
+            }
+            Some(_) => {}
+            None => return Err(format!("unknown catalogue parameter {key}")),
+        }
+    }
+    overrides.insert(key.to_string(), json!(value));
+    Ok(())
+}
+
+/// Tuner restore. Clears operator overrides and leaves the pack defaults.
+pub fn restore_catalogue_overrides(overrides: &mut Map<String, Value>) {
+    overrides.clear();
+}
+
+fn safe_role(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Roles for the FDD series plot after a run. No run, or a removed rule, is an error.
+pub fn series_roles_after_run(
+    run_present: bool,
+    removed: bool,
+    required: &[String],
+    optional: &[String],
+) -> Result<Vec<String>, String> {
+    if !run_present {
+        return Err("rule catalogue series unavailable: no FDD run for this rule".into());
+    }
+    if removed {
+        return Err("rule catalogue series unavailable: rule removed from the catalogue".into());
+    }
+    let mut roles = Vec::new();
+    for role in required.iter().chain(optional.iter()) {
+        if !safe_role(role) || roles.iter().any(|existing| existing == role) {
+            continue;
+        }
+        roles.push(role.clone());
+        if roles.len() == SERIES_ROLE_CAP {
+            break;
+        }
+    }
+    Ok(roles)
+}
+
+fn catalogue_list_from_load(loaded: Result<RuleRegistry, String>) -> Value {
+    match loaded {
+        Ok(reg) if reg.rules.is_empty() => json!({
+            "ok": false,
+            "error": "rule catalogue unavailable: pack has no rules",
+            "rules_dir": reg.rules_dir,
+            "count": 0,
+            "rules": [],
+        }),
         Ok(reg) => {
             let rules: Vec<Value> = reg.rules.iter().map(rule_summary).collect();
+            let catalogue_version = plan_catalogue_reconcile(&reg.rules, &[]).catalogue_version;
             json!({
                 "ok": true,
                 "rules_dir": reg.rules_dir,
+                "catalogue_version": catalogue_version,
                 "count": rules.len(),
                 "rules": rules,
             })
         }
-        Err(e) => json!({"ok": false, "error": e, "count": 0, "rules": []}),
+        Err(e) => json!({
+            "ok": false,
+            "error": e,
+            "count": 0,
+            "rules": [],
+        }),
     }
+}
+
+/// `GET /api/fdd/rules` - full registry catalog.
+pub fn list_registry_rules() -> Value {
+    catalogue_list_from_load(load_reg())
 }
 
 /// `GET /api/fdd/rules/{id}/params` - tuning schema for one rule.
@@ -1798,7 +2044,193 @@ mod tests {
     fn list_rules_loads_repo_registry() {
         let v = list_registry_rules();
         assert_eq!(v["ok"], true, "{v}");
-        assert!(v["count"].as_u64().unwrap_or(0) >= 19, "{v}");
+        let reg = load_reg().expect("registry");
+        let listed = v["rules"].as_array().expect("rules");
+        assert_eq!(listed.len(), reg.rules.len(), "{v}");
+        assert_eq!(
+            v["count"].as_u64().unwrap() as usize,
+            reg.rules.len(),
+            "{v}"
+        );
+        assert!(
+            v["catalogue_version"]
+                .as_str()
+                .is_some_and(|v| !v.is_empty()),
+            "{v}"
+        );
+    }
+
+    #[test]
+    fn catalogue_plan_keeps_override_disable_and_removal_stable() {
+        let reg = load_reg().expect("registry");
+        assert!(!reg.rules.is_empty(), "pack has rules");
+        let fresh = plan_catalogue_reconcile(&reg.rules, &[]);
+        assert_eq!(fresh.upserts.len(), reg.rules.len());
+        assert!(fresh.removed_rule_ids.is_empty());
+        assert!(fresh.upserts.iter().all(|row| row.overrides.is_empty()));
+
+        let tunable = reg
+            .rules
+            .iter()
+            .find(|rule| !rule.parameters.is_empty())
+            .expect("tunable rule");
+        let mut keys: Vec<&String> = tunable.parameters.keys().collect();
+        keys.sort();
+        let key = keys[0].as_str();
+        let def = &tunable.parameters[key];
+        let edited = if (def.min - def.default).abs() > f64::EPSILON {
+            def.min
+        } else {
+            def.max
+        };
+        let mut overrides = Map::new();
+        edit_rule_override(tunable, &mut overrides, key, edited).expect("edit");
+        let rejected = edit_rule_override(tunable, &mut overrides, "not_a_param", edited);
+        assert!(rejected.is_err(), "{rejected:?}");
+
+        let mut existing = vec![CatalogueExisting {
+            rule_id: tunable.rule_id.clone(),
+            enabled: false,
+            catalogue_source: Some("pack".into()),
+            pack_version: Some("stale".into()),
+            removed: false,
+            overrides: overrides.clone(),
+        }];
+        existing.push(CatalogueExisting {
+            rule_id: "RETIRED-PACK-RULE".into(),
+            enabled: true,
+            catalogue_source: Some("pack".into()),
+            pack_version: Some("old".into()),
+            removed: false,
+            overrides: Map::new(),
+        });
+        existing.push(CatalogueExisting {
+            rule_id: "OPERATOR-NOTE".into(),
+            enabled: true,
+            catalogue_source: None,
+            pack_version: None,
+            removed: false,
+            overrides: Map::new(),
+        });
+        let upgraded = plan_catalogue_reconcile(&reg.rules, &existing);
+        assert_eq!(upgraded.upserts.len(), reg.rules.len());
+        let kept = upgraded
+            .upserts
+            .iter()
+            .find(|row| row.rule_id == tunable.rule_id)
+            .expect("tunable upsert");
+        assert_eq!(
+            kept.overrides.get(key).and_then(Value::as_f64),
+            Some(edited)
+        );
+        assert_eq!(
+            upgraded.removed_rule_ids,
+            vec!["RETIRED-PACK-RULE".to_string()]
+        );
+        assert!(!upgraded
+            .removed_rule_ids
+            .iter()
+            .any(|id| id == "OPERATOR-NOTE"));
+
+        let mut after: Vec<CatalogueExisting> = upgraded
+            .upserts
+            .iter()
+            .map(|row| CatalogueExisting {
+                rule_id: row.rule_id.clone(),
+                enabled: row.rule_id != tunable.rule_id,
+                catalogue_source: Some("pack".into()),
+                pack_version: Some(row.pack_version.clone()),
+                removed: false,
+                overrides: row.overrides.clone(),
+            })
+            .collect();
+        after.push(CatalogueExisting {
+            rule_id: "RETIRED-PACK-RULE".into(),
+            enabled: true,
+            catalogue_source: Some("pack".into()),
+            pack_version: Some("old".into()),
+            removed: true,
+            overrides: Map::new(),
+        });
+        let repeated = plan_catalogue_reconcile(&reg.rules, &after);
+        assert_eq!(repeated.catalogue_version, upgraded.catalogue_version);
+        assert!(repeated.removed_rule_ids.is_empty());
+        let still = repeated
+            .upserts
+            .iter()
+            .find(|row| row.rule_id == tunable.rule_id)
+            .expect("repeat upsert");
+        assert_eq!(
+            still.overrides.get(key).and_then(Value::as_f64),
+            Some(edited)
+        );
+        let mut restored = still.overrides.clone();
+        restore_catalogue_overrides(&mut restored);
+        assert!(restored.is_empty());
+
+        let mut changed = tunable.clone();
+        changed.description.push_str(" revised");
+        let mut rules = reg.rules.clone();
+        if let Some(slot) = rules
+            .iter_mut()
+            .find(|rule| rule.rule_id == tunable.rule_id)
+        {
+            *slot = changed;
+        }
+        let bumped = plan_catalogue_reconcile(&rules, &[]);
+        assert_ne!(bumped.catalogue_version, fresh.catalogue_version);
+    }
+
+    #[test]
+    fn series_roles_follow_the_catalogue_only_after_a_run() {
+        let missing = series_roles_after_run(false, false, &["zone_t".into()], &[]);
+        assert!(missing.is_err(), "{missing:?}");
+        let removed = series_roles_after_run(true, true, &["zone_t".into()], &[]);
+        assert!(removed.is_err(), "{removed:?}");
+        let reg = load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|rule| !rule.required_roles.is_empty() || !rule.optional_roles.is_empty())
+            .expect("plotted rule");
+        let selected =
+            series_roles_after_run(true, false, &rule.required_roles, &rule.optional_roles)
+                .expect("series");
+        let mut expected = Vec::new();
+        for role in rule.required_roles.iter().chain(rule.optional_roles.iter()) {
+            if expected.iter().any(|existing| existing == role) {
+                continue;
+            }
+            expected.push(role.clone());
+            if expected.len() == SERIES_ROLE_CAP {
+                break;
+            }
+        }
+        assert_eq!(selected, expected);
+        assert!(selected.len() <= SERIES_ROLE_CAP);
+    }
+
+    #[test]
+    fn missing_pack_fails_the_catalogue_visibly() {
+        let empty = catalogue_list_from_load(Ok(RuleRegistry {
+            rules_dir: "pack".into(),
+            rules: Vec::new(),
+        }));
+        assert_eq!(empty["ok"], false, "{empty}");
+        assert_eq!(empty["count"], 0, "{empty}");
+        assert!(
+            empty["error"]
+                .as_str()
+                .is_some_and(|msg| msg.contains("unavailable")),
+            "{empty}"
+        );
+        let missing = catalogue_list_from_load(Err(
+            "rule catalogue unavailable: read pack/registry.yaml".into(),
+        ));
+        assert_eq!(missing["ok"], false, "{missing}");
+        assert!(missing["rules"]
+            .as_array()
+            .is_some_and(|rows| rows.is_empty()));
     }
 
     #[test]
