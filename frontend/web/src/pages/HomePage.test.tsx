@@ -235,7 +235,17 @@ describe("HomePage overview", () => {
       expect(screen.getByTestId("overview-devices-by-type")).toBeTruthy();
       expect(screen.getByTestId("overview-schedule")).toBeTruthy();
     });
-    expect(screen.getByTestId("oracle-hero-logo")).toBeTruthy();
+    const stack = screen.getByTestId("oracle-hero-logo");
+    expect(stack.tagName.toLowerCase()).toBe("svg");
+    expect(stack.getAttribute("aria-labelledby")).toBe("openfdd-stack-title");
+    expect(stack.textContent).toMatch(/NF/);
+    expect(stack.textContent).toMatch(/CSV/);
+    expect(stack.textContent).toMatch(/Rust/);
+    expect(stack.textContent).toMatch(/Timescale/);
+    expect(stack.textContent).toMatch(/React/);
+    expect(stack.textContent).toMatch(/Haystack RDF/);
+    expect(stack.textContent).not.toMatch(/at the edge/i);
+    expect(document.querySelector('img[src="/image_new_chiller.png"]')).toBeNull();
     expect(screen.queryByTestId("oracle-hero-how")).toBeNull();
     expect(screen.queryByText(/WattLab energy twin/)).toBeNull();
     expect(screen.queryByText(/How it works/)).toBeNull();

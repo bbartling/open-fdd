@@ -207,9 +207,12 @@ export function UploadPage() {
                 </Link>
               ) : null}
             </p>
-            <pre className="page-json" data-testid="upload-result-json">
-              {JSON.stringify(result, null, 2)}
-            </pre>
+            <details className="upload-result-json" data-testid="upload-result-disclosure">
+              <summary>Import response</summary>
+              <pre className="page-json" data-testid="upload-result-json">
+                {JSON.stringify(result, null, 2)}
+              </pre>
+            </details>
           </div>
         ) : null}
       </div>
