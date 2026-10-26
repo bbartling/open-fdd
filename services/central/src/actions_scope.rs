@@ -744,6 +744,7 @@ mod tests {
             detail: None,
             tenant_id: None,
             building_id: None,
+            request_id: None,
         };
         assert!(!entry_visible(&scope, &plane, &blank));
     }

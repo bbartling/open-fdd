@@ -31,6 +31,12 @@ pub struct ActionEntry {
     /// Site the row belongs to. Older rows may carry this only inside `detail`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub building_id: Option<String>,
+    /// Server request id for the HTTP call that started the row.
+    ///
+    /// The same value is `request_id` on the typed audit record and
+    /// `x-openfdd-server-request-id`. Rows started outside a request omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 /// Identity copied out of a row for an audit event. Labels and detail stay in the log.
@@ -210,6 +216,7 @@ pub fn start_action(kind: &str, label: &str, detail: Option<Value>) -> Result<St
         detail,
         tenant_id: None,
         building_id: None,
+        request_id: crate::audit::current_server_request_id().filter(|id| !id.is_empty()),
     };
     crate::actions_scope::bind_entry_scope(&mut entry);
     let _guard = LOG_LOCK.lock().map_err(|e| e.to_string())?;

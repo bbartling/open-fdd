@@ -388,12 +388,26 @@ pub async fn create_export(
     let root = export_dir(job_id, &export_id)?;
 
     let (profile, filename, schema_version, size_bytes) = if kind == "csv" {
-        fs::create_dir_all(&root).map_err(|e| JobError::Io(e.to_string()))?;
-        let filename = crate::csv_site_export::site_history_zip_filename(&building_id);
-        let zip_path = root.join(&filename);
-        let size_bytes =
-            crate::csv_site_export::build_csv_zip(&building_id, request.include_faults, &zip_path)
-                .await?;
+        let built = async {
+            fs::create_dir_all(&root).map_err(|e| JobError::Io(e.to_string()))?;
+            let filename = crate::csv_site_export::site_history_zip_filename(&building_id);
+            let zip_path = root.join(&filename);
+            let size_bytes = crate::csv_site_export::build_csv_zip(
+                &building_id,
+                request.include_faults,
+                &zip_path,
+            )
+            .await?;
+            Ok::<_, JobError>((filename, size_bytes))
+        }
+        .await;
+        let (filename, size_bytes) = match built {
+            Ok(pair) => pair,
+            Err(error) => {
+                audit_csv_export(&building_id, Err(&error));
+                return Err(error);
+            }
+        };
         (
             "csv".into(),
             filename,
@@ -423,11 +437,48 @@ pub async fn create_export(
         created_at: Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
         size_bytes,
     };
-    jobs::atomic_write_json(
+    let wrote = jobs::atomic_write_json(
         &root.join("metadata.json"),
         &serde_json::to_value(&artifact).map_err(|e| JobError::Io(e.to_string()))?,
-    )?;
+    );
+    if kind == "csv" {
+        match &wrote {
+            Ok(()) => audit_csv_export(&artifact.building_id, Ok(artifact.size_bytes)),
+            Err(error) => audit_csv_export(&artifact.building_id, Err(error)),
+        }
+    }
+    wrote?;
     Ok(artifact)
+}
+
+fn audit_csv_export(building_id: &str, result: Result<u64, &JobError>) {
+    use crate::audit::{AuditAction, AuditChange, AuditEvent, Outcome, ReasonCode};
+    let mut audit = AuditEvent::new(AuditAction::CsvExport);
+    audit.note_request_actor();
+    if !building_id.is_empty() {
+        audit.target_site(building_id);
+    }
+    match result {
+        Ok(bytes) => {
+            audit
+                .change(AuditChange::CsvExport { bytes })
+                .status(axum::http::StatusCode::CREATED)
+                .outcome(Outcome::Ok);
+        }
+        Err(error) => {
+            let reason = match error {
+                JobError::NotFound(_) => ReasonCode::NotFound,
+                JobError::Invalid(_) => ReasonCode::InvalidRequest,
+                JobError::Conflict { .. } => ReasonCode::RevisionConflict,
+                JobError::Io(_) => ReasonCode::StorageError,
+            };
+            audit
+                .status(error.status_code())
+                .outcome(Outcome::Failed)
+                .reason(reason);
+        }
+    }
+    audit.emit();
 }
 
 pub fn load_export(job_id: &str, export_id: &str) -> Result<(ExportArtifact, Vec<u8>), JobError> {
@@ -442,4 +493,43 @@ pub fn load_export(job_id: &str, export_id: &str) -> Result<(ExportArtifact, Vec
     // One-shot download: remove the export dir so nothing stays cached on disk.
     let _ = fs::remove_dir_all(&root);
     Ok((artifact, bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn csv_export_audit_records_the_site_and_byte_count() {
+        let _env = crate::test_env_lock::lock_env();
+        let dir = tempfile::tempdir().expect("audit dir");
+        let path = dir.path().join("security_audit.jsonl");
+        struct AuditPath(Option<String>);
+        impl Drop for AuditPath {
+            fn drop(&mut self) {
+                match self.0.take() {
+                    Some(value) => std::env::set_var("OPENFDD_AUDIT_LOG_PATH", value),
+                    None => std::env::remove_var("OPENFDD_AUDIT_LOG_PATH"),
+                }
+            }
+        }
+        let _audit_path = AuditPath(std::env::var("OPENFDD_AUDIT_LOG_PATH").ok());
+        std::env::set_var("OPENFDD_AUDIT_LOG_PATH", &path);
+        super::audit_csv_export("SITE_EXPORT", Ok(42));
+        open_fdd_edge_prototype::auth::audit::flush_sink();
+        let text = std::fs::read_to_string(&path).expect("audit line");
+        let event: serde_json::Value =
+            serde_json::from_str(text.lines().next().expect("line")).expect("json");
+        assert_eq!(event["event"], "csv.export");
+        assert_eq!(event["detail"]["schema"], "openfdd.audit.v1");
+        assert_eq!(event["detail"]["action"], "csv.export");
+        assert_eq!(event["detail"]["site_id"], "SITE_EXPORT");
+        assert_eq!(event["detail"]["change"]["kind"], "csv_export");
+        assert_eq!(event["detail"]["change"]["bytes"], 42);
+        assert_eq!(event["detail"]["outcome"], "ok");
+        assert_eq!(event["detail"]["http_status"], 201);
+        assert_eq!(event["detail"]["decision"], "allow");
+        assert!(event["detail"]["qa_run"].is_null());
+        assert!(event["detail"]["request_id"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty()));
+    }
 }

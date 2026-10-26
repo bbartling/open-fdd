@@ -179,4 +179,102 @@ mod tests {
         );
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE while the middleware stamps Actions"
+    )]
+    async fn server_request_id_is_shared_with_actions_and_the_audit_record() {
+        use tower::ServiceExt;
+
+        let _env = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().expect("workspace");
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let audit_path = workspace.path().join("security_audit.jsonl");
+        struct EnvRestore {
+            audit: Option<String>,
+            qa: Option<String>,
+        }
+        impl Drop for EnvRestore {
+            fn drop(&mut self) {
+                match self.audit.take() {
+                    Some(value) => std::env::set_var("OPENFDD_AUDIT_LOG_PATH", value),
+                    None => std::env::remove_var("OPENFDD_AUDIT_LOG_PATH"),
+                }
+                match self.qa.take() {
+                    Some(value) => std::env::set_var("OPENFDD_QA_RUN_MANIFEST", value),
+                    None => std::env::remove_var("OPENFDD_QA_RUN_MANIFEST"),
+                }
+            }
+        }
+        let _restore = EnvRestore {
+            audit: std::env::var("OPENFDD_AUDIT_LOG_PATH").ok(),
+            qa: std::env::var("OPENFDD_QA_RUN_MANIFEST").ok(),
+        };
+        std::env::set_var("OPENFDD_AUDIT_LOG_PATH", &audit_path);
+        std::env::remove_var("OPENFDD_QA_RUN_MANIFEST");
+
+        let app = axum::Router::new()
+            .route(
+                "/api/export",
+                axum::routing::post(|| async {
+                    let action_id = crate::actions::start_action("csv_export", "CSV export", None)
+                        .expect("action");
+                    let mut audit =
+                        crate::audit::AuditEvent::new(crate::audit::AuditAction::CsvExport);
+                    audit
+                        .actor("operator")
+                        .outcome(crate::audit::Outcome::Ok)
+                        .status(StatusCode::CREATED)
+                        .emit();
+                    axum::Json(serde_json::json!({ "action_id": action_id }))
+                }),
+            )
+            .layer(axum::middleware::from_fn(request_id_middleware));
+        let response = app
+            .oneshot(
+                Request::post("/api/export")
+                    .header(REQUEST_ID_HEADER, "client-label")
+                    .header("x-openfdd-qa-run", "client-qa")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let server = response
+            .headers()
+            .get(SERVER_REQUEST_ID_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .expect("server request id")
+            .to_string();
+        let echoed = response
+            .headers()
+            .get(REQUEST_ID_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .expect("echoed caller id");
+        assert_eq!(echoed, "client-label");
+        assert_ne!(server, "client-label");
+
+        open_fdd_edge_prototype::auth::audit::flush_sink();
+        let actions = std::fs::read_to_string(workspace.path().join("data/actions/log.jsonl"))
+            .expect("actions log");
+        let row: serde_json::Value =
+            serde_json::from_str(actions.lines().next().expect("action row")).expect("action json");
+        assert_eq!(row["request_id"], server);
+        assert_eq!(row["kind"], "csv_export");
+
+        let audit = std::fs::read_to_string(&audit_path).expect("audit log");
+        let event: serde_json::Value =
+            serde_json::from_str(audit.lines().next().expect("audit row")).expect("audit json");
+        assert_eq!(event["event"], "csv.export");
+        assert_eq!(event["detail"]["request_id"], server);
+        assert_eq!(event["detail"]["caller_request_id"], "client-label");
+        assert_eq!(event["detail"]["correlation"]["server_request_id"], server);
+        assert!(event["detail"]["qa_run"].is_null());
+        assert_eq!(
+            event["detail"]["untrusted_labels"]["claimed_qa_run"],
+            "client-qa"
+        );
+    }
 }

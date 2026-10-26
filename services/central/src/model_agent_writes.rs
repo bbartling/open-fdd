@@ -20,6 +20,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::audit::{AuditAction, AuditChange, AuditEvent, ReasonCode};
 use crate::auth::{AuthUser, Role};
 use crate::routes;
 use crate::state::AppState;
@@ -80,16 +81,7 @@ fn deny_out_of_scope(
     match building_id {
         Some(b) if ctx.allow_building(b) => Ok(()),
         _ => {
-            log_event(
-                "agent_write_denied",
-                json!({
-                    "tool": tool,
-                    "sub": user.sub,
-                    "reason": "tenant_scope",
-                    "building_id": building_id,
-                    "active_tenant_id": ctx.tenant_id,
-                }),
-            );
+            audit_model_denied(user, tool, building_id, ReasonCode::SiteScope);
             Err(reject(
                 StatusCode::FORBIDDEN,
                 "building not in tenant scope",
@@ -114,15 +106,11 @@ fn gate(
     let user = authenticate(state, headers)?;
     let building_id = body_building_id(body);
     if !user.role.can_issue_commands() {
-        log_event(
-            "agent_write_denied",
-            json!({
-                "tool": tool,
-                "sub": user.sub,
-                "role": role_name(user.role),
-                "reason": "role",
-                "building_id": building_id,
-            }),
+        audit_model_denied(
+            &user,
+            tool,
+            building_id.as_deref(),
+            ReasonCode::RoleRequired,
         );
         return Err(reject(
             StatusCode::FORBIDDEN,
@@ -155,7 +143,51 @@ fn gate(
     })
 }
 
-fn audit_write(event: &str, tool: &str, gate: &WriteGate, status: StatusCode, response: &Value) {
+fn audit_model_denied(user: &AuthUser, tool: &str, building_id: Option<&str>, reason: ReasonCode) {
+    let mut audit = AuditEvent::new(AuditAction::ModelWrite);
+    audit
+        .user(user)
+        .change(AuditChange::ModelWrite {
+            tool: tool.to_string(),
+        })
+        .deny(reason)
+        .status(StatusCode::FORBIDDEN);
+    if let Some(building_id) = building_id {
+        audit.target_site(building_id);
+    }
+    audit.emit();
+}
+
+/// Typed `model.write` record for an applied or rejected semantic-meta / model write.
+fn audit_model(tool: &str, gate: &WriteGate, status: StatusCode, response: &Value) {
+    if gate.dry_run {
+        return;
+    }
+    let mut audit = AuditEvent::new(AuditAction::ModelWrite);
+    audit.user(&gate.user).change(AuditChange::ModelWrite {
+        tool: tool.to_string(),
+    });
+    if let Some(building_id) = gate.building_id.as_deref() {
+        audit.target_site(building_id);
+    }
+    if status == StatusCode::CONFLICT {
+        audit.reason(ReasonCode::RevisionConflict);
+    }
+    let result = if status.is_success() {
+        Ok(Json(response.clone()))
+    } else {
+        Err((status, Json(response.clone())))
+    };
+    audit.finish(&result).emit();
+}
+
+fn audit_historian(
+    event: &str,
+    tool: &str,
+    gate: &WriteGate,
+    status: StatusCode,
+    response: &Value,
+) {
     if gate.dry_run {
         return;
     }
@@ -195,8 +227,8 @@ where
     })?;
     let result = handler(State(state), headers, Json(parsed)).await;
     match &result {
-        Ok(Json(value)) => audit_write("model_agent_write", tool, &gate, StatusCode::OK, value),
-        Err((status, Json(value))) => audit_write("model_agent_write", tool, &gate, *status, value),
+        Ok(Json(value)) => audit_model(tool, &gate, StatusCode::OK, value),
+        Err((status, Json(value))) => audit_model(tool, &gate, *status, value),
     }
     result
 }
@@ -381,7 +413,7 @@ pub async fn historian_purge(
     let tsdb = match historian().await {
         Ok(tsdb) => tsdb,
         Err((status, Json(value))) => {
-            audit_write("historian_purge", tool, &gate, status, &value);
+            audit_historian("historian_purge", tool, &gate, status, &value);
             return Err((status, Json(value)));
         }
     };
@@ -422,7 +454,7 @@ pub async fn historian_purge(
         Err(e) => {
             tracing::warn!(%building_id, error = %e, "historian purge failed");
             let value = json!({ "ok": false, "error": "historian purge failed" });
-            audit_write(
+            audit_historian(
                 "historian_purge",
                 tool,
                 &gate,
@@ -635,6 +667,94 @@ mod tests {
             .collect()
     }
 
+    fn app_with_request_ids(state: Arc<AppState>) -> axum::Router {
+        crate::routes::router(state).layer(axum::middleware::from_fn(
+            crate::contract::request_id_middleware,
+        ))
+    }
+
+    async fn call_tracked(
+        app: &axum::Router,
+        bearer: &str,
+        body: Value,
+        qa_label: Option<&str>,
+    ) -> (StatusCode, Value, String) {
+        let mut req = Request::builder()
+            .method("PUT")
+            .uri("/api/model/semantic-meta")
+            .header("authorization", format!("Bearer {bearer}"))
+            .header("content-type", "application/json")
+            .header("x-request-id", "client-label");
+        if let Some(label) = qa_label {
+            req = req.header("x-openfdd-qa-run", label);
+        }
+        let resp = app
+            .clone()
+            .oneshot(req.body(Body::from(body.to_string())).expect("request"))
+            .await
+            .expect("response");
+        let status = resp.status();
+        let server = resp
+            .headers()
+            .get(crate::contract::SERVER_REQUEST_ID_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+            server,
+        )
+    }
+
+    fn semantic_meta(building_id: &str) -> Value {
+        json!({
+            "schema": "openfdd_point_metadata_v1_sketch",
+            "building_id": building_id,
+            "points": [{
+                "equipment_id": "AHU_1",
+                "column": "SAT",
+                "haystack_tags": ["sensor", "point", "air", "temp"],
+                "unit": "°F",
+                "unit_source": "package_map"
+            }],
+            "equipment": [{
+                "equipment_id": "AHU_1",
+                "haystack_tags": ["ahu", "equip"],
+                "display_name": "AHU 1"
+            }]
+        })
+    }
+
+    fn write_qa_manifest(dir: &std::path::Path, run_id: &str) -> std::path::PathBuf {
+        let path = dir.join("qa-run.json");
+        std::fs::write(
+            &path,
+            json!({
+                "run_id": run_id,
+                "tenants": ["w3a-a"],
+                "sites": ["W3A_META", "W3A_OWN"],
+                "tool_version": "tool-w3a",
+                "candidate": "sha-w3a",
+                "window_start": "2020-01-01T00:00:00Z",
+                "window_end": "2099-01-01T00:00:00Z"
+            })
+            .to_string(),
+        )
+        .expect("qa manifest");
+        path
+    }
+
+    fn detail_for<'a>(events: &'a [Value], request_id: &str) -> &'a Value {
+        &events
+            .iter()
+            .find(|event| event["detail"]["request_id"] == request_id)
+            .unwrap_or_else(|| panic!("missing audit event {request_id}: {events:?}"))["detail"]
+    }
+
     fn writes(bid: &str) -> Vec<(&'static str, &'static str, Value)> {
         vec![
             (
@@ -716,10 +836,15 @@ mod tests {
             "a denied write reached the model"
         );
         open_fdd_edge_prototype::auth::audit::flush_sink();
-        assert_eq!(
-            audit_events(workspace.path(), "agent_write_denied").len(),
-            8,
-            "every viewer write attempt is audited"
+        let denies = audit_events(workspace.path(), "model.write");
+        assert_eq!(denies.len(), 8, "every viewer write attempt is audited");
+        assert!(
+            denies
+                .iter()
+                .all(|event| event["detail"]["decision"] == "deny"
+                    && event["detail"]["reason"] == "role_required"
+                    && event["detail"]["schema"] == "openfdd.audit.v1"),
+            "{denies:?}"
         );
 
         let (status, json) = call(
@@ -754,18 +879,26 @@ mod tests {
         assert_eq!(status, StatusCode::OK, "dry run needs no confirm: {json}");
 
         open_fdd_edge_prototype::auth::audit::flush_sink();
-        let events = audit_events(workspace.path(), "model_agent_write");
+        let events = audit_events(workspace.path(), "model.write");
+        let applied: Vec<&Value> = events
+            .iter()
+            .filter(|event| event["detail"]["outcome"] == "ok")
+            .collect();
         assert_eq!(
-            events.len(),
+            applied.len(),
             1,
             "only the applied write is audited: {events:?}"
         );
-        let detail = &events[0]["detail"];
-        assert_eq!(detail["tool"], "model.equip.upsert");
-        assert_eq!(detail["sub"], "agent-w7n");
+        let detail = &applied[0]["detail"];
+        assert_eq!(detail["schema"], "openfdd.audit.v1");
+        assert_eq!(detail["action"], "model.write");
+        assert_eq!(detail["change"]["kind"], "model_write");
+        assert_eq!(detail["change"]["tool"], "model.equip.upsert");
+        assert_eq!(detail["actor"], "agent-w7n");
         assert_eq!(detail["role"], "operator");
-        assert_eq!(detail["building_id"], bid);
-        assert_eq!(detail["ok"], true);
+        assert_eq!(detail["site_id"], bid);
+        assert_eq!(detail["decision"], "allow");
+        assert_eq!(detail["outcome"], "ok");
 
         let (status, tools) = call(&app, "GET", "/api/agent/tools", &viewer, None).await;
         assert_eq!(status, StatusCode::OK);
@@ -788,6 +921,264 @@ mod tests {
         ] {
             assert!(names.contains(&name), "missing agent tool {name}");
         }
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE and the QA manifest for semantic-meta audit"
+    )]
+    async fn semantic_meta_permitted_write_and_cas_conflict_share_the_server_request_id() {
+        let _env = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().expect("workspace");
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let _audit = EnvGuard::unset("OPENFDD_AUDIT_LOG_PATH");
+        let _mt = EnvGuard::unset("OPENFDD_MULTI_TENANT");
+        let manifest = write_qa_manifest(workspace.path(), "server-run-w3a");
+        let _qa = EnvGuard::set(
+            "OPENFDD_QA_RUN_MANIFEST",
+            manifest.to_str().expect("manifest path"),
+        );
+        let state = app_state("semantic-meta-audit-secret");
+        let app = app_with_request_ids(Arc::clone(&state));
+        let bid = "W3A_META";
+        let meta = semantic_meta(bid);
+        let operator = token(&state, "w3a-operator", Role::Operator);
+
+        let (status, dry, dry_id) = call_tracked(
+            &app,
+            &operator,
+            json!({"building_id": bid, "meta": meta, "dry_run": true}),
+            Some("client-approved"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{dry}");
+        assert!(!dry_id.is_empty());
+        open_fdd_edge_prototype::auth::audit::flush_sink();
+        assert!(
+            audit_events(workspace.path(), "model.write")
+                .iter()
+                .all(|event| event["detail"]["request_id"] != dry_id),
+            "dry_run is not an applied write"
+        );
+
+        let (status, published, publish_id) = call_tracked(
+            &app,
+            &operator,
+            json!({"building_id": bid, "meta": meta, "confirm": true}),
+            Some("client-approved"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{published}");
+        assert_eq!(published["ok"], true, "{published}");
+        let revision = published["revision"]
+            .as_str()
+            .expect("revision")
+            .to_string();
+        assert_ne!(publish_id, "client-label");
+        assert_ne!(publish_id, dry_id);
+        open_fdd_edge_prototype::auth::audit::flush_sink();
+        let events = audit_events(workspace.path(), "model.write");
+        let detail = detail_for(&events, &publish_id);
+        assert_eq!(detail["schema"], "openfdd.audit.v1");
+        assert_eq!(detail["action"], "model.write");
+        assert_eq!(detail["decision"], "allow");
+        assert_eq!(detail["outcome"], "ok");
+        assert_eq!(detail["http_status"], 200);
+        assert_eq!(detail["actor"], "w3a-operator");
+        assert_eq!(detail["site_id"], bid);
+        assert_eq!(detail["change"]["tool"], "model.semantic_meta.put");
+        assert_eq!(detail["caller_request_id"], "client-label");
+        assert_eq!(detail["request_id"], publish_id);
+        assert_eq!(detail["qa_run"]["run_id"], "server-run-w3a");
+        assert_eq!(detail["qa_run"]["server_approved"], true);
+        assert_eq!(
+            detail["untrusted_labels"]["claimed_qa_run"],
+            "client-approved"
+        );
+        assert_ne!(
+            detail["qa_run"]["run_id"],
+            detail["untrusted_labels"]["claimed_qa_run"]
+        );
+
+        let (status, conflict, conflict_id) = call_tracked(
+            &app,
+            &operator,
+            json!({
+                "building_id": bid,
+                "meta": meta,
+                "confirm": true,
+                "expected_revision": "stale-rev-not-current"
+            }),
+            Some("client-approved"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT, "{conflict}");
+        assert_eq!(conflict["conflict"], true, "{conflict}");
+        assert_ne!(conflict_id, publish_id);
+        open_fdd_edge_prototype::auth::audit::flush_sink();
+        let events = audit_events(workspace.path(), "model.write");
+        let detail = detail_for(&events, &conflict_id);
+        assert_eq!(detail["decision"], "allow");
+        assert_eq!(detail["outcome"], "failed");
+        assert_eq!(detail["http_status"], 409);
+        assert_eq!(detail["reason"], "revision_conflict");
+        assert_eq!(detail["change"]["tool"], "model.semantic_meta.put");
+        assert_eq!(detail["request_id"], conflict_id);
+        assert_eq!(detail["qa_run"]["run_id"], "server-run-w3a");
+        let published_head = std::fs::read_to_string(
+            workspace
+                .path()
+                .join("data/csv_buildings")
+                .join(bid)
+                .join("semantic_meta.json"),
+        )
+        .expect("published head");
+        assert!(
+            published_head.contains(&revision),
+            "a 409 must leave the published revision in place"
+        );
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE and multi-tenant scope for the foreign denial"
+    )]
+    async fn foreign_semantic_meta_denial_ignores_the_client_qa_label() {
+        let _env = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().expect("workspace");
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let _audit = EnvGuard::unset("OPENFDD_AUDIT_LOG_PATH");
+        let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
+        let manifest = write_qa_manifest(workspace.path(), "server-run-w3a");
+        let _qa = EnvGuard::set(
+            "OPENFDD_QA_RUN_MANIFEST",
+            manifest.to_str().expect("manifest path"),
+        );
+        let plane = crate::tenant::ControlPlane {
+            tenants: vec![
+                crate::tenant::TenantRecord {
+                    id: "w3a-a".into(),
+                    name: "A".into(),
+                    building_ids: vec!["W3A_OWN".into()],
+                },
+                crate::tenant::TenantRecord {
+                    id: "w3a-b".into(),
+                    name: "B".into(),
+                    building_ids: vec!["W3A_FOREIGN".into()],
+                },
+            ],
+        };
+        plane.save(workspace.path()).expect("control plane");
+        let state = app_state("semantic-meta-scope-secret");
+        let app = app_with_request_ids(Arc::clone(&state));
+        let operator = state
+            .auth
+            .issue_token_with_tenants("w3a-operator", Role::Operator, 60, &["w3a-a".to_string()])
+            .expect("token");
+        let foreign = "W3A_FOREIGN";
+        let (status, body, server_id) = call_tracked(
+            &app,
+            &operator,
+            json!({
+                "building_id": foreign,
+                "meta": semantic_meta(foreign),
+                "confirm": true
+            }),
+            Some("client-approved"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        assert!(
+            !workspace
+                .path()
+                .join("data/csv_buildings")
+                .join(foreign)
+                .join("semantic_meta.json")
+                .exists(),
+            "a foreign denial must not publish"
+        );
+        open_fdd_edge_prototype::auth::audit::flush_sink();
+        let events = audit_events(workspace.path(), "model.write");
+        let detail = detail_for(&events, &server_id);
+        assert_eq!(detail["decision"], "deny");
+        assert_eq!(detail["reason"], "site_scope");
+        assert_eq!(detail["outcome"], "failed");
+        assert_eq!(detail["http_status"], 403);
+        assert_eq!(detail["site_id"], foreign);
+        assert_eq!(detail["actor"], "w3a-operator");
+        assert_eq!(detail["qa_run"]["run_id"], "server-run-w3a");
+        assert_eq!(detail["qa_run"]["server_approved"], true);
+        assert_eq!(
+            detail["untrusted_labels"]["claimed_qa_run"],
+            "client-approved"
+        );
+        assert_ne!(
+            detail["qa_run"]["run_id"],
+            detail["untrusted_labels"]["claimed_qa_run"]
+        );
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE and the audit sink path for the write-failure fixture"
+    )]
+    async fn permitted_semantic_meta_write_records_a_sink_failure() {
+        let _env = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().expect("workspace");
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let _mt = EnvGuard::unset("OPENFDD_MULTI_TENANT");
+        let _qa = EnvGuard::unset("OPENFDD_QA_RUN_MANIFEST");
+        let blocker = workspace.path().join("audit-blocker");
+        std::fs::write(&blocker, b"not-a-directory").expect("blocker");
+        let audit_path = blocker.join("security_audit.jsonl");
+        let _audit = EnvGuard::set(
+            "OPENFDD_AUDIT_LOG_PATH",
+            audit_path.to_str().expect("audit path"),
+        );
+        let before = open_fdd_edge_prototype::auth::audit::sink_status().write_failures;
+        let state = app_state("semantic-meta-sink-secret");
+        let app = app_with_request_ids(Arc::clone(&state));
+        let bid = "W3A_SINK";
+        let operator = token(&state, "w3a-sink", Role::Operator);
+        let (status, body, server_id) = call_tracked(
+            &app,
+            &operator,
+            json!({
+                "building_id": bid,
+                "meta": semantic_meta(bid),
+                "confirm": true
+            }),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["ok"], true, "{body}");
+        assert!(
+            workspace
+                .path()
+                .join("data/csv_buildings")
+                .join(bid)
+                .join("semantic_meta.json")
+                .is_file(),
+            "the model write commits even when the audit sink cannot store the line"
+        );
+        let report = open_fdd_edge_prototype::auth::audit::reconcile_request_ids(
+            std::slice::from_ref(&server_id),
+        );
+        assert!(
+            report
+                .missing_recorded_as_loss
+                .iter()
+                .any(|id| id == &server_id),
+            "request {server_id} should be on the loss ledger: {report:?}"
+        );
+        assert!(
+            open_fdd_edge_prototype::auth::audit::sink_status().write_failures > before,
+            "a failed append increments write_failures"
+        );
     }
 
     #[tokio::test]

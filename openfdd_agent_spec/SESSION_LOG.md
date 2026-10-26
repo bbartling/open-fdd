@@ -4,6 +4,13 @@
 
 - Portal samples convert to canonical `degF` before the existing Timescale writer. The site-file `units` field fills in when NF reports an unknown unit. NF and site-file disagreements are withheld and logged. Source unit stays on the point. No second write path. No VERSION bump.
 
+## 2026-10-26 — Typed audit for model writes and CSV export (W3a)
+
+- Semantic-meta and other model-agent writes and denials use the `openfdd.audit.v1` record (`model.write`), including compare-and-swap `409` (`revision_conflict`).
+- CSV site-history export records `csv.export`. Each request keeps a server-assigned id on that record, the response header, and Actions rows started by the request.
+- An authenticated caller is tagged from `OPENFDD_QA_RUN_MANIFEST`. A client `qa_run` label stays an untrusted label and does not grant access.
+- No VERSION bump.
+
 ## 2026-10-26 — Site history CSV export (W2b)
 
 - CSV export reads authorized Timescale samples (`sample` joined to `authorized_series`) into a rectangular long file: timestamp, equipment, point, role, unit, value. Missing unit or value cells stay blank. The read is bounded by span, row, and byte budgets and stops when the request is dropped.
