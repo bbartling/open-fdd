@@ -52,6 +52,27 @@ class PortalRunnerCliIntegrityTest(unittest.TestCase):
             self.assertNotEqual(duplicate.returncode, 0)
             self.assertIn("duplicate:", duplicate.stdout)
 
+    def test_viewer_cli_separates_agent_token_probe_without_weakening_matrix(self):
+        required = [{"check_id": cid, "status": "PASS"}
+                    for cid in sorted(portal_qual.VIEWER_WRITE_CHECK_IDS)]
+        legacy = {"check_id": "y.authz.viewer_mutation_denied", "status": "PASS"}
+        with tempfile.TemporaryDirectory() as td:
+            report = Path(td) / "report.json"
+            def evaluate(checks):
+                report.write_text(json.dumps({"checks": checks}), encoding="utf-8")
+                return self.run_cli("validate-viewer-write-matrix", "--report", str(report))
+            passed = evaluate(required + [legacy])
+            self.assertEqual(passed.returncode, 0, passed.stdout + passed.stderr)
+            missing = evaluate(required[:-1] + [legacy])
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("missing:", missing.stdout)
+            unknown = evaluate(required + [legacy, {"check_id": "y.authz.viewer_unknown_denied", "status": "PASS"}])
+            self.assertNotEqual(unknown.returncode, 0)
+            self.assertIn("unexpected:", unknown.stdout)
+            blocked = evaluate(required[:-1] + [{**required[-1], "status": "BLOCKED"}, legacy])
+            self.assertNotEqual(blocked.returncode, 0)
+            self.assertIn("not PASS:", blocked.stdout)
+
     def test_service_cli_requires_exact_names(self):
         exact = self.run_cli("validate-services", *sorted(portal_qual.REQUIRED_PORTAL_SERVICES))
         self.assertEqual(exact.returncode, 0, exact.stdout + exact.stderr)
