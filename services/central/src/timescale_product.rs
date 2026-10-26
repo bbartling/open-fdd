@@ -1137,6 +1137,85 @@ pub async fn rcx_box(
     .await
 }
 
+#[derive(Debug)]
+pub enum ComfortRankError {
+    InvalidBand {
+        low_f: f64,
+        high_f: f64,
+    },
+    Decode {
+        column: &'static str,
+        source: sqlx::Error,
+    },
+    NonFinite {
+        equipment_id: String,
+        value: f64,
+    },
+}
+
+impl std::fmt::Display for ComfortRankError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidBand { low_f, high_f } => write!(
+                f,
+                "comfort band must be finite with low <= high (low={low_f}, high={high_f})"
+            ),
+            Self::Decode { column, source } => {
+                write!(
+                    f,
+                    "comfort rank column '{column}' failed to decode: {source}"
+                )
+            }
+            Self::NonFinite {
+                equipment_id,
+                value,
+            } => write!(
+                f,
+                "comfort_pct for '{equipment_id}' is not a finite percent: {value}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ComfortRankError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Decode { source, .. } => Some(source),
+            Self::InvalidBand { .. } | Self::NonFinite { .. } => None,
+        }
+    }
+}
+
+/// One ranking row. Every row has at least one sample, so a null or
+/// undecodable `comfort_pct` is an error rather than a missing value.
+fn comfort_rank_point(row: &sqlx::postgres::PgRow) -> Result<Value, ComfortRankError> {
+    fn get<'r, T>(
+        row: &'r sqlx::postgres::PgRow,
+        column: &'static str,
+    ) -> Result<T, ComfortRankError>
+    where
+        T: sqlx::Decode<'r, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
+    {
+        row.try_get::<T, _>(column)
+            .map_err(|source| ComfortRankError::Decode { column, source })
+    }
+    let equipment_id: String = get(row, "equipment_id")?;
+    let comfort_pct: f64 = get(row, "comfort_pct")?;
+    let n: i64 = get(row, "n")?;
+    if !comfort_pct.is_finite() {
+        return Err(ComfortRankError::NonFinite {
+            equipment_id,
+            value: comfort_pct,
+        });
+    }
+    Ok(json!({
+        "equipment_id": equipment_id,
+        "comfort_pct": comfort_pct,
+        "n": n,
+        "value_f": comfort_pct,
+    }))
+}
+
 pub async fn rcx_zone_comfort_rank(
     building_id: &str,
     eq_kinds: &[&str],
@@ -1144,6 +1223,13 @@ pub async fn rcx_zone_comfort_rank(
     comfort_high_f: f64,
     scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
+    if !comfort_low_f.is_finite() || !comfort_high_f.is_finite() || comfort_low_f > comfort_high_f {
+        return Err(ComfortRankError::InvalidBand {
+            low_f: comfort_low_f,
+            high_f: comfort_high_f,
+        }
+        .into());
+    }
     let tsdb = Tsdb::connect_from_env().await?;
     let equipment = list_equipment(&tsdb, building_id).await?;
     let ids = cohort_ids(equipment, eq_kinds, &scope.equipment_ids);
@@ -1154,7 +1240,7 @@ pub async fn rcx_zone_comfort_rank(
         r#"
         SELECT
           a.equipment_id,
-          100.0 * AVG(CASE WHEN s.val BETWEEN $2 AND $3 THEN 1.0 ELSE 0.0 END) AS comfort_pct,
+          (100.0 * AVG(CASE WHEN s.val BETWEEN $2 AND $3 THEN 1.0 ELSE 0.0 END))::float8 AS comfort_pct,
           COUNT(*)::bigint AS n
         FROM sample s
         JOIN authorized_series a
@@ -1172,7 +1258,7 @@ pub async fn rcx_zone_comfort_rank(
           AND ($5::timestamptz IS NULL OR s.ts >= $5)
           AND ($6::timestamptz IS NULL OR s.ts < $6)
         GROUP BY a.equipment_id
-        ORDER BY comfort_pct ASC
+        ORDER BY comfort_pct ASC, a.equipment_id ASC
         LIMIT 200
         "#,
     )
@@ -1188,15 +1274,10 @@ pub async fn rcx_zone_comfort_rank(
     if rows.is_empty() {
         return Ok(None);
     }
-    let mut points = Vec::new();
-    for r in &rows {
-        points.push(json!({
-            "equipment_id": r.try_get::<String, _>("equipment_id").unwrap_or_default(),
-            "comfort_pct": r.try_get::<Option<f64>, _>("comfort_pct").ok().flatten(),
-            "n": r.try_get::<i64, _>("n").unwrap_or(0),
-            "value_f": r.try_get::<Option<f64>, _>("comfort_pct").ok().flatten(),
-        }));
-    }
+    let points = rows
+        .iter()
+        .map(comfort_rank_point)
+        .collect::<Result<Vec<_>, _>>()?;
     let mut env = envelope_with_engine(
         "rcx-ranking-v1",
         &AnalyticsQuery {
@@ -5809,3 +5890,7 @@ mod opaque_series_binding {
 #[cfg(test)]
 #[path = "duplicate_timestamp_parity.rs"]
 mod duplicate_timestamp_parity;
+
+#[cfg(test)]
+#[path = "zone_comfort_decode_fixture.rs"]
+mod zone_comfort_decode_fixture;

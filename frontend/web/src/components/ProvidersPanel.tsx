@@ -13,6 +13,9 @@ import {
 import {
   credentialRefLabel,
   isArchivedFieldDriver,
+  jobCoverageWord,
+  lastErrorText,
+  lastIngestedPointsText,
   ledgerFromFetches,
   mergeProviderRows,
   POLL_LEDGER_COVERAGE_LABEL,
@@ -256,7 +259,7 @@ export function ProvidersPanel() {
                 <th>Credential ref</th>
                 <th>Last poll</th>
                 <th>Last success</th>
-                <th>Last ingested</th>
+                <th>Last ingested points</th>
                 <th>Last error</th>
                 <th>Errors</th>
               </tr>
@@ -306,9 +309,11 @@ export function ProvidersPanel() {
                     <td data-testid={`provider-last-success-${row.buildingId}`}>
                       {row.lastSuccessAt ?? "—"}
                     </td>
-                    <td>{row.lastIngested ?? "—"}</td>
+                    <td data-testid={`provider-last-ingested-${row.buildingId}`}>
+                      {lastIngestedPointsText(row.lastIngested)}
+                    </td>
                     <td data-testid={`provider-last-error-${row.buildingId}`}>
-                      {row.message || row.lastErrorAt || "—"}
+                      {lastErrorText(row)}
                     </td>
                     <td>{row.consecutiveErrors ?? "—"}</td>
                   </tr>
@@ -374,6 +379,7 @@ export function ProvidersPanel() {
                         <th>Device</th>
                         <th>Window</th>
                         <th>State</th>
+                        <th>Coverage</th>
                         <th>Points</th>
                         <th>Attempt</th>
                         <th>Job</th>
@@ -393,6 +399,7 @@ export function ProvidersPanel() {
                             </span>
                             {row.reason ? ` — ${row.reason}` : ""}
                           </td>
+                          <td data-testid="provider-job-coverage">{jobCoverageWord(row.coverage)}</td>
                           <td>
                             fetched {row.fetched ?? "—"} · accepted {row.accepted ?? "—"} · rejected{" "}
                             {row.rejected ?? "—"} · inserted {row.inserted ?? "—"}

@@ -124,6 +124,13 @@ describe("UploadPage", () => {
     expect(screen.getByTestId("upload-goto-overview").getAttribute("href")).toBe(
       "/?site=BUILDING_9",
     );
+    const disclosure = screen.getByTestId("upload-result-disclosure");
+    expect(disclosure.tagName).toBe("DETAILS");
+    expect(disclosure.hasAttribute("open")).toBe(false);
+    expect(screen.getByTestId("upload-result-json").textContent).toMatch(/BUILDING_9/);
+    expect(disclosure.querySelector("pre")).toBe(screen.getByTestId("upload-result-json"));
+    fireEvent.click(screen.getByText("Import response"));
+    expect(disclosure.hasAttribute("open")).toBe(true);
     const link = screen.getByRole("link", { name: /continue to mapping/i });
     expect(link.getAttribute("href")).toBe("/mapping?site=BUILDING_9");
   });

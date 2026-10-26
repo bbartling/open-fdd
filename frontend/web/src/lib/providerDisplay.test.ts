@@ -3,7 +3,10 @@ import {
   credentialRefLabel,
   illustratedNfHistoryRead,
   interpretIngestLedger,
+  jobCoverageWord,
   jobIdentityBindings,
+  lastErrorText,
+  lastIngestedPointsText,
   mergeProviderRows,
   providerStatusView,
   safeRequestPreview,
@@ -151,7 +154,173 @@ describe("provider display", () => {
     expect(clear.status).toBe("ready");
     if (clear.status === "ready") {
       expect(clear.gapsNote).toMatch(/not gap-free ingest/);
+      expect(clear.jobsCoverage).toBe("not_assessed");
+      expect(clear.gapsCoverage).toBe("not_assessed");
     }
+  });
+
+  it("parses complete and incomplete jobs without treating a receipt as gap-free", () => {
+    const gapsWords = interpretIngestLedger(
+      { coverage: "bounded_windows_only", jobs: [] },
+      {
+        coverage: "not_assessed",
+        guarantee: "bounded_windows_only",
+        update_log: "not_claimed",
+        gaps: [],
+      },
+    );
+    expect(gapsWords.status).toBe("unavailable");
+
+    const mixed = interpretIngestLedger(
+      {
+        coverage: "complete",
+        jobs: [
+          {
+            job_id: "job-complete",
+            device_id: "device-a",
+            provider_instance_id: "portal-a",
+            model_revision: "rev-1",
+            logical_window_start: "2026-10-19T09:00:00Z",
+            logical_window_end: "2026-10-19T10:00:00Z",
+            state: "committed",
+            coverage: "complete",
+            counts: { fetched: 4, accepted: 4, rejected: 0, inserted: 4 },
+          },
+        ],
+      },
+      {
+        coverage: "complete",
+        guarantee: "missing",
+        gaps: [],
+      },
+    );
+    expect(mixed.status).toBe("unavailable");
+
+    const accounted = interpretIngestLedger(
+      {
+        coverage: "incomplete",
+        jobs: [
+          {
+            job_id: "job-complete",
+            device_id: "device-a",
+            provider_instance_id: "portal-a",
+            model_revision: "rev-1",
+            logical_window_start: "2026-10-19T09:00:00Z",
+            logical_window_end: "2026-10-19T10:00:00Z",
+            state: "committed",
+            coverage: "complete",
+            counts: { fetched: 4, accepted: 4, rejected: 0, inserted: 4 },
+          },
+          {
+            job_id: "job-partial",
+            device_id: "device-a",
+            provider_instance_id: "portal-a",
+            model_revision: "rev-1",
+            logical_window_start: "2026-10-19T10:00:00Z",
+            logical_window_end: "2026-10-19T11:00:00Z",
+            state: "partial",
+            coverage: "incomplete",
+            safe_error_code: "upstream_timeout",
+            counts: { fetched: 3, accepted: 1, rejected: 2, inserted: 0 },
+          },
+        ],
+      },
+      {
+        coverage: "incomplete",
+        guarantee: "bounded_windows_only",
+        update_log: "not_claimed",
+        gaps: [
+          {
+            recoverable: true,
+            job: {
+              job_id: "job-partial",
+              device_id: "device-a",
+              provider_instance_id: "portal-a",
+              model_revision: "rev-1",
+              logical_window_start: "2026-10-19T10:00:00Z",
+              logical_window_end: "2026-10-19T11:00:00Z",
+              state: "partial",
+              coverage: "incomplete",
+              safe_error_code: "upstream_timeout",
+            },
+          },
+        ],
+      },
+    );
+    expect(accounted.status).toBe("ready");
+    if (accounted.status !== "ready") return;
+    expect(accounted.jobsCoverage).toBe("incomplete");
+    expect(accounted.gapsCoverage).toBe("incomplete");
+    expect(accounted.coverageLabel).toMatch(/Job coverage is incomplete/);
+    expect(accounted.coverageLabel).toMatch(/not the gaps list/);
+    expect(accounted.coverageLabel).toMatch(/not a gap-free ingest claim/);
+    expect(accounted.coverageLabel).not.toMatch(/No gaps in the returned windows/);
+    expect(accounted.gapsNote).toMatch(/Gaps coverage is incomplete/);
+    expect(accounted.gapsNote).not.toMatch(/Job coverage is incomplete/);
+    expect(jobCoverageWord(accounted.jobs[0]!.coverage)).toBe("Complete");
+    expect(jobCoverageWord(accounted.jobs[1]!.coverage)).toBe("Incomplete");
+    expect(windowStateLabel(accounted.gaps[0]!)).toBe("Partial");
+
+    const receipt = interpretIngestLedger(
+      {
+        coverage: "complete",
+        jobs: [
+          {
+            job_id: "job-complete",
+            device_id: "device-a",
+            provider_instance_id: "portal-a",
+            model_revision: "rev-1",
+            state: "committed",
+            coverage: "complete",
+          },
+        ],
+      },
+      {
+        coverage: "not_assessed",
+        guarantee: "bounded_windows_only",
+        update_log: "not_claimed",
+        gaps: [],
+      },
+    );
+    expect(receipt.status).toBe("ready");
+    if (receipt.status !== "ready") return;
+    expect(receipt.jobsCoverage).toBe("complete");
+    expect(receipt.gapsCoverage).toBe("not_assessed");
+    expect(receipt.coverageLabel).toMatch(/complete receipt is not proof that history has no gaps/);
+    expect(receipt.coverageLabel).toMatch(/not a gap-free ingest claim/);
+    expect(receipt.gapsNote).toMatch(/empty gap list is not gap-free ingest/);
+    expect(receipt.gapsNote).not.toMatch(/Job coverage is complete/);
+    expect(receipt.jobsNote).not.toMatch(/no gaps/);
+  });
+
+  it("keeps a healthy status message out of Last error and renders ingested points as a count", () => {
+    expect(
+      lastErrorText({
+        status: "ok",
+        message: "committed; update log not claimed",
+        lastErrorAt: null,
+      }),
+    ).toBe("—");
+    expect(
+      lastErrorText({
+        status: "ok",
+        message: "committed; update log not claimed",
+        lastErrorAt: "2026-10-01T00:00:00Z",
+      }),
+    ).toBe("2026-10-01T00:00:00Z");
+    expect(
+      lastErrorText({
+        status: "error",
+        message: "history_failed",
+        lastErrorAt: "2026-10-01T00:00:00Z",
+      }),
+    ).toBe("history_failed");
+    expect(lastIngestedPointsText(60)).toBe("60");
+    expect(lastIngestedPointsText(1500)).toBe("1,500");
+    expect(lastIngestedPointsText(1_700_000_000)).toBe("1,700,000,000");
+    expect(lastIngestedPointsText(1_700_000_000)).not.toMatch(/T\d{2}:/);
+    expect(lastIngestedPointsText(60)).not.toMatch(/1970/);
+    expect(lastIngestedPointsText(undefined)).toBe("—");
   });
 
   it("refuses secret and write previews", () => {

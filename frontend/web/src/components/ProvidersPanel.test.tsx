@@ -133,6 +133,9 @@ describe("ProvidersPanel", () => {
     expect(screen.getByTestId("provider-last-success-NF_EDGE").textContent).toBe(
       "2026-10-19T10:00:00Z",
     );
+    expect(screen.getByTestId("provider-last-ingested-NF_EDGE").textContent).toBe("60");
+    expect(screen.getByTestId("provider-last-ingested-NF_EDGE").textContent).not.toMatch(/1970|T\d{2}:/);
+    expect(screen.getByTestId("provider-last-error-NF_EDGE").textContent).toBe("—");
     expect(screen.getByTestId("providers-health-table").textContent).not.toMatch(/secret/);
     expect(screen.getByTestId("providers-poll-enabled").textContent).toMatch(/enabled/);
     expect(screen.getByTestId("coverage-gapless").textContent).not.toMatch(/Gapless:\s*yes/i);
@@ -261,5 +264,131 @@ describe("ProvidersPanel", () => {
     expect(screen.queryByTestId("provider-ledger-coverage")).toBeNull();
     expect(document.body.textContent).not.toMatch(/Gapless:\s*yes/i);
     expect(document.body.textContent).not.toMatch(/N5 have not landed/);
+  });
+
+  it("renders a count in Last ingested points and keeps a healthy message out of Last error", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/providers/health") {
+        return {
+          ...healthBody(false),
+          sites: [
+            {
+              ...healthBody(false).sites[0],
+              last_ingested_points: 1500,
+              health: {
+                status: "ok",
+                message: "committed; update log not claimed",
+                last_success_at: "2026-10-19T10:00:00Z",
+                last_error_at: null,
+              },
+            },
+          ],
+        };
+      }
+      if (path === "/api/providers/sites") return { sites: [] };
+      throw new ApiClientError("missing", 404);
+    });
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-status-NF_EDGE").textContent).toMatch(/Poll ok/);
+    });
+    const ingested = screen.getByTestId("provider-last-ingested-NF_EDGE");
+    const errorCell = screen.getByTestId("provider-last-error-NF_EDGE");
+    expect(ingested.textContent).toBe("1,500");
+    expect(ingested.textContent).not.toMatch(/1970|T\d{2}:/);
+    expect(errorCell.textContent).toBe("—");
+    expect(errorCell.textContent).not.toMatch(/committed/);
+    expect(screen.getByTestId("providers-health-table").textContent).toMatch(/Last ingested points/);
+  });
+
+  it("shows an error status message under Last error", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/providers/health") {
+        return {
+          ...healthBody(false),
+          sites: [
+            {
+              ...healthBody(false).sites[0],
+              consecutive_errors: 2,
+              health: {
+                status: "error",
+                message: "history_failed",
+                last_success_at: null,
+                last_error_at: "2026-10-19T11:00:00Z",
+              },
+            },
+          ],
+        };
+      }
+      if (path === "/api/providers/sites") return { sites: [] };
+      throw new ApiClientError("missing", 404);
+    });
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-last-error-NF_EDGE").textContent).toBe("history_failed");
+    });
+  });
+
+  it("reads complete and incomplete job coverage without a gap-free claim", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/providers/health") return healthBody(false);
+      if (path === "/api/providers/sites") return { sites: [] };
+      if (String(path).startsWith("/api/ingest/jobs")) {
+        return {
+          ok: true,
+          coverage: "incomplete",
+          jobs: [
+            job({ coverage: "complete", state: "committed" }),
+            job({
+              job_id: "22222222-2222-2222-2222-222222222222",
+              state: "partial",
+              coverage: "incomplete",
+              safe_error_code: "upstream_timeout",
+            }),
+          ],
+        };
+      }
+      if (String(path).startsWith("/api/ingest/gaps")) {
+        return {
+          ok: true,
+          coverage: "incomplete",
+          guarantee: "bounded_windows_only",
+          update_log: "not_claimed",
+          gaps: [
+            {
+              recoverable: true,
+              job: job({
+                job_id: "22222222-2222-2222-2222-222222222222",
+                state: "partial",
+                coverage: "incomplete",
+                safe_error_code: "upstream_timeout",
+              }),
+            },
+          ],
+        };
+      }
+      throw new ApiClientError("missing", 404);
+    });
+    renderPanel();
+    await waitFor(() => screen.getByTestId("provider-open-NF_EDGE"));
+    fireEvent.click(screen.getByTestId("provider-open-NF_EDGE"));
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-ledger-jobs").textContent).toMatch(/Complete/);
+    });
+    const jobs = screen.getByTestId("provider-ledger-jobs").textContent ?? "";
+    const gaps = screen.getByTestId("provider-ledger-gaps").textContent ?? "";
+    const coverage = screen.getByTestId("provider-ledger-coverage").textContent ?? "";
+    expect(jobs).toMatch(/Incomplete/);
+    expect(jobs).toMatch(/Committed/);
+    expect(gaps).toMatch(/Partial/);
+    expect(gaps).not.toMatch(/Complete/);
+    expect(coverage).toMatch(/Job coverage is incomplete/);
+    expect(coverage).toMatch(/not a gap-free ingest claim/);
+    expect(screen.getByTestId("provider-ledger-gaps-note").textContent).toMatch(
+      /Gaps coverage is incomplete/,
+    );
+    expect(screen.getByTestId("provider-ledger-gaps-note").textContent).not.toMatch(
+      /Job coverage is incomplete/,
+    );
   });
 });

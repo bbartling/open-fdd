@@ -76,6 +76,7 @@ vi.mock("../api/providersApi", () => ({
 }));
 
 import { listFddRules } from "../api/fddApi";
+import { fetchOptionalJson } from "../api/providersApi";
 import { getAuthMe } from "../api/authApi";
 import { getHistorianPoints, purgeHistorian } from "../api/historianApi";
 import {
@@ -115,6 +116,7 @@ describe("MappingPage", () => {
         applicability: "typed",
       },
     ]);
+    vi.mocked(fetchOptionalJson).mockImplementation(async () => ({ http: "missing" }));
     vi.mocked(listPackageBuildings).mockResolvedValue(["B1"]);
     vi.mocked(getHistorianPoints).mockResolvedValue({
       ok: true,
@@ -446,6 +448,59 @@ describe("MappingPage", () => {
       "Active ingest: not reported",
     );
     expect(screen.getByTestId("map-download-ttl").textContent).toMatch(/inventory/i);
+  });
+
+  it("keeps a complete ingest receipt separate from the gaps list", async () => {
+    vi.mocked(fetchOptionalJson).mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/ingest/jobs")) {
+        return {
+          http: "ok",
+          body: {
+            ok: true,
+            coverage: "complete",
+            jobs: [
+              {
+                job_id: "job-complete",
+                device_id: "device-a",
+                provider_instance_id: "portal-a",
+                model_revision: "rev-1",
+                logical_window_start: "2026-10-19T09:00:00Z",
+                logical_window_end: "2026-10-19T10:00:00Z",
+                state: "committed",
+                coverage: "complete",
+                counts: { fetched: 1, accepted: 1, rejected: 0, inserted: 1 },
+              },
+            ],
+          },
+        };
+      }
+      if (path.startsWith("/api/ingest/gaps")) {
+        return {
+          http: "ok",
+          body: {
+            ok: true,
+            coverage: "not_assessed",
+            guarantee: "bounded_windows_only",
+            update_log: "not_claimed",
+            gaps: [],
+          },
+        };
+      }
+      return { http: "missing" };
+    });
+    renderMapping();
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-bindings-coverage").textContent).toMatch(
+        /complete receipt is not proof that history has no gaps/,
+      );
+    });
+    const gaps = screen.getByTestId("provider-bindings-gaps").textContent ?? "";
+    expect(gaps).toMatch(/not gap-free/);
+    expect(gaps).not.toMatch(/Job coverage is complete/);
+    expect(screen.getByTestId("provider-bindings-table").textContent).toMatch(/portal-a/);
+    expect(screen.getByTestId("provider-bindings-coverage").textContent).not.toMatch(
+      /No gaps in the returned windows/,
+    );
   });
 });
 

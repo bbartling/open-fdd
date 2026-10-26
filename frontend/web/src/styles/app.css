@@ -588,6 +588,15 @@ body {
   word-break: break-word;
 }
 
+.upload-result-json {
+  margin-top: var(--space-md);
+}
+
+.upload-result-json summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+}
+
 .contract-badge {
   display: inline-block;
   background: var(--color-secondary-bg);
@@ -926,6 +935,31 @@ body {
   width: 100%;
   height: auto;
   display: block;
+  color: var(--color-text);
+}
+
+.oracle-hero__stack-box {
+  fill: var(--color-widget-bg);
+  stroke: var(--color-border);
+  stroke-width: 1.5;
+}
+
+.oracle-hero__stack-label {
+  fill: currentColor;
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.oracle-hero__stack-sub {
+  fill: currentColor;
+  font-size: 14px;
+}
+
+.oracle-hero__stack-arrow {
+  stroke: var(--color-primary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .oracle-hero__how h2 {
