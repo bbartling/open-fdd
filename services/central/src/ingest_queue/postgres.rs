@@ -304,6 +304,89 @@ pub async fn apply_samples(
     Ok(stats)
 }
 
+/// Canonical rows for one claimed device window and the ledger rows that
+/// record them. Rows belong to `job.canonical_site` / `job.device_id`.
+pub struct CanonicalWindow<'a> {
+    pub equip_type: Option<&'a str>,
+    pub rows: &'a fdd_tsdb::UpsertBatch,
+    pub applied: &'a [AppliedSample],
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WindowWrite {
+    pub samples: fdd_tsdb::SampleUpsertStats,
+    pub ledger: ApplyStats,
+}
+
+/// Write one window to canonical history and the applied-sample ledger in one
+/// transaction. The job row is locked first and must still name this lease
+/// owner, fencing token, and an unexpired lease at `now`; otherwise nothing is
+/// written and the caller gets [`QueueError::StaleFence`]. While the lock is
+/// held a reclaiming claim skips the row, so a write that passed the check
+/// commits before any later owner can start.
+pub async fn commit_window(
+    pool: &PgPool,
+    job: &JobView,
+    now: DateTime<Utc>,
+    window: &CanonicalWindow<'_>,
+) -> Result<WindowWrite, QueueError> {
+    if window.rows.rows.iter().any(|row| {
+        row.site_id != job.canonical_site
+            || row.equipment_id.as_deref() != Some(job.device_id.as_str())
+    }) {
+        return Err(QueueError::Invalid(
+            "canonical rows are outside the claimed window".into(),
+        ));
+    }
+    let Some(owner) = job.lease_owner.as_deref() else {
+        return Err(QueueError::StaleFence);
+    };
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    let owned: Option<String> = sqlx::query_scalar(
+        "SELECT job_id FROM ingest_job
+         WHERE job_id = $1 AND lease_owner = $2 AND fencing_token = $3
+           AND state = 'leased' AND lease_expiry > $4
+         FOR UPDATE",
+    )
+    .bind(job.job_id.to_string())
+    .bind(owner)
+    .bind(i64::try_from(job.fencing_token).unwrap_or(i64::MAX))
+    .bind(now)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    if owned.is_none() {
+        tx.rollback().await.map_err(db_err)?;
+        return Err(QueueError::StaleFence);
+    }
+    if !window.rows.is_empty() {
+        fdd_tsdb::Tsdb::ensure_site_building_tx(&mut tx, &job.canonical_site)
+            .await
+            .map_err(tsdb_err)?;
+        fdd_tsdb::Tsdb::upsert_equipment_tx(
+            &mut tx,
+            &job.canonical_site,
+            &job.device_id,
+            window.equip_type,
+        )
+        .await
+        .map_err(tsdb_err)?;
+    }
+    let samples = fdd_tsdb::Tsdb::upsert_samples_tx(&mut tx, window.rows)
+        .await
+        .map_err(tsdb_err)?;
+    let ledger = apply_samples_tx(&mut tx, job, window.applied).await?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(WindowWrite { samples, ledger })
+}
+
+fn tsdb_err(err: fdd_tsdb::TsdbError) -> QueueError {
+    match err {
+        fdd_tsdb::TsdbError::Sqlx(inner) => db_err(inner),
+        other => QueueError::Db(other.to_string()),
+    }
+}
+
 pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<ReceiptView>, QueueError> {
     let job_id = req.job_id.to_string();
     let exists: Option<(String, Option<String>)> = sqlx::query_as(

@@ -3,7 +3,7 @@ use std::env;
 use std::sync::{Arc, Mutex};
 
 use sqlx::postgres::PgPoolOptions;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::portal::{upsert_portal_point, PortalPointUpsert};
@@ -110,6 +110,16 @@ impl Tsdb {
     }
 
     pub async fn ensure_site_building(&self, building_id: &str) -> Result<(), TsdbError> {
+        let mut tx = self.pool.begin().await?;
+        Self::ensure_site_building_tx(&mut tx, building_id).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn ensure_site_building_tx(
+        tx: &mut Transaction<'_, Postgres>,
+        building_id: &str,
+    ) -> Result<(), TsdbError> {
         sqlx::query(
             r#"
             INSERT INTO site(site_id, dis, timezone, enabled)
@@ -118,7 +128,7 @@ impl Tsdb {
             "#,
         )
         .bind(building_id)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         sqlx::query(
             r#"
@@ -128,13 +138,25 @@ impl Tsdb {
             "#,
         )
         .bind(building_id)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(())
     }
 
     pub async fn upsert_equipment(
         &self,
+        building_id: &str,
+        equipment_id: &str,
+        equip_type: Option<&str>,
+    ) -> Result<(), TsdbError> {
+        let mut tx = self.pool.begin().await?;
+        Self::upsert_equipment_tx(&mut tx, building_id, equipment_id, equip_type).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn upsert_equipment_tx(
+        tx: &mut Transaction<'_, Postgres>,
         building_id: &str,
         equipment_id: &str,
         equip_type: Option<&str>,
@@ -150,7 +172,7 @@ impl Tsdb {
         .bind(building_id)
         .bind(equipment_id)
         .bind(equip_type)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
         Ok(())
     }
@@ -174,6 +196,17 @@ impl Tsdb {
             return Ok(SampleUpsertStats::default());
         }
         let mut tx = self.pool.begin().await?;
+        let stats = Self::upsert_samples_tx(&mut tx, batch).await?;
+        tx.commit().await?;
+        Ok(stats)
+    }
+
+    /// [`Self::upsert_samples_stats`] inside a caller-owned transaction, so a
+    /// caller can check its own write fence and publish samples atomically.
+    pub async fn upsert_samples_tx(
+        tx: &mut Transaction<'_, Postgres>,
+        batch: &UpsertBatch,
+    ) -> Result<SampleUpsertStats, TsdbError> {
         let mut stats = SampleUpsertStats::default();
         let mut portal_keys: HashMap<(String, String), String> = HashMap::new();
         for row in &batch.rows {
@@ -190,7 +223,7 @@ impl Tsdb {
                         Some(key) => key.clone(),
                         None => {
                             let key = upsert_portal_point(
-                                &mut tx,
+                                tx,
                                 &PortalPointUpsert {
                                     site_id: &row.site_id,
                                     portal_point_id: pid,
@@ -238,7 +271,7 @@ impl Tsdb {
             .bind(row.val)
             .bind(&row.unit)
             .bind(&row.quality)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&mut **tx)
             .await?;
             match outcome {
                 Some(1) => stats.inserted += 1,
@@ -263,7 +296,7 @@ impl Tsdb {
                 .bind(&row.openfdd_key)
                 .bind(role)
                 .bind(&row.unit)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
                 sqlx::query(
                     r#"
@@ -282,11 +315,10 @@ impl Tsdb {
                 .bind(role)
                 .bind(&row.unit)
                 .bind(equip)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
             }
         }
-        tx.commit().await?;
         Ok(stats)
     }
 
