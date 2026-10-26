@@ -1,5 +1,10 @@
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
+## 2026-10-26 — Tenant site identity at creation (W3c)
+
+- A new tenant site assignment is accepted only when no other tenant already lists that site id. The write reports the conflict and does not change stored memberships.
+- Rows already on disk stay as stored. No migration. Own-site access and foreign-site denial are unchanged.
+
 ## 2026-10-26 — NF ingest unit normalization (UNITS-NF-405-01)
 
 - Portal samples convert to canonical `degF` before the existing Timescale writer. The site-file `units` field fills in when NF reports an unknown unit. NF and site-file disagreements are withheld and logged. Source unit stays on the point. No second write path. No VERSION bump.

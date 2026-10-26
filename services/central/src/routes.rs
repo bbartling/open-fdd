@@ -1255,12 +1255,15 @@ fn admin_upsert_tenant_inner(
             name: body.name,
             building_ids: body.building_ids,
         })
-        .map_err(|e| {
-            audit.reason(ReasonCode::InvalidRequest);
-            (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": e})),
-            )
+        .map_err(|err| {
+            let rejection = err.rejection();
+            if rejection.status == 409 {
+                audit.reason(ReasonCode::SiteScope);
+            } else {
+                audit.reason(ReasonCode::InvalidRequest);
+            }
+            let status = StatusCode::from_u16(rejection.status).unwrap_or(StatusCode::BAD_REQUEST);
+            (status, Json(rejection.body))
         })?;
     plane.save(&ws).map_err(|e| {
         audit.reason(ReasonCode::StorageError);
