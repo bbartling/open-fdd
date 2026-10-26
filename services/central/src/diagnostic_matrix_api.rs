@@ -86,12 +86,11 @@ impl Drop for SampleCleanup {
     }
 }
 
-fn postgres_url() -> String {
+fn postgres_url() -> Option<String> {
     std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".into())
 }
 
 async fn delete_sites(url: &str, sites: &[String]) {
@@ -205,10 +204,13 @@ fn index_rows(body: &Value) -> HashMap<(String, String), Value> {
     reason = "OPENFDD_HISTORIAN and OPENFDD_DATABASE_URL are process-global while the handlers run"
 )]
 async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
+    let Some(url) = postgres_url() else {
+        eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
+        return;
+    };
     let _lock = lock_env();
     let workspace = tempfile::tempdir().expect("workspace");
     let _workspace = WorkspaceEnv::set(workspace.path());
-    let url = postgres_url();
     let suffix = uuid::Uuid::new_v4().simple().to_string();
     let site_a = format!("w3c_diag_a_{suffix}");
     let site_b = format!("w3c_diag_b_{suffix}");

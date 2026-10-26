@@ -16,7 +16,7 @@ For CSV/package analytics, deploy only:
 
 | Service | Image | Host port | Purpose |
 | --- | --- | ---: | --- |
-| central | `ghcr.io/bbartling/openfdd-central:<tag>` | `8080` | API, package ingest, historian, DataFusion FDD |
+| central | `ghcr.io/bbartling/openfdd-central:<tag>` | `8080` | API, package ingest, Timescale historian, Timescale SQL FDD |
 | web | `ghcr.io/bbartling/openfdd-web:<tag>` | `3000` | React dashboard; proxies `/api` to central |
 
 Use the repository's `csv` Compose recipe. MQTT and fieldbus are not required for a dashboard that consumes uploaded CSV/package data.

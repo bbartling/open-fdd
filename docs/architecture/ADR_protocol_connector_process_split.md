@@ -38,7 +38,7 @@ standalone Haystack process has no automatic polling producer; its
 the typed read API plus an explicitly triggered current-read to local-ingest
 route. Only
 `openfdd-central` validates the ingest envelope and writes canonical
-Parquet/DataFusion historian state. The local path returns a typed receipt
+historian state (Timescale only; the original Parquet/DataFusion wording is historical, superseded by the Timescale-only mandate). The local path returns a typed receipt
 with exact scope/site/edge/message correlation, persisted envelope digest,
 pending/committed/terminal/retryable/conflict outcomes, and no second database
 or direct Parquet writer. Terminal zero-eligible, rejected, and conflict

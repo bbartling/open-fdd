@@ -1,5 +1,7 @@
 # WattLab-to-WattLab dump parity (Building 100) — vibe19 4.4.1 / `sha-69494c2`
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Oracle: vibe19 Engineering Bundle `ghcr.io/bbartling/vibe19:latest` digest `sha256:159802ca…f9ae52b0` (OCI revision `11cc1cdc…`), wheel **4.4.1**, catalog `2e684dbb…cba9`. Diagnostic dump includes `vav_health_matrix.csv`, `mech_cooling_oat_bins.csv`, `motor_hours.csv`, `motor_weekly.csv`. `agent_afdd` rc **0**.
 
 OpenFDD: DataFusion on **`sha-69494c2`** (#734 mad_c damper ranking + #735 dump grain/accepts). Health `3.3.0+69494c2195ac`. Stack: `OPENFDD_IMAGE_TAG=sha-69494c2` `react-ot --no-pull` (override sticky `.env` `sha-8ab0b5e`). No local rust/docker image build for FDD.

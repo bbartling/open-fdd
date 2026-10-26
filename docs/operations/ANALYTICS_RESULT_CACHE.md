@@ -1,5 +1,7 @@
 # Analytics / RCx / fault result cache
 
+> Storage mandate: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). Derived FDD / analytics results persist in PostgreSQL or bounded memory. Parquet, Arrow, Arrow IPC, Feather and DataFusion are prohibited in product storage, caching, execution and dependencies.
+
 Derived result rows for `/api/analytics/*` (including RCx presets and sensor-fault analytics) live in the PostgreSQL table `analytics_result`, next to the Timescale historian. They are recomputable output, not telemetry. The cache never writes files. It is not the AFDD `{rule_id}.json` blob under rule results.
 
 ## Storage
@@ -74,7 +76,9 @@ CSV / package buildings are guests.
 
 `ram_resident` / `historian_resident` are the RSS check. After unload they must not still name the CSV building. The lease list can still name it until leave or idle.
 
-Listing datasets (`note_catalog_list`) does not open a session.
+**Historical, superseded by the Timescale-only mandate:** live MQTTS ingest once recorded a capped row buffer (`OPENFDD_MQTT_INGEST_BUFFER_ROWS`, default 256, max 4096) for at most `OPENFDD_MAX_MQTT_BUILDING_BUFFERS` buildings (default 32). MQTTS is archived; there is no MQTTS ingest buffer on the product path, and no ingest buffer may act as a second telemetry store.
+
+Listing datasets (`note_catalog_list`) does not open a session. A hub with hundreds of packages must not keep hundreds of in-memory tables resident.
 
 ## Acceptance
 
@@ -89,5 +93,7 @@ Listing datasets (`note_catalog_list`) does not open a session.
 | --- | --- |
 | No `equipment_id` substring filters | Lookups are exact primary-key equality. Request `equipment_ids` are a config-hash input only. |
 | No building hardcodes; `building_id` is always a parameter | Cache, session, and trim take the caller id. Missing id skips the cache. Tests use `site-a`. |
+| No MQTT CELL/DELTA | Historical (MQTTS archived): ingest recorded a row-count buffer under the envelope site id. No new topic mode. |
 | Timescale/PostgreSQL only | No Parquet, Arrow, or file writes on this path. |
+| Building-agnostic session and cache | Same limits for every building. `OPENFDD_TEST_DEPLOY` is an env flag, not a site-name branch. |
 | No VERSION bump / not FQ | Workspace `VERSION` is unchanged. |

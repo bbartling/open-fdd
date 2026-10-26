@@ -10,7 +10,7 @@
 | Agent | Tree | Charter |
 |-------|------|---------|
 | **Bench (Linux edge)** | `/home/ben/open-fdd` | Test, document, local harness → [#429](https://github.com/bbartling/open-fdd/issues/429). **No product edits.** |
-| **Product (WSL/source)** | `/home/ben/src/open-fdd` | Implement vibe16 BACnet/Feather ports, **ship PRs**. [vibe16 prompt](./vibe16-bacnet-feather-port-agent-prompt.md) |
+| **Product (WSL/source)** | `/home/ben/src/open-fdd` | Implement and **ship PRs** (the vibe16 BACnet/Feather port is historical, superseded by the Timescale-only mandate). [vibe16 prompt](./vibe16-bacnet-feather-port-agent-prompt.md) |
 
 ## GHCR channels
 

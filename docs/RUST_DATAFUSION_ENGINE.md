@@ -1,6 +1,8 @@
 # Open-FDD Rust / DataFusion engine
 
-Production-direction deterministic FDD analytics for Open-FDD.
+> **Historical, superseded by the Timescale-only mandate.** This page describes the retired DataFusion / Arrow / Parquet engine (`fdd_sql`, `fdd_cli`, `fdd_bench`, `sql_rules/`). It is not the product path and must not be revived. Product FDD and analytics are Timescale / PostgreSQL + `sql/fdd/*.sql` ([ADR-010](architecture/adr-010-timescale-hard-cutover.md)); storage mandate: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate](../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). Those crates are out of the workspace; their remaining source outside `archive/` and the `crates/fdd_store` Parquet modules are a known gap being removed in Wave P2. The package-map and `timestamp_utc` contracts below still describe current CSV / package ingest, which now writes to Timescale.
+
+Historical description: production-direction deterministic FDD analytics for Open-FDD.
 
 ## Stack
 
@@ -38,7 +40,7 @@ Haystack `points` names translate via `haystack_point_to_role` (`discharge-air-t
 - Single-equip Haystack sidecars may set `"equip": "AHU_1"` as a **string** device id — that is metadata; roles come from `points` / `column_roles`.
 - Site-specific vendor point names belong in the package preprocess, not in Rust equations.
 
-## CLI
+## CLI (historical/non-executable)
 
 ```powershell
 cargo run -p fdd_cli --release -- validate --data-root examples/sample_data --building BUILDING_FIXTURE
@@ -50,7 +52,7 @@ cargo run -p fdd_cli --release -- benchmark --data-root $env:HVAC_DATA_ROOT --bu
 
 Release binary: `target/release/openfdd_cli.exe`
 
-## SQL rules
+## SQL rules (historical; product rules are `sql/fdd/`)
 
 - Registry: `sql_rules/registry.yaml`
 - Rule SQL: `sql_rules/*.sql`

@@ -5,6 +5,8 @@ nav_exclude: true
 
 # S3-compatible historian operations
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 > **SUPERSEDED (Wave-X 3.6.0+ / [ADR-010](../architecture/adr-010-timescale-hard-cutover.md)):** Product historian is **TimescaleDB only** — no dual-write, no Parquet/S3 co-canonical path. Soft-OPEN ≠ FQ. Live bring-up: [`TIMESCALE_WAVE_X.md`](TIMESCALE_WAVE_X.md). The Parquet/S3/DataFusion guidance below is **historical** (pre-3.6.0 H5) and must not guide new deploys.
 
 Open-FDD historically used the same Parquet historian contract on local disk and S3-compatible object storage. The engine stayed provider-neutral: AWS S3, MinIO, Railway Storage Buckets, and compatible providers mapped deployment settings into the same `OPENFDD_*` variables.

@@ -25,6 +25,8 @@ isProject: true
 
 # Wave Haystack RDF — master
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status:** activated under [`patch_all_open_issues_master.plan.md`](patch_all_open_issues_master.plan.md) as Track D (PR-02 C1, PR-07…PR-11 C2–C6). Execute child plans in order when that master runs.
 
 **Requirements SoT:** [`openfdd_agent_spec/HAYSTACK_RDF_ROLLOUT.md`](../../openfdd_agent_spec/HAYSTACK_RDF_ROLLOUT.md) (HR-01–HR-12)  

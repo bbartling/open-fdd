@@ -1,5 +1,7 @@
 # Rust and React best-practices audit (2026-10-20)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Product Rust and `frontend/web` are clean against the lints this standard turns on. `cargo +1.95.0 clippy --workspace --all-targets -- -D warnings` exits 0. `frontend/web` `npm run lint` exits 0 (13 pre-existing `react-refresh/only-export-components` warnings; that rule stays a warning, and CI does not fail on warnings).
 
 The product surface for this standard is the NF portal API and CSV ingest. MQTT, BACnet, Haystack, Modbus, fieldbus, edge, and dual-write paths are not cleaned here. Archived code lives in `archive/` and is never built.

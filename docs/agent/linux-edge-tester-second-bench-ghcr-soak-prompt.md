@@ -1,5 +1,7 @@
 # Linux edge tester — second-bench GHCR soak (paste into Cursor)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Repo-only.** Paste into Cursor on a **second** OT / integration bench after product ships green `openfdd-{central,ui,fieldbus,mqtt}:nightly`.
 
 Charter parent: [linux-edge-tester-prompt.md](./linux-edge-tester-prompt.md) · stack short form: [linux-edge-tester-stack-nightly-prompt.md](./linux-edge-tester-stack-nightly-prompt.md)

@@ -6,6 +6,8 @@ nav_order: 20
 
 # Milestone A closeout
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Audit date:** 2026-07-28  
 **Open-FDD tip:** `master` after [#582](https://github.com/bbartling/open-fdd/pull/582) (`openfdd_agent_spec`)  
 **Playground tip:** `develop` after vibe19/20 twin cutovers (#55–#59)

@@ -52,4 +52,4 @@ Docs and the external BUILDING_100 kit may name maintainer datasets. Do not copy
 
 ## Historian identity
 
-Timescale rows for the caller `building_id` are the historian (ADR-010). Do not branch on a lab name. Parquet dual-read is retired. Do not restore it. The old tree comparison is `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../../../docs/archive/ai-agent/historical-3.5-ot-ops.md).
+Timescale rows for the caller `building_id` are the historian (ADR-010). Do not branch on a lab name. Parquet dual-read is retired. Do not restore it, and do not add any dual read or dual write ([storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). The old tree comparison is `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../../../docs/archive/ai-agent/historical-3.5-ot-ops.md).

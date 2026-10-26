@@ -1,5 +1,7 @@
 # Security harness evidence — 3.5.30
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Requirement → evidence matrix for the Python security probe (gates **25** / **25b** / **26**)
 and Wave S1 tip closeout. Product FDD remains DataFusion SQL; this harness is
 qualification evidence only — not a “100% secure” claim.

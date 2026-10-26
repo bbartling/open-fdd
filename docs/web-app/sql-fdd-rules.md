@@ -16,7 +16,7 @@ Professional commissioning surface — no NL prompt or visual query builder:
 |---------|---------|
 | **Historian table** | `telemetry_pivot` (default) or `telemetry` |
 | **Equipment scope** | Haystack `equip:*` id for `WHERE equipment_id = …` |
-| **SQL editor** | Read-only DataFusion `SELECT` |
+| **SQL editor** | Read-only SQL `SELECT` (Timescale) |
 | **Format SQL** | Keyword layout only |
 | **Validate / Run** | Syntax check and test against historian |
 
@@ -45,7 +45,7 @@ List every historian column in the rule’s `required_inputs` array (e.g. `oa_t`
 
 ## Data location
 
-Historian pivot files: `workspace/data/historian/validation/telemetry_pivot.jsonl` (+ Arrow IPC snapshot). See [Storage & DataFusion]({{ site.baseurl }}/architecture/storage-and-datafusion.html).
+Historical, superseded by the Timescale-only mandate: historian pivot files `workspace/data/historian/validation/telemetry_pivot.jsonl` (+ Arrow IPC snapshot). See [Storage & DataFusion]({{ site.baseurl }}/architecture/storage-and-datafusion.html).
 
 ## Results, Overview, and HITL scope
 

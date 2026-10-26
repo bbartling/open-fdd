@@ -16,7 +16,9 @@ description: >-
 - Expression record: `docs/rules/cookbook/` (the file `datafusion-sql-cookbook.md` is not a DataFusion runner)
 - Architecture: `docs/architecture/adr-010-timescale-hard-cutover.md`
 
-`sql_rules/` is the retired DataFusion pack. New product rules go in `sql/fdd`, not there.
+`sql_rules/` is the retired DataFusion pack (historical). New product rules go in `sql/fdd`, not there.
+
+Storage mandate: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([`DATA_CONTRACT.md` § Storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). Rule results persist in PostgreSQL or bounded memory — never a Parquet, Arrow or Feather file, and never DataFusion execution.
 
 ## Typed unit and time contract
 

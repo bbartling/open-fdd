@@ -33,7 +33,7 @@ Alias note: `surrogate-train` is the role called `dm-surrogate-train` in
 All rules in [agent-safety.md](../agent-safety.html) and the safety model in
 `AGENTIC_AI_AND_MCP_SPEC.md` apply. In addition:
 
-1. **Online runtime is React + Rust central + DataFusion/Arrow.** No tool may
+1. **Online runtime is React + Rust central + Timescale / PostgreSQL (Arrow / DataFusion prohibited).** No tool may
    introduce Flask, joblib, sklearn, or pandas into production images or ask
    central to deserialize pickles. `joblib.load` online is forbidden.
 2. **Model uploads are portable only** — `model_release.zip` with

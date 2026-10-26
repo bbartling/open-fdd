@@ -6,7 +6,7 @@ nav_order: 5
 
 # CSV driver
 
-CSV is a **headless batch driver** — load pre-shaped telemetry into the historian for DataFusion FDD. Large CSV analysis, merges, and RCx studies belong in the [Pandas cookbook](../rules/cookbook/pandas-cookbook.html) outside the edge app.
+CSV is a **headless batch driver** — load pre-shaped telemetry into the Timescale historian for SQL FDD. Large CSV analysis, merges, and RCx studies belong in the [Pandas cookbook](../rules/cookbook/pandas-cookbook.html) outside the edge app.
 
 ## Workflow
 

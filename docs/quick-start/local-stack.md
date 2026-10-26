@@ -7,7 +7,7 @@ permalink: /quick-start/local-stack.html
 
 # Local stack bootstrap
 
-**Recipe 2 — OT edge / LAN:** run central + web + site protocol on a host with OT access. A Mosquitto broker is **not** required for local DataFusion / Parquet readback. Optional MQTTS publish to a Recipe 1 hub stays off by default.
+**Recipe 2 — OT edge / LAN:** run central + web + site protocol on a host with OT access. Historical, superseded by the Timescale-only mandate: this recipe once read back DataFusion / Parquet locally; product history is Timescale only. Optional MQTTS publish to a Recipe 1 hub stays off by default.
 
 Use GHCR images (no local Rust image builds on low-RAM machines).
 

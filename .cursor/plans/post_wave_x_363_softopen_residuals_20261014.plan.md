@@ -37,6 +37,8 @@ isProject: true
 
 # Wave-X 3.6.3 Soft-OPEN residuals — 2026-10-14
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status: ACTIVE Soft-OPEN residuals train.** Supersedes [post_wave_x_361_completion_patch_20261013.plan.md](post_wave_x_361_completion_patch_20261013.plan.md) for unfinished work. Soft-OPEN ≠ FQ.
 
 | Fact | Value |

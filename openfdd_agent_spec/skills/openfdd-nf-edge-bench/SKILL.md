@@ -116,6 +116,87 @@ curl -s 'localhost:8080/api/v1/bacnet/scan?status_filter=ANY'   # wait for all D
 - The portal URL rejects Python's default `urllib` User-Agent with 403. Send an
   explicit `User-Agent` header from scripts.
 
+## NF MCP connector (preferred path for agents)
+
+The Normal Framework MCP server (`https://portal.normal-online.net/mcp`) uses a
+Normal Online sign-in and reaches the box through the portal tunnel, so it needs
+no Tailscale, console password or SSH. Connect first:
+`connect` `use_site` with the installation UUID (the host part of `NFURL`).
+Re-run that whenever a call says "No site connected".
+
+| Task | Tool / action |
+| --- | --- |
+| Health | `diagnose` `overview`, then `errors` (`window_seconds`) and `device_status` (`error_filter: YELLOW`/`RED`). `system_info` gives version and license |
+| Find points | `search_points` `layers`, `facets`, `query` |
+| Freshness / values | `read_values` `latest`, `history`, `stats` |
+| Hooks | Read `nf://docs/hooks-guide`. `deploy_hook` creates the app, writes code, registers the hook (`mode: scheduled`, `schedule_rrule: "DTSTART:...Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"`), and restarts |
+| Run now / history | `manage_hooks` `run` (waits, returns console output), `runs`, `logs`, `status` |
+| Code on the box | `manage_app` `read_file`, `write_file`, `restart`, `git_status` / `git_commit` |
+
+Rules: read before you write. Never use `control` (BACnet writes) or `delete_points`
+on HVAC points unless the owner asks. Only hook variables may be written. The repo
+is still the source of truth for hook code. After `deploy_hook` or a `write_file`,
+copy the code back into `scripts/nf/hooks/`. `nf_app_sync.py` (console API) is the
+scripted fallback when the MCP is not connected.
+
+## NF JavaScript hooks (lessons learned, ACME NF 3.10.9)
+
+NF 3.10.x runs JavaScript hooks on the box (Applications SDK, Node runtime). Hooks
+can run on a schedule, on data, or on request, and they write NF variable points.
+The repo is the source of truth: code and config live in
+[`scripts/nf/hooks/`](../../../scripts/nf/hooks/README.md) (hook JS, `*.app.json`
+config with mode, rrule and variables, and `nf_app_sync.py`).
+
+**Workflow (MCP first, see above):**
+1. Read `nf://docs/hooks-guide`, then edit the JS in the repo.
+2. Deploy with `deploy_hook`: `application_id`, `hook_name`, `code` = file content,
+   `entry_point: /hooks/<file>.js`, `mode: scheduled`, `schedule_rrule`, `no_points: true`,
+   and `global_variables` from the manifest. The fallback is
+   `nf_app_sync.py --env ~/.secrets/nf_<site>_console.env push <manifest>`.
+3. Confirm the app has `auth.apiKey.scopes` (below), then run it now with
+   `manage_hooks run` (or `nf_app_sync.py run`).
+4. Pull back with `manage_app read_file` (or `nf_app_sync.py diff`/`pull`) and
+   commit, so the repo copy is byte-identical to what runs.
+
+**rrule / DTSTART:** the schedule must carry a `DTSTART` line in UTC, e.g.
+`DTSTART:20261026T140000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20`. It fires on the grid
+from DTSTART (:00/:20/:40), not from deploy time. `manage_hooks status` shows
+`scheduler.lastRun`. Runs show `TRIGGER_SCHEDULE` versus `TRIGGER_REQUEST` (run now).
+
+**Points and trending:** each `globalVariables` label becomes an NF point
+(`pointType VARIABLE`, attrs `application_id`/`hook_id`/`label`) with a stable
+UUID (`GET /api/v1/apps/{app}/hooks/{hook}/data`, or `search_points` on the
+label). Every write is stored as a sample, so do **not** set a trend period. The
+points are readable through the portal (`/api/v1/point/data`) with the read-only
+Open-FDD key. Units are `UNITS_UNKNOWN`; put `units` in the variable attrs.
+Map them in `provider_sites.<site>.json` with distinct roles (weather uses
+`web-outside-air-*`, equip `weather`).
+
+**Gotchas:**
+- The app needs `auth.apiKey.scopes` (`normalgw.hpl.v1.readwrite`,
+  `normalgw.hpl.v2.readwrite`, `normalgw.automation.v1.readonly`). Without them every
+  SDK call in the hook gets 401 / `UNAUTHENTICATED`. Setting them creates (or rotates)
+  the auth client `Application: <app>`. Restart the app afterwards.
+- `variable.write()` does not await, so a failed write still shows `STATE_SUCCESS`.
+  Write with an awaited `sdk.http.post('/api/v1/point/data', {uuid, values:[{ts, real}]})`,
+  throw on error, and log a summary with `sdk.logEvent`.
+- New code only loads after `manage_app restart` (`PATCH /api/v1/apps/{app}/restart`).
+- `sdk.http` (axios) rejects with a plain object. Wrap it in an `Error`.
+- Outbound HTTPS works from the runtime. Send a `User-Agent`, use a timeout shorter
+  than `invokeTimeout` (60 s), and log both the API and the computed value when you
+  derive one (e.g. Magnus dewpoint as a fallback).
+- Console API shapes: WriteFile's body is a JSON *string* of base64, UpdateHook's
+  body is the hook object itself, and runtime `RUNTIME_NODE_JS`. A wrapped
+  `{applicationId, hook}` body creates a blank, disabled hook.
+- `GET /api/v1/apps` and `GET .../hooks/{hook}/runtimes` return the app's client
+  secret. Never print them. If it leaks, re-push to rotate it.
+- No SSH is needed. The MCP or the console API covers create, write, schedule, run and logs.
+
+**Validate:** run it now and get `STATE_SUCCESS` with your log line. Wait for two
+`TRIGGER_SCHEDULE` runs one interval apart. Check `read_values latest` on the variable
+UUIDs, then run `python3 scripts/nf/check_acme_portal_fresh.py`; it must PASS on the
+remote portal. Spot-check that existing BACnet points kept their period.
+
 ## Do not
 
 - Do not `docker compose down -v`, prune NF volumes, or rebuild NF images.

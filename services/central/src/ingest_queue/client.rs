@@ -132,6 +132,25 @@ impl QueueClient {
         self.memory.apply_samples(job, samples)
     }
 
+    /// Fenced canonical write for one claimed window. `None` when the queue is
+    /// process memory: there is no shared database to fence against.
+    pub async fn commit_window(
+        &self,
+        job: &JobView,
+        now: DateTime<Utc>,
+        window: &postgres::CanonicalWindow<'_>,
+    ) -> Result<Option<postgres::WindowWrite>, QueueError> {
+        if window.applied.len() > super::coverage::MAX_TIMESTAMPS {
+            return Err(QueueError::Invalid("payload_bound".into()));
+        }
+        match self.pool_if_configured().await? {
+            Some(pool) => postgres::commit_window(&pool, job, now, window)
+                .await
+                .map(Some),
+            None => Ok(None),
+        }
+    }
+
     pub async fn list_jobs(&self, filter: &ListFilter) -> Result<Vec<JobView>, QueueError> {
         if let Some(pool) = self.pool_if_configured().await? {
             return postgres::list_jobs(&pool, filter).await;

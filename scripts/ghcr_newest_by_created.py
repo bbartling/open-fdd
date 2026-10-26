@@ -35,6 +35,21 @@ def _get_json(url: str, tok: str, accept: str) -> tuple[dict, dict]:
         return json.loads(r.read()), headers
 
 
+def pick_newest(rows: list[dict]) -> tuple[dict, list[dict]]:
+    """Newest row by `created`, reported under its digest's `sha-*` tag.
+
+    `nightly`, `latest`, and `sha-*` on one digest share one `created`, so the
+    sort alone returns whichever tag the registry listed first. Pin `sha-*`.
+    """
+    if not rows:
+        raise ValueError("no rows")
+    ordered = sorted(rows, key=lambda r: r["created"], reverse=True)
+    top = ordered[0]
+    same_digest = [r for r in ordered if r["digest"] == top["digest"]]
+    sha = next((r for r in same_digest if r["tag"].startswith("sha-")), None)
+    return sha or top, ordered
+
+
 def newest_for(package: str, owner: str = OWNER) -> dict:
     name = package.removeprefix(f"{owner}/")
     repo = f"{owner}/{name}"
@@ -100,8 +115,7 @@ def newest_for(package: str, owner: str = OWNER) -> dict:
             continue
     if not rows:
         raise RuntimeError(f"no readable GHCR tags for {repo}")
-    rows.sort(key=lambda r: r["created"], reverse=True)
-    top = rows[0]
+    top, rows = pick_newest(rows)
     return {
         "package": name,
         "created": top["created"],

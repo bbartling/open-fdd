@@ -33,7 +33,10 @@ do not hand out `http://192.168.204.55/auth` and blame the user.
 Product UI: **React**. 4.0 default recipe is **`portal`** (`compose.portal.yml` +
 Timescale → host `:3000`): central + web, no MQTT broker and no fieldbus. Central
 image is **Rust on debian-slim** (no Python). Wave-X **3.6.0+**: analytics and FDD
-are **Timescale + `sql/fdd/*.sql`** (no DataFusion/Parquet product path; no dual-write).
+are **Timescale + `sql/fdd/*.sql`**. Storage mandate: **Timescale/PostgreSQL only,
+one canonical telemetry write path, no dual record writing**; Parquet, Arrow, Arrow
+IPC, Feather and DataFusion are prohibited in product storage, caching, execution
+and dependencies ([`DATA_CONTRACT.md` § Storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 Bring-up: [`docs/operations/TIMESCALE_WAVE_X.md`](../docs/operations/TIMESCALE_WAVE_X.md)
 · ADR-010 · ART REBOOT_SAFE under `/tmp/openfdd-softopen/3.6.0/`.
 
@@ -104,7 +107,7 @@ required for health, FDD, or Overview analytics.
 
 ## Analytics RAM and local disk budget
 
-Timescale is the historian. Analytics/RCx/fault result cache is the PostgreSQL `analytics_result` table and is not telemetry. CSV buildings load for a query and unload when the job finishes, the SPA leaves the site, or the idle timer fires. Max interactive sessions default to 2. There is no MQTTS ingest buffer on the product path.
+Timescale is the historian and the only telemetry store. Analytics / RCx / fault results persist in PostgreSQL or bounded memory. The result cache is the PostgreSQL `analytics_result` table and is not telemetry. CSV buildings load for a query and unload when the job finishes, the SPA leaves the site, or the idle timer fires. Max interactive sessions default to 2. There is no MQTTS ingest buffer on the product path.
 
 **Memory:** prefer lookback-bounded Timescale SQL. DataFusion spill-pool variables are not the tip path ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)). See [`AFDD_MODES.md`](../docs/operations/AFDD_MODES.md).
 
