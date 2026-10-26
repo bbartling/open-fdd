@@ -45,9 +45,12 @@ env file's `NFURL` / `NF_CLIENT_ID` / `NF_CLIENT_SECRET`. Secrets are never prin
 checks a BACnet sample (RTU-01 SA/RA/OA, Tracer SC OA, a JCI and a Trane VAV zone temp,
 the HW plant supply and return) plus every `equip_type: weather` point. It prints point,
 value, units, last timestamp (America/Chicago) and age. A point fails if it is older than
-30 min, null or non-numeric, or outside its range (°F −40..130 after a °C→°F conversion
-when NF reports Celsius, RH 0..100, HW 32..220, weather dewpoint ≤ dry bulb + 0.5).
-The script exits 1 with a FAIL list, or prints PASS. Stdlib only.
+`--max-age-min` (30), null or non-numeric, or outside its range (°F −40..130 after a °C→°F
+conversion when NF reports Celsius, RH 0..100, HW 32..220, weather dewpoint ≤ dry bulb + 0.5).
+A weather point older than `--warn-age-min` (25: one 20 min hook interval plus margin)
+prints WARN and does not fail by itself. The script exits 1 with a FAIL list, or prints
+PASS. `python3 scripts/nf/check_acme_portal_fresh.py --self-test` checks the thresholds
+offline. Stdlib only.
 
 ## NF hooks (JavaScript on the NF box)
 

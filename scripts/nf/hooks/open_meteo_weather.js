@@ -36,7 +36,26 @@ const OPEN_METEO_URL =
   '&current=temperature_2m,relative_humidity_2m,dew_point_2m' +
   '&temperature_unit=fahrenheit&timezone=UTC';
 
-const HTTP_TIMEOUT_MS = 20000;
+const HTTP_TIMEOUT_MS = 20000; // per-attempt deadline for the Open-Meteo request
+const HTTP_RETRIES = 1; // one retry on network error/timeout/5xx
+const WRITE_TIMEOUT_MS = 10000; // per-point AddPointsData deadline
+const RUN_DEADLINE_MS = 60000; // whole-run cap so a hung run fails instead of blocking the schedule
+
+/** Reject if `promise` doesn't settle within `ms`; calls onTimeout (e.g. abort) first. */
+function withDeadline(promise, ms, what, onTimeout) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      try {
+        if (onTimeout) onTimeout();
+      } catch (_) {
+        /* best effort */
+      }
+      reject(new Error(`${what} exceeded ${ms} ms`));
+    }, ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
+}
 
 function getJson(url) {
   return new Promise((resolve, reject) => {
@@ -60,9 +79,30 @@ function getJson(url) {
         });
       },
     );
-    req.setTimeout(HTTP_TIMEOUT_MS, () => req.destroy(new Error(`Open-Meteo timeout after ${HTTP_TIMEOUT_MS} ms`)));
+    // req.setTimeout only fires on an idle socket; the hard total deadline is in getJsonWithRetry.
+    req.setTimeout(HTTP_TIMEOUT_MS, () => req.destroy(new Error(`Open-Meteo idle timeout after ${HTTP_TIMEOUT_MS} ms`)));
     req.on('error', reject);
+    getJson.lastReq = req;
   });
+}
+
+/** Open-Meteo fetch with a hard per-attempt deadline (covers DNS stalls and slow-drip bodies) and one retry. */
+async function getJsonWithRetry(url, log) {
+  let lastErr;
+  for (let attempt = 0; attempt <= HTTP_RETRIES; attempt += 1) {
+    try {
+      return await withDeadline(getJson(url), HTTP_TIMEOUT_MS, 'Open-Meteo request', () => {
+        if (getJson.lastReq) getJson.lastReq.destroy(new Error('Open-Meteo hard deadline'));
+      });
+    } catch (e) {
+      lastErr = e;
+      const msg = String(e && e.message);
+      const retryable = !/HTTP 4\d\d/.test(msg) && !/invalid JSON/.test(msg);
+      if (!retryable || attempt === HTTP_RETRIES) break;
+      log(`open-meteo attempt ${attempt + 1} failed (${msg}); retrying`);
+    }
+  }
+  throw lastErr;
 }
 
 const fToC = (f) => ((f - 32) * 5) / 9;
@@ -80,7 +120,7 @@ function magnusDewpointF(tempF, rhPct) {
 
 const round2 = (x) => Math.round(x * 100) / 100;
 
-module.exports = async ({ globalVariables, sdk }) => {
+async function runOnce({ globalVariables, sdk }) {
   const log = (msg) => {
     console.log(msg);
     try {
@@ -90,7 +130,7 @@ module.exports = async ({ globalVariables, sdk }) => {
     }
   };
 
-  const wx = await getJson(OPEN_METEO_URL);
+  const wx = await getJsonWithRetry(OPEN_METEO_URL, log);
   const cur = wx && wx.current;
   if (!cur) throw new Error('Open-Meteo response has no "current" block');
 
@@ -126,10 +166,14 @@ module.exports = async ({ globalVariables, sdk }) => {
     if (sdk && sdk.http && typeof sdk.http.post === 'function') {
       let res;
       try {
-        res = await sdk.http.post('/api/v1/point/data', {
-          uuid: v.uuid,
-          values: [{ ts, real: round2(value) }],
-        });
+        res = await withDeadline(
+          sdk.http.post('/api/v1/point/data', {
+            uuid: v.uuid,
+            values: [{ ts, real: round2(value) }],
+          }),
+          WRITE_TIMEOUT_MS,
+          `AddPointsData ${label}`,
+        );
       } catch (e) {
         // sdk.http rejects with a plain object, not an Error
         throw new Error(`AddPointsData ${label} (${v.uuid}) failed: ${e && e.message} status=${e && e.status}`);
@@ -139,7 +183,7 @@ module.exports = async ({ globalVariables, sdk }) => {
       }
     } else {
       writePath = 'variable.write';
-      await v.write({ real: round2(value) });
+      await withDeadline(v.write({ real: round2(value) }), WRITE_TIMEOUT_MS, `variable.write ${label}`);
     }
   }
 
@@ -157,8 +201,11 @@ module.exports = async ({ globalVariables, sdk }) => {
   };
   log(`open-meteo weather ${JSON.stringify(summary)}`);
   return summary;
-};
+}
+
+module.exports = async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run');
 
 // Exported for offline tests (node -e "require('./open_meteo_weather.js').magnusDewpointF(70,50)").
 module.exports.magnusDewpointF = magnusDewpointF;
 module.exports.OPEN_METEO_URL = OPEN_METEO_URL;
+module.exports.withDeadline = withDeadline;

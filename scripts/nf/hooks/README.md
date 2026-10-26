@@ -88,7 +88,12 @@ The console API calls behind it (HTTP Basic, local console only):
   responses. `nf_app_sync.py` drops the `auth` block and prints only the scheduler fields.
   If one leaks, run `push`: setting the scopes again rotates the client.
 - The runtime has `fetch`/`https` and outbound internet from the box. Send a
-  `User-Agent`, set a timeout, and keep `invokeTimeout` (60 s) above it.
+  `User-Agent`. A socket idle timeout is not a run deadline: `open_meteo_weather.js`
+  wraps every await in `withDeadline` (`HTTP_TIMEOUT_MS` 20000 per Open-Meteo
+  attempt, `HTTP_RETRIES` 1 on errors that are not HTTP 4xx, `WRITE_TIMEOUT_MS`
+  10000 per point write, `RUN_DEADLINE_MS` 60000 around `runOnce`). The hook
+  exports `magnusDewpointF`, `OPEN_METEO_URL`, and `withDeadline`. Keep
+  `invokeTimeout` (60 s) at the whole-run cap.
 - `sdk.http` (axios, base `http://127.0.0.1:8080`) rejects with a plain object,
   not an `Error`. Wrap it so failures show in the run result.
 - `rrule` is UTC (`DTSTART:...Z`). `FREQ=MINUTELY;INTERVAL=20` fires at :00/:20/:40.
@@ -97,8 +102,9 @@ The console API calls behind it (HTTP Basic, local console only):
 
 1. `nf_app_sync.py run` shows `STATE_SUCCESS` with `write_path: sdk.http AddPointsData`.
 2. `nf_app_sync.py status`: later runs show `TRIGGER_SCHEDULE` 20 min apart.
-3. `python3 scripts/nf/check_acme_portal_fresh.py` prints PASS, with the weather
-   points under 30 min old on the **remote portal**.
+3. `python3 scripts/nf/check_acme_portal_fresh.py` prints PASS on the **remote
+   portal**. Weather points older than `--warn-age-min` (default 25, one 20 min
+   hook interval plus margin) print WARN and still pass until the 30 min fail.
 
 ## Open-Meteo weather hook
 
