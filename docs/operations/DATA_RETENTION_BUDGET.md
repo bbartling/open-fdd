@@ -1,5 +1,7 @@
 # Local data budget (100 GiB, oldest first)
 
+> **Status: known gap, not permitted.** Storage mandate: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). The Parquet trees this budget counts (`history/`, `analytics_results/`, `building=*`, tenant copies) are leftovers that current code in `crates/fdd_store` (`disk_budget.rs`, compaction) still prunes. They are being removed in Wave P2. The budget is a cleanup mechanism for that gap, not a permission to keep or add Parquet, Arrow or Feather files. Telemetry retention belongs to Timescale.
+
 Default cap for **local / edge** historian parquet plus analytics result parquet is **100 GiB** (`OPENFDD_LOCAL_DATA_BUDGET_GIB`). Past the cap, delete the oldest parts and keep the newest. One newest file that is itself larger than the cap is kept.
 
 This is separate from the per-building historian limit (365 days or 5 GiB, `OPENFDD_HISTORIAN_SIZE_GIB`). The 100 GiB figure is the hub/local pool.
@@ -23,7 +25,7 @@ Order key: `part-YYYYMMDDTHHMMSSZ`, else `year=`/`month=` (first of that month),
 
 ## API
 
-Central also applies the budget after a historian flush and after an analytics result write, at most once a minute, when the budget is enabled. That scan uses the hub pool, including `tenants/{id}/…`, not one tenant directory alone.
+Current code (known gap) also applies the budget after a historian flush and after an analytics result write, at most once a minute, when the budget is enabled. That scan uses the hub pool, including `tenants/{id}/…`, not one tenant directory alone.
 
 Hub admin:
 
@@ -32,7 +34,7 @@ Hub admin:
 
 ## Update preflight
 
-Reserved free space defaults to **10%** of the disk (`OPENFDD_DISK_RESERVED_FREE_PERCENT`, clamp 1–50). An on-box backup is the size of a second copy of live parquet. A ~200 GiB host with a 100 GiB live set does **not** have room for that copy plus the reserve. Skip the full copy or prune oldest parts until the copy fits. If free space stays under the reserve even after that reclaim, fail closed and do not start the update.
+Reserved free space defaults to **10%** of the disk (`OPENFDD_DISK_RESERVED_FREE_PERCENT`, clamp 1–50). An on-box backup is the size of a second copy of the live data set (on current images, the known-gap parquet trees plus the Timescale volume). A backup is an off-line copy, not a second write path. A ~200 GiB host with a 100 GiB live set does **not** have room for that copy plus the reserve. Skip the full copy or prune oldest parts until the copy fits. If free space stays under the reserve even after that reclaim, fail closed and do not start the update.
 
 | Decision | Exit | Meaning |
 | --- | --- | --- |
@@ -53,7 +55,7 @@ python3 scripts/openfdd_disk_preflight.py --self-test
 
 Eviction walks hive trees (`history/`, `analytics_results/`, exact key `building={id}`, tenant history). It does not substring-match `equipment_id`. `building_id` stays a path parameter.
 
-DataFusion spill (`OPENFDD_DATAFUSION_SPILL_DIR`, default `<storage_root>/.datafusion-spill`) is ephemeral query scratch under the same storage root — keep it inside the local disk budget envelope (`OPENFDD_DATAFUSION_SPILL_MAX_GB` / `_BYTES`). Spill is not a durable historian; safe to prune when central is idle.
+**Historical, superseded by the Timescale-only mandate:** DataFusion spill (`OPENFDD_DATAFUSION_SPILL_DIR`, default `<storage_root>/.datafusion-spill`, `OPENFDD_DATAFUSION_SPILL_MAX_GB` / `_BYTES`) was ephemeral query scratch for the retired DataFusion engine. DataFusion is prohibited on the product path; do not set these variables. A leftover `.datafusion-spill` directory is safe to delete when central is idle.
 
 ## Soft-OPEN
 

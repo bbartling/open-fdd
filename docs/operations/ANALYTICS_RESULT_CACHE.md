@@ -1,6 +1,10 @@
 # Analytics / RCx / fault result cache
 
-Parquet result tables for `/api/analytics/*` (including RCx presets and sensor-fault analytics). This is the same Arrow/Parquet family as the historian. It is not the AFDD `{rule_id}.json` blob under rule results. Historian parts are not rewritten when a result file is stored.
+> **Status: known gap, not permitted.** Storage mandate: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). Derived FDD / analytics results persist in PostgreSQL or bounded memory. Parquet, Arrow, Arrow IPC, Feather and DataFusion are prohibited in product storage, caching, execution and dependencies.
+>
+> The Parquet cache described below is what current code in `crates/fdd_store` (`analytics_cache.rs`) and `services/central/src/analytics/result_cache.rs` still does. It is being removed in Wave P2. This page records that behavior so operators and agents can recognize it; it does not permit it. Do not extend the Parquet layout, add columns, add a new schema version, or point new features at it. The freshness contract (cache key, watermark, `stale`, `refresh`) and the building-RAM rules carry over to the PostgreSQL result store.
+
+Current (known-gap) behavior: Parquet result tables for `/api/analytics/*` (including RCx presets and sensor-fault analytics). It is not the AFDD `{rule_id}.json` blob under rule results. Historian rows are not rewritten when a result file is stored. The older statement that this is "the same Arrow/Parquet family as the historian" is historical, superseded by the Timescale-only mandate: the historian is Timescale.
 
 ## Layout
 
@@ -61,11 +65,13 @@ CSV / package buildings are guests.
 
 `ram_resident` / `historian_resident` are the RSS check. After unload they must not still name the CSV building. The lease list can still name it until leave or idle.
 
-Live MQTTS does not load the full historian. Ingest records a capped row buffer (`OPENFDD_MQTT_INGEST_BUFFER_ROWS`, default 256, max 4096) and at most `OPENFDD_MAX_MQTT_BUILDING_BUFFERS` buildings (default 32). MQTT sessions are not idle-evicted.
+**Historical, superseded by the Timescale-only mandate:** live MQTTS ingest once recorded a capped row buffer (`OPENFDD_MQTT_INGEST_BUFFER_ROWS`, default 256, max 4096) for at most `OPENFDD_MAX_MQTT_BUILDING_BUFFERS` buildings (default 32). MQTTS is archived; there is no MQTTS ingest buffer on the product path, and no ingest buffer may act as a second telemetry store.
 
-Listing datasets (`note_catalog_list`) does not open a session. A hub with hundreds of packages must not keep hundreds of Arrow tables resident. Overview paint prefers the cached parquet partition.
+Listing datasets (`note_catalog_list`) does not open a session. A hub with hundreds of packages must not keep hundreds of in-memory tables resident. Current code paints Overview from the cached parquet partition (known gap); the target is the PostgreSQL result store or bounded memory.
 
 ## Acceptance
+
+Historical acceptance for the known-gap Parquet cache. The Wave P2 replacement keeps the freshness and session criteria and drops the on-disk Parquet layout.
 
 - On-disk layout and schema above.
 - `cache_hit_does_not_recompute_and_records_elapsed` shows a second call does not recompute and records `elapsed_ms`.
@@ -78,7 +84,8 @@ Listing datasets (`note_catalog_list`) does not open a session. A hub with hundr
 | Rule | This change |
 | --- | --- |
 | No `equipment_id` substring filters | Hive keys are exact: path segment `building_id={caller}` or `building={caller}`, or directory key `building` after one `=`. `equipment_id` text is never searched with `contains`, `starts_with`, or `LIKE`. Request `equipment_ids` are a config-hash input only. |
-| No building hardcodes; `building_id` is always a parameter | Product cache, session, ingest buffer, and retention take the caller id. Missing id skips the cache. No default site. Tests use `site-a`. |
-| No MQTT CELL/DELTA | Ingest records a row-count buffer under the envelope site id. No new topic mode. |
+| No building hardcodes; `building_id` is always a parameter | Product cache, session, and retention take the caller id. Missing id skips the cache. No default site. Tests use `site-a`. |
+| No MQTT CELL/DELTA | Historical (MQTTS archived): ingest recorded a row-count buffer under the envelope site id. No new topic mode. |
+| Timescale/PostgreSQL only | **Not met.** The Parquet cache is a known gap being removed in Wave P2. |
 | Building-agnostic session, cache, and retention | Same limits and layout for every building. `OPENFDD_TEST_DEPLOY` is an env flag, not a site-name branch. |
 | No VERSION bump / not FQ | Workspace `VERSION` is unchanged. Edge disk proof is still open. |
