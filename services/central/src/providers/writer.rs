@@ -187,16 +187,11 @@ fn samples_to_points(samples: &[NormalizedSample]) -> Vec<TelemetryPoint> {
     points
 }
 
-/// Timescale row projection for fixture acceptance. Same point tags as
-/// `ingest_samples`, then `point_to_sample`. No database connection.
-#[cfg(test)]
-pub(crate) fn project_historian_rows(
+/// Envelope for a projection that never reaches the live writer queue.
+fn projection_envelope(
     building_id: &str,
     samples: &[NormalizedSample],
-) -> Result<Vec<fdd_tsdb::SampleRow>, ProviderError> {
-    if samples.is_empty() {
-        return Ok(Vec::new());
-    }
+) -> Result<TelemetryEnvelope, ProviderError> {
     let points = samples_to_points(samples);
     let observed_at = samples.iter().map(|s| s.ts).max().unwrap_or_else(Utc::now);
     let mut envelope = TelemetryEnvelope::new(
@@ -211,6 +206,50 @@ pub(crate) fn project_historian_rows(
     envelope
         .validate()
         .map_err(|_| ProviderError::new(super::error::ProviderErrorCode::InvalidSample))?;
+    Ok(envelope)
+}
+
+/// Canonical rows for a fenced queue write: the live writer's projection.
+/// Points it would skip are counted in `skipped` and not written.
+pub(crate) struct CanonicalRows {
+    pub rows: fdd_tsdb::UpsertBatch,
+    pub skipped: usize,
+}
+
+pub(crate) fn canonical_rows(
+    building_id: &str,
+    samples: &[NormalizedSample],
+) -> Result<CanonicalRows, ProviderError> {
+    let mut out = CanonicalRows {
+        rows: fdd_tsdb::UpsertBatch::default(),
+        skipped: 0,
+    };
+    if samples.is_empty() {
+        return Ok(out);
+    }
+    let envelope = projection_envelope(building_id, samples)?;
+    for point in &envelope.points {
+        match crate::timescale_historian::point_to_sample(&envelope, point) {
+            Ok(Some(row)) if row.equipment_id.as_deref().is_some_and(|id| !id.is_empty()) => {
+                out.rows.push(row);
+            }
+            Ok(_) | Err(_) => out.skipped += 1,
+        }
+    }
+    Ok(out)
+}
+
+/// Timescale row projection for fixture acceptance. Same point tags as
+/// `ingest_samples`, then `point_to_sample`. No database connection.
+#[cfg(test)]
+pub(crate) fn project_historian_rows(
+    building_id: &str,
+    samples: &[NormalizedSample],
+) -> Result<Vec<fdd_tsdb::SampleRow>, ProviderError> {
+    if samples.is_empty() {
+        return Ok(Vec::new());
+    }
+    let envelope = projection_envelope(building_id, samples)?;
     let mut rows = Vec::with_capacity(envelope.points.len());
     for point in &envelope.points {
         match crate::timescale_historian::point_to_sample(&envelope, point) {

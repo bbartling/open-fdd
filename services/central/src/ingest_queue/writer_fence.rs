@@ -111,15 +111,17 @@ fn finish_req(owner: &str, job: &JobView, now: DateTime<Utc>) -> FinishRequest {
     )
 }
 
+struct WorkerResult {
+    wrote: Result<WindowWrite, QueueError>,
+    finished: Result<Option<ReceiptView>, QueueError>,
+}
+
 /// Worker A after claim: fetch, report the fetch, wait at the barrier, then
 /// write and finish with the wall time it resumes at.
 struct PausedWorker {
     fetched: oneshot::Receiver<()>,
     release: oneshot::Sender<DateTime<Utc>>,
-    done: tokio::task::JoinHandle<(
-        Result<WindowWrite, QueueError>,
-        Result<Option<ReceiptView>, QueueError>,
-    )>,
+    done: tokio::task::JoinHandle<WorkerResult>,
 }
 
 fn spawn_paused_worker(pool: PgPool, job: JobView, fetched: Fetched) -> PausedWorker {
@@ -130,7 +132,7 @@ fn spawn_paused_worker(pool: PgPool, job: JobView, fetched: Fetched) -> PausedWo
         let resumed_at = release_rx.await.expect("barrier release");
         let wrote = write(&pool, &job, resumed_at, &fetched).await;
         let finished = postgres::finish(&pool, &finish_req("replica-a", &job, resumed_at)).await;
-        (wrote, finished)
+        WorkerResult { wrote, finished }
     });
     PausedWorker {
         fetched: fetched_rx,
@@ -199,7 +201,10 @@ async fn stale_owner_is_fenced(replica_a: &PgPool, replica_b: &PgPool, scope: &S
 
     let resumed_at = reclaim_at + chrono::Duration::seconds(1);
     worker_a.release.send(resumed_at).expect("release a");
-    let (wrote_a, finished_a) = worker_a.done.await.expect("worker a task");
+    let WorkerResult {
+        wrote: wrote_a,
+        finished: finished_a,
+    } = worker_a.done.await.expect("worker a task");
 
     assert!(
         matches!(finished_a, Err(QueueError::StaleFence)),
@@ -236,7 +241,10 @@ async fn live_owner_commits(replica_a: &PgPool, replica_b: &PgPool, scope: &Scop
     assert!(stolen.is_empty(), "an unexpired lease is not reclaimed");
 
     worker_a.release.send(just_under).expect("release a");
-    let (wrote_a, finished_a) = worker_a.done.await.expect("worker a task");
+    let WorkerResult {
+        wrote: wrote_a,
+        finished: finished_a,
+    } = worker_a.done.await.expect("worker a task");
     let wrote_a = wrote_a.expect("owner a canonical write");
     assert_eq!(wrote_a.samples.inserted, 1);
     assert_eq!(wrote_a.ledger.inserted, 1);
