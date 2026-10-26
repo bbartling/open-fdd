@@ -1,5 +1,7 @@
 # Cursor prompt — next patch after the independent 2026-10-05 audit
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Read and execute the plan:
 
 `/home/ben/Desktop/open-fdd/.cursor/plans/next_patch_security_rdf_sparql_memory_20261005.plan.md`

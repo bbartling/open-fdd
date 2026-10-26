@@ -9,7 +9,7 @@ permalink: /modeling/engineering-quantities.html
 
 Open-FDD defines a **versioned** engineering-quantity vocabulary for design /
 rated / TAB capacities that feed PyPI ECM tools. Telemetry and FDD math stay in
-Parquet / DataFusion; these records are **model evidence**, not historian
+Timescale / PostgreSQL; these records are **model evidence**, not historian
 samples.
 
 | Field | Value |

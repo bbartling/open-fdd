@@ -29,7 +29,7 @@ ghcr.io/bbartling/openfdd-mcp
 
 The container stack:
 
-- `openfdd-central` — HTTP API at `/api/*` and the DataFusion FDD engine
+- `openfdd-central` — HTTP API at `/api/*` and the Timescale SQL FDD engine
 - `openfdd-web` — React engineering UI (vibe19 + WattLab export), talks to central REST
 - `openfdd-fieldbus` — BACnet/IP poller publishing over MQTTS
 - `openfdd-mqtt` — Mosquitto broker

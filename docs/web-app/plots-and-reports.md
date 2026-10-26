@@ -8,7 +8,7 @@ nav_order: 3
 
 ## Plots (`/plot`)
 
-Trend charts from Feather telemetry:
+Trend charts from Timescale telemetry:
 
 - Select site, equipment, and points
 - Optional FDD fault overlays

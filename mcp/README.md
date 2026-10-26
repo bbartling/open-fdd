@@ -143,7 +143,7 @@ docker run -i --rm --network host \
 | `openfdd_model_overlay_put` / `openfdd_model_semantic_meta_put` | Replace overlay Turtle / semantic meta (write gate, audited) |
 | `openfdd_package_roles_update` | Remap CSV-package column roles (write gate, audited) |
 | `openfdd_fdd_rules_list` | Legacy wire/SQL FDD rule catalog |
-| `openfdd_fdd_registry` | Production DataFusion registry |
+| `openfdd_fdd_registry` | Production Timescale SQL registry (`sql/fdd/registry.yaml`) |
 | `openfdd_fdd_equipment` | Loaded equipment IDs/types |
 | `openfdd_fdd_results` | Latest per-equipment rule outcomes |
 | `openfdd_fdd_series` | Mapped live display series |

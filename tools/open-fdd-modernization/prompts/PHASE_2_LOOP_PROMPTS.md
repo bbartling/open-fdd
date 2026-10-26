@@ -1,5 +1,7 @@
 # Phase 2 Loop-Engineered Prompts
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Use only after Phase 1 exit evidence is approved. These prompts do not authorize
 production deployment, destructive deletion, or live BACnet writes unless the
 user separately grants that authority.

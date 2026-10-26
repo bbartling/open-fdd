@@ -1,5 +1,7 @@
 # Building 100 mech cooling OAT bins — OpenFDD fix notes
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Verdict (2026-08-13):** OpenFDD was wrong vs vibe19/pandas (no playground handoff).
 
 | Side | Peak bin | Peak h | Total device-h |

@@ -6,6 +6,8 @@ nav_order: 1
 
 # Open-FDD external multi-agent architecture
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Open-FDD is a **deterministic Rust edge runtime**. Assistance is provided by **external orchestrators** (Codex CLI, Cursor, OpenClaw) using git, safe scripts, JWT REST, and optional `openfdd-mcp` — not by embedding chat or LLM runtimes in the dashboard.
 
 ## Layered model

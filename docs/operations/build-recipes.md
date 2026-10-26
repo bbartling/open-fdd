@@ -13,9 +13,9 @@ Open-FDD ships two **named** product recipes. Compose helpers below map onto the
 | Named recipe | Best for | Services | Arch | Guide |
 | --- | --- | --- | --- | --- |
 | **Recipe 1 — cloud hub** | Railway / cloud MQTTS hub | `openfdd-mqtt` + `openfdd-central` + `openfdd-web` | **linux/amd64 only** | [Railway hub](../quick-start/railway-hub.md) · [Railway deployment](RAILWAY_DEPLOYMENT.md) |
-| **Recipe 2 — OT edge** | LAN/VPN OT host with local DataFusion | `openfdd-central` + `openfdd-web` + protocol (fieldbus/…) | **amd64 + arm64** | [Local stack](../quick-start/local-stack.md) · [VM deployment](VM_DEPLOYMENT.md) |
+| **Recipe 2 — OT edge** | Historical (archived OT): LAN/VPN OT host | `openfdd-central` + `openfdd-web` + protocol (fieldbus/…) | **amd64 + arm64** | [Local stack](../quick-start/local-stack.md) · [VM deployment](VM_DEPLOYMENT.md) |
 
-**Ingest on Recipe 2:** protocol scrape → on-box central / Parquet / DataFusion (broker **not** required). Optional MQTTS publish to a Recipe 1 hub is **off by default**.
+**Ingest on Recipe 2 (historical, superseded by the Timescale-only mandate):** protocol scrape → on-box central / Parquet / DataFusion (broker **not** required). Optional MQTTS publish to a Recipe 1 hub is **off by default**.
 
 CSV-only dashboard (`csv` compose) is Recipe 2 without a protocol container. `nightly` is the floating green-master channel; `sha-<7>` (newest-by-created) is the preferred reproducible pin.
 
@@ -25,7 +25,7 @@ Do **not** treat “fieldbus-only on-prem + hub-only in cloud” as the only top
 
 | Image | Role |
 |-------|------|
-| `ghcr.io/bbartling/openfdd-central` | API + FDD engine (DataFusion rule registry) |
+| `ghcr.io/bbartling/openfdd-central` | API + FDD engine (Timescale SQL rule registry, `sql/fdd`) |
 | `ghcr.io/bbartling/openfdd-web` | React engineering UI (container port `8080`; local Compose maps host `3000`) |
 | `ghcr.io/bbartling/openfdd-fieldbus` | BACnet/IP poller, publishes over MQTTS |
 | `ghcr.io/bbartling/openfdd-bacnet-modbus` | Split BACnet edge process (`bacnet-modbus` Docker target) |

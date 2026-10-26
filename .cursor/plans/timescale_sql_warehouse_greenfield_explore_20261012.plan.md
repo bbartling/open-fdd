@@ -37,6 +37,8 @@ isProject: true
 
 # Wave-X — Timescale 3.6.0 hard cutover (overnight mega) — 2026-10-12
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status:** Soft-OPEN tip shipping (≠ FQ). Pin **`3.6.0`**. Default binary Timescale-only (`legacy-*` OFF). Product path + FC1 run-now hours FIXED (W9/W10): run-now `confirmation_seconds=600` → **107.0833h MATCH W6 SQL**; pandas delta~9h Soft-OPEN. Grok HUMAN_PASTE = morning (kickoff clipboard+open OK).
 
 **Next:** [`.cursor/plans/post_wave_x_361_patch_ghcr_20261012.plan.md`](post_wave_x_361_patch_ghcr_20261012.plan.md) — **3.6.1** bugfix patch cycle on Timescale tip only.

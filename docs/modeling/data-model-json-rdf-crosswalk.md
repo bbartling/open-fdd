@@ -8,7 +8,7 @@ permalink: /modeling/data-model-json-rdf-crosswalk.html
 # `openfdd_data_model_v1` ↔ native RDF ↔ strict Haystack
 
 Crosswalk for package **Mapping inventory** exports. Telemetry and FDD math stay
-in Parquet/DataFusion — not in this table.
+in Timescale / PostgreSQL — not in this table.
 
 Profile for strict Haystack: [`ofdd_haystack_projection_v1`](haystack-rdf-profile.html).
 

@@ -4,7 +4,7 @@ Both expression cookbooks are **permanent project deliverables**.
 
 | Cookbook | Path | Engine |
 | --- | --- | --- |
-| DataFusion SQL | [`docs/rules/cookbook/datafusion-sql-cookbook.md`](../../docs/rules/cookbook/datafusion-sql-cookbook.md) | Production (`sql_rules/`) |
+| DataFusion SQL | [`docs/rules/cookbook/datafusion-sql-cookbook.md`](../../docs/rules/cookbook/datafusion-sql-cookbook.md) | Expression record (filename is historical; production rules are `sql/fdd/` on Timescale) |
 | Pandas | [`docs/rules/cookbook/pandas-cookbook.md`](../../docs/rules/cookbook/pandas-cookbook.md) | Oracle (`open_fdd.rules`) |
 | Parity matrix | [`docs/rules/cookbook/parity-matrix.md`](../../docs/rules/cookbook/parity-matrix.md) | Honesty layer |
 | Gap / taxonomy / schema | sibling files under `docs/rules/cookbook/` | Supporting |

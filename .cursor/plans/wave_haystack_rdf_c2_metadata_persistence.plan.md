@@ -25,6 +25,8 @@ isProject: false
 
 # C2 — Compatible metadata persistence
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Parent:** [`wave_haystack_rdf_master.plan.md`](wave_haystack_rdf_master.plan.md)  
 **Depends on:** C1 profile/crosswalk locked  
 **HR:** HR-01 Package compatibility, HR-02 Identity, HR-07 Revision lifecycle (+ EQ-PERSIST)  

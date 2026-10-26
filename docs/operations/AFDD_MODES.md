@@ -1,10 +1,10 @@
 # AFDD operating modes (bulk vs continuous)
 
-Open-FDD uses **one** Timescale / PostgreSQL SQL registry (`sql/fdd`) for fault detection ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). Soft-OPEN ≠ FQ. **AFDD** is how and when that registry runs — not a second rule engine. Do not revive DataFusion/Parquet as the product FDD path.
+Open-FDD uses **one** Timescale / PostgreSQL SQL registry (`sql/fdd`) for fault detection ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). Soft-OPEN ≠ FQ. **AFDD** is how and when that registry runs — not a second rule engine. Storage mandate: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing**; Parquet, Arrow, Arrow IPC, Feather and DataFusion are prohibited in product storage, caching, execution and dependencies ([`DATA_CONTRACT.md` § Storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)). AFDD results persist in PostgreSQL or bounded memory.
 
 | | Bulk / manual “run all” | Continuous AFDD |
 |--|-------------------------|-----------------|
-| Typical data | CSV / package import | MQTT live append |
+| Typical data | CSV / package import | NF portal hourly append (MQTT live append is historical) |
 | Trigger | Operator, soak, or `POST /api/fdd/run` | Timer + optional `POST /api/afdd/scheduler/run-now` |
 | Default | `OPENFDD_AFDD_MODE=bulk` (no timer) | Opt-in `continuous` |
 | Isolation | Explicit `building_id` | Per-`building_id` mutex + checkpoint |
@@ -63,7 +63,7 @@ OPENFDD_AFDD_BUILDING_ID=ACME
 - **Window:** lookback-sized only. `end` = latest persisted telemetry watermark; `start` = `end − lookback` (`plan_continuous_cycle`). Result rows outside that window are left unchanged (`merge_windowed_rule_result`). A rows-only file and a null-bound `preserved_unscoped` slice keep the same rows hash. After downtime, catch-up is still one lookback-sized window (`catch_up`). Historical rebuild is `POST /api/afdd/scheduler/backfill` with an explicit range (`plan_bounded_backfill`), never an update-all flag.
 - Soft-OPEN ACME/Railway: Timescale-only, dual-write false, **no site backups** unless Ben asks ([TIMESCALE_WAVE_X.md](TIMESCALE_WAVE_X.md)).
 - Stress SoT: gate **38** `38_acme_afdd_qualification.sh` (MEGA required). Gate **19** remains synth flood only.
-- **RAM (portable):** Prefer lookback-bounded SQL cycles on small hosts. Watch `/api/health.memory_budget` when present — not Railway-hardcoded 10/24 GB in product code. Legacy DataFusion spill pool vars (`OPENFDD_DATAFUSION_SPILL_DIR`, FairSpillPool) are **not** the Timescale tip path ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)).
+- **RAM (portable):** Prefer lookback-bounded SQL cycles on small hosts. Watch `/api/health.memory_budget` when present — not Railway-hardcoded 10/24 GB in product code. Legacy DataFusion spill pool vars (`OPENFDD_DATAFUSION_SPILL_DIR`, FairSpillPool) are historical and prohibited on the product path ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)); do not set them.
 
 ## Local == cloud
 
@@ -91,7 +91,7 @@ Heavy analytics/AFDD **shed** new work at `OPENFDD_MEMORY_SHED_FRACTION` (defaul
 
 ## Feather / Parquet dual-write
 
-**Forbidden on tip.** Timescale is the sole product historian ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). Do not add a Feather/Parquet hot tier for lookback or dual-write.
+**Forbidden.** Timescale is the sole product historian ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). NF REST, local NF gRPC (planned) and CSV share one validated, idempotent Timescale telemetry writer. Do not add a Feather / Parquet / Arrow hot tier, raw-data mirror, result-file cache, or legacy fallback for lookback, speed, or migration. The `{rule_id}.json` result files and windowed slices above are current behavior; the target is PostgreSQL result tables.
 
 ## Suspend telemetry (per site/edge)
 

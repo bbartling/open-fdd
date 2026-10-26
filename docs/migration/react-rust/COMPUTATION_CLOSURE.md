@@ -1,5 +1,7 @@
 # P2-M1 — Computation closure ledger
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Prompt 2 inventory against code truth (commit of this PR). Production React
 callers already use Rust/DataFusion; remaining Python is React SPA-local,
 explicitly gated oracle, or deferred product.

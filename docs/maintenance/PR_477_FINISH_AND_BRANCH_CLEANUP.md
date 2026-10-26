@@ -1,5 +1,7 @@
 # PR #477 finish and branch cleanup
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Date:** 2026-07-09  
 **PR:** [#477 — Integrate Vibe19 Rust/DataFusion engine into master (additive)](https://github.com/bbartling/open-fdd/pull/477)  
 **Branch:** `cleanup/integrate-rust-port-into-master`  

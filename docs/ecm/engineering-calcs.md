@@ -7,7 +7,7 @@ permalink: /ecm/engineering-calcs.html
 
 # Engineering calculations (agent → Excel)
 
-Complete catalog of **industry-method ECM screens** and **Python referee calculators** in `open_fdd.ecm_engineering`. Agents fill **input cells only**; Excel keeps live formulas. Product FDD remains DataFusion on GHCR.
+Complete catalog of **industry-method ECM screens** and **Python referee calculators** in `open_fdd.ecm_engineering`. Agents fill **input cells only**; Excel keeps live formulas. Product FDD remains Timescale SQL on GHCR.
 
 Install: `pip install open-fdd` (extras: `[oracle]`, `[analytics]`, `[reporting]`).
 

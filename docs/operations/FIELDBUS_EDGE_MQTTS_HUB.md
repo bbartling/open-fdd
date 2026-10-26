@@ -8,6 +8,8 @@ nav_exclude: true
 
 # Fieldbus edge → MQTTS cloud hub (generic pattern)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 This is the **optional WAN** pattern: on-prem protocol publishes into a **Recipe 1** MQTTS hub (Railway or LAN). It is **not** the only OT topology — **Recipe 2** can scrape → on-box central/DataFusion with **no** broker. It does **not** include private site kits, IPs, or credentials.
 
 ## Topology

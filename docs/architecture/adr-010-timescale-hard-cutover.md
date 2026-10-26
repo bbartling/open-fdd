@@ -12,6 +12,16 @@ decision. The retired transport steps are
 `historical/non-executable` in
 [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../archive/ai-agent/historical-3.5-ot-ops.md).
 
+**Timescale-only mandate (2026-10, extends decision 1):** **Timescale/PostgreSQL
+only, one canonical telemetry write path, no dual record writing.** Parquet,
+Apache Arrow, Arrow IPC, Feather and DataFusion are prohibited in active product
+storage, caching, execution and dependencies — not only on the historian path.
+Derived FDD / analytics results persist in PostgreSQL or bounded memory. NF
+REST, local NF gRPC (planned) and CSV share one validated, idempotent Timescale
+telemetry writer. Canonical text and known gaps (the `crates/fdd_store` Parquet
+analytics cache, removed in Wave P2):
+[`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory).
+
 **BPS reference (pattern only):** ADR 0009 in BPS
 (`docs/spec/ADR/0009-timescale-sql-fdd.md`) — Timescale + `.sql` FDD; pandas
 oracle test-only. BPS is Haystack-only; Open-FDD is not.
@@ -36,7 +46,8 @@ oracle test-only. BPS is Haystack-only; Open-FDD is not.
 - Compose requires `openfdd-timescale`; auto-seed applies schema, loads SQL pack,
   imports BUILDING_50 into Timescale.
 - Product crates must not open `SessionContext` or write Parquet historian parts
-  on the live path. Oracle/CI may still use pandas/DuckDB harnesses outside the
+  on the live path. Under the Timescale-only mandate they also must not write
+  Parquet / Arrow / Feather result caches or depend on those crates. Oracle/CI may still use pandas/DuckDB harnesses outside the
   product containers.
 - SPA Overview / RCx / FDD / Inspect envelopes stay; backend becomes SQL.
 

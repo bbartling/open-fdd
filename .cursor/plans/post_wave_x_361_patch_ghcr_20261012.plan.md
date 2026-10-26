@@ -31,6 +31,8 @@ isProject: true
 
 # Post–Wave-X — 3.6.1 Timescale patch train — 2026-10-12
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status:** Ready once **3.6.0** merge-ready PR is landed / Actions green. Soft-OPEN ≠ FQ.
 
 **Parent cutover:** [`.cursor/plans/timescale_sql_warehouse_greenfield_explore_20261012.plan.md`](timescale_sql_warehouse_greenfield_explore_20261012.plan.md)  

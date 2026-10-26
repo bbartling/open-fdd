@@ -14,6 +14,48 @@ QUALIFIED status without evidence paths.
 
 ---
 
+## Storage mandate: Timescale/PostgreSQL only (mandatory)
+
+**TIMESCALE/POSTGRESQL ONLY. ONE CANONICAL TELEMETRY WRITE PATH. NO DUAL RECORD WRITING.**
+
+This section is the canonical statement of the storage rule. Root
+[`AGENTS.md`](../AGENTS.md), [`AGENTS.md`](AGENTS.md),
+[`CONTAINER_AGENT.md`](CONTAINER_AGENT.md), every skill under
+[`skills/`](skills/), and every linked doc defer to it. If another doc permits
+something this section prohibits, the other doc is wrong: fix the doc, not the
+rule.
+
+| Rule | Requirement |
+| --- | --- |
+| Telemetry store | Timescale on PostgreSQL is the only product store for telemetry. |
+| One writer | NF REST portal ingest, local NF gRPC (planned) and CSV / package import all call one validated, idempotent Timescale telemetry writer. There is no parallel historian, raw-data mirror, shadow copy, or legacy fallback. |
+| No dual record writing | A telemetry record is written once, to Timescale. Never write the same record to a second store (file, object store, cache, second database) for safety, speed, or migration. |
+| Prohibited formats and engines | Parquet, Apache Arrow, Arrow IPC, Feather and DataFusion are prohibited in active product storage, caching, execution and dependencies. Only `archive/` may contain them, labeled historical. |
+| Derived results | FDD and analytics results (rule results, Overview tables, health matrices, RCx presets, sensor-fault analytics) persist in PostgreSQL tables or live in bounded memory. There is no file-format result cache. |
+| Preserved, not telemetry | Haystack RDF / parsed SPARQL, durable job and coverage metadata, audit logs, model snapshots and on-demand exports stay. None of them may become another raw telemetry store: no history read back from an export directory, snapshot, audit log, or job workspace. |
+| Python | Python / pandas is tooling only: PyPI `open-fdd`, qualification and tests. Never in the central or web request path. |
+| Agent law | Agents follow the canonical spec in `openfdd_agent_spec/`. Skills are authored only in `openfdd_agent_spec/skills/` and synced with `./scripts/openfdd_install_agent_skills.sh --sync`. |
+
+### Known gaps (not permitted; removal in Wave P2)
+
+Current code does not yet meet the mandate. These are defects being removed in
+Wave P2, not exceptions. Do not extend them, rely on them, or describe them as
+allowed behavior. A change that touches them removes or shrinks them.
+
+- `crates/fdd_store` analytics result cache: Parquet files under
+  `analytics_results/` (schema `analytics-result-parquet-v2`,
+  `analytics_cache.rs`), read by `services/central/src/analytics/result_cache.rs`,
+  plus the crate's Arrow / Parquet sidecar, compaction and disk-budget modules.
+- `edge/` Arrow IPC pages for package CSV datasets.
+- Workspace dependencies `arrow`, `arrow-schema`, `parquet` and `datafusion` in
+  the root `Cargo.toml`, and the `legacy-datafusion` / `legacy-parquet`
+  check-cfg tombstones.
+- Source trees `crates/fdd_sql`, `crates/fdd_cli` and `crates/fdd_bench`
+  (DataFusion). They are already out of the workspace but still outside
+  `archive/`.
+
+---
+
 ## WattLab dump
 
 | Item | Truth |
@@ -85,14 +127,14 @@ Target shape (Phase 4 hardening):
 
 ## Production FDD run
 
-`architecture_epoch: portal-timescale-v1`. Arrow, Feather, and DataFusion are not the product historian.
+`architecture_epoch: portal-timescale-v1`. Timescale / PostgreSQL only ([storage mandate](#storage-mandate-timescalepostgresql-only-mandatory)). Parquet, Arrow, Feather and DataFusion are prohibited on the product path, not merely "not the historian".
 
 | Item | Truth |
 | --- | --- |
 | API | `POST /api/fdd/run` (Timescale / PostgreSQL) |
 | Registry | `sql/fdd/registry.yaml` |
 | Rules | `sql/fdd/postgres/rules/*.sql` |
-| Storage | Timescale. A result-cache file is not telemetry. |
+| Storage | Timescale / PostgreSQL. Rule results persist in PostgreSQL or bounded memory. A file-format result cache is not permitted (known gap: `crates/fdd_store` Parquet cache, removal in Wave P2). |
 | Units | °F canonical. Metric inputs convert at query (`unit_system=metric\|si`). |
 | Time | UTC `timestamptz`. Fault duration uses the forward timestamp delta. A gap longer than `MAX_GAP_HOURS` (default 1) is unknown: not fault time and not covered time. |
 | Ingest | Normal Framework portal API and CSV packages only |
@@ -121,7 +163,7 @@ Do not commit vendor appenders or full Building 50 zips. CI uses `tests/fixtures
 | Item | Truth |
 | --- | --- |
 | Online dump | `POST /api/jobs/{id}/wattlab/dumps` (rename to `/eplus/dumps` pending) |
-| Offline export | `scripts/eplus_dump_clustering_export.py` → `clustering_features.csv`, timeseries long parquet |
+| Offline export | `scripts/eplus_dump_clustering_export.py` → `clustering_features.csv`, timeseries long parquet. Offline Python tooling only; the output is an on-demand export and is never read back as product telemetry. |
 | Artifact root | `EPLUS_DUMP_ROOT` default `reports/eplus-dump/`; legacy `reports/wattlab-parity/` via `scripts/eplus_paths.py` |
 | Engine | `tools/wattlab_export/` optional offline Python |
 
@@ -158,7 +200,7 @@ Seed lane: `POST /api/csv/import/package`. Layout (generic `AHU_1` / `VAV_1` / `
 - Empty Overview / RCx / Inspect = missing roles in the zip. Importable ≠ FDD-ready ([`docs/modeling/rule-readiness.md`](../docs/modeling/rule-readiness.md)).
 - Heat-pump / WSHP topology and anti-patterns: [`docs/modeling/heat-pump-buildings.md`](../docs/modeling/heat-pump-buildings.md). Do not copy AHU/VAV BUILDING_100 topology onto HP buildings.
 - Motor ≠ compressor ≠ valve (status/cmd before amps; never CHW pump / `clg_valve_pct` as compressor proof).
-- Sites UI may show CSV / MQTT / Both **inventory labels**; that is not a dual CSV+MQTT writer contract. Unified historian for the same `building_id` remains a later epic.
+- Sites UI may show CSV / MQTT / Both **inventory labels**; that is not a dual CSV+MQTT writer contract. Portal and CSV history for the same `building_id` go through the one Timescale telemetry writer ([storage mandate](#storage-mandate-timescalepostgresql-only-mandatory)).
 
 ---
 

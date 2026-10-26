@@ -37,6 +37,8 @@ isProject: true
 
 # Cursor entry point: next revision after the 2026-10-05 independent audit
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 ## Read first
 
 This is a new continuation plan, not a completed implementation. Audit source is **3.5.65 / `215e1594675e8a6b8a113dc0399950ab649ba2a4`**. Current GitHub master and VERSION must be rechecked before implementation; Grok and other agents can land intervening changes. The primary checkout was still `4251505` with active edits at audit time. Do not reset, overwrite or blindly pull those files. Use the existing suitable worktree/PR or a separate checkout and reconcile newer master safely.

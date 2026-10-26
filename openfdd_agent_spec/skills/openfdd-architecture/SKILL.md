@@ -16,7 +16,13 @@ Read [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and [`ownership.yaml`](../../own
 
 ## Non-negotiables
 
-- Production FDD and analytics = Timescale / PostgreSQL (`sql/fdd/`) on central. No silent pandas fallback. No DataFusion or Parquet historian on the product path ([ADR-010](../../../docs/architecture/adr-010-timescale-hard-cutover.md)).
+- **TIMESCALE/POSTGRESQL ONLY. ONE CANONICAL TELEMETRY WRITE PATH. NO DUAL RECORD WRITING.** Canonical text: [`DATA_CONTRACT.md` § Storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory).
+  - Parquet, Apache Arrow, Arrow IPC, Feather and DataFusion are prohibited in active product storage, caching, execution and dependencies. Only `archive/` may contain them, labeled historical.
+  - Derived FDD / analytics results persist in PostgreSQL or bounded memory.
+  - NF REST, local NF gRPC (planned) and CSV share one validated, idempotent Timescale telemetry writer. No parallel historian, raw-data mirror, or legacy fallback.
+  - Haystack RDF / parsed SPARQL, durable job and coverage metadata, audit logs, model snapshots and on-demand exports stay; none may become another raw telemetry store.
+  - Known gap, not permitted: the `crates/fdd_store` Parquet analytics cache (`analytics_results/`, `analytics-result-parquet-v2`), removed in Wave P2.
+- Production FDD and analytics = Timescale / PostgreSQL (`sql/fdd/`) on central. No silent pandas fallback ([ADR-010](../../../docs/architecture/adr-010-timescale-hard-cutover.md)).
 - Ingest = Normal Framework portal API and CSV. MQTT, BACnet, Modbus, Haystack wire, and fieldbus are an unqualified archive.
 - Railway product services = central + web, with Timescale. Optional image: `openfdd-mcp`.
 - Pandas oracle = `open_fdd.rules` + `analytics` — permanent, outside the product request path.
