@@ -9,6 +9,8 @@ description: >-
 
 # Railway CLI (Open-FDD hub)
 
+> **`historical/non-executable`.** The Railway lab was deleted. Do not run these steps or re-create Railway services. Live sites are Normal Framework at the edge plus central pulling the portal: [`openfdd-nf-provider`](../openfdd-nf-provider/SKILL.md), [`openfdd-nf-edge-bench`](../openfdd-nf-edge-bench/SKILL.md).
+
 `architecture_epoch: portal-timescale-v1`.
 
 Full ops: [`docs/operations/RAILWAY_DEPLOYMENT.md`](../../../docs/operations/RAILWAY_DEPLOYMENT.md)
