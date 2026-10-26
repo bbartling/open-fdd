@@ -41,6 +41,8 @@ RESET_TABLES = (
     "sample",
     "sample_changed_range",
     "data_revision",
+    "fdd_interval_result",
+    "fdd_incremental_checkpoint",
     "fdd_run",
     "analytics_result",
     "point_map",
