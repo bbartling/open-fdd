@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { PlantHealthSections } from "./PlantHealthSections";
 import { ProvidersPanel } from "./ProvidersPanel";
@@ -82,12 +82,9 @@ describe("live ingest copy", () => {
     expect(
       await screen.findByText(/CSV packages and the NF portal stamp zone_other/),
     ).toBeTruthy();
-    expect(await screen.findByTestId("providers-ingest")).toBeTruthy();
-    await waitFor(() => {
-      expect(screen.getByTestId("provider-registry-nf")).toBeTruthy();
-    });
-    expect(screen.queryByTestId("provider-registry-mqtt")).toBeNull();
-    expect(screen.queryByTestId("provider-registry-bacnet")).toBeNull();
+    expect(await screen.findByTestId("providers-poll-enabled")).toBeTruthy();
+    expect(screen.queryByTestId("provider-registry")).toBeNull();
+    expect(screen.queryByTestId("provider-driver-notes")).toBeNull();
     expect(screen.queryByText("OLD_BUS")).toBeNull();
     expect(screen.getByText("NF_EDGE")).toBeTruthy();
     expect(document.body.textContent ?? "").not.toMatch(/mqtt/i);

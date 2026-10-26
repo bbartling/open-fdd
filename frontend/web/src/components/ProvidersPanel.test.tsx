@@ -143,7 +143,9 @@ describe("ProvidersPanel", () => {
       );
     });
     expect(screen.getByTestId("provider-ledger-empty").textContent).toMatch(/not a gap-free ingest/);
-    expect(screen.getByTestId("provider-driver-notes").textContent).toMatch(/GET \/api\/v1\/point\/data/);
+    expect(screen.queryByTestId("provider-driver-notes")).toBeNull();
+    expect(screen.queryByTestId("provider-registry")).toBeNull();
+    expect(screen.getByText(/Poll status is separate from history coverage/)).toBeTruthy();
     expect(screen.queryByTestId("provider-ledger-jobs")).toBeNull();
     const paths = vi.mocked(apiFetch).mock.calls.map((call) => String(call[0]));
     expect(paths.some((path) => path.startsWith("/api/ingest/jobs?site_id=NF_EDGE"))).toBe(true);
@@ -206,7 +208,6 @@ describe("ProvidersPanel", () => {
     expect(screen.getByTestId("provider-ledger-gaps-note").textContent).toMatch(
       /not a device-hour completeness proof/,
     );
-    expect(screen.getByTestId("provider-backfill-note").textContent).toMatch(/not submitted/);
     const inspect = screen.getAllByRole("link", { name: "Inspect" });
     expect(inspect[0]?.getAttribute("href")).toContain("site=NF_EDGE");
     expect(screen.getAllByRole("link", { name: "Model" })[0]?.getAttribute("href")).toContain(
