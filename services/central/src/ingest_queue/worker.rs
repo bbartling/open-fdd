@@ -546,6 +546,7 @@ fn device_for_write(
                 provider_point_id: point.source_point_id.clone(),
                 role: point.canonical_role.clone(),
                 equip_type: Some(group.equip_type.clone()),
+                configured_units: point.source_unit.clone(),
             })
             .collect(),
     })

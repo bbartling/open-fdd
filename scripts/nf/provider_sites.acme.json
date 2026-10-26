@@ -1045,19 +1045,22 @@
         "provider_point_id": "6d3cef4d-ee80-3a18-8603-cbb0efe61000",
         "equipment_id": "trane_vav_11002",
         "role": "zone-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "e2292cb5-b452-3f2f-ad3a-8a9105f2d242",
         "equipment_id": "trane_vav_11002",
         "role": "zone-air-temp-setpoint",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "5d6582cd-e6e6-3b44-9bcf-07d7f548454f",
         "equipment_id": "trane_vav_11002",
         "role": "discharge-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "3b5faf69-ece3-3d91-b2dd-b1a3686a37ce",
@@ -1087,19 +1090,22 @@
         "provider_point_id": "cbc71867-7f08-3142-b969-d3fd551dd8c0",
         "equipment_id": "trane_vav_11007",
         "role": "zone-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "8f5c8661-1634-345f-8f52-0e3c2afe6238",
         "equipment_id": "trane_vav_11007",
         "role": "zone-air-temp-setpoint",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "8480344e-8409-3cfa-873d-99bc5b62213e",
         "equipment_id": "trane_vav_11007",
         "role": "discharge-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "a4263faf-dd6c-3b9e-8466-5ea3bd8cd9fb",
@@ -1129,19 +1135,22 @@
         "provider_point_id": "7ca3a2c7-a8d9-37e1-aa42-ba8960c45cc5",
         "equipment_id": "trane_vav_12023",
         "role": "zone-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "b11c29c6-cbec-3447-808e-869ad1cf98fd",
         "equipment_id": "trane_vav_12023",
         "role": "zone-air-temp-setpoint",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "4093193c-18ad-3576-acb3-4661c04725ea",
         "equipment_id": "trane_vav_12023",
         "role": "discharge-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "bebd69a8-b2fb-3733-9f3d-b0392dec32c0",
@@ -1171,19 +1180,22 @@
         "provider_point_id": "65c995fc-5a82-3d48-b79e-8fd6c3c4b43d",
         "equipment_id": "trane_vav_12026",
         "role": "zone-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "08a7e834-aae8-3a7e-8291-f632c816adc9",
         "equipment_id": "trane_vav_12026",
         "role": "zone-air-temp-setpoint",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "a13c06c3-eabc-3e34-b22f-de17982f0463",
         "equipment_id": "trane_vav_12026",
         "role": "discharge-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "564f9d50-f829-33b4-8247-9184079f305e",
@@ -1213,19 +1225,22 @@
         "provider_point_id": "cdf1bee3-e358-3add-8ea0-2f092c39d4e6",
         "equipment_id": "trane_vav_12028",
         "role": "zone-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "ec1224cd-d528-3789-855e-35b3c70c8667",
         "equipment_id": "trane_vav_12028",
         "role": "zone-air-temp-setpoint",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "31c7ec18-78dd-36c0-9c14-dea3b4eb922d",
         "equipment_id": "trane_vav_12028",
         "role": "discharge-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "cf184c0a-b4ac-344f-b566-c05db26e052a",
@@ -1255,19 +1270,22 @@
         "provider_point_id": "0abcd9a2-66b5-376e-a343-7df9b183b980",
         "equipment_id": "trane_vav_12032",
         "role": "zone-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "990073a1-bc10-33de-b86c-5f4214798de3",
         "equipment_id": "trane_vav_12032",
         "role": "zone-air-temp-setpoint",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "4a4d63ae-96b0-3346-9436-d0bfd3e9dc50",
         "equipment_id": "trane_vav_12032",
         "role": "discharge-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "9412ce4f-2826-385c-ac84-d6f71d3a0b7f",
@@ -1297,19 +1315,22 @@
         "provider_point_id": "24ebbfb3-a94a-365a-a91a-75d749f673ea",
         "equipment_id": "trane_vav_12033",
         "role": "zone-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "50c71776-53c6-31ce-b413-0c4521a1060a",
         "equipment_id": "trane_vav_12033",
         "role": "zone-air-temp-setpoint",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "0b37b16b-f616-3caf-9588-5e94ccc83ea9",
         "equipment_id": "trane_vav_12033",
         "role": "discharge-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "cfe206ab-b3f5-339d-929b-705ba28c4b7d",
@@ -1339,19 +1360,22 @@
         "provider_point_id": "713cf15e-d5d0-35df-abe5-588cd44eb670",
         "equipment_id": "trane_vav_12035",
         "role": "zone-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "ed4f4eee-3a17-3a80-9140-bdf6ed718417",
         "equipment_id": "trane_vav_12035",
         "role": "zone-air-temp-setpoint",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "d62844db-e1f9-3195-8d20-382f65d10a2d",
         "equipment_id": "trane_vav_12035",
         "role": "discharge-air-temp",
-        "equip_type": "vav"
+        "equip_type": "vav",
+        "units": "degC"
       },
       {
         "provider_point_id": "baabed9e-a120-3d6a-a4b4-22cf587884fe",
@@ -1393,19 +1417,22 @@
         "provider_point_id": "6add01fc-4495-3bd2-9585-d761048e0289",
         "equipment_id": "weather",
         "role": "web-outside-air-temp",
-        "equip_type": "weather"
+        "equip_type": "weather",
+        "units": "degF"
       },
       {
         "provider_point_id": "7a3095df-3fe7-3bce-9adc-33712b3cf950",
         "equipment_id": "weather",
         "role": "web-outside-air-humidity",
-        "equip_type": "weather"
+        "equip_type": "weather",
+        "units": "%"
       },
       {
         "provider_point_id": "d1049ebb-cc7a-3371-979c-7e59a3f3c5ce",
         "equipment_id": "weather",
         "role": "web-outside-air-dewpoint",
-        "equip_type": "weather"
+        "equip_type": "weather",
+        "units": "degF"
       }
     ]
   }

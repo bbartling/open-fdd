@@ -215,6 +215,7 @@ fn point_map(points: &[(&str, &str)]) -> DevicePoints {
                 provider_point_id: (*id).to_string(),
                 role: (*role).to_string(),
                 equip_type: Some("ahu".into()),
+                configured_units: None,
             })
             .collect(),
     }

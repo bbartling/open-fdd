@@ -101,6 +101,233 @@ pub async fn run_legacy_site_loops(state: Arc<AppState>, shutdown: &mut watch::R
 /// job already names its own window.
 pub struct WindowAccept {
     pub samples: Vec<super::types::NormalizedSample>,
+    /// Portal unit disagreed with the site file, or the canonical value is
+    /// outside the role's range. Those samples are not written.
+    pub unit_flags: Vec<UnitFlag>,
+}
+
+/// Why one sample was withheld instead of written in canonical units.
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnitFlag {
+    /// NF and the site file name different units. Neither value is written.
+    Mismatch { nf_unit: String, json_units: String },
+    /// Value is outside the role range after conversion to canonical units.
+    Range { canonical: f64, low: f64, high: f64 },
+}
+
+impl std::fmt::Display for UnitFlag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Mismatch {
+                nf_unit,
+                json_units,
+            } => write!(f, "nf_unit_mismatch nf={nf_unit} json={json_units}"),
+            Self::Range {
+                canonical,
+                low,
+                high,
+            } => write!(f, "nf_unit_range value={canonical} bounds={low}..{high}"),
+        }
+    }
+}
+
+/// Historian temperature unit. SQL FDD stores °F (`imperial-f-v1`).
+const CANONICAL_TEMPERATURE_UNIT: &str = "degF";
+
+#[derive(Clone, PartialEq, Eq)]
+enum UnitClass {
+    Celsius,
+    Fahrenheit,
+    Percent,
+    Other(String),
+}
+
+fn unit_token(raw: &str) -> String {
+    raw.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect()
+}
+
+fn unknown_unit_token(token: &str) -> bool {
+    matches!(
+        token,
+        "unknown"
+            | "unitsunknown"
+            | "none"
+            | "null"
+            | "na"
+            | "nounits"
+            | "unitsnounits"
+            | "notavailable"
+    )
+}
+
+/// `None` means the portal omitted the unit or reported it as unknown.
+fn classify_unit(raw: &str) -> Option<UnitClass> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed == "%" || trimmed.eq_ignore_ascii_case("%rh") {
+        return Some(UnitClass::Percent);
+    }
+    let token = unit_token(trimmed);
+    if token.is_empty() || unknown_unit_token(&token) {
+        return None;
+    }
+    Some(match token.as_str() {
+        "c" | "degc" | "celsius" | "degreescelsius" | "centigrade" => UnitClass::Celsius,
+        "f" | "degf" | "fahrenheit" | "degreesfahrenheit" => UnitClass::Fahrenheit,
+        "percent" | "percentrelativehumidity" | "rh" | "pct" => UnitClass::Percent,
+        _ => UnitClass::Other(token),
+    })
+}
+
+fn attr_owned(attrs: &serde_json::Map<String, serde_json::Value>, key: &str) -> Option<String> {
+    attrs
+        .get(key)
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn put_attr(attrs: &mut serde_json::Map<String, serde_json::Value>, key: &str, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+    attrs.insert(
+        key.to_string(),
+        serde_json::Value::String(value.to_string()),
+    );
+}
+
+/// Hot-water temperatures sit above the air-side band. Role match is exact.
+fn temperature_bounds(role: &str) -> (f64, f64) {
+    let sql = fdd_core::columns::haystack_point_to_role(role);
+    let hot_water = matches!(
+        sql.as_str(),
+        "hw_supply_t" | "hw_return_t" | "hw_supply_temp" | "hw_return_temp"
+    ) || matches!(
+        role.trim().to_ascii_lowercase().as_str(),
+        "hw-supply-temp" | "hw-return-temp" | "hot-water-supply-temp" | "hot-water-return-temp"
+    );
+    if hot_water {
+        (32.0, 220.0)
+    } else {
+        (-40.0, 130.0)
+    }
+}
+
+struct AdmittedUnit {
+    class: UnitClass,
+    source: String,
+    from: &'static str,
+}
+
+/// Convert one portal sample into canonical units before the Timescale write.
+///
+/// The site-file `units` value is used only when NF omitted the unit or reported
+/// it as unknown. A disagreement is returned and the sample is left unchanged.
+pub fn apply_nf_unit_policy(sample: &mut super::types::NormalizedSample) -> Result<(), UnitFlag> {
+    if attr_owned(&sample.attrs, "nf_unit_policy").as_deref() == Some("applied") {
+        return Ok(());
+    }
+    let reported_nf = attr_owned(&sample.attrs, "nf_unit");
+    let configured = attr_owned(&sample.attrs, "configured_units");
+    let stamped =
+        sample.attrs.contains_key("nf_unit") || sample.attrs.contains_key("configured_units");
+    let nf_unit = if stamped {
+        reported_nf
+    } else {
+        sample
+            .unit
+            .as_deref()
+            .map(str::trim)
+            .filter(|unit| !unit.is_empty())
+            .map(str::to_string)
+    };
+    let nf_class = nf_unit.as_deref().and_then(classify_unit);
+    let json_class = configured.as_deref().and_then(classify_unit);
+    let admitted = match (nf_class, json_class) {
+        (Some(left), Some(right)) if left != right => {
+            return Err(UnitFlag::Mismatch {
+                nf_unit: nf_unit.unwrap_or_default(),
+                json_units: configured.unwrap_or_default(),
+            });
+        }
+        (None, Some(class)) => AdmittedUnit {
+            class,
+            source: configured.unwrap_or_default(),
+            from: "provider_sites",
+        },
+        (Some(class), _) => AdmittedUnit {
+            class,
+            source: nf_unit.unwrap_or_default(),
+            from: "nf",
+        },
+        (None, None) => {
+            put_attr(&mut sample.attrs, "nf_unit_policy", "applied");
+            return Ok(());
+        }
+    };
+    if matches!(admitted.class, UnitClass::Celsius | UnitClass::Fahrenheit) {
+        let canonical = match admitted.class {
+            UnitClass::Celsius => fdd_core::celsius_to_fahrenheit(sample.val),
+            _ => sample.val,
+        };
+        let (low, high) = temperature_bounds(&sample.role);
+        if !canonical.is_finite() || canonical < low || canonical > high {
+            return Err(UnitFlag::Range {
+                canonical,
+                low,
+                high,
+            });
+        }
+        sample.val = canonical;
+        sample.unit = Some(CANONICAL_TEMPERATURE_UNIT.to_string());
+        put_attr(&mut sample.attrs, "source_unit", &admitted.source);
+        put_attr(
+            &mut sample.attrs,
+            "canonical_unit",
+            CANONICAL_TEMPERATURE_UNIT,
+        );
+        put_attr(&mut sample.attrs, "unit_from", admitted.from);
+    } else {
+        put_attr(&mut sample.attrs, "source_unit", &admitted.source);
+        // An unknown portal token must not stay on the row once the site file named the unit.
+        let replace_unit = admitted.from == "provider_sites"
+            || sample.unit.as_deref().is_none_or(|unit| unit.is_empty());
+        if replace_unit {
+            sample.unit = Some(admitted.source);
+        }
+    }
+    put_attr(&mut sample.attrs, "nf_unit_policy", "applied");
+    Ok(())
+}
+
+pub(crate) fn canonicalize_nf_samples(
+    samples: Vec<super::types::NormalizedSample>,
+) -> (Vec<super::types::NormalizedSample>, Vec<UnitFlag>) {
+    let mut ready = Vec::with_capacity(samples.len());
+    let mut flags = Vec::new();
+    for mut sample in samples {
+        match apply_nf_unit_policy(&mut sample) {
+            Ok(()) => ready.push(sample),
+            Err(flag) => {
+                warn!(
+                    code = "nf_unit_flag",
+                    flag = %flag,
+                    provider_point_id = %sample.provider_point_id,
+                    role = %sample.role,
+                    "NF unit policy withheld a sample"
+                );
+                flags.push(flag);
+            }
+        }
+    }
+    (ready, flags)
 }
 
 pub fn accept_device_window(
@@ -133,11 +360,15 @@ pub fn accept_device_window(
                 &device.device_id,
                 point.role.clone(),
                 point.equip_type.clone(),
-                None,
+                point.configured_units.clone(),
             ),
         ));
     }
-    WindowAccept { samples }
+    let (samples, unit_flags) = canonicalize_nf_samples(samples);
+    WindowAccept {
+        samples,
+        unit_flags,
+    }
 }
 
 fn chosen_resolver<'a>(live: &'a RoleResolver, site: &'a RoleResolver) -> &'a RoleResolver {
@@ -239,6 +470,13 @@ pub async fn write_device_window(
         page,
         LogicalWindow { start, end },
     );
+    if !accepted.unit_flags.is_empty() {
+        warn!(
+            building_id = %site.building_id,
+            withheld = accepted.unit_flags.len(),
+            "NF unit policy withheld samples before the Timescale write"
+        );
+    }
     if accepted.samples.is_empty() {
         return Ok(super::writer::ProviderIngestReceipt {
             submitted: 0,
@@ -693,11 +931,12 @@ impl SampleWriter for HistorianSink<'_> {
         samples: &'a [super::types::NormalizedSample],
     ) -> BoxFuture<'a, Result<usize, String>> {
         Box::pin(async move {
+            let (ready, _) = canonicalize_nf_samples(samples.to_vec());
             let receipt = writer::ingest_samples(
                 self.state,
                 self.building_id,
                 self.provider_instance_id,
-                samples,
+                &ready,
             )
             .await
             .map_err(|_| "persistence".to_string())?;
@@ -909,6 +1148,7 @@ mod tests {
                 provider_point_id: point.into(),
                 role: "sat".into(),
                 equip_type: Some("ahu".into()),
+                configured_units: None,
             }],
         };
         let accepted = accept_device_window(
@@ -974,6 +1214,7 @@ mod tests {
             role: "sat".into(),
             equip_type: Some("ahu".into()),
             unit: None,
+            units: None,
             kind: None,
             provisional: false,
         }])
@@ -984,5 +1225,180 @@ mod tests {
         let unset = RoleResolver::default();
         let fallback = chosen_resolver(&unset, &site);
         assert_eq!(fallback.mapped_count(), 1);
+    }
+
+    fn zoned(
+        point_id: &str,
+        role: &str,
+        val: f64,
+        nf_unit: Option<&str>,
+        json_units: Option<&str>,
+    ) -> WindowAccept {
+        let start = Utc.with_ymd_and_hms(2026, 6, 1, 12, 0, 0).unwrap();
+        let device = DevicePoints {
+            device_id: "device-a".into(),
+            points: vec![MappedPoint {
+                provider_point_id: point_id.into(),
+                role: role.into(),
+                equip_type: Some("vav".into()),
+                configured_units: json_units.map(str::to_string),
+            }],
+        };
+        let page = HistorySeries {
+            provider_point_id: point_id.into(),
+            samples: vec![RawProviderPoint {
+                provider_point_id: point_id.into(),
+                display_name: None,
+                ts: start,
+                val,
+                unit: nf_unit.map(str::to_string),
+                source_quality: None,
+                attrs: serde_json::Map::new(),
+            }],
+        };
+        accept_device_window(
+            "site-a",
+            "nf:site-a",
+            &device,
+            &[page],
+            LogicalWindow {
+                start,
+                end: start + ChronoDuration::hours(1),
+            },
+        )
+    }
+
+    #[test]
+    fn celsius_portal_unit_is_stored_as_fahrenheit() {
+        let accepted = zoned(
+            "11111111-1111-4111-8111-111111111111",
+            "zone-air-temp",
+            21.0,
+            Some("DEGREES_CELSIUS"),
+            None,
+        );
+        assert!(accepted.unit_flags.is_empty());
+        assert_eq!(accepted.samples.len(), 1);
+        let sample = &accepted.samples[0];
+        assert!((sample.val - 69.8).abs() < 1e-9);
+        assert_eq!(sample.unit.as_deref(), Some("degF"));
+        assert_eq!(
+            sample.attrs.get("source_unit").and_then(|v| v.as_str()),
+            Some("DEGREES_CELSIUS")
+        );
+        let again = {
+            let mut copy = sample.clone();
+            apply_nf_unit_policy(&mut copy).unwrap();
+            copy.val
+        };
+        assert!((again - sample.val).abs() < 1e-9);
+    }
+
+    #[test]
+    fn unknown_portal_unit_uses_the_site_file() {
+        let accepted = zoned(
+            "22222222-2222-4222-8222-222222222222",
+            "zone-air-temp",
+            0.0,
+            Some("UNITS_UNKNOWN"),
+            Some("degC"),
+        );
+        assert!(accepted.unit_flags.is_empty());
+        let sample = &accepted.samples[0];
+        assert!((sample.val - 32.0).abs() < 1e-9);
+        assert_eq!(sample.unit.as_deref(), Some("degF"));
+        assert_eq!(
+            sample.attrs.get("source_unit").and_then(|v| v.as_str()),
+            Some("degC")
+        );
+        assert_eq!(
+            sample.attrs.get("unit_from").and_then(|v| v.as_str()),
+            Some("provider_sites")
+        );
+        assert_eq!(
+            sample.attrs.get("nf_unit").and_then(|v| v.as_str()),
+            Some("UNITS_UNKNOWN")
+        );
+        let humidity = zoned(
+            "77777777-7777-4777-8777-777777777777",
+            "outside-air-humidity",
+            40.0,
+            Some("UNITS_UNKNOWN"),
+            Some("%"),
+        );
+        assert!(humidity.unit_flags.is_empty());
+        assert_eq!(humidity.samples[0].unit.as_deref(), Some("%"));
+        assert!((humidity.samples[0].val - 40.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn portal_and_site_file_unit_mismatch_is_flagged() {
+        let accepted = zoned(
+            "33333333-3333-4333-8333-333333333333",
+            "zone-air-temp",
+            21.0,
+            Some("DEGREES_CELSIUS"),
+            Some("degF"),
+        );
+        assert!(accepted.samples.is_empty());
+        assert_eq!(
+            accepted.unit_flags,
+            vec![UnitFlag::Mismatch {
+                nf_unit: "DEGREES_CELSIUS".into(),
+                json_units: "degF".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn range_check_uses_the_converted_value() {
+        let hot = zoned(
+            "44444444-4444-4444-8444-444444444444",
+            "zone-air-temp",
+            90.0,
+            Some("DEGREES_CELSIUS"),
+            None,
+        );
+        assert!(hot.samples.is_empty());
+        match &hot.unit_flags[..] {
+            [UnitFlag::Range {
+                canonical,
+                low,
+                high,
+            }] => {
+                assert!((canonical - 194.0).abs() < 1e-9);
+                assert_eq!(*low, -40.0);
+                assert_eq!(*high, 130.0);
+            }
+            other => panic!("expected range flag, got {other:?}"),
+        }
+        let plant = zoned(
+            "55555555-5555-4555-8555-555555555555",
+            "hw-supply-temp",
+            90.0,
+            Some("DEGREES_CELSIUS"),
+            None,
+        );
+        assert!(plant.unit_flags.is_empty());
+        assert!((plant.samples[0].val - 194.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn percent_samples_stay_on_the_reported_unit() {
+        let accepted = zoned(
+            "66666666-6666-4666-8666-666666666666",
+            "damper",
+            40.0,
+            Some("PERCENT"),
+            None,
+        );
+        assert!(accepted.unit_flags.is_empty());
+        let sample = &accepted.samples[0];
+        assert!((sample.val - 40.0).abs() < 1e-9);
+        assert_eq!(sample.unit.as_deref(), Some("PERCENT"));
+        assert_eq!(
+            sample.attrs.get("source_unit").and_then(|v| v.as_str()),
+            Some("PERCENT")
+        );
     }
 }

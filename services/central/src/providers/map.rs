@@ -27,12 +27,30 @@ pub struct PointMapEntry {
     pub role: String,
     #[serde(default)]
     pub equip_type: Option<String>,
+    /// Older site files. `units` wins when both are set.
     #[serde(default)]
     pub unit: Option<String>,
+    /// Portal unit fallback when NF reports an unknown unit.
+    #[serde(default)]
+    pub units: Option<String>,
     #[serde(default)]
     pub kind: Option<String>,
     #[serde(default)]
     pub provisional: bool,
+}
+
+impl PointMapEntry {
+    /// Explicit site-file unit. `units` is the fallback field; `unit` still loads.
+    pub fn configured_units(&self) -> Option<String> {
+        nonempty_unit(self.units.as_deref()).or_else(|| nonempty_unit(self.unit.as_deref()))
+    }
+}
+
+fn nonempty_unit(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|unit| !unit.is_empty())
+        .map(str::to_string)
 }
 
 #[cfg(test)]
@@ -186,12 +204,7 @@ impl RoleResolver {
                         .map(str::trim)
                         .filter(|s| !s.is_empty())
                         .map(str::to_string),
-                    entry
-                        .unit
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(str::to_string),
+                    entry.configured_units(),
                 ),
             )?;
         }
@@ -296,6 +309,7 @@ impl RoleResolver {
                 provider_point_id: point_id,
                 role: resolved.role.clone(),
                 equip_type: resolved.equip_type.clone(),
+                configured_units: resolved.unit.clone(),
             };
             grouped.entry(equipment_id).or_default().push(point);
         }
@@ -311,6 +325,8 @@ pub struct MappedPoint {
     pub provider_point_id: String,
     pub role: String,
     pub equip_type: Option<String>,
+    /// Site-file unit used when the portal unit is unknown.
+    pub configured_units: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -366,6 +382,13 @@ pub fn normalize_mapped(
     if let Some(unit) = resolved.canonical_unit.as_deref() {
         insert_attr(&mut attrs, "canonical_unit", unit);
     }
+    // Kept apart from `sample.unit` so a portal unit and a site-file unit can disagree.
+    if let Some(unit) = raw.unit.as_deref() {
+        insert_attr(&mut attrs, "nf_unit", unit);
+    }
+    if let Some(unit) = resolved.unit.as_deref() {
+        insert_attr(&mut attrs, "configured_units", unit);
+    }
     NormalizedSample {
         building_id: building_id.to_string(),
         provider_instance_id: provider_instance_id.to_string(),
@@ -400,7 +423,7 @@ fn bootstrap(entries: &[PointMapEntry]) -> Vec<super::committed_model::Bootstrap
             equipment_id: entry.equipment_id.clone(),
             role: entry.role.clone(),
             equip_type: entry.equip_type.clone(),
-            unit: entry.unit.clone(),
+            unit: entry.configured_units(),
             kind: entry.kind.clone(),
             provisional: entry.provisional,
         })
@@ -452,6 +475,7 @@ mod tests {
             role: role.into(),
             equip_type: Some("ahu".into()),
             unit: None,
+            units: None,
             kind: None,
             provisional: false,
         }
@@ -520,5 +544,24 @@ mod tests {
         assert!(resolver.resolve("uuid-sat").is_none());
         assert!(resolver.resolve("SAT").is_none());
         assert_eq!(resolver.mapped_count(), 0);
+    }
+
+    #[test]
+    fn units_field_is_the_site_file_fallback() {
+        let parsed: PointMapEntry = serde_json::from_str(
+            r#"{"provider_point_id":"pt-1","equipment_id":"EQ_1","role":"zone-air-temp","equip_type":"vav","units":"degC"}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed.configured_units().as_deref(), Some("degC"));
+        let legacy: PointMapEntry = serde_json::from_str(
+            r#"{"provider_point_id":"pt-2","equipment_id":"EQ_1","role":"sat","equip_type":"ahu","unit":"degF"}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.configured_units().as_deref(), Some("degF"));
+        let both: PointMapEntry = serde_json::from_str(
+            r#"{"provider_point_id":"pt-3","equipment_id":"EQ_1","role":"sat","equip_type":"ahu","unit":"degF","units":"degC"}"#,
+        )
+        .unwrap();
+        assert_eq!(both.configured_units().as_deref(), Some("degC"));
     }
 }
