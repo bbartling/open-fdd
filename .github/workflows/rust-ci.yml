@@ -59,6 +59,11 @@ jobs:
           bash scripts/ci/test_forbid_datafusion_product.sh
           bash scripts/ci/real_stack_browser.sh --self-test
 
+      - name: Timescale-only guard (no columnar crates or files, one sample writer)
+        run: |
+          python3 scripts/ci/forbid_columnar_product.py --self-test
+          python3 scripts/ci/forbid_columnar_product.py
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -78,7 +83,7 @@ jobs:
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: |
-          cargo test -p openfdd_contracts -p fdd_resources -p openfdd-central -- --skip fixture_acceptance
+          cargo test -p openfdd_contracts -p fdd_resources -p fdd_tsdb -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
 
