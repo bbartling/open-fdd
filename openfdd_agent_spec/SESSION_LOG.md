@@ -1,5 +1,9 @@
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
+## 2026-10-26 — NF ingest unit normalization (UNITS-NF-405-01)
+
+- Portal samples convert to canonical `degF` before the existing Timescale writer. The site-file `units` field fills in when NF reports an unknown unit. NF and site-file disagreements are withheld and logged. Source unit stays on the point. No second write path. No VERSION bump.
+
 ## 2026-10-22 — FDD run generation and metric results
 
 - Each Timescale registry run commits an immutable generation (run id, site, model, rules, config hash, window, watermark) and switches the active pointer with a rename. Older generations stay on disk.

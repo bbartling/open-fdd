@@ -533,7 +533,7 @@ fn normalize_device(
                 device_id,
                 point.role.clone(),
                 point.equip_type.clone(),
-                None,
+                point.configured_units.clone(),
             ),
         ));
     }
@@ -639,6 +639,7 @@ mod tests {
                     provider_point_id: (*id).to_string(),
                     role: "zone-temp".into(),
                     equip_type: Some("ahu".into()),
+                    configured_units: None,
                 })
                 .collect(),
         }

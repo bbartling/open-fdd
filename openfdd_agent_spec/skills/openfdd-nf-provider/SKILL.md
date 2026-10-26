@@ -66,8 +66,16 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
 ```
 
 - `point_map` entry: `provider_point_id`, `equipment_id`, `role` (Haystack SQL
-  role, normalized by `normalize_role`), optional `equip_type`, `unit`, `kind`,
-  `semantic_point_id`, and `provisional: true` for a mapping not yet confirmed.
+  role, normalized by `normalize_role`), optional `equip_type`, `units` (alias
+  `unit`), `kind`, `semantic_point_id`, and `provisional: true` for a mapping
+  not yet confirmed.
+- `units` is the site-file fallback when NF omits the unit or reports it as
+  unknown (JavaScript hook points often do). Ingest reads the NF unit first,
+  converts temperature to the historian canonical unit (`degF`, imperial-f-v1)
+  on the existing sample before the single Timescale write, and keeps the
+  source unit on the point (`source_unit`). If NF and `units` name different
+  units, the sample is withheld and logged as `nf_unit_mismatch`. A converted
+  temperature outside the role range is withheld as `nf_unit_range`.
 - `equip_type` is the classifier (rule 64). Do not encode type in `equipment_id`.
 - Anonymous access is lab-only (`auth_mode: "anonymous"`) and only with no
   credential fields. `network_scope: "private"` is needed for RFC1918 endpoints.
@@ -123,8 +131,12 @@ older than one hook interval plus a margin (25 min for a 20 min hook,
 a hung hook early. WARN does not change the exit code. Check units per device
 before trusting a range: some devices report °C and others °F, and a constant or
 impossible reading (a negative relative humidity) is a bad sensor. ACME notes:
-- All 8 Trane VAVs report zone temp in **°C** (NF units `DEGREES_CELSIUS`). The
-  check converts it; FDD rules must too.
+- All 8 Trane VAVs report zone temp in **°C** (NF units `DEGREES_CELSIUS`).
+  Ingest converts that to canonical `degF` before the Timescale write. The
+  freshness check still converts for its own range test. Those temperature
+  points also carry `"units": "degC"` so an unknown NF unit still converts,
+  and a conflicting NF unit is flagged. The three weather hook points carry
+  `"units"` because the hook often reports `UNITS_UNKNOWN`.
 - The Tracer SC `outside-air-humidity` point reads a constant −0.37 %, so that
   sensor is bad. Use `rtu_01` OA or the web weather points for humidity.
 

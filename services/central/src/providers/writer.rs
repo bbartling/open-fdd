@@ -120,7 +120,13 @@ fn samples_to_points(samples: &[NormalizedSample]) -> Vec<TelemetryPoint> {
                 serde_json::Value::String(et.to_string()),
             );
         }
-        if let Some(unit) = sample.unit.as_deref().filter(|s| !s.is_empty()) {
+        let source_unit = sample
+            .attrs
+            .get("source_unit")
+            .and_then(|value| value.as_str())
+            .filter(|unit| !unit.is_empty())
+            .or_else(|| sample.unit.as_deref().filter(|unit| !unit.is_empty()));
+        if let Some(unit) = source_unit {
             tags.insert(
                 "source_unit".into(),
                 serde_json::Value::String(unit.to_string()),
@@ -132,6 +138,8 @@ fn samples_to_points(samples: &[NormalizedSample]) -> Vec<TelemetryPoint> {
             "kind",
             "quantity",
             "canonical_unit",
+            "nf_unit",
+            "unit_from",
         ] {
             if tags.contains_key(key) {
                 continue;
@@ -285,5 +293,42 @@ mod tests {
         assert_eq!(receipt.inserted_rows, 2);
         assert_eq!(receipt.updated_rows, 1);
         assert_ne!(receipt.persisted_rows, receipt.submitted);
+    }
+
+    #[test]
+    fn source_unit_tag_keeps_the_portal_unit() {
+        use chrono::TimeZone;
+        let mut attrs = serde_json::Map::new();
+        attrs.insert("source_unit".into(), serde_json::json!("DEGREES_CELSIUS"));
+        attrs.insert("canonical_unit".into(), serde_json::json!("degF"));
+        attrs.insert("nf_unit".into(), serde_json::json!("DEGREES_CELSIUS"));
+        let sample = super::super::types::NormalizedSample {
+            building_id: "site-a".into(),
+            provider_instance_id: "nf:site-a".into(),
+            equipment_id: "EQ_1".into(),
+            provider_point_id: "pt-1".into(),
+            role: "zone-air-temp".into(),
+            equip_type: Some("vav".into()),
+            ts: chrono::Utc.with_ymd_and_hms(2026, 6, 1, 12, 0, 0).unwrap(),
+            val: 69.8,
+            unit: Some("degF".into()),
+            source_quality: None,
+            attrs,
+        };
+        let points = samples_to_points(&[sample]);
+        assert_eq!(points[0].unit.as_deref(), Some("degF"));
+        let stored = points[0].value.as_f64().unwrap();
+        assert!((stored - 69.8).abs() < 1e-9);
+        assert_eq!(
+            points[0].tags.get("source_unit").and_then(|v| v.as_str()),
+            Some("DEGREES_CELSIUS")
+        );
+        assert_eq!(
+            points[0]
+                .tags
+                .get("canonical_unit")
+                .and_then(|v| v.as_str()),
+            Some("degF")
+        );
     }
 }
