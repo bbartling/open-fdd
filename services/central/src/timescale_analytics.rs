@@ -1150,10 +1150,284 @@ fn text_array(row: &sqlx::postgres::PgRow, column: &str) -> Option<Vec<String>> 
     row.try_get::<Option<Vec<String>>, _>(column).ok().flatten()
 }
 
+const CATALOGUE_VERSION_KEY: &str = "fdd_rule_catalogue_version";
+
+/// Serializes catalogue writers only. Schema migration keeps its own advisory
+/// key so a rules read does not queue behind `CREATE TABLE`, and a migration
+/// does not wait on the catalogue.
+const CATALOGUE_ADVISORY_LOCK_KEY: i64 = 4_040_530_042;
+
+const CATALOGUE_DDL: &[&str] = &[
+    r#"CREATE TABLE IF NOT EXISTS fdd_rule_registry (
+      rule_id text PRIMARY KEY,
+      sql_file text NOT NULL,
+      title text,
+      equipment_kinds text[],
+      required_roles text[],
+      optional_roles text[],
+      parity_status text,
+      enabled boolean NOT NULL DEFAULT true,
+      detail jsonb
+    )"#,
+    "ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS title text",
+    "ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS equipment_kinds text[]",
+    "ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS required_roles text[]",
+    "ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS optional_roles text[]",
+    "ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS parity_status text",
+    "ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS enabled boolean NOT NULL DEFAULT true",
+    "ALTER TABLE fdd_rule_registry ADD COLUMN IF NOT EXISTS detail jsonb",
+    r#"CREATE TABLE IF NOT EXISTS seed_meta (
+      key text PRIMARY KEY,
+      value text NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )"#,
+];
+
+fn pack_detail(version: &str) -> Value {
+    json!({
+        "catalogue_source": "pack",
+        "pack_version": version,
+        "removed": false,
+        "overrides": {},
+    })
+}
+
+async fn ensure_catalogue_schema(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<()> {
+    for statement in CATALOGUE_DDL {
+        sqlx::query(statement)
+            .execute(&mut **tx)
+            .await
+            .with_context(|| {
+                format!(
+                    "rule catalogue schema: {}",
+                    statement.chars().take(60).collect::<String>()
+                )
+            })?;
+    }
+    Ok(())
+}
+
+async fn read_catalogue_rows(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+) -> Result<Vec<open_fdd_edge_prototype::fdd::registry_api::CatalogueExisting>> {
+    let rows =
+        sqlx::query("SELECT rule_id, enabled, detail FROM fdd_rule_registry ORDER BY rule_id")
+            .fetch_all(&mut **tx)
+            .await
+            .context("rule catalogue unavailable: read fdd_rule_registry")?;
+    let mut existing = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let rule_id: String = row
+            .try_get("rule_id")
+            .context("rule catalogue unavailable: rule_id")?;
+        let enabled: bool = row
+            .try_get("enabled")
+            .context("rule catalogue unavailable: enabled")?;
+        let detail: Option<Value> = row
+            .try_get("detail")
+            .context("rule catalogue unavailable: detail")?;
+        let parsed =
+            open_fdd_edge_prototype::fdd::registry_api::catalogue_detail_from_json(detail.as_ref());
+        existing.push(
+            open_fdd_edge_prototype::fdd::registry_api::CatalogueExisting {
+                rule_id,
+                enabled,
+                catalogue_source: parsed.catalogue_source,
+                pack_version: parsed.pack_version,
+                removed: parsed.removed,
+                overrides: parsed.overrides,
+            },
+        );
+    }
+    Ok(existing)
+}
+
+fn load_catalogue_pack() -> Result<fdd_rules::RuleRegistry> {
+    let root = crate::timescale_product::sql_root_for_registry();
+    let reg = fdd_rules::load_registry(&root)
+        .with_context(|| format!("rule catalogue unavailable: {}", root.display()))?;
+    if reg.rules.is_empty() {
+        anyhow::bail!(
+            "rule catalogue unavailable: pack at {} has no rules",
+            root.display()
+        );
+    }
+    Ok(reg)
+}
+
+fn expected_catalogue_version(reg: &fdd_rules::RuleRegistry) -> String {
+    open_fdd_edge_prototype::fdd::registry_api::plan_catalogue_reconcile(&reg.rules, &[])
+        .catalogue_version
+}
+
+async fn stored_catalogue_version(pool: &sqlx::PgPool) -> Result<Option<String>> {
+    let ready: bool = sqlx::query_scalar(
+        "SELECT to_regclass('fdd_rule_registry') IS NOT NULL AND to_regclass('seed_meta') IS NOT NULL",
+    )
+    .fetch_one(pool)
+    .await
+    .context("rule catalogue unavailable: version")?;
+    if !ready {
+        return Ok(None);
+    }
+    sqlx::query_scalar("SELECT value FROM seed_meta WHERE key = $1")
+        .bind(CATALOGUE_VERSION_KEY)
+        .fetch_optional(pool)
+        .await
+        .context("rule catalogue unavailable: version")
+}
+
+/// Startup entry. One idempotent reconcile after schema apply, before the
+/// listener accepts rules requests. No database URL skips it. A database that
+/// cannot be reached does not block boot; the rules API still fails visibly.
+pub(crate) async fn reconcile_catalogue_on_startup() -> Result<()> {
+    if !crate::timescale_historian::historian_is_timescale() {
+        return Ok(());
+    }
+    let url = std::env::var("OPENFDD_DATABASE_URL").unwrap_or_default();
+    if url.trim().is_empty() {
+        return Ok(());
+    }
+    let tsdb = match fdd_tsdb::Tsdb::connect_from_env().await {
+        Ok(tsdb) => tsdb,
+        Err(err) => {
+            tracing::warn!(
+                %err,
+                "rule catalogue startup left unchanged; database unreachable"
+            );
+            return Ok(());
+        }
+    };
+    let version = reconcile_catalogue_on_startup_with(&tsdb).await?;
+    tracing::info!(catalogue_version = %version, "rule catalogue reconciled");
+    Ok(())
+}
+
+/// Same reconcile `reconcile_catalogue_on_startup` runs, against a caller pool.
+pub(crate) async fn reconcile_catalogue_on_startup_with(tsdb: &Tsdb) -> Result<String> {
+    reconcile_rule_catalogue(tsdb).await
+}
+
+/// Insert or refresh the shipped rule pack. Operator `enabled` and `overrides`
+/// stay. Pack rules that disappeared are marked removed and kept.
+/// Writers take one transaction advisory lock so concurrent startups cannot
+/// insert the same rule twice or pile DDL locks.
+pub(crate) async fn reconcile_rule_catalogue(tsdb: &Tsdb) -> Result<String> {
+    let reg = load_catalogue_pack()?;
+    let mut tx = tsdb
+        .pool()
+        .begin()
+        .await
+        .context("rule catalogue unavailable: begin")?;
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(CATALOGUE_ADVISORY_LOCK_KEY)
+        .execute(&mut *tx)
+        .await
+        .context("rule catalogue unavailable: lock")?;
+    ensure_catalogue_schema(&mut tx).await?;
+    let existing = read_catalogue_rows(&mut tx).await?;
+    let plan =
+        open_fdd_edge_prototype::fdd::registry_api::plan_catalogue_reconcile(&reg.rules, &existing);
+    for upsert in &plan.upserts {
+        sqlx::query(
+            r#"
+            INSERT INTO fdd_rule_registry (
+              rule_id, sql_file, title, equipment_kinds, required_roles, optional_roles,
+              parity_status, enabled, detail
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)
+            ON CONFLICT (rule_id) DO UPDATE SET
+              sql_file = EXCLUDED.sql_file,
+              title = EXCLUDED.title,
+              equipment_kinds = EXCLUDED.equipment_kinds,
+              required_roles = EXCLUDED.required_roles,
+              optional_roles = EXCLUDED.optional_roles,
+              parity_status = EXCLUDED.parity_status,
+              detail = (
+                COALESCE(fdd_rule_registry.detail, '{}'::jsonb) || EXCLUDED.detail
+              ) || jsonb_build_object(
+                'overrides',
+                CASE
+                  WHEN jsonb_typeof(fdd_rule_registry.detail->'overrides') = 'object'
+                  THEN fdd_rule_registry.detail->'overrides'
+                  ELSE '{}'::jsonb
+                END
+              )
+            WHERE fdd_rule_registry.sql_file IS DISTINCT FROM EXCLUDED.sql_file
+               OR fdd_rule_registry.title IS DISTINCT FROM EXCLUDED.title
+               OR fdd_rule_registry.equipment_kinds IS DISTINCT FROM EXCLUDED.equipment_kinds
+               OR fdd_rule_registry.required_roles IS DISTINCT FROM EXCLUDED.required_roles
+               OR fdd_rule_registry.optional_roles IS DISTINCT FROM EXCLUDED.optional_roles
+               OR fdd_rule_registry.parity_status IS DISTINCT FROM EXCLUDED.parity_status
+               OR COALESCE(fdd_rule_registry.detail->>'pack_version', '')
+                    IS DISTINCT FROM COALESCE(EXCLUDED.detail->>'pack_version', '')
+               OR COALESCE(fdd_rule_registry.detail->>'catalogue_source', '')
+                    IS DISTINCT FROM 'pack'
+               OR COALESCE(fdd_rule_registry.detail->>'removed', 'false')
+                    IS DISTINCT FROM 'false'
+            "#,
+        )
+        .bind(&upsert.rule_id)
+        .bind(&upsert.sql_file)
+        .bind(&upsert.title)
+        .bind(&upsert.equipment_kinds)
+        .bind(&upsert.required_roles)
+        .bind(&upsert.optional_roles)
+        .bind(&upsert.parity_status)
+        .bind(pack_detail(&upsert.pack_version))
+        .execute(&mut *tx)
+        .await
+        .with_context(|| format!("rule catalogue upsert {}", upsert.rule_id))?;
+    }
+    if !plan.removed_rule_ids.is_empty() {
+        sqlx::query(
+            r#"
+            UPDATE fdd_rule_registry
+            SET detail = jsonb_set(
+              COALESCE(detail, '{}'::jsonb),
+              '{removed}',
+              'true'::jsonb,
+              true
+            )
+            WHERE rule_id = ANY($1::text[])
+              AND COALESCE(detail->>'removed', 'false') IS DISTINCT FROM 'true'
+            "#,
+        )
+        .bind(&plan.removed_rule_ids)
+        .execute(&mut *tx)
+        .await
+        .context("rule catalogue removed rules")?;
+    }
+    sqlx::query(
+        r#"
+        INSERT INTO seed_meta(key, value) VALUES ($1, $2)
+        ON CONFLICT (key) DO UPDATE
+        SET value = EXCLUDED.value, updated_at = now()
+        WHERE seed_meta.value IS DISTINCT FROM EXCLUDED.value
+        "#,
+    )
+    .bind(CATALOGUE_VERSION_KEY)
+    .bind(&plan.catalogue_version)
+    .execute(&mut *tx)
+    .await
+    .context("rule catalogue version")?;
+    tx.commit()
+        .await
+        .context("rule catalogue unavailable: commit")?;
+    Ok(plan.catalogue_version)
+}
+
 pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
+    let reg = load_catalogue_pack()?;
+    let expected = expected_catalogue_version(&reg);
+    // A current version is a read. Reconcile, including its DDL, runs only when
+    // startup has not caught up yet so concurrent lists do not lock the catalogue.
+    let catalogue_version = match stored_catalogue_version(tsdb.pool()).await? {
+        Some(stored) if stored == expected => stored,
+        _ => reconcile_rule_catalogue(tsdb).await?,
+    };
     let rows = sqlx::query(
         r#"
-        SELECT rule_id, sql_file, title, enabled,
+        SELECT rule_id, sql_file, title, enabled, detail,
                equipment_kinds, required_roles, optional_roles
         FROM fdd_rule_registry
         ORDER BY rule_id
@@ -1161,30 +1435,28 @@ pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
     )
     .fetch_all(tsdb.pool())
     .await
-    .context("fdd_registry")?;
+    .context("rule catalogue unavailable: list")?;
 
-    // Canonical pack (`sql/fdd/registry.yaml`) supplies description, kinds, and
-    // roles. Warehouse rows often store only id/sql/title; null columns stay
-    // unknown instead of meaning "applies to every equipment type".
-    let specs: std::collections::HashMap<String, fdd_rules::RuleSpec> = {
-        let root = crate::timescale_product::sql_root_for_registry();
-        match fdd_rules::load_registry(&root) {
-            Ok(reg) => reg
-                .rules
-                .into_iter()
-                .map(|rule| (rule.rule_id.clone(), rule))
-                .collect(),
-            Err(e) => {
-                tracing::warn!(error = %e, "fdd_registry: canonical pack unavailable");
-                std::collections::HashMap::new()
-            }
-        }
-    };
+    let specs: std::collections::HashMap<String, fdd_rules::RuleSpec> = reg
+        .rules
+        .into_iter()
+        .map(|rule| (rule.rule_id.clone(), rule))
+        .collect();
 
     let mut out = Vec::new();
     let mut alias_count = 0usize;
     for r in rows {
-        let rule_id = r.try_get::<String, _>("rule_id").unwrap_or_default();
+        let rule_id: String = r
+            .try_get("rule_id")
+            .context("rule catalogue unavailable: rule_id")?;
+        let detail: Option<Value> = r
+            .try_get("detail")
+            .context("rule catalogue unavailable: detail")?;
+        let parsed =
+            open_fdd_edge_prototype::fdd::registry_api::catalogue_detail_from_json(detail.as_ref());
+        if parsed.removed {
+            continue;
+        }
         let spec = specs.get(&rule_id);
         let aliases = spec.map(|rule| rule.aliases.clone()).unwrap_or_default();
         alias_count += aliases.len();
@@ -1196,23 +1468,36 @@ pub async fn fdd_registry(tsdb: &Tsdb) -> Result<Value> {
                 text_array(&r, "optional_roles"),
             ),
         };
+        let sql_file: String = r
+            .try_get("sql_file")
+            .context("rule catalogue unavailable: sql_file")?;
+        let title: Option<String> = r
+            .try_get("title")
+            .context("rule catalogue unavailable: title")?;
+        let enabled: bool = r
+            .try_get("enabled")
+            .context("rule catalogue unavailable: enabled")?;
         out.push(json!({
             "rule_id": rule_id,
             "aliases": aliases,
-            "sql_file": r.try_get::<String, _>("sql_file").unwrap_or_default(),
-            "title": r.try_get::<Option<String>, _>("title").ok().flatten(),
+            "sql_file": sql_file,
+            "title": title,
             "description": fields.description,
             "equipment_kinds": fields.equipment_kinds,
             "required_roles": fields.required_roles,
             "optional_roles": fields.optional_roles,
             "applicability": fields.applicability,
-            "enabled": r.try_get::<bool, _>("enabled").unwrap_or(true),
+            "enabled": enabled,
+            "pack_version": parsed.pack_version,
+            "overrides": parsed.overrides,
+            "removed": false,
             "engine": "postgres-sql",
         }));
     }
     Ok(json!({
         "ok": true,
         "engine": "postgres-sql",
+        "catalogue_version": catalogue_version,
         "count": out.len(),
         "alias_count": alias_count,
         "rules": out,
