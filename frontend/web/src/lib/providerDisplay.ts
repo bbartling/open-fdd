@@ -7,6 +7,13 @@ import type {
 
 export type StatusTone = "good" | "warn" | "bad" | "neutral";
 
+/**
+ * Coverage token shared by the jobs list and the gaps list.
+ * The two lists still have separate contracts: a jobs `complete` is a receipt
+ * summary, and a gaps `not_assessed` (including an empty gap list) is not that receipt.
+ */
+export type IngestCoverage = "complete" | "incomplete" | "not_assessed";
+
 export interface ProviderStatusView {
   tone: StatusTone;
   label: string;
@@ -48,6 +55,8 @@ export interface ProviderWindowRow {
   jobId: string;
   recoverable: boolean | null;
   reason: string;
+  /** Jobs-list coverage. Complete is a receipt summary, not a gaps result. */
+  coverage: IngestCoverage;
 }
 
 export interface JobIdentityBinding {
@@ -74,6 +83,8 @@ export type WindowLedgerView =
   | {
       status: "ready";
       coverageLabel: string;
+      jobsCoverage: IngestCoverage;
+      gapsCoverage: IngestCoverage;
       jobs: ProviderWindowRow[];
       gaps: ProviderWindowRow[];
       jobsNote: string;
@@ -216,6 +227,30 @@ export function credentialRefLabel(configured: boolean | undefined): string {
   return "not reported";
 }
 
+const STATUS_WITHOUT_ERROR_TEXT = new Set(["ok", "not_configured", "not_implemented"]);
+
+/** Healthy poll copy stays out of the Last error column. */
+export function lastErrorText(input: {
+  status?: string | null;
+  message?: string | null;
+  lastErrorAt?: string | null;
+}): string {
+  const status = (input.status ?? "").trim().toLowerCase();
+  const message = (input.message ?? "").trim();
+  if (message && !STATUS_WITHOUT_ERROR_TEXT.has(status)) return message;
+  const at = (input.lastErrorAt ?? "").trim();
+  return at || "—";
+}
+
+/** `last_ingested_points` is a sample count. It is not a clock time. */
+export function lastIngestedPointsText(count: number | null | undefined): string {
+  if (typeof count !== "number" || !Number.isFinite(count)) return "—";
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+    useGrouping: true,
+  }).format(Math.trunc(count));
+}
+
 function rowKey(buildingId: string, provider: string): string {
   return `${buildingId}\u0000${provider}`;
 }
@@ -281,7 +316,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-const COVERAGE_NOT_ASSESSED = "not_assessed";
 const GAPS_GUARANTEE = "bounded_windows_only";
 const UPDATE_LOG_NOT_CLAIMED = "not_claimed";
 
@@ -291,8 +325,40 @@ function claimsGapFree(record: Record<string, unknown>): boolean {
   return guarantee?.gapless === true;
 }
 
-function coverageIsUnassessed(value: unknown): boolean {
-  return text(value) === COVERAGE_NOT_ASSESSED;
+/** Jobs and gaps both emit these three tokens. Other words belong to the other list. */
+function parseListedCoverage(value: unknown, allowAbsent: boolean): IngestCoverage | null {
+  if (value == null) return allowAbsent ? "not_assessed" : null;
+  if (typeof value !== "string") return null;
+  const raw = value.trim();
+  if (!raw) return allowAbsent ? "not_assessed" : null;
+  if (raw === "complete" || raw === "incomplete" || raw === "not_assessed") return raw;
+  return null;
+}
+
+export function jobsCoverageLabel(coverage: IngestCoverage): string {
+  if (coverage === "complete") {
+    return "Bounded-window coverage. Job coverage is complete. A complete receipt is not proof that history has no gaps. This is not a gap-free ingest claim.";
+  }
+  if (coverage === "incomplete") {
+    return "Bounded-window coverage. Job coverage is incomplete. Incomplete belongs to the jobs list, not the gaps list. This is not a gap-free ingest claim.";
+  }
+  return BOUNDED_WINDOW_COVERAGE_LABEL;
+}
+
+export function jobCoverageWord(coverage: IngestCoverage): string {
+  if (coverage === "complete") return "Complete";
+  if (coverage === "incomplete") return "Incomplete";
+  return "Not assessed";
+}
+
+function gapsNoteText(gaps: ProviderWindowRow[], coverage: IngestCoverage): string {
+  const base =
+    gaps.length === 0
+      ? "No gaps in the returned windows. An empty gap list is not gap-free ingest."
+      : "Partial, failed, and retry windows in the bounded list. These rows are not a device-hour completeness proof.";
+  if (coverage === "not_assessed") return base;
+  if (coverage === "incomplete") return `${base} Gaps coverage is incomplete.`;
+  return `${base} Gaps coverage complete applies only to returned gap rows. It is not proof that history has no gaps.`;
 }
 
 function windowFromJob(raw: unknown, recoverable: boolean | null): ProviderWindowRow | null {
@@ -301,8 +367,8 @@ function windowFromJob(raw: unknown, recoverable: boolean | null): ProviderWindo
   const jobId = text(row.job_id);
   if (!jobId) return null;
   const counts = asRecord(row.counts);
-  const coverage = text(row.coverage);
-  if (coverage && coverage !== COVERAGE_NOT_ASSESSED) return null;
+  const coverage = parseListedCoverage(row.coverage, true);
+  if (!coverage) return null;
   return {
     id: jobId,
     deviceId: text(row.device_id),
@@ -321,21 +387,29 @@ function windowFromJob(raw: unknown, recoverable: boolean | null): ProviderWindo
     jobId,
     recoverable,
     reason: text(row.safe_error_code),
+    coverage,
   };
 }
 
-function jobsFromEnvelope(body: unknown): ProviderWindowRow[] | null {
+function jobsFromEnvelope(
+  body: unknown,
+): { coverage: IngestCoverage; jobs: ProviderWindowRow[] } | null {
   const record = asRecord(body);
-  if (!record || !coverageIsUnassessed(record.coverage) || claimsGapFree(record)) return null;
-  if (!Array.isArray(record.jobs)) return null;
+  if (!record || claimsGapFree(record)) return null;
+  const coverage = parseListedCoverage(record.coverage, false);
+  if (!coverage || !Array.isArray(record.jobs)) return null;
   const rows = record.jobs.slice(0, 500).map((row) => windowFromJob(row, null));
   if (rows.some((row) => row == null)) return null;
-  return rows.filter((row): row is ProviderWindowRow => row != null);
+  return { coverage, jobs: rows.filter((row): row is ProviderWindowRow => row != null) };
 }
 
-function gapsFromEnvelope(body: unknown): ProviderWindowRow[] | null {
+function gapsFromEnvelope(
+  body: unknown,
+): { coverage: IngestCoverage; gaps: ProviderWindowRow[] } | null {
   const record = asRecord(body);
-  if (!record || !coverageIsUnassessed(record.coverage) || claimsGapFree(record)) return null;
+  if (!record || claimsGapFree(record)) return null;
+  const coverage = parseListedCoverage(record.coverage, false);
+  if (!coverage) return null;
   if (text(record.guarantee) !== GAPS_GUARANTEE) return null;
   if (text(record.update_log) !== UPDATE_LOG_NOT_CLAIMED) return null;
   if (!Array.isArray(record.gaps)) return null;
@@ -347,34 +421,34 @@ function gapsFromEnvelope(body: unknown): ProviderWindowRow[] | null {
     return windowFromJob(wrapper.job, recoverable);
   });
   if (rows.some((row) => row == null)) return null;
-  return rows.filter((row): row is ProviderWindowRow => row != null);
+  return { coverage, gaps: rows.filter((row): row is ProviderWindowRow => row != null) };
 }
 
 export function interpretIngestLedger(jobsBody: unknown, gapsBody: unknown): WindowLedgerView {
-  const jobs = jobsFromEnvelope(jobsBody);
-  const gaps = gapsFromEnvelope(gapsBody);
-  if (!jobs || !gaps) {
+  const jobsParsed = jobsFromEnvelope(jobsBody);
+  const gapsParsed = gapsFromEnvelope(gapsBody);
+  if (!jobsParsed || !gapsParsed) {
     return {
       status: "unavailable",
       reason:
         "This response is not the ingest jobs and gaps contract. Coverage was not assessed from it, and it is not shown as gap-free.",
     };
   }
+  const { jobs } = jobsParsed;
+  const { gaps } = gapsParsed;
   const jobsNote =
     jobs.length === 0
       ? "No durable job windows were returned. That is not a green coverage result."
       : "Durable job windows and retries. These rows are not a device-hour completeness proof.";
-  const gapsNote =
-    gaps.length === 0
-      ? "No gaps in the returned windows. An empty gap list is not gap-free ingest."
-      : "Partial, failed, and retry windows in the bounded list. These rows are not a device-hour completeness proof.";
   return {
     status: "ready",
-    coverageLabel: BOUNDED_WINDOW_COVERAGE_LABEL,
+    coverageLabel: jobsCoverageLabel(jobsParsed.coverage),
+    jobsCoverage: jobsParsed.coverage,
+    gapsCoverage: gapsParsed.coverage,
     jobs,
     gaps,
     jobsNote,
-    gapsNote,
+    gapsNote: gapsNoteText(gaps, gapsParsed.coverage),
   };
 }
 
