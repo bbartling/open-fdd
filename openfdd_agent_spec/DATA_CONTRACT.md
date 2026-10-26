@@ -36,15 +36,12 @@ rule.
 | Python | Python / pandas is tooling only: PyPI `open-fdd`, qualification and tests. Never in the central or web request path. |
 | Agent law | Agents follow the canonical spec in `openfdd_agent_spec/`. Skills are authored only in `openfdd_agent_spec/skills/` and synced with `./scripts/openfdd_install_agent_skills.sh --sync`. |
 
-### Known gaps (not permitted; removal in Wave P2)
+### Enforcement
 
-Current code does not yet meet the mandate. These are defects being removed in
-Wave P2, not exceptions. Do not extend them, rely on them, or describe them as
-allowed behavior. A change that touches them removes or shrinks them.
-
-- `edge/` data-management status still reports `arrow_ipc_bytes` for a
-  `telemetry_pivot.arrow` file that nothing writes, and the edge dashboard
-  still labels its rule engine "Arrow + DataFusion".
+CI runs `scripts/ci/forbid_columnar_product.py`. It fails when the workspace
+dependency graph contains a Parquet, Arrow, DataFusion or Feather crate, when
+product Rust names a columnar file or crate path, or when product Rust writes
+the `sample` table outside `crates/fdd_tsdb/src/writer.rs`.
 
 ---
 
