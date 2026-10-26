@@ -590,6 +590,8 @@ pub enum ReasonCode {
     AdmissionShed,
     InvalidRequest,
     NotFound,
+    /// Compare-and-swap precondition failed (`409`).
+    RevisionConflict,
     StorageError,
     HistorianError,
     InternalError,
@@ -673,6 +675,8 @@ pub enum AuditAction {
     ActionsClear,
     #[serde(rename = "fdd.run")]
     FddRun,
+    #[serde(rename = "csv.export")]
+    CsvExport,
 }
 
 impl AuditAction {
@@ -700,6 +704,7 @@ impl AuditAction {
             Self::ActionDelete => "actions.delete",
             Self::ActionsClear => "actions.clear",
             Self::FddRun => "fdd.run",
+            Self::CsvExport => "csv.export",
         }
     }
 }
@@ -787,6 +792,14 @@ pub enum AuditChange {
     AgentToken {
         ttl_secs: i64,
         tenant_ids: BoundedList,
+    },
+    /// Model or semantic-meta write. `tool` is a fixed route name.
+    ModelWrite {
+        tool: String,
+    },
+    /// Site history CSV export. `bytes` is the zip size.
+    CsvExport {
+        bytes: u64,
     },
 }
 
@@ -917,7 +930,12 @@ impl AuditEvent {
         self.identity = identity;
         self.issued_session = issued;
         self.untrusted_labels = untrusted;
-        self.qa_run = server_qa_run();
+        // A manifest tags an authenticated caller. Anonymous traffic, including
+        // a client `x-openfdd-qa-run` label, does not receive `qa_run`.
+        self.qa_run = match self.identity.class {
+            IdentityClass::Anonymous => None,
+            _ => server_qa_run(),
+        };
         self.correlation = CorrelationRecord {
             server_request_id: server_id,
             job_ids: BoundedList {
@@ -992,6 +1010,22 @@ impl AuditEvent {
     pub fn actor(&mut self, sub: &str) -> &mut Self {
         self.actor = self.bound(sub);
         self.auth_kind = AuthKind::for_subject(sub);
+        self
+    }
+
+    /// Copy the verified bearer subject when the handler does not have `AuthUser`.
+    ///
+    /// A missing request scope or an anonymous caller leaves `actor` unchanged.
+    pub fn note_request_actor(&mut self) -> &mut Self {
+        let Some(ctx) = current_context() else {
+            return self;
+        };
+        let subject = lock_mutex(&ctx.shared.bearer)
+            .as_ref()
+            .map(|actor| actor.subject.clone());
+        if let Some(subject) = subject.as_deref() {
+            self.actor(subject);
+        }
         self
     }
 
@@ -1484,6 +1518,61 @@ mod tests {
             value["untrusted_labels"]["claimed_qa_run"]
         );
         assert_eq!(value["untrusted_labels"]["claimed_qa_run"], "spoofed-run");
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "OPENFDD_QA_RUN_MANIFEST is process-global for the anonymous label fixture"
+    )]
+    async fn anonymous_caller_keeps_a_client_qa_label_and_stays_denied() {
+        let _env = crate::test_env_lock::lock_env();
+        let dir = tempfile::tempdir().expect("qa manifest dir");
+        let path = dir.path().join("qa-run.json");
+        std::fs::write(
+            &path,
+            serde_json::json!({
+                "run_id": "server-run-anon",
+                "tenants": ["tenant-a"],
+                "sites": ["site-a"],
+                "window_start": "2020-01-01T00:00:00Z",
+                "window_end": "2099-01-01T00:00:00Z"
+            })
+            .to_string(),
+        )
+        .expect("write manifest");
+        let prev = std::env::var(QA_MANIFEST_ENV).ok();
+        std::env::set_var(QA_MANIFEST_ENV, path.to_str().expect("path"));
+        *qa_cache() = None;
+        let ctx = RequestContext::new(None, "PUT", "/api/model/semantic-meta")
+            .with_untrusted_headers(&HeaderMap::from_iter([(
+                axum::http::HeaderName::from_static("x-openfdd-qa-run"),
+                axum::http::HeaderValue::from_static("client-approved"),
+            )]));
+        let value = with_request_context(ctx, async {
+            let mut ev = AuditEvent::new(AuditAction::ModelWrite);
+            ev.deny(ReasonCode::SiteScope)
+                .status(StatusCode::FORBIDDEN)
+                .to_value()
+        })
+        .await;
+        match prev {
+            Some(value) => std::env::set_var(QA_MANIFEST_ENV, value),
+            None => std::env::remove_var(QA_MANIFEST_ENV),
+        }
+        *qa_cache() = None;
+        assert_eq!(value["identity"]["class"], "anonymous");
+        assert!(value["qa_run"].is_null());
+        assert_eq!(value["decision"], "deny");
+        assert_eq!(value["reason"], "site_scope");
+        assert_eq!(
+            value["untrusted_labels"]["claimed_qa_run"],
+            "client-approved"
+        );
+        assert_ne!(
+            value["untrusted_labels"]["claimed_qa_run"],
+            "server-run-anon"
+        );
     }
 
     #[test]

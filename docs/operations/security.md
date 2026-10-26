@@ -139,17 +139,17 @@ operations `event` is the action and `detail` is a fixed-field record:
 | Field | Meaning |
 |-------|---------|
 | `schema` | `openfdd.audit.v1` |
-| `request_id` | Server-generated UUID, also returned as `x-openfdd-server-request-id` |
+| `request_id` | Server-generated UUID, also returned as `x-openfdd-server-request-id` and stored on Actions rows started by that request |
 | `caller_request_id` | Caller `x-request-id`, bounded (64 chars), never the primary key |
 | `actor`, `auth_kind`, `role` | Subject, credential channel (`human_login` / `agent_token` / `anonymous`), and role |
 | `identity` | `class` is `unique_human`, `shared_credential`, `agent_session`, or `anonymous`. `actor_id` is the user id or subject for a unique human, and null for a shared env credential (`admin`, `viewer`, or `agent` without a server session). `session_id` is a server UUID (`sid` on the token), not a hash of the bearer |
 | `issued_session` | Present when this request minted a different session than the verified caller (an agent token). `delegated_by` is the parent session id |
-| `qa_run` | Set only from `OPENFDD_QA_RUN_MANIFEST`: run id, tenants, sites, tool version, candidate, and a UTC window that contains the current time. `server_approved` is that file, not a header |
+| `qa_run` | Set only for an authenticated caller, and only from `OPENFDD_QA_RUN_MANIFEST`: run id, tenants, sites, tool version, candidate, and a UTC window that contains the current time. `server_approved` is that file. A client `qa_run` label is stored under `untrusted_labels` and grants no access |
 | `untrusted_labels` | `user-agent`, `x-forwarded-for`, `x-openfdd-qa-run`, and `x-openfdd-actor`. Labels only |
 | `correlation` | `server_request_id` plus job and receipt ids attached on this request |
 | `tenant_id`, `site_id` | Resolved tenant and site (`building_id`) |
 | `action`, `target_type`, `target_id` | See actions below; target is a user, tenant, site, action, or route |
-| `decision`, `reason` | `allow` / `deny` and a fixed reason code (`missing_credentials`, `expired_token`, `role_required`, `site_scope`, `size_cap`, …) |
+| `decision`, `reason` | `allow` / `deny` and a fixed reason code (`missing_credentials`, `expired_token`, `role_required`, `site_scope`, `revision_conflict`, `size_cap`, …) |
 | `outcome`, `http_status` | `ok` / `failed` / `partial` / `replayed`, recorded after the result is known |
 | `change` | Typed summary (counts, ids, flags). Never request bodies, headers, or credentials |
 | `build`, `method`, `path`, `ts`, `truncated` | Build version, request line (no query string), time, and whether size budgets dropped data |
@@ -158,7 +158,8 @@ Actions: `auth.login`, `auth.bearer`, `auth.agent_token`, `tenant.select`,
 `site.access`, `admin.read`, `admin.maintenance`, `admin.historian_limits`,
 `user.upsert`, `user.disable`, `user.delete`, `tenant.upsert`, `tenant.delete`,
 `package.import`, `package.append`, `package.roles`, `session_config.put`,
-`model.write`, `dataset.delete`, `actions.delete`, `actions.clear`.
+`model.write`, `dataset.delete`, `actions.delete`, `actions.clear`, `fdd.run`,
+`csv.export`.
 
 Every string is length-bounded with a `…[truncated]` marker, control and
 bidi characters are escaped, bearer/JWT/URL-query/`key=secret` fragments are
