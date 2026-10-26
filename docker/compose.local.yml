@@ -1,0 +1,47 @@
+# Local single-host stack from the repo checkout (e.g. the OptiPlex).
+# Overlay on the 4.0 portal recipe; all values come from the gitignored repo-root .env:
+#
+#   docker compose --env-file .env -f docker/compose.portal.yml \
+#     -f docker/compose.timescale.yml -f docker/compose.local.yml up -d --no-build
+#
+# - GHCR images pinned by OPENFDD_IMAGE_TAG (sha-<7>). Never built locally.
+# - Workspace and Timescale data live in project-scoped named volumes
+#   (<COMPOSE_PROJECT_NAME>_openfdd-workspace / _openfdd-timescale).
+# - SQL schema/rule packs come from the image (/app/sql); no per-file binds.
+#   Central applies the forward-only schema itself on boot.
+# - NF provider creds are forwarded by name; provider_sites refers to them as env:NF_*.
+# Requires Docker Compose >= 2.24.4 for !reset / !override.
+
+services:
+  central:
+    image: ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG=sha-<7>}
+    build: !reset null
+    pull_policy: missing
+    environment:
+      OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
+      OPENFDD_DATABASE_URL: ${OPENFDD_DATABASE_URL:?set OPENFDD_DATABASE_URL in .env}
+      OPENFDD_SQL_ROOT: /app/sql/fdd
+      OPENFDD_PROVIDER_SITES: ${OPENFDD_PROVIDER_SITES:-}
+      OPENFDD_PROVIDER_POLL: ${OPENFDD_PROVIDER_POLL:-}
+      NFURL: ${NFURL:-}
+      NF_CLIENT_ID: ${NF_CLIENT_ID:-}
+      NF_CLIENT_SECRET: ${NF_CLIENT_SECRET:-}
+    volumes: !override
+      - openfdd-workspace:/workspace
+      - ../scripts/nf:/config/nf:ro
+
+  timescale:
+    environment:
+      POSTGRES_PASSWORD: ${OPENFDD_TIMESCALE_PASSWORD:?set OPENFDD_TIMESCALE_PASSWORD in .env}
+    volumes: !override
+      - openfdd-timescale:/var/lib/postgresql/data
+
+  web:
+    image: ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG=sha-<7>}
+    build: !reset null
+    pull_policy: missing
+    environment:
+      OPENFDD_CENTRAL_UPSTREAM: central:8080
+
+volumes:
+  openfdd-workspace:

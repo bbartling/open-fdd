@@ -26,6 +26,7 @@ FORBIDDEN_ENV = (
 
 PRODUCT_COMPOSE_REL = (
     "docker/compose.portal.yml",
+    "docker/compose.local.yml",
     "docker/compose.react.yml",
     "docker/compose.central.yml",
     "docker/compose.csv.yml",
