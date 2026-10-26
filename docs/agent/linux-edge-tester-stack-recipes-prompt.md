@@ -6,6 +6,8 @@ nav_order: 12
 
 # Linux edge tester — stack recipes GHCR soak
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Living daily prompt.** Rewrite this file in place each day (or whenever nightlies
 change). Do **not** create dated copies (`*-2026-07-17.md`, `bench-NNN-*`, etc.).
 One path forever: `docs/agent/linux-edge-tester-stack-recipes-prompt.md`.

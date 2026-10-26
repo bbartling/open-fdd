@@ -6,6 +6,8 @@ nav_order: 1
 
 # Vibe19 × Vibe20 × Open-FDD audit
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Audit date:** 2026-07-25 · **Tip under audit:** `8850b0bf` (`sha-8850b0b`, merges #571 audit + #572 Jobs)  
 **Rule:** trust tested current code over historical `docs/migration/vibe19/*` stage notes.
 

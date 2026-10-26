@@ -1,3 +1,5 @@
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 > **SUPERSEDED for Soft-OPEN scheduling** by [`wave_u_remainder_patch_cycles.plan.md`](wave_u_remainder_patch_cycles.plan.md) (V1–V8 remainder cycles after hub FQ). Keep this file for historical Soft-OPEN TODO labels only; do not treat as active master.
 
 ---

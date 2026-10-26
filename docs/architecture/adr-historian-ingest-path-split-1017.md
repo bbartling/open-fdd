@@ -6,6 +6,8 @@ nav_order: 17
 
 # ADR: Historian ingest path split (#1017 L1)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status:** Accepted for L1 baseline (docs + metrics contract). L2/L3 implement crash durability and scheduled `hisRead`.  
 **Issue:** [#1017](https://github.com/bbartling/open-fdd/issues/1017)  
 **Related:** [#781](https://github.com/bbartling/open-fdd/issues/781) protocol split · [#997](https://github.com/bbartling/open-fdd/issues/997) Haystack RDF · [ADR protocol connector process split](ADR_protocol_connector_process_split.md)

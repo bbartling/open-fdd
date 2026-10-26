@@ -1,5 +1,7 @@
 # Python reduction plan
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Inventory of Python modules in vibe19 with migration target. **Do not delete** until SQL/Rust parity is documented and tests pass.
 
 **Counts:** 50 cookbook rules in pandas · 8 SQL rules ported · 42 rules remain pandas-only (stage 1)

@@ -1,5 +1,7 @@
 # Open-FDD React/Rust Modernization Program
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Status: proposed execution plan  
 Repository inspected: `bbartling/open-fdd` at `d56ec14b0f3f92846d664034f50d12803a45ce6e`  
 Planning date: 2026-07-30

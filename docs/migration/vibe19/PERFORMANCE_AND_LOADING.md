@@ -1,5 +1,7 @@
 # Performance, loading paths, and pitfalls (App 19)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Guide for AI agents and vibe-coders building on this stack. **Read before adding data loaders, new pages, or alternate front ends.**
 
 **Related:** [`DATA_CONTRACT.md`](../DATA_CONTRACT.md) · [`../AGENTS.md`](../AGENTS.md) (AI quick rules)

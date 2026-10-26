@@ -1,5 +1,7 @@
 # Retired for Wave-NF 4.0
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 This file is a **legacy OT / ACME fieldbus tip**. Normal 4.0 does not publish or
 start `openfdd-fieldbus`, and MCP does not advertise BACnet, Haystack wire, or
 driver-discovery tools. Portal ingest is central + web + Timescale. Provider

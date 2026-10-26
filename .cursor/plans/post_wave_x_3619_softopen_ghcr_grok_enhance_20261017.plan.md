@@ -58,6 +58,8 @@ isProject: true
 
 # Wave-X 3.6.18 Soft-OPEN — GHCR roll + enhanced Grok — 2026-10-17 (3619)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Status: SHIPPING** — [#1286](https://github.com/bbartling/open-fdd/pull/1286) **merged**. [#1287](https://github.com/bbartling/open-fdd/pull/1287) **3.6.18 bump + lesson 03 FC1** in flight. Supersedes [3618](post_wave_x_3618_softopen_api_parity_grok_20261017.plan.md).
 
 **Ship path:** [#1286](https://github.com/bbartling/open-fdd/pull/1286) green → **merge all Soft-OPEN branches** (no stale open PRs/branches when done) → bump **3.6.18** → **wait GHCR refresh** → Grok **re-pins Railway + ACME** → Grok **validates missing Timescale data** on the hub → enhanced Soft-OPEN (lessons 01/03/05, softopen suite, **JWT API data + errors**). Soft-OPEN ≠ FQ. **No backups.** **No screenshot / headed-browser Soft-OPEN.** ZAP later.

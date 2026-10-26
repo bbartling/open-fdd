@@ -1,5 +1,7 @@
 # Dashboard UI spec (App 19)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 Analyst-facing **static-first** RCx dashboard branded **Open FDD Vibe Coder**. Same look across buildings; only data, equipment pages, and copy change per fork.
 
 **Template note:** page ids like `ahu_1` / `ahu_2` are the current reference layout — forks should rename/add pages to match discovered `AHU_*` folders. See [`../TEMPLATE.md`](../TEMPLATE.md).

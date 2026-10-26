@@ -1,5 +1,7 @@
 # Cursor prompt — vibe19 / py-bacnet-stacks playground
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Target repo:** `bbartling/py-bacnet-stacks-playground` (vibe19 image / agent_afdd)  
 **Do NOT patch on bensbench / open-fdd.** OpenFDD tip is healthy; this is export-path polish only.
 

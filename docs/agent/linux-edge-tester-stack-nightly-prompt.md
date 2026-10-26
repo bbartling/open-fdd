@@ -1,5 +1,7 @@
 # Linux edge tester — standalone stack nightly (central + fieldbus + UI)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Repo-only.** Paste into Cursor on the OT bench after product ships a new `openfdd-{central,ui,fieldbus,mqtt}:nightly` that includes **#502** P0s (openapi crash, MQTT `value`, `add_routed_device`).
 
 Full charter: [linux-edge-tester-prompt.md](./linux-edge-tester-prompt.md)

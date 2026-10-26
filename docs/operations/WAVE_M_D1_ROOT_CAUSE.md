@@ -1,5 +1,7 @@
 # Wave M D1 - Root-cause report (durable results / release / UX)
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 **Date:** 2026-09-12  
 **Source tip (git):** record at land time (`origin/master` tip; docs tip may advance)  
 **Ops pin (Railway central image):** `ghcr.io/bbartling/openfdd-central:sha-e80237c` - health `3.5.6+e80237c0e758`  

@@ -1,5 +1,7 @@
 # React / TypeScript dashboard cutover plan
 
+> **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+
 > **OBSOLETE (2026-07-25).** Product UI is **React SPA** (`frontend/web` / `openfdd-web`). The React dashboard was retired. Kept as historical cutover notes only — do not implement.
 
 **Former status:** Shipped then superseded by React #559. Registry APIs remain on central; chart parity lives in React Plotly helpers.
