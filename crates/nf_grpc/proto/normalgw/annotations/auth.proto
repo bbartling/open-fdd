@@ -1,0 +1,17 @@
+
+syntax = "proto3";
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/normalframework/nf/src/proto/gen/go/normalgw/annotations;annotations";
+package normalgw.annotations;
+
+
+message AuthOptions {
+	bool readonly = 1;
+	bool no_auth = 2;
+};
+
+extend google.protobuf.MethodOptions {
+       AuthOptions auth = 123197411;
+}

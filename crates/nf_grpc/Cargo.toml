@@ -1,0 +1,28 @@
+[package]
+name = "openfdd_nf_grpc"
+description = "Read-only Normal Framework PointManager gRPC client (pinned contract)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+chrono.workspace = true
+http = "1"
+prost = "0.13"
+prost-types = "0.13"
+tokio = { version = "1", features = ["rt", "time", "macros", "net"] }
+tonic = { version = "0.12.3", features = ["tls", "tls-native-roots", "tls-webpki-roots"] }
+
+[build-dependencies]
+protoc-bin-vendored = "3"
+sha2 = "0.10"
+tonic-build = "0.12.3"
+
+[dev-dependencies]
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "net"] }
+tokio-stream = "0.1"
+
+[lints]
+workspace = true
