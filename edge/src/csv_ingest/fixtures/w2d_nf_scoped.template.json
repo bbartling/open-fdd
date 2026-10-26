@@ -1,0 +1,49 @@
+{
+  "schema": "ofdd_portal_committed_model_v1",
+  "tenant_id": "tenant-w2d",
+  "site_id": "site-w2d",
+  "provider_instance_id": "nf-w2d",
+  "truncated": false,
+  "equipment": [
+    {
+      "equipment_id": "EQ_7",
+      "equip_type": "ahu",
+      "points": [
+        {
+          "point_id": "urn:openfdd:point:site-w2d:EQ_7:sat",
+          "provider_point_id": "src-eq7-sat",
+          "canonical_role": "sat",
+          "selection_status": "approved",
+          "fdd_ready": true
+        },
+        {
+          "point_id": "urn:openfdd:point:site-w2d:EQ_7:fan",
+          "provider_point_id": "src-eq7-fan",
+          "canonical_role": "fan_status",
+          "selection_status": "approved",
+          "fdd_ready": true
+        },
+        {
+          "point_id": "urn:openfdd:point:site-w2d:EQ_7:oat",
+          "provider_point_id": "src-eq7-oat",
+          "canonical_role": "oa_t",
+          "selection_status": "excluded",
+          "fdd_ready": false
+        }
+      ]
+    },
+    {
+      "equipment_id": "EQ_70",
+      "equip_type": "ahu",
+      "points": [
+        {
+          "point_id": "urn:openfdd:point:site-w2d:EQ_70:mat",
+          "provider_point_id": "src-eq70-mat",
+          "canonical_role": "mat",
+          "selection_status": "approved",
+          "fdd_ready": true
+        }
+      ]
+    }
+  ]
+}

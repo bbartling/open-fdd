@@ -1,0 +1,22 @@
+{
+  "building_id": "site-w2d",
+  "tenant_id": "tenant-w2d",
+  "equipment": [
+    {
+      "equipment_id": "EQ_7",
+      "equip_type": "ahu",
+      "roles": {
+        "series-sat": "sat",
+        "series-fan": "fan_status",
+        "series-duct": "duct_static"
+      }
+    },
+    {
+      "equipment_id": "EQ_70",
+      "equip_type": "ahu",
+      "roles": {
+        "series-mat": "mat"
+      }
+    }
+  ]
+}
