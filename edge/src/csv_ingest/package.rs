@@ -2292,6 +2292,13 @@ fn mapping_from_timescale_rows(
                 .iter()
                 .any(|equip| equip.equipment_id == row.equipment_id)
         });
+    } else {
+        // A missing stamp is not package inventory. Sample mapping owns it.
+        selected.retain(|row| {
+            row.equip_type
+                .as_deref()
+                .is_some_and(|stamp| !stamp.trim().is_empty())
+        });
     }
     if selected.is_empty() {
         return json!({
@@ -3223,6 +3230,69 @@ mod tests {
             assert!(!out.to_string().contains("EQ_70"), "{out}");
             assert_no_mqtt(&out);
         }
+    }
+
+    #[test]
+    fn unstamped_timescale_row_is_not_historian_inventory() {
+        let _env = crate::test_support::workspace_env_lock();
+        let tmp = std::env::temp_dir().join(format!(
+            "openfdd_w2d_unstamped_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let prev_ws = std::env::var("OPENFDD_WORKSPACE").ok();
+        std::env::set_var("OPENFDD_WORKSPACE", &tmp);
+
+        let unstamped = TimescaleInventoryEquipment {
+            equipment_id: "EQ1".into(),
+            equip_type: None,
+            roles: BTreeMap::from([("EQ1.sat".into(), "sat".into())]),
+        };
+        let missing = mapping_from_timescale_rows(
+            "site-w2d",
+            None,
+            None,
+            std::slice::from_ref(&unstamped),
+            None,
+            "timescale",
+        );
+        assert_eq!(missing["ok"], json!(false), "{missing}");
+        assert_eq!(missing["hint"], json!(HISTORIAN_MAPPING_HINT), "{missing}");
+        assert!(missing.get("equipment").is_none(), "{missing}");
+        assert_no_mqtt(&missing);
+
+        let stamped = TimescaleInventoryEquipment {
+            equipment_id: "EQ_7".into(),
+            equip_type: Some("ahu".into()),
+            roles: BTreeMap::from([("series-sat".into(), "sat".into())]),
+        };
+        let mapped = mapping_from_timescale_rows(
+            "site-w2d",
+            None,
+            None,
+            std::slice::from_ref(&stamped),
+            None,
+            "timescale",
+        );
+        assert_eq!(mapped["ok"], json!(true), "{mapped}");
+        assert_eq!(mapped["equipment_ids"], json!(["EQ_7"]), "{mapped}");
+        assert_eq!(
+            mapped["equipment"][0]["equipment_type"],
+            json!("AHU"),
+            "{mapped}"
+        );
+        assert_no_mqtt(&mapped);
+
+        match prev_ws {
+            Some(value) => std::env::set_var("OPENFDD_WORKSPACE", value),
+            None => std::env::remove_var("OPENFDD_WORKSPACE"),
+        }
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
