@@ -437,26 +437,6 @@ pub async fn commit_and_persist_registry_run(
     Ok(summary)
 }
 
-/// Count rows for readiness / idempotency checks.
-pub async fn fdd_persist_counts(tsdb: &Tsdb, site_id: &str) -> Result<(i64, i64, i64)> {
-    let runs: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM fdd_run WHERE site_id = $1")
-        .bind(site_id)
-        .fetch_one(tsdb.pool())
-        .await?;
-    let intervals: i64 =
-        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1")
-            .bind(site_id)
-            .fetch_one(tsdb.pool())
-            .await?;
-    let checkpoints: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::bigint FROM fdd_incremental_checkpoint WHERE site_id = $1",
-    )
-    .bind(site_id)
-    .fetch_one(tsdb.pool())
-    .await?;
-    Ok((runs, intervals, checkpoints))
-}
-
 pub async fn results_from_timescale(
     tsdb: &Tsdb,
     building_id: Option<&str>,
