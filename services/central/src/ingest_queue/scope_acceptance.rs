@@ -862,6 +862,7 @@ fn activate(
                 history_mode: None,
                 cadence_secs: None,
                 heartbeat_secs: None,
+                primary_reference: false,
             }],
         }],
     };

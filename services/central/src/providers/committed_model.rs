@@ -6,11 +6,16 @@
 //! leaves the last valid plan active.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use open_fdd_edge_prototype::csv_ingest::model_overlay::{
+    effective_point_quantity, effective_point_unit, effective_primary_reference,
+    load_engineer_point_overlay,
+};
 use open_fdd_edge_prototype::csv_ingest::portal_ingest_sparql::{
     validate_binding_rows, validate_slug, validate_unit, IngestBindingRow,
 };
@@ -108,6 +113,9 @@ pub struct CommittedPoint {
     pub cadence_secs: Option<u64>,
     #[serde(default)]
     pub heartbeat_secs: Option<u64>,
+    /// Engineer-declared primary reference for this role (for example local OAT).
+    #[serde(default)]
+    pub primary_reference: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,6 +218,39 @@ pub fn model_from_json(raw: &str, scope: &ModelScope) -> Result<CommittedModel, 
     Ok(model)
 }
 
+/// Merge engineer unit / quantity / primary-reference overlay onto a committed model.
+pub fn apply_engineer_point_overlays(
+    building_root: &Path,
+    building_id: &str,
+    model: &mut CommittedModel,
+) -> Result<(), String> {
+    let store = load_engineer_point_overlay(building_root)?;
+    if store.points.is_empty() {
+        return Ok(());
+    }
+    if !store.building_id.is_empty() && store.building_id != building_id {
+        return Err("engineer overlay building_id mismatch".into());
+    }
+    for equip in &mut model.equipment {
+        for point in &mut equip.points {
+            let portal_unit = point.unit.clone();
+            let entry = store.points.get(&point.provider_point_id);
+            point.unit = effective_point_unit(portal_unit.as_deref(), entry);
+            if let Some(q) = effective_point_quantity(entry) {
+                point.quantity = Some(q);
+            }
+            point.primary_reference = effective_primary_reference(entry);
+            if let Some(unit) = point.unit.as_deref() {
+                validate_unit(unit)?;
+            }
+            if let Some(q) = point.quantity.as_deref() {
+                validate_slug("quantity", q, 64)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn model_from_point_map(
     scope: &ModelScope,
     entries: &[BootstrapPoint],
@@ -251,6 +292,7 @@ pub fn model_from_point_map(
             history_mode: None,
             cadence_secs: None,
             heartbeat_secs: None,
+            primary_reference: false,
         };
         let equip = by_equip
             .entry(entry.equipment_id.trim().to_string())
@@ -308,6 +350,7 @@ pub fn model_from_sparql_rows(
             history_mode: row.history_mode.clone(),
             cadence_secs: row.cadence_secs,
             heartbeat_secs: row.heartbeat_secs,
+            primary_reference: false,
         };
         let equip =
             by_equip
@@ -473,6 +516,7 @@ fn revision_id(model: &CommittedModel) -> Result<String, String> {
                     "kind": point.kind,
                     "quantity": point.quantity,
                     "provisional": point.provisional,
+                    "primary_reference": point.primary_reference,
                 });
                 if let Some(mode) = point.history_mode.clone() {
                     body["history_mode"] = json!(mode);
@@ -762,6 +806,7 @@ mod tests {
             history_mode: None,
             cadence_secs: None,
             heartbeat_secs: None,
+            primary_reference: false,
         }
     }
 
@@ -778,6 +823,44 @@ mod tests {
                 points,
             }],
         }
+    }
+
+    #[test]
+    fn engineer_overlay_unit_changes_model_revision() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        let bid = "site-overlay-rev";
+        let pid = "pt-oa";
+        let base = point(
+            "urn:openfdd:point:site-a:AHU_1:oa_t",
+            pid,
+            "oa_t",
+            "approved",
+            true,
+            false,
+        );
+        let mut bare = base.clone();
+        bare.unit = None;
+        let rev_bare = revision_id(&model_with(vec![bare])).unwrap();
+        open_fdd_edge_prototype::csv_ingest::model_overlay::upsert_engineer_point_overlay(
+            root,
+            bid,
+            pid,
+            Some("degF"),
+            Some("absolute_temperature"),
+            None,
+            false,
+        )
+        .expect("overlay");
+        let mut with_unit = base;
+        with_unit.unit = None;
+        let mut model = model_with(vec![with_unit]);
+        apply_engineer_point_overlays(root, bid, &mut model).expect("merge");
+        let rev_eng = revision_id(&model).unwrap();
+        assert_ne!(rev_bare, rev_eng);
+        assert_eq!(model.equipment[0].points[0].unit.as_deref(), Some("degF"));
+        use fdd_core::sensor_sweep::sweep_assessable_sql_role;
+        assert!(!sweep_assessable_sql_role("oa_t", None));
     }
 
     #[test]
