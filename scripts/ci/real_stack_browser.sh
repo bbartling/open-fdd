@@ -9,7 +9,7 @@ cd "$ROOT"
 
 TIMESCALE_IMAGE="timescale/timescaledb:2.17.2-pg16"
 WEB_BASE="http://127.0.0.1:3000"
-REQUIRED_SPECS=(e2e/smoke.spec.ts e2e/product.spec.ts)
+REQUIRED_SPECS=(e2e/smoke.spec.ts e2e/product.spec.ts e2e/csp-plotly.spec.ts)
 COMPOSE_FILES=(-f docker/compose.portal.yml -f docker/compose.timescale.yml -f docker/compose.ci-browser.yml)
 
 STARTED=0

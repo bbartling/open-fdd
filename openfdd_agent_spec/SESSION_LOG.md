@@ -3,8 +3,14 @@
 ## 2026-10-27 — 4.0.6 W1a repin assert + compose env passthrough
 
 - `assert_local_stack_after_repin.sh` reads build id from `GET /api/version`, prints explicit PASS/FAIL lines and `SUMMARY:`, optional `--skip-containers` for CI stub tests.
-- Portal/local compose forwards ingest, provider tick, and `OPENFDD_AFDD_*` vars; local overlay loads optional repo-root `.env` for per-site NF credential names.
+- Portal/local compose forwards ingest, provider tick, and `OPENFDD_AFDD_*` vars; local overlay loads optional `OPENFDD_NF_PROVIDER_CREDENTIALS_ENV` (not repo-root `.env`).
 - CI: `scripts/ci/check_compose_env_passthrough.sh`, `tests/ops/test_assert_local_stack.sh` (T1401-1 / T1401-3 / T1403-3). Docs: `.env.example`, `LOCAL_DEPLOYMENT.md`. No VERSION bump.
+
+## 2026-10-27 — CSP style-src split (4.0.6 W1c / #1130)
+
+- `frontend/web/nginx.conf`: `style-src` / `style-src-elem` `'self'` only; `style-src-attr 'unsafe-inline'` for Plotly attributes.
+- Static `/plotly.css` + `plotly-csp-shim.js` so Plotly does not mount inline `<style>` nodes under strict CSP.
+- `ActionsPage.css` replaces inline `<style>`; CI `check_csp_headers.sh` + Playwright `e2e/csp-plotly.spec.ts` (T1130-1).
 
 ## 2026-10-26 — Data revision and changed ranges (W4a)
 

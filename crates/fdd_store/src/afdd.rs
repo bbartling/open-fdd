@@ -5,6 +5,7 @@
 //! the rolling lookback window; runtime scheduling consumes this validated
 //! contract rather than reparsing environment variables in multiple services.
 
+use std::collections::BTreeSet;
 use std::env;
 
 use anyhow::{bail, Context, Result};
@@ -140,6 +141,12 @@ pub struct AfddConfig {
     /// IANA timezone when `schedule_kind` is `wall_clock`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wall_clock_timezone: Option<String>,
+    /// Single-site scope from `OPENFDD_AFDD_BUILDING_ID` (trimmed empty → unset).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_building_id: Option<String>,
+    /// Explicit multi-site scope from `OPENFDD_AFDD_BUILDING_IDS` (comma-separated).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scope_building_ids: Vec<String>,
 }
 
 /// Persisted operator overrides (mode stays deployment/env-owned).
@@ -166,6 +173,8 @@ impl Default for AfddConfig {
             schedule_kind: AfddScheduleKind::Interval,
             wall_clock_hhmm: None,
             wall_clock_timezone: None,
+            scope_building_id: None,
+            scope_building_ids: Vec::new(),
         }
     }
 }
@@ -198,6 +207,9 @@ impl AfddConfig {
             .ok()
             .map(|raw| raw.trim().to_string())
             .filter(|raw| !raw.is_empty());
+        let scope_building_id = env_var_nonempty("OPENFDD_AFDD_BUILDING_ID")?;
+        let scope_building_ids =
+            parse_scope_building_ids(env_var_nonempty("OPENFDD_AFDD_BUILDING_IDS")?.as_deref())?;
 
         let config = Self {
             mode,
@@ -207,9 +219,64 @@ impl AfddConfig {
             schedule_kind,
             wall_clock_hhmm,
             wall_clock_timezone,
+            scope_building_id,
+            scope_building_ids,
         };
         config.validate()?;
         Ok(config)
+    }
+
+    /// Scheduled building ids for continuous AFDD.
+    ///
+    /// When `scope_building_ids` is non-empty it wins over `scope_building_id`.
+    /// When both are unset, every id in `known_buildings` is scheduled (sorted).
+    /// Each explicit id must appear in `known_buildings` or startup fails closed.
+    pub fn resolve_scheduled_buildings(&self, known_buildings: &[String]) -> Result<Vec<String>> {
+        let known: BTreeSet<&str> = known_buildings
+            .iter()
+            .map(|id| id.trim())
+            .filter(|id| !id.is_empty())
+            .collect();
+        if !self.scope_building_ids.is_empty() {
+            let mut out = Vec::new();
+            for id in &self.scope_building_ids {
+                let trimmed = id.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if !known.contains(trimmed) {
+                    bail!(
+                        "OPENFDD_AFDD_BUILDING_IDS contains unknown building_id '{trimmed}'; known sites: {}",
+                        format_known_buildings(&known)
+                    );
+                }
+                if !out.iter().any(|existing: &String| existing == trimmed) {
+                    out.push(trimmed.to_string());
+                }
+            }
+            if out.is_empty() {
+                bail!("OPENFDD_AFDD_BUILDING_IDS is set but contains no valid building ids");
+            }
+            out.sort();
+            return Ok(out);
+        }
+        if let Some(single) = self
+            .scope_building_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        {
+            if !known.contains(single) {
+                bail!(
+                    "OPENFDD_AFDD_BUILDING_ID '{single}' is not a known site; known sites: {}",
+                    format_known_buildings(&known)
+                );
+            }
+            return Ok(vec![single.to_string()]);
+        }
+        let mut all: Vec<String> = known.iter().map(|id| (*id).to_string()).collect();
+        all.sort();
+        Ok(all)
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -285,6 +352,7 @@ impl AfddOperatorSchedule {
             schedule_kind: self.schedule_kind,
             wall_clock_hhmm: self.wall_clock_hhmm.clone(),
             wall_clock_timezone: self.wall_clock_timezone.clone(),
+            ..AfddConfig::default()
         }
         .validate()?;
         Ok(())
@@ -299,6 +367,30 @@ fn env_var_nonempty(name: &str) -> Result<Option<String>> {
         Err(env::VarError::NotPresent) => Ok(None),
         Err(err) => Err(err).with_context(|| format!("read {name}")),
     }
+}
+
+fn parse_scope_building_ids(raw: Option<&str>) -> Result<Vec<String>> {
+    let Some(raw) = raw.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for part in raw.split(',') {
+        let id = part.trim();
+        if id.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|existing| existing == id) {
+            out.push(id.to_string());
+        }
+    }
+    Ok(out)
+}
+
+fn format_known_buildings(known: &BTreeSet<&str>) -> String {
+    if known.is_empty() {
+        return "(none)".into();
+    }
+    known.iter().copied().collect::<Vec<_>>().join(", ")
 }
 
 fn env_positive_u64(name: &str, default: u64) -> Result<u64> {
@@ -342,6 +434,8 @@ mod tests {
             "OPENFDD_AFDD_LOOKBACK_VALUE",
             "OPENFDD_AFDD_LOOKBACK_UNIT",
             "OPENFDD_AFDD_SCHEDULE",
+            "OPENFDD_AFDD_BUILDING_ID",
+            "OPENFDD_AFDD_BUILDING_IDS",
         ];
         let saved: Vec<(String, Option<String>)> = keys
             .iter()
@@ -355,6 +449,8 @@ mod tests {
         assert_eq!(config.interval_minutes, DEFAULT_AFDD_INTERVAL_MINUTES);
         assert_eq!(config.lookback_value, DEFAULT_AFDD_LOOKBACK_VALUE);
         assert_eq!(config.lookback_unit, DEFAULT_AFDD_LOOKBACK_UNIT);
+        assert!(config.scope_building_id.is_none());
+        assert!(config.scope_building_ids.is_empty());
         for (key, value) in saved {
             match value {
                 Some(v) => env::set_var(&key, v),
@@ -486,6 +582,7 @@ mod tests {
             schedule_kind: AfddScheduleKind::WallClock,
             wall_clock_hhmm: Some("05:00".into()),
             wall_clock_timezone: Some("America/Chicago".into()),
+            ..AfddConfig::default()
         };
         ok.validate().unwrap();
         assert_eq!(
@@ -506,5 +603,47 @@ mod tests {
             wall_clock_timezone: Some("America/Chicago".into()),
         };
         schedule.validate_allowlist().unwrap();
+    }
+
+    #[test]
+    fn scope_all_uses_known_buildings_sorted() {
+        let config = AfddConfig::default();
+        let sites = config
+            .resolve_scheduled_buildings(&["site-c".into(), "site-a".into(), "site-b".into()])
+            .unwrap();
+        assert_eq!(sites, vec!["site-a", "site-b", "site-c"]);
+    }
+
+    #[test]
+    fn explicit_building_ids_select_subset_and_reject_unknown() {
+        let config = AfddConfig {
+            scope_building_ids: vec!["site-b".into(), "site-a".into(), "site-b".into()],
+            ..AfddConfig::default()
+        };
+        let sites = config
+            .resolve_scheduled_buildings(&["site-a".into(), "site-b".into(), "site-c".into()])
+            .unwrap();
+        assert_eq!(sites, vec!["site-a", "site-b"]);
+        let bad = AfddConfig {
+            scope_building_ids: vec!["missing".into()],
+            ..AfddConfig::default()
+        };
+        assert!(bad
+            .resolve_scheduled_buildings(&["site-a".into()])
+            .unwrap_err()
+            .to_string()
+            .contains("unknown building_id"));
+    }
+
+    #[test]
+    fn single_scope_building_id_overrides_when_list_empty() {
+        let config = AfddConfig {
+            scope_building_id: Some("site-b".into()),
+            ..AfddConfig::default()
+        };
+        let sites = config
+            .resolve_scheduled_buildings(&["site-a".into(), "site-b".into()])
+            .unwrap();
+        assert_eq!(sites, vec!["site-b"]);
     }
 }

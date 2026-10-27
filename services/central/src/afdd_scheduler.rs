@@ -9,7 +9,7 @@
 //! The timer upserts only the cycle window. Unbounded "update all" is rejected.
 //! An explicit historical range is `POST /api/afdd/scheduler/backfill`.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -26,8 +26,9 @@ use fdd_store::{
     apply_scheduler_config_update, lookback_matches_cadence, next_due_at, parse_backfill_request,
     plan_bounded_backfill, plan_continuous_cycle, wall_clock_local_rfc3339, AfddBackfillChunk,
     AfddConfig, AfddCycleWindow, AfddMode, AfddOperatorSchedule, AfddSchedulerCheckpoint,
-    SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH,
-    OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
+    AfddSchedulerCheckpointStore, SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINTS_PATH,
+    AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES,
+    OPERATOR_LOOKBACK_DAYS,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -39,7 +40,6 @@ use crate::auth;
 use crate::canonical_state::CanonicalStateStore;
 use crate::state::AppState;
 
-const LATEST_TELEMETRY_WATERMARK_PATH: &str = "state/live-historian/latest-telemetry.json";
 const MAX_RECENT_CYCLES: usize = 50;
 const AFDD_RUNS_PREFIX: &str = "state/afdd/runs";
 
@@ -78,11 +78,6 @@ impl Drop for CancelBridge {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct LatestTelemetryWatermark {
-    latest_persisted_timestamp_utc: DateTime<Utc>,
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct AfddCycleRecord {
     pub run_id: String,
@@ -111,6 +106,7 @@ pub struct AfddCycleRecord {
 #[derive(Debug, Default)]
 struct RuntimeStatus {
     recent_cycles: VecDeque<AfddCycleRecord>,
+    last_cycles_by_building: BTreeMap<String, AfddCycleRecord>,
     last_error: Option<String>,
 }
 
@@ -119,6 +115,7 @@ pub struct AfddSchedulerRuntime {
     store: CanonicalStateStore,
     scope_locks: DashMap<String, Arc<AsyncMutex<()>>>,
     status: Mutex<RuntimeStatus>,
+    scheduled_buildings: Mutex<Vec<String>>,
 }
 
 impl AfddSchedulerRuntime {
@@ -141,7 +138,45 @@ impl AfddSchedulerRuntime {
             store,
             scope_locks: DashMap::new(),
             status: Mutex::new(RuntimeStatus::default()),
+            scheduled_buildings: Mutex::new(Vec::new()),
         }))
+    }
+
+    /// Resolve scheduled sites from env scope against provider + Timescale inventory.
+    pub fn validate_scheduled_buildings(&self, state: &AppState) -> Result<()> {
+        let known = collect_known_afdd_buildings(state);
+        let config = self.config_snapshot();
+        let scheduled = config
+            .resolve_scheduled_buildings(&known)
+            .context("AFDD building scope")?;
+        let mut store = self.load_checkpoint_store()?;
+        if let Some(legacy) = self.legacy_checkpoint()? {
+            store.seed_missing_from_legacy(&scheduled, &legacy);
+            self.persist_checkpoint_store(&store)?;
+        }
+        let count = scheduled.len();
+        let buildings = scheduled.join(",");
+        *self
+            .scheduled_buildings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = scheduled;
+        if config.mode == AfddMode::Continuous && count == 0 {
+            warn!("continuous AFDD enabled but no buildings are scheduled");
+        } else if count > 0 {
+            info!(
+                count,
+                buildings = %buildings,
+                "AFDD scheduled buildings"
+            );
+        }
+        Ok(())
+    }
+
+    fn scheduled_building_ids(&self) -> Vec<String> {
+        self.scheduled_buildings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     fn config_snapshot(&self) -> AfddConfig {
@@ -151,7 +186,7 @@ impl AfddSchedulerRuntime {
             .clone()
     }
 
-    fn checkpoint(&self) -> Result<Option<AfddSchedulerCheckpoint>> {
+    fn legacy_checkpoint(&self) -> Result<Option<AfddSchedulerCheckpoint>> {
         let Some(bytes) = self
             .store
             .read_optional(Path::new(AFDD_SCHEDULER_CHECKPOINT_PATH))?
@@ -159,46 +194,48 @@ impl AfddSchedulerRuntime {
             return Ok(None);
         };
         Ok(Some(
-            serde_json::from_slice(&bytes).context("decode AFDD scheduler checkpoint")?,
+            serde_json::from_slice(&bytes).context("decode legacy AFDD scheduler checkpoint")?,
         ))
     }
 
-    fn latest_telemetry(&self) -> Result<Option<DateTime<Utc>>> {
+    fn load_checkpoint_store(&self) -> Result<AfddSchedulerCheckpointStore> {
         let Some(bytes) = self
             .store
-            .read_optional(Path::new(LATEST_TELEMETRY_WATERMARK_PATH))?
+            .read_optional(Path::new(AFDD_SCHEDULER_CHECKPOINTS_PATH))?
         else {
-            return Ok(None);
+            return Ok(AfddSchedulerCheckpointStore::default());
         };
-        let watermark: LatestTelemetryWatermark =
-            serde_json::from_slice(&bytes).context("decode live telemetry watermark")?;
-        Ok(Some(watermark.latest_persisted_timestamp_utc))
+        serde_json::from_slice(&bytes).context("decode AFDD scheduler checkpoints")
     }
 
-    /// Scoped watermark from Timescale `sample` max(ts) (Wave-X C6 / R8e).
-    /// Scope `all` uses global max(ts) across sites. Only `all` falls back to
-    /// the live-telemetry watermark file when Timescale is offline; a failed
-    /// per-site read is an error, never an empty watermark.
-    fn latest_telemetry_for_scope(&self, scope: &str) -> Result<Option<DateTime<Utc>>> {
-        let scope_owned = scope.to_string();
-        let result = block_on_async(async move {
-            let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
-            let ts = if scope_owned == "all" {
-                tsdb.max_sample_ts_global().await?
-            } else {
-                tsdb.max_sample_ts(&scope_owned).await?
-            };
-            Ok(ts)
-        })
-        .context("Timescale AFDD watermark query");
-        match result {
-            Ok(ts) => Ok(ts),
-            Err(error) if scope == "all" => {
-                warn!(%error, "Timescale AFDD watermark failed; using live telemetry watermark");
-                self.latest_telemetry()
-            }
-            Err(error) => Err(error),
+    fn persist_checkpoint_store(&self, store: &AfddSchedulerCheckpointStore) -> Result<()> {
+        let bytes = serde_json::to_vec_pretty(store)?;
+        self.store
+            .write(Path::new(AFDD_SCHEDULER_CHECKPOINTS_PATH), &bytes)
+            .context("persist AFDD scheduler checkpoints")
+    }
+
+    fn checkpoint_for_building(
+        &self,
+        building_id: &str,
+    ) -> Result<Option<AfddSchedulerCheckpoint>> {
+        let store = self.load_checkpoint_store()?;
+        match store.checkpoint_for(building_id) {
+            Some(cp) => Ok(Some(cp.clone())),
+            None => self.legacy_checkpoint(),
         }
+    }
+
+    /// Per-building watermark from Timescale `sample` max(ts) (Wave-X C6 / R8e).
+    fn latest_telemetry_for_building(&self, building_id: &str) -> Result<Option<DateTime<Utc>>> {
+        let building_id = building_id.to_string();
+        block_on_async(async move {
+            let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
+            tsdb.max_sample_ts(&building_id)
+                .await
+                .map_err(anyhow::Error::from)
+        })
+        .context("Timescale AFDD watermark query")
     }
 
     fn no_data_cycle_record(
@@ -228,11 +265,14 @@ impl AfddSchedulerRuntime {
         }
     }
 
-    fn persist_checkpoint(&self, checkpoint: &AfddSchedulerCheckpoint) -> Result<()> {
-        let bytes = serde_json::to_vec_pretty(checkpoint)?;
-        self.store
-            .write(Path::new(AFDD_SCHEDULER_CHECKPOINT_PATH), &bytes)
-            .context("persist AFDD scheduler checkpoint")
+    fn persist_checkpoint_for_building(
+        &self,
+        building_id: &str,
+        checkpoint: &AfddSchedulerCheckpoint,
+    ) -> Result<()> {
+        let mut store = self.load_checkpoint_store()?;
+        store.upsert(building_id, checkpoint.clone());
+        self.persist_checkpoint_store(&store)
     }
 
     fn persist_operator_schedule(&self, schedule: &AfddOperatorSchedule) -> Result<()> {
@@ -259,6 +299,9 @@ impl AfddSchedulerRuntime {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         status.last_error = record.error.clone();
+        status
+            .last_cycles_by_building
+            .insert(record.scope.clone(), record.clone());
         status.recent_cycles.push_front(record);
         status.recent_cycles.truncate(MAX_RECENT_CYCLES);
     }
@@ -278,29 +321,73 @@ impl AfddSchedulerRuntime {
             .clone()
     }
 
-    async fn run_scheduled_cycle(&self, scope: &str) -> Result<Option<AfddCycleRecord>> {
+    async fn run_scheduled_cycle(&self, building_id: &str) -> Result<Option<AfddCycleRecord>> {
         let config = self.config_snapshot();
         if config.mode != AfddMode::Continuous {
             return Ok(None);
         }
         let now = Utc::now();
-        let checkpoint = self.checkpoint()?;
-        // Soft-OPEN R8e: Timescale product path uses sample max(ts) (scope=all
-        // → global). File live-telemetry watermark is fallback only.
-        let latest = self.latest_telemetry_for_scope(scope)?;
+        let checkpoint = self.checkpoint_for_building(building_id)?;
+        let latest = self.latest_telemetry_for_building(building_id)?;
         let Some(window) = plan_continuous_cycle(checkpoint.as_ref(), now, latest, &config)? else {
             return Ok(None);
         };
-        self.execute_cycle(scope, "scheduled", window, true)
+        self.execute_cycle(building_id, "scheduled", window, true)
             .await
             .map(Some)
     }
 
     async fn run_now(&self, scope: &str) -> Result<AfddCycleRecord> {
+        let building_ids = self.resolve_run_targets(scope)?;
+        if building_ids.len() == 1 {
+            return self.run_now_single(&building_ids[0]).await;
+        }
+        let mut records = Vec::with_capacity(building_ids.len());
+        for building_id in building_ids {
+            records.push(self.run_now_single(&building_id).await?);
+        }
+        let ok = records.iter().all(|record| record.ok);
+        let combined = AfddCycleRecord {
+            run_id: records
+                .first()
+                .map(|record| record.run_id.clone())
+                .unwrap_or_else(|| Uuid::new_v4().to_string()),
+            scope: scope.to_string(),
+            trigger: "run_now".into(),
+            status: if ok { "completed" } else { "partial" }.into(),
+            started_at_utc: records
+                .iter()
+                .map(|record| record.started_at_utc)
+                .min()
+                .unwrap_or_else(Utc::now),
+            finished_at_utc: Utc::now(),
+            start_utc: records
+                .iter()
+                .map(|record| record.start_utc)
+                .min()
+                .unwrap_or_else(Utc::now),
+            end_utc: records
+                .iter()
+                .map(|record| record.end_utc)
+                .max()
+                .unwrap_or_else(Utc::now),
+            catch_up: false,
+            result_scope: result_scope_for("run_now").into(),
+            ok,
+            error: records.iter().find_map(|record| record.error.clone()),
+            rules_succeeded: Some(records.iter().filter_map(|r| r.rules_succeeded).sum()),
+            rules_failed: Some(records.iter().filter_map(|r| r.rules_failed).sum()),
+            rules_skipped: Some(records.iter().filter_map(|r| r.rules_skipped).sum()),
+        };
+        self.record_cycle(combined.clone());
+        Ok(combined)
+    }
+
+    async fn run_now_single(&self, building_id: &str) -> Result<AfddCycleRecord> {
         let config = self.config_snapshot();
         let started_at_utc = Utc::now();
         let run_id = Uuid::new_v4().to_string();
-        let Some(end_utc) = self.latest_telemetry_for_scope(scope)? else {
+        let Some(end_utc) = self.latest_telemetry_for_building(building_id)? else {
             let configured = i64::try_from(config.lookback_seconds()?)?;
             let window = AfddCycleWindow {
                 start_utc: started_at_utc - Duration::seconds(configured),
@@ -309,7 +396,7 @@ impl AfddSchedulerRuntime {
                 catch_up: false,
             };
             let record =
-                self.no_data_cycle_record(scope, "run_now", run_id, started_at_utc, window);
+                self.no_data_cycle_record(building_id, "run_now", run_id, started_at_utc, window);
             self.record_cycle(record.clone());
             let _ = self.persist_run_record(&record);
             return Ok(record);
@@ -343,7 +430,7 @@ impl AfddSchedulerRuntime {
         let inflight = fdd_resources::InFlightGuard::spawn("afdd_run_now");
         // Structured bridge: Drop stops the poller on success/error (M70-01).
         let _bridge = CancelBridge::link(inflight.cancel_flag(), cancel.clone());
-        let fut = self.execute_cycle_chunked(scope, "run_now", window, true, Some(cancel));
+        let fut = self.execute_cycle_chunked(building_id, "run_now", window, true, Some(cancel));
         tokio::pin!(fut);
         let outcome = match tokio::time::timeout(StdDuration::from_secs(timeout_secs), &mut fut)
             .await
@@ -399,19 +486,21 @@ impl AfddSchedulerRuntime {
         chunk_hours: u64,
     ) -> Result<Vec<AfddCycleRecord>> {
         let chunks = plan_bounded_backfill(start_utc, end_utc, chunk_hours)?;
-        let mut records = Vec::with_capacity(chunks.len());
-        for chunk in chunks {
-            let window = AfddCycleWindow {
-                start_utc: chunk.start_utc,
-                end_utc: chunk.end_utc,
-                scheduled_for_utc: Utc::now(),
-                catch_up: false,
-            };
-            // Backfill does not move the continuous checkpoint.
-            records.push(
-                self.execute_cycle_chunked(scope, "backfill", window, false, None)
-                    .await?,
-            );
+        let building_ids = self.resolve_run_targets(scope)?;
+        let mut records = Vec::with_capacity(chunks.len() * building_ids.len());
+        for building_id in building_ids {
+            for chunk in &chunks {
+                let window = AfddCycleWindow {
+                    start_utc: chunk.start_utc,
+                    end_utc: chunk.end_utc,
+                    scheduled_for_utc: Utc::now(),
+                    catch_up: false,
+                };
+                records.push(
+                    self.execute_cycle_chunked(&building_id, "backfill", window, false, None)
+                        .await?,
+                );
+            }
         }
         Ok(records)
     }
@@ -502,8 +591,10 @@ impl AfddSchedulerRuntime {
                 }]
             });
 
-        let building = if scope == "all" { None } else { Some(scope) };
-        let equipment_ids = list_equipment_ids_type_first(building);
+        if scope == "all" {
+            anyhow::bail!("AFDD registry run requires an explicit building_id");
+        }
+        let equipment_ids = list_equipment_ids_type_first(Some(scope));
         let equipment_chunks: Vec<Option<String>> = if equipment_ids.is_empty() {
             vec![None]
         } else {
@@ -545,16 +636,14 @@ impl AfddSchedulerRuntime {
                     cancelled = true;
                     break;
                 }
-                let mut payload = json!({
-                    "mode": "registry",
-                    "building_id": if scope == "all" { Value::Null } else { json!(scope) },
-                    "start_utc": tchunk.start_utc.to_rfc3339(),
-                    "end_utc": tchunk.end_utc.to_rfc3339(),
-                    "afdd_trigger": trigger,
-                    "afdd_catch_up": window.catch_up,
-                    "afdd_run_id": run_id,
-                    "params": {}
-                });
+                let mut payload = registry_run_payload(
+                    scope,
+                    tchunk.start_utc,
+                    tchunk.end_utc,
+                    trigger,
+                    window.catch_up,
+                    &run_id,
+                );
                 if let Some(equipment_id) = eq {
                     payload["equipment_id"] = json!(equipment_id);
                 }
@@ -663,10 +752,13 @@ impl AfddSchedulerRuntime {
 
         self.persist_run_record(&record)?;
         if advance_checkpoint && rules_clean {
-            self.persist_checkpoint(&AfddSchedulerCheckpoint {
-                last_completed_at_utc: record.finished_at_utc,
-                analyzed_through_utc: record.end_utc,
-            })?;
+            self.persist_checkpoint_for_building(
+                scope,
+                &AfddSchedulerCheckpoint {
+                    last_completed_at_utc: record.finished_at_utc,
+                    analyzed_through_utc: record.end_utc,
+                },
+            )?;
         }
         self.record_cycle(record.clone());
         Ok(record)
@@ -674,48 +766,127 @@ impl AfddSchedulerRuntime {
 
     fn status_json(&self) -> Result<Value> {
         let config = self.config_snapshot();
-        let checkpoint = self.checkpoint()?;
-        let timer_scope =
-            normalize_scope(std::env::var("OPENFDD_AFDD_BUILDING_ID").ok().as_deref());
-        // Soft-OPEN R8e: surface Timescale max(ts) when product historian is Timescale.
-        let latest_telemetry = self.latest_telemetry_for_scope(&timer_scope)?;
+        let checkpoint_store = self.load_checkpoint_store()?;
+        let scheduled = self.scheduled_building_ids();
         let now = Utc::now();
-        let next_due = next_due_at(checkpoint.as_ref(), now, &config)?;
-        let next_due_local = config
-            .wall_clock_timezone
-            .as_deref()
-            .and_then(|tz| wall_clock_local_rfc3339(next_due, tz).ok());
-        let status = self
-            .status
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (last_error, recent_cycles, last_cycles_by_building) = {
+            let status = self
+                .status
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            (
+                status.last_error.clone(),
+                status.recent_cycles.clone(),
+                status.last_cycles_by_building.clone(),
+            )
+        };
         let timer_enabled = config.mode == AfddMode::Continuous;
         let schedule_kind = config.schedule_kind;
-        let watermark_source = if crate::timescale_historian::historian_is_timescale() {
-            "timescale_sample_max_ts"
+        let watermark_source = "timescale_sample_max_ts";
+        let mut sites = Vec::new();
+        for building_id in &scheduled {
+            let checkpoint = checkpoint_store.checkpoint_for(building_id).cloned();
+            let latest_telemetry = self.latest_telemetry_for_building(building_id)?;
+            let next_due = next_due_at(checkpoint.as_ref(), now, &config)?;
+            let next_due_local = config
+                .wall_clock_timezone
+                .as_deref()
+                .and_then(|tz| wall_clock_local_rfc3339(next_due, tz).ok());
+            let last_cycle = last_cycles_by_building.get(building_id);
+            sites.push(json!({
+                "building_id": building_id,
+                "checkpoint": checkpoint,
+                "latest_persisted_telemetry_utc": latest_telemetry,
+                "next_due_at_utc": if timer_enabled { Some(next_due) } else { None },
+                "next_due_local": if timer_enabled { next_due_local } else { None },
+                "last_cycle": last_cycle,
+            }));
+        }
+        let timer_scope = if scheduled.len() == 1 {
+            scheduled[0].clone()
+        } else if scheduled.is_empty() {
+            "none".into()
         } else {
-            "live_telemetry_file"
+            "multi".into()
         };
         Ok(json!({
             "ok": true,
             "config": config,
             "schedule_kind": schedule_kind,
-            "checkpoint": checkpoint,
-            "latest_persisted_telemetry_utc": latest_telemetry,
+            "scheduled_buildings": scheduled,
+            "sites": sites,
             "watermark_source": watermark_source,
-            "next_due_at_utc": if timer_enabled { Some(next_due) } else { None },
-            "next_due_local": if timer_enabled { next_due_local } else { None },
             "result_write": "lookback_window",
             "lookback_matches_cadence": lookback_matches_cadence(&config),
             "timer_scope": timer_scope,
-            "last_error": status.last_error,
-            "recent_cycles": status.recent_cycles,
+            "last_error": last_error,
+            "recent_cycles": recent_cycles,
             "operator_schedule_editable": true,
             "operator_interval_minutes": OPERATOR_INTERVAL_MINUTES,
             "operator_lookback_days": OPERATOR_LOOKBACK_DAYS,
             "soft_open_neq_fq": true,
         }))
     }
+
+    fn resolve_run_targets(&self, scope: &str) -> Result<Vec<String>> {
+        if scope != "all" {
+            return Ok(vec![scope.to_string()]);
+        }
+        let scheduled = self.scheduled_building_ids();
+        if scheduled.is_empty() {
+            anyhow::bail!("no buildings are scheduled for AFDD");
+        }
+        Ok(scheduled)
+    }
+}
+
+/// Registry payload keys read by `run_fdd_registry` (`start` / `end` plus aliases).
+pub(crate) fn registry_run_payload(
+    building_id: &str,
+    start_utc: DateTime<Utc>,
+    end_utc: DateTime<Utc>,
+    trigger: &str,
+    catch_up: bool,
+    run_id: &str,
+) -> Value {
+    let start = start_utc.to_rfc3339();
+    let end = end_utc.to_rfc3339();
+    json!({
+        "mode": "registry",
+        "building_id": building_id,
+        "start": start,
+        "end": end,
+        "window_start": start,
+        "window_end": end,
+        "start_utc": start,
+        "end_utc": end,
+        "afdd_trigger": trigger,
+        "afdd_catch_up": catch_up,
+        "afdd_run_id": run_id,
+        "params": {}
+    })
+}
+
+pub(crate) fn collect_known_afdd_buildings(state: &AppState) -> Vec<String> {
+    let mut ids = BTreeSet::new();
+    for site in &state.providers.sites {
+        let trimmed = site.building_id.trim();
+        if !trimmed.is_empty() {
+            ids.insert(trimmed.to_string());
+        }
+    }
+    if let Ok(registry_ids) = block_on_async(async {
+        let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
+        tsdb.list_site_ids().await.map_err(anyhow::Error::from)
+    }) {
+        for id in registry_ids {
+            let trimmed = id.trim();
+            if !trimmed.is_empty() {
+                ids.insert(trimmed.to_string());
+            }
+        }
+    }
+    ids.into_iter().collect()
 }
 
 fn result_scope_for(trigger: &str) -> &'static str {
@@ -844,6 +1015,7 @@ fn normalize_scope(building_id: Option<&str>) -> String {
 
 pub fn router(state: Arc<AppState>, runtime: Arc<AfddSchedulerRuntime>) -> Router {
     Router::new()
+        .route("/api/afdd/status", get(scheduler_status))
         .route("/api/afdd/scheduler/status", get(scheduler_status))
         .route(
             "/api/afdd/scheduler/result-slices",
@@ -943,27 +1115,28 @@ pub fn spawn(runtime: Arc<AfddSchedulerRuntime>) -> Option<tokio::task::JoinHand
         info!("AFDD scheduler is in bulk mode; continuous timer is disabled");
         return None;
     }
-    let scope = normalize_scope(std::env::var("OPENFDD_AFDD_BUILDING_ID").ok().as_deref());
     Some(tokio::spawn(async move {
         let mut interval = tokio::time::interval(StdDuration::from_secs(30));
         interval.tick().await;
         loop {
             interval.tick().await;
-            match runtime.run_scheduled_cycle(&scope).await {
-                Ok(Some(record)) => info!(
-                    scope = %record.scope,
-                    analyzed_through = %record.end_utc,
-                    catch_up = record.catch_up,
-                    "continuous AFDD cycle completed"
-                ),
-                Ok(None) => {}
-                Err(error) => {
-                    warn!(scope = %scope, %error, "continuous AFDD cycle failed");
-                    runtime
-                        .status
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .last_error = Some(error.to_string());
+            for building_id in runtime.scheduled_building_ids() {
+                match runtime.run_scheduled_cycle(&building_id).await {
+                    Ok(Some(record)) => info!(
+                        scope = %record.scope,
+                        analyzed_through = %record.end_utc,
+                        catch_up = record.catch_up,
+                        "continuous AFDD cycle completed"
+                    ),
+                    Ok(None) => {}
+                    Err(error) => {
+                        warn!(building_id = %building_id, %error, "continuous AFDD cycle failed");
+                        runtime
+                            .status
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .last_error = Some(error.to_string());
+                    }
                 }
             }
         }
@@ -995,5 +1168,190 @@ mod tests {
         let value =
             block_on_async(async { Ok::<_, anyhow::Error>(42u32) }).expect("nested-safe block_on");
         assert_eq!(value, 42);
+    }
+
+    #[test]
+    fn t1403_1_registry_payload_window_keys_match_chunk() {
+        let start = Utc::now() - Duration::hours(6);
+        let end = Utc::now();
+        let start_s = start.to_rfc3339();
+        let end_s = end.to_rfc3339();
+        let payload = registry_run_payload("site-a", start, end, "scheduled", false, "run-1");
+        assert_eq!(
+            payload.get("start").and_then(Value::as_str),
+            payload.get("window_start").and_then(Value::as_str)
+        );
+        assert_eq!(
+            payload.get("end").and_then(Value::as_str),
+            payload.get("window_end").and_then(Value::as_str)
+        );
+        assert_eq!(
+            payload.get("start").and_then(Value::as_str),
+            Some(start_s.as_str())
+        );
+        assert_eq!(
+            payload.get("end").and_then(Value::as_str),
+            Some(end_s.as_str())
+        );
+        assert_eq!(
+            payload.get("building_id").and_then(Value::as_str),
+            Some("site-a")
+        );
+    }
+
+    #[test]
+    fn t1403_2_explicit_building_ids_select_subset() {
+        let config = AfddConfig {
+            scope_building_ids: vec!["site-b".into(), "site-a".into()],
+            ..AfddConfig::default()
+        };
+        let scheduled = config
+            .resolve_scheduled_buildings(&["site-a".into(), "site-b".into(), "site-c".into()])
+            .unwrap();
+        assert_eq!(scheduled, vec!["site-a", "site-b"]);
+    }
+}
+
+#[cfg(test)]
+mod contract_timescale {
+    use super::*;
+    use chrono::TimeZone;
+    use fdd_store::AfddConfig;
+    use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch};
+
+    fn fixture_database_url() -> Option<String> {
+        std::env::var("OPENFDD_LIFECYCLE_DATABASE_URL")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    }
+
+    fn assert_disposable(id: &str) {
+        let upper = id.to_ascii_uppercase();
+        assert!(!upper.contains("BUILDING_50") && !upper.contains("BOSSPI"));
+    }
+
+    async fn ensure_schema(tsdb: &Tsdb) {
+        static ONCE: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
+        ONCE.get_or_init(|| async {
+            for stmt in crate::db_lifecycle::forward_statements() {
+                sqlx::query(&stmt)
+                    .execute(tsdb.pool())
+                    .await
+                    .expect("schema");
+            }
+        })
+        .await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
+    )]
+    #[tokio::test]
+    async fn t1403_1_recorded_run_window_equals_payload_lookback() {
+        let Some(url) = fixture_database_url() else {
+            eprintln!("skip t1403_1: OPENFDD_LIFECYCLE_DATABASE_URL unset");
+            return;
+        };
+        let _lock = crate::test_env_lock::lock_env();
+        let site = format!("af{}", uuid::Uuid::new_v4().simple());
+        assert_disposable(&site);
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        let results_dir = tempfile::tempdir().expect("results dir");
+        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", results_dir.path());
+
+        let tsdb = Tsdb::connect(&url).await.expect("connect");
+        ensure_schema(&tsdb).await;
+        tsdb.ensure_site_building(&site).await.expect("site");
+        tsdb.upsert_equipment(&site, "AHU_1", Some("ahu"))
+            .await
+            .expect("equipment");
+
+        let t0 = Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap();
+        let mut batch = UpsertBatch::default();
+        for hour in [0i64, 40] {
+            batch.push(SampleRow::new(
+                t0 + Duration::hours(hour),
+                &site,
+                "AHU_1.sat",
+                Some(70.0),
+            ));
+        }
+        tsdb.upsert_samples(&batch).await.expect("samples");
+
+        let lookback_hours = 6i64;
+        let end = t0 + Duration::hours(40);
+        let start = end - Duration::hours(lookback_hours);
+        let payload = registry_run_payload(&site, start, end, "scheduled", false, "run-1");
+        let summary = crate::timescale_product::run_fdd_registry(&payload)
+            .await
+            .expect("registry run");
+        assert_eq!(
+            summary.pointer("/window/start").and_then(|v| v.as_str()),
+            Some(start.to_rfc3339().as_str())
+        );
+        assert_eq!(
+            summary.pointer("/window/end").and_then(|v| v.as_str()),
+            Some(end.to_rfc3339().as_str())
+        );
+        let outside: i64 = sqlx::query_scalar(
+            "SELECT count(*)::bigint FROM sample WHERE site_id = $1 AND ts < $2::timestamptz",
+        )
+        .bind(&site)
+        .bind(start)
+        .fetch_one(tsdb.pool())
+        .await
+        .expect("outside");
+        assert_eq!(outside, 1);
+        let _ = tsdb.purge_building(&site).await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
+    )]
+    #[tokio::test]
+    async fn t1403_2_three_fixture_sites_and_unknown_id() {
+        let Some(url) = fixture_database_url() else {
+            eprintln!("skip t1403_2: OPENFDD_LIFECYCLE_DATABASE_URL unset");
+            return;
+        };
+        let _lock = crate::test_env_lock::lock_env();
+        let sites = [
+            format!("a1{}", uuid::Uuid::new_v4().simple()),
+            format!("a2{}", uuid::Uuid::new_v4().simple()),
+            format!("a3{}", uuid::Uuid::new_v4().simple()),
+        ];
+        for site in &sites {
+            assert_disposable(site);
+        }
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        let tsdb = Tsdb::connect(&url).await.expect("connect");
+        ensure_schema(&tsdb).await;
+        for site in &sites {
+            tsdb.ensure_site_building(site).await.expect("site");
+        }
+        let known = tsdb.list_site_ids().await.expect("list");
+        let scheduled = AfddConfig::default()
+            .resolve_scheduled_buildings(&known)
+            .expect("resolve all");
+        for site in &sites {
+            assert!(scheduled.iter().any(|id| id == site));
+        }
+        let bad = AfddConfig {
+            scope_building_ids: vec![format!("{}-missing", sites[0])],
+            ..AfddConfig::default()
+        };
+        assert!(bad
+            .resolve_scheduled_buildings(&known)
+            .expect_err("unknown")
+            .to_string()
+            .contains("unknown building_id"));
+        for site in &sites {
+            let _ = tsdb.purge_building(site).await;
+        }
     }
 }
