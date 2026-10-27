@@ -409,6 +409,31 @@ impl MemoryStore {
         Some(row)
     }
 
+    pub fn list_cursors(&self, tenant_id: &str, canonical_site: &str) -> Vec<CoverageCursor> {
+        let inner = self.lock();
+        let mut rows: Vec<CoverageCursor> = inner
+            .cursors
+            .values()
+            .filter(|row| {
+                row.key.tenant_id == tenant_id && row.key.canonical_site == canonical_site
+            })
+            .cloned()
+            .collect();
+        rows.sort_by(|a, b| {
+            (
+                &a.key.provider_instance_id,
+                &a.key.device_id,
+                &a.key.model_revision,
+            )
+                .cmp(&(
+                    &b.key.provider_instance_id,
+                    &b.key.device_id,
+                    &b.key.model_revision,
+                ))
+        });
+        rows
+    }
+
     pub fn list_jobs(&self, filter: &ListFilter) -> Vec<JobView> {
         let inner = self.lock();
         filtered_jobs(&inner.jobs, filter)

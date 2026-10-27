@@ -192,6 +192,70 @@ async fn run_upgrade(workspace: &std::path::Path) {
         assert_eq!(job["state"], "queued", "{job}");
     }
 
+    let (status, before) = call(
+        &app,
+        &operator,
+        "GET",
+        &format!("/api/ingest/coverage-status?site_id={SITE}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{before}");
+    assert_eq!(before["state"], "not_assessed", "{before}");
+    let provider = &before["providers"][0];
+    assert_eq!(provider["schedule"]["mode"], "periodic", "{before}");
+    assert!(provider["schedule"]["timezone"].is_null(), "{before}");
+    assert!(provider["next_run"].is_string(), "{before}");
+    assert!(provider["planned_through"].is_string(), "{before}");
+    assert_eq!(provider["status"]["model_revision"], revision, "{before}");
+    assert_eq!(provider["status"]["approved_points"], 1, "{before}");
+    assert_eq!(provider["status"]["discovered_points"], 1, "{before}");
+    assert_eq!(
+        provider["status"]["devices"][0]["device_id"], DEVICE,
+        "{before}"
+    );
+    assert!(provider["status"]["verified_through"].is_null(), "{before}");
+    assert!(provider["status"]["oldest_gap"].is_null(), "{before}");
+
+    state
+        .ingest_queue
+        .advance_cursor(
+            &super::cursor::CursorKey {
+                tenant_id: TENANT.into(),
+                canonical_site: SITE.into(),
+                provider_instance_id: CONNECTION.into(),
+                device_id: DEVICE.into(),
+                model_revision: revision.into(),
+            },
+            Utc::now(),
+        )
+        .await
+        .expect("advance cursor over queued windows");
+    let (status, queued) = call(
+        &app,
+        &operator,
+        "GET",
+        &format!("/api/ingest/coverage-status?site_id={SITE}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{queued}");
+    assert_eq!(queued["state"], "behind", "{queued}");
+    let device = &queued["providers"][0]["status"]["devices"][0];
+    assert_eq!(device["state"], "behind", "{queued}");
+    assert_eq!(device["hole"]["state"], "queued", "{queued}");
+    assert_ne!(queued["state"], "verified", "{queued}");
+
+    let (status, missing) = call(
+        &app,
+        &operator,
+        "GET",
+        "/api/ingest/coverage-status?site_id=NOT_A_SITE",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{missing}");
+
     let (status, created) = call(
         &app,
         &operator,
@@ -372,6 +436,7 @@ async fn purge_fixture(pool: &PgPool) {
     for stmt in [
         "DELETE FROM ingest_receipt WHERE tenant_id = 'lab' AND canonical_site = 'BOSSPI'",
         "DELETE FROM ingest_job WHERE tenant_id = 'lab' AND canonical_site = 'BOSSPI'",
+        "DELETE FROM ingest_coverage_cursor WHERE tenant_id = 'lab' AND canonical_site = 'BOSSPI'",
         "DELETE FROM ingest_idempotency WHERE tenant_id = 'lab' OR actor IN ('w9-operator', 'w9-hub')",
         "DELETE FROM ingest_audit WHERE actor IN ('w9-operator', 'w9-hub')",
     ] {

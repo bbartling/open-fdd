@@ -312,6 +312,13 @@ mod live_routes {
     pub fn ingest_gaps() {}
 
     #[utoipa::path(
+        get, path = "/api/ingest/coverage-status", tag = "ingest",
+        params(("site_id" = String, Query, description = "Site to report")),
+        responses((status = 200, description = "Schedule and verified-coverage status per provider", body = serde_json::Value))
+    )]
+    pub fn ingest_coverage_status() {}
+
+    #[utoipa::path(
         get, path = "/api/ingest/queue", tag = "ingest",
         responses((status = 200, description = "Queue pressure. Live autoscaler is off.", body = serde_json::Value))
     )]
@@ -338,6 +345,7 @@ mod live_routes {
         live_routes::ingest_jobs,
         live_routes::ingest_receipts,
         live_routes::ingest_gaps,
+        live_routes::ingest_coverage_status,
         live_routes::ingest_queue_metrics,
         live_routes::ingest_backfill,
         crate::routes::fdd_run,

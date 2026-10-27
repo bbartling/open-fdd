@@ -196,6 +196,124 @@ pub async fn list_gaps(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct StatusQuery {
+    pub site_id: String,
+}
+
+/// Schedule and verified-coverage status for one site, per provider.
+pub async fn coverage_status(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Query(query): Query<StatusQuery>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    let site = query.site_id.trim();
+    let not_found = || {
+        json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "site not found",
+            &request_id,
+            false,
+        )
+    };
+    if site.is_empty() || !ctx.allow_building(site) {
+        return not_found();
+    }
+    let scoped_tenant = if ctx.multi_tenant && !ctx.hub_admin {
+        match ctx.tenant_id.clone() {
+            Some(tenant_id) => Some(tenant_id),
+            None => return not_found(),
+        }
+    } else {
+        None
+    };
+    let configs: Vec<&SiteConfig> = state
+        .providers
+        .sites
+        .iter()
+        .filter(|row| {
+            row.building_id == site
+                && scoped_tenant
+                    .as_deref()
+                    .is_none_or(|tenant_id| row.tenant_id == tenant_id)
+        })
+        .collect();
+    if configs.is_empty() {
+        return not_found();
+    }
+    let now = Utc::now();
+    let delay = chrono::Duration::seconds(super::worker::publication_delay_secs() as i64);
+    let window_secs = crate::providers::hourly::HourlyPolicy::from_env().window_secs;
+    let mut overall = super::status::VERIFIED;
+    let mut providers = Vec::with_capacity(configs.len());
+    for config in configs {
+        let tenant_id = config.tenant_id.as_str();
+        let plan = {
+            let models = state
+                .providers
+                .models
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            models.active_plan(tenant_id, site).cloned()
+        };
+        let cursors = match state.ingest_queue.list_cursors(tenant_id, site).await {
+            Ok(rows) => rows,
+            Err(err) => return queue_err(&err, &request_id),
+        };
+        let filter = ListFilter {
+            sites: Some(vec![site.to_string()]),
+            tenant_id: Some(tenant_id.to_string()),
+            state: None,
+            limit: MAX_LIST,
+        };
+        let gaps = match state.ingest_queue.list_gaps(&filter).await {
+            Ok(rows) => rows,
+            Err(err) => return queue_err(&err, &request_id),
+        };
+        let horizon = super::schedule::planned_horizon(config.schedule, now, delay, window_secs);
+        let (planned_through, next_run, schedule_error) = match horizon {
+            Ok((planned, next)) => (Some(planned), Some(next), None),
+            Err(err) => (None, None, Some(err.to_string())),
+        };
+        let status = super::status::provider_status(
+            &config.provider_instance_id,
+            plan.as_ref(),
+            &cursors,
+            &gaps,
+            planned_through.unwrap_or(DateTime::<Utc>::MAX_UTC),
+        );
+        overall = super::status::worse(overall, status.state);
+        let gap_scan_truncated = status.oldest_gap.is_none() && gaps.len() >= MAX_LIST as usize;
+        let (mode, timezone) = match config.schedule {
+            super::schedule::IngestSchedule::Periodic => ("periodic", None),
+            super::schedule::IngestSchedule::Daily { tz } => ("daily", Some(tz.name())),
+        };
+        providers.push(json!({
+            "tenant_id": tenant_id,
+            "schedule": { "mode": mode, "timezone": timezone },
+            "planned_through": planned_through,
+            "next_run": next_run,
+            "schedule_error": schedule_error,
+            "gap_scan_truncated": gap_scan_truncated,
+            "status": status,
+        }));
+    }
+    Json(json!({
+        "ok": true,
+        "request_id": request_id,
+        "scope": scope_json(&ctx),
+        "site_id": site,
+        "generated_at": now,
+        "state": overall,
+        "providers": providers,
+    }))
+    .into_response()
+}
+
 pub async fn queue_metrics(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
@@ -555,6 +673,11 @@ pub fn discovery_tools(ot_enabled: bool) -> Vec<(&'static str, &'static str, &'s
         ("ingest.jobs", "GET", "/api/ingest/jobs"),
         ("ingest.receipts", "GET", "/api/ingest/receipts"),
         ("ingest.gaps", "GET", "/api/ingest/gaps"),
+        (
+            "ingest.coverage_status",
+            "GET",
+            "/api/ingest/coverage-status",
+        ),
         ("ingest.queue", "GET", "/api/ingest/queue"),
         ("ingest.stats", "GET", "/api/ingest/stats"),
         ("fdd.run", "POST", "/api/fdd/run"),
