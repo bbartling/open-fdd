@@ -486,10 +486,15 @@ pub async fn readiness_from_timescale(tsdb: &Tsdb, building_id: Option<&str>) ->
         Some(id) => active_generation_manifest(tsdb, id).await?,
         None => None,
     };
+    let stored_count = match bid {
+        Some(id) => active_generation_rows(tsdb, id).await?.len(),
+        None => 0,
+    };
     let body = open_fdd_edge_prototype::fdd::registry_api::readiness_from_timescale_manifest(
         bid,
         legacy,
         manifest.as_ref(),
+        stored_count,
     );
     Ok(body)
 }

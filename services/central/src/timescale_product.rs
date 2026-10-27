@@ -3383,6 +3383,38 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         .get("end")
         .or_else(|| payload.get("window_end"))
         .and_then(|v| v.as_str());
+    let mut window_start_s = window_start.map(str::to_string);
+    let mut window_end_s = window_end.map(str::to_string);
+    let needs_window = window_start_s
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+        || window_end_s
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .is_none();
+    if needs_window {
+        let row = sqlx::query(
+            "SELECT min(ts) AS start_ts, max(ts) AS end_ts FROM sample WHERE site_id = $1",
+        )
+        .bind(&building_id)
+        .fetch_optional(tsdb.pool())
+        .await?;
+        if let Some(row) = row {
+            if window_start_s.is_none() {
+                window_start_s = row
+                    .try_get::<Option<DateTime<Utc>>, _>("start_ts")?
+                    .map(|ts| ts.to_rfc3339());
+            }
+            if window_end_s.is_none() {
+                window_end_s = row
+                    .try_get::<Option<DateTime<Utc>>, _>("end_ts")?
+                    .map(|ts| ts.to_rfc3339());
+            }
+        }
+    }
 
     let full_cohort = equipment_filter.is_none()
         && rule_filter
@@ -3656,8 +3688,8 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
             .collect(),
         rules: rule_files,
         config_fingerprint: config_fingerprint(payload, poll),
-        window_start: window_start.map(str::to_string),
-        window_end: window_end.map(str::to_string),
+        window_start: window_start_s,
+        window_end: window_end_s,
         watermark,
         poll_seconds: poll,
         pack: pack_json,

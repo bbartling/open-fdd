@@ -2030,6 +2030,7 @@ pub fn readiness_from_timescale_manifest(
     _building_id: Option<&str>,
     legacy_files: usize,
     manifest: Option<&Value>,
+    stored_equipment_result_count: usize,
 ) -> Value {
     let mut dirty_reasons: Vec<String> = Vec::new();
     let Some(manifest) = manifest else {
@@ -2052,10 +2053,7 @@ pub fn readiness_from_timescale_manifest(
             "source": "timescale",
         });
     };
-    let result_count = manifest
-        .get("result_count")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
+    let result_count = u64::try_from(stored_equipment_result_count).unwrap_or(0);
     let stored_hash = manifest
         .get("rule_set_hash")
         .and_then(Value::as_str)
