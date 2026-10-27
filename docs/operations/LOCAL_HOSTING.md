@@ -70,6 +70,23 @@ The assert checks health `ok`, Timescale historian, `dual_write:false`, the
 health version `+<sha>`, AFDD scheduler status, the web SPA, and that the running
 central/web containers use the pinned tag. Exit `0` = PASS, `2` = FAIL.
 
+## FDD results (Timescale) and legacy manifest files
+
+Product FDD registry runs persist to PostgreSQL (`fdd_run`, `fdd_interval_result`,
+`fdd_incremental_checkpoint`). `/api/fdd/results` and readiness read those tables;
+central does **not** write run-manifest JSON on the Timescale path.
+
+Older stacks may still have files under `OPENFDD_RULE_RESULTS_DIR` or
+`$OPENFDD_WORKSPACE/openfdd/rule_results/`. The product **does not** read or
+delete them automatically. After you confirm Timescale rows look correct, remove
+legacy manifests manually (example, adjust paths for your site id):
+
+```bash
+rm -rf "${OPENFDD_RULE_RESULTS_DIR:-$OPENFDD_WORKSPACE/openfdd/rule_results}/building=YOUR_SITE_ID"
+```
+
+Keep the Timescale volume; do not run `docker compose down -v`.
+
 ## Data safety
 
 - Never build stack images locally; pull GHCR `sha-*` only.

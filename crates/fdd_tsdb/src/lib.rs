@@ -20,8 +20,8 @@ pub use incremental::{
     ResultScope, RuleHorizon,
 };
 pub use incremental_store::{
-    claim, ensure_incremental_schema, load_results, publish, release, run_incremental, Claim,
-    RunReport,
+    claim, ensure_incremental_schema, load_results, publish, release, replace_scope_results_in_tx,
+    run_incremental, Claim, RunReport,
 };
 pub use package_seed::{append_package_equipment, remap_equipment_roles, seed_package_dir};
 pub use portal::{
@@ -29,8 +29,8 @@ pub use portal::{
 };
 pub use revision::{
     changed_ranges_after, current_data_revision, ensure_revision_schema, quality_keeps_sample,
-    sched1_unoccupied, AnalysisWindow, ChangeKind, ChangedRange, FddResultIdentity, IdentityError,
-    QualityPolicy, RuleParameters, SchedulePolicy,
+    sched1_unoccupied, schema_statements, AnalysisWindow, ChangeKind, ChangedRange,
+    FddResultIdentity, IdentityError, QualityPolicy, RuleParameters, SchedulePolicy,
 };
 pub use runner::{
     default_sql_root, load_rule_sql, render_placeholders, RuleRunRequest, RuleRunResult,
