@@ -292,8 +292,16 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     }
 }
 
+fn analytics_payload(body: &Value) -> Value {
+    body.get("analytics")
+        .cloned()
+        .unwrap_or_else(|| body.clone())
+}
+
 fn warning_text(body: &Value) -> String {
-    body.get("warnings")
+    let payload = analytics_payload(body);
+    payload
+        .get("warnings")
         .and_then(|v| v.as_array())
         .map(|items| {
             items
@@ -339,7 +347,7 @@ async fn post_json(app: &axum::Router, path: &str, payload: Value) -> Value {
     let body: Value = serde_json::from_slice(&bytes)
         .unwrap_or_else(|_| json!({ "raw": String::from_utf8_lossy(&bytes).into_owned() }));
     assert_eq!(status, StatusCode::OK, "{path} {body}");
-    body
+    analytics_payload(&body)
 }
 
 async fn apply_schema(pool: &PgPool) {

@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use tower::limit::ConcurrencyLimitLayer;
 
 use crate::actions;
-use crate::analytics::{self, AnalyticsRequest};
+use crate::analytics::{self, AnalyticsQuery, AnalyticsRequest};
 use crate::audit::{
     AuditAction, AuditChange, AuditEvent, BoundedList, HandlerResult, Outcome, ReasonCode,
     TargetType,
@@ -6386,11 +6386,13 @@ fn gate_analytics(
 macro_rules! cached_analytics {
     ($query_id:expr, $query_version:expr, $state:expr, $headers:expr, $req:expr, $compute:expr) => {{
         gate_analytics($state, $headers, &mut $req)?;
-        // Wave-X: never open DataFusion when Timescale is the product historian.
         if crate::timescale_historian::historian_is_timescale() {
-            return crate::timescale_analytics::respond_query($query_id, $query_version, &$req)
-                .await
-                .map(Json);
+            return crate::analytics::result_cache::respond_timescale(
+                $query_id,
+                $query_version,
+                &$req,
+            )
+            .await;
         }
         crate::analytics::result_cache::respond($query_id, $query_version, &$req, async || {
             $compute.await
@@ -6404,39 +6406,6 @@ async fn analytics_runtime(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if crate::timescale_historian::historian_is_timescale() {
-        gate_analytics(&state, &headers, &mut req)?;
-        let building = req.query.building_id.clone().ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": "building_id required"})),
-            )
-        })?;
-        match fdd_tsdb::Tsdb::connect_from_env().await {
-            Ok(tsdb) => {
-                let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
-                match crate::timescale_analytics::motor_weekly_runtime(&tsdb, &building, &scope)
-                    .await
-                {
-                    Ok(v) => return Ok(Json(v)),
-                    Err(e) => {
-                        return Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(
-                                json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"}),
-                            ),
-                        ));
-                    }
-                }
-            }
-            Err(e) => {
-                return Err((
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
-                ));
-            }
-        }
-    }
     cached_analytics!(
         "runtime",
         analytics::QV_RUNTIME,
@@ -6632,35 +6601,24 @@ async fn analytics_sensor_health(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    gate_analytics(&state, &headers, &mut req)?;
-    if crate::timescale_historian::historian_is_timescale() {
-        return crate::timescale_analytics::respond_query(
-            "sensor-health",
-            analytics::QV_SENSOR_HEALTH,
-            &req,
-        )
-        .await
-        .map(Json);
-    }
-    match analytics::sensor_health::handle_async(&req).await {
-        Ok(env) => {
-            crate::analytics::result_cache::respond(
-                "sensor-health",
-                analytics::QV_SENSOR_HEALTH,
-                &req,
-                async move || env,
-            )
-            .await
+    cached_analytics!(
+        "sensor-health",
+        analytics::QV_SENSOR_HEALTH,
+        &state,
+        &headers,
+        req,
+        async {
+            match analytics::sensor_health::handle_async(&req).await {
+                Ok(env) => env,
+                Err(err) => analytics::envelope_with_engine(
+                    analytics::QV_SENSOR_HEALTH,
+                    &req.query,
+                    vec![err.to_string()],
+                    "timescale-sql",
+                ),
+            }
         }
-        Err(err) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({
-                "ok": false,
-                "error": err.to_string(),
-                "engine": "timescale-sql",
-            })),
-        )),
-    }
+    )
 }
 
 async fn analytics_schedule(
@@ -6698,37 +6656,6 @@ async fn analytics_bas_vs_web_oat(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if crate::timescale_historian::historian_is_timescale() {
-        gate_analytics(&state, &headers, &mut req)?;
-        let building = req.query.building_id.clone().ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": "building_id required"})),
-            )
-        })?;
-        match fdd_tsdb::Tsdb::connect_from_env().await {
-            Ok(tsdb) => {
-                let scope = crate::timescale_analytics::AnalyticsSqlScope::from_request(&req);
-                match crate::timescale_analytics::bas_vs_web_oat(&tsdb, &building, &scope).await {
-                    Ok(v) => return Ok(Json(v)),
-                    Err(e) => {
-                        return Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(
-                                json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"}),
-                            ),
-                        ));
-                    }
-                }
-            }
-            Err(e) => {
-                return Err((
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(json!({"ok": false, "error": e.to_string(), "engine": "timescale-sql"})),
-                ));
-            }
-        }
-    }
     let ctx = resolve_tenant_context(&state, &headers);
     req.read_tenant_id = preferred_tenant_for_building_read(&ctx, req.query.building_id.as_deref());
     cached_analytics!(
@@ -6928,6 +6855,7 @@ async fn analytics_rcx_presets_list(
     headers: HeaderMap,
     Query(q): Query<BuildingScopeQuery>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    // Static RCx preset catalog — not a historian compute; intentionally uncached.
     // Catalog is static, but inventory policy is tenant_building_acl — foreign
     // building_id must 403 (same posture as GET /api/fdd/results).
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
@@ -7065,9 +6993,8 @@ async fn analytics_mv_change_point(
     headers: HeaderMap,
     Json(mut req): Json<AnalyticsRequest>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    // The Metering demo posts inline monthly rows. Product Timescale dispatch
-    // (`respond_query`) ignores that series and answers `building_id is required`
-    // from the historian daily-change query. Serve the inline twin directly.
+    // Inline M&V demo twin — not backed by Timescale; intentionally uncached.
+    // Historian `respond_query` ignores inline series and requires `building_id`.
     if analytics::mv_change_point::has_inline_series(&req) {
         return Ok(Json(analytics::mv_change_point::demo_response(&req)));
     }
@@ -7282,63 +7209,44 @@ async fn analytics_fuel(
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            match fdd_tsdb::Tsdb::connect_from_env().await {
-                Ok(tsdb) => {
-                    // FuelRequest has no window/equipment yet — open scope (all).
-                    // Universal /api/analytics/query?query_id=fuel binds from AnalyticsRequest.
-                    let scope = crate::timescale_analytics::AnalyticsSqlScope {
-                        start: None,
-                        end: None,
-                        equipment_ids: Vec::new(),
-                    };
-                    match crate::timescale_analytics::fuel_daily(&tsdb, building, &scope).await {
-                        Ok(mut v) => {
-                            let empty = v
-                                .get("rows")
-                                .and_then(|rows| rows.as_array())
-                                .is_some_and(|rows| rows.is_empty());
-                            if empty {
-                                if let Some(obj) = v.as_object_mut() {
-                                    obj.insert("status".into(), json!("no_meters"));
-                                    obj.insert(
-                                        "reason".into(),
-                                        json!("selected site has no meter rows"),
-                                    );
-                                }
-                            }
-                            let status = if empty { "no_meters" } else { "ok" };
-                            return Ok(Json(json!({
-                                "ok": true,
-                                "status": status,
-                                "analytics": v,
-                                "engine": "timescale-sql",
-                                "soft_open_neq_fq": true,
-                                "note": "Timescale fuel_daily Soft-OPEN; campus EUI import path unchanged",
-                            })));
-                        }
-                        Err(e) => {
-                            return Err((
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                Json(json!({
-                                    "ok": false,
-                                    "error": e.to_string(),
-                                    "engine": "timescale-sql",
-                                })),
-                            ));
-                        }
-                    }
-                }
-                Err(e) => {
-                    return Err((
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        Json(json!({
-                            "ok": false,
-                            "error": e.to_string(),
-                            "engine": "timescale-sql",
-                        })),
-                    ));
+            let query_version = req
+                .query_version
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("fuel");
+            let analytics_req = AnalyticsRequest {
+                query: AnalyticsQuery {
+                    building_id: Some(building.to_string()),
+                    query_version: Some(query_version.to_string()),
+                    ..Default::default()
+                },
+                refresh: false,
+                ..Default::default()
+            };
+            let Json(mut body) = crate::analytics::result_cache::respond_timescale(
+                "fuel",
+                query_version,
+                &analytics_req,
+            )
+            .await?;
+            let empty = body
+                .get("analytics")
+                .and_then(|v| v.get("rows"))
+                .and_then(|rows| rows.as_array())
+                .is_some_and(|rows| rows.is_empty());
+            let status = if empty { "no_meters" } else { "ok" };
+            body["status"] = json!(status);
+            if empty {
+                if let Some(analytics) = body.get_mut("analytics").and_then(|v| v.as_object_mut()) {
+                    analytics.insert("status".into(), json!("no_meters"));
+                    analytics.insert(
+                        "reason".into(),
+                        json!("selected site has no meter rows"),
+                    );
                 }
             }
+            return Ok(Json(body));
         }
     }
     let qv = req.query_version.clone().unwrap_or_else(|| "fuel".into());

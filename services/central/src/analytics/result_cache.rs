@@ -89,8 +89,8 @@ fn analytics_pressure_deferred(notes: &[String], abort: bool) -> (StatusCode, Js
 
 /// Cache hits skip this. Recompute paths must hold a process-wide Analytics
 /// permit and refuse when pressure asks to defer expensive compute (#1127 M-01).
-async fn compute_with_admission(
-    compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
+async fn compute_with_admission_fallible(
+    compute: impl AsyncFnOnce() -> Result<AnalyticsEnvelope, (StatusCode, Json<Value>)>,
 ) -> Result<AnalyticsEnvelope, (StatusCode, Json<Value>)> {
     let pressure = fdd_resources::sample_pressure();
     if pressure.defer_expensive_compute {
@@ -110,7 +110,7 @@ async fn compute_with_admission(
         .ok_or_else(analytics_admission_busy)?;
     let inflight = fdd_resources::InFlightGuard::spawn("analytics");
     let cancel = inflight.cancel_flag();
-    let envelope = compute().await;
+    let envelope = compute().await?;
     if cancel.load(std::sync::atomic::Ordering::SeqCst) || fdd_resources::memory_abort_requested() {
         return Err(analytics_pressure_deferred(
             &["in-flight memory watchdog aborted analytics SQL".into()],
@@ -122,9 +122,37 @@ async fn compute_with_admission(
     Ok(envelope)
 }
 
+async fn compute_with_admission(
+    compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
+) -> Result<AnalyticsEnvelope, (StatusCode, Json<Value>)> {
+    compute_with_admission_fallible(async || Ok(compute().await)).await
+}
+
 pub struct ServedAnalytics {
     pub envelope: AnalyticsEnvelope,
     pub cache: Value,
+}
+
+/// Timescale product dispatch through the same `analytics_result` path as every
+/// other computing `/api/analytics/*` POST.
+pub async fn respond_timescale(
+    query_id: &str,
+    query_version: &str,
+    req: &AnalyticsRequest,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let served = serve_fallible(query_id, query_version, req, async || {
+        let value =
+            crate::timescale_analytics::respond_query(query_id, query_version, req).await?;
+        Ok(crate::timescale_analytics::envelope_from_dispatch_value(
+            query_version,
+            req,
+            value,
+        ))
+    })
+    .await?;
+    let _permit = fdd_resources::try_acquire_compute(fdd_resources::ComputeClass::Analytics)
+        .ok_or_else(analytics_admission_busy)?;
+    Ok(json_body(&served))
 }
 
 pub async fn respond(
@@ -147,11 +175,20 @@ pub async fn serve(
     req: &AnalyticsRequest,
     compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
 ) -> Result<ServedAnalytics, (StatusCode, Json<Value>)> {
+    serve_fallible(query_id, query_version, req, async || Ok(compute().await)).await
+}
+
+pub async fn serve_fallible(
+    query_id: &str,
+    query_version: &str,
+    req: &AnalyticsRequest,
+    compute: impl AsyncFnOnce() -> Result<AnalyticsEnvelope, (StatusCode, Json<Value>)>,
+) -> Result<ServedAnalytics, (StatusCode, Json<Value>)> {
     let store = match super::result_store::store_from_env().await {
         Ok(store) => store,
         Err(reason) => {
             let started = Instant::now();
-            let envelope = compute_with_admission(compute).await?;
+            let envelope = compute_with_admission_fallible(compute).await?;
             return Ok(skipped(
                 envelope,
                 started,
@@ -178,7 +215,7 @@ pub async fn serve_with(
     req: &AnalyticsRequest,
     on_stale: StaleAction,
     watch: CacheWatch,
-    compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
+    compute: impl AsyncFnOnce() -> Result<AnalyticsEnvelope, (StatusCode, Json<Value>)>,
 ) -> Result<ServedAnalytics, (StatusCode, Json<Value>)> {
     let (query_id, query_version) = query;
     if let Err(detail) = super::validate_analytics_request(req) {
@@ -192,7 +229,7 @@ pub async fn serve_with(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     else {
-        let envelope = compute_with_admission(compute).await?;
+        let envelope = compute_with_admission_fallible(compute).await?;
         return Ok(skipped(
             envelope,
             started,
@@ -208,7 +245,7 @@ pub async fn serve_with(
     let key = match cache_key(building_id, query_id, query_version, req, &identity) {
         Ok(key) => key,
         Err(reason) => {
-            let envelope = compute_with_admission(compute).await?;
+            let envelope = compute_with_admission_fallible(compute).await?;
             return Ok(skipped(envelope, started, &reason));
         }
     };
@@ -258,7 +295,7 @@ pub async fn serve_with(
         sessions,
         building_id: key.building_id.clone(),
     };
-    let envelope = compute_with_admission(compute).await?;
+    let envelope = compute_with_admission_fallible(compute).await?;
     let table = table_from_envelope(&envelope);
     let provenance = provenance_for(&key, &envelope, &identity);
     if let Err(err) = store.write(&key, &table, &provenance).await {
@@ -709,7 +746,7 @@ mod tests {
                 env.rows
                     .push(json!({"equipment_id": "AHU_1", "run_hours": 3.5}));
                 env.engine = "datafusion".into();
-                env
+                Ok(env)
             },
         )
         .await
@@ -728,7 +765,7 @@ mod tests {
             CacheWatch::Resolved(timescale_identity("model-a", 1, "samples=1;series=1")),
             async || {
                 calls_second.fetch_add(1, Ordering::SeqCst);
-                envelope("runtime-v1", &req("site-a").query, Vec::new())
+                Ok(envelope("runtime-v1", &req("site-a").query, Vec::new()))
             },
         )
         .await
@@ -760,7 +797,7 @@ mod tests {
                 let mut env = envelope("sensor-faults-v1", &req("site-a").query, Vec::new());
                 env.rows
                     .push(json!({"equipment_id": "AHU_1", "fault_hours": 1.0}));
-                env
+                Ok(env)
             },
         )
         .await
@@ -775,7 +812,7 @@ mod tests {
             CacheWatch::Resolved(timescale_identity("model-a", 2, "samples=2;series=1")),
             async || {
                 c2.fetch_add(1, Ordering::SeqCst);
-                envelope("sensor-faults-v1", &req("site-a").query, Vec::new())
+                Ok(envelope("sensor-faults-v1", &req("site-a").query, Vec::new()))
             },
         )
         .await
@@ -800,7 +837,7 @@ mod tests {
                 let mut env = envelope("sensor-faults-v1", &req("site-a").query, Vec::new());
                 env.rows
                     .push(json!({"equipment_id": "AHU_1", "fault_hours": 2.0}));
-                env
+                Ok(env)
             },
         )
         .await
@@ -833,7 +870,7 @@ mod tests {
             &req("site-busy"),
             StaleAction::ServeStale,
             CacheWatch::Resolved(timescale_identity("model-a", 1, "samples=1;series=1")),
-            async || envelope("runtime-v1", &req("site-busy").query, Vec::new()),
+            async || Ok(envelope("runtime-v1", &req("site-busy").query, Vec::new())),
         )
         .await
         {
@@ -954,7 +991,7 @@ mod tests {
             CacheWatch::Resolved(identity.clone()),
             async || {
                 calls_first.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -978,7 +1015,7 @@ mod tests {
             CacheWatch::Resolved(identity.clone()),
             async || {
                 calls_second.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1009,7 +1046,7 @@ mod tests {
                 env.generated_at = DateTime::parse_from_rfc3339("2026-06-03T00:00:00Z")
                     .unwrap()
                     .with_timezone(&Utc);
-                env
+                Ok(env)
             },
         )
         .await
@@ -1029,7 +1066,7 @@ mod tests {
             CacheWatch::Resolved(identity),
             async || {
                 calls_again.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1078,7 +1115,7 @@ mod tests {
             &request,
             StaleAction::ServeStale,
             CacheWatch::Resolved(identity),
-            async || corrected_scatter(),
+            async || Ok(corrected_scatter()),
         )
         .await
         .unwrap();
@@ -1106,7 +1143,7 @@ mod tests {
             CacheWatch::Resolved(first_id),
             async || {
                 c1.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1122,7 +1159,7 @@ mod tests {
             CacheWatch::Resolved(advanced),
             async || {
                 c2.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1152,7 +1189,7 @@ mod tests {
             CacheWatch::Resolved(original.clone()),
             async || {
                 c1.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1171,7 +1208,7 @@ mod tests {
                 c2.fetch_add(1, Ordering::SeqCst);
                 let mut env = corrected_scatter();
                 env.points[0]["x_role"] = json!("web_oa_t_remapped");
-                env
+                Ok(env)
             },
         )
         .await
@@ -1195,7 +1232,7 @@ mod tests {
             CacheWatch::Resolved(other_pack),
             async || {
                 c3.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1229,7 +1266,7 @@ mod tests {
             CacheWatch::Resolved(known.clone()),
             async || {
                 c1.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1248,7 +1285,7 @@ mod tests {
             CacheWatch::Resolved(broken.clone()),
             async || {
                 c2.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1273,7 +1310,7 @@ mod tests {
             CacheWatch::Resolved(broken),
             async || {
                 c3.fetch_add(1, Ordering::SeqCst);
-                corrected_scatter()
+                Ok(corrected_scatter())
             },
         )
         .await
@@ -1303,7 +1340,7 @@ mod tests {
             &site_a,
             StaleAction::ServeStale,
             CacheWatch::Resolved(identity.clone()),
-            async || corrected_scatter(),
+            async || Ok(corrected_scatter()),
         )
         .await
         .unwrap();
@@ -1322,7 +1359,7 @@ mod tests {
                 calls_b.fetch_add(1, Ordering::SeqCst);
                 let mut env = corrected_scatter();
                 env.points[0]["equipment_id"] = json!("AHU_9");
-                env
+                Ok(env)
             },
         )
         .await
