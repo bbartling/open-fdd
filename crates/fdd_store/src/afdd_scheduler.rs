@@ -524,6 +524,7 @@ mod tests {
         assert_eq!(store.checkpoint_for("site-b"), None);
     }
 
+    #[test]
     fn downtime_window_stays_one_lookback_not_the_outage() {
         let checkpoint = AfddSchedulerCheckpoint {
             last_completed_at_utc: utc(2026, 9, 20, 10, 0),
