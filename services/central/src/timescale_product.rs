@@ -2643,18 +2643,13 @@ pub(crate) async fn resolve_site_oa_t_reference(
             primaries.push((key, equip));
         }
     }
-    let (openfdd_key, equipment_id, selection) = if !primaries.is_empty() {
-        let (key, eq) = primaries
-            .into_iter()
-            .min_by(|a, b| a.0.cmp(&b.0))
-            .expect("non-empty primaries");
-        (key, eq, "primary_reference".to_string())
+    primaries.sort_by(|a, b| a.0.cmp(&b.0));
+    all.sort_by(|a, b| a.0.cmp(&b.0));
+    let (openfdd_key, equipment_id, selection) = if let Some((key, eq)) = primaries.first() {
+        (key.clone(), eq.clone(), "primary_reference".to_string())
     } else {
-        let (key, eq, _) = all
-            .into_iter()
-            .min_by(|a, b| a.0.cmp(&b.0))
-            .expect("non-empty oa_t bindings");
-        (key, eq, "default_lowest_binding".to_string())
+        let (key, eq, _) = &all[0];
+        (key.clone(), eq.clone(), "default_lowest_binding".to_string())
     };
     Ok(Some(SiteOatReference {
         openfdd_key,

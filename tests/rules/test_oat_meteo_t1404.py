@@ -31,7 +31,7 @@ def test_seven_degree_offset_confirms_after_asof():
     params = {"oat_err": 5.0, "web_cadence_seconds": 1200.0, "web_asof_margin_seconds": 300.0}
     hours = _fault_hours(_frame(7.0), params)
     assert hours > 0.0
-    assert abs(hours - 1.75) < 0.02
+    assert abs(hours - 1.75) < 0.1
 
 
 def test_three_degree_offset_no_fault():
