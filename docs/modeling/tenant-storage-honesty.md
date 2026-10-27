@@ -29,7 +29,7 @@ multi-tenant (MT) mode. Update when paths migrate.
 
 ## Soft-OPEN closed by V7
 
-- Optional on-disk prefix `tenants/{tid}/building=…` — **CLOSED** as product dual-read + migrate helper (`wave-o1-tenant-path-migrate`). Live hub APPLY remains operator-authorized after Railway backup.
+- Optional on-disk prefix `tenants/{tid}/building=…` — **CLOSED** as product dual-read + migrate helper (`wave-o1-tenant-path-migrate`). Live hub APPLY remains operator-authorized after a backup.
 
 ## What remains Soft-OPEN
 

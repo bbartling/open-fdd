@@ -8,7 +8,7 @@ nav_exclude: true
 
 # VM deployment behind a firewall
 
-This is the recommended self-hosted dashboard recipe for an IT department that wants Open-FDD on a Linux VM inside a private network. It uses the same public GHCR images as the Railway cloud-lab recipe, but keeps the application entirely on the organization's LAN/VPN.
+This is the recommended self-hosted dashboard recipe for an IT department that wants Open-FDD on a Linux VM inside a private network. It uses the same public GHCR images as the local single-host stack ([LOCAL_HOSTING.md](LOCAL_HOSTING.md)), but keeps the application entirely on the organization's LAN/VPN.
 
 ## Recommended topology
 

@@ -1,5 +1,7 @@
 # Wave O — Known bugs / patch train tracker
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 **Master tip:** `aea817fd` / **3.5.20** (#934 O12b) · GHCR publish in flight · Railway re-pin **DEFERRED** (Kali)
 **Closed tips:** O8–O9 … O6 3.5.17 · O2a/headers 3.5.18–19 · **O12b 3.5.20**
 **Residuals:** [`BUG_REPORT_WAVE_P.md`](BUG_REPORT_WAVE_P.md) owns Soft + final stress + GH tidy

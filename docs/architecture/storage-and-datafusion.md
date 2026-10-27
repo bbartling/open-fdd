@@ -16,7 +16,7 @@ nav_order: 3
 
 ## Bring-up
 
-See [TIMESCALE_WAVE_X](../operations/TIMESCALE_WAVE_X.md). Soft-OPEN Railway/ACME: no site backups unless asked; dual-write false.
+See [TIMESCALE_WAVE_X](../operations/TIMESCALE_WAVE_X.md). Soft-OPEN local stack/ACME: no site backups unless asked; dual-write false.
 
 ## APIs
 

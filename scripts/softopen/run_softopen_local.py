@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Soft-OPEN orchestrator for Railway (or any --host hub).
+"""Soft-OPEN orchestrator for the local single-host stack (or any --host / --base-url).
 
 Runs, in order:
   1) hub health wait
-  2) optional assert_hub_env_after_repin.sh when --assert-hub and railway CLI present
+  2) optional scripts/ops/assert_local_stack_after_repin.sh when --assert-stack
   3) scripts/lessons (each present lesson_*.py)
   4) scripts/stress/run_gate.py (HTTP subset)
   5) validate_db_samples.py
@@ -12,12 +12,13 @@ Runs, in order:
 Unique building ids: pass --building-id or --unique-building (SOFTOPEN_<date>_<sha>).
 No screenshots. Soft-OPEN ≠ FQ. ZAP out of scope.
 
-  python scripts/softopen/run_softopen_railway.py \\
-    --host openfdd-web-production.up.railway.app --building-id SYNTH_03
+Base URL defaults to OPENFDD_API_BASE or http://127.0.0.1:8080.
 
-  python scripts/softopen/run_softopen_railway.py \\
-    --base-url https://openfdd-web-production.up.railway.app \\
-    --unique-building --shortsha 52e1045
+  python scripts/softopen/run_softopen_local.py --building-id SYNTH_03
+
+  python scripts/softopen/run_softopen_local.py \\
+    --base-url http://127.0.0.1:8080 \\
+    --unique-building --shortsha 52e1045 --assert-stack
 """
 
 from __future__ import annotations
@@ -58,7 +59,7 @@ def _run(cmd: list[str], *, cwd: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Soft-OPEN Railway lessons+stress+plot-bool")
+    p = argparse.ArgumentParser(description="Soft-OPEN local-stack lessons+stress+plot-bool")
     p.add_argument("--base-url", default=None)
     p.add_argument("--host", default=None)
     p.add_argument("--port", type=int, default=8080)
@@ -72,9 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--shortsha", default=None)
     p.add_argument(
-        "--assert-hub",
+        "--assert-stack",
         action="store_true",
-        help="Run scripts/ops/assert_hub_env_after_repin.sh when present",
+        help="Run scripts/ops/assert_local_stack_after_repin.sh (health, pins, web)",
     )
     p.add_argument("--skip-lessons", action="store_true")
     p.add_argument("--skip-stress", action="store_true")
@@ -97,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.password:
         common += ["--password", args.password]
 
-    safe_print("Soft-OPEN Railway orchestrator")
+    safe_print("Soft-OPEN local-stack orchestrator")
     safe_print(f"  base_url     {base}")
     safe_print(f"  building_id  {building_id}")
     safe_print("  screenshots  OFF (bool API gates only)")
@@ -105,11 +106,11 @@ def main(argv: list[str] | None = None) -> int:
 
     fails = 0
 
-    if args.assert_hub:
-        script = REPO / "scripts" / "ops" / "assert_hub_env_after_repin.sh"
+    if args.assert_stack:
+        script = REPO / "scripts" / "ops" / "assert_local_stack_after_repin.sh"
         if script.is_file():
             sha = args.shortsha or os.environ.get("OPENFDD_IMAGE_TAG") or ""
-            cmd = ["bash", str(script)]
+            cmd = ["bash", str(script), "--base", base]
             if sha:
                 cmd.append(sha if sha.startswith("sha-") else f"sha-{sha}")
             env = os.environ.copy()
@@ -118,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
             if rc != 0:
                 fails += 1
         else:
-            safe_print("SKIP assert_hub (script missing)")
+            safe_print("SKIP assert_stack (script missing)")
 
     if not args.skip_lessons:
         lessons = sorted(LESSONS.glob("lesson_*.py"))
@@ -165,9 +166,9 @@ def main(argv: list[str] | None = None) -> int:
             fails += 1
 
     if fails:
-        safe_print(f"\nFAIL Soft-OPEN Railway suite ({fails} step groups)")
+        safe_print(f"\nFAIL Soft-OPEN local-stack suite ({fails} step groups)")
         return 2
-    safe_print("\nPASS Soft-OPEN Railway suite")
+    safe_print("\nPASS Soft-OPEN local-stack suite")
     return 0
 
 

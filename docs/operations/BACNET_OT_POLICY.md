@@ -4,7 +4,7 @@ Operators and AI agents must treat BACnet as a **shared, fragile OT resource** â
 
 ## Hard rules (Wave N)
 
-1. **`openfdd-fieldbus` is never deployed on Railway / public cloud.** It is an **OT-behind-firewall** edge only. Cloud hub = `openfdd-central` + `openfdd-mqtt` + `openfdd-web` (+ optional `openfdd-mcp`). Fieldbus publishes **inbound MQTTS** to the hub.
+1. **`openfdd-fieldbus` is never deployed on public cloud (Railway / cloud web-app hosting is retired).** It is an **OT-behind-firewall** edge only. Cloud hub = `openfdd-central` + `openfdd-mqtt` + `openfdd-web` (+ optional `openfdd-mcp`). Fieldbus publishes **inbound MQTTS** to the hub.
 2. **Poll + MQTT publish interval is fixed at 300 seconds** (compiled into fieldbus). Operator env/TOML knobs that used to lower the interval are **ignored**. This protects legacy MS/TP from MQTTS bursts.
 3. Target **~30%** of configured points â€” HVAC health / cookbook roles only (`OPENFDD_POLL_HEALTH_ONLY=1` or `[poll] health_roles_only = true`). Bandwidth throttle is the point subset, **not** a faster poll.
 4. **Never** bulk-discover and poll an entire BACnet network on a production site.

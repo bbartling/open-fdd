@@ -3,7 +3,7 @@ name: openfdd-stack-ghcr
 description: >-
   Use when pulling or verifying Open-FDD GHCR stack images for the portal
   recipe (central, web, Timescale). Triggers on: nightly, openfdd-central,
-  openfdd-web, GHCR, openfdd_stack_up, OPENFDD_IMAGE_TAG.
+  openfdd-web, GHCR, openfdd_stack_up, OPENFDD_IMAGE_TAG, re-pin, local stack.
 ---
 
 # Stack GHCR
@@ -39,9 +39,26 @@ OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/rest
 
 Do not pull `openfdd-fieldbus` or `openfdd-mqtt` as the product stack.
 
-## Railway and local HTTP
+## Local single-host stack and re-pin
 
-Railway uses the same `openfdd-web` image. Set `OPENFDD_CENTRAL_UPSTREAM` to the live central private DNS (`host:8080`, no `http://`). `OPENFDD_NGINX_RESOLVER=auto` lets nginx start before that DNS exists. Deploy central (healthy `/api/health`) then web. Re-pin steps: [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md).
+Hosting is the local single-host stack only. Railway and any cloud web-app hosting are retired and prohibited (like DataFusion, Parquet and dual record writing); old Railway notes are `historical/non-executable`.
+
+The stack runs from the repo checkout with secrets and the pin in the gitignored repo-root `.env`:
+
+```bash
+docker compose --env-file .env -f docker/compose.portal.yml \
+  -f docker/compose.timescale.yml -f docker/compose.local.yml up -d --no-build
+```
+
+Re-pin to a published tip (edits only `OPENFDD_IMAGE_TAG` in `.env`, pulls central/web, `up -d --no-build`, then asserts):
+
+```bash
+./scripts/check_ghcr_tip_stack.sh sha-<7>
+./scripts/openfdd_local_repin.sh sha-<7>            # --dry-run to preview; no tag = newest-by-created
+./scripts/ops/assert_local_stack_after_repin.sh sha-<7>   # base defaults to http://127.0.0.1:8080
+```
+
+The assert checks `/api/health` (`historian:"timescale"`, `dual_write:false`, version `+<sha>`), AFDD scheduler status, the web SPA on `:3000`, and the running central/web image tags. Never build images locally, never `down -v`, never prune volumes; workspace and Timescale data stay in the project-scoped named volumes. Runbook: [`docs/operations/LOCAL_HOSTING.md`](../../../docs/operations/LOCAL_HOSTING.md).
 
 Set `OPENFDD_AGENT_PASSWORD` on central for MCP (username `agent`). Do not put `OPENFDD_ADMIN_PASSWORD` in an MCP config. Admins may `POST /api/auth/agent-token` for a short-lived operator JWT.
 
@@ -61,5 +78,4 @@ Workflow: `ghcr-openfdd-stack.yml` (retargets nightly on master). MCP: `rust-ghc
 
 ## Related skills
 
-- [`openfdd-railway-cli`](../openfdd-railway-cli/SKILL.md) — backup and re-pin
 - [`openfdd-architecture`](../openfdd-architecture/SKILL.md) — engine boundary

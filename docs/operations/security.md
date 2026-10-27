@@ -77,7 +77,7 @@ Industry-typical dual sink — enough for auditors / pen testers, not a SIEM pro
 | Channel | What | Where |
 |---------|------|--------|
 | **Security audit** | Login success/fail/throttle, command authz, command issue, telemetry suspend/resume, fieldbus API-key rejects | One JSONL file + stdout target `security_audit` |
-| **App / error logs** | `tracing` at info/warn/error with `request_id` | stdout (Railway / AWS / `docker logs`) |
+| **App / error logs** | `tracing` at info/warn/error with `request_id` | stdout (`docker logs`) |
 
 **File audit (local + volume mounts):**
 

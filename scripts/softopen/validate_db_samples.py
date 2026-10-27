@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Soft-OPEN DB sample checks via product API (no direct SQL on Railway).
+"""Soft-OPEN DB sample checks via product API (no direct SQL on the stack DB).
 
 Fails when package mapping shows roles but point-resolve history is empty
 (mapped-but-0-samples). Soft-OPEN ≠ FQ.

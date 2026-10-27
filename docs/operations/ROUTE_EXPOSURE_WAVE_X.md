@@ -6,7 +6,7 @@ Soft-OPEN ≠ FQ. Source policy: `.cursor/agents/deployment_route_exposure_wave_
 
 | Profile | Public entry | Private | OT |
 | --- | --- | --- | --- |
-| Railway/cloud | HTTPS web → nginx → central | Timescale + mqtt | Fieldbus on-prem → MQTTS only |
+| Railway/cloud (historical, retired) | HTTPS web → nginx → central | Timescale + mqtt | Fieldbus on-prem → MQTTS only |
 | Full OT LAN | Caddy HTTPS → web → central | Timescale + drivers | Local SQL ingest; optional MQTTS |
 | Field-only | No public API | Collector + spool | OT LAN; outbound MQTTS |
 

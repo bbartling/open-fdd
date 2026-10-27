@@ -12,7 +12,7 @@ Open-FDD ships two **named** product recipes. Compose helpers below map onto the
 
 | Named recipe | Best for | Services | Arch | Guide |
 | --- | --- | --- | --- | --- |
-| **Recipe 1 — cloud hub** | Railway / cloud MQTTS hub | `openfdd-mqtt` + `openfdd-central` + `openfdd-web` | **linux/amd64 only** | [Railway hub](../quick-start/railway-hub.md) · [Railway deployment](RAILWAY_DEPLOYMENT.md) |
+| **Recipe 1 — cloud hub** (historical; Railway / cloud hosting retired) | cloud MQTTS hub | `openfdd-mqtt` + `openfdd-central` + `openfdd-web` | **linux/amd64 only** | Retired — use [Local hosting](LOCAL_HOSTING.md) |
 | **Recipe 2 — OT edge** | Historical (archived OT): LAN/VPN OT host | `openfdd-central` + `openfdd-web` + protocol (fieldbus/…) | **amd64 + arm64** | [Local stack](../quick-start/local-stack.md) · [VM deployment](VM_DEPLOYMENT.md) |
 
 **Ingest on Recipe 2 (historical, superseded by the Timescale-only mandate):** protocol scrape → on-box central / Parquet / DataFusion (broker **not** required). Optional MQTTS publish to a Recipe 1 hub is **off by default**.
@@ -33,7 +33,7 @@ Do **not** treat “fieldbus-only on-prem + hub-only in cloud” as the only top
 | `ghcr.io/bbartling/openfdd-mqtt` | Mosquitto broker (MQTTS on 8883) |
 | `ghcr.io/bbartling/openfdd-mcp` | Slim Rust MCP server (talks to central) |
 
-All release images are intended to be publicly pullable from GHCR so an IT department, Railway, or a local Docker host does not need a repository credential just to run Open-FDD. Package visibility is a GitHub Package setting and should be checked whenever a new GHCR package name is introduced.
+All release images are intended to be publicly pullable from GHCR so an IT department or a local Docker host does not need a repository credential just to run Open-FDD. Package visibility is a GitHub Package setting and should be checked whenever a new GHCR package name is introduced.
 
 See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html).
 
@@ -196,7 +196,7 @@ OPENFDD_EDGE_KIT_DIR=./deploy/mqtt/kits/site-a__fieldbus-1 \
 | `OPENFDD_ADMIN_PASSWORD` | — | admin/operator/viewer password when JWT is set |
 | `OPENFDD_CENTRAL_BIND` | `0.0.0.0` | Central host bind; use `127.0.0.1` on a dashboard VM unless direct API access is needed |
 | `OPENFDD_WEB_BIND` | `0.0.0.0` | React web host bind (LAN/VPN access) |
-| `OPENFDD_CENTRAL_UPSTREAM` | `central:8080` | Runtime web proxy target; Railway uses private service DNS |
+| `OPENFDD_CENTRAL_UPSTREAM` | `central:8080` | Runtime web proxy target (`central:8080` on the local stack) |
 | `OPENFDD_PRIORITY_SCAN_ENABLED` | `0` | Explicitly enable the read-only edge priority history scheduler |
 | `OPENFDD_PRIORITY_SCAN_INTERVAL_SECS` | `3600` | Delay after each completed device visit; minimum `300` |
 | `OPENFDD_PRIORITY_SCAN_MAX_POINTS_PER_DEVICE` | `100` | Bound configured points visited per device cycle; maximum `1000` |

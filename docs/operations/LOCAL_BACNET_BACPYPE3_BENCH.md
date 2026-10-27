@@ -8,6 +8,8 @@ nav_exclude: true
 
 # Local BACnet / BACpypes3 OT bench (Mint OptiPlex)
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 Use this host to troubleshoot **BACnet → fieldbus → MQTTS → central** without Railway
 or ACME VIM.
 

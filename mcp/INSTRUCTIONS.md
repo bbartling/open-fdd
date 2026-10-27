@@ -33,7 +33,7 @@ MCP runs on the **host** and needs a **Bearer JWT** in `OPENFDD_MCP_TOKEN`. Pref
 
 | Source | Path / env |
 |--------|------------|
-| Railway / central | `OPENFDD_AGENT_PASSWORD` → `POST /api/auth/login` `{ "username":"agent", "password":"…" }` → operator JWT |
+| Local stack / central | `OPENFDD_AGENT_PASSWORD` → `POST /api/auth/login` `{ "username":"agent", "password":"…" }` → operator JWT |
 | Admin mint | Admin JWT → `POST /api/auth/agent-token` `{ "ttl_secs": 3600 }` |
 | LAN bootstrap (legacy) | `workspace/bootstrap_credentials.once.txt` — lines `integrator: …`, `agent: …` |
 | Env override (scripts) | `OPENFDD_INTEGRATOR_PASSWORD`, `OPENFDD_AGENT_PASSWORD` |
@@ -44,19 +44,18 @@ MCP runs on the **host** and needs a **Bearer JWT** in `OPENFDD_MCP_TOKEN`. Pref
 - `openfdd_auth_credentials_hint` — paths and roles (no secrets)
 - `openfdd_auth_login` — `{ "role": "agent" }` → JWT for `OPENFDD_MCP_TOKEN` when bootstrap/env passwords exist
 
-Railway: keep MCP on private networking; see [RAILWAY_DEPLOYMENT.md](../docs/operations/RAILWAY_DEPLOYMENT.md). Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. Open-FDD does **not** ship a built-in chatbot — connect external agents through this stdio server or JWT REST.
+Local stack: keep MCP on loopback or the LAN/VPN; see [LOCAL_HOSTING.md](../docs/operations/LOCAL_HOSTING.md). Works with **Cursor, Claude Desktop, Codex CLI, OpenClaw**, or any MCP host. Open-FDD does **not** ship a built-in chatbot — connect external agents through this stdio server or JWT REST.
 
-### Railway CLI vs this MCP
+### Stack tooling vs this MCP
 
 | Tool | Purpose |
 |------|---------|
-| **`railway` CLI** (`@railway/cli`) | Deploy/re-pin hub images, vars, logs on Railway (`gleaming-cooperation`). Skill: [`openfdd-railway-cli`](../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md). Docs: [`RAILWAY_DEPLOYMENT.md`](../docs/operations/RAILWAY_DEPLOYMENT.md). |
+| **Local re-pin** (`scripts/openfdd_local_repin.sh`) | Pin `OPENFDD_IMAGE_TAG` in `.env`, pull, `up -d --no-build`, assert. Skill: [`openfdd-stack-ghcr`](../openfdd_agent_spec/skills/openfdd-stack-ghcr/SKILL.md). Docs: [`LOCAL_HOSTING.md`](../docs/operations/LOCAL_HOSTING.md). Railway / cloud web-app hosting is retired. |
 | **Local Compose (`react-ot`)** | Firewall / on-prem hub — **plain HTTP** UI `:3000` / API `:8080`; **no product TLS yet**. Docs: [`LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md). |
-| **Stress closeout** | After tip re-pin: smoke 01/06/10/18 + Pipeline A, then `run_all` → synth59 → gate17 → B100 → Creekside → gate19 → optional light ZAP on Railway public URL. Docs: [`STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd_agent_spec/skills/openfdd-stress-closeout/SKILL.md). |
-| **Railway’s optional MCP** (`railway setup agent`) | Railway platform deploys/docs — **not** HVAC FDD. |
+| **Stress closeout** | After tip re-pin: smoke 01/06/10/18 + Pipeline A, then `run_all` → synth59 → gate17 → B100 → Creekside → gate19 (owned stack; no public-URL ZAP). Docs: [`STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd_agent_spec/skills/openfdd-stress-closeout/SKILL.md). |
 | **`openfdd-mcp` (this package)** | FDD / sites / historian tools against central via `OPENFDD_MCP_TOKEN`. |
 
-Do not point Cursor at Railway MCP and expect Open-FDD AFDD tools. For cloud lab: keep central private; mint agent JWT; set `OPENFDD_API_BASE` to a reachable central URL (private mesh or VPN), not the public web SPA alone for write tools. For local: `OPENFDD_API_BASE=http://127.0.0.1:8080` (HTTP).
+Keep central private; mint an agent JWT; set `OPENFDD_API_BASE` to a reachable central URL (loopback or LAN/VPN), not the web SPA alone for write tools. For local: `OPENFDD_API_BASE=http://127.0.0.1:8080` (HTTP).
 
 ## Model + FDD wiresheet
 
@@ -66,7 +65,7 @@ After `openfdd_model_assignments_save` (with `confirm: true`), the **FDD wireshe
 
 Empty analytics after import = **missing roles**, not a broken MCP tool or FDD engine. Stamp `equipType`; Haystack `points` → SQL via `haystack_point_to_role`; weather at `{building}/weather/`; motor ≠ compressor ≠ valve. Full table: [`docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md) · aliases [`ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
 
-**Live MQTT (Railway `bldg2`):** healthy `ingest_ok` with blank Overview usually means live tags (`zonetemp`, `sa_t`) were not normalized to cookbook `zone_t` / `sat`. Product aliases: `normalize_role` in `fdd_core`. Do not rename remote OT devices. CSV package uploads need JWT + web nginx body ≥128m.
+**Live MQTT (historical, retired Railway `bldg2`):** healthy `ingest_ok` with blank Overview usually means live tags (`zonetemp`, `sa_t`) were not normalized to cookbook `zone_t` / `sat`. Product aliases: `normalize_role` in `fdd_core`. Do not rename remote OT devices. CSV package uploads need JWT + web nginx body ≥128m.
 
 Use existing `openfdd_csv_import_*` + `openfdd_csv_package_append`. SCAFFOLD `package_preflight` / `mapping_suggest` are **not** in this crate.
 

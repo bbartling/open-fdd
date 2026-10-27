@@ -1,5 +1,7 @@
 # Soft-OPEN R5 — ACME semantic_meta tip reachability
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](../operations/LOCAL_HOSTING.md).
+
 Soft-OPEN ≠ FQ. **No volume heroics** (no package import / volume mutate from Soft-OPEN agents).
 
 ## Tip-proven (Railway Soft-OPEN hub)

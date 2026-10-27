@@ -1,5 +1,7 @@
 # Single-system and building-folder AHU FDD/RCx Typst
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](../../operations/LOCAL_HOSTING.md).
+
 **Date:** 2026-09-26
 **Status:** Shipped on the anomaly-screening CLI branch
 **Package:** PyPI `open-fdd`. The only shipped PDF command is `open-fdd-anomaly report ... --compile`.

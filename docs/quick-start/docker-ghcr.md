@@ -47,7 +47,7 @@ Named product recipes (see [Build recipes](../operations/build-recipes.md)):
 
 | Named recipe | Compose helpers | Services | Arch |
 |--------------|-----------------|----------|------|
-| **Recipe 1 — cloud hub** | `central`, Railway hub | mqtt + central + web | amd64 |
+| **Recipe 1 — cloud hub** (historical; Railway retired) | `central` | mqtt + central + web | amd64 |
 | **Recipe 2 — OT edge** | `csv` / `react` + protocol, or `standalone` | central + web + protocol (mqtt optional) | amd64 + arm64 |
 
 | Compose helper | Command | Services |

@@ -49,7 +49,7 @@ not a Soft-OPEN driver, and not a new GitHub repo. Haystack semantics stay.
 
 ## Consequences
 
-- Railway Soft-OPEN hub can poll NF portals over HTTPS without MQTT/fieldbus.
+- The local single-host stack can poll NF portals over HTTPS without MQTT/fieldbus.
 - ACME live NF retrofit waits until bosspi Soft-OPEN is stable (marinate) and
   Grok deploy tools are rewritten for the slimmer stack.
 - Soft-OPEN 3620 ART sweep remains deferred tip-bug backlog.
