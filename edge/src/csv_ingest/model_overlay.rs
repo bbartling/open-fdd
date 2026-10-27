@@ -911,11 +911,7 @@ pub fn validate_engineer_unit_quantity(unit: &str, quantity: &str) -> Result<(),
     ))
 }
 
-fn validate_engineer_patch(
-    unit: Option<&str>,
-    quantity: Option<&str>,
-    primary_reference: Option<bool>,
-) -> Result<(), String> {
+fn validate_engineer_patch(unit: Option<&str>, quantity: Option<&str>) -> Result<(), String> {
     let has_unit = unit.map(str::trim).is_some_and(|u| !u.is_empty());
     let has_quantity = quantity.map(str::trim).is_some_and(|q| !q.is_empty());
     if has_unit || has_quantity {
