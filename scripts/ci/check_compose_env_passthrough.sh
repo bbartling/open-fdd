@@ -127,10 +127,10 @@ for name in "${required[@]}"; do
   fi
 done
 
-if grep -qE '^    env_file:' <<<"$central_block" && grep -qE '\.env' <<<"$central_block"; then
-  echo "PASS: central env_file forwards per-site credential names from .env"
+if grep -q 'env_file:' docker/compose.local.yml && grep -qE '\.env' docker/compose.local.yml; then
+  echo "PASS: compose.local.yml env_file forwards per-site credential names from .env"
 else
-  echo "FAIL: central must declare env_file for per-site NF credential env names (see LOCAL_DEPLOYMENT.md)" >&2
+  echo "FAIL: compose.local.yml must declare env_file for per-site NF credential env names" >&2
   fail=1
 fi
 
