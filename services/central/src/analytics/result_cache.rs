@@ -141,8 +141,7 @@ pub async fn respond_timescale(
     req: &AnalyticsRequest,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let served = serve_fallible(query_id, query_version, req, async || {
-        let value =
-            crate::timescale_analytics::respond_query(query_id, query_version, req).await?;
+        let value = crate::timescale_analytics::respond_query(query_id, query_version, req).await?;
         Ok(crate::timescale_analytics::envelope_from_dispatch_value(
             query_version,
             req,
@@ -812,7 +811,11 @@ mod tests {
             CacheWatch::Resolved(timescale_identity("model-a", 2, "samples=2;series=1")),
             async || {
                 c2.fetch_add(1, Ordering::SeqCst);
-                Ok(envelope("sensor-faults-v1", &req("site-a").query, Vec::new()))
+                Ok(envelope(
+                    "sensor-faults-v1",
+                    &req("site-a").query,
+                    Vec::new(),
+                ))
             },
         )
         .await

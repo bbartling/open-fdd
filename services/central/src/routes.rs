@@ -7240,10 +7240,7 @@ async fn analytics_fuel(
             if empty {
                 if let Some(analytics) = body.get_mut("analytics").and_then(|v| v.as_object_mut()) {
                     analytics.insert("status".into(), json!("no_meters"));
-                    analytics.insert(
-                        "reason".into(),
-                        json!("selected site has no meter rows"),
-                    );
+                    analytics.insert("reason".into(), json!("selected site has no meter rows"));
                 }
             }
             return Ok(Json(body));

@@ -1637,8 +1637,8 @@ pub fn envelope_from_dispatch_value(
     req: &AnalyticsRequest,
     value: Value,
 ) -> crate::analytics::AnalyticsEnvelope {
-    use chrono::Utc;
     use crate::analytics::{finalize_historian, AnalyticsEnvelope, SCHEMA_VERSION};
+    use chrono::Utc;
 
     if let Ok(env) = serde_json::from_value::<AnalyticsEnvelope>(value.clone()) {
         return finalize_historian(req, env, query_version);
@@ -1717,9 +1717,7 @@ pub fn envelope_from_dispatch_value(
         "pack_version",
         "analytics_pack",
     ];
-    let has_meta = dispatch_meta_keys
-        .iter()
-        .any(|key| obj.contains_key(*key));
+    let has_meta = dispatch_meta_keys.iter().any(|key| obj.contains_key(*key));
     if has_meta {
         let mut cov = env
             .coverage

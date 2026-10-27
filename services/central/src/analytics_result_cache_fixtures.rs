@@ -11,12 +11,11 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 use crate::analytics::{
-    plant, plant_health,
-    QV_AHU_ECONOMIZER_HEALTH, QV_AHU_HEALTH, QV_AHU_PRESSURE_HEALTH, QV_AHU_TEMPERATURE_HEALTH,
-    QV_BOILER_HEALTH, QV_DIURNAL, QV_ECONOMIZER, QV_HP_HEALTH, QV_MECHANICAL_COOLING, QV_METERING,
-    QV_MV_CHANGE_POINT, QV_PID_HUNTING, QV_RCX_AHU, QV_RCX_VAV, QV_RUNTIME, QV_SCHEDULE,
-    QV_SENSOR_FAULTS, QV_SENSOR_HEALTH, QV_SENSOR_STATS, QV_SETPOINTS, QV_SQL_ANOMALY, QV_TOPOLOGY,
-    QV_VAV_HEALTH,
+    plant, plant_health, QV_AHU_ECONOMIZER_HEALTH, QV_AHU_HEALTH, QV_AHU_PRESSURE_HEALTH,
+    QV_AHU_TEMPERATURE_HEALTH, QV_BOILER_HEALTH, QV_DIURNAL, QV_ECONOMIZER, QV_HP_HEALTH,
+    QV_MECHANICAL_COOLING, QV_METERING, QV_MV_CHANGE_POINT, QV_PID_HUNTING, QV_RCX_AHU, QV_RCX_VAV,
+    QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_FAULTS, QV_SENSOR_HEALTH, QV_SENSOR_STATS, QV_SETPOINTS,
+    QV_SQL_ANOMALY, QV_TOPOLOGY, QV_VAV_HEALTH,
 };
 use crate::state::AppState;
 
@@ -53,16 +52,28 @@ pub const COMPUTING_ANALYTICS_POST_ROUTES: &[(&str, &str, &str)] = &[
         "cooling-tower-health",
         plant_health::QV_COOLING_TOWER_HEALTH,
     ),
-    ("/api/analytics/sensor-faults", "sensor-faults", QV_SENSOR_FAULTS),
+    (
+        "/api/analytics/sensor-faults",
+        "sensor-faults",
+        QV_SENSOR_FAULTS,
+    ),
     ("/api/analytics/pid-hunting", "pid-hunting", QV_PID_HUNTING),
-    ("/api/analytics/boiler-health", "boiler-health", QV_BOILER_HEALTH),
+    (
+        "/api/analytics/boiler-health",
+        "boiler-health",
+        QV_BOILER_HEALTH,
+    ),
     ("/api/analytics/hp-health", "hp-health", QV_HP_HEALTH),
     (
         "/api/analytics/zone-other-health",
         "zone-other-health",
         plant_health::QV_ZONE_OTHER_HEALTH,
     ),
-    ("/api/analytics/sensor-health", "sensor-health", QV_SENSOR_HEALTH),
+    (
+        "/api/analytics/sensor-health",
+        "sensor-health",
+        QV_SENSOR_HEALTH,
+    ),
     ("/api/analytics/schedule", "schedule", QV_SCHEDULE),
     (
         "/api/analytics/mechanical-cooling",
@@ -99,7 +110,11 @@ pub const COMPUTING_ANALYTICS_POST_ROUTES: &[(&str, &str, &str)] = &[
     ("/api/analytics/setpoints", "setpoints", QV_SETPOINTS),
     ("/api/analytics/diurnal", "diurnal", QV_DIURNAL),
     ("/api/analytics/topology", "topology", QV_TOPOLOGY),
-    ("/api/analytics/sensor-stats", "sensor-stats", QV_SENSOR_STATS),
+    (
+        "/api/analytics/sensor-stats",
+        "sensor-stats",
+        QV_SENSOR_STATS,
+    ),
     ("/api/analytics/sql-anomaly", "sql-anomaly", QV_SQL_ANOMALY),
 ];
 
@@ -157,17 +172,16 @@ fn test_database_url() -> Option<String> {
 fn every_computing_analytics_post_route_is_documented() {
     let routes = include_str!("routes.rs");
     for (path, query_id, _qv) in COMPUTING_ANALYTICS_POST_ROUTES {
-        assert!(
-            routes.contains(path),
-            "routes.rs must register POST {path}"
-        );
+        assert!(routes.contains(path), "routes.rs must register POST {path}");
         assert!(
             routes.contains(query_id),
             "routes.rs must dispatch cache query_id {query_id} for {path}"
         );
     }
     assert!(
-        routes.contains("Static RCx preset catalog — not a historian compute; intentionally uncached"),
+        routes.contains(
+            "Static RCx preset catalog — not a historian compute; intentionally uncached"
+        ),
         "rcx presets list must document uncached static catalog"
     );
     assert!(
@@ -215,7 +229,12 @@ async fn every_analytics_endpoint_uses_result_store() {
     );
 
     let before_rows = cache_rows(&pool, SITE).await;
-    let first = post_json(&app, path, json!({ "building_id": SITE, "max_points": 500 })).await;
+    let first = post_json(
+        &app,
+        path,
+        json!({ "building_id": SITE, "max_points": 500 }),
+    )
+    .await;
     assert_eq!(first["cache"]["hit"], false, "{first}");
     let after_miss = cache_rows(&pool, SITE).await;
     assert!(
@@ -223,7 +242,12 @@ async fn every_analytics_endpoint_uses_result_store() {
         "miss must persist analytics_result row"
     );
 
-    let second = post_json(&app, path, json!({ "building_id": SITE, "max_points": 500 })).await;
+    let second = post_json(
+        &app,
+        path,
+        json!({ "building_id": SITE, "max_points": 500 }),
+    )
+    .await;
     assert_eq!(second["cache"]["hit"], true, "{second}");
     assert_eq!(cache_rows(&pool, SITE).await, after_miss);
 
@@ -371,11 +395,13 @@ async fn seed_runtime_site(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("site");
-    sqlx::query("INSERT INTO building (building_id, site_id) VALUES ($1, $1) ON CONFLICT DO NOTHING")
-        .bind(SITE)
-        .execute(pool)
-        .await
-        .expect("building");
+    sqlx::query(
+        "INSERT INTO building (building_id, site_id) VALUES ($1, $1) ON CONFLICT DO NOTHING",
+    )
+    .bind(SITE)
+    .execute(pool)
+    .await
+    .expect("building");
     sqlx::query(
         "INSERT INTO equipment (building_id, equipment_id, equip_type)
          VALUES ($1, $2, 'ahu') ON CONFLICT DO NOTHING",
