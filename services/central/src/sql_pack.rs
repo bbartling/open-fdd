@@ -2027,6 +2027,37 @@ mod tests {
             return;
         };
         let admin = admin_url(&shared_url);
+        let admin_pool = match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(3))
+            .connect(&admin)
+            .await
+        {
+            Ok(pool) => pool,
+            Err(_) if explicit_database_url() => {
+                panic!("pack database admin connect failed");
+            }
+            Err(_) => {
+                eprintln!("skip: postgres admin unavailable");
+                return;
+            }
+        };
+        let timescale: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM pg_available_extensions WHERE name = 'timescaledb'
+             )",
+        )
+        .fetch_one(&admin_pool)
+        .await
+        .unwrap_or(false);
+        drop(admin_pool);
+        if !timescale {
+            if timescale_required() {
+                panic!("timescaledb extension is not available");
+            }
+            eprintln!("skip: timescaledb extension is not available");
+            return;
+        }
         let _lock = crate::test_env_lock::lock_env();
         let results = tempfile::tempdir().expect("results");
         let _env = EnvHold::capture(&[
