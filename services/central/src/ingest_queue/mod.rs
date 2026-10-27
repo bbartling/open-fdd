@@ -22,6 +22,8 @@ mod replay_horizon_acceptance;
 #[cfg(test)]
 mod scope_acceptance;
 #[cfg(test)]
+mod site_backfill_acceptance;
+#[cfg(test)]
 mod upgrade_acceptance;
 #[cfg(test)]
 mod writer_fence;

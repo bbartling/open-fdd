@@ -246,6 +246,21 @@ impl QueueClient {
         self.memory.backfill(jobs, now, claim)
     }
 
+    pub async fn site_backfill(
+        &self,
+        jobs: Vec<NewJob>,
+        range_start: DateTime<Utc>,
+        range_end: DateTime<Utc>,
+        now: DateTime<Utc>,
+        claim: &IdempotencyClaim,
+    ) -> Result<Vec<JobView>, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            return postgres::site_backfill(&pool, &jobs, range_start, range_end, now, claim).await;
+        }
+        self.memory
+            .site_backfill(jobs, range_start, range_end, now, claim)
+    }
+
     pub async fn prune_applied_samples(
         &self,
         tenant_id: &str,

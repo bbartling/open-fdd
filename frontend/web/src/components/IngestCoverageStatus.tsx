@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchOptionalJson, ingestCoverageStatusPath } from "../api/providersApi";
 import {
   coverageStateLabel,
+  coverageStateReasonLabel,
   coverageStateTone,
   coverageStatusFromFetch,
   pointsText,
@@ -33,6 +34,13 @@ export function IngestCoverageStatus({ siteId }: { siteId: string }) {
       {view?.status === "error" ? (
         <p className="error" data-testid="ingest-coverage-error">
           {view.message}
+        </p>
+      ) : null}
+      {view?.status === "ready" && view.state === "not_assessed" ? (
+        <p className="inline-alert" data-testid="ingest-coverage-not-assessed">
+          <strong>Not assessed</strong>
+          {" — "}
+          {coverageStateReasonLabel(view.stateReason ?? view.rows[0]?.stateReason ?? "")}
         </p>
       ) : null}
       {view?.status === "ready" ? (

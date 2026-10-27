@@ -42,6 +42,7 @@ use error::safe_operator_code;
 use map::RoleResolver;
 use types::{
     ProviderHealth, ProviderHealthStatus, ProviderKind, ProvidersHealthBody, SiteProviderHealth,
+    WithheldPointSummary,
 };
 
 use crate::state::AppState;
@@ -328,7 +329,7 @@ impl Runtime {
                     "ingest site skipped; committed plan identity does not match the configured site"
                 );
             }
-            site_health.push(health_row(site, status, message));
+            site_health.push(health_row(site, &models, status, message));
         }
         site_health.extend(loaded.failures.iter().map(failure_row));
         Arc::new(Self {
@@ -382,7 +383,24 @@ impl Runtime {
     }
 
     pub async fn health_snapshot(&self) -> ProvidersHealthBody {
-        self.health.lock().await.clone()
+        let mut body = self.health.lock().await.clone();
+        let models = self.models.lock().unwrap_or_else(|err| err.into_inner());
+        for site in &mut body.sites {
+            let Some(config) = self.sites.iter().find(|row| {
+                row.building_id == site.building_id
+                    && crate::providers::http_policy::provider_ids_equivalent(
+                        &row.provider_instance_id,
+                        &site.provider_instance_id,
+                    )
+            }) else {
+                continue;
+            };
+            let (approved, withheld, reasons) = plan_point_rollups(config, &models);
+            site.approved_points = approved;
+            site.withheld_points = withheld;
+            site.withheld_point_reasons = reasons;
+        }
+        body
     }
 
     /// Record a plan-identity skip on the health row. Does not invent a poll time.
@@ -414,6 +432,9 @@ impl Runtime {
                     endpoint: "https://portal.example".into(),
                     poll_secs: 60,
                     mapped_points: 1,
+                    approved_points: 0,
+                    withheld_points: 0,
+                    withheld_point_reasons: Vec::new(),
                     health: ProviderHealth {
                         provider_id: "nf:test".into(),
                         kind: ProviderKind::Nf,
@@ -532,11 +553,50 @@ fn opening_health(
     }
 }
 
+fn plan_point_rollups(
+    site: &SiteConfig,
+    models: &CommittedModelStore,
+) -> (usize, usize, Vec<WithheldPointSummary>) {
+    let Some(plan) = models.active_plan(&site.tenant_id, &site.building_id) else {
+        return (0, 0, Vec::new());
+    };
+    let approved = plan
+        .groups
+        .iter()
+        .filter(|group| {
+            crate::providers::http_policy::provider_ids_equivalent(
+                &group.provider_instance_id,
+                &site.provider_instance_id,
+            )
+        })
+        .map(|group| group.points.len())
+        .sum();
+    let withheld_rows: Vec<WithheldPointSummary> = plan
+        .withheld
+        .iter()
+        .filter(|row| {
+            crate::providers::http_policy::provider_ids_equivalent(
+                &row.provider_instance_id,
+                &site.provider_instance_id,
+            )
+        })
+        .map(|row| WithheldPointSummary {
+            equipment_id: row.equipment_id.clone(),
+            semantic_point_id: row.semantic_point_id.clone(),
+            reason: row.reason.clone(),
+        })
+        .collect();
+    let withheld = withheld_rows.len();
+    (approved, withheld, withheld_rows)
+}
+
 fn health_row(
     site: &SiteConfig,
+    models: &CommittedModelStore,
     status: ProviderHealthStatus,
     message: Option<String>,
 ) -> SiteProviderHealth {
+    let (approved, withheld, withheld_point_reasons) = plan_point_rollups(site, models);
     SiteProviderHealth {
         building_id: site.building_id.clone(),
         provider_instance_id: site.provider_instance_id.clone(),
@@ -544,6 +604,9 @@ fn health_row(
         endpoint: site.endpoint.clone(),
         poll_secs: site.poll_secs,
         mapped_points: site.resolver.mapped_count(),
+        approved_points: approved,
+        withheld_points: withheld,
+        withheld_point_reasons,
         health: ProviderHealth {
             provider_id: site.provider_instance_id.clone(),
             kind: site.kind,
@@ -569,6 +632,9 @@ fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
         endpoint: "invalid".into(),
         poll_secs: 0,
         mapped_points: 0,
+        approved_points: 0,
+        withheld_points: 0,
+        withheld_point_reasons: Vec::new(),
         health: ProviderHealth {
             provider_id: String::new(),
             kind: ProviderKind::Nf,
@@ -747,6 +813,9 @@ mod tests {
             endpoint: endpoint.into(),
             poll_secs: 300,
             mapped_points: 1,
+            approved_points: 0,
+            withheld_points: 0,
+            withheld_point_reasons: Vec::new(),
             health: ProviderHealth {
                 provider_id: format!("nf:{building}:abc"),
                 kind: ProviderKind::Nf,

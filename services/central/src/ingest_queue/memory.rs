@@ -393,6 +393,68 @@ impl MemoryStore {
         Ok(created)
     }
 
+    pub fn site_backfill(
+        &self,
+        jobs: Vec<NewJob>,
+        range_start: DateTime<Utc>,
+        range_end: DateTime<Utc>,
+        now: DateTime<Utc>,
+        claim: &IdempotencyClaim,
+    ) -> Result<Vec<JobView>, QueueError> {
+        if jobs.is_empty() || jobs.len() > MAX_SITE_BACKFILL_JOBS as usize {
+            return Err(QueueError::Invalid(format!(
+                "site backfill requires 1 to {} jobs",
+                MAX_SITE_BACKFILL_JOBS
+            )));
+        }
+        let object_id = site_backfill_object_id(&jobs[0]);
+        let payload_hash = site_backfill_payload_hash(
+            &jobs[0].tenant_id,
+            &jobs[0].canonical_site,
+            &jobs[0].provider_instance_id,
+            &jobs[0].model_revision,
+            range_start,
+            range_end,
+        );
+        if claim.object_id != object_id
+            || claim.payload_hash != payload_hash
+            || jobs.iter().any(|job| job.tenant_id != claim.tenant_id)
+        {
+            return Err(QueueError::Conflict(
+                "idempotency key does not match the original request".into(),
+            ));
+        }
+        let mut inner = self.lock();
+        let key = idempotency_key(claim, "site_backfill");
+        if let Some(record) = inner.idempotency.get(&key) {
+            if record.object_id != claim.object_id || record.payload_hash != claim.payload_hash {
+                return Err(QueueError::Conflict(
+                    "idempotency key does not match the original request".into(),
+                ));
+            }
+            return replay_job_list(&inner, &record.job_ids, &claim.tenant_id);
+        }
+        for job in &jobs {
+            refuse_before_horizon(
+                &inner,
+                &job.tenant_id,
+                &job.canonical_site,
+                job.logical_window_start,
+            )?;
+        }
+        let mut created = Vec::with_capacity(jobs.len());
+        for job in jobs {
+            match enqueue_locked(&mut inner, job, now)? {
+                EnqueueOutcome::Created(view) | EnqueueOutcome::Existing(view) => {
+                    created.push(view)
+                }
+            }
+        }
+        let ids: Vec<Uuid> = created.iter().map(|job| job.job_id).collect();
+        remember_idempotency(&mut inner, claim, "site_backfill", ids, None);
+        Ok(created)
+    }
+
     /// Memory mirror of the Postgres ledger prune: deletes ledger rows older
     /// than the retention for one site, keeps rows of live jobs, and moves the
     /// site's replay horizon forward.

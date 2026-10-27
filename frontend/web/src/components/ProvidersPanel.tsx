@@ -259,6 +259,8 @@ export function ProvidersPanel() {
                 <th>Origin</th>
                 <th>Poll</th>
                 <th>Mapped points</th>
+                <th>Approved points</th>
+                <th>Withheld points</th>
                 <th>Credential ref</th>
                 <th>Last poll</th>
                 <th>Last success</th>
@@ -310,6 +312,12 @@ export function ProvidersPanel() {
                     </td>
                     <td>{formatPoll(row.pollSecs)}</td>
                     <td>{row.mappedPoints ?? "—"}</td>
+                    <td data-testid={`provider-approved-${row.buildingId}`}>
+                      {row.approvedPoints ?? "—"}
+                    </td>
+                    <td data-testid={`provider-withheld-${row.buildingId}`}>
+                      {row.withheldPoints ?? "—"}
+                    </td>
                     <td>{credentialRefLabel(row.clientIdConfigured)}</td>
                     <td>{row.lastPollAt ?? "—"}</td>
                     <td data-testid={`provider-last-success-${row.buildingId}`}>
@@ -343,6 +351,18 @@ export function ProvidersPanel() {
               message: selected.message,
             }).detail}
           </p>
+          {selected.withheldReasons && selected.withheldReasons.length > 0 ? (
+            <div data-testid="provider-withheld-reasons">
+              <h4>Withheld plan points</h4>
+              <ul>
+                {selected.withheldReasons.map((entry) => (
+                  <li key={`${entry.equipmentId}:${entry.pointId}:${entry.reason}`}>
+                    {entry.equipmentId} · {entry.pointId}: {entry.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <IngestCoverageStatus siteId={selected.buildingId} />
           <h3 id="provider-ledger-heading">Window ledger</h3>
           {ledgerError ? (

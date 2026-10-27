@@ -148,6 +148,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(ingest_queue::http::scale_preview),
         )
         .route("/api/ingest/backfill", post(ingest_queue::http::backfill))
+        .route(
+            "/api/ingest/backfill/site",
+            post(ingest_queue::http::backfill_site),
+        )
         .route("/api/building/snapshot", get(building_snapshot))
         .route("/api/dashboard/summary", get(dashboard_summary))
         .route("/api/tenants", get(list_tenants))

@@ -732,6 +732,69 @@ pub async fn backfill(
     Ok(views)
 }
 
+pub async fn site_backfill(
+    pool: &PgPool,
+    jobs: &[NewJob],
+    range_start: DateTime<Utc>,
+    range_end: DateTime<Utc>,
+    now: DateTime<Utc>,
+    claim: &IdempotencyClaim,
+) -> Result<Vec<JobView>, QueueError> {
+    if jobs.is_empty() || jobs.len() > MAX_SITE_BACKFILL_JOBS as usize {
+        return Err(QueueError::Invalid(format!(
+            "site backfill requires 1 to {} jobs",
+            MAX_SITE_BACKFILL_JOBS
+        )));
+    }
+    let object_id = site_backfill_object_id(&jobs[0]);
+    let payload_hash = site_backfill_payload_hash(
+        &jobs[0].tenant_id,
+        &jobs[0].canonical_site,
+        &jobs[0].provider_instance_id,
+        &jobs[0].model_revision,
+        range_start,
+        range_end,
+    );
+    if claim.object_id != object_id
+        || claim.payload_hash != payload_hash
+        || jobs.iter().any(|job| job.tenant_id != claim.tenant_id)
+    {
+        return Err(QueueError::Conflict(
+            "idempotency key does not match the original request".into(),
+        ));
+    }
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    let reserved = lock_idempotency(&mut tx, "site_backfill", claim).await?;
+    if !reserved.inserted {
+        if !binding_matches(&reserved, claim) {
+            return Err(QueueError::Conflict(
+                "idempotency key does not match the original request".into(),
+            ));
+        }
+        let views = load_jobs_for_replay(&mut tx, &reserved.job_ids, &claim.tenant_id).await?;
+        tx.commit().await.map_err(db_err)?;
+        return Ok(views);
+    }
+    for job in jobs {
+        refuse_before_replay_horizon(
+            &mut tx,
+            &job.tenant_id,
+            &job.canonical_site,
+            job.logical_window_start,
+            now,
+        )
+        .await?;
+    }
+    let mut views = Vec::with_capacity(jobs.len());
+    for job in jobs {
+        views.push(enqueue_tx(&mut tx, job).await?);
+    }
+    let ids: Vec<Uuid> = views.iter().map(|job| job.job_id).collect();
+    store_idempotency_result(&mut tx, "site_backfill", claim, &ids, None).await?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(views)
+}
+
 pub async fn list_gaps(pool: &PgPool, filter: &ListFilter) -> Result<Vec<JobView>, QueueError> {
     let rows = sqlx::query(&format!(
         "SELECT {JOB_COLUMNS} FROM ingest_job

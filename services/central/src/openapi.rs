@@ -327,6 +327,13 @@ mod live_routes {
         responses((status = 202, description = "Enqueue at most 48 hourly windows", body = serde_json::Value))
     )]
     pub fn ingest_backfill() {}
+
+    #[utoipa::path(
+        post, path = "/api/ingest/backfill/site", tag = "ingest",
+        request_body = serde_json::Value,
+        responses((status = 202, description = "Enqueue all plan groups for a bounded UTC hour range", body = serde_json::Value))
+    )]
+    pub fn ingest_backfill_site() {}
 }
 
 #[derive(OpenApi)]
@@ -344,6 +351,7 @@ mod live_routes {
         live_routes::ingest_gaps,
         live_routes::ingest_queue_metrics,
         live_routes::ingest_backfill,
+        live_routes::ingest_backfill_site,
         crate::routes::fdd_run,
         crate::routes::fdd_status,
         crate::routes::auth_status,

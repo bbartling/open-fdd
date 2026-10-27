@@ -7439,21 +7439,59 @@
         "identity"
       ],
       "notes": "Enqueue at most 48 exact UTC hours."
+    },
+    {
+      "method": "POST",
+      "path": "/api/ingest/backfill/site",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_ingest_backfill_site",
+        "y.authz.post_api_ingest_backfill_site"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_ingest_backfill_site",
+        "y.authz.post_api_ingest_backfill_site"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "queue_enqueue",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Site-wide backfill for committed plan groups; operator JWT; hour and job caps."
     }
   ],
   "counts": {
     "IMPLEMENTED": 38,
-    "PLANNED": 122,
+    "PLANNED": 123,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 4,
     "implemented": 38,
-    "planned": 122,
+    "planned": 123,
     "blocked_policy": 29,
     "excluded": 4
   },
   "summary": {
     "IMPLEMENTED": 38,
-    "PLANNED": 122,
+    "PLANNED": 123,
     "BLOCKED_POLICY": 29,
     "EXCLUDED": 4
   }

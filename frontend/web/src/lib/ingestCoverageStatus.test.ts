@@ -78,6 +78,20 @@ describe("ingest coverage status", () => {
     expect(coverageStateTone("not_assessed")).toBe("neutral");
   });
 
+  it("surfaces site not assessed reason text", () => {
+    const view = coverageStatusFromFetch({
+      http: "ok",
+      body: {
+        state: "not_assessed",
+        state_reason: "cadence_not_bound",
+        providers: [provider({ state: "not_assessed", state_reason: "cadence_not_bound" })],
+      },
+    });
+    if (view.status !== "ready") throw new Error("expected ready");
+    expect(view.stateReason).toBe("cadence_not_bound");
+    expect(view.rows[0].stateReason).toBe("cadence_not_bound");
+  });
+
   it("treats a body without providers as an error and a 404 as unavailable", () => {
     expect(coverageStatusFromFetch({ http: "ok", body: { ok: true } }).status).toBe("error");
     expect(coverageStatusFromFetch({ http: "missing" }).status).toBe("unavailable");
