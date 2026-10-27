@@ -19,7 +19,7 @@ use super::hourly::{assess_page, HourlyPolicy, LogicalWindow};
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
 use super::map::{normalize_mapped, DevicePoints, HistorySeries, ResolvedRole, RoleResolver};
 use super::meteo::OpenMeteoDriver;
-use super::nf::NfPortalDriver;
+use super::nf_transport::NfTransport;
 use super::store::StoreOpen;
 use super::types::{HourlyCoverageHealth, ProviderHealthStatus};
 use super::writer;
@@ -397,16 +397,8 @@ pub async fn fetch_device_window(
         return Err("invalid_window".into());
     }
     let runtime = Arc::clone(&state.providers);
-    let mut driver = NfPortalDriver::new(
-        site.provider_instance_id.clone(),
-        site.endpoint.clone(),
-        site.client_id.clone(),
-        site.client_secret.clone(),
-        site.anonymous,
-        super::http_policy::HttpLimits::default(),
-    )
-    .map_err(|_| "config_invalid".to_string())?;
-    if driver.authenticate().await.is_err() {
+    let mut transport = NfTransport::for_site(site).map_err(|_| "config_invalid".to_string())?;
+    if transport.driver_mut().authenticate().await.is_err() {
         runtime
             .record_error(
                 &site.building_id,
@@ -436,10 +428,10 @@ pub async fn fetch_device_window(
         .iter()
         .map(|point| point.provider_point_id.clone())
         .collect();
-    let page = match driver.read_history_page(&ids, start, end).await {
+    let page = match transport.read_history_page(&ids, start, end).await {
         Ok(page) => page,
         Err(err) => {
-            let code = err.code().to_string();
+            let code = err.code();
             runtime
                 .record_error(
                     &site.building_id,
@@ -540,15 +532,8 @@ async fn nf_hourly_loop(
     let building_id = site.building_id.clone();
     let tenant_id = site.tenant_id.clone();
     let provider_instance_id = site.provider_instance_id.clone();
-    let mut driver = match NfPortalDriver::new(
-        provider_instance_id.clone(),
-        site.endpoint.clone(),
-        site.client_id.clone(),
-        site.client_secret.clone(),
-        site.anonymous,
-        super::http_policy::HttpLimits::default(),
-    ) {
-        Ok(driver) => driver,
+    let mut transport = match NfTransport::for_site(&site) {
+        Ok(transport) => transport,
         Err(_) => {
             runtime
                 .record_error(
@@ -561,7 +546,8 @@ async fn nf_hourly_loop(
         }
     };
     debug!(
-        identity = %super::driver_identity(&driver),
+        identity = %super::driver_identity(transport.driver()),
+        transport = transport.transport().as_str(),
         %building_id,
         "nf driver"
     );
@@ -584,7 +570,7 @@ async fn nf_hourly_loop(
             Ok(p) => p,
             Err(_) => return,
         };
-        if driver.authenticate().await.is_err() {
+        if transport.driver_mut().authenticate().await.is_err() {
             warn!(%building_id, "NF authenticate failed");
             runtime
                 .record_error(
@@ -595,7 +581,11 @@ async fn nf_hourly_loop(
                 .await;
             continue;
         }
-        let inventory_note = match driver.query_inventory(INVENTORY_PAGE_SIZE).await {
+        let inventory_note = match transport
+            .driver_mut()
+            .query_inventory(INVENTORY_PAGE_SIZE)
+            .await
+        {
             Ok(snapshot) => {
                 let outcome =
                     super::inventory_sync::apply(&runtime, &state.haystack_rdf, &site, &snapshot)
@@ -638,7 +628,7 @@ async fn nf_hourly_loop(
         let live = runtime.resolver_for(&tenant_id, &building_id);
         let devices = chosen_resolver(&live, &site.resolver).devices();
         let now = Utc::now();
-        let provider_instance = driver.provider_id().to_string();
+        let provider_instance = transport.driver().provider_id().to_string();
         let tick = TickInput {
             now,
             tenant: &tenant_id,
@@ -649,7 +639,7 @@ async fn nf_hourly_loop(
             owner: &owner,
         };
         let mut source = NfHistory {
-            driver: &mut driver,
+            transport: &mut transport,
         };
         let mut sink = HistorianSink {
             state: &state,
@@ -872,7 +862,7 @@ async fn meteo_hourly_loop(
 }
 
 struct NfHistory<'a> {
-    driver: &'a mut NfPortalDriver,
+    transport: &'a mut NfTransport,
 }
 
 impl HistorySource for NfHistory<'_> {
@@ -886,11 +876,20 @@ impl HistorySource for NfHistory<'_> {
                 device_id = %req.device_id,
                 window_start = %req.window_start,
                 points = req.point_ids.len(),
-                "NF history GET"
+                transport = self.transport.transport().as_str(),
+                "NF history read"
             );
-            self.driver
+            self.transport
                 .read_history_page(&req.point_ids, req.from, req.to)
                 .await
+                .map_err(|failure| {
+                    warn!(
+                        device_id = %req.device_id,
+                        code = %failure.code(),
+                        "NF history read failed"
+                    );
+                    failure.fetch_error()
+                })
         })
     }
 }

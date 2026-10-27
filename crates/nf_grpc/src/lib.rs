@@ -19,6 +19,9 @@ pub use client::{
 };
 pub use error::NfGrpcError;
 
+#[cfg(feature = "test-support")]
+pub mod test_support;
+
 /// BSR commit of `buf.build/normalframework/nf` compiled by this crate.
 pub const CONTRACT_COMMIT: &str = "38f497f826214f09a483e288a78d28d4";
 

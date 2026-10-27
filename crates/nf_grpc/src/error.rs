@@ -83,6 +83,11 @@ pub(crate) fn map_status(status: &tonic::Status) -> NfGrpcError {
     }
     match status.code() {
         Code::Ok => NfGrpcError::Contract,
+        // tonic reports an elapsed per-request deadline as CANCELLED with
+        // the `TimeoutExpired` text, on the client and the server side.
+        Code::Cancelled if status.message() == tonic::TimeoutExpired(()).to_string() => {
+            NfGrpcError::DeadlineExceeded
+        }
         Code::Cancelled => NfGrpcError::Cancelled,
         Code::Unknown => NfGrpcError::Transport,
         Code::InvalidArgument => NfGrpcError::InvalidArgument,
