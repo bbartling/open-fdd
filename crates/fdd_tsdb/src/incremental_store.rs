@@ -242,6 +242,81 @@ pub async fn publish(
     Ok(())
 }
 
+/// Replace bucket rows and advance the checkpoint inside an open transaction.
+///
+/// Registry runs use this path instead of [`publish`]: there is no lease, and
+/// the caller already holds one transaction for the whole run.
+pub async fn replace_scope_results_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    scope: &ResultScope,
+    window: AnalysisWindow,
+    through_revision: u64,
+    results: &[BucketResult],
+) -> Result<(), IncrementalError> {
+    let grid = scope.grid();
+    let on_grid: BTreeSet<DateTime<Utc>> = grid
+        .buckets_overlapping(window.start(), window.end())?
+        .into_iter()
+        .map(|bucket| bucket.start())
+        .collect();
+    for result in results {
+        let bucket = result.bucket();
+        if !on_grid.contains(&bucket.start()) || grid.bucket_containing(bucket.start())? != bucket {
+            return Err(IncrementalError::ForeignBucket(bucket.start()));
+        }
+    }
+    sqlx::query(
+        "DELETE FROM fdd_interval_result
+         WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3 AND scope_digest = md5($4)
+           AND bucket_start >= $5 AND bucket_start < $6",
+    )
+    .bind(scope.site_id())
+    .bind(scope.rule_id())
+    .bind(scope.equipment_id())
+    .bind(scope.canonical())
+    .bind(window.start())
+    .bind(window.end())
+    .execute(&mut **tx)
+    .await?;
+    let fence: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(fence), 0) + 1
+         FROM fdd_incremental_checkpoint
+         WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3 AND scope_digest = md5($4)",
+    )
+    .bind(scope.site_id())
+    .bind(scope.rule_id())
+    .bind(scope.equipment_id())
+    .bind(scope.canonical())
+    .fetch_one(&mut **tx)
+    .await?;
+    let fence = to_u64(fence)?;
+    let claim = Claim {
+        scope: scope.clone(),
+        owner: String::new(),
+        fence,
+        processed_revision: None,
+    };
+    write_results(tx, &claim, through_revision, results).await?;
+    sqlx::query(
+        "INSERT INTO fdd_incremental_checkpoint
+           (site_id, rule_id, equipment_id, scope_digest, scope_canonical, processed_revision, fence)
+         VALUES ($1, $2, $3, md5($4), $4, $5, $6)
+         ON CONFLICT (site_id, rule_id, equipment_id, scope_digest) DO UPDATE
+         SET processed_revision = EXCLUDED.processed_revision,
+             fence = EXCLUDED.fence,
+             updated_at = now()",
+    )
+    .bind(scope.site_id())
+    .bind(scope.rule_id())
+    .bind(scope.equipment_id())
+    .bind(scope.canonical())
+    .bind(to_i64(through_revision)?)
+    .bind(to_i64(fence)?)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 async fn write_results(
     tx: &mut Transaction<'_, Postgres>,
     claim: &Claim,

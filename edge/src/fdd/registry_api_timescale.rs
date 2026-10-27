@@ -193,6 +193,10 @@ fn manifest_registry_dir() -> PathBuf {
     sql_rules_dir()
 }
 
+pub fn rule_set_hash_for_readiness() -> String {
+    rule_set_hash()
+}
+
 fn rule_set_hash() -> String {
     let mut ids: Vec<String> = load_registry(&manifest_registry_dir())
         .map(|reg| reg.rules.into_iter().map(|rule| rule.rule_id).collect())
@@ -210,7 +214,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-fn new_run_id() -> String {
+pub fn new_run_id() -> String {
     let seq = RUN_SEQ.fetch_add(1, Ordering::Relaxed);
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -283,8 +287,8 @@ fn is_metric_row(row: &Value) -> bool {
         .is_some_and(object_has_metric_field)
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum RuleOutcome {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleOutcome {
     Succeeded,
     Skipped,
     Failed,
@@ -423,10 +427,23 @@ pub struct RunGenerationCommit {
     pub pack: Value,
 }
 
-struct PreparedRule {
-    rule_id: String,
-    body: Value,
-    outcome: RuleOutcome,
+#[derive(Debug, Clone)]
+pub struct PreparedRule {
+    pub rule_id: String,
+    pub body: Value,
+    pub outcome: RuleOutcome,
+}
+
+/// In-memory generation before persistence (Timescale or manifest files).
+#[derive(Debug, Clone)]
+pub struct RunGenerationPrepared {
+    pub run_id: String,
+    pub parent_run_id: Option<String>,
+    pub cohort: String,
+    pub prepared: Vec<PreparedRule>,
+    pub manifest: Value,
+    pub flat_results: Vec<Value>,
+    pub dirty_reason: Option<String>,
 }
 
 fn model_set(equipment: &[RunModelEquipment]) -> BTreeSet<String> {
@@ -528,27 +545,51 @@ fn prepare_rule_file(
     })
 }
 
-/// Write one immutable generation, then switch `_active.json` with a rename.
-///
-/// Older generations stay on disk. A rule omitted from a full cohort is not
-/// carried forward. A scoped run copies the parent's other rule files and
-/// merges equipment rows so one tuned rule does not erase the rest of the run.
-pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, String> {
+fn parent_body_from_rows(rule_id: &str, rows: &[(String, Value)]) -> Option<Value> {
+    let mut rule_rows: Vec<Value> = rows
+        .iter()
+        .filter(|(id, _)| id == rule_id)
+        .map(|(_, row)| row.clone())
+        .collect();
+    if rule_rows.is_empty() {
+        return None;
+    }
+    Some(json!({
+        "rule_id": rule_id,
+        "rows": rule_rows,
+    }))
+}
+
+/// Build one run generation in memory (manifest + flat rows). Does not write disk.
+pub fn prepare_run_generation(commit: &RunGenerationCommit) -> Result<RunGenerationPrepared, String> {
+    prepare_run_generation_with_parent(commit, None, &[])
+}
+
+/// Same as [`prepare_run_generation`], but the parent generation may come from
+/// Timescale (`parent_manifest` + `parent_rows`) instead of on-disk manifests.
+pub fn prepare_run_generation_with_parent(
+    commit: &RunGenerationCommit,
+    parent_manifest: Option<&Value>,
+    parent_rows: &[(String, Value)],
+) -> Result<RunGenerationPrepared, String> {
     let building_id = commit.building_id.trim();
     if building_id.is_empty() {
         return Err("building_id required".into());
     }
-    let dir = results_dir(Some(building_id));
-    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    let parent = if commit.full_cohort {
+    let parent_files = if commit.full_cohort {
         None
     } else {
         active_manifest(Some(building_id))
     };
-    let parent_run_id = parent
-        .as_ref()
-        .and_then(|(_, manifest)| manifest.get("run_id").and_then(Value::as_str))
-        .map(str::to_string);
+    let parent_run_id = parent_manifest
+        .and_then(|m| m.get("run_id").and_then(Value::as_str))
+        .map(str::to_string)
+        .or_else(|| {
+            parent_files
+                .as_ref()
+                .and_then(|(_, manifest)| manifest.get("run_id").and_then(Value::as_str))
+                .map(str::to_string)
+        });
     let cohort = if commit.full_cohort {
         "full"
     } else if parent_run_id.is_some() {
@@ -557,15 +598,15 @@ pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, Stri
         "scoped"
     };
     let run_id = new_run_id();
-    let gen = dir.join(GENERATIONS_DIR).join(&run_id);
-    std::fs::create_dir_all(&gen).map_err(|err| err.to_string())?;
     let model = model_set(&commit.equipment);
     let mut prepared: Vec<PreparedRule> = Vec::new();
     let mut seen = BTreeSet::new();
     for rule in &commit.rules {
-        let parent_body = parent
-            .as_ref()
-            .and_then(|(parent_gen, _)| parent_rule_body(parent_gen, &rule.rule_id));
+        let parent_body = parent_body_from_rows(&rule.rule_id, parent_rows).or_else(|| {
+            parent_files
+                .as_ref()
+                .and_then(|(parent_gen, _)| parent_rule_body(parent_gen, &rule.rule_id))
+        });
         let item = prepare_rule_file(
             &rule.rule_id,
             &rule.body,
@@ -578,30 +619,40 @@ pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, Stri
         seen.insert(item.rule_id.clone());
         prepared.push(item);
     }
-    if let Some((parent_gen, parent_manifest)) = parent.as_ref() {
-        if let Some(rules) = parent_manifest.get("rules").and_then(Value::as_array) {
-            for rule in rules {
-                let Some(rule_id) = rule.as_str() else {
-                    continue;
-                };
-                if seen.contains(rule_id) || !safe_rule_id(rule_id) {
-                    continue;
-                }
-                let Some(parent_body) = parent_rule_body(parent_gen, rule_id) else {
-                    continue;
-                };
-                let item = prepare_rule_file(
-                    rule_id,
-                    &parent_body,
-                    None,
-                    true,
-                    &model,
-                    &run_id,
-                    building_id,
-                )?;
-                seen.insert(item.rule_id.clone());
-                prepared.push(item);
+    let parent_rule_list = parent_manifest
+        .and_then(|m| m.get("rules").and_then(Value::as_array))
+        .or_else(|| {
+            parent_files
+                .as_ref()
+                .and_then(|(_, m)| m.get("rules").and_then(Value::as_array))
+        });
+    if let Some(rules) = parent_rule_list {
+        for rule in rules {
+            let Some(rule_id) = rule.as_str() else {
+                continue;
+            };
+            if seen.contains(rule_id) || !safe_rule_id(rule_id) {
+                continue;
             }
+            let parent_body = parent_body_from_rows(rule_id, parent_rows).or_else(|| {
+                parent_files
+                    .as_ref()
+                    .and_then(|(parent_gen, _)| parent_rule_body(parent_gen, rule_id))
+            });
+            let Some(parent_body) = parent_body else {
+                continue;
+            };
+            let item = prepare_rule_file(
+                rule_id,
+                &parent_body,
+                None,
+                true,
+                &model,
+                &run_id,
+                building_id,
+            )?;
+            seen.insert(item.rule_id.clone());
+            prepared.push(item);
         }
     }
     prepared.sort_by(|left, right| left.rule_id.cmp(&right.rule_id));
@@ -616,7 +667,6 @@ pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, Stri
             RuleOutcome::Failed => rules_failed += 1,
             RuleOutcome::Skipped => rules_skipped += 1,
         }
-        write_json_file(&gen.join(format!("{}.json", item.rule_id)), &item.body)?;
         if let Some(rows) = item.body.get("rows").and_then(Value::as_array) {
             result_count += rows.len();
             for row in rows {
@@ -658,11 +708,48 @@ pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, Stri
         "rules_failed": rules_failed,
         "rules_skipped": rules_skipped,
     });
-    write_json_file(&gen.join(MANIFEST_NAME), &manifest)?;
+    let dirty_reason = if run_status == "complete" && cohort != "scoped" {
+        None
+    } else if run_status == "partial" {
+        Some("run_partial".into())
+    } else if run_status == "failed" {
+        Some("run_failed".into())
+    } else {
+        Some("scoped_run".into())
+    };
+    Ok(RunGenerationPrepared {
+        run_id,
+        parent_run_id,
+        cohort,
+        prepared,
+        manifest,
+        flat_results,
+        dirty_reason,
+    })
+}
+
+/// Write one immutable generation to disk, then switch `_active.json` with a rename.
+///
+/// **Historical:** product Timescale runs persist to PostgreSQL instead. This
+/// path remains for on-demand export only.
+pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, String> {
+    let building_id = commit.building_id.trim();
+    if building_id.is_empty() {
+        return Err("building_id required".into());
+    }
+    let prepared = prepare_run_generation(commit)?;
+    let dir = results_dir(Some(building_id));
+    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
+    let gen = dir.join(GENERATIONS_DIR).join(&prepared.run_id);
+    std::fs::create_dir_all(&gen).map_err(|err| err.to_string())?;
+    for item in &prepared.prepared {
+        write_json_file(&gen.join(format!("{}.json", item.rule_id)), &item.body)?;
+    }
+    write_json_file(&gen.join(MANIFEST_NAME), &prepared.manifest)?;
     let gen_dir = std::fs::File::open(&gen).map_err(|err| err.to_string())?;
     gen_dir.sync_all().map_err(|err| err.to_string())?;
     let pointer = json!({
-        "run_id": run_id,
+        "run_id": prepared.run_id,
         "schema": MANIFEST_SCHEMA,
     });
     let pointer_bytes = serde_json::to_vec_pretty(&pointer).map_err(|err| err.to_string())?;
@@ -670,21 +757,14 @@ pub fn commit_run_generation(commit: &RunGenerationCommit) -> Result<Value, Stri
     std::fs::write(&tmp, &pointer_bytes).map_err(|err| err.to_string())?;
     sync_file(&tmp)?;
     std::fs::rename(&tmp, dir.join(ACTIVE_FILE)).map_err(|err| err.to_string())?;
-    if run_status == "complete" && cohort != "scoped" {
+    if prepared.dirty_reason.is_none() {
         let _ = std::fs::remove_file(dir.join(DIRTY_FILE));
-    } else {
-        let reason = if run_status == "partial" {
-            "run_partial"
-        } else if run_status == "failed" {
-            "run_failed"
-        } else {
-            "scoped_run"
-        };
+    } else if let Some(reason) = &prepared.dirty_reason {
         mark_building_results_dirty(building_id, reason);
     }
-    let mut summary = manifest;
+    let mut summary = prepared.manifest;
     if let Some(obj) = summary.as_object_mut() {
-        obj.insert("results".into(), Value::Array(flat_results));
+        obj.insert("results".into(), Value::Array(prepared.flat_results));
     }
     Ok(summary)
 }
@@ -1796,6 +1876,227 @@ pub fn results_response_with_types(
         "run_status": active.manifest.get("run_status").cloned().unwrap_or(Value::Null),
         "parent_run_id": active.manifest.get("parent_run_id").cloned().unwrap_or(Value::Null),
         "legacy_withheld": false,
+    })
+}
+
+pub fn loose_rule_file_count_for_building(building_id: &str) -> usize {
+    loose_rule_file_count(&results_dir(Some(building_id)))
+}
+
+/// Format API results from a Timescale-stored generation manifest and row list.
+pub fn results_response_with_timescale_rows(
+    building_id: Option<&str>,
+    stamped_types: &BTreeMap<String, String>,
+    type_source_label: &str,
+    manifest: &Value,
+    stored_rows: &[(String, Value)],
+) -> Value {
+    let reg = load_reg().ok();
+    let mut metadata = HashMap::new();
+    let mut kinds_by_rule: HashMap<String, Vec<String>> = HashMap::new();
+    if let Some(reg) = &reg {
+        for rule in &reg.rules {
+            metadata.insert(rule.rule_id.clone(), rule.description.clone());
+            kinds_by_rule.insert(rule.rule_id.clone(), rule.equipment_kinds.clone());
+            for alias in &rule.aliases {
+                kinds_by_rule.insert(alias.clone(), rule.equipment_kinds.clone());
+            }
+        }
+    }
+    let manifest_types = manifest_type_map(manifest);
+    let mut rows = Vec::new();
+    for (rule_id, row) in stored_rows {
+        let equipment_id = row_equipment_id(row).unwrap_or("");
+        let rule_level = equipment_id.is_empty();
+        let stamped = if rule_level {
+            None
+        } else {
+            stamped_types
+                .get(equipment_id)
+                .map(String::as_str)
+                .or_else(|| manifest_types.get(equipment_id).map(String::as_str))
+        };
+        let kind = crate::equipment_types::kind_for(equipment_id, stamped);
+        let applies = if rule_level {
+            true
+        } else if stamped
+            .map(str::trim)
+            .is_some_and(|stamp| !stamp.is_empty())
+        {
+            kinds_by_rule
+                .get(rule_id)
+                .map(|kinds| rule_applies_to_kind(kinds, kind))
+                .unwrap_or(true)
+        } else {
+            kinds_by_rule
+                .get(rule_id)
+                .map(|kinds| kinds.is_empty())
+                .unwrap_or(true)
+        };
+        let metric = is_metric_row(row);
+        let stored_status = row_status_token(row);
+        let withheld = stored_status == "ERROR" || stored_status.starts_with("SKIP");
+        let stored_fault = row.get("fault_hours").filter(|value| !value.is_null());
+        let fault_hours_num = stored_fault.and_then(Value::as_f64).unwrap_or(0.0);
+        let status = if rule_level {
+            if stored_status.is_empty() {
+                "SKIP".to_string()
+            } else {
+                stored_status.clone()
+            }
+        } else if withheld {
+            stored_status.clone()
+        } else if metric {
+            if applies {
+                "METRIC".to_string()
+            } else {
+                "NOT_APPLICABLE_EQUIPMENT_TYPE".to_string()
+            }
+        } else {
+            displayed_result_status(
+                row.get("status").and_then(Value::as_str),
+                fault_hours_num,
+                kinds_by_rule.get(rule_id).map(Vec::as_slice),
+                stamped,
+            )
+        };
+        let fault_hours = if metric || withheld {
+            Value::Null
+        } else if !applies {
+            json!(0.0)
+        } else if stored_fault.is_some() {
+            json!(fault_hours_num)
+        } else {
+            Value::Null
+        };
+        let missing_roles = row
+            .get("missing_roles")
+            .cloned()
+            .unwrap_or_else(|| json!([]));
+        let type_source = if stamped.is_some() {
+            type_source_label
+        } else if rule_level {
+            "rule"
+        } else {
+            "missing"
+        };
+        let metric_doc = if metric {
+            metric_document(row, manifest)
+        } else {
+            Value::Null
+        };
+        rows.push(json!({
+            "rule_id": rule_id,
+            "title": metadata.get(rule_id).cloned().unwrap_or_default(),
+            "equipment_id": equipment_id,
+            "equipment_type": if rule_level {
+                Value::Null
+            } else {
+                json!(crate::equipment_types::api_equipment_type_for(equipment_id, stamped))
+            },
+            "equipment_type_raw": stamped,
+            "equipment_type_source": type_source,
+            "status": status,
+            "output_kind": if metric { "metric" } else { "diagnostic" },
+            "fault_hours": fault_hours,
+            "fault_pct": if metric || withheld {
+                Value::Null
+            } else {
+                json!(derive_fault_pct(row))
+            },
+            "metric": metric_doc,
+            "values": row.get("values").cloned().unwrap_or(Value::Null),
+            "missing_roles": missing_roles,
+            "notes": row.get("notes").cloned().unwrap_or(Value::Null),
+            "run_id": manifest.get("run_id").cloned().unwrap_or(Value::Null),
+        }));
+    }
+    json!({
+        "ok": true,
+        "count": rows.len(),
+        "results": rows,
+        "run_id": manifest.get("run_id").cloned().unwrap_or(Value::Null),
+        "run_status": manifest.get("run_status").cloned().unwrap_or(Value::Null),
+        "parent_run_id": manifest.get("parent_run_id").cloned().unwrap_or(Value::Null),
+        "legacy_withheld": loose_legacy_count(building_id) > 0,
+        "source": "timescale",
+    })
+}
+
+/// Readiness when the active generation lives in Timescale, not manifest files.
+pub fn readiness_from_timescale_manifest(
+    building_id: Option<&str>,
+    legacy_files: usize,
+    manifest: Option<&Value>,
+) -> Value {
+    let mut dirty_reasons: Vec<String> = Vec::new();
+    let Some(manifest) = manifest else {
+        if legacy_files > 0 {
+            dirty_reasons.push("legacy_unmanifested".into());
+        } else {
+            dirty_reasons.push("never_run".into());
+        }
+        return json!({
+            "ok": true,
+            "has_results": false,
+            "clean": false,
+            "dirty_reasons": dirty_reasons,
+            "completed_at": Value::Null,
+            "result_count": 0,
+            "run_id": Value::Null,
+            "run_status": Value::Null,
+            "mode": Value::Null,
+            "legacy_file_count": legacy_files,
+            "source": "timescale",
+        });
+    };
+    let result_count = manifest
+        .get("result_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let stored_hash = manifest
+        .get("rule_set_hash")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !stored_hash.is_empty() && stored_hash != rule_set_hash() {
+        dirty_reasons.push("rule_set_changed".into());
+    }
+    let run_status = manifest
+        .get("run_status")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let cohort = manifest.get("cohort").and_then(Value::as_str).unwrap_or("");
+    if run_status == "partial" {
+        dirty_reasons.push("run_partial".into());
+    }
+    if run_status == "failed" {
+        dirty_reasons.push("run_failed".into());
+    }
+    if cohort == "scoped" {
+        dirty_reasons.push("scoped_run".into());
+    }
+    let run_id = manifest.get("run_id").and_then(Value::as_str).unwrap_or("");
+    let clean = result_count > 0
+        && run_status == "complete"
+        && cohort != "scoped"
+        && dirty_reasons.is_empty();
+    json!({
+        "ok": true,
+        "has_results": result_count > 0,
+        "clean": clean,
+        "dirty_reasons": dirty_reasons,
+        "completed_at": manifest.get("completed_at").cloned().unwrap_or(Value::Null),
+        "result_count": result_count,
+        "run_id": run_id,
+        "run_status": run_status,
+        "parent_run_id": manifest.get("parent_run_id").cloned().unwrap_or(Value::Null),
+        "cohort": cohort,
+        "mode": manifest.get("mode").cloned().unwrap_or(Value::Null),
+        "rules_succeeded": manifest.get("rules_succeeded").cloned().unwrap_or(Value::Null),
+        "rules_failed": manifest.get("rules_failed").cloned().unwrap_or(Value::Null),
+        "rules_skipped": manifest.get("rules_skipped").cloned().unwrap_or(Value::Null),
+        "legacy_file_count": legacy_files,
+        "source": "timescale",
     })
 }
 

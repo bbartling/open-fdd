@@ -2328,7 +2328,7 @@ pub async fn fdd_run(
         && !single_update
     {
         if let Some(bid) = building_id.as_deref() {
-            if let Some(cached) = crate::timescale_product::cached_run_all_if_present(bid) {
+            if let Some(cached) = crate::timescale_product::cached_run_all_if_present(bid).await {
                 return Ok(Json(cached));
             }
         }
@@ -2650,13 +2650,13 @@ pub async fn fdd_results(
         let types = crate::timescale_product::type_map_for_building(q.scoped())
             .await
             .unwrap_or_default();
-        return Ok(Json(
-            open_fdd_edge_prototype::fdd::registry_api::results_response_with_types(
-                q.scoped(),
-                &types,
-                "timescale_equipment",
-            ),
-        ));
+        let tsdb = fdd_tsdb::Tsdb::connect_from_env()
+            .await
+            .map_err(internal_server_error)?;
+        let body = crate::fdd_registry_persist::results_from_timescale(&tsdb, q.scoped(), &types)
+            .await
+            .map_err(internal_server_error)?;
+        return Ok(Json(body));
     }
     Ok(Json(
         open_fdd_edge_prototype::fdd::registry_api::results_response(q.scoped()),
@@ -2671,7 +2671,16 @@ pub async fn fdd_results_readiness(
     if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, q.building_id.as_deref()) {
         return Err(deny);
     }
-    let mut body = open_fdd_edge_prototype::fdd::registry_api::readiness_response(q.scoped());
+    let mut body = if crate::timescale_historian::historian_is_timescale() {
+        let tsdb = fdd_tsdb::Tsdb::connect_from_env()
+            .await
+            .map_err(internal_server_error)?;
+        crate::fdd_registry_persist::readiness_from_timescale(&tsdb, q.scoped())
+            .await
+            .map_err(internal_server_error)?
+    } else {
+        open_fdd_edge_prototype::fdd::registry_api::readiness_response(q.scoped())
+    };
     crate::sql_pack::attach_pack_readiness(&mut body).await;
     Ok(Json(body))
 }

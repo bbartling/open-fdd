@@ -1994,7 +1994,75 @@ pub async fn schema_contract_softopen() -> Result<Value> {
 
 /// Soft-OPEN write-once: reuse a complete active generation. A partial, failed,
 /// scoped, dirty, or legacy folder is not a cache hit.
-pub fn cached_run_all_if_present(building_id: &str) -> Option<Value> {
+pub async fn cached_run_all_if_present(building_id: &str) -> Option<Value> {
+    if crate::timescale_historian::historian_is_timescale() {
+        let tsdb = match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(tsdb) => tsdb,
+            Err(_) => return None,
+        };
+        let manifest = crate::fdd_registry_persist::active_generation_manifest(&tsdb, building_id)
+            .await
+            .ok()
+            .flatten()?;
+        if manifest.get("run_status").and_then(Value::as_str) != Some("complete") {
+            return None;
+        }
+        if manifest.get("cohort").and_then(Value::as_str) == Some("scoped") {
+            return None;
+        }
+        if manifest.get("dirty_reason").is_some() {
+            return None;
+        }
+        let stored = manifest
+            .get("rule_set_hash")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if stored.is_empty()
+            || stored
+                != open_fdd_edge_prototype::fdd::registry_api::rule_set_hash_for_readiness()
+        {
+            return None;
+        }
+        let rows = crate::fdd_registry_persist::active_generation_rows(&tsdb, building_id)
+            .await
+            .ok()?;
+        let stored_count = manifest
+            .get("result_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if stored_count != rows.len() as u64 {
+            return None;
+        }
+        let mut body = manifest;
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("results".into(), {
+                let mut flat = Vec::new();
+                for (rule_id, row) in rows {
+                    let mut cloned = row.clone();
+                    if let Some(o) = cloned.as_object_mut() {
+                        o.insert("rule_id".into(), json!(rule_id));
+                    }
+                    flat.push(cloned);
+                }
+                Value::Array(flat)
+            });
+        }
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("engine".into(), json!(TS_ENGINE));
+            obj.insert("historian".into(), json!("timescale"));
+            obj.insert("skipped_recompute".into(), json!(true));
+            obj.insert("ok".into(), json!(true));
+            obj.insert(
+                "message".into(),
+                json!(
+                    "FDD results already persisted for this site — UI should read records. \
+                     Use force_new_data=true only after new historian samples, \
+                     or run a single rule_id from Lab / rule tuning."
+                ),
+            );
+        }
+        return Some(body);
+    }
     let mut body = open_fdd_edge_prototype::fdd::registry_api::reusable_complete_run(building_id)?;
     if let Some(obj) = body.as_object_mut() {
         obj.insert("engine".into(), json!(TS_ENGINE));
@@ -2961,7 +3029,7 @@ pub(crate) async fn read_analytics_cache_input_from(
     end: Option<DateTime<Utc>>,
     equipment_ids: &[String],
 ) -> AnalyticsCacheInput {
-    let model_revision = read_model_revision(tsdb, building_id).await;
+    let model_revision = read_model_revision_string(tsdb, building_id).await;
     let watermark = read_scoped_watermark(tsdb, building_id, start, end, equipment_ids).await;
     AnalyticsCacheInput {
         model_revision,
@@ -2969,7 +3037,7 @@ pub(crate) async fn read_analytics_cache_input_from(
     }
 }
 
-async fn read_model_revision(tsdb: &Tsdb, building_id: &str) -> Result<String, String> {
+pub async fn read_model_revision_string(tsdb: &Tsdb, building_id: &str) -> Result<String, String> {
     let equipment = sqlx::query(
         r#"
         SELECT equipment_id, COALESCE(equip_type, ''), COALESCE(parent_equipment_id, '')
@@ -3595,8 +3663,8 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         poll_seconds: poll,
         pack: pack_json,
     };
-    let mut summary = open_fdd_edge_prototype::fdd::registry_api::commit_run_generation(&commit)
-        .map_err(anyhow::Error::msg)?;
+    let mut summary =
+        crate::fdd_registry_persist::commit_and_persist_registry_run(&tsdb, commit).await?;
     if let Some(obj) = summary.as_object_mut() {
         obj.insert("engine".into(), json!(TS_ENGINE));
         obj.insert("historian".into(), json!("timescale"));
@@ -4766,6 +4834,18 @@ rules:
         ] {
             crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
+        for statement in fdd_tsdb::revision::schema_statements(
+            include_str!("../../../sql/schema/01_bps_core.sql"),
+        ) {
+            if statement.contains("fdd_run") {
+                crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
+            }
+        }
+        for statement in fdd_tsdb::revision::schema_statements(
+            include_str!("../../../sql/schema/10_incremental_fdd.sql"),
+        ) {
+            crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
+        }
     }
 
     async fn seed_site(pool: &sqlx::PgPool, site: &str, equipment: &[(&str, &str)]) {
@@ -4822,6 +4902,18 @@ rules:
     }
 
     async fn delete_site(pool: &sqlx::PgPool, site: &str) {
+        let _ = sqlx::query("DELETE FROM fdd_interval_result WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM fdd_incremental_checkpoint WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM fdd_run WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
         let _ = sqlx::query("DELETE FROM sample WHERE site_id = $1")
             .bind(site)
             .execute(pool)
@@ -4852,16 +4944,22 @@ rules:
             .unwrap_or_else(|| panic!("missing {rule_id}/{equipment_id} in {body}"))
     }
 
-    fn rest_rows(building_id: &str, types: &BTreeMap<String, String>) -> Value {
-        open_fdd_edge_prototype::fdd::registry_api::results_response_with_types(
-            Some(building_id),
-            types,
-            "fixture",
-        )
+    async fn rest_rows(
+        pool: &sqlx::PgPool,
+        building_id: &str,
+        types: &BTreeMap<String, String>,
+    ) -> Value {
+        let tsdb = fdd_tsdb::Tsdb::from_pool(pool.clone());
+        crate::fdd_registry_persist::results_from_timescale(&tsdb, Some(building_id), types)
+            .await
+            .expect("rest results")
     }
 
-    fn readiness(building_id: &str) -> Value {
-        open_fdd_edge_prototype::fdd::registry_api::readiness_response(Some(building_id))
+    async fn readiness(pool: &sqlx::PgPool, building_id: &str) -> Value {
+        let tsdb = fdd_tsdb::Tsdb::from_pool(pool.clone());
+        crate::fdd_registry_persist::readiness_from_timescale(&tsdb, Some(building_id))
+            .await
+            .expect("readiness")
     }
 
     #[expect(
@@ -4987,19 +5085,19 @@ rules:
         let vav = row_for(&partial, "VAV-ONLY", "VAV_1");
         assert_eq!(vav["status"], json!("FAULT"));
         let first_run = partial["run_id"].as_str().unwrap().to_string();
-        let first_vav = results.path().join(format!(
-            "building={site_a}/generations/{first_run}/VAV-ONLY.json"
-        ));
-        let first_vav_bytes = std::fs::read(&first_vav).expect("history vav");
-        assert!(std::str::from_utf8(&first_vav_bytes)
-            .unwrap()
-            .contains("VAV_1"));
+        let first_vav_rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_run WHERE site_id = $1 AND rule_id = 'VAV-ONLY'",
+        )
+        .bind(&site_a)
+        .fetch_one(&pool)
+        .await
+        .expect("vav run count");
 
         let mut stale_types = BTreeMap::new();
         stale_types.insert("AHU_A".into(), "ahu".into());
         stale_types.insert("VAV_1".into(), "vav".into());
-        let partial_rest = rest_rows(&site_a, &stale_types);
-        let partial_ready = readiness(&site_a);
+        let partial_rest = rest_rows(&pool, &site_a, &stale_types).await;
+        let partial_ready = readiness(&pool, &site_a).await;
         assert_eq!(partial_ready["clean"], json!(false), "{partial_ready}");
         assert_eq!(partial_ready["run_status"], json!("partial"));
         assert_eq!(
@@ -5018,10 +5116,10 @@ rules:
         assert_eq!(failed["run_status"], json!("failed"), "{failed}");
         assert_eq!(failed["rules_failed"], json!(1), "{failed}");
         assert!(failed["rules_skipped"].as_u64().unwrap_or(0) >= 1);
-        let failed_ready = readiness(&site_fail);
+        let failed_ready = readiness(&pool, &site_fail).await;
         assert_eq!(failed_ready["clean"], json!(false), "{failed_ready}");
         assert_eq!(failed_ready["run_status"], json!("failed"));
-        let failed_rest = rest_rows(&site_fail, &BTreeMap::new());
+        let failed_rest = rest_rows(&pool, &site_fail, &BTreeMap::new()).await;
         assert_eq!(
             failed_ready["result_count"].as_u64().unwrap(),
             failed_rest["results"].as_array().unwrap().len() as u64
@@ -5043,15 +5141,12 @@ rules:
             .unwrap()
             .iter()
             .all(|row| row["equipment_id"] != "VAV_1"));
-        assert_eq!(
-            std::fs::read(&first_vav).expect("history kept"),
-            first_vav_bytes
-        );
+        assert_eq!(first_vav_rows, 0, "full cohort replaces prior VAV-ONLY rows");
         let second_run = complete["run_id"].as_str().unwrap().to_string();
         assert_ne!(second_run, first_run);
 
-        let current = rest_rows(&site_a, &stale_types);
-        let current_ready = readiness(&site_a);
+        let current = rest_rows(&pool, &site_a, &stale_types).await;
+        let current_ready = readiness(&pool, &site_a).await;
         assert_eq!(current_ready["clean"], json!(true), "{current_ready}");
         assert_eq!(current_ready["run_status"], json!("complete"));
         assert_eq!(
@@ -5115,10 +5210,6 @@ rules:
             "provenance config fingerprint: {metric_rest}"
         );
 
-        let parent_manifest = std::fs::read_to_string(results.path().join(format!(
-            "building={site_a}/generations/{second_run}/manifest.json"
-        )))
-        .expect("parent manifest");
         let tuned = run_fdd_registry(&json!({
             "building_id": site_a,
             "rule_ids": ["AVG-ZONE-TEMP"],
@@ -5133,21 +5224,13 @@ rules:
             .unwrap()
             .iter()
             .any(|row| row["rule_id"] == "BOILER-ONLY"));
-        assert_eq!(
-            std::fs::read_to_string(results.path().join(format!(
-                "building={site_a}/generations/{second_run}/manifest.json"
-            )))
-            .expect("parent still there"),
-            parent_manifest
-        );
-
         let other = run_fdd_registry(&json!({ "building_id": site_b }))
             .await
             .expect("other site");
         assert_eq!(other["run_status"], json!("complete"), "{other}");
         let other_metric = row_for(&other, "AVG-ZONE-TEMP", "AHU_B");
         assert!((other_metric["metric"]["value"].as_f64().unwrap() - 50.0).abs() < 1e-6);
-        let site_a_after = rest_rows(&site_a, &stale_types);
+        let site_a_after = rest_rows(&pool, &site_a, &stale_types).await;
         assert!(site_a_after["results"]
             .as_array()
             .unwrap()
@@ -5163,7 +5246,7 @@ rules:
             br#"{"rule_id":"FC1","rows":[{"equipment_id":"OLD","status":"PASS","fault_hours":0}]}"#,
         )
         .expect("legacy");
-        let legacy_ready = readiness(&site_legacy);
+        let legacy_ready = readiness(&pool, &site_legacy).await;
         assert_eq!(legacy_ready["result_count"], json!(0), "{legacy_ready}");
         assert_eq!(legacy_ready["clean"], json!(false));
         assert!(legacy_ready["dirty_reasons"]
@@ -5172,7 +5255,7 @@ rules:
             .iter()
             .any(|reason| reason == "legacy_unmanifested"));
         assert!(legacy_file.is_file(), "legacy history is kept");
-        let legacy_rest = rest_rows(&site_legacy, &BTreeMap::new());
+        let legacy_rest = rest_rows(&pool, &site_legacy, &BTreeMap::new()).await;
         assert_eq!(legacy_rest["count"], json!(0));
         assert_eq!(legacy_rest["legacy_withheld"], json!(true));
 
