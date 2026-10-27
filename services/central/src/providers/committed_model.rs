@@ -852,7 +852,7 @@ mod tests {
             false,
         )
         .expect("overlay");
-        let mut with_unit = base.clone();
+        let mut with_unit = base;
         with_unit.unit = None;
         let mut model = model_with(vec![with_unit]);
         apply_engineer_point_overlays(root, bid, &mut model).expect("merge");
