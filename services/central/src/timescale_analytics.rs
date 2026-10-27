@@ -1721,7 +1721,9 @@ pub fn envelope_from_dispatch_value(
     let scope_meta_keys = ["window_start", "window_end", "equipment_ids"];
     let mut cov = env
         .coverage
-        .and_then(|v| v.as_object().cloned())
+        .as_ref()
+        .and_then(|v| v.as_object())
+        .cloned()
         .unwrap_or_default();
     let mut merged = false;
     for key in dispatch_meta_keys.iter().chain(scope_meta_keys.iter()) {
