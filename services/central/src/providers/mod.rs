@@ -445,6 +445,7 @@ impl Runtime {
                 provider_instance_id: s.provider_instance_id.clone(),
                 model_revision: s.resolver.model_revision().map(str::to_string),
                 provider: s.kind,
+                transport: s.transport,
                 endpoint: s.endpoint.clone(),
                 poll_secs: s.poll_secs,
                 mapped_points: s.resolver.mapped_count(),
@@ -461,6 +462,9 @@ pub struct SiteConfigSummary {
     pub provider_instance_id: String,
     pub model_revision: Option<String>,
     pub provider: ProviderKind,
+    /// NF history transport (`rest` = portal HTTPS, `grpc` = LAN gRPC).
+    /// Non-NF sites always report `rest`.
+    pub transport: config::SiteTransport,
     pub endpoint: String,
     pub poll_secs: u64,
     pub mapped_points: usize,
@@ -689,6 +693,50 @@ mod tests {
         check_provider(&meteo);
         assert_eq!(ace.provider_id(), "ace_iot:explicit");
         assert_eq!(meteo.kind(), ProviderKind::OpenMeteo);
+    }
+
+    fn runtime_with_sites(json: &str) -> Runtime {
+        let loaded = config::load_sites_json_owned(json).unwrap();
+        assert!(loaded.failures.is_empty(), "sites should load: {json}");
+        Runtime {
+            sites: loaded.sites,
+            models: StdMutex::new(CommittedModelStore::default()),
+            health: Mutex::new(ProvidersHealthBody {
+                ok: true,
+                poll_enabled: false,
+                sites: Vec::new(),
+                config_error: None,
+                registry: Vec::new(),
+            }),
+            hourly: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn sites_config_reports_transport_without_secrets() {
+        let nf = |id: &str, extra: &str| {
+            format!(
+                r#"{{"building_id":"{id}","tenant_id":"tenant-a","provider":"nf","endpoint":"https://portal.example","client_id":"id","client_secret":"sek-do-not-echo"{extra}}}"#
+            )
+        };
+        let json = format!(
+            "[{},{}]",
+            nf("LAN", r#","transport":"grpc""#),
+            nf("PORTAL", "")
+        );
+        let runtime = runtime_with_sites(&json);
+        let rows = serde_json::to_value(runtime.sites_config()).unwrap();
+        let rows = rows.as_array().unwrap();
+        let by_id = |id: &str| {
+            rows.iter()
+                .find(|r| r["building_id"] == id)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(by_id("LAN")["transport"], "grpc");
+        assert_eq!(by_id("PORTAL")["transport"], "rest");
+        let text = serde_json::to_string(rows).unwrap();
+        assert!(!text.contains("sek-do-not-echo"));
     }
 
     fn site(building: &str, endpoint: &str, message: &str) -> SiteProviderHealth {
