@@ -3415,6 +3415,30 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
             }
         }
     }
+    if window_start_s
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+        || window_end_s
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .is_none()
+    {
+        let end = historian_watermark(&tsdb, &building_id)
+            .await
+            .and_then(|s| DateTime::parse_from_rfc3339(s.trim()).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(Utc::now);
+        let start = end - chrono::Duration::hours(24);
+        if window_start_s.is_none() {
+            window_start_s = Some(start.to_rfc3339());
+        }
+        if window_end_s.is_none() {
+            window_end_s = Some(end.to_rfc3339());
+        }
+    }
 
     let full_cohort = equipment_filter.is_none()
         && rule_filter
