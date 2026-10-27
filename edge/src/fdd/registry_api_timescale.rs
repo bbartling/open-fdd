@@ -546,7 +546,7 @@ fn prepare_rule_file(
 }
 
 fn parent_body_from_rows(rule_id: &str, rows: &[(String, Value)]) -> Option<Value> {
-    let mut rule_rows: Vec<Value> = rows
+    let rule_rows: Vec<Value> = rows
         .iter()
         .filter(|(id, _)| id == rule_id)
         .map(|(_, row)| row.clone())
@@ -593,11 +593,11 @@ pub fn prepare_run_generation_with_parent(
                 .map(str::to_string)
         });
     let cohort = if commit.full_cohort {
-        "full"
+        "full".to_string()
     } else if parent_run_id.is_some() {
-        "derived"
+        "derived".to_string()
     } else {
-        "scoped"
+        "scoped".to_string()
     };
     let run_id = new_run_id();
     let model = model_set(&commit.equipment);
@@ -2027,7 +2027,7 @@ pub fn results_response_with_timescale_rows(
 
 /// Readiness when the active generation lives in Timescale, not manifest files.
 pub fn readiness_from_timescale_manifest(
-    building_id: Option<&str>,
+    _building_id: Option<&str>,
     legacy_files: usize,
     manifest: Option<&Value>,
 ) -> Value {
