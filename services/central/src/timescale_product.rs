@@ -3458,6 +3458,9 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         let run_targets = targets_for_rule(&equipment, &kinds, equipment_filter.as_deref());
         let metric = rule_is_metric(rule);
         if site_targets.is_empty() {
+            if full_cohort && kinds.as_slice() == ["vav"] {
+                continue;
+            }
             rule_files.push(rule_file(
                 &rule.rule_id,
                 &building_id,
