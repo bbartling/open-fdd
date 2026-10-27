@@ -71,7 +71,9 @@ OPENFDD_S3_ALLOW_HTTP=true
 
 The example credentials are local-test-only. Do not use them outside an isolated development environment.
 
-## Railway Storage Bucket
+## Railway Storage Bucket (historical)
+
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; this section is `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
 
 Railway is deployment configuration, not an engine branch. Map the bucket variables into Open-FDD:
 

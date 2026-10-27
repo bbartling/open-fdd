@@ -1,5 +1,7 @@
 # Wave U — Security-first master (supersedes Wave T)
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 ## Acceptance correction — 2026-09-20
 
 The independent acceptance review reopened qualification, standalone, MQTT, ZAP and image/readiness acceptance. Existing component fixes and historical runs remain recorded. See [milestones](../../MILESTONES.md), [the living tracker](BUG_REPORT_WAVE_P.md) and the local Cursor handoff `.cursor/plans/wave_u_independent_acceptance_audit.plan.md` for execution criteria. Wave U remains the master.

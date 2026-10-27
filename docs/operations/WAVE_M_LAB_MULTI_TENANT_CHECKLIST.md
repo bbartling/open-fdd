@@ -1,5 +1,7 @@
 # Wave M M3 - Lab multi-tenant enable checklist
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 Prod stays `multi_tenant=false` until Stage C checklist (M4). This document is the **lab-only** enable harness.
 
 ## Refuse silent prod enable

@@ -32,4 +32,4 @@ See the repository [`SECURITY.md`](https://github.com/bbartling/open-fdd/blob/ma
 
 ## Deployment posture
 
-Open-FDD remains local-first and LAN/VPN/OT-oriented. The Railway recipe is an experimental CSV/package lab/demo path. Internet-facing deployment requires an independent review of authentication, secrets, TLS, persistence, backups, exposure policy, and network controls.
+Open-FDD remains local-first and LAN/VPN/OT-oriented. Hosting is the local single-host stack only; the Railway recipe is retired. Internet-facing deployment requires an independent review of authentication, secrets, TLS, persistence, backups, exposure policy, and network controls.

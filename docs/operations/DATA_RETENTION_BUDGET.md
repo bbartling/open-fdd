@@ -31,7 +31,7 @@ python3 scripts/openfdd_disk_preflight.py --self-test
 
 `scripts/openfdd_maint_update_resume.sh` runs the preflight in metadata-snapshot mode (tag/env pin, not a second historian) before its snapshot. Exit 10 clears that snapshot. Exit 20 refuses the update. A full `tar` of `workspace/` must use `--full-copy` first.
 
-`scripts/openfdd_railway_release.sh` still backs up before a real release. **`OPENFDD_TEST_DEPLOY=1` skips that backup** for any site unless `OPENFDD_BACKUP_ON_UPDATE=1`. The flag is not a site-name branch. Do not treat a test deploy as a production backup drill.
+Release backups (historically `scripts/openfdd_railway_release.sh`, retired with Railway) run before a real release. **`OPENFDD_TEST_DEPLOY=1` skips that backup** for any site unless `OPENFDD_BACKUP_ON_UPDATE=1`. The flag is not a site-name branch. Do not treat a test deploy as a production backup drill.
 
 **Historical, superseded by the Timescale-only mandate:** DataFusion spill (`OPENFDD_DATAFUSION_SPILL_DIR`, default `<storage_root>/.datafusion-spill`, `OPENFDD_DATAFUSION_SPILL_MAX_GB` / `_BYTES`) was ephemeral query scratch for the retired DataFusion engine. DataFusion is prohibited on the product path; do not set these variables. A leftover `.datafusion-spill` directory is safe to delete when central is idle.
 

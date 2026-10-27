@@ -1,5 +1,7 @@
 # Wave M D1 - Root-cause report (durable results / release / UX)
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
 **Date:** 2026-09-12  
@@ -26,7 +28,7 @@ Leads from `ecd97a473405` revalidated against tip code (not assumed unchanged).
 | Lead | Status | Evidence |
 |------|--------|----------|
 | Rule results ? `.cache/rule_results` | **REPRODUCED (static)** | [`edge/src/fdd/registry_api.rs`](../../edge/src/fdd/registry_api.rs) `results_dir` defaults to `.cache/rule_results` unless `OPENFDD_RULE_RESULTS_DIR`. Central Dockerfile `WORKDIR /app` - relative `.cache` is **not** under `/workspace` volume unless cwd/env override. |
-| Backup tar openfdd+mqtt with `\|\| tar .` fallback | **REPRODUCED (static)** | [`scripts/railway_central_workspace_backup.sh`](../../scripts/railway_central_workspace_backup.sh) lines 25-27: failed first tar still writes fallback stream to same file ? concat risk. |
+| Backup tar openfdd+mqtt with `\|\| tar .` fallback | **REPRODUCED (static)** | `scripts/railway_central_workspace_backup.sh` (removed, historical) lines 25-27: failed first tar still writes fallback stream to same file ? concat risk. |
 | Single `session_config.json` | **REPRODUCED (static)** | [`edge/src/fdd/session_config.rs`](../../edge/src/fdd/session_config.rs) - one hub-wide `workspace/data/session_config.json`. |
 | Global browser rule override key | **REPRODUCED (static)** | [`frontend/web/src/lib/ruleParams.ts`](../../frontend/web/src/lib/ruleParams.ts) `RULE_PARAMS_STORAGE_KEY = "openfdd.ui.rule_params"` - not building-scoped. |
 | Overview auto-load | **REPRODUCED (working)** | [`OverviewPopulated.tsx`](../../frontend/web/src/components/OverviewPopulated.tsx) auto-loads on site/visibility; Wave H demo freshness. |

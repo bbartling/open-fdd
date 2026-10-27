@@ -6,10 +6,10 @@ Soft-OPEN ≠ FQ. Historical (3.6.0): "Fieldbus BACnet/Modbus unchanged" — fie
 (`dual_write` / dual-path false). Default binary Timescale-only
 (`legacy-datafusion` / `legacy-parquet` OFF).
 
-**Soft-OPEN Railway / ACME:** no site backups unless Ben asks — Timescale-only
+**Soft-OPEN local stack / ACME:** no site backups unless Ben asks — Timescale-only
 historian, dual-write false. Soft-OPEN is not full qualification.
 
-**Soft-OPEN R8d tip-safe:** no Soft-OPEN agent Railway/DB/volume backups; Parquet
+**Soft-OPEN R8d tip-safe:** no Soft-OPEN agent DB/volume backups; Parquet
 compaction/budget Soft-OPEN N/A on Timescale tip (that code is removed from
 `crates/fdd_store`); Timescale WAL/PITR/restore
 remain FQ-open. See [`docs/softopen/SOFTOPEN_WAL_RESTORE_R8d.md`](../softopen/SOFTOPEN_WAL_RESTORE_R8d.md).

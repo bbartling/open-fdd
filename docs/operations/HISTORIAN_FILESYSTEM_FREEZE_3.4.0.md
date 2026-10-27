@@ -8,6 +8,8 @@ nav_exclude: true
 
 # Historian filesystem freeze — 3.4.0
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
 Wave K **K2** contract pin for the single-tenant Parquet / DataFusion historian.
@@ -130,7 +132,7 @@ Never commit backup directories. Secrets in the tarball stay on local disk only.
 
 Durability model: **same volume (or same `s3://` bucket)**, not a per-message export. App updates replace container images; historian bytes remain on the mounted root.
 
-See also [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](RAILWAY_DEPLOYMENT_CHECKLIST.md) (“App updates must not wipe telemetry”).
+See also `RAILWAY_DEPLOYMENT_CHECKLIST.md` (removed, historical) (“App updates must not wipe telemetry”).
 
 ## No silent format change in the 3.4.0 line
 
@@ -170,7 +172,7 @@ A tenant prefix is an **additive** isolation layer. It does not redefine what a 
 | [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md) | Living pin / smoke / stress evidence |
 | [`PATCH_CYCLE.md`](PATCH_CYCLE.md) | Tiny VERSION rev + Railway hub stress template |
 | [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) | Full stress handbook (`run_railway_hub_stress.sh`) |
-| [`RAILWAY_DEPLOYMENT_CHECKLIST.md`](RAILWAY_DEPLOYMENT_CHECKLIST.md) | Volume / image re-pin checklist |
+| `RAILWAY_DEPLOYMENT_CHECKLIST.md` (removed, historical) | Volume / image re-pin checklist |
 | [`historian-s3.md`](historian-s3.md) | Object-store (`s3://`) variant of the same contract |
 | [`patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md`](patch_trains/openfdd_wave_k_340_filesystem_pin_program.plan.md) | Wave K master (repo mirror) |
 | [`patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md`](patch_trains/openfdd_wave_l_shared_db_mega_program.plan.md) | Wave L queued program |

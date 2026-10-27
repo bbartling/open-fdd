@@ -59,8 +59,8 @@ grep -q 'data_safe_action=reset_workspace' <<<"$out"
 for path in \
   scripts/openfdd_stack_up.sh \
   scripts/openfdd_maint_update_resume.sh \
-  scripts/openfdd_railway_release.sh \
-  scripts/railway_repin_hub.sh
+  scripts/openfdd_local_repin.sh \
+  scripts/ops/assert_local_stack_after_repin.sh
 do
   if grep -nE 'docker[[:space:]]+volume[[:space:]]+(prune|rm)|compose[[:space:]]+down[[:space:]]+(-v|--volumes)' "$path"; then
     echo "FAIL: $path still destroys volumes on the update path" >&2

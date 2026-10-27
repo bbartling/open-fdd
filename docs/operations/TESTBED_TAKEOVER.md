@@ -1,5 +1,7 @@
 # Test-bed takeover — Open-FDD (Railway hub + local fieldbus)
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 **Read this first** if you are new to this checkout, machine, or Cursor session.
 Prefer in-repo docs over chat memory. This is the operator path for the current
 **Wave U** security-first spine (supersedes Wave T).

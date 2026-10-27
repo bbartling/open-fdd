@@ -8,6 +8,8 @@ nav_exclude: true
 
 # Bench recovery — recreate Open-FDD field edge if this host dies
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 **Purpose:** If **bensbench** (or any field laptop) is lost, a new x86 Linux box can resume the Railway hub + fieldbus topology and continue the **3.3.21→3.3.26** patch trains using **only** GitHub + GHCR + Railway + documented secrets (never secrets in git).
 
 Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md).  
@@ -70,7 +72,7 @@ git checkout master && git pull
 railway link   # gleaming-cooperation / production / openfdd-central-cQ-F
 ```
 
-Optional: copy [`~/.config/railway/bensbench.env.example`](../../.config/railway/bensbench.env.example) pattern — **never commit** filled `bensbench.env`.
+Optional: copy `~/.config/railway/bensbench.env.example` (removed, historical) pattern — **never commit** filled `bensbench.env`.
 
 ### 3) Discover tip pin
 
@@ -93,7 +95,7 @@ Health must read `3.3.N+<fullsha-prefix>` after re-pin.
 
 ### 5) Re-pin hub (central → mqtt → web)
 
-See [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md):
+See `RAILWAY_DEPLOYMENT.md` (removed, historical):
 
 ```bash
 SHA=sha-<7>

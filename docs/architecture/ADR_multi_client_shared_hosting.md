@@ -6,6 +6,8 @@ nav_order: 12
 
 # ADR — Multi-client shared hosting (Wave L Phase 0)
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](../operations/LOCAL_HOSTING.md).
+
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
 > **SUPERSEDED historian lock (Wave-X 3.6.0+ / [ADR-010](adr-010-timescale-hard-cutover.md)):** Product historian is **TimescaleDB only** — no dual-write, no Parquet/DataFusion co-canonical path. Soft-OPEN ≠ FQ. Live ops: [`../operations/TIMESCALE_WAVE_X.md`](../operations/TIMESCALE_WAVE_X.md). Tenant-isolation goals below may still inform Wave L scaffolding, but **do not** treat Parquet/DataFusion decision text as current product law.
@@ -14,7 +16,7 @@ nav_order: 12
 - **Date:** 2026-09-09
 - **Program:** Wave L `3.5.x` — shared Railway hub for many engineering firms
 - **Depends on:** Wave K **3.4.0 PINNED** before product coding; this ADR may land as design-only K3 meanwhile
-- **Related:** [`historian.md`](historian.md), [`adr-010-timescale-hard-cutover.md`](adr-010-timescale-hard-cutover.md), [`SECURITY.md`](../../SECURITY.md), [`docs/operations/RAILWAY_DEPLOYMENT.md`](../operations/RAILWAY_DEPLOYMENT.md), [`docs/operations/STRESS_CLOSEOUT.md`](../operations/STRESS_CLOSEOUT.md), [`scripts/qualification/README.md`](../../scripts/qualification/README.md)
+- **Related:** [`historian.md`](historian.md), [`adr-010-timescale-hard-cutover.md`](adr-010-timescale-hard-cutover.md), [`SECURITY.md`](../../SECURITY.md), `RAILWAY_DEPLOYMENT.md` (removed), [`docs/operations/STRESS_CLOSEOUT.md`](../operations/STRESS_CLOSEOUT.md), [`scripts/qualification/README.md`](../../scripts/qualification/README.md)
 
 ## Context (historical Wave L framing)
 
@@ -128,11 +130,11 @@ Never claim multi-tenant ready without **Tier-2** isolation evidence. L8 cutover
 3. Do not delete Parquet during failed shared-mode experiments; tenant roots are additive prefixes where possible.
 4. Control-plane schema (if introduced) must degrade gracefully when mode is OFF (unused or ignored).
 
-## Railway CLI testing notes
+## Railway CLI testing notes (historical)
 
-- Use `@railway/cli` against the linked hub project; service names and re-pin order follow [`docs/operations/RAILWAY_DEPLOYMENT.md`](../operations/RAILWAY_DEPLOYMENT.md) / agent Railway skill — typically central → mqtt → web, then fieldbus up scripts when needed.
+- Use `@railway/cli` against the linked hub project; service names and re-pin order follow `RAILWAY_DEPLOYMENT.md` (removed) / agent Railway skill — typically central → mqtt → web, then fieldbus up scripts when needed.
 - Prefer **tip GHCR `sha-*` pulls** on the hub; do not local-`docker build` central/web/mqtt/fieldbus on the low-RAM bench during qualification.
-- Between builds: tip Publish → tip gate → backup (`scripts/railway_central_workspace_backup.sh` when used) → re-pin → soak → smoke → BUG_REPORT.
+- Between builds: tip Publish → tip gate → backup (retired `railway_central_workspace_backup.sh`) → re-pin → soak → smoke → BUG_REPORT.
 - Tier-3 on the live hub is **smoke/freshness only**; A↔B aggression and ZAP active belong on disposable/synthetic stacks (Tier-2).
 - Never commit `RAILWAY_TOKEN` or JWT dumps; never treat Railway AI as the FDD agent.
 - MQTT ACL path on tip stacks: `acl_file` under `deploy/mqtt/certs/acl` (not only a non-mounted `deploy/mqtt/acl`).

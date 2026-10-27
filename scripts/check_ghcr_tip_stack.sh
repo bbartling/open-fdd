@@ -79,7 +79,7 @@ if printf '%s\n' "${present[@]}" | grep -qx openfdd-central \
   && printf '%s\n' "${missing[@]}" | grep -qx openfdd-mqtt; then
   echo "FAIL: PARTIAL TIP — central present but mqtt missing for ${TAG}." >&2
   echo "  Likely: Publish still on multi-arch fieldbus (or hung) before mqtt push." >&2
-  echo "  Do not Railway re-pin until hub (central/web/mqtt) is complete." >&2
+  echo "  Do not re-pin the local stack (scripts/openfdd_local_repin.sh) until central/web are complete." >&2
   exit 1
 fi
 

@@ -15,7 +15,7 @@ MCP is opt-in — bring up a stack recipe first, then pull MCP on the **same tag
 | Path | Doc / skill |
 |------|-------------|
 | Local firewall hub (HTTP `:3000`/`:8080`, **no TLS**) | [`docs/operations/LOCAL_DEPLOYMENT.md`](../docs/operations/LOCAL_DEPLOYMENT.md) · `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web` then `./scripts/openfdd_maint_update_resume.sh portal sha-<7> --skip-maintenance` |
-| Railway cloud hub | [`docs/operations/RAILWAY_DEPLOYMENT.md`](../docs/operations/RAILWAY_DEPLOYMENT.md) · skill [`openfdd-railway-cli`](../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md) |
+| Local single-host stack | [`docs/operations/LOCAL_HOSTING.md`](../docs/operations/LOCAL_HOSTING.md) · skill [`openfdd-stack-ghcr`](../openfdd_agent_spec/skills/openfdd-stack-ghcr/SKILL.md) |
 | Stress LAST after re-pin | [`docs/operations/STRESS_CLOSEOUT.md`](../docs/operations/STRESS_CLOSEOUT.md) · skill [`openfdd-stress-closeout`](../openfdd_agent_spec/skills/openfdd-stress-closeout/SKILL.md) |
 
 ```bash
@@ -27,9 +27,8 @@ export OPENFDD_IMAGE_TAG=nightly   # or a pinned semver / sha-*
 
 # JWT for central REST — prefer dedicated agent identity (operator role)
 # Local: http://127.0.0.1:8080 (plain HTTP — no TLS on Compose yet)
-# On Railway: OPENFDD_AGENT_PASSWORD + username "agent", or admin POST /api/auth/agent-token
-# Hub deploy/re-pin is the Railway CLI (not this MCP) — see docs/operations/RAILWAY_DEPLOYMENT.md
-#   and openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md (project gleaming-cooperation).
+# Local stack: OPENFDD_AGENT_PASSWORD + username "agent", or admin POST /api/auth/agent-token
+# Stack re-pin is scripts/openfdd_local_repin.sh (not this MCP) — see docs/operations/LOCAL_HOSTING.md.
 export OPENFDD_MCP_TOKEN="$(
   curl -s -X POST http://127.0.0.1:8080/api/auth/login \
     -H 'Content-Type: application/json' \
@@ -37,7 +36,7 @@ export OPENFDD_MCP_TOKEN="$(
   | jq -r '.token // .access_token'
 )"
 # LAN legacy (bootstrap / integrator) still works via scripts/openfdd_auth_lib.sh when present.
-# Cloud: use private central URL (*.railway.internal or VPN), not Railway’s own MCP for FDD.
+# Remote: reach central over the LAN/VPN; cloud web-app hosting is retired.
 ```
 
 **Cursor (stdio via Docker)** — MCP speaks JSON-RPC on stdin/stdout, not HTTP. Use `OPENFDD_API_BASE=http://central:8080` inside the compose network, or `http://127.0.0.1:8080` from the host:

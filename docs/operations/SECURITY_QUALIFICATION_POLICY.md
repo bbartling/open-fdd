@@ -73,9 +73,8 @@ failed positive controls; record incomplete checks as BLOCKED or ERROR.
 Use exact origin allowlists, TLS verification, disabled automatic redirects/proxies and
 credentials from protected environment/file references. Do not follow external redirects
 with credentials. SSRF tests use isolated canary endpoints. Active/fuzz/load tests run
-only on isolated equivalents. Railway testing targets the operator's approved application
-origins and broker endpoints; it does not scan shared provider networks or claim host-OS
-assessment of provider-managed infrastructure.
+only on isolated equivalents. Railway / cloud hosting is retired; testing targets the operator's approved local-stack
+origins only and does not scan shared networks.
 
 ## Coverage and scanner evidence
 

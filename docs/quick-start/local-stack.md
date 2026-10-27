@@ -34,4 +34,4 @@ cd open-fdd
 
 More detail (repo, not public Ops nav): [`docs/operations/LOCAL_DEPLOYMENT.md`](https://github.com/bbartling/open-fdd/blob/master/docs/operations/LOCAL_DEPLOYMENT.md).
 
-→ Next: [Docker & GHCR](docker-ghcr.html) · [Railway hub](railway-hub.html) · [Site lifecycle](site-lifecycle.html)
+→ Next: [Docker & GHCR](docker-ghcr.html) · [Local hosting](../operations/LOCAL_HOSTING.md) · [Site lifecycle](site-lifecycle.html)

@@ -11,7 +11,7 @@ description: >-
 
 Works with any AI agent that can read markdown skills and run the PyPI CLI. Author only under `openfdd_agent_spec/skills/`. `./scripts/openfdd_install_agent_skills.sh --sync` links that tree into vendor homes. Do not edit a copy under `.cursor/skills/`. Publishing `open-fdd` showcases AI agent RCx/FDD reporting (`open-fdd-anomaly report`) alongside the ECM guide at https://bbartling.github.io/open-fdd/ecm/
 
-AI agent reporting can consume FDD and analytics that Timescale SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
+AI agent reporting can consume FDD and analytics that Timescale SQL already ran on a self-hosted local Open-FDD instance, or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not API-only.
 
 ## Layout
 
@@ -56,7 +56,7 @@ product UI. Role alias Camber↔SQL is a **doc table only** until twin SQL lands
    The Typst note under that figure is `econ_scatter_caption`: damper color vs
    OA-fraction lines, damper position is not fresh-air fraction, and mild
    weather (MAT ≈ RAT ≈ OAT) shrinks the deltas.
-8. **Single-AHU Typst:** the only shipped PDF command is `open-fdd-anomaly report --month YYYY-MM --compile` (`open_fdd.reporting.report_template`). Do not use `build_april_report.py` or any other out-of-tree runner. Profile `vav_ahu` selects figures from mapped roles. Other system profiles are registered stubs. History is not Railway-only: local CSV plus column map, a Railway or self-hosted Open-FDD central (agent-supplied reader), or a future vendor API, all as mapped roles.
+8. **Single-AHU Typst:** the only shipped PDF command is `open-fdd-anomaly report --month YYYY-MM --compile` (`open_fdd.reporting.report_template`). Do not use `build_april_report.py` or any other out-of-tree runner. Profile `vav_ahu` selects figures from mapped roles. Other system profiles are registered stubs. History is mapped roles: local CSV plus column map, a self-hosted local Open-FDD central (agent-supplied reader), or a future vendor API, all as mapped roles.
    `report.pdf` is written when `typst` is on `PATH` (the CLI runs `typst compile`). Order is sensor
    checks, plain anomaly bullets, executive summary, motor run hours
    (`motor_weekly_runtime_chart` for every mapped fan and pump on any profile;

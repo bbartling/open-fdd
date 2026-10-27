@@ -9,13 +9,13 @@ permalink: /ecm/overview.html
 
 `open-fdd` ships AI-agent RCx/FDD reporting and ECM workbooks. ECM guide: https://bbartling.github.io/open-fdd/ecm/
 
-1. **AI agent report** — `open-fdd-anomaly report ... --compile` from mapped roles. Not Railway-only: a local CSV plus column map, a Railway or self-hosted Open-FDD central (agent-supplied reader), or a future vendor API. Default title **Open-FDD AI Agent Report**. `--title` and `--location` are optional.
+1. **AI agent report** — `open-fdd-anomaly report ... --compile` from mapped roles. From a local CSV plus column map, a self-hosted local Open-FDD central (agent-supplied reader), or a future vendor API. Default title **Open-FDD AI Agent Report**. `--title` and `--location` are optional.
 2. **ECM engineering** (`open_fdd.ecm_engineering`) — agent-drivable HVAC spreadsheet workbooks + Python benchmarks.
 3. **Pandas oracle** (`open_fdd.rules`, `open_fdd.analytics`, `open_fdd.reporting`) — cookbook catalog, analytics helpers, Engineering Findings.
 
 Works with any AI agent that can read markdown skills and run the PyPI CLI. Skill source of truth: `openfdd_agent_spec/skills/` (`./scripts/openfdd_install_agent_skills.sh --sync`).
 
-AI agent reporting can consume FDD and analytics that Timescale SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
+AI agent reporting can consume FDD and analytics that Timescale SQL already ran on a self-hosted local Open-FDD instance, or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not API-only.
 
 **Why it exists:** agents put industry-method calcs into **Excel** for human audit, then optionally **compare honesty against EnergyPlus** — see [Purpose: Excel + EnergyPlus](purpose-excel-energyplus.html).
 
@@ -135,7 +135,7 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out
 # defaults: --top-n 5 --max-days 10 --methods zscore,mad,stl,iforest
 
 # Single AHU FDD/RCx PDF. Only this CLI; no build_april_report.py or other local runner.
-# History is mapped roles: local CSV+map, Railway or self-hosted Open-FDD, or a future vendor API.
+# History is mapped roles: local CSV+map, self-hosted local Open-FDD, or a future vendor API.
 # --compile writes report.pdf when typst is on PATH.
 # --month filters every plot. --week pins the RCx window (YYYY-MM-DD, 7 days).
 # Web OAT: mapped column, CSV (web_oa_t reindexed onto the BAS clock), or fetch.

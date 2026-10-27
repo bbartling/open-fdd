@@ -64,7 +64,7 @@ Evidence is what exists in this tree on 2026-10-19. In-progress rows owned by ot
 | N10 | Scoped REST / MCP jobs, receipts, gaps | prototype | Existing read-first tools | OT tool discovery is not fully retired from every recipe |
 | N11 | Providers / sites / model / ledger UI | prototype | Ops Providers view exists | Ledger, gap, and source-neutral analytics UI are separate work |
 | N12 | Full acceptance matrix and bounded NF pilot | prototype | Not started here | No portal flood. No qualification claim |
-| N13 | Phased publish and truthful remaining status | prototype | This matrix | No GHCR publish, no Railway pin, no PyPI publish from this work |
+| N13 | Phased publish and truthful remaining status | prototype | This matrix | No GHCR publish, no stack re-pin, no PyPI publish from this work |
 | Ace | Ace IoT driver | prototype | `providers/ace_stub.rs` returns `NotImplemented` | Driver not started. Conformance test locks the stub |
 | M13 | ACME NF retrofit | prototype | Deferred in the plan | Do not retrofit ACME in this change |
 | Weather roles | Web OAT series enter Timescale only through an explicit map | implemented | Point map keys are Open-Meteo series ids (`temperature_2m`, …). Roles such as `web-outside-air-temp` are operator config | Display names in a payload must not become roles |

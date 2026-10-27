@@ -72,7 +72,7 @@ History cursors are bounded to the retained 100,000-record window, and a page
 probes at most `offset + page_size + 1` matching records to determine whether
 continuation exists.
 
-The cloud-only `central` and Railway recipes intentionally have no fieldbus
+The central-only recipe and the retired Railway recipe intentionally have no fieldbus
 scanner or BACnet socket. MQTT history synchronization is not part of this
 contract; use a separately versioned transport contract if that is added later.
 

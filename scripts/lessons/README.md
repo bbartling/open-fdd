@@ -7,7 +7,7 @@ helpers. Soft-OPEN ≠ FQ. **Synthetic `building_id` only**.
 
 | Where | Command |
 | --- | --- |
-| Railway hub | `python scripts/lessons/… --base-url https://openfdd-web-production.up.railway.app --building-id SYNTH_03` |
+| Local stack | `python scripts/lessons/… --base-url http://127.0.0.1:8080 --building-id SYNTH_03` |
 | Lab LAN | `python scripts/lessons/… --host <lab-ip> --building-id SYNTH_03` |
 
 Env: `OPENFDD_API_BASE`, `OPENFDD_AGENT_PASSWORD` (or admin), `OPENFDD_STRESS_BUILDING_ID`.

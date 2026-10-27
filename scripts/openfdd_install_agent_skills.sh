@@ -11,11 +11,26 @@
 #       Symlink each product skill into repo homes for Cursor, Claude, and Codex.
 #       --user also links into the home directories used by Cursor, Claude, Codex,
 #       OpenClaw, Hermes, and Grok. A real directory with the same name is refused.
+#       Dangling links into openfdd_agent_spec/skills (deleted skills) are pruned.
 #
 #   ./scripts/openfdd_install_agent_skills.sh [path/to/research_review_agent_skills_v1.zip]
 #       Install the separate research-review skill zip (existing behavior).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Remove stale links (pointing into the skill source tree) whose skill was deleted.
+prune_dangling_skill_links() {
+  local dest="$1" link
+  for link in "$dest"/*; do
+    [[ -L "$link" && ! -e "$link" ]] || continue
+    case "$(readlink "$link")" in
+      *openfdd_agent_spec/skills/*)
+        rm -f "$link"
+        echo "Pruned dangling skill link $link"
+        ;;
+    esac
+  done
+}
 
 sync_product_skills() {
   local user_home="${1:-}"
@@ -32,6 +47,7 @@ sync_product_skills() {
   local dest rel name target
   for dest in "${repo_dests[@]}"; do
     mkdir -p "$dest"
+    prune_dangling_skill_links "$dest"
     rel="$(realpath --relative-to="$dest" "$src_root")"
     for skill in "$src_root"/*; do
       [[ -d "$skill" ]] || continue
@@ -57,6 +73,7 @@ sync_product_skills() {
     )
     for dest in "${homes[@]}"; do
       mkdir -p "$dest"
+      prune_dangling_skill_links "$dest"
       for skill in "$src_root"/*; do
         [[ -d "$skill" ]] || continue
         name="$(basename "$skill")"

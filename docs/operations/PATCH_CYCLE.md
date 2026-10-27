@@ -6,110 +6,48 @@ nav_exclude: true
 
 ---
 
-# Patch cycle — tiny VERSION rev + Railway hub stress
+# Patch cycle — tiny VERSION rev + local stack re-pin
 
-Copy this file’s **Cursor plan YAML** into `.cursor/plans/patch_cycle_3.3.N_<slug>.plan.md` for the next train. Bump **N** every GHCR-shipping cycle.
+**Hosting is the local single-host stack only** ([LOCAL_HOSTING.md](LOCAL_HOSTING.md)).
+Railway and any cloud web-app hosting are retired and prohibited. The old 3.3.x
+Railway hub train (backup → `railway` re-pin central → mqtt → web → public-URL
+stress) is `historical/non-executable`; see git history and
+[`patch_trains/`](patch_trains/) for the record.
 
-**Hub:** Railway (central → mqtt → web).  
-**Field:** bensbench **x86** `openfdd-fieldbus` only → Railway MQTTS.  
-**Pis:** not in Open-FDD stress (freed for vibe13 / other benches).
-
-Living evidence: [`BUG_REPORT_OT_MODBUS_HAYSTACK.md`](BUG_REPORT_OT_MODBUS_HAYSTACK.md). Stress handbook: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md).  
-Qualification entry (tiers + manifest): [`scripts/qualification/README.md`](../../scripts/qualification/README.md).  
-**Machine death / new bench:** [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md). **AI handoff:** [`recovery/AI_CONTEXT_HANDOFF.md`](recovery/AI_CONTEXT_HANDOFF.md).  
-**Active series (3.3.21–3.3.26):** [`patch_trains/`](patch_trains/) (mirrored Cursor plans — keep GitHub as source of truth).
+Qualification entry (tiers + manifest): [`scripts/qualification/README.md`](../../scripts/qualification/README.md) (Codex-owned).
+**Machine death / new bench (historical):** [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md).
 
 ## Rev bump rule
 
 | When | VERSION |
 |------|---------|
-| Ships stack images to GHCR (docs+harness+ops that retarget nightly) | `3.3.N` → `3.3.N+1` in `VERSION` + workspace `Cargo.toml` + `edge` / `services/*` / `crates/openfdd_{contracts,mqtt}` |
-| Pure evidence / BUG_REPORT after publish | No bump |
+| Ships stack images to GHCR | bump the patch in `VERSION` + workspace `Cargo.toml` |
+| Pure evidence / guidance after publish | No bump |
 | PyPI `open-fdd` | Do **not** bump unless the Python package changed |
 
-Always keep the README tip line in sync: `Version **3.3.N** on tip · PyPI **x.y.z**` must match `VERSION` and the current PyPI release whenever either changes (same PR as the bump when possible).
-
-After publish, pin **`sha-<7>`**. Health must read `3.3.N+<fullsha-prefix>`.
-
-## Cursor plan YAML (paste + fill N)
-
-```yaml
----
-name: 3.3.N patch cycle
-overview: Tiny VERSION 3.3.(N-1)→3.3.N. x86 fieldbus → Railway MQTTS. CSV + ZAP stress LAST. Low-RAM. 0 stale PRs/branches/failed Actions.
-todos:
-  - id: p0-hygiene
-    content: GH hygiene START — 0 open PRs; only master; tip Actions green
-    status: pending
-  - id: p1-version
-    content: Bump VERSION + Cargo 3.3.(N-1) → 3.3.N
-    status: pending
-  - id: p2-fix
-    content: Product/ops fix for this rev (one concern)
-    status: pending
-  - id: p3-pr
-    content: One PR; squash-merge --delete-branch; wait GHCR Publish
-    status: pending
-  - id: p4-repin
-    content: Railway backup + re-pin central→mqtt→web; x86 fieldbus same sha-*
-    status: pending
-  - id: p5-stress
-    content: run_railway_hub_stress.sh — cite qualification_manifest fully_qualified (CSV+ZAP+auth+MCP)
-    status: pending
-  - id: p6-bug-report
-    content: BUG_REPORT verdict 3.3.N + SESSION_LOG artifact paths
-    status: pending
-  - id: p7-hygiene-end
-    content: GH hygiene END — 0 PRs; only master; tip Actions green
-    status: pending
-isProject: false
----
-```
+Keep the README tip line in sync with `VERSION` and the current PyPI release.
+After publish, pin **`sha-<7>`**. Health must read `<semver>+<fullsha-prefix>`.
 
 ## Loop (every rev)
 
 ```text
-hygiene → VERSION bump + one fix → PR merge → GHCR sha-*
-  → Railway backup → re-pin hub → x86 fieldbus up
-  → run_railway_hub_stress.sh → BUG_REPORT → hygiene
+hygiene → VERSION bump + one fix → PR merge → GHCR Publish green
+  → resolve sha → tip gate → local re-pin → assert → owned qualification → hygiene
 ```
 
 ```bash
-# 1) backup + re-pin (see railway-cli skill)
-./scripts/railway_central_workspace_backup.sh
-SHA=sha-<7>
-# railway service source connect … central → mqtt → web
-
-# 2) field only on this machine
-./scripts/openfdd_fieldbus_railway_up.sh "$SHA"
-
-# 3) stress LAST (FQ + ACME MQTTS + CSV + live security execute)
-export OPENFDD_API_BASE=https://openfdd-web-production-af99.up.railway.app
-export OPENFDD_SECURITY_EXECUTE=1
-./scripts/nightly-ot-bench/run_railway_hub_stress.sh
-# FQ requires gates 19 + 35 + 25/25b; ACCEPT_ZAP_MEDIUM only with reviewed dispositions JSON
+SHA=$(./scripts/ghcr_newest_by_created.py openfdd-central | cut -f2)
+./scripts/check_ghcr_tip_stack.sh "$SHA"
+./scripts/openfdd_local_repin.sh "$SHA"            # edits OPENFDD_IMAGE_TAG in .env, pull, up -d --no-build
+./scripts/ops/assert_local_stack_after_repin.sh "$SHA"
 ```
 
-## Stress matrix (fill BUG_REPORT)
-
-| # | Gate | Pass |
-|---|------|------|
-| 0 | Hub health + x86 fieldbus + `/api/edges` telemetry | `3.5.N+…`; `has_telemetry:true` |
-| 0b | MQTTS → Overview Zone Other / `zone_t` charts | Hosted-weather AV 9101 charts populated (not empty + rising ingest) |
-| 1 | synth59 `--api-base` Railway | **59/59** |
-| 2 | Gate 17 | health matrix + overview |
-| 3 | B100 `RAILWAY_ONLY=1` | FC1 / runtime / series |
-| 4 | Creekside fixture + full zip | `LAKESIDE_ES` |
-| 5 | Gate 19 | **READY** (FQ required) |
-| 6 | Gate 35 ACME MQTTS | Live broker + fieldbus ingest (FQ required) |
-| 7 | Gates 25 / 25b | `OPENFDD_SECURITY_EXECUTE=1`; High=0; Medium via dispositions JSON only |
-| 8 | Gate 26 | Suite expansion when RUN; else N/A (not BLOCKED) |
-| 9 | ZAP baseline Railway public URL | High=0; every Medium dispositioned; cite `qualification_manifest` `fully_qualified` |
+Qualification runs on an owned disposable central + web + Timescale stack
+(Codex-owned under `scripts/qualification/`), never against a public URL.
 
 ## Anti-patterns
 
-- Raspberry Pi fieldbus or fake-device Pis in the closeout path
-- Local `react-ot` hub as the AFDD head-end
-- Local `docker build` on bensbench
-- Citing an older `sha-*` stress run for a newer tip
+- Any Railway / cloud web-app re-pin, deploy config or credential
+- Local `docker build` of stack images; `down -v`; volume prune
+- Citing an older `sha-*` run for a newer tip
 - Leaving open PRs / feature branches after merge

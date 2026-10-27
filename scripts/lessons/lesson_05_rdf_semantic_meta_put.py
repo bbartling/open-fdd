@@ -9,7 +9,7 @@ Proves:
   5. PUT restore previous display_name when we changed one
 
   python scripts/lessons/lesson_05_rdf_semantic_meta_put.py \\
-    --base-url https://openfdd-web-production.up.railway.app --building-id SYNTH_03
+    --base-url http://127.0.0.1:8080 --building-id SYNTH_03
 
 Soft-OPEN ≠ FQ. Synthetic sites only. Needs operator/admin JWT (not viewer).
 """

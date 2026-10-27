@@ -1,5 +1,7 @@
 # Security harness evidence — 3.5.29 (offline / CI)
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 Candidate tip branch: `tip/3.5.29-security-harness` (PR #948).  
 Harness revision: working tree after inventory v2 + MT fail-closed.  
 **Live hub execute: NOT RUN** (HOLD). **Layer C Rust: pending GH Actions.**

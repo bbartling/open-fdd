@@ -8,6 +8,8 @@ nav_exclude: true
 
 # Backup, update, restore
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
 Local/edge historian plus analytics result parquet defaults to a **100 GiB** oldest-first cap. A backup of that live set is a second copy. Do not assume a ~200 GiB host can hold both. Run `scripts/openfdd_disk_preflight.py --full-copy` before `tar` of `workspace/`. Exit 10 means skip the on-box copy (offload it). Exit 20 means free space is under the reserved percent — do not start the update. Any deploy with `OPENFDD_TEST_DEPLOY=1` skips the release backup unless `OPENFDD_BACKUP_ON_UPDATE=1`. The flag is not tied to a site id. Detail: [DATA_RETENTION_BUDGET.md](DATA_RETENTION_BUDGET.md).

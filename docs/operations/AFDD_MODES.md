@@ -46,7 +46,7 @@ Operator UI / `POST /api/afdd/scheduler/config` allowlist: schedule `interval` o
 
 `POST /api/afdd/scheduler/backfill` re-runs an explicit `start_utc`/`end_utc` (max 366 days, max 64 chunks). It does not move the continuous checkpoint. Bulk `POST /api/fdd/run` without a window remains the imported-package registry scan; it is not the timer.
 
-## ACME = continuous AFDD qualification building (Railway)
+## ACME = continuous AFDD qualification building (local stack)
 
 Live OT tenant **ACME** is the field proof for continuous AFDD (not Synthetic-59 flood / gate 19).
 
@@ -61,13 +61,13 @@ OPENFDD_AFDD_BUILDING_ID=ACME
 - **Cadence:** either `OPENFDD_AFDD_INTERVAL_MINUTES=1440` (checkpoint + interval) or `OPENFDD_AFDD_SCHEDULE=wall_clock` at `05:00` `America/Chicago`. Interval 1440 does not pin the clock. Wall-clock does. The live hub stays on interval until this build is the field tip.
 - **Ops clock (lab):** daily **05:00 America/Chicago**, lookback 24h / 1 day, so the cycle can finish before the **06:00** digest. That timezone is operator config for the lab, not a hardcoded site.
 - **Window:** lookback-sized only. `end` = latest persisted telemetry watermark; `start` = `end − lookback` (`plan_continuous_cycle`). Result rows outside that window are left unchanged (`merge_windowed_rule_result`). A rows-only file and a null-bound `preserved_unscoped` slice keep the same rows hash. After downtime, catch-up is still one lookback-sized window (`catch_up`). Historical rebuild is `POST /api/afdd/scheduler/backfill` with an explicit range (`plan_bounded_backfill`), never an update-all flag.
-- Soft-OPEN ACME/Railway: Timescale-only, dual-write false, **no site backups** unless Ben asks ([TIMESCALE_WAVE_X.md](TIMESCALE_WAVE_X.md)).
+- Soft-OPEN ACME/local stack: Timescale-only, dual-write false, **no site backups** unless Ben asks ([TIMESCALE_WAVE_X.md](TIMESCALE_WAVE_X.md)).
 - Stress SoT: gate **38** `38_acme_afdd_qualification.sh` (MEGA required). Gate **19** remains synth flood only.
-- **RAM (portable):** Prefer lookback-bounded SQL cycles on small hosts. Watch `/api/health.memory_budget` when present — not Railway-hardcoded 10/24 GB in product code. Legacy DataFusion spill pool vars (`OPENFDD_DATAFUSION_SPILL_DIR`, FairSpillPool) are historical and prohibited on the product path ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)); do not set them.
+- **RAM (portable):** Prefer lookback-bounded SQL cycles on small hosts. Watch `/api/health.memory_budget` when present — not host-hardcoded 10/24 GB in product code. Legacy DataFusion spill pool vars (`OPENFDD_DATAFUSION_SPILL_DIR`, FairSpillPool) are historical and prohibited on the product path ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)); do not set them.
 
 ## Local == cloud
 
-Same GHCR central image and Timescale SQL path. Storage env is `OPENFDD_DATABASE_URL` / `OPENFDD_HISTORIAN=timescale`. No Railway/AWS-specific SQL fork. Soft-OPEN ≠ FQ.
+Same GHCR central image and Timescale SQL path. Storage env is `OPENFDD_DATABASE_URL` / `OPENFDD_HISTORIAN=timescale`. No host-specific SQL fork. Soft-OPEN ≠ FQ.
 
 ## Low-RAM labs
 
@@ -82,11 +82,11 @@ Prefer lookback-bounded continuous cycles over full-history scans on small hosts
 
 ### Memory pressure policy (#1127 / #1179)
 
-Heavy analytics/AFDD **shed** new work at `OPENFDD_MEMORY_SHED_FRACTION` (default **0.75 × hard**) with HTTP 503 + `security_audit{event:"memory_shed"}`; **abort** in-flight heavy work at `OPENFDD_MEMORY_ABORT_FRACTION` (default **0.85**). A per-request **in-flight sampler** (`OPENFDD_MEMORY_SAMPLE_MS`, default **1000**) polls cgroup `memory.current` during analytics/SQL/AFDD chunks and sets the cancel flag before the kernel OOMs; `/api/health.memory_budget` reports `sample_ms` and `last_trip` when present. Unlimited Docker cgroups use host **MemTotal** as the portable hard limit (`source=host_meminfo`). **Run-now** uses the **building-scoped** historian watermark (not the global live watermark); empty scoped windows return `status=no_data` quickly (#1192). Light paths (health, auth, ingest ack) never shed on memory alone — health stays **200** with `memory_budget.shed_state`. Ingest/control stay preferred; a deferred/cancelled AFDD cycle does **not** advance the checkpoint. Live Railway combined-load qualification remains operator/Grok Soft-OPEN after a GHCR pin — HTTP success alone is not survival proof; require `events` `oom_killed` watch + memory series.
+Heavy analytics/AFDD **shed** new work at `OPENFDD_MEMORY_SHED_FRACTION` (default **0.75 × hard**) with HTTP 503 + `security_audit{event:"memory_shed"}`; **abort** in-flight heavy work at `OPENFDD_MEMORY_ABORT_FRACTION` (default **0.85**). A per-request **in-flight sampler** (`OPENFDD_MEMORY_SAMPLE_MS`, default **1000**) polls cgroup `memory.current` during analytics/SQL/AFDD chunks and sets the cancel flag before the kernel OOMs; `/api/health.memory_budget` reports `sample_ms` and `last_trip` when present. Unlimited Docker cgroups use host **MemTotal** as the portable hard limit (`source=host_meminfo`). **Run-now** uses the **building-scoped** historian watermark (not the global live watermark); empty scoped windows return `status=no_data` quickly (#1192). Light paths (health, auth, ingest ack) never shed on memory alone — health stays **200** with `memory_budget.shed_state`. Ingest/control stay preferred; a deferred/cancelled AFDD cycle does **not** advance the checkpoint. Live local-stack combined-load qualification remains operator/Grok Soft-OPEN after a GHCR pin — HTTP success alone is not survival proof; require `events` `oom_killed` watch + memory series.
 
 ### Lab ops (this Soft-OPEN program)
 
-- **No backups** unless Ben asks. Soft-OPEN Railway/ACME = Timescale-only, dual-write false. Data continuity = keep Timescale / historian volumes across `compose pull` + `up -d` (never `-v`).
+- **No backups** unless Ben asks. Soft-OPEN local stack/ACME = Timescale-only, dual-write false. Data continuity = keep Timescale / historian volumes across `compose pull` + `up -d` (never `-v`).
 - Docker maintenance before pulls: prune unused images/digests; **never** `docker volume prune` / `compose down -v` / delete `workspace/`.
 
 ## Feather / Parquet dual-write
