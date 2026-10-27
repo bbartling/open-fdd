@@ -172,21 +172,24 @@ impl Default for AfddConfig {
 
 impl AfddConfig {
     pub fn from_env() -> Result<Self> {
-        let mode = env::var("OPENFDD_AFDD_MODE")
-            .map(|raw| AfddMode::parse(&raw))
-            .unwrap_or(Ok(AfddMode::Bulk))?;
+        let mode = match env_var_nonempty("OPENFDD_AFDD_MODE")? {
+            Some(raw) => AfddMode::parse(&raw)?,
+            None => AfddMode::Bulk,
+        };
         let interval_minutes = env_positive_u64(
             "OPENFDD_AFDD_INTERVAL_MINUTES",
             DEFAULT_AFDD_INTERVAL_MINUTES,
         )?;
         let lookback_value =
             env_positive_u64("OPENFDD_AFDD_LOOKBACK_VALUE", DEFAULT_AFDD_LOOKBACK_VALUE)?;
-        let lookback_unit = env::var("OPENFDD_AFDD_LOOKBACK_UNIT")
-            .map(|raw| AfddLookbackUnit::parse(&raw))
-            .unwrap_or(Ok(DEFAULT_AFDD_LOOKBACK_UNIT))?;
-        let schedule_kind = env::var("OPENFDD_AFDD_SCHEDULE")
-            .map(|raw| AfddScheduleKind::parse(&raw))
-            .unwrap_or(Ok(AfddScheduleKind::Interval))?;
+        let lookback_unit = match env_var_nonempty("OPENFDD_AFDD_LOOKBACK_UNIT")? {
+            Some(raw) => AfddLookbackUnit::parse(&raw)?,
+            None => DEFAULT_AFDD_LOOKBACK_UNIT,
+        };
+        let schedule_kind = match env_var_nonempty("OPENFDD_AFDD_SCHEDULE")? {
+            Some(raw) => AfddScheduleKind::parse(&raw)?,
+            None => AfddScheduleKind::Interval,
+        };
         let wall_clock_hhmm = env::var("OPENFDD_AFDD_WALL_CLOCK_HHMM")
             .ok()
             .map(|raw| raw.trim().to_string())
@@ -288,8 +291,19 @@ impl AfddOperatorSchedule {
     }
 }
 
+/// Compose `${VAR:-}` forwards unset names as empty strings; treat those as absent.
+fn env_var_nonempty(name: &str) -> Result<Option<String>> {
+    match env::var(name) {
+        Ok(raw) if raw.trim().is_empty() => Ok(None),
+        Ok(raw) => Ok(Some(raw)),
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(err) => Err(err).with_context(|| format!("read {name}")),
+    }
+}
+
 fn env_positive_u64(name: &str, default: u64) -> Result<u64> {
     match env::var(name) {
+        Ok(raw) if raw.trim().is_empty() => Ok(default),
         Ok(raw) => raw
             .parse::<u64>()
             .with_context(|| format!("{name} must be a positive integer"))
@@ -318,6 +332,35 @@ mod tests {
         assert_eq!(AfddMode::parse("bulk").unwrap(), AfddMode::Bulk);
         assert_eq!(AfddMode::parse("CONTINUOUS").unwrap(), AfddMode::Continuous);
         assert!(AfddMode::parse("scheduled").is_err());
+    }
+
+    #[test]
+    fn empty_compose_forwarded_afdd_env_uses_defaults() {
+        let keys = [
+            "OPENFDD_AFDD_MODE",
+            "OPENFDD_AFDD_INTERVAL_MINUTES",
+            "OPENFDD_AFDD_LOOKBACK_VALUE",
+            "OPENFDD_AFDD_LOOKBACK_UNIT",
+            "OPENFDD_AFDD_SCHEDULE",
+        ];
+        let saved: Vec<(String, Option<String>)> = keys
+            .iter()
+            .map(|key| (key.to_string(), env::var(key).ok()))
+            .collect();
+        for key in keys {
+            env::set_var(key, "");
+        }
+        let config = AfddConfig::from_env().expect("empty forwarded vars must not fail startup");
+        assert_eq!(config.mode, AfddMode::Bulk);
+        assert_eq!(config.interval_minutes, DEFAULT_AFDD_INTERVAL_MINUTES);
+        assert_eq!(config.lookback_value, DEFAULT_AFDD_LOOKBACK_VALUE);
+        assert_eq!(config.lookback_unit, DEFAULT_AFDD_LOOKBACK_UNIT);
+        for (key, value) in saved {
+            match value {
+                Some(v) => env::set_var(&key, v),
+                None => env::remove_var(&key),
+            }
+        }
     }
 
     #[test]
