@@ -122,12 +122,6 @@ async fn compute_with_admission_fallible(
     Ok(envelope)
 }
 
-async fn compute_with_admission(
-    compute: impl AsyncFnOnce() -> AnalyticsEnvelope,
-) -> Result<AnalyticsEnvelope, (StatusCode, Json<Value>)> {
-    compute_with_admission_fallible(async || Ok(compute().await)).await
-}
-
 pub struct ServedAnalytics {
     pub envelope: AnalyticsEnvelope,
     pub cache: Value,
