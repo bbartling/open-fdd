@@ -420,16 +420,10 @@ pub async fn commit_and_persist_registry_run(
     let parent_manifest = if commit.full_cohort {
         None
     } else {
-        active_generation_manifest(tsdb, commit.building_id.trim())
-            .await
-            .ok()
-            .flatten()
+        active_generation_manifest(tsdb, commit.building_id.trim()).await?
     };
     let parent_rows = if parent_manifest.is_some() {
-        active_generation_rows(tsdb, commit.building_id.trim())
-            .await
-            .ok()
-            .unwrap_or_default()
+        active_generation_rows(tsdb, commit.building_id.trim()).await?
     } else {
         Vec::new()
     };
