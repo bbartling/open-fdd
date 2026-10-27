@@ -952,7 +952,9 @@ mod tests {
 
     #[tokio::test]
     async fn engineer_overlay_merged_into_committed_model_after_sync() {
-        use crate::providers::committed_model::{apply_engineer_point_overlays, model_from_point_map};
+        use crate::providers::committed_model::{
+            apply_engineer_point_overlays, model_from_point_map,
+        };
         let dir = tempfile::tempdir().expect("tempdir");
         let root = dir.path().join("SITE_OVL");
         let snap = snapshot(V1);
