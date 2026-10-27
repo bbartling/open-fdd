@@ -376,7 +376,7 @@ async fn apply_schema(pool: &PgPool) {
 }
 
 async fn purge_site(pool: &PgPool, site: &str) {
-    sqlx::query("DELETE FROM sample WHERE building_id = $1")
+    sqlx::query("DELETE FROM sample WHERE site_id = $1")
         .bind(site)
         .execute(pool)
         .await

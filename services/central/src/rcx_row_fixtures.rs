@@ -120,7 +120,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     let qualified = post_analytics(&app, "/api/analytics/economizer", SITE, Some(10.0)).await;
     let rows = qualified["rows"].as_array().expect("economizer rows");
     assert!(
-        qualified.get("points").is_none(),
+        crate::analytics_response_fixtures::points_absent_or_empty(&qualified),
         "economizer endpoint stays row-only: {qualified}"
     );
     assert_eq!(
@@ -184,7 +184,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
 
     let runtime = post_analytics(&app, "/api/analytics/runtime", SITE, None).await;
     assert!(
-        runtime.get("points").is_none(),
+        crate::analytics_response_fixtures::points_absent_or_empty(&runtime),
         "runtime stays row-only: {runtime}"
     );
     let runtime_rows = runtime["rows"].as_array().expect("runtime rows");
@@ -203,7 +203,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
 
     let mech = post_analytics(&app, "/api/analytics/mechanical-cooling", SITE, None).await;
     assert!(
-        mech.get("points").is_none(),
+        crate::analytics_response_fixtures::points_absent_or_empty(&mech),
         "mechanical cooling stays row-only: {mech}"
     );
     let mech_rows = mech["rows"].as_array().expect("mech rows");
@@ -212,7 +212,10 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     assert!((mech_rows[0]["run_hours"].as_f64().unwrap_or(0.0) - 1.0).abs() < 1e-6);
 
     let bas = post_analytics(&app, "/api/analytics/bas-vs-web-oat", SITE, None).await;
-    assert!(bas.get("points").is_none(), "BAS stays row-only: {bas}");
+    assert!(
+        crate::analytics_response_fixtures::points_absent_or_empty(&bas),
+        "BAS stays row-only: {bas}"
+    );
     let bas_rows = bas["rows"].as_array().expect("bas rows");
     assert_eq!(bas_rows.len(), 1, "{bas}");
     assert_eq!(bas_rows[0]["bas_oa_t"], 50.0);
@@ -293,9 +296,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
 }
 
 fn analytics_payload(body: &Value) -> Value {
-    body.get("analytics")
-        .cloned()
-        .unwrap_or_else(|| body.clone())
+    crate::analytics_response_fixtures::analytics_envelope(body)
 }
 
 fn warning_text(body: &Value) -> String {

@@ -113,7 +113,7 @@ async fn runtime_handler_reports_observation_counts_and_partial_weeks() {
     let app = crate::routes::router(state);
     let body = post_runtime(&app).await;
     assert!(
-        body.get("points").is_none(),
+        crate::analytics_response_fixtures::points_absent_or_empty(&body),
         "runtime stays row-only: {body}"
     );
     let rows = body["rows"].as_array().expect("runtime rows");

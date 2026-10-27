@@ -447,7 +447,7 @@ async fn post_json(app: &axum::Router, path: &str, payload: Value) -> Value {
     let body: Value = serde_json::from_slice(&bytes)
         .unwrap_or_else(|_| json!({ "raw": String::from_utf8_lossy(&bytes).into_owned() }));
     assert_eq!(status, StatusCode::OK, "{path} {body}");
-    body
+    crate::analytics_response_fixtures::analytics_envelope(&body)
 }
 
 async fn apply_schema(pool: &PgPool) {

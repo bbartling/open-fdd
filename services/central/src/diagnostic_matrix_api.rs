@@ -308,8 +308,9 @@ async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
     .await;
 
     let app = crate::routes::router(Arc::new(AppState::new()));
-    let (status, body) = post_matrix(&app, "/api/analytics/sensor-faults", &site_a).await;
-    assert_eq!(status, StatusCode::OK, "sensor-faults {body}");
+    let (status, raw) = post_matrix(&app, "/api/analytics/sensor-faults", &site_a).await;
+    assert_eq!(status, StatusCode::OK, "sensor-faults {raw}");
+    let body = crate::analytics_response_fixtures::analytics_envelope(&raw);
     assert_eq!(body["schema_version"], json!("diagnostic_matrix_v1"));
     assert_eq!(body["query_version"], json!("diagnostic-matrix-v1"));
     assert_eq!(body["query_id"], json!("sensor-faults"));
