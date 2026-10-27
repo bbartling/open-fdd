@@ -255,8 +255,7 @@ impl QueueClient {
         claim: &IdempotencyClaim,
     ) -> Result<Vec<JobView>, QueueError> {
         if let Some(pool) = self.pool_if_configured().await? {
-            return postgres::site_backfill(&pool, &jobs, range_start, range_end, now, claim)
-                .await;
+            return postgres::site_backfill(&pool, &jobs, range_start, range_end, now, claim).await;
         }
         self.memory
             .site_backfill(jobs, range_start, range_end, now, claim)

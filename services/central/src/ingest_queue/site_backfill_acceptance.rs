@@ -51,20 +51,18 @@ fn site_jobs(devices: &[&str], window_offsets: &[i64]) -> Vec<NewJob> {
     jobs
 }
 
-fn site_claim(key: &str, start: DateTime<Utc>, end: DateTime<Utc>, jobs: &[NewJob]) -> IdempotencyClaim {
+fn site_claim(
+    key: &str,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    jobs: &[NewJob],
+) -> IdempotencyClaim {
     IdempotencyClaim {
         actor: "operator".into(),
         tenant_id: TENANT.into(),
         client_key: key.into(),
         object_id: site_backfill_object_id(&jobs[0]),
-        payload_hash: site_backfill_payload_hash(
-            TENANT,
-            SITE,
-            PROVIDER,
-            REV,
-            start,
-            end,
-        ),
+        payload_hash: site_backfill_payload_hash(TENANT, SITE, PROVIDER, REV, start, end),
     }
 }
 

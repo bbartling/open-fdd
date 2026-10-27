@@ -730,7 +730,13 @@ pub async fn backfill_site(
     let windows = match hourly_windows_between(body.start, body.end, MAX_SITE_BACKFILL_WINDOWS) {
         Ok(rows) => rows,
         Err(QueueError::Invalid(msg)) => {
-            return json_error(StatusCode::BAD_REQUEST, "invalid_window", &msg, &request_id, false)
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_window",
+                &msg,
+                &request_id,
+                false,
+            )
         }
         Err(err) => return queue_err(&err, &request_id),
     };

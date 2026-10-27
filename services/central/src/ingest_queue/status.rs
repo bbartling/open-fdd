@@ -91,7 +91,10 @@ fn not_assessed_reason(
     if !plan_has_assessable_points(plan, provider_instance_id) {
         return "cadence_not_bound";
     }
-    if devices.iter().any(|row| row.state == NOT_ASSESSED && row.verified_through.is_none()) {
+    if devices
+        .iter()
+        .any(|row| row.state == NOT_ASSESSED && row.verified_through.is_none())
+    {
         return "no_verified_cursor";
     }
     "coverage_not_assessed"
