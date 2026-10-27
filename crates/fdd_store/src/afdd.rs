@@ -208,9 +208,8 @@ impl AfddConfig {
             .ok()
             .map(|raw| raw.trim().to_string())
             .filter(|raw| !raw.is_empty());
-        let scope_building_ids = parse_scope_building_ids(
-            env::var("OPENFDD_AFDD_BUILDING_IDS").ok().as_deref(),
-        )?;
+        let scope_building_ids =
+            parse_scope_building_ids(env::var("OPENFDD_AFDD_BUILDING_IDS").ok().as_deref())?;
 
         let config = Self {
             mode,

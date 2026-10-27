@@ -26,8 +26,8 @@ use fdd_store::{
     apply_scheduler_config_update, lookback_matches_cadence, next_due_at, parse_backfill_request,
     plan_bounded_backfill, plan_continuous_cycle, wall_clock_local_rfc3339, AfddBackfillChunk,
     AfddConfig, AfddCycleWindow, AfddMode, AfddOperatorSchedule, AfddSchedulerCheckpoint,
-    AfddSchedulerCheckpointStore, SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINT_PATH,
-    AFDD_SCHEDULER_CHECKPOINTS_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES,
+    AfddSchedulerCheckpointStore, SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINTS_PATH,
+    AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES,
     OPERATOR_LOOKBACK_DAYS,
 };
 use serde::{Deserialize, Serialize};
@@ -219,7 +219,10 @@ impl AfddSchedulerRuntime {
             .context("persist AFDD scheduler checkpoints")
     }
 
-    fn checkpoint_for_building(&self, building_id: &str) -> Result<Option<AfddSchedulerCheckpoint>> {
+    fn checkpoint_for_building(
+        &self,
+        building_id: &str,
+    ) -> Result<Option<AfddSchedulerCheckpoint>> {
         let store = self.load_checkpoint_store()?;
         if let Some(cp) = store.checkpoint_for(building_id) {
             return Ok(Some(cp.clone()));
@@ -406,13 +409,8 @@ impl AfddSchedulerRuntime {
                 scheduled_for_utc: started_at_utc,
                 catch_up: false,
             };
-            let record = self.no_data_cycle_record(
-                building_id,
-                "run_now",
-                run_id,
-                started_at_utc,
-                window,
-            );
+            let record =
+                self.no_data_cycle_record(building_id, "run_now", run_id, started_at_utc, window);
             self.record_cycle(record.clone());
             let _ = self.persist_run_record(&record);
             return Ok(record);
@@ -1196,9 +1194,18 @@ mod tests {
             payload.get("end").and_then(Value::as_str),
             payload.get("window_end").and_then(Value::as_str)
         );
-        assert_eq!(payload.get("start").and_then(Value::as_str), Some(&start.to_rfc3339()));
-        assert_eq!(payload.get("end").and_then(Value::as_str), Some(&end.to_rfc3339()));
-        assert_eq!(payload.get("building_id").and_then(Value::as_str), Some("site-a"));
+        assert_eq!(
+            payload.get("start").and_then(Value::as_str),
+            Some(&start.to_rfc3339())
+        );
+        assert_eq!(
+            payload.get("end").and_then(Value::as_str),
+            Some(&end.to_rfc3339())
+        );
+        assert_eq!(
+            payload.get("building_id").and_then(Value::as_str),
+            Some("site-a")
+        );
     }
 
     #[test]
@@ -1208,11 +1215,7 @@ mod tests {
             ..AfddConfig::default()
         };
         let scheduled = config
-            .resolve_scheduled_buildings(&[
-                "site-a".into(),
-                "site-b".into(),
-                "site-c".into(),
-            ])
+            .resolve_scheduled_buildings(&["site-a".into(), "site-b".into(), "site-c".into()])
             .unwrap();
         assert_eq!(scheduled, vec!["site-a", "site-b"]);
     }
