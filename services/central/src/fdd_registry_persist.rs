@@ -430,10 +430,23 @@ pub async fn commit_and_persist_registry_run(
         }
     }
     persist_registry_run_timescale(tsdb, &commit, &prep).await?;
+    let stored_rows = active_generation_rows(tsdb, commit.building_id.trim()).await?;
+    let merged_results = stored_rows
+        .into_iter()
+        .map(|(rule_id, row)| {
+            let mut cloned = row;
+            if let Some(obj) = cloned.as_object_mut() {
+                obj.entry("rule_id").or_insert(json!(rule_id));
+            }
+            cloned
+        })
+        .collect::<Vec<_>>();
+    let result_count = merged_results.len();
     let mut summary = prep.manifest;
     if let Some(obj) = summary.as_object_mut() {
-        obj.insert("results".into(), Value::Array(prep.flat_results));
+        obj.insert("results".into(), Value::Array(merged_results));
         obj.insert("building_id".into(), json!(commit.building_id));
+        obj.insert("result_count".into(), json!(result_count));
     }
     Ok(summary)
 }
