@@ -5193,7 +5193,7 @@ rules:
         assert_eq!(complete["ok"], json!(true), "{complete}");
         assert_eq!(complete["run_status"], json!("complete"), "{complete}");
         assert_eq!(complete["rules_failed"], json!(0), "{complete}");
-        assert_eq!(complete["rules_skipped"], json!(2), "{complete}");
+        assert_eq!(complete["rules_skipped"], json!(1), "{complete}");
         assert!(complete["results"]
             .as_array()
             .unwrap()
