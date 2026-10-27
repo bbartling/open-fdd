@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 use super::coverage::{CoverageReport, COMPLETE, INCOMPLETE};
 
+pub type HourWindow = (DateTime<Utc>, DateTime<Utc>);
+
 pub const COVERAGE_NOT_ASSESSED: &str = "not_assessed";
 pub const MAX_CATCHUP_HOURS: u32 = 48;
 /// Max UTC hours enqueued by one `POST /api/ingest/backfill/site` request.
@@ -380,7 +382,7 @@ pub fn hourly_windows_between(
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     max_windows: u32,
-) -> Result<Vec<(DateTime<Utc>, DateTime<Utc>)>, QueueError> {
+) -> Result<Vec<HourWindow>, QueueError> {
     if end <= start {
         return Err(QueueError::Invalid(
             "backfill end must be after start".into(),
