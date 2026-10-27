@@ -11,11 +11,9 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 use crate::analytics::{
-    plant, plant_health, QV_AHU_ECONOMIZER_HEALTH, QV_AHU_HEALTH, QV_AHU_PRESSURE_HEALTH,
-    QV_AHU_TEMPERATURE_HEALTH, QV_BOILER_HEALTH, QV_DIURNAL, QV_ECONOMIZER, QV_HP_HEALTH,
-    QV_MECHANICAL_COOLING, QV_METERING, QV_MV_CHANGE_POINT, QV_PID_HUNTING, QV_RCX_AHU, QV_RCX_VAV,
-    QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_FAULTS, QV_SENSOR_HEALTH, QV_SENSOR_STATS, QV_SETPOINTS,
-    QV_SQL_ANOMALY, QV_TOPOLOGY, QV_VAV_HEALTH,
+    plant, plant_health, vav_health, QV_DIURNAL, QV_ECONOMIZER, QV_MECHANICAL_COOLING, QV_METERING,
+    QV_MV_CHANGE_POINT, QV_RCX_AHU, QV_RCX_VAV, QV_RUNTIME, QV_SCHEDULE, QV_SENSOR_HEALTH,
+    QV_SENSOR_STATS, QV_SETPOINTS, QV_SQL_ANOMALY, QV_TOPOLOGY,
 };
 use crate::state::AppState;
 
@@ -25,22 +23,30 @@ const SITE: &str = "t1402-cache";
 /// Static catalogs and inline demo twins are intentionally absent.
 pub const COMPUTING_ANALYTICS_POST_ROUTES: &[(&str, &str, &str)] = &[
     ("/api/analytics/runtime", "runtime", QV_RUNTIME),
-    ("/api/analytics/vav-health", "vav-health", QV_VAV_HEALTH),
-    ("/api/analytics/ahu-health", "ahu-health", QV_AHU_HEALTH),
+    (
+        "/api/analytics/vav-health",
+        "vav-health",
+        vav_health::QV_VAV_HEALTH,
+    ),
+    (
+        "/api/analytics/ahu-health",
+        "ahu-health",
+        plant_health::QV_AHU_HEALTH,
+    ),
     (
         "/api/analytics/ahu-temperature-health",
         "ahu-temperature-health",
-        QV_AHU_TEMPERATURE_HEALTH,
+        plant_health::QV_AHU_TEMPERATURE_HEALTH,
     ),
     (
         "/api/analytics/ahu-pressure-health",
         "ahu-pressure-health",
-        QV_AHU_PRESSURE_HEALTH,
+        plant_health::QV_AHU_PRESSURE_HEALTH,
     ),
     (
         "/api/analytics/ahu-economizer-health",
         "ahu-economizer-health",
-        QV_AHU_ECONOMIZER_HEALTH,
+        plant_health::QV_AHU_ECONOMIZER_HEALTH,
     ),
     (
         "/api/analytics/chiller-health",
@@ -55,15 +61,23 @@ pub const COMPUTING_ANALYTICS_POST_ROUTES: &[(&str, &str, &str)] = &[
     (
         "/api/analytics/sensor-faults",
         "sensor-faults",
-        QV_SENSOR_FAULTS,
+        plant_health::QV_SENSOR_FAULTS,
     ),
-    ("/api/analytics/pid-hunting", "pid-hunting", QV_PID_HUNTING),
+    (
+        "/api/analytics/pid-hunting",
+        "pid-hunting",
+        plant_health::QV_PID_HUNTING,
+    ),
     (
         "/api/analytics/boiler-health",
         "boiler-health",
-        QV_BOILER_HEALTH,
+        plant_health::QV_BOILER_HEALTH,
     ),
-    ("/api/analytics/hp-health", "hp-health", QV_HP_HEALTH),
+    (
+        "/api/analytics/hp-health",
+        "hp-health",
+        plant_health::QV_HP_HEALTH,
+    ),
     (
         "/api/analytics/zone-other-health",
         "zone-other-health",

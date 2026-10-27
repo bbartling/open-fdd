@@ -1647,22 +1647,22 @@ pub fn envelope_from_dispatch_value(
     let rows = obj
         .get("rows")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().cloned().collect())
+        .map(|a| a.to_vec())
         .unwrap_or_default();
     let equipment = obj
         .get("equipment")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().cloned().collect())
+        .map(|a| a.to_vec())
         .unwrap_or_default();
     let points = obj
         .get("points")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().cloned().collect())
+        .map(|a| a.to_vec())
         .unwrap_or_default();
     let skipped = obj
         .get("skipped")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().cloned().collect())
+        .map(|a| a.to_vec())
         .unwrap_or_default();
     let warnings = obj
         .get("warnings")
