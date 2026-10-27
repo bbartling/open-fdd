@@ -16,6 +16,7 @@ mod fdd_run_persists_runs_intervals_checkpoint {
         let explicit = std::env::var("OPENFDD_TEST_DATABASE_URL")
             .ok()
             .filter(|v| !v.trim().is_empty());
+        let had_explicit = explicit.is_some();
         let url = explicit
             .unwrap_or_else(|| "postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".to_string());
         match sqlx::postgres::PgPoolOptions::new()
@@ -24,7 +25,7 @@ mod fdd_run_persists_runs_intervals_checkpoint {
             .await
         {
             Ok(pool) => Some(pool),
-            Err(_) if explicit.is_some() => panic!("OPENFDD_TEST_DATABASE_URL connect failed"),
+            Err(_) if had_explicit => panic!("OPENFDD_TEST_DATABASE_URL connect failed"),
             Err(_) => {
                 eprintln!("skip: postgres fixture unavailable");
                 None
@@ -33,9 +34,9 @@ mod fdd_run_persists_runs_intervals_checkpoint {
     }
 
     async fn apply_schema(pool: &PgPool) {
-        for statement in fdd_tsdb::revision::schema_statements(include_str!(
-            "../../../sql/schema/01_bps_core.sql"
-        )) {
+        for statement in
+            fdd_tsdb::schema_statements(include_str!("../../../sql/schema/01_bps_core.sql"))
+        {
             if statement.contains("fdd_run") {
                 crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
             }
@@ -46,6 +47,38 @@ mod fdd_run_persists_runs_intervals_checkpoint {
         fdd_tsdb::ensure_incremental_schema(pool)
             .await
             .expect("incremental schema");
+    }
+
+    fn fixture_commit(site: &str) -> RunGenerationCommit {
+        RunGenerationCommit {
+            building_id: site.to_string(),
+            full_cohort: true,
+            equipment: vec![RunModelEquipment {
+                equipment_id: "AHU_1".into(),
+                equip_type: Some("ahu".into()),
+            }],
+            rules: vec![RunRuleFile {
+                rule_id: "FIXTURE-FAULT".into(),
+                body: json!({
+                    "rule_id": "FIXTURE-FAULT",
+                    "rows": [{
+                        "equipment_id": "AHU_1",
+                        "status": "FAULT",
+                        "output_kind": "diagnostic",
+                        "fault_hours": 1.0,
+                        "covered_hours": 1.0,
+                        "sample_rows": 2,
+                        "confirm_seconds": 0.0,
+                    }],
+                }),
+            }],
+            config_fingerprint: "fixture-fp".into(),
+            window_start: Some("2026-06-01T00:00:00Z".into()),
+            window_end: Some("2026-06-01T01:00:00Z".into()),
+            watermark: None,
+            poll_seconds: 300.0,
+            pack: json!({ "pack_version": "test-pack" }),
+        }
     }
 
     #[tokio::test]
@@ -60,37 +93,7 @@ mod fdd_run_persists_runs_intervals_checkpoint {
             .execute(&pool)
             .await;
         let tsdb = fdd_tsdb::Tsdb::from_pool(pool.clone());
-        let rules = vec![RunRuleFile {
-            rule_id: "FIXTURE-FAULT".into(),
-            body: json!({
-                "rule_id": "FIXTURE-FAULT",
-                "rows": [{
-                    "equipment_id": "AHU_1",
-                    "status": "FAULT",
-                    "output_kind": "diagnostic",
-                    "fault_hours": 1.0,
-                    "covered_hours": 1.0,
-                    "sample_rows": 2,
-                    "confirm_seconds": 0.0,
-                }],
-            }),
-        }];
-        let commit = || RunGenerationCommit {
-            building_id: site.clone(),
-            full_cohort: true,
-            equipment: vec![RunModelEquipment {
-                equipment_id: "AHU_1".into(),
-                equip_type: Some("ahu".into()),
-            }],
-            rules: rules.clone(),
-            config_fingerprint: "fixture-fp".into(),
-            window_start: Some("2026-06-01T00:00:00Z".into()),
-            window_end: Some("2026-06-01T01:00:00Z".into()),
-            watermark: None,
-            poll_seconds: 300.0,
-            pack: json!({ "pack_version": "test-pack" }),
-        };
-        let summary = commit_and_persist_registry_run(&tsdb, commit())
+        let summary = commit_and_persist_registry_run(&tsdb, fixture_commit(&site))
             .await
             .expect("persist");
         let (runs, intervals, checkpoints) =
@@ -107,7 +110,7 @@ mod fdd_run_persists_runs_intervals_checkpoint {
         );
         let (runs2, intervals2, checkpoints2) =
             fdd_persist_counts(&tsdb, &site).await.expect("counts2");
-        let _ = commit_and_persist_registry_run(&tsdb, commit())
+        let _ = commit_and_persist_registry_run(&tsdb, fixture_commit(&site))
             .await
             .expect("re-run");
         assert_eq!(runs, runs2);

@@ -997,6 +997,13 @@ fn control_plane_unavailable(audit: &mut AuditEvent, error: String) -> (StatusCo
     )
 }
 
+fn internal_server_error<E: std::fmt::Display>(err: E) -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"ok": false, "error": err.to_string()})),
+    )
+}
+
 fn workspace_path() -> std::path::PathBuf {
     std::path::PathBuf::from(
         std::env::var("OPENFDD_WORKSPACE").unwrap_or_else(|_| "workspace".into()),

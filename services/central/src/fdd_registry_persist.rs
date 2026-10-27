@@ -90,7 +90,9 @@ fn distribute_interval_buckets(
 }
 
 async fn model_revision_for_site(tsdb: &Tsdb, site_id: &str) -> Result<String> {
-    crate::timescale_product::read_model_revision_string(tsdb, site_id).await
+    crate::timescale_product::read_model_revision_string(tsdb, site_id)
+        .await
+        .map_err(|e| anyhow!(e))
 }
 
 /// Write one registry generation to Timescale. Replaces manifest JSON as the results store.

@@ -4833,16 +4833,16 @@ rules:
         ] {
             crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
-        for statement in fdd_tsdb::revision::schema_statements(include_str!(
-            "../../../sql/schema/01_bps_core.sql"
-        )) {
+        for statement in
+            fdd_tsdb::schema_statements(include_str!("../../../sql/schema/01_bps_core.sql"))
+        {
             if statement.contains("fdd_run") {
                 crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
             }
         }
-        for statement in fdd_tsdb::revision::schema_statements(include_str!(
-            "../../../sql/schema/10_incremental_fdd.sql"
-        )) {
+        for statement in
+            fdd_tsdb::schema_statements(include_str!("../../../sql/schema/10_incremental_fdd.sql"))
+        {
             crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
     }

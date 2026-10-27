@@ -435,7 +435,7 @@ pub(crate) async fn record_bounds(
     Ok(())
 }
 
-pub(crate) fn schema_statements(sql: &'static str) -> impl Iterator<Item = &'static str> {
+pub fn schema_statements(sql: &'static str) -> impl Iterator<Item = &'static str> {
     sql.split(';').map(str::trim).filter(|statement| {
         statement.lines().any(|line| {
             let code = match line.split_once("--") {
