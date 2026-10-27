@@ -16,9 +16,8 @@ mod fdd_run_persists_runs_intervals_checkpoint {
         let explicit = std::env::var("OPENFDD_TEST_DATABASE_URL")
             .ok()
             .filter(|v| !v.trim().is_empty());
-        let url = explicit.unwrap_or_else(|| {
-            "postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".to_string()
-        });
+        let url = explicit
+            .unwrap_or_else(|| "postgresql://openfdd:openfdd@127.0.0.1:5432/openfdd".to_string());
         match sqlx::postgres::PgPoolOptions::new()
             .max_connections(2)
             .connect(&url)
@@ -34,14 +33,16 @@ mod fdd_run_persists_runs_intervals_checkpoint {
     }
 
     async fn apply_schema(pool: &PgPool) {
-        for statement in fdd_tsdb::revision::schema_statements(
-            include_str!("../../../sql/schema/01_bps_core.sql"),
-        ) {
+        for statement in fdd_tsdb::revision::schema_statements(include_str!(
+            "../../../sql/schema/01_bps_core.sql"
+        )) {
             if statement.contains("fdd_run") {
                 crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
             }
         }
-        fdd_tsdb::ensure_revision_schema(pool).await.expect("revision schema");
+        fdd_tsdb::ensure_revision_schema(pool)
+            .await
+            .expect("revision schema");
         fdd_tsdb::ensure_incremental_schema(pool)
             .await
             .expect("incremental schema");
@@ -92,9 +93,8 @@ mod fdd_run_persists_runs_intervals_checkpoint {
         let summary = commit_and_persist_registry_run(&tsdb, commit())
             .await
             .expect("persist");
-        let (runs, intervals, checkpoints) = fdd_persist_counts(&tsdb, &site)
-            .await
-            .expect("counts");
+        let (runs, intervals, checkpoints) =
+            fdd_persist_counts(&tsdb, &site).await.expect("counts");
         assert!(runs > 0, "fdd_run rows");
         assert_eq!(intervals, 1, "one hourly bucket for the one-hour window");
         assert_eq!(checkpoints, 1, "one incremental checkpoint");
@@ -105,9 +105,8 @@ mod fdd_run_persists_runs_intervals_checkpoint {
             api["results"].as_array().map(|a| a.len()).unwrap_or(0),
             summary["results"].as_array().map(|a| a.len()).unwrap_or(0)
         );
-        let (runs2, intervals2, checkpoints2) = fdd_persist_counts(&tsdb, &site)
-            .await
-            .expect("counts2");
+        let (runs2, intervals2, checkpoints2) =
+            fdd_persist_counts(&tsdb, &site).await.expect("counts2");
         let _ = commit_and_persist_registry_run(&tsdb, commit())
             .await
             .expect("re-run");

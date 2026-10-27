@@ -561,7 +561,9 @@ fn parent_body_from_rows(rule_id: &str, rows: &[(String, Value)]) -> Option<Valu
 }
 
 /// Build one run generation in memory (manifest + flat rows). Does not write disk.
-pub fn prepare_run_generation(commit: &RunGenerationCommit) -> Result<RunGenerationPrepared, String> {
+pub fn prepare_run_generation(
+    commit: &RunGenerationCommit,
+) -> Result<RunGenerationPrepared, String> {
     prepare_run_generation_with_parent(commit, None, &[])
 }
 

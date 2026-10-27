@@ -20,8 +20,8 @@ pub use incremental::{
     ResultScope, RuleHorizon,
 };
 pub use incremental_store::{
-    claim, ensure_incremental_schema, load_results, publish, release,
-    replace_scope_results_in_tx, run_incremental, Claim, RunReport,
+    claim, ensure_incremental_schema, load_results, publish, release, replace_scope_results_in_tx,
+    run_incremental, Claim, RunReport,
 };
 pub use package_seed::{append_package_equipment, remap_equipment_roles, seed_package_dir};
 pub use portal::{

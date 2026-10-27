@@ -11,15 +11,12 @@ use fdd_tsdb::{
     RuleParameters, SchedulePolicy, Tsdb,
 };
 use open_fdd_edge_prototype::fdd::registry_api::{
-    prepare_run_generation_with_parent, RunGenerationCommit, RunGenerationPrepared, RuleOutcome,
+    prepare_run_generation_with_parent, RuleOutcome, RunGenerationCommit, RunGenerationPrepared,
 };
 use serde_json::{json, Value};
 use sqlx::{Postgres, Row, Transaction};
 
-fn parse_window(
-    start: Option<&str>,
-    end: Option<&str>,
-) -> Result<AnalysisWindow> {
+fn parse_window(start: Option<&str>, end: Option<&str>) -> Result<AnalysisWindow> {
     let start = start
         .filter(|s| !s.is_empty())
         .context("window start required for Timescale FDD persist")?;
@@ -82,7 +79,12 @@ fn distribute_interval_buckets(
         } else {
             0.0
         };
-        out.push(BucketResult::new(bucket, fault, covered, per_bucket_samples as u64)?);
+        out.push(BucketResult::new(
+            bucket,
+            fault,
+            covered,
+            per_bucket_samples as u64,
+        )?);
     }
     Ok(out)
 }
@@ -110,8 +112,7 @@ pub async fn persist_registry_run_timescale(
         .get("config_hash")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let through_revision =
-        fdd_tsdb::current_data_revision(tsdb.pool(), site_id).await?;
+    let through_revision = fdd_tsdb::current_data_revision(tsdb.pool(), site_id).await?;
     let model_revision = model_revision_for_site(tsdb, site_id).await?;
     let pack_ver = pack_version(&commit.pack);
     let poll = commit.poll_seconds.round().max(1.0) as i32;
@@ -141,8 +142,15 @@ pub async fn persist_registry_run_timescale(
             .bind(&touched)
             .execute(&mut *tx)
             .await?;
-        copy_parent_runs(&mut tx, site_id, parent, &prep.run_id, &touched, &prep.manifest)
-            .await?;
+        copy_parent_runs(
+            &mut tx,
+            site_id,
+            parent,
+            &prep.run_id,
+            &touched,
+            &prep.manifest,
+        )
+        .await?;
     }
 
     for item in &prep.prepared {
@@ -176,10 +184,8 @@ pub async fn persist_registry_run_timescale(
                     .and_then(Value::as_str)
                     .unwrap_or("UNKNOWN");
                 let fault_hours = row_f64(row, "fault_hours");
-                let sample_rows = row
-                    .get("sample_rows")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(0) as i32;
+                let sample_rows =
+                    row.get("sample_rows").and_then(Value::as_i64).unwrap_or(0) as i32;
                 let detail = json!({
                     "generation": prep.manifest,
                     "run_id": prep.run_id,
@@ -222,14 +228,8 @@ pub async fn persist_registry_run_timescale(
                             chrono::Duration::zero(),
                             chrono::Duration::seconds(confirm.round().max(0.0) as i64),
                         )?;
-                        let scope = ResultScope::new(
-                            site_id,
-                            &item.rule_id,
-                            eq,
-                            &identity,
-                            grid,
-                            horizon,
-                        )?;
+                        let scope =
+                            ResultScope::new(site_id, &item.rule_id, eq, &identity, grid, horizon)?;
                         let covered = row_f64(row, "covered_hours");
                         let buckets = distribute_interval_buckets(
                             grid,
@@ -349,10 +349,7 @@ async fn copy_parent_runs(
 }
 
 /// Latest active run manifest for a site, if any rows exist.
-pub async fn active_generation_manifest(
-    tsdb: &Tsdb,
-    building_id: &str,
-) -> Result<Option<Value>> {
+pub async fn active_generation_manifest(tsdb: &Tsdb, building_id: &str) -> Result<Option<Value>> {
     let row = sqlx::query(
         r#"
         SELECT detail
@@ -381,10 +378,7 @@ pub async fn active_generation_rows(
     let Some(manifest) = manifest else {
         return Ok(Vec::new());
     };
-    let run_id = manifest
-        .get("run_id")
-        .and_then(Value::as_str)
-        .unwrap_or("");
+    let run_id = manifest.get("run_id").and_then(Value::as_str).unwrap_or("");
     if run_id.is_empty() {
         return Ok(Vec::new());
     }
@@ -404,10 +398,7 @@ pub async fn active_generation_rows(
     for row in rows {
         let rule_id = row.try_get::<String, _>("rule_id")?;
         let detail: Value = row.try_get("detail")?;
-        let body_row = detail
-            .get("row")
-            .cloned()
-            .unwrap_or(Value::Null);
+        let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
         out.push((rule_id, body_row));
     }
     Ok(out)
@@ -427,12 +418,9 @@ pub async fn commit_and_persist_registry_run(
     } else {
         Vec::new()
     };
-    let mut prep = prepare_run_generation_with_parent(
-        &commit,
-        parent_manifest.as_ref(),
-        &parent_rows,
-    )
-    .map_err(anyhow::Error::msg)?;
+    let mut prep =
+        prepare_run_generation_with_parent(&commit, parent_manifest.as_ref(), &parent_rows)
+            .map_err(anyhow::Error::msg)?;
     if let Some(reason) = &prep.dirty_reason {
         if let Some(obj) = prep.manifest.as_object_mut() {
             obj.insert("dirty_reason".into(), json!(reason));
@@ -448,20 +436,16 @@ pub async fn commit_and_persist_registry_run(
 }
 
 /// Count rows for readiness / idempotency checks.
-pub async fn fdd_persist_counts(
-    tsdb: &Tsdb,
-    site_id: &str,
-) -> Result<(i64, i64, i64)> {
+pub async fn fdd_persist_counts(tsdb: &Tsdb, site_id: &str) -> Result<(i64, i64, i64)> {
     let runs: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM fdd_run WHERE site_id = $1")
         .bind(site_id)
         .fetch_one(tsdb.pool())
         .await?;
-    let intervals: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1",
-    )
-    .bind(site_id)
-    .fetch_one(tsdb.pool())
-    .await?;
+    let intervals: i64 =
+        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1")
+            .bind(site_id)
+            .fetch_one(tsdb.pool())
+            .await?;
     let checkpoints: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)::bigint FROM fdd_incremental_checkpoint WHERE site_id = $1",
     )

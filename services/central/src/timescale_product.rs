@@ -2018,8 +2018,7 @@ pub async fn cached_run_all_if_present(building_id: &str) -> Option<Value> {
             .and_then(Value::as_str)
             .unwrap_or("");
         if stored.is_empty()
-            || stored
-                != open_fdd_edge_prototype::fdd::registry_api::rule_set_hash_for_readiness()
+            || stored != open_fdd_edge_prototype::fdd::registry_api::rule_set_hash_for_readiness()
         {
             return None;
         }
@@ -4834,16 +4833,16 @@ rules:
         ] {
             crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
-        for statement in fdd_tsdb::revision::schema_statements(
-            include_str!("../../../sql/schema/01_bps_core.sql"),
-        ) {
+        for statement in fdd_tsdb::revision::schema_statements(include_str!(
+            "../../../sql/schema/01_bps_core.sql"
+        )) {
             if statement.contains("fdd_run") {
                 crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
             }
         }
-        for statement in fdd_tsdb::revision::schema_statements(
-            include_str!("../../../sql/schema/10_incremental_fdd.sql"),
-        ) {
+        for statement in fdd_tsdb::revision::schema_statements(include_str!(
+            "../../../sql/schema/10_incremental_fdd.sql"
+        )) {
             crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
         }
     }
@@ -5141,7 +5140,10 @@ rules:
             .unwrap()
             .iter()
             .all(|row| row["equipment_id"] != "VAV_1"));
-        assert_eq!(first_vav_rows, 0, "full cohort replaces prior VAV-ONLY rows");
+        assert_eq!(
+            first_vav_rows, 0,
+            "full cohort replaces prior VAV-ONLY rows"
+        );
         let second_run = complete["run_id"].as_str().unwrap().to_string();
         assert_ne!(second_run, first_run);
 
