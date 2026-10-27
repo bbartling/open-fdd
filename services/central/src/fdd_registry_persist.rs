@@ -258,10 +258,11 @@ pub async fn persist_registry_run_timescale(
                           site_id, equipment_id, rule_id, window_start, window_end,
                           poll_seconds, confirm_min, config_hash, status, fault_seconds,
                           fault_hours, sample_count, detail
-                        ) VALUES ($1,'', $2, $3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                         "#,
                     )
                     .bind(site_id)
+                    .bind("")
                     .bind(&item.rule_id)
                     .bind(window.start())
                     .bind(window.end())
