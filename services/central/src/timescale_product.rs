@@ -5196,8 +5196,16 @@ rules:
             .unwrap()
             .iter()
             .all(|row| row["equipment_id"] != "VAV_1"));
+        assert_eq!(first_vav_rows, 1, "partial run persisted VAV-ONLY");
+        let vav_rows_after_full: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_run WHERE site_id = $1 AND rule_id = 'VAV-ONLY'",
+        )
+        .bind(&site_a)
+        .fetch_one(&pool)
+        .await
+        .expect("vav run count after full cohort");
         assert_eq!(
-            first_vav_rows, 0,
+            vav_rows_after_full, 0,
             "full cohort replaces prior VAV-ONLY rows"
         );
         let second_run = complete["run_id"].as_str().unwrap().to_string();
