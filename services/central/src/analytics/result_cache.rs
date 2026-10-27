@@ -291,18 +291,14 @@ pub async fn serve_with(
     let envelope = compute_with_admission_fallible(compute).await?;
     let table = table_from_envelope(&envelope);
     let provenance = provenance_for(&key, &envelope, &identity);
-    if let Err(err) = store.write(&key, &table, &provenance).await {
-        tracing::warn!(error = %err, query_id, "analytics result cache write failed");
+    let certifiable = input_certifiable(&identity);
+    if certifiable {
+        if let Err(err) = store.write(&key, &table, &provenance).await {
+            tracing::warn!(error = %err, query_id, "analytics result cache write failed");
+        }
     }
     // A just-computed envelope is fresh only when the input read succeeded.
-    let cache = cache_status(
-        false,
-        !input_certifiable(&identity),
-        started,
-        &key,
-        &provenance,
-        &identity,
-    );
+    let cache = cache_status(false, !certifiable, started, &key, &provenance, &identity);
     Ok(ServedAnalytics { envelope, cache })
 }
 
