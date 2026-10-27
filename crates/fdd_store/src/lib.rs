@@ -18,7 +18,8 @@ pub use afdd::{
 pub use afdd_scheduler::{
     cadence_seconds, lookback_matches_cadence, next_due_at, plan_backfill_chunks,
     plan_bounded_backfill, plan_continuous_cycle, AfddBackfillChunk, AfddCycleWindow,
-    AfddSchedulerCheckpoint, AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH,
+    AfddSchedulerCheckpoint, AfddSchedulerCheckpointStore, AFDD_SCHEDULER_CHECKPOINT_PATH,
+    AFDD_SCHEDULER_CHECKPOINTS_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH,
 };
 pub use afdd_window::{
     apply_scheduler_config_update, enforce_routine_result_scope, merge_windowed_rule_result,

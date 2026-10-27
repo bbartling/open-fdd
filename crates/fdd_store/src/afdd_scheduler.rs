@@ -13,12 +13,43 @@ use crate::afdd::{parse_wall_clock_hhmm, parse_wall_clock_timezone};
 use crate::{AfddConfig, AfddScheduleKind};
 
 pub const AFDD_SCHEDULER_CHECKPOINT_PATH: &str = "state/afdd/scheduler-checkpoint.json";
+pub const AFDD_SCHEDULER_CHECKPOINTS_PATH: &str = "state/afdd/scheduler-checkpoints.json";
 pub const AFDD_SCHEDULER_RUNTIME_CONFIG_PATH: &str = "state/afdd/scheduler-runtime-config.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AfddSchedulerCheckpoint {
     pub last_completed_at_utc: DateTime<Utc>,
     pub analyzed_through_utc: DateTime<Utc>,
+}
+
+/// Per-building scheduler checkpoints so one slow site does not block others.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct AfddSchedulerCheckpointStore {
+    #[serde(default)]
+    pub sites: std::collections::BTreeMap<String, AfddSchedulerCheckpoint>,
+}
+
+impl AfddSchedulerCheckpointStore {
+    pub fn checkpoint_for(&self, building_id: &str) -> Option<&AfddSchedulerCheckpoint> {
+        self.sites.get(building_id)
+    }
+
+    pub fn upsert(&mut self, building_id: &str, checkpoint: AfddSchedulerCheckpoint) {
+        self.sites.insert(building_id.to_string(), checkpoint);
+    }
+
+    /// Copy a legacy single-site checkpoint onto buildings that lack an entry.
+    pub fn seed_missing_from_legacy(
+        &mut self,
+        building_ids: &[String],
+        legacy: &AfddSchedulerCheckpoint,
+    ) {
+        for id in building_ids {
+            if !self.sites.contains_key(id) {
+                self.sites.insert(id.clone(), legacy.clone());
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -251,6 +282,7 @@ mod tests {
             schedule_kind: crate::AfddScheduleKind::WallClock,
             wall_clock_hhmm: Some("05:00".into()),
             wall_clock_timezone: Some("America/Chicago".into()),
+            ..AfddConfig::default()
         }
     }
 
@@ -481,6 +513,17 @@ mod tests {
     }
 
     #[test]
+    fn checkpoint_store_round_trip() {
+        let mut store = AfddSchedulerCheckpointStore::default();
+        let cp = AfddSchedulerCheckpoint {
+            last_completed_at_utc: ts(8),
+            analyzed_through_utc: ts(8),
+        };
+        store.upsert("site-a", cp.clone());
+        assert_eq!(store.checkpoint_for("site-a"), Some(&cp));
+        assert_eq!(store.checkpoint_for("site-b"), None);
+    }
+
     fn downtime_window_stays_one_lookback_not_the_outage() {
         let checkpoint = AfddSchedulerCheckpoint {
             last_completed_at_utc: utc(2026, 9, 20, 10, 0),
