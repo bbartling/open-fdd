@@ -62,7 +62,7 @@ A daily window with a recoverable gap or a retryable error waits for the next da
 
 ## Coverage status
 
-`GET /api/ingest/coverage-status?site_id=` reports, per configured provider, the schedule mode and timezone, the planned end (`planned_through`), the next run, the approved, withheld, and discovered point counts from the committed plan, and each device's verified cursor. It reads only stored rows: the active plan, `ingest_coverage_cursor`, and the gap list. It does not run a fetch.
+`GET /api/ingest/gaps?view=status&site_id=` reports, per configured provider, the schedule mode and timezone, the planned end (`planned_through`), the next run, the approved, withheld, and discovered point counts from the committed plan, and each device's verified cursor. It reads only stored rows: the active plan, `ingest_coverage_cursor`, and the gap list. It does not run a fetch.
 
 A device is `verified` only when its cursor reaches `planned_through`. Otherwise its hole decides: no hole, `not_scheduled`, `queued`, or `leased` is `behind`; a committed window with code `not_assessed` is `not_assessed`; any other hole (partial, retry wait, permanent failure, committed but incomplete) is `gap`. A device with no cursor is `not_assessed`, and a provider with no committed plan is `not_configured`. The provider and site take the worst device state. The oldest gap is the first gap row for the active revision within the first 200 rows; `gap_scan_truncated` is set when none matched. The Operations page shows this as **Schedule and coverage** under the selected site.
 
@@ -75,7 +75,7 @@ JWT scoped like other tenant routes. Empty membership returns no rows. Operators
 | GET | `/api/ingest/jobs` |
 | GET | `/api/ingest/receipts` |
 | GET | `/api/ingest/gaps` |
-| GET | `/api/ingest/coverage-status` |
+| GET | `/api/ingest/gaps?view=status&site_id=` |
 | GET | `/api/ingest/queue` |
 | GET | `/api/ingest/queue/scale-preview` |
 | POST | `/api/ingest/jobs/{job_id}/retry` |

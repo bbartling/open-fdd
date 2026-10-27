@@ -142,10 +142,6 @@ pub fn router(state: Arc<AppState>) -> Router {
             get(ingest_queue::http::get_receipt),
         )
         .route("/api/ingest/gaps", get(ingest_queue::http::list_gaps))
-        .route(
-            "/api/ingest/coverage-status",
-            get(ingest_queue::http::coverage_status),
-        )
         .route("/api/ingest/queue", get(ingest_queue::http::queue_metrics))
         .route(
             "/api/ingest/queue/scale-preview",

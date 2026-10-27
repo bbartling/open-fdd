@@ -196,7 +196,7 @@ async fn run_upgrade(workspace: &std::path::Path) {
         &app,
         &operator,
         "GET",
-        &format!("/api/ingest/coverage-status?site_id={SITE}"),
+        &format!("/api/ingest/gaps?view=status&site_id={SITE}"),
         None,
     )
     .await;
@@ -235,7 +235,7 @@ async fn run_upgrade(workspace: &std::path::Path) {
         &app,
         &operator,
         "GET",
-        &format!("/api/ingest/coverage-status?site_id={SITE}"),
+        &format!("/api/ingest/gaps?view=status&site_id={SITE}"),
         None,
     )
     .await;
@@ -250,11 +250,31 @@ async fn run_upgrade(workspace: &std::path::Path) {
         &app,
         &operator,
         "GET",
-        "/api/ingest/coverage-status?site_id=NOT_A_SITE",
+        "/api/ingest/gaps?view=status&site_id=NOT_A_SITE",
         None,
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{missing}");
+    let (status, bad_view) = call(
+        &app,
+        &operator,
+        "GET",
+        &format!("/api/ingest/gaps?view=summary&site_id={SITE}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{bad_view}");
+    assert_eq!(bad_view["error"]["code"], "invalid_view", "{bad_view}");
+    let (status, plain) = call(
+        &app,
+        &operator,
+        "GET",
+        &format!("/api/ingest/gaps?site_id={SITE}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{plain}");
+    assert!(plain["gaps"].is_array(), "gap list without view: {plain}");
 
     let (status, created) = call(
         &app,

@@ -28,6 +28,9 @@ pub struct ListQuery {
     pub site_id: Option<String>,
     pub state: Option<String>,
     pub limit: Option<u32>,
+    /// `status` on `/api/ingest/gaps` returns the site's schedule and
+    /// coverage status instead of the gap list.
+    pub view: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -161,6 +164,22 @@ pub async fn list_gaps(
 ) -> Response {
     let request_id = contract::ensure_request_id(&headers);
     let ctx = tenant_ctx(&state, &user).await;
+    match query.view.as_deref().map(str::trim) {
+        None | Some("") => {}
+        Some("status") => {
+            let site = query.site_id.as_deref().unwrap_or_default();
+            return coverage_status(&state, &ctx, site, &request_id).await;
+        }
+        Some(_) => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_view",
+                "view must be status or omitted",
+                &request_id,
+                false,
+            )
+        }
+    }
     let Some(filter) = scoped_filter(&ctx, &query, &request_id) else {
         return empty_named(&request_id, &ctx, "gaps");
     };
@@ -196,27 +215,21 @@ pub async fn list_gaps(
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub struct StatusQuery {
-    pub site_id: String,
-}
-
 /// Schedule and verified-coverage status for one site, per provider.
-pub async fn coverage_status(
-    State(state): State<Arc<AppState>>,
-    Extension(user): Extension<AuthUser>,
-    headers: HeaderMap,
-    Query(query): Query<StatusQuery>,
+/// Served as `GET /api/ingest/gaps?view=status&site_id=`.
+async fn coverage_status(
+    state: &Arc<AppState>,
+    ctx: &TenantContext,
+    site: &str,
+    request_id: &str,
 ) -> Response {
-    let request_id = contract::ensure_request_id(&headers);
-    let ctx = tenant_ctx(&state, &user).await;
-    let site = query.site_id.trim();
+    let site = site.trim();
     let not_found = || {
         json_error(
             StatusCode::NOT_FOUND,
             "not_found",
             "site not found",
-            &request_id,
+            request_id,
             false,
         )
     };
@@ -262,7 +275,7 @@ pub async fn coverage_status(
         };
         let cursors = match state.ingest_queue.list_cursors(tenant_id, site).await {
             Ok(rows) => rows,
-            Err(err) => return queue_err(&err, &request_id),
+            Err(err) => return queue_err(&err, request_id),
         };
         let filter = ListFilter {
             sites: Some(vec![site.to_string()]),
@@ -272,7 +285,7 @@ pub async fn coverage_status(
         };
         let gaps = match state.ingest_queue.list_gaps(&filter).await {
             Ok(rows) => rows,
-            Err(err) => return queue_err(&err, &request_id),
+            Err(err) => return queue_err(&err, request_id),
         };
         let horizon = super::schedule::planned_horizon(config.schedule, now, delay, window_secs);
         let (planned_through, next_run, schedule_error) = match horizon {
@@ -305,7 +318,7 @@ pub async fn coverage_status(
     Json(json!({
         "ok": true,
         "request_id": request_id,
-        "scope": scope_json(&ctx),
+        "scope": scope_json(ctx),
         "site_id": site,
         "generated_at": now,
         "state": overall,
@@ -673,11 +686,6 @@ pub fn discovery_tools(ot_enabled: bool) -> Vec<(&'static str, &'static str, &'s
         ("ingest.jobs", "GET", "/api/ingest/jobs"),
         ("ingest.receipts", "GET", "/api/ingest/receipts"),
         ("ingest.gaps", "GET", "/api/ingest/gaps"),
-        (
-            "ingest.coverage_status",
-            "GET",
-            "/api/ingest/coverage-status",
-        ),
         ("ingest.queue", "GET", "/api/ingest/queue"),
         ("ingest.stats", "GET", "/api/ingest/stats"),
         ("fdd.run", "POST", "/api/fdd/run"),
@@ -1054,12 +1062,14 @@ mod tests {
             site_id: Some("site-b".into()),
             state: None,
             limit: None,
+            view: None,
         };
         assert!(scoped_filter(&ctx, &query, "req").is_none());
         let own = ListQuery {
             site_id: Some("site-a".into()),
             state: Some("queued".into()),
             limit: Some(10),
+            view: None,
         };
         let filter = scoped_filter(&ctx, &own, "req").unwrap();
         assert_eq!(filter.sites.unwrap(), vec!["site-a".to_string()]);
@@ -1071,7 +1081,8 @@ mod tests {
             &ListQuery {
                 site_id: None,
                 state: None,
-                limit: None
+                limit: None,
+                view: None,
             },
             "req"
         )

@@ -153,5 +153,6 @@ export function ingestGapsPath(siteId: string): string {
 export function ingestCoverageStatusPath(siteId: string): string {
   const q = new URLSearchParams();
   q.set("site_id", siteId);
-  return `/api/ingest/coverage-status?${q.toString()}`;
+  q.set("view", "status");
+  return `/api/ingest/gaps?${q.toString()}`;
 }

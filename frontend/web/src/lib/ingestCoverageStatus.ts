@@ -1,7 +1,7 @@
 import type { OptionalFetch } from "../api/providersApi";
 import type { StatusTone } from "./providerDisplay";
 
-/** One provider row from `GET /api/ingest/coverage-status`. */
+/** One provider row from `GET /api/ingest/gaps?view=status`. */
 export interface CoverageStatusRow {
   key: string;
   providerInstanceId: string;

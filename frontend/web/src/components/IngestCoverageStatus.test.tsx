@@ -46,7 +46,7 @@ describe("IngestCoverageStatus", () => {
     render(<IngestCoverageStatus siteId="SITE_A" />);
     const row = await screen.findByTestId("ingest-coverage-row-nf:nf-site-a");
     expect(vi.mocked(apiFetch).mock.calls[0]?.[0]).toBe(
-      "/api/ingest/coverage-status?site_id=SITE_A",
+      "/api/ingest/gaps?site_id=SITE_A&view=status",
     );
     expect(row.textContent).toMatch(/periodic/);
     expect(row.textContent).toMatch(/2026-10-27T02:05:00Z/);
