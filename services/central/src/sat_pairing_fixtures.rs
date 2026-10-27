@@ -316,9 +316,9 @@ async fn sat_scatter_binds_one_weather_series_and_scopes_the_window() {
     assert_eq!(rows.len(), 1, "{vav}");
     assert_eq!(rows[0]["equipment_id"], VAV_1);
     assert!(near(rows[0]["val"].as_f64(), 72.0), "{vav}");
-    assert_eq!(vav["window_start"], "2026-06-01T12:00:00Z");
-    assert_eq!(vav["window_end"], "2026-06-01T13:00:00Z");
-    assert_eq!(vav["equipment_ids"], json!([VAV_1]));
+    assert_eq!(vav["coverage"]["window_start"], "2026-06-01T12:00:00Z");
+    assert_eq!(vav["coverage"]["window_end"], "2026-06-01T13:00:00Z");
+    assert_eq!(vav["coverage"]["equipment_ids"], json!([VAV_1]));
     let vav_body = vav.to_string();
     assert!(!vav_body.contains(VAV_2), "{vav}");
     assert!(!vav_body.contains("73"), "{vav}");

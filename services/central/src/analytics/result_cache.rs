@@ -292,7 +292,8 @@ pub async fn serve_with(
     let table = table_from_envelope(&envelope);
     let provenance = provenance_for(&key, &envelope, &identity);
     let certifiable = input_certifiable(&identity);
-    if certifiable {
+    let persistable = cache_persistable(&identity);
+    if persistable {
         if let Err(err) = store.write(&key, &table, &provenance).await {
             tracing::warn!(error = %err, query_id, "analytics result cache write failed");
         }
@@ -538,6 +539,21 @@ fn input_certifiable(identity: &CacheIdentity) -> bool {
         && !identity.sql_pack.is_empty()
         && !identity.model_revision.is_empty()
         && matches!(identity.watermark, InputWatermark::Known { .. })
+}
+
+fn historian_has_samples(identity: &CacheIdentity) -> bool {
+    match &identity.watermark {
+        InputWatermark::Known { coverage, .. } => coverage
+            .strip_prefix("samples=")
+            .and_then(|rest| rest.split(';').next())
+            .and_then(|token| token.parse::<i64>().ok())
+            .is_some_and(|count| count > 0),
+        InputWatermark::Unavailable { .. } => false,
+    }
+}
+
+fn cache_persistable(identity: &CacheIdentity) -> bool {
+    input_certifiable(identity) && historian_has_samples(identity)
 }
 
 fn provenance_for(

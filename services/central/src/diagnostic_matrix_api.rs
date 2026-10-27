@@ -312,7 +312,7 @@ async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
     assert_eq!(status, StatusCode::OK, "sensor-faults {raw}");
     let body = crate::analytics_response_fixtures::analytics_envelope(&raw);
     assert_eq!(body["schema_version"], json!("diagnostic_matrix_v1"));
-    assert_eq!(body["query_version"], json!("diagnostic-matrix-v1"));
+    assert_eq!(body["query_version"], json!("sensor-faults-v1"));
     assert_eq!(body["query_id"], json!("sensor-faults"));
     assert_eq!(body["site_id"], json!(site_a));
     assert_eq!(body["building_id"], json!(site_a));

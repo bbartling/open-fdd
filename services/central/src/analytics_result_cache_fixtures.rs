@@ -266,16 +266,15 @@ async fn every_analytics_endpoint_uses_result_store() {
     assert_eq!(cache_rows(&pool, SITE).await, after_miss);
 
     let t0 = Utc.with_ymd_and_hms(2026, 6, 1, 12, 0, 0).unwrap();
-    sqlx::query(
-        "INSERT INTO sample (ts, site_id, building_id, equipment_id, role, value)
-         VALUES ($1, $2, $2, $3, 'fan_status', 1.0)",
-    )
-    .bind(t0 + Duration::hours(2))
-    .bind(SITE)
-    .bind("AHU_T1402")
-    .execute(&pool)
-    .await
-    .expect("append sample");
+    let key = "AHU_T1402.fan_status";
+    sqlx::query("INSERT INTO sample (ts, site_id, openfdd_key, val) VALUES ($1, $2, $3, 1.0)")
+        .bind(t0 + Duration::hours(2))
+        .bind(SITE)
+        .bind(key)
+        .execute(&pool)
+        .await
+        .expect("append sample");
+    crate::series_binding::bind_conventional_key(&pool, SITE, key).await;
     fdd_tsdb::clear_shared_pool();
 
     let stale = post_json(
@@ -359,11 +358,9 @@ async fn apply_schema(pool: &PgPool) {
         "CREATE TABLE IF NOT EXISTS sample (
             ts timestamptz NOT NULL,
             site_id text NOT NULL,
-            building_id text NOT NULL,
-            equipment_id text NOT NULL,
-            role text NOT NULL,
-            value double precision,
-            PRIMARY KEY (building_id, equipment_id, role, ts)
+            openfdd_key text NOT NULL,
+            val double precision,
+            PRIMARY KEY (site_id, openfdd_key, ts)
         )",
     ] {
         crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
@@ -426,17 +423,16 @@ async fn seed_runtime_site(pool: &PgPool) {
     .await
     .expect("equipment");
     let t0 = Utc.with_ymd_and_hms(2026, 6, 1, 10, 0, 0).unwrap();
+    let key = "AHU_T1402.fan_status";
     for (offset_mins, value) in [(0, 1.0), (30, 1.0), (60, 0.0)] {
-        sqlx::query(
-            "INSERT INTO sample (ts, site_id, building_id, equipment_id, role, value)
-             VALUES ($1, $2, $2, $3, 'fan_status', $4)",
-        )
-        .bind(t0 + Duration::minutes(offset_mins))
-        .bind(SITE)
-        .bind("AHU_T1402")
-        .bind(value)
-        .execute(pool)
-        .await
-        .expect("sample");
+        sqlx::query("INSERT INTO sample (ts, site_id, openfdd_key, val) VALUES ($1, $2, $3, $4)")
+            .bind(t0 + Duration::minutes(offset_mins))
+            .bind(SITE)
+            .bind(key)
+            .bind(value)
+            .execute(pool)
+            .await
+            .expect("sample");
     }
+    crate::series_binding::bind_conventional_key(pool, SITE, key).await;
 }
