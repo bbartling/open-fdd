@@ -311,6 +311,9 @@ pub fn load_sites_from_env() -> Result<ProviderConfigLoad, String> {
         });
     };
     let trimmed = spec.trim();
+    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        return load_sites_json_owned(trimmed);
+    }
     let raws = load_site_raws_from_spec(trimmed)?;
     load_sites_from_raws(raws)
 }
