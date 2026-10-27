@@ -102,6 +102,58 @@ if command -v cargo >/dev/null 2>&1; then
   cargo test -p open_fdd_edge_prototype validation::audit --quiet 2>/dev/null || true
 fi
 
+# Tracked NF site configs must be the shipped example only (T1401-7).
+while IFS= read -r nf_site; do
+  [[ -z "$nf_site" ]] && continue
+  base="$(basename "$nf_site")"
+  if [[ "$base" != "provider_sites.example.json" ]]; then
+    echo "VIOLATION: tracked $nf_site — real site configs belong outside git (see scripts/nf/.gitignore)" >&2
+    fail=1
+    hits=$((hits + 1))
+  fi
+done < <(git ls-files 'scripts/nf/provider_sites*.json' 2>/dev/null || true)
+
+EXAMPLE_SITES="scripts/nf/provider_sites.example.json"
+if git ls-files --error-unmatch "$EXAMPLE_SITES" >/dev/null 2>&1; then
+  if grep -qE 'normal-online\.net' "$EXAMPLE_SITES"; then
+    echo "VIOLATION: $EXAMPLE_SITES must not contain normal-online.net URLs" >&2
+    fail=1
+    hits=$((hits + 1))
+  fi
+  if grep -qE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' "$EXAMPLE_SITES"; then
+    echo "VIOLATION: $EXAMPLE_SITES must not contain real NF point UUIDs" >&2
+    fail=1
+    hits=$((hits + 1))
+  fi
+  while IFS= read -r line; do
+    if [[ "$line" == *\"client_secret\"* ]] && [[ "$line" != *env:* ]]; then
+      echo "VIOLATION: $EXAMPLE_SITES client_secret must use env: refs" >&2
+      fail=1
+      hits=$((hits + 1))
+      break
+    fi
+  done < "$EXAMPLE_SITES"
+fi
+
+for forbidden in \
+  scripts/nf/provider_sites.acme.json \
+  scripts/nf/provider_sites.bosspi.json \
+  scripts/nf/bosspi_gateway.json \
+  scripts/nf/bosspi_semantic_meta.json \
+  scripts/nf/check_acme_portal_fresh.py; do
+  if git ls-files --error-unmatch "$forbidden" >/dev/null 2>&1; then
+    echo "VIOLATION: site-named file still tracked: $forbidden" >&2
+    fail=1
+    hits=$((hits + 1))
+  fi
+done
+
+if [[ ! -f scripts/nf/check_portal_fresh.py ]]; then
+  echo "VIOLATION: missing scripts/nf/check_portal_fresh.py" >&2
+  fail=1
+  hits=$((hits + 1))
+fi
+
 if [[ "$fail" -ne 0 ]]; then
   echo "Anti-hardcoding audit FAILED ($hits violation(s))" >&2
   exit 1

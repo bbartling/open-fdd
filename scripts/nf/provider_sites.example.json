@@ -1,0 +1,41 @@
+[
+  {
+    "building_id": "SITE_A",
+    "tenant_id": "lab",
+    "provider_instance_id": "nf-site-a",
+    "provider": "nf",
+    "endpoint": "https://REPLACE-WITH-PORTAL-HOST.example.com",
+    "client_id": "env:NF_CLIENT_ID_SITE_A",
+    "client_secret": "env:NF_CLIENT_SECRET_SITE_A",
+    "poll_secs": 3600,
+    "transport": "rest",
+    "point_map": [
+      {
+        "provider_point_id": "REPLACE_WITH_NF_POINT_UUID",
+        "equipment_id": "AHU_1",
+        "role": "supply-air-temp",
+        "equip_type": "ahu"
+      }
+    ]
+  },
+  {
+    "building_id": "SITE_B",
+    "tenant_id": "lab",
+    "provider_instance_id": "nf-site-b",
+    "provider": "nf",
+    "endpoint": "https://REPLACE-WITH-OTHER-PORTAL-HOST.example.com",
+    "client_id": "env:NF_CLIENT_ID_SITE_B",
+    "client_secret": "env:NF_CLIENT_SECRET_SITE_B",
+    "poll_secs": 3600,
+    "transport": "rest",
+    "point_map": [
+      {
+        "provider_point_id": "REPLACE_WITH_OTHER_NF_POINT_UUID",
+        "equipment_id": "WEATHER_1",
+        "role": "web-outside-air-temp",
+        "equip_type": "weather",
+        "units": "degF"
+      }
+    ]
+  }
+]

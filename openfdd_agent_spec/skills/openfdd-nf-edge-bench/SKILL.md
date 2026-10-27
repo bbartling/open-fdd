@@ -189,7 +189,8 @@ UUID (`GET /api/v1/apps/{app}/hooks/{hook}/data`, or `search_points` on the
 label). Every write is stored as a sample, so do **not** set a trend period. The
 points are readable through the portal (`/api/v1/point/data`) with the read-only
 Open-FDD key. Units are `UNITS_UNKNOWN`; put `units` in the variable attrs.
-Map them in `provider_sites.<site>.json` with distinct roles (weather uses
+Map them in an operator site file (for example `~/.config/openfdd/sites/<site>.json`)
+with distinct roles (weather uses
 `web-outside-air-*`, equip `weather`). Record any manual or debug write on those
 points; do not leave a test value unnoted.
 
@@ -224,8 +225,9 @@ points; do not leave a test value unnoted.
 
 **Validate:** run it now and get `STATE_SUCCESS` with your log line. Wait for two
 `TRIGGER_SCHEDULE` runs one interval apart. Check `read_values latest` on the variable
-UUIDs, then run `python3 scripts/nf/check_acme_portal_fresh.py`; it must PASS on the
-remote portal. Warn when a hook point is older than one hook interval plus a margin
+UUIDs, then run `python3 scripts/nf/check_portal_fresh.py --env <file> --sites <site.json>`
+with `--points` or `--sample`; it must PASS on the remote portal. Warn when a hook
+point is older than one hook interval plus a margin
 (25 min for a 20 min hook, `--warn-age-min`) even while it is still under the 30 min
 fail. Spot-check that existing BACnet points kept their period.
 

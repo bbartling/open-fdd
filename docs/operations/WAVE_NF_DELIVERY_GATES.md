@@ -6,7 +6,8 @@ nav_exclude: true
 # Wave-NF 4.0 phased delivery gates
 
 Machine-readable status: [`wave_nf_status.json`](wave_nf_status.json).
-Check: `python3 scripts/nf/check_wave_nf_status.py`.
+Check: `python3 scripts/nf/check_wave_nf_status.py`. Portal freshness (operator
+hosts): `python3 scripts/nf/check_portal_fresh.py --env <file> --sites <file>`.
 
 Labels mean different things. **Implemented** is code on this branch.
 **Tested** is recorded gate evidence. **Deployed** is a published sha pinned

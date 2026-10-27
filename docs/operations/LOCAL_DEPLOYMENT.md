@@ -62,6 +62,32 @@ MQTT ACL for local: place under `deploy/mqtt/certs/acl` (tip mqtt images read `a
 
 Historical: patch-cycle OT was **one** MQTTS path (x86 fieldbus → the retired Railway hub). Optional local `react-ot` is a lab only — do not use it as the AFDD head-end. Current hosting: [`LOCAL_HOSTING.md`](LOCAL_HOSTING.md).
 
+## Multi-site NF providers (local stack)
+
+Run any number of NF portal sites from configuration only — no site names in
+product code.
+
+1. Copy real site files out of the repo (for example
+   `~/.config/openfdd/sites/site_a.json`). Use
+   [`scripts/nf/provider_sites.example.json`](../../scripts/nf/provider_sites.example.json)
+   as the shape. Each file is one site object or a one-element array. Credential
+   fields use distinct `env:NAME` refs per site, for example
+   `env:NF_CLIENT_SECRET_SITE_A` and `env:NF_CLIENT_SECRET_SITE_B`.
+2. Add those names to the gitignored repo-root `.env`. `docker/compose.local.yml`
+   forwards provider-related variables into `central` by name (Wave 1a); add a
+   new `NF_CLIENT_*` pair to `.env` when you add a site — do not commit secrets.
+3. Mount the sites directory read-only on central. The default local overlay
+   binds `../scripts/nf` at `/config/nf:ro`. Prefer a host path outside the
+   checkout, for example bind `~/.config/openfdd/sites` to `/config/nf/sites:ro`
+   in a personal compose override, and set
+   `OPENFDD_PROVIDER_SITES=/config/nf/sites` (directory) or a comma-separated
+   list of files under that mount.
+4. Restart central after config changes. `GET /api/providers/sites` lists each
+   loaded site; a missing env ref fails only that site (`auth_not_configured`).
+5. After onboarding, run
+   `python3 scripts/nf/check_portal_fresh.py --env <secrets.env> --sites <site.json> --points <probes.json>`
+   per portal (see [`scripts/nf/README.md`](../../scripts/nf/README.md)).
+
 ## MCP against local central
 
 ```bash

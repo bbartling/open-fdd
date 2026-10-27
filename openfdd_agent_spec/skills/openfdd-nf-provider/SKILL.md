@@ -29,11 +29,16 @@ Edge install, licensing, BACnet scan, and trend periods: [`openfdd-nf-edge-bench
 2. Create an NF API key on that box (see `openfdd-nf-edge-bench`). Store the id and
    secret only in an env file outside git (`chmod 600`). Config uses
    `env:NAME` references, never literals.
-3. Write `scripts/nf/provider_sites.<site>.json` (shape below). Point ids are NF
-   point **UUIDs**. Never match NF display names (`map.rs` forbids substring /
-   prefix / `LIKE` role inference).
-4. Point central at it: `OPENFDD_PROVIDER_SITES=/path/to/provider_sites.<site>.json`
-   (inline JSON also works). Restart only the stack you own.
+3. Write a site file outside git (for example `~/.config/openfdd/sites/<site>.json`;
+   shape below). Point ids are NF point **UUIDs**. Never match NF display names
+   (`map.rs` forbids substring / prefix / `LIKE` role inference). The repo ships
+   only [`scripts/nf/provider_sites.example.json`](../../../scripts/nf/provider_sites.example.json).
+4. Point central at it:
+   - one file: `OPENFDD_PROVIDER_SITES=/path/to/site.json`
+   - several files: comma-separated paths
+   - a directory: every `*.json` in the directory (sorted)
+   Inline JSON also works. Use distinct `env:NAME` refs per site when multiple
+   portals share one central. Restart only the stack you own.
 5. Smoke one UUID with [`scripts/nf/read_sensors.py`](../../../scripts/nf/read_sensors.py)
    (`NF_POINT_UUIDS`), then check provider health in central.
 
@@ -51,8 +56,8 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
     "provider_instance_id": "nf-site-a",
     "provider": "nf",
     "endpoint": "https://<installation-uuid>.normal-online.net",
-    "client_id": "env:NF_CLIENT_ID",
-    "client_secret": "env:NF_CLIENT_SECRET",
+    "client_id": "env:NF_CLIENT_ID_SITE_A",
+    "client_secret": "env:NF_CLIENT_SECRET_SITE_A",
     "poll_secs": 3600,
     "transport": "rest",
     "point_map": [
@@ -126,13 +131,14 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
 - To backfill a new site, raise bootstrap up to 168 h on first start. Anything
   older than 7 days needs a CSV package import instead.
 
-## Examples in the repo
+## Example in the repo
 
 | File | What |
 | --- | --- |
-| [`scripts/nf/provider_sites.bosspi.json`](../../../scripts/nf/provider_sites.bosspi.json) | Bench Pi with one FEC, AHU-style roles, `poll_secs: 3600` |
-| [`scripts/nf/provider_sites.bosspi.example.json`](../../../scripts/nf/provider_sites.bosspi.example.json) | Placeholder UUID template |
-| [`scripts/nf/provider_sites.acme.json`](../../../scripts/nf/provider_sites.acme.json) | ACME: 233 points. 230 BACnet points on 33 equipment (VAVs, RTU, hot-water plant, Tracer SC OA) are the bare-minimum set the retired edge poll used, trended in NF at 300 s. 3 Open-Meteo weather points (equip `weather`, roles `web-outside-air-temp`, `web-outside-air-humidity` and `web-outside-air-dewpoint`) are written by the NF hook every 20 min |
+| [`scripts/nf/provider_sites.example.json`](../../../scripts/nf/provider_sites.example.json) | Two-site template with placeholder hosts, UUIDs, and per-site `env:NF_CLIENT_*` names |
+
+Real maps live on the operator host (`scripts/nf/.gitignore` blocks
+`provider_sites.*.json` except the example).
 
 ## Verify a site (freshness check)
 
@@ -142,24 +148,21 @@ the scripted, repeatable check that must PASS.
 
 
 After onboarding, and whenever charts look stale, run the portal freshness check:
-`python3 scripts/nf/check_acme_portal_fresh.py` (ACME defaults). For another site pass
-`--env ~/.secrets/nf_<site>.env --sites scripts/nf/provider_sites.<site>.json` and
-`--sample EQUIP:ROLE` as needed. It reads the remote portal only, never prints
-secrets, and needs PASS: every sampled BACnet point and every `weather` point newer
-than 30 min (`--max-age-min`), numeric and plausible. Warn when a hook point is
-older than one hook interval plus a margin (25 min for a 20 min hook,
-`--warn-age-min`), even while it is still under the fail threshold. That catches
-a hung hook early. WARN does not change the exit code. Check units per device
-before trusting a range: some devices report °C and others °F, and a constant or
-impossible reading (a negative relative humidity) is a bad sensor. ACME notes:
-- All 8 Trane VAVs report zone temp in **°C** (NF units `DEGREES_CELSIUS`).
-  Ingest converts that to canonical `degF` before the Timescale write. The
-  freshness check still converts for its own range test. Those temperature
-  points also carry `"units": "degC"` so an unknown NF unit still converts,
-  and a conflicting NF unit is flagged. The three weather hook points carry
-  `"units"` because the hook often reports `UNITS_UNKNOWN`.
-- The Tracer SC `outside-air-humidity` point reads a constant −0.37 %, so that
-  sensor is bad. Use `rtu_01` OA or the web weather points for humidity.
+
+```bash
+python3 scripts/nf/check_portal_fresh.py \
+  --env ~/.secrets/nf_<site>.env \
+  --sites ~/.config/openfdd/sites/<site>.json \
+  --points ~/.config/openfdd/sites/<site>_probes.json
+```
+
+(`--sample EQUIP:ROLE` replaces `--points` for a short list.) It reads the remote
+portal only, never prints secrets, and needs PASS: every probed point and every
+`weather` point newer than 30 min (`--max-age-min`), numeric and plausible. Warn
+when a hook point is older than one hook interval plus a margin (`--warn-age-min`,
+default 25 for a 20 min hook). WARN does not change the exit code. NF
+`DEGREES_CELSIUS` readings are converted to °F for the range check. Impossible
+readings (for example dewpoint above dry bulb) fail the run.
 
 ## Weather and other NF hooks
 
