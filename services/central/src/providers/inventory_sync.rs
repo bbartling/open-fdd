@@ -744,6 +744,7 @@ mod tests {
             client_id: None,
             client_secret: None,
             anonymous: true,
+            transport: crate::providers::config::SiteTransport::Rest,
             poll_secs: 300,
             latitude: None,
             longitude: None,

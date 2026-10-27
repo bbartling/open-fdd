@@ -264,6 +264,11 @@ impl NfReadClient {
         }
     }
 
+    /// Swap the bearer after the caller re-issued a token. The channel stays.
+    pub fn replace_bearer(&mut self, bearer: BearerToken) {
+        self.bearer = bearer;
+    }
+
     /// `PointManager.GetPoints`.
     pub async fn list_points(
         &mut self,

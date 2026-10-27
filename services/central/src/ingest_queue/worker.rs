@@ -711,7 +711,7 @@ async fn finish_for_poll_error(state: &Arc<AppState>, job: &JobView, err: &str) 
 }
 
 fn classify_poll_error(err: &str, attempt: u32, now: chrono::DateTime<Utc>) -> FinishOutcome {
-    if err == "device_unmapped" || err == "not_implemented" {
+    if err == "device_unmapped" || err == "not_implemented" || err == "grpc_unimplemented" {
         return FinishOutcome::Permanent {
             code: err.to_string(),
         };
@@ -722,7 +722,7 @@ fn classify_poll_error(err: &str, attempt: u32, now: chrono::DateTime<Utc>) -> F
         "throttled".to_string()
     } else if portal_timeout(err) {
         "timeout".to_string()
-    } else if err == "persistence" || err == "auth_failed" {
+    } else if err == "persistence" || err == "auth_failed" || grpc_status_code(err) {
         err.to_string()
     } else {
         "provider_poll_failed".to_string()
@@ -736,6 +736,14 @@ fn classify_poll_error(err: &str, attempt: u32, now: chrono::DateTime<Utc>) -> F
             not_before: now + chrono::Duration::seconds(backoff),
         }
     }
+}
+
+/// gRPC transport failures keep their status category (`grpc_unavailable`,
+/// `grpc_forbidden`, ...) on the job row instead of a generic poll code.
+fn grpc_status_code(err: &str) -> bool {
+    err.strip_prefix("grpc_").is_some_and(|rest| {
+        !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+    })
 }
 
 fn portal_timeout(err: &str) -> bool {
@@ -1150,6 +1158,36 @@ mod tests {
             classify_poll_error("429", 8, now),
             FinishOutcome::Permanent { code } if code == "throttled"
         ));
+    }
+
+    #[test]
+    fn grpc_status_codes_keep_precise_retry_categories() {
+        let now = Utc::now();
+        assert!(matches!(
+            classify_poll_error("grpc_unimplemented", 1, now),
+            FinishOutcome::Permanent { code } if code == "grpc_unimplemented"
+        ));
+        for (err, want) in [
+            ("grpc_throttled", "throttled"),
+            ("grpc_deadline_exceeded", "timeout"),
+            ("grpc_unavailable", "grpc_unavailable"),
+            ("grpc_auth_failed", "grpc_auth_failed"),
+            ("grpc_forbidden", "grpc_forbidden"),
+            ("grpc_internal", "grpc_internal"),
+            ("grpc_tls_required", "grpc_tls_required"),
+        ] {
+            match classify_poll_error(err, 1, now) {
+                FinishOutcome::Retry { code, .. } => assert_eq!(code, want, "{err}"),
+                other => panic!("expected retry for {err}, got {other:?}"),
+            }
+        }
+        // Negative controls: free text never passes through as a code.
+        for err in ["grpc_", "grpc_Bad Header", "grpc_x;y"] {
+            match classify_poll_error(err, 1, now) {
+                FinishOutcome::Retry { code, .. } => assert_eq!(code, "provider_poll_failed"),
+                other => panic!("expected generic retry for {err}, got {other:?}"),
+            }
+        }
     }
 
     #[test]

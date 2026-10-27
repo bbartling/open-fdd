@@ -14,6 +14,7 @@ pub mod ledger;
 pub mod map;
 pub mod meteo;
 pub mod nf;
+pub mod nf_transport;
 pub mod pg_store;
 pub mod poller;
 pub mod registry;

@@ -585,6 +585,17 @@ async fn status_codes_map_without_vendor_text() {
     }
 }
 
+#[test]
+fn elapsed_deadline_is_not_reported_as_cancelled() {
+    let elapsed = tonic::Status::cancelled(tonic::TimeoutExpired(()).to_string());
+    assert_eq!(
+        crate::error::map_status(&elapsed),
+        NfGrpcError::DeadlineExceeded
+    );
+    let cancelled = tonic::Status::cancelled("client went away");
+    assert_eq!(crate::error::map_status(&cancelled), NfGrpcError::Cancelled);
+}
+
 #[tokio::test]
 async fn oversized_response_is_its_own_category() {
     let fake = Fake::new(Script::Huge);

@@ -119,6 +119,32 @@ impl NfPortalDriver {
         self.authenticate_force().await
     }
 
+    /// Token for the gRPC transport, issued by the same NF token endpoint
+    /// (`AuthService.IssueToken`). This is token issuance, not a history
+    /// fallback. The value goes straight into a redacted `BearerToken`.
+    pub(crate) async fn grpc_bearer(&mut self) -> Result<String, ProviderError> {
+        if self.anonymous {
+            return Err(ProviderError::auth_not_configured());
+        }
+        self.authenticate().await?;
+        if !self.token_fresh() {
+            self.authenticate_force().await?;
+        }
+        self.token
+            .clone()
+            .filter(|token| !token.is_empty())
+            .ok_or_else(|| ProviderError::new(ProviderErrorCode::AuthFailed))
+    }
+
+    /// Drop a token the gRPC server rejected so the next call re-issues it.
+    pub(crate) fn forget_token(&mut self) {
+        if let (Some(tag), Some(rejected)) = (self.credential_tag(), self.token.clone()) {
+            forget_cached_token_if_matches(&self.provider_id, &self.endpoint, tag, &rejected);
+        }
+        self.token = None;
+        self.token_expires_at = None;
+    }
+
     async fn authenticate_force(&mut self) -> Result<(), ProviderError> {
         let (Some(id), Some(secret)) = (&self.client_id, &self.client_secret) else {
             return Err(ProviderError::auth_not_configured());
@@ -495,7 +521,7 @@ impl NfPortalDriver {
     }
 }
 
-fn valid_point_id(id: &str) -> bool {
+pub(crate) fn valid_point_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= MAX_ID_LEN
         && id
@@ -1166,6 +1192,12 @@ fn parse_source_ts(raw: &str) -> Option<DateTime<Utc>> {
                 .ok()
                 .map(|ndt| ndt.and_utc())
         })?;
+    admit_source_ts(dt)
+}
+
+/// Shared timestamp gate for REST and gRPC history: floor to microseconds,
+/// drop pre-1990 and more than 15 minutes in the future.
+pub(crate) fn admit_source_ts(dt: DateTime<Utc>) -> Option<DateTime<Utc>> {
     let dt = floor_timestamp_micros(dt);
     if dt.year() < 1990 {
         return None;
