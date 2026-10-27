@@ -141,25 +141,14 @@ async fn run_oat_meteo(pool: &sqlx::PgPool, site: &str, fill: Option<HistoryFill
     ensure_history_table(&mut tx, &roles)
         .await
         .expect("history");
-    let n = fill_history_for_equipment(
-        &mut tx,
-        site,
-        "AHU_1",
-        &roles,
-        None,
-        None,
-        fill.as_ref(),
-    )
-    .await
-    .expect("fill");
+    let n = fill_history_for_equipment(&mut tx, site, "AHU_1", &roles, None, None, fill.as_ref())
+        .await
+        .expect("fill");
     assert!(n > 0, "history rows");
     crate::sql_pack::prepare_rule_inputs(&mut tx, site, None, None, &sql, true)
         .await
         .expect("inputs");
-    let row = sqlx::query(&sql)
-        .fetch_one(&mut *tx)
-        .await
-        .expect("rule");
+    let row = sqlx::query(&sql).fetch_one(&mut *tx).await.expect("rule");
     let _ = tx.rollback().await;
     row.try_get::<f64, _>("fault_hours").unwrap_or(0.0)
 }
@@ -194,14 +183,24 @@ async fn t1404_sql_asof_fixture_offsets_and_gap() {
         }),
     };
     let fault_hours = run_oat_meteo(&pool, &site, Some(fill.clone())).await;
-    assert!((fault_hours - 1.75).abs() < 0.05, "fault_hours={fault_hours}");
+    assert!(
+        (fault_hours - 1.75).abs() < 0.05,
+        "fault_hours={fault_hours}"
+    );
 
     let mut mild = UpsertBatch::default();
     for m in (0..=120).step_by(5) {
         mild.push(sample(&site, "WX", "oa_t", "WX.oa_t_a", m + 200, 53.0));
     }
     for m in (0..=120).step_by(20) {
-        mild.push(sample(&site, "WX", "web_oa_t", "WX.web_oa_t", m + 200, 50.0));
+        mild.push(sample(
+            &site,
+            "WX",
+            "web_oa_t",
+            "WX.web_oa_t",
+            m + 200,
+            50.0,
+        ));
     }
     upsert_samples(&pool, mild).await;
     let mild_hours = run_oat_meteo(&pool, &site, Some(fill)).await;

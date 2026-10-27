@@ -2649,7 +2649,11 @@ pub(crate) async fn resolve_site_oa_t_reference(
         (key.clone(), eq.clone(), "primary_reference".to_string())
     } else {
         let (key, eq, _) = &all[0];
-        (key.clone(), eq.clone(), "default_lowest_binding".to_string())
+        (
+            key.clone(),
+            eq.clone(),
+            "default_lowest_binding".to_string(),
+        )
     };
     Ok(Some(SiteOatReference {
         openfdd_key,
