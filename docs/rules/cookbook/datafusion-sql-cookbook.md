@@ -116,9 +116,11 @@ Validated catalog roles use Haystack-style names (`outside-air-temp`, `discharge
 
 Sensor-sweep rules apply to **every modeled sensor** present on the equipment (not a single fixed point).
 
+**Sweep catalog (SV-RANGE / SV-FLATLINE / SV-STALE):** shipped SQL windows the pandas `SENSOR_LIMITS` roles on the wide `history` pivot — air/water temps (`oa_t`, `mat`, `zone_t`, `rat`, `sat`, `chw_supply_t`, `chw_return_t`, `hw_supply_t`, `hw_return_t`), humidity (`oa_h`, `ra_h`, `zone_rh`, `ma_h`, `sa_h` at 0–100 %RH with `RANGE_SCALE_HUMIDITY` / `SPIKE_SCALE_HUMIDITY`), and `duct_static` (−1–8 in.w.c., `RANGE_SCALE_PRESSURE`). Temperature limits are per-role (for example SAT 30–150°F, zone/RA 40–100°F) with `RANGE_SCALE_TEMPERATURE`. **SV-FLATLINE** and **SV-STALE** use the flatline/stale subset (no `duct_static`). Status, command, setpoint, and mode columns are energization inputs only — not flatline/stale/range targets. Before scoring, SQL masks each sweep column with `fdd.mask_sweep_val(role, authorized_series.unit, value)` so a point with **no declared binding unit** is **not assessed** (same as pandas `sweep_assessable_role`).
+
 ### SV-RANGE — Sensor out of hard range
 **Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
-**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F).  
+**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F, RH 0–100 %).  
 **Default confirmation:** 300 s
 
 | Param | Label | Unit | Default | Range |
@@ -2293,14 +2295,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2312,18 +2343,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -2340,6 +2377,9 @@ GROUP BY equipment_id;
 -- ahu_satdev.sql — SAT deviation from setpoint (fan_running + confirm)
 -- Gate: fan-on from fan_status then fan_cmd. Missing fan stays off
 -- (do not ELSE 1 / COALESCE to on — that invents on-hours).
+-- Quality (#1253): SQL does NOT apply open_fdd.quality OUT_OF_RANGE/sentinel
+-- nulling. Pandas SQL parity must use quality=False; run_rule(quality=True) is
+-- a different surface.
 WITH h AS (
   SELECT
     equipment_id,
@@ -2367,14 +2407,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2386,18 +2455,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -2440,14 +2515,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2459,18 +2563,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -2550,14 +2660,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM proof
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2569,18 +2708,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -2628,14 +2773,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM proof
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2647,18 +2821,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -2705,14 +2885,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM proof
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2724,18 +2933,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -2781,14 +2996,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM proof
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2800,18 +3044,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -2877,14 +3127,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM proof
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2896,19 +3175,25 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
+    held_seconds,
     sat_present,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours,
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct,
   CASE
     WHEN MAX(sat_present) = 0 THEN 'SKIPPED_MISSING_ROLES'
     WHEN SUM(confirmed) > 0 THEN 'FAULT'
@@ -2947,14 +3232,43 @@ base AS (
         END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -2966,18 +3280,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3025,14 +3345,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3044,18 +3393,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3103,14 +3458,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3122,18 +3506,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3179,14 +3569,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3198,18 +3617,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3252,14 +3677,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3271,18 +3725,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3330,14 +3790,43 @@ WITH base AS (
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3349,18 +3838,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3417,14 +3912,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3436,18 +3960,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3490,14 +4020,43 @@ base AS (
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3509,18 +4068,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3568,14 +4133,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3587,18 +4181,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3650,14 +4250,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3669,18 +4298,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3736,14 +4371,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3755,18 +4419,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3801,14 +4471,43 @@ WITH base AS (
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3820,18 +4519,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -3846,21 +4551,37 @@ GROUP BY equipment_id;
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fan_runtime_hours.sql
--- Fan runtime hours: fan_cmd normalized > 0.05
--- Output: equipment_id, fan_runtime_hours, total_hours
+-- Fan runtime integrates the forward delta while fan_cmd > 0.05.
+-- A gap longer than MAX_GAP_HOURS is unknown and is omitted from both totals.
+-- The last sample does not invent a trailing interval.
 
-WITH h AS (
+WITH ordered AS (
   SELECT
     equipment_id,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_cmd
+    timestamp_utc,
+    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_cmd,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      - timestamp_utc
+    )) AS dt_seconds
   FROM history
+),
+held AS (
+  SELECT
+    equipment_id,
+    fan_cmd,
+    CASE
+      WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE dt_seconds
+    END AS held_seconds
+  FROM ordered
 )
 SELECT
   equipment_id,
-  SUM(CASE WHEN fan_cmd > 0.05 THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fan_runtime_hours,
-  COUNT(*) * {{POLL_SECONDS}} / 3600.0 AS total_hours
-FROM h
-WHERE fan_cmd IS NOT NULL
+  SUM(CASE WHEN fan_cmd > 0.05 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fan_runtime_hours,
+  SUM(CASE WHEN fan_cmd IS NOT NULL THEN held_seconds ELSE 0.0 END) / 3600.0 AS total_hours
+FROM held
 GROUP BY equipment_id;
 ```
 {% endraw %}
@@ -3873,13 +4594,44 @@ GROUP BY equipment_id;
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
--- fault_elapsed_hours.sql — comfort fault sample rollup
+-- fault_elapsed_hours.sql — comfort fault elapsed rollup
+-- Out-of-band zone temperature holds forward until the next sample.
+-- Gaps longer than MAX_GAP_HOURS are unknown (not fault, not covered).
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    zone_t,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      - timestamp_utc
+    )) AS dt_seconds
+  FROM history
+  WHERE zone_t IS NOT NULL
+),
+held AS (
+  SELECT
+    equipment_id,
+    zone_t,
+    CASE
+      WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE dt_seconds
+    END AS held_seconds
+  FROM ordered
+)
 SELECT
   equipment_id,
   SUM(CASE WHEN zone_t < 68.0 OR zone_t > 76.0 THEN 1 ELSE 0 END) AS fault_samples,
-  SUM(CASE WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
-FROM history
-WHERE zone_t IS NOT NULL
+  SUM(CASE
+    WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN held_seconds
+    ELSE 0.0
+  END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE
+    WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN held_seconds
+    ELSE 0.0
+  END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
+FROM held
 GROUP BY equipment_id;
 ```
 {% endraw %}
@@ -3936,14 +4688,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -3955,13 +4736,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -3973,10 +4758,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4035,14 +4826,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4054,13 +4874,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4072,10 +4896,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4134,14 +4964,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4153,13 +5012,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4171,10 +5034,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4234,14 +5103,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4253,13 +5151,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4271,10 +5173,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4336,14 +5244,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4355,13 +5292,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4373,10 +5314,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4438,14 +5385,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4457,13 +5433,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4475,10 +5455,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4534,14 +5520,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4553,13 +5568,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4571,10 +5590,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4630,14 +5655,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4649,13 +5703,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4667,10 +5725,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4762,14 +5826,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM hourly
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4781,13 +5874,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4799,10 +5896,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4859,14 +5962,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4878,13 +6010,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4896,10 +6032,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -4960,14 +6102,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -4979,13 +6150,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -4997,10 +6172,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -5050,14 +6231,43 @@ base AS (
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -5069,13 +6279,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -5087,10 +6301,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -5149,14 +6369,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -5168,13 +6417,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -5186,10 +6439,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -5248,14 +6507,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -5267,13 +6555,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -5285,10 +6577,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -5320,18 +6618,57 @@ WITH normalized AS (
   SELECT equipment_id, timestamp_utc,
     CAST(CASE WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1 AND clg >= {{VALVE_OPEN}} AND htg <= 0.05 AND sat - zone_t >= 0.0 THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM normalized
-), lagged AS (
-  SELECT *, CASE WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) THEN 0 ELSE 1 END AS is_new_streak
-  FROM base
+), elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
+lagged AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM elapsed_hold
 ), grouped AS (
   SELECT *, SUM(is_new_streak) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
   FROM lagged
 ), ranked AS (
-  SELECT *, ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+  SELECT *, SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grouped
 )
 SELECT equipment_id,
-  SUM(CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM ranked
 GROUP BY equipment_id;
 ```
@@ -5362,18 +6699,57 @@ WITH normalized AS (
   SELECT equipment_id, timestamp_utc,
     CAST(CASE WHEN fan_on = 1 AND zone_co2 IS NOT NULL AND zone_co2 > {{CO2_HIGH_PPM}} AND zone_co2 >= 300.0 AND dcmd IS NOT NULL AND dcmd < {{DAMPER_LOW}} THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM normalized
-), lagged AS (
-  SELECT *, CASE WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) THEN 0 ELSE 1 END AS is_new_streak
-  FROM base
+), elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
+lagged AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM elapsed_hold
 ), grouped AS (
   SELECT *, SUM(is_new_streak) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
   FROM lagged
 ), ranked AS (
-  SELECT *, ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+  SELECT *, SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grouped
 )
 SELECT equipment_id,
-  SUM(CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM ranked
 GROUP BY equipment_id;
 ```
@@ -5404,18 +6780,57 @@ WITH normalized AS (
   SELECT equipment_id, timestamp_utc,
     CAST(CASE WHEN fan_on = 1 AND dcmd IS NOT NULL AND dpos IS NOT NULL AND dcmd >= {{COMMAND_MIN}} AND dcmd - dpos > {{POSITION_ERROR}} THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM normalized
-), lagged AS (
-  SELECT *, CASE WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) THEN 0 ELSE 1 END AS is_new_streak
-  FROM base
+), elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
+lagged AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM elapsed_hold
 ), grouped AS (
   SELECT *, SUM(is_new_streak) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
   FROM lagged
 ), ranked AS (
-  SELECT *, ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+  SELECT *, SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grouped
 )
 SELECT equipment_id,
-  SUM(CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM ranked
 GROUP BY equipment_id;
 ```
@@ -5429,12 +6844,45 @@ GROUP BY equipment_id;
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
--- FCU-DEADBAND — pass-through FCU setpoints remain site-native Celsius
-SELECT equipment_id,
-  SUM(CASE WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
-    AND cooling_sp - heating_sp < {{DEADBAND_C}} THEN 1 ELSE 0 END)
-    * {{POLL_SECONDS}} / 3600.0 AS fault_hours
-FROM history
+-- FCU-DEADBAND — pass-through FCU setpoints remain site-native Celsius.
+-- Duration is the eligible forward delta, not a row count times poll.
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    cooling_sp,
+    heating_sp,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      - timestamp_utc
+    )) AS dt_seconds
+  FROM history
+),
+held AS (
+  SELECT
+    equipment_id,
+    cooling_sp,
+    heating_sp,
+    CASE
+      WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE dt_seconds
+    END AS held_seconds
+  FROM ordered
+)
+SELECT
+  equipment_id,
+  SUM(CASE
+    WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
+     AND cooling_sp - heating_sp < {{DEADBAND_C}}
+    THEN held_seconds ELSE 0.0
+  END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE
+    WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
+     AND cooling_sp - heating_sp < {{DEADBAND_C}}
+    THEN held_seconds ELSE 0.0
+  END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
+FROM held
 GROUP BY equipment_id;
 ```
 {% endraw %}
@@ -5464,18 +6912,57 @@ WITH normalized AS (
   SELECT equipment_id, timestamp_utc,
     CAST(CASE WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1 AND htg >= {{VALVE_OPEN}} AND sat - zone_t < {{COIL_DELTA_F}} THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM normalized
-), lagged AS (
-  SELECT *, CASE WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) THEN 0 ELSE 1 END AS is_new_streak
-  FROM base
+), elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
+lagged AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM elapsed_hold
 ), grouped AS (
   SELECT *, SUM(is_new_streak) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
   FROM lagged
 ), ranked AS (
-  SELECT *, ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+  SELECT *, SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grouped
 )
 SELECT equipment_id,
-  SUM(CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM ranked
 GROUP BY equipment_id;
 ```
@@ -5489,32 +6976,59 @@ GROUP BY equipment_id;
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
--- FCU-MODE-CYCLE — cumulative heat/cool mode transitions in the analysis window
+-- FCU-MODE-CYCLE — cumulative heat/cool mode transitions in the analysis window.
+-- Hours are eligible forward deltas after the change count reaches MODE_CHANGES.
 WITH modes AS (
-  SELECT equipment_id, timestamp_utc,
+  SELECT
+    equipment_id,
+    timestamp_utc,
     CASE
       WHEN clg_valve_pct IS NOT NULL AND (CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END) > {{MODE_VALVE_MIN}} THEN -1
       WHEN htg_valve_pct IS NOT NULL AND (CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END) > {{MODE_VALVE_MIN}} THEN 1
       ELSE 0
     END AS mode
   FROM history
-), active_modes AS (
+),
+active_modes AS (
   SELECT equipment_id, timestamp_utc, mode
-  FROM modes WHERE mode <> 0
-), changes AS (
-  SELECT equipment_id, timestamp_utc, mode,
-    CASE WHEN LAG(mode) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) IS NOT NULL
-      AND mode <> LAG(mode) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
-      THEN 1 ELSE 0 END AS changed
+  FROM modes
+  WHERE mode <> 0
+),
+changes AS (
+  SELECT
+    equipment_id,
+    timestamp_utc,
+    mode,
+    CASE
+      WHEN LAG(mode) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) IS NOT NULL
+       AND mode <> LAG(mode) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      THEN 1 ELSE 0
+    END AS changed,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      - timestamp_utc
+    )) AS dt_seconds
   FROM active_modes
-), cumulative AS (
-  SELECT equipment_id, timestamp_utc,
-    SUM(changed) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS change_count
+),
+cumulative AS (
+  SELECT
+    equipment_id,
+    SUM(changed) OVER (
+      PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING
+    ) AS change_count,
+    CASE
+      WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE dt_seconds
+    END AS held_seconds
   FROM changes
 )
-SELECT equipment_id,
-  SUM(CASE WHEN change_count >= {{MODE_CHANGES}} THEN 1 ELSE 0 END)
-    * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+SELECT
+  equipment_id,
+  SUM(CASE WHEN change_count >= {{MODE_CHANGES}} THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN change_count >= {{MODE_CHANGES}} THEN held_seconds ELSE 0.0 END)
+    / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM cumulative
 GROUP BY equipment_id;
 ```
@@ -5530,16 +7044,56 @@ GROUP BY equipment_id;
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- FCU-SENSOR-NULL — own zone setpoint exists while a mapped zone sensor is predominantly null.
 -- The runner rewrites this file to zero hours when zone_t is absent from history.
-WITH coverage AS (
-  SELECT equipment_id,
-    SUM(CASE WHEN zone_air_temp_sp IS NOT NULL THEN 1 ELSE 0 END) AS eligible_rows,
-    SUM(CASE WHEN zone_air_temp_sp IS NOT NULL AND zone_t IS NULL THEN 1 ELSE 0 END) AS null_rows
+-- Null time and eligible time are eligible forward deltas. A long gap is unknown.
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    zone_air_temp_sp,
+    zone_t,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      - timestamp_utc
+    )) AS dt_seconds
   FROM history
+),
+held AS (
+  SELECT
+    equipment_id,
+    zone_air_temp_sp,
+    zone_t,
+    CASE
+      WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE dt_seconds
+    END AS held_seconds
+  FROM ordered
+),
+coverage AS (
+  SELECT
+    equipment_id,
+    SUM(CASE WHEN zone_air_temp_sp IS NOT NULL THEN held_seconds ELSE 0.0 END) AS eligible_seconds,
+    SUM(CASE
+      WHEN zone_air_temp_sp IS NOT NULL AND zone_t IS NULL THEN held_seconds
+      ELSE 0.0
+    END) AS null_seconds
+  FROM held
   GROUP BY equipment_id
 )
-SELECT equipment_id,
-  CASE WHEN eligible_rows > 0 AND CAST(null_rows AS DOUBLE PRECISION) / eligible_rows >= {{NULL_FRACTION}}
-    THEN null_rows * {{POLL_SECONDS}} / 3600.0 ELSE 0.0 END AS fault_hours
+SELECT
+  equipment_id,
+  CASE
+    WHEN eligible_seconds > 0.0
+     AND null_seconds / eligible_seconds >= {{NULL_FRACTION}}
+    THEN null_seconds / 3600.0
+    ELSE 0.0
+  END AS fault_hours,
+  eligible_seconds / 3600.0 AS covered_hours,
+  CASE
+    WHEN eligible_seconds > 0.0
+     AND null_seconds / eligible_seconds >= {{NULL_FRACTION}}
+    THEN 100.0 * null_seconds / eligible_seconds
+    ELSE 0.0
+  END AS fault_pct
 FROM coverage;
 ```
 {% endraw %}
@@ -5569,18 +7123,57 @@ WITH normalized AS (
   SELECT equipment_id, timestamp_utc,
     CAST(CASE WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1 AND htg <= 0.05 AND clg <= 0.05 AND zone_t - sat > {{PASS_DELTA_F}} THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM normalized
-), lagged AS (
-  SELECT *, CASE WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) THEN 0 ELSE 1 END AS is_new_streak
-  FROM base
+), elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
+lagged AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM elapsed_hold
 ), grouped AS (
   SELECT *, SUM(is_new_streak) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
   FROM lagged
 ), ranked AS (
-  SELECT *, ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+  SELECT *, SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grouped
 )
 SELECT equipment_id,
-  SUM(CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM ranked
 GROUP BY equipment_id;
 ```
@@ -5611,18 +7204,57 @@ WITH normalized AS (
   SELECT equipment_id, timestamp_utc,
     CAST(CASE WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1 AND htg <= 0.05 AND clg <= 0.05 AND sat - zone_t > {{PASS_DELTA_F}} THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM normalized
-), lagged AS (
-  SELECT *, CASE WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) THEN 0 ELSE 1 END AS is_new_streak
-  FROM base
+), elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
+lagged AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM elapsed_hold
 ), grouped AS (
   SELECT *, SUM(is_new_streak) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
   FROM lagged
 ), ranked AS (
-  SELECT *, ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+  SELECT *, SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grouped
 )
 SELECT equipment_id,
-  SUM(CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM ranked
 GROUP BY equipment_id;
 ```
@@ -5666,14 +7298,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -5685,18 +7346,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -5734,14 +7401,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -5753,18 +7449,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -5807,14 +7509,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -5826,18 +7557,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -5884,35 +7621,69 @@ base AS (
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM joined
 ),
+elapsed_hold AS (
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
-    LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_raw_fault
-  FROM base
+    CASE
+      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+      THEN 0 ELSE 1
+    END AS is_new_streak
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
     *,
-    SUM(CASE WHEN raw_fault IS DISTINCT FROM prev_raw_fault THEN 1 ELSE 0 END)
+    SUM(is_new_streak)
       OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
   FROM lagged
 ),
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours,
-  100.0 * SUM(confirmed) / NULLIF(COUNT(*), 0) AS fault_pct
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -5928,9 +7699,10 @@ GROUP BY equipment_id;
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- pid_hunt_1.sql — Suspected control-output hunting (rolling 1h metrics)
 -- Matches pandas hunting_fault_mask: TV / span / cycles / reversals over
--- WINDOW_HOURS. Sample-to-sample Δ alone under-counts the golden hangover
--- window (0.917h vs 1.0h). {{WINDOW_ROWS}} / {{WINDOW_ROWS_PRECEDING}} are
--- derived from WINDOW_HOURS + POLL_SECONDS (DataFusion needs literal ROWS).
+-- WINDOW_HOURS. The detection window is still a row frame (WINDOW_ROWS).
+-- Fault hours integrate eligible forward deltas and do not add a phantom
+-- interval after the last sample. {{WINDOW_ROWS}} / {{WINDOW_ROWS_PRECEDING}}
+-- are derived from WINDOW_HOURS + POLL_SECONDS (literal ROWS bounds).
 WITH h AS (
   SELECT
     equipment_id,
@@ -6040,14 +7812,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM win
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6059,18 +7860,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -6111,14 +7918,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6130,18 +7966,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -6200,14 +8042,43 @@ base AS (
   FROM h
 ) h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6219,13 +8090,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -6237,10 +8112,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -6285,14 +8166,43 @@ WITH base AS (
         END AS INT) AS raw_fault
   FROM history
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6304,18 +8214,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -6375,14 +8291,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM win
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6394,18 +8339,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -6424,12 +8375,62 @@ GROUP BY equipment_id;
 -- mapped role is flat while the equipment is energized.
 -- {{FLATLINE_ROWS}} / {{FLATLINE_ROWS_PRECEDING}} are derived from FLATLINE_HOURS
 -- and POLL_SECONDS (DataFusion requires literal ROWS frame bounds).
-WITH h AS (
+-- Binding unit required per role (fdd.mask_sweep_val); status/cmd/setpoint roles are not sweep targets.
+WITH bind AS (
+  SELECT
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_t') AS u_oa_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'mat') AS u_mat,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_t') AS u_zone_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'rat') AS u_rat,
+    MAX(a.unit) FILTER (WHERE a.role = 'sat') AS u_sat,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_supply_t') AS u_chw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_return_t') AS u_chw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_supply_t') AS u_hw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_return_t') AS u_hw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_h') AS u_oa_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'ra_h') AS u_ra_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_rh') AS u_zone_rh,
+    MAX(a.unit) FILTER (WHERE a.role = 'ma_h') AS u_ma_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'sa_h') AS u_sa_h
+  FROM authorized_series a
+  JOIN equipment e ON e.building_id = a.site_id AND e.equipment_id = a.equipment_id
+  WHERE e.equipment_id = (SELECT MIN(equipment_id) FROM history)
+    AND (SELECT count(*)::int FROM authorized_series c
+         WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id AND c.role = a.role) = 1
+),
+gated AS (
+  SELECT
+    h.equipment_id,
+    h.timestamp_utc,
+    fdd.mask_sweep_val('oa_t', b.u_oa_t, h.oa_t) AS oa_t,
+    fdd.mask_sweep_val('mat', b.u_mat, h.mat) AS mat,
+    fdd.mask_sweep_val('zone_t', b.u_zone_t, h.zone_t) AS zone_t,
+    fdd.mask_sweep_val('rat', b.u_rat, h.rat) AS rat,
+    fdd.mask_sweep_val('sat', b.u_sat, h.sat) AS sat,
+    fdd.mask_sweep_val('chw_supply_t', b.u_chw_supply_t, h.chw_supply_t) AS chw_supply_t,
+    fdd.mask_sweep_val('chw_return_t', b.u_chw_return_t, h.chw_return_t) AS chw_return_t,
+    fdd.mask_sweep_val('hw_supply_t', b.u_hw_supply_t, h.hw_supply_t) AS hw_supply_t,
+    fdd.mask_sweep_val('hw_return_t', b.u_hw_return_t, h.hw_return_t) AS hw_return_t,
+    fdd.mask_sweep_val('oa_h', b.u_oa_h, h.oa_h) AS oa_h,
+    fdd.mask_sweep_val('ra_h', b.u_ra_h, h.ra_h) AS ra_h,
+    fdd.mask_sweep_val('zone_rh', b.u_zone_rh, h.zone_rh) AS zone_rh,
+    fdd.mask_sweep_val('ma_h', b.u_ma_h, h.ma_h) AS ma_h,
+    fdd.mask_sweep_val('sa_h', b.u_sa_h, h.sa_h) AS sa_h,
+    h.fan_cmd,
+    h.fan_status,
+    h.pump_status,
+    h.chw_pump_cmd,
+    h.chiller_status
+  FROM history h
+  CROSS JOIN bind b
+),
+h AS (
   SELECT
     equipment_id,
     timestamp_utc,
     oa_t, mat, zone_t, rat, sat,
-    chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h,
+    chw_supply_t, chw_return_t, hw_supply_t, hw_return_t,
+    oa_h, ra_h, zone_rh, ma_h, sa_h,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
@@ -6438,7 +8439,7 @@ WITH h AS (
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       ELSE 1
     END AS energized
-  FROM history
+  FROM gated
 ),
 win AS (
   SELECT
@@ -6474,7 +8475,19 @@ win AS (
       - MIN(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_hw_return_t,
     COUNT(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_oa_h,
     MAX(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
-      - MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_oa_h
+      - MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_oa_h,
+    COUNT(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_ra_h,
+    MAX(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_ra_h,
+    COUNT(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_zone_rh,
+    MAX(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_zone_rh,
+    COUNT(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_ma_h,
+    MAX(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_ma_h,
+    COUNT(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_sa_h,
+    MAX(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{FLATLINE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_sa_h
   FROM h
 ),
 base AS (
@@ -6493,18 +8506,51 @@ base AS (
       WHEN n_hw_supply_t >= {{FLATLINE_ROWS}} AND span_hw_supply_t <= {{FLATLINE_TOL}} THEN 1
       WHEN n_hw_return_t >= {{FLATLINE_ROWS}} AND span_hw_return_t <= {{FLATLINE_TOL}} THEN 1
       WHEN n_oa_h >= {{FLATLINE_ROWS}} AND span_oa_h <= {{FLATLINE_TOL}} THEN 1
+      WHEN n_ra_h >= {{FLATLINE_ROWS}} AND span_ra_h <= {{FLATLINE_TOL}} THEN 1
+      WHEN n_zone_rh >= {{FLATLINE_ROWS}} AND span_zone_rh <= {{FLATLINE_TOL}} THEN 1
+      WHEN n_ma_h >= {{FLATLINE_ROWS}} AND span_ma_h <= {{FLATLINE_TOL}} THEN 1
+      WHEN n_sa_h >= {{FLATLINE_ROWS}} AND span_sa_h <= {{FLATLINE_TOL}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM win
+),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
 ),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6516,18 +8562,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -6543,12 +8595,64 @@ GROUP BY equipment_id;
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sv_range.sql — Sensor out of hard range (pandas SENSOR_LIMITS catalog)
 -- Do not force everything through oa_t. Humidity/pressure are not temperature-scaled.
-WITH h AS (
+-- Points without a declared binding unit are masked (not assessed), matching pandas sweep_assessable_role.
+WITH bind AS (
+  SELECT
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_t') AS u_oa_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'mat') AS u_mat,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_t') AS u_zone_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'rat') AS u_rat,
+    MAX(a.unit) FILTER (WHERE a.role = 'sat') AS u_sat,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_supply_t') AS u_chw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_return_t') AS u_chw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_supply_t') AS u_hw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_return_t') AS u_hw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_h') AS u_oa_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'ra_h') AS u_ra_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_rh') AS u_zone_rh,
+    MAX(a.unit) FILTER (WHERE a.role = 'ma_h') AS u_ma_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'sa_h') AS u_sa_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'duct_static') AS u_duct_static
+  FROM authorized_series a
+  JOIN equipment e ON e.building_id = a.site_id AND e.equipment_id = a.equipment_id
+  WHERE e.equipment_id = (SELECT MIN(equipment_id) FROM history)
+    AND (SELECT count(*)::int FROM authorized_series c
+         WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id AND c.role = a.role) = 1
+),
+gated AS (
+  SELECT
+    h.equipment_id,
+    h.timestamp_utc,
+    fdd.mask_sweep_val('oa_t', b.u_oa_t, h.oa_t) AS oa_t,
+    fdd.mask_sweep_val('mat', b.u_mat, h.mat) AS mat,
+    fdd.mask_sweep_val('zone_t', b.u_zone_t, h.zone_t) AS zone_t,
+    fdd.mask_sweep_val('rat', b.u_rat, h.rat) AS rat,
+    fdd.mask_sweep_val('sat', b.u_sat, h.sat) AS sat,
+    fdd.mask_sweep_val('chw_supply_t', b.u_chw_supply_t, h.chw_supply_t) AS chw_supply_t,
+    fdd.mask_sweep_val('chw_return_t', b.u_chw_return_t, h.chw_return_t) AS chw_return_t,
+    fdd.mask_sweep_val('hw_supply_t', b.u_hw_supply_t, h.hw_supply_t) AS hw_supply_t,
+    fdd.mask_sweep_val('hw_return_t', b.u_hw_return_t, h.hw_return_t) AS hw_return_t,
+    fdd.mask_sweep_val('oa_h', b.u_oa_h, h.oa_h) AS oa_h,
+    fdd.mask_sweep_val('ra_h', b.u_ra_h, h.ra_h) AS ra_h,
+    fdd.mask_sweep_val('zone_rh', b.u_zone_rh, h.zone_rh) AS zone_rh,
+    fdd.mask_sweep_val('ma_h', b.u_ma_h, h.ma_h) AS ma_h,
+    fdd.mask_sweep_val('sa_h', b.u_sa_h, h.sa_h) AS sa_h,
+    fdd.mask_sweep_val('duct_static', b.u_duct_static, h.duct_static) AS duct_static,
+    h.fan_cmd,
+    h.fan_status,
+    h.pump_status,
+    h.chw_pump_cmd,
+    h.chiller_status
+  FROM history h
+  CROSS JOIN bind b
+),
+h AS (
   SELECT
     equipment_id,
     timestamp_utc,
     oa_t, mat, zone_t, rat, sat,
-    chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static,
+    chw_supply_t, chw_return_t, hw_supply_t, hw_return_t,
+    oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static,
     fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
@@ -6558,7 +8662,7 @@ WITH h AS (
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       ELSE 1
     END AS energized
-  FROM history
+  FROM gated
 ),
 base AS (
   SELECT
@@ -6576,19 +8680,52 @@ base AS (
       WHEN hw_supply_t IS NOT NULL AND (hw_supply_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_supply_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR hw_supply_t > 220.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
       WHEN hw_return_t IS NOT NULL AND (hw_return_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_return_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR hw_return_t > 220.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
       WHEN oa_h IS NOT NULL AND (oa_h = CAST('NaN' AS DOUBLE PRECISION) OR oa_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR oa_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN ra_h IS NOT NULL AND (ra_h = CAST('NaN' AS DOUBLE PRECISION) OR ra_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR ra_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN zone_rh IS NOT NULL AND (zone_rh = CAST('NaN' AS DOUBLE PRECISION) OR zone_rh < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR zone_rh > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN ma_h IS NOT NULL AND (ma_h = CAST('NaN' AS DOUBLE PRECISION) OR ma_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR ma_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN sa_h IS NOT NULL AND (sa_h = CAST('NaN' AS DOUBLE PRECISION) OR sa_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR sa_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
       WHEN duct_static IS NOT NULL AND (duct_static = CAST('NaN' AS DOUBLE PRECISION) OR duct_static < -1.0 * {{RANGE_SCALE_PRESSURE}} OR duct_static > 8.0 * {{RANGE_SCALE_PRESSURE}}) THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
+),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
 ),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6600,18 +8737,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -6684,14 +8827,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM flagged
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6703,18 +8875,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -6779,14 +8957,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6798,13 +9005,17 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 , cov AS (
@@ -6816,10 +9027,16 @@ final AS (
 SELECT
   f.equipment_id,
   CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE SUM(f.confirmed) * {{POLL_SECONDS}} / 3600.0
-  END AS fault_hours
+    ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  END AS fault_hours,
+  SUM(f.held_seconds) / 3600.0 AS covered_hours,
+  CASE
+    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
+    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;
@@ -6842,7 +9059,51 @@ GROUP BY f.equipment_id;
 -- window: one live sensor is enough to prove the feed is still updating.
 -- {{STALE_ROWS}} / {{STALE_ROWS_PRECEDING}} are derived from STALE_HOURS and
 -- POLL_SECONDS (DataFusion requires literal ROWS frame bounds).
-WITH win AS (
+-- Binding unit required per role (fdd.mask_sweep_val); duct static is not in the stale AND set.
+WITH bind AS (
+  SELECT
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_t') AS u_oa_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'mat') AS u_mat,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_t') AS u_zone_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'rat') AS u_rat,
+    MAX(a.unit) FILTER (WHERE a.role = 'sat') AS u_sat,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_supply_t') AS u_chw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_return_t') AS u_chw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_supply_t') AS u_hw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_return_t') AS u_hw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_h') AS u_oa_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'ra_h') AS u_ra_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_rh') AS u_zone_rh,
+    MAX(a.unit) FILTER (WHERE a.role = 'ma_h') AS u_ma_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'sa_h') AS u_sa_h
+  FROM authorized_series a
+  JOIN equipment e ON e.building_id = a.site_id AND e.equipment_id = a.equipment_id
+  WHERE e.equipment_id = (SELECT MIN(equipment_id) FROM history)
+    AND (SELECT count(*)::int FROM authorized_series c
+         WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id AND c.role = a.role) = 1
+),
+gated AS (
+  SELECT
+    h.equipment_id,
+    h.timestamp_utc,
+    fdd.mask_sweep_val('oa_t', b.u_oa_t, h.oa_t) AS oa_t,
+    fdd.mask_sweep_val('mat', b.u_mat, h.mat) AS mat,
+    fdd.mask_sweep_val('zone_t', b.u_zone_t, h.zone_t) AS zone_t,
+    fdd.mask_sweep_val('rat', b.u_rat, h.rat) AS rat,
+    fdd.mask_sweep_val('sat', b.u_sat, h.sat) AS sat,
+    fdd.mask_sweep_val('chw_supply_t', b.u_chw_supply_t, h.chw_supply_t) AS chw_supply_t,
+    fdd.mask_sweep_val('chw_return_t', b.u_chw_return_t, h.chw_return_t) AS chw_return_t,
+    fdd.mask_sweep_val('hw_supply_t', b.u_hw_supply_t, h.hw_supply_t) AS hw_supply_t,
+    fdd.mask_sweep_val('hw_return_t', b.u_hw_return_t, h.hw_return_t) AS hw_return_t,
+    fdd.mask_sweep_val('oa_h', b.u_oa_h, h.oa_h) AS oa_h,
+    fdd.mask_sweep_val('ra_h', b.u_ra_h, h.ra_h) AS ra_h,
+    fdd.mask_sweep_val('zone_rh', b.u_zone_rh, h.zone_rh) AS zone_rh,
+    fdd.mask_sweep_val('ma_h', b.u_ma_h, h.ma_h) AS ma_h,
+    fdd.mask_sweep_val('sa_h', b.u_sa_h, h.sa_h) AS sa_h
+  FROM history h
+  CROSS JOIN bind b
+),
+win AS (
   SELECT
     equipment_id,
     timestamp_utc,
@@ -6875,8 +9136,20 @@ WITH win AS (
       - MIN(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_hw_return_t,
     COUNT(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_oa_h,
     MAX(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
-      - MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_oa_h
-  FROM history
+      - MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_oa_h,
+    COUNT(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_ra_h,
+    MAX(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_ra_h,
+    COUNT(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_zone_rh,
+    MAX(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_zone_rh,
+    COUNT(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_ma_h,
+    MAX(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_ma_h,
+    COUNT(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_sa_h,
+    MAX(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_sa_h
+  FROM gated
 ),
 scored AS (
   SELECT
@@ -6891,7 +9164,11 @@ scored AS (
       + CASE WHEN n_chw_return_t >= {{STALE_ROWS}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_supply_t >= {{STALE_ROWS}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_return_t >= {{STALE_ROWS}} THEN 1 ELSE 0 END
-      + CASE WHEN n_oa_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END AS roles_mapped,
+      + CASE WHEN n_oa_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_ra_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_zone_rh >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_ma_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_sa_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END AS roles_mapped,
     CASE WHEN n_oa_t >= {{STALE_ROWS}} AND span_oa_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_mat >= {{STALE_ROWS}} AND span_mat <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_zone_t >= {{STALE_ROWS}} AND span_zone_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
@@ -6901,7 +9178,11 @@ scored AS (
       + CASE WHEN n_chw_return_t >= {{STALE_ROWS}} AND span_chw_return_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_supply_t >= {{STALE_ROWS}} AND span_hw_supply_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_return_t >= {{STALE_ROWS}} AND span_hw_return_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
-      + CASE WHEN n_oa_h >= {{STALE_ROWS}} AND span_oa_h <= {{STALE_TOL}} THEN 1 ELSE 0 END AS roles_stale
+      + CASE WHEN n_oa_h >= {{STALE_ROWS}} AND span_oa_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_ra_h >= {{STALE_ROWS}} AND span_ra_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_zone_rh >= {{STALE_ROWS}} AND span_zone_rh <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_ma_h >= {{STALE_ROWS}} AND span_ma_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_sa_h >= {{STALE_ROWS}} AND span_sa_h <= {{STALE_TOL}} THEN 1 ELSE 0 END AS roles_stale
   FROM win
 ),
 base AS (
@@ -6914,14 +9195,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM scored
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -6933,18 +9243,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -6981,14 +9297,43 @@ WITH base AS (
 
   FROM history
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7000,18 +9345,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7058,14 +9409,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7077,18 +9457,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7135,14 +9521,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7154,18 +9569,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7180,15 +9601,29 @@ GROUP BY equipment_id;
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- util_interval_fault.sql — BAS 15m vs utility interval (rolling MAE proxy)
-WITH bas AS (
+WITH bas_raw AS (
+  SELECT
+    timestamp_utc,
+    kwh,
+    electric_kw,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) - timestamp_utc
+    )) AS dt_seconds
+  FROM history
+  WHERE kwh IS NOT NULL OR electric_kw IS NOT NULL
+),
+bas AS (
   SELECT
     timestamp_utc,
     COALESCE(
       CAST(kwh AS DOUBLE PRECISION),
-      CAST(electric_kw AS DOUBLE PRECISION) * {{POLL_SECONDS}} / 3600.0
+      CASE
+        WHEN dt_seconds > 0.0 AND dt_seconds <= ({{MAX_GAP_HOURS}} * 3600.0)
+        THEN CAST(electric_kw AS DOUBLE PRECISION) * dt_seconds / 3600.0
+        ELSE 0.0
+      END
     ) AS bas_kwh
-  FROM history
-  WHERE kwh IS NOT NULL OR electric_kw IS NOT NULL
+  FROM bas_raw
 ),
 util AS (
   SELECT
@@ -7215,7 +9650,9 @@ SELECT
     WHEN (SELECT COUNT(*) FROM util) = 0 THEN 0.0
     WHEN mae > {{UTIL_INTERVAL_MAE}} THEN 720.0
     ELSE 0.0
-  END AS fault_hours
+  END AS fault_hours,
+  NULL::double precision AS covered_hours,
+  NULL::double precision AS fault_pct
 FROM agg;
 ```
 {% endraw %}
@@ -7229,18 +9666,32 @@ FROM agg;
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- util_monthly_fault.sql — BAS monthly kWh vs utility monthly bills (% deviation)
-WITH bas_monthly AS (
+WITH bas_raw AS (
+  SELECT
+    timestamp_utc,
+    kwh,
+    electric_kw,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) - timestamp_utc
+    )) AS dt_seconds
+  FROM history
+  WHERE kwh IS NOT NULL OR electric_kw IS NOT NULL
+),
+bas_monthly AS (
   SELECT
     to_char(timestamp_utc AT TIME ZONE 'UTC', 'YYYY-MM') AS billing_period,
     SUM(
       COALESCE(
         CAST(kwh AS DOUBLE PRECISION),
-        CAST(electric_kw AS DOUBLE PRECISION) * {{POLL_SECONDS}} / 3600.0,
+        CASE
+          WHEN dt_seconds > 0.0 AND dt_seconds <= ({{MAX_GAP_HOURS}} * 3600.0)
+          THEN CAST(electric_kw AS DOUBLE PRECISION) * dt_seconds / 3600.0
+          ELSE 0.0
+        END,
         0.0
       )
     ) AS bas_kwh
-  FROM history
-  WHERE kwh IS NOT NULL OR electric_kw IS NOT NULL
+  FROM bas_raw
   GROUP BY 1
 ),
 util AS (
@@ -7266,7 +9717,9 @@ joined AS (
 )
 SELECT
   '__UTIL_MONTHLY__' AS equipment_id,
-  CAST(SUM(raw_fault) AS DOUBLE PRECISION) * 720.0 AS fault_hours
+  CAST(SUM(raw_fault) AS DOUBLE PRECISION) * 720.0 AS fault_hours,
+  NULL::double precision AS covered_hours,
+  NULL::double precision AS fault_pct
 FROM joined;
 ```
 {% endraw %}
@@ -7317,14 +9770,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7336,20 +9818,25 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
+    held_seconds,
     timestamp_utc,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours,
-  100.0 * SUM(confirmed) / COUNT(*) AS fault_pct
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7386,14 +9873,43 @@ WITH h AS (
     END AS INT) AS raw_fault
   FROM history
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM h src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM h
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7405,18 +9921,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7460,14 +9982,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7479,18 +10030,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7505,8 +10062,9 @@ GROUP BY equipment_id;
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- vav4_damper_full_open.sql — sequential sustain then confirm (pandas vav4).
--- Stage 1: air-on and damper > FULL_OPEN for SUSTAIN_ROWS consecutive samples.
--- Stage 2: confirm that sustained mask for CONFIRM_ROWS (not max of the two).
+-- Stage 1: air-on and damper > FULL_OPEN for SUSTAIN_HOURS of eligible elapsed time.
+-- Stage 2: confirm that sustained mask for CONFIRM_SECONDS (not the max of the two).
+-- Gaps longer than MAX_GAP_HOURS are unknown and break both streaks.
 WITH h AS (
   SELECT
     equipment_id,
@@ -7535,14 +10093,40 @@ cond AS (
     END AS INT) AS cond_fault
   FROM h
 ),
+elapsed_hold AS (
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM cond src
+  ) stepped
+),
 lagged1 AS (
   SELECT
     *,
     CASE
       WHEN cond_fault = LAG(cond_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new1
-  FROM cond
+  FROM elapsed_hold
 ),
 grp1 AS (
   SELECT
@@ -7552,12 +10136,13 @@ grp1 AS (
 ),
 sustained AS (
   SELECT
-    equipment_id,
-    timestamp_utc,
+    *,
     CAST(CASE
       WHEN cond_fault = 1
-       AND ROW_NUMBER() OVER (PARTITION BY equipment_id, streak1 ORDER BY timestamp_utc)
-           >= CAST(CEIL({{SUSTAIN_HOURS}} * 3600.0 / {{POLL_SECONDS}}) AS INT)
+       AND SUM(held_seconds) OVER (
+         PARTITION BY equipment_id, streak1 ORDER BY timestamp_utc
+         ROWS UNBOUNDED PRECEDING
+       ) >= ({{SUSTAIN_HOURS}} * 3600.0)
       THEN 1 ELSE 0
     END AS INT) AS sustained_fault
   FROM grp1
@@ -7567,6 +10152,7 @@ lagged2 AS (
     *,
     CASE
       WHEN sustained_fault = LAG(sustained_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new2
   FROM sustained
@@ -7580,16 +10166,22 @@ grp2 AS (
 final AS (
   SELECT
     equipment_id,
+    held_seconds,
     CAST(CASE
       WHEN sustained_fault = 1
-       AND ROW_NUMBER() OVER (PARTITION BY equipment_id, streak2 ORDER BY timestamp_utc) >= {{CONFIRM_ROWS}}
+       AND SUM(held_seconds) OVER (
+         PARTITION BY equipment_id, streak2 ORDER BY timestamp_utc
+         ROWS UNBOUNDED PRECEDING
+       ) >= {{CONFIRM_SECONDS}}
       THEN 1 ELSE 0
     END AS INT) AS confirmed
   FROM grp2
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7632,14 +10224,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7651,18 +10272,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7700,14 +10327,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7719,18 +10375,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7799,14 +10461,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM rolled
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7818,18 +10509,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7873,14 +10570,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7892,18 +10618,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -7948,14 +10680,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -7967,18 +10728,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -8024,14 +10791,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -8043,18 +10839,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -8088,14 +10890,43 @@ base AS (
     END AS INT) AS raw_fault
   FROM h
 ),
+elapsed_hold AS (
+  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
+  -- it is not fault time, not covered time, and it breaks confirmation.
+  -- The last sample has no forward interval.
+  SELECT
+    stepped.*,
+    CASE
+      WHEN stepped.dt_seconds IS NULL
+        OR stepped.dt_seconds <= 0.0
+        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE stepped.dt_seconds
+    END AS held_seconds,
+    CASE
+      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
+      ELSE 0
+    END AS gap_after
+  FROM (
+    SELECT
+      src.*,
+      EXTRACT(EPOCH FROM (
+        LEAD(src.timestamp_utc) OVER (
+          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
+        ) - src.timestamp_utc
+      )) AS dt_seconds
+    FROM base src
+  ) stepped
+),
 lagged AS (
   SELECT
     *,
     CASE
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
       THEN 0 ELSE 1
     END AS is_new_streak
-  FROM base
+  FROM elapsed_hold
 ),
 grp AS (
   SELECT
@@ -8107,18 +10938,24 @@ grp AS (
 ranked AS (
   SELECT
     *,
-    ROW_NUMBER() OVER (PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc) AS streak_len
+    SUM(held_seconds) OVER (
+      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
+      ROWS UNBOUNDED PRECEDING
+    ) AS streak_elapsed
   FROM grp
 ),
 final AS (
   SELECT
     equipment_id,
-    CASE WHEN raw_fault = 1 AND streak_len >= {{CONFIRM_ROWS}} THEN 1 ELSE 0 END AS confirmed
+    held_seconds,
+    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
-  SUM(confirmed) * {{POLL_SECONDS}} / 3600.0 AS fault_hours
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+  SUM(held_seconds) / 3600.0 AS covered_hours,
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;
 ```
@@ -8133,11 +10970,36 @@ GROUP BY equipment_id;
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- zone_comfort_pct.sql
+-- Comfort is the share of eligible elapsed time inside the band, not a row count.
+WITH ordered AS (
+  SELECT
+    equipment_id,
+    zone_t,
+    EXTRACT(EPOCH FROM (
+      LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
+      - timestamp_utc
+    )) AS dt_seconds
+  FROM history
+  WHERE zone_t IS NOT NULL
+),
+held AS (
+  SELECT
+    equipment_id,
+    zone_t,
+    CASE
+      WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
+      THEN 0.0
+      ELSE dt_seconds
+    END AS held_seconds
+  FROM ordered
+)
 SELECT
   equipment_id,
-  100.0 * SUM(CASE WHEN zone_t >= {{ZONE_T_LO}} AND zone_t <= {{ZONE_T_HI}} THEN 1 ELSE 0 END) / COUNT(*) AS comfort_pct
-FROM history
-WHERE zone_t IS NOT NULL
+  100.0 * SUM(CASE
+    WHEN zone_t >= {{ZONE_T_LO}} AND zone_t <= {{ZONE_T_HI}} THEN held_seconds
+    ELSE 0.0
+  END) / NULLIF(SUM(held_seconds), 0.0) AS comfort_pct
+FROM held
 GROUP BY equipment_id;
 ```
 {% endraw %}
@@ -8159,6 +11021,87 @@ BEGIN
 EXCEPTION
   WHEN invalid_text_representation OR numeric_value_out_of_range THEN RETURN NULL;
 END;
+$$;
+
+-- Sensor sweep assessability (twin of fdd_core::sensor_sweep / pandas sensor_sweep_catalog).
+CREATE OR REPLACE FUNCTION fdd.norm_unit(value text)
+RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT lower(regexp_replace(coalesce(btrim(value), ''), '[^a-zA-Z0-9]', '', 'g'));
+$$;
+
+CREATE OR REPLACE FUNCTION fdd.quantity_for_sql_role(role text)
+RETURNS text
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT CASE btrim(role)
+    WHEN 'oa_t' THEN 'absolute_temperature'
+    WHEN 'rat' THEN 'absolute_temperature'
+    WHEN 'zone_t' THEN 'absolute_temperature'
+    WHEN 'mat' THEN 'absolute_temperature'
+    WHEN 'sat' THEN 'absolute_temperature'
+    WHEN 'chw_supply_t' THEN 'absolute_temperature'
+    WHEN 'chw_return_t' THEN 'absolute_temperature'
+    WHEN 'hw_supply_t' THEN 'absolute_temperature'
+    WHEN 'hw_return_t' THEN 'absolute_temperature'
+    WHEN 'oa_h' THEN 'relative_humidity'
+    WHEN 'ra_h' THEN 'relative_humidity'
+    WHEN 'zone_rh' THEN 'relative_humidity'
+    WHEN 'zone_h' THEN 'relative_humidity'
+    WHEN 'ma_h' THEN 'relative_humidity'
+    WHEN 'sa_h' THEN 'relative_humidity'
+    WHEN 'duct_static' THEN 'air_pressure'
+    ELSE NULL
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION fdd.unit_declares_quantity(unit text, quantity text)
+RETURNS boolean
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT CASE
+    WHEN unit IS NULL OR btrim(unit) = '' THEN false
+    WHEN quantity = 'absolute_temperature' THEN
+      fdd.norm_unit(unit) IN ('f', 'degf', 'fahrenheit', 'c', 'degc', 'celsius')
+    WHEN quantity = 'relative_humidity' THEN
+      fdd.norm_unit(unit) IN ('pct', 'percent', 'rh', 'percentrelativehumidity')
+      OR position('%' IN unit) > 0
+    WHEN quantity = 'air_pressure' THEN
+      fdd.norm_unit(unit) IN ('inwc', 'inh2o', 'inw.c.', 'pa', 'pascal')
+      OR position('w.c' IN lower(unit)) > 0
+    ELSE false
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION fdd.is_expected_constant_sql_role(role text)
+RETURNS boolean
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT CASE
+    WHEN btrim(role) = '' THEN false
+    WHEN fdd.norm_unit(role) LIKE '%sp' THEN true
+    WHEN position('setpoint' IN fdd.norm_unit(role)) > 0 THEN true
+    WHEN position('status' IN fdd.norm_unit(role)) > 0 THEN true
+    WHEN fdd.norm_unit(role) LIKE '%cmd' THEN true
+    WHEN position('command' IN fdd.norm_unit(role)) > 0 THEN true
+    WHEN fdd.norm_unit(role) = 'occmode' THEN true
+    WHEN position('occupied' IN fdd.norm_unit(role)) > 0 THEN true
+    WHEN position('occupancy' IN fdd.norm_unit(role)) > 0 THEN true
+    WHEN fdd.norm_unit(role) = 'loopenabled' THEN true
+    ELSE false
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION fdd.sweep_assessable_sql_role(role text, unit text)
+RETURNS boolean
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT CASE
+    WHEN fdd.is_expected_constant_sql_role(role) THEN false
+    ELSE fdd.unit_declares_quantity(unit, fdd.quantity_for_sql_role(role))
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION fdd.mask_sweep_val(role text, unit text, val double precision)
+RETURNS double precision
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
+  SELECT CASE WHEN fdd.sweep_assessable_sql_role(role, unit) THEN val ELSE NULL END;
 $$;
 ```
 {% endraw %}

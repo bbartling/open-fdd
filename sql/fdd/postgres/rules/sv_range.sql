@@ -2,7 +2,58 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sv_range.sql — Sensor out of hard range (pandas SENSOR_LIMITS catalog)
 -- Do not force everything through oa_t. Humidity/pressure are not temperature-scaled.
-WITH h AS (
+-- Points without a declared binding unit are masked (not assessed), matching pandas sweep_assessable_role.
+WITH bind AS (
+  SELECT
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_t') AS u_oa_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'mat') AS u_mat,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_t') AS u_zone_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'rat') AS u_rat,
+    MAX(a.unit) FILTER (WHERE a.role = 'sat') AS u_sat,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_supply_t') AS u_chw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_return_t') AS u_chw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_supply_t') AS u_hw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_return_t') AS u_hw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_h') AS u_oa_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'ra_h') AS u_ra_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_rh') AS u_zone_rh,
+    MAX(a.unit) FILTER (WHERE a.role = 'ma_h') AS u_ma_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'sa_h') AS u_sa_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'duct_static') AS u_duct_static
+  FROM authorized_series a
+  JOIN equipment e ON e.building_id = a.site_id AND e.equipment_id = a.equipment_id
+  WHERE e.equipment_id = (SELECT MIN(equipment_id) FROM history)
+    AND (SELECT count(*)::int FROM authorized_series c
+         WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id AND c.role = a.role) = 1
+),
+gated AS (
+  SELECT
+    h.equipment_id,
+    h.timestamp_utc,
+    fdd.mask_sweep_val('oa_t', b.u_oa_t, h.oa_t) AS oa_t,
+    fdd.mask_sweep_val('mat', b.u_mat, h.mat) AS mat,
+    fdd.mask_sweep_val('zone_t', b.u_zone_t, h.zone_t) AS zone_t,
+    fdd.mask_sweep_val('rat', b.u_rat, h.rat) AS rat,
+    fdd.mask_sweep_val('sat', b.u_sat, h.sat) AS sat,
+    fdd.mask_sweep_val('chw_supply_t', b.u_chw_supply_t, h.chw_supply_t) AS chw_supply_t,
+    fdd.mask_sweep_val('chw_return_t', b.u_chw_return_t, h.chw_return_t) AS chw_return_t,
+    fdd.mask_sweep_val('hw_supply_t', b.u_hw_supply_t, h.hw_supply_t) AS hw_supply_t,
+    fdd.mask_sweep_val('hw_return_t', b.u_hw_return_t, h.hw_return_t) AS hw_return_t,
+    fdd.mask_sweep_val('oa_h', b.u_oa_h, h.oa_h) AS oa_h,
+    fdd.mask_sweep_val('ra_h', b.u_ra_h, h.ra_h) AS ra_h,
+    fdd.mask_sweep_val('zone_rh', b.u_zone_rh, h.zone_rh) AS zone_rh,
+    fdd.mask_sweep_val('ma_h', b.u_ma_h, h.ma_h) AS ma_h,
+    fdd.mask_sweep_val('sa_h', b.u_sa_h, h.sa_h) AS sa_h,
+    fdd.mask_sweep_val('duct_static', b.u_duct_static, h.duct_static) AS duct_static,
+    h.fan_cmd,
+    h.fan_status,
+    h.pump_status,
+    h.chw_pump_cmd,
+    h.chiller_status
+  FROM history h
+  CROSS JOIN bind b
+),
+h AS (
   SELECT
     equipment_id,
     timestamp_utc,
@@ -18,7 +69,7 @@ WITH h AS (
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       ELSE 1
     END AS energized
-  FROM history
+  FROM gated
 ),
 base AS (
   SELECT

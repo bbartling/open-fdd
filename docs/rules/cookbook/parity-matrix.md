@@ -92,7 +92,7 @@ Per-rule equations, parameters, and shipped SQL / pandas live in the [DataFusion
 |-------|----------------|--------|
 | Window / rolling | `LAG()`, limited `OVER` | `.shift()`, `.rolling()`, multi-sensor sweeps |
 | Confirmation | streak / interval (Wave 2 target) | `confirm_fault()` |
-| Sensor sweeps | Per-column CASE examples | Catalog `sensor_sweep=True` |
+| Sensor sweeps | Catalog roles on `history` + `fdd.mask_sweep_val` (binding unit required; humidity `oa_h`/`ra_h`/`zone_rh`/`ma_h`/`sa_h`; flatline/stale omit duct static; status/cmd/setpoint/mode not assessed) | `SENSOR_LIMITS` / `FLATLINE_SENSOR_ROLES` + `sweep_assessable_role` (`units_map`) |
 | Control hunting | Screening thresholds | Full TV / reversal / cycle metrics |
 
 ---
