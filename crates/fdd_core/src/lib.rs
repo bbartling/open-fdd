@@ -15,8 +15,8 @@ pub use columns::{
 pub use role_rank::{is_zone_t_limit_or_alarm_column, score_column_for_role};
 pub use sensor_sweep::{
     flatline_quantity_allowed, is_expected_constant_role, limits_for_haystack_role,
-    limits_for_quantity, quantity_for_haystack_role, quantity_for_sql_role, sweep_assessable_sql_role,
-    QuantityLimits,
+    limits_for_quantity, quantity_for_haystack_role, quantity_for_sql_role,
+    sweep_assessable_sql_role, QuantityLimits,
 };
 
 pub use error::CoreError;
