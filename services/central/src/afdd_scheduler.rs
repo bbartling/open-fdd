@@ -205,7 +205,7 @@ impl AfddSchedulerRuntime {
         else {
             return Ok(AfddSchedulerCheckpointStore::default());
         };
-        Ok(serde_json::from_slice(&bytes).context("decode AFDD scheduler checkpoints")?)
+        serde_json::from_slice(&bytes).context("decode AFDD scheduler checkpoints")
     }
 
     fn persist_checkpoint_store(&self, store: &AfddSchedulerCheckpointStore) -> Result<()> {
@@ -1244,6 +1244,10 @@ mod contract_timescale {
         .await;
     }
 
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
+    )]
     #[tokio::test]
     async fn t1403_1_recorded_run_window_equals_payload_lookback() {
         let Some(url) = fixture_database_url() else {
@@ -1304,6 +1308,10 @@ mod contract_timescale {
         let _ = tsdb.purge_building(&site).await;
     }
 
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
+    )]
     #[tokio::test]
     async fn t1403_2_three_fixture_sites_and_unknown_id() {
         let Some(url) = fixture_database_url() else {
