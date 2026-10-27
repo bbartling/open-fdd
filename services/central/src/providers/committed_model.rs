@@ -302,12 +302,12 @@ pub fn model_from_sparql_rows(
             unit: row.source_unit.clone(),
             canonical_unit: row.canonical_unit.clone(),
             kind: row.kind.clone(),
-            quantity: None,
+            quantity: row.quantity.clone(),
             provisional: row.provisional,
             display_name: None,
-            history_mode: None,
-            cadence_secs: None,
-            heartbeat_secs: None,
+            history_mode: row.history_mode.clone(),
+            cadence_secs: row.cadence_secs,
+            heartbeat_secs: row.heartbeat_secs,
         };
         let equip =
             by_equip
@@ -420,6 +420,10 @@ pub fn validate_model(model: &CommittedModel) -> Result<(), String> {
                 canonical_unit: point.canonical_unit.clone(),
                 kind: point.kind.clone(),
                 provisional: point.provisional,
+                quantity: point.quantity.clone(),
+                history_mode: point.history_mode.clone(),
+                cadence_secs: point.cadence_secs,
+                heartbeat_secs: point.heartbeat_secs,
             });
         }
     }
@@ -1145,6 +1149,159 @@ mod tests {
         assert_eq!(devices, vec!["AHU_1", "VAV_1"]);
         assert_eq!(plan.groups[0].equip_type, "ahu");
         assert_eq!(plan.groups[1].equip_type, "vav");
+    }
+
+    fn expectation_snapshot(extra: &str) -> String {
+        format!(
+            r#"
+@prefix ing: <urn:openfdd:ingest:v1:> .
+<urn:openfdd:binding/sat> ing:tenantRef "tenant-a" ;
+  ing:siteRef "site-a" ;
+  ing:providerInstanceId "nf-conn-a" ;
+  ing:providerInstanceRef <urn:openfdd:provider-instance/nf-conn-a> ;
+  ing:equipmentRef "AHU_1" ;
+  ing:pointRef "urn:openfdd:point:site-a:AHU_1:sat" ;
+  ing:sourcePointId "uuid-sat" ;
+  ing:canonicalRole "sat" ;
+  {extra}
+  ing:equipType "ahu" .
+"#
+        )
+    }
+
+    fn sparql_scope() -> IngestSparqlScope {
+        IngestSparqlScope::new(
+            "tenant-a",
+            "site-a",
+            "urn:openfdd:ingest:v1:graph/tenant-a/site-a",
+            "nf-conn-a",
+        )
+    }
+
+    fn revision_for(extra: &str) -> Result<(String, CommittedModel), String> {
+        let rows = compile_bindings_from_snapshot(&expectation_snapshot(extra), &sparql_scope())?;
+        let model = model_from_sparql_rows(&scope(), &rows)?;
+        Ok((revision_id(&model)?, model))
+    }
+
+    #[test]
+    fn binding_expectations_enter_the_plan_and_the_revision() {
+        let base = r#"ing:approvalState "approved" ; ing:sourceUnit "degF" ; ing:quantity "temperature" ; ing:historyMode "interval" ; ing:cadenceSecs "300" ;"#;
+        let (base_rev, model) = revision_for(base).unwrap();
+        let point = &model.equipment[0].points[0];
+        assert_eq!(point.history_mode.as_deref(), Some("interval"));
+        assert_eq!(point.cadence_secs, Some(300));
+        assert_eq!(point.quantity.as_deref(), Some("temperature"));
+        let mut store = CommittedModelStore::default();
+        store.try_activate(None, &model).unwrap();
+        let plan = store.active_plan("tenant-a", "site-a").unwrap();
+        assert_eq!(plan.groups[0].points[0].cadence_secs, Some(300));
+        assert_eq!(
+            plan.groups[0].points[0].history_mode.as_deref(),
+            Some("interval")
+        );
+
+        // Control: the same snapshot compiles to the same revision.
+        assert_eq!(revision_for(base).unwrap().0, base_rev);
+
+        let variants = [
+            (
+                "cadence",
+                r#"ing:approvalState "approved" ; ing:sourceUnit "degF" ; ing:quantity "temperature" ; ing:historyMode "interval" ; ing:cadenceSecs "900" ;"#,
+            ),
+            (
+                "cov",
+                r#"ing:approvalState "approved" ; ing:sourceUnit "degF" ; ing:quantity "temperature" ; ing:historyMode "cov" ;"#,
+            ),
+            (
+                "heartbeat",
+                r#"ing:approvalState "approved" ; ing:sourceUnit "degF" ; ing:quantity "temperature" ; ing:historyMode "cov" ; ing:heartbeatSecs "3600" ;"#,
+            ),
+            (
+                "unit",
+                r#"ing:approvalState "approved" ; ing:sourceUnit "degC" ; ing:quantity "temperature" ; ing:historyMode "interval" ; ing:cadenceSecs "300" ;"#,
+            ),
+            (
+                "quantity",
+                r#"ing:approvalState "approved" ; ing:sourceUnit "degF" ; ing:quantity "other" ; ing:historyMode "interval" ; ing:cadenceSecs "300" ;"#,
+            ),
+            (
+                "approval",
+                r#"ing:approvalState "unresolved" ; ing:sourceUnit "degF" ; ing:quantity "temperature" ; ing:historyMode "interval" ; ing:cadenceSecs "300" ;"#,
+            ),
+            (
+                "unknown",
+                r#"ing:approvalState "approved" ; ing:sourceUnit "degF" ; ing:quantity "temperature" ;"#,
+            ),
+        ];
+        let mut seen = vec![base_rev];
+        for (label, extra) in variants {
+            let (rev, _) = revision_for(extra).unwrap_or_else(|e| panic!("{label}: {e}"));
+            assert!(!seen.contains(&rev), "{label} did not change the revision");
+            seen.push(rev);
+        }
+
+        // No stated expectation stays unknown in the plan, never a default cadence.
+        let (_, unknown) = revision_for(variants[6].1).unwrap();
+        assert_eq!(unknown.equipment[0].points[0].history_mode, None);
+        assert_eq!(unknown.equipment[0].points[0].cadence_secs, None);
+    }
+
+    #[test]
+    fn malformed_binding_expectations_are_rejected() {
+        let cases = [
+            (
+                "words",
+                r#"ing:approvalState "approved" ; ing:historyMode "interval" ; ing:cadenceSecs "5m" ;"#,
+            ),
+            (
+                "negative",
+                r#"ing:approvalState "approved" ; ing:historyMode "interval" ; ing:cadenceSecs "-300" ;"#,
+            ),
+            (
+                "zero",
+                r#"ing:approvalState "approved" ; ing:historyMode "interval" ; ing:cadenceSecs "0" ;"#,
+            ),
+            (
+                "too long",
+                r#"ing:approvalState "approved" ; ing:historyMode "interval" ; ing:cadenceSecs "86401" ;"#,
+            ),
+            (
+                "no cadence",
+                r#"ing:approvalState "approved" ; ing:historyMode "interval" ;"#,
+            ),
+            (
+                "orphan cadence",
+                r#"ing:approvalState "approved" ; ing:cadenceSecs "300" ;"#,
+            ),
+            (
+                "interval heartbeat",
+                r#"ing:approvalState "approved" ; ing:historyMode "interval" ; ing:cadenceSecs "300" ; ing:heartbeatSecs "600" ;"#,
+            ),
+            (
+                "cov cadence",
+                r#"ing:approvalState "approved" ; ing:historyMode "cov" ; ing:cadenceSecs "300" ;"#,
+            ),
+            (
+                "cov heartbeat range",
+                r#"ing:approvalState "approved" ; ing:historyMode "cov" ; ing:heartbeatSecs "604801" ;"#,
+            ),
+            (
+                "mode",
+                r#"ing:approvalState "approved" ; ing:historyMode "poll" ; ing:cadenceSecs "300" ;"#,
+            ),
+            (
+                "blank",
+                r#"ing:approvalState "approved" ; ing:historyMode "interval" ; ing:cadenceSecs " " ;"#,
+            ),
+            (
+                "quantity",
+                r#"ing:approvalState "approved" ; ing:quantity "air temp" ;"#,
+            ),
+        ];
+        for (label, extra) in cases {
+            assert!(revision_for(extra).is_err(), "{label} was accepted");
+        }
     }
 
     #[test]

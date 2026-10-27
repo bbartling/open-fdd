@@ -472,6 +472,7 @@ mod tests {
 
     async fn reset(pool: &PgPool, site: &str) {
         for sql in [
+            "DELETE FROM fdd_interval_result WHERE site_id = $1",
             "DELETE FROM fdd_incremental_checkpoint WHERE site_id = $1",
             "DELETE FROM sample_changed_range WHERE site_id = $1",
             "DELETE FROM data_revision WHERE site_id = $1",

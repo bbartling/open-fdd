@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::{PgPool, Row};
 
+use super::coverage::COMPLETE;
 use super::model::{JobState, QueueError};
 
 pub const NOT_SCHEDULED: &str = "not_scheduled";
@@ -44,6 +45,13 @@ pub struct WindowState {
     pub end: DateTime<Utc>,
     pub state: String,
     pub code: Option<String>,
+    /// Job coverage summary. Only `complete` verifies the window.
+    pub coverage: String,
+}
+
+/// A committed window whose coverage was not assessed as complete is a hole.
+fn verified(window: &WindowState) -> bool {
+    window.state == JobState::Committed.as_str() && window.coverage == COMPLETE
 }
 
 /// Advance from `current` (or the earliest window when there is no cursor yet).
@@ -62,14 +70,16 @@ pub fn walk(
             .iter()
             .filter(|window| window.start <= cursor && cursor < window.end)
             .collect();
-        if let Some(blocker) = covering
-            .iter()
-            .find(|window| window.state != JobState::Committed.as_str())
-        {
+        if let Some(blocker) = covering.iter().find(|window| !verified(window)) {
+            let code = if blocker.state == JobState::Committed.as_str() {
+                Some(blocker.coverage.clone())
+            } else {
+                blocker.code.clone()
+            };
             let hole = CursorHole {
                 at: cursor,
                 state: blocker.state.clone(),
-                code: blocker.code.clone(),
+                code,
             };
             return Some((cursor, Some(hole)));
         }
@@ -109,7 +119,7 @@ pub async fn advance_postgres(
     .await
     .map_err(db_err)?;
     let rows = sqlx::query(
-        "SELECT logical_window_start, logical_window_end, state, safe_error_code
+        "SELECT logical_window_start, logical_window_end, state, safe_error_code, coverage
          FROM ingest_job
          WHERE tenant_id = $1 AND canonical_site = $2 AND provider_instance_id = $3
            AND device_id = $4 AND model_revision = $5
@@ -132,6 +142,7 @@ pub async fn advance_postgres(
             end: row.try_get("logical_window_end").map_err(db_err)?,
             state: row.try_get("state").map_err(db_err)?,
             code: row.try_get("safe_error_code").map_err(db_err)?,
+            coverage: row.try_get("coverage").map_err(db_err)?,
         });
     }
     let Some((verified_through, hole)) = walk(current, &windows) else {
@@ -202,6 +213,11 @@ mod tests {
             end: at(hour + 1),
             state: state.into(),
             code: code.map(str::to_string),
+            coverage: if state == "committed" {
+                COMPLETE.into()
+            } else {
+                "not_assessed".into()
+            },
         }
     }
 
@@ -248,6 +264,22 @@ mod tests {
         assert_eq!(walk(None, &all).unwrap(), (at(2), None));
     }
 
+    #[test]
+    fn committed_but_not_assessed_window_holds_the_cursor() {
+        let mut unknown = window(1, "committed", None);
+        unknown.coverage = "not_assessed".into();
+        let windows = vec![
+            window(0, "committed", None),
+            unknown,
+            window(2, "committed", None),
+        ];
+        let (through, hole) = walk(None, &windows).unwrap();
+        assert_eq!(through, at(1));
+        let hole = hole.unwrap();
+        assert_eq!(hole.state, "committed");
+        assert_eq!(hole.code.as_deref(), Some("not_assessed"));
+    }
+
     fn pg_key(tenant: &str) -> CursorKey {
         CursorKey {
             tenant_id: tenant.into(),
@@ -281,10 +313,18 @@ mod tests {
     }
 
     async fn pg_set(pool: &PgPool, job: uuid::Uuid, state: &str, code: Option<&str>) {
-        sqlx::query("UPDATE ingest_job SET state = $2, safe_error_code = $3 WHERE job_id = $1")
-            .bind(job.to_string())
-            .bind(state)
-            .bind(code)
+        let coverage = if state == "committed" {
+            COMPLETE
+        } else {
+            "not_assessed"
+        };
+        sqlx::query(
+            "UPDATE ingest_job SET state = $2, safe_error_code = $3, coverage = $4 WHERE job_id = $1",
+        )
+        .bind(job.to_string())
+        .bind(state)
+        .bind(code)
+        .bind(coverage)
             .execute(pool)
             .await
             .unwrap();

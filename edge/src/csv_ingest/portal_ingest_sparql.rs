@@ -54,7 +54,18 @@ pub struct IngestBindingRow {
     pub canonical_unit: Option<String>,
     pub kind: Option<String>,
     pub provisional: bool,
+    /// Binding expectation. `None` means the binding states no expectation, so
+    /// coverage for the point stays not assessed.
+    pub quantity: Option<String>,
+    pub history_mode: Option<String>,
+    pub cadence_secs: Option<u64>,
+    pub heartbeat_secs: Option<u64>,
 }
+
+/// Largest interval cadence a binding may declare (one day).
+pub const MAX_BINDING_CADENCE_SECS: u64 = 86_400;
+/// Largest COV heartbeat a binding may declare (seven days).
+pub const MAX_BINDING_HEARTBEAT_SECS: u64 = 604_800;
 
 #[derive(Debug, Clone)]
 pub struct IngestSparqlScope {
@@ -191,7 +202,7 @@ fn select_query(graph: &str, limit: usize) -> Result<String, String> {
     }
     Ok(format!(
         r#"PREFIX ing: <urn:openfdd:ingest:v1:>
-SELECT ?tenant ?site ?provider ?device ?point ?remotePoint ?role ?selection ?equipType ?sourceUnit ?kind ?canonicalUnit ?provisional ?connection
+SELECT ?tenant ?site ?provider ?device ?point ?remotePoint ?role ?selection ?equipType ?sourceUnit ?kind ?canonicalUnit ?provisional ?quantity ?historyMode ?cadenceSecs ?heartbeatSecs ?connection
 WHERE {{
   GRAPH <{graph}> {{
     ?binding ing:tenantRef ?tenant ;
@@ -208,6 +219,10 @@ WHERE {{
     OPTIONAL {{ ?binding ing:kind ?kind }}
     OPTIONAL {{ ?binding ing:canonicalUnit ?canonicalUnit }}
     OPTIONAL {{ ?binding ing:provisional ?provisional }}
+    OPTIONAL {{ ?binding ing:quantity ?quantity }}
+    OPTIONAL {{ ?binding ing:historyMode ?historyMode }}
+    OPTIONAL {{ ?binding ing:cadenceSecs ?cadenceSecs }}
+    OPTIONAL {{ ?binding ing:heartbeatSecs ?heartbeatSecs }}
   }}
 }}
 ORDER BY ?device ?point
@@ -396,6 +411,10 @@ fn row_from_terms(
             terms.get("provisional").map(|t| t.value.as_str()),
             Some("true" | "1")
         ),
+        quantity: optional_term(terms, "quantity")?,
+        history_mode: optional_term(terms, "historyMode")?.map(|raw| selection_token(&raw)),
+        cadence_secs: optional_seconds(terms, "cadenceSecs")?,
+        heartbeat_secs: optional_seconds(terms, "heartbeatSecs")?,
     };
     validate_row_shape(&row)?;
     Ok(row)
@@ -407,6 +426,53 @@ fn optional_term(terms: &BTreeMap<String, TermVal>, name: &str) -> Result<Option
         Some(term) if term.value.trim().is_empty() => Err(format!("malformed {name}")),
         Some(term) => Ok(Some(term.value.trim().to_string())),
     }
+}
+
+/// A whole number of seconds. Anything else is malformed, never dropped.
+fn optional_seconds(terms: &BTreeMap<String, TermVal>, name: &str) -> Result<Option<u64>, String> {
+    let Some(raw) = optional_term(terms, name)? else {
+        return Ok(None);
+    };
+    raw.parse::<u64>()
+        .map(Some)
+        .map_err(|_| format!("malformed {name}"))
+}
+
+/// Interval needs a cadence; COV may carry a heartbeat; neither number is
+/// meaningful without its mode.
+pub fn validate_expectation(row: &IngestBindingRow) -> Result<(), String> {
+    if let Some(quantity) = row.quantity.as_deref() {
+        validate_slug("quantity", quantity, 64)?;
+    }
+    match row.history_mode.as_deref() {
+        None => {
+            if row.cadence_secs.is_some() || row.heartbeat_secs.is_some() {
+                return Err("cadence or heartbeat requires a history mode".into());
+            }
+        }
+        Some("interval") => {
+            match row.cadence_secs {
+                Some(secs) if (1..=MAX_BINDING_CADENCE_SECS).contains(&secs) => {}
+                Some(_) => return Err("malformed cadenceSecs".into()),
+                None => return Err("interval history mode requires cadenceSecs".into()),
+            }
+            if row.heartbeat_secs.is_some() {
+                return Err("heartbeatSecs applies only to cov history mode".into());
+            }
+        }
+        Some("cov") => {
+            if row.cadence_secs.is_some() {
+                return Err("cadenceSecs applies only to interval history mode".into());
+            }
+            if let Some(secs) = row.heartbeat_secs {
+                if !(1..=MAX_BINDING_HEARTBEAT_SECS).contains(&secs) {
+                    return Err("malformed heartbeatSecs".into());
+                }
+            }
+        }
+        Some(other) => return Err(format!("malformed historyMode {other}")),
+    }
+    Ok(())
 }
 
 fn selection_token(raw: &str) -> String {
@@ -432,6 +498,7 @@ fn validate_row_shape(row: &IngestBindingRow) -> Result<(), String> {
     if row.semantic_point_id == row.source_point_id {
         return Err("semantic point id must be distinct from the provider source id".into());
     }
+    validate_expectation(row)?;
     Ok(())
 }
 

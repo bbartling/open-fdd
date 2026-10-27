@@ -2,9 +2,13 @@
 //!
 //! A provider page or a checkpoint is not coverage. Each expected point is
 //! `present`, `no_sample_expected`, `no_sample_received`, `late_arrival`,
-//! `source_unavailable`, `genuine_gap`, or `expectation_unspecified`.
+//! `source_unavailable`, `genuine_gap`, `expectation_unspecified`, or
+//! `not_assessed`.
 //! Commit is allowed only when every point is accounted for by a sample, an
 //! explicit late arrival, or a cadence/COV rule that expected nothing.
+//! Samples for a point with no binding expectation are written but stay
+//! `not_assessed`, and a window where nothing was expected or observed is
+//! `not_assessed` too. Only `complete` counts toward the verified cursor.
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde::Serialize;
@@ -18,11 +22,14 @@ pub const GENUINE_GAP: &str = "genuine_gap";
 pub const EXPECTATION_UNSPECIFIED: &str = "expectation_unspecified";
 pub const COMPLETE: &str = "complete";
 pub const INCOMPLETE: &str = "incomplete";
+/// Point disposition and window summary when the binding gives no expectation
+/// or the window expected and observed nothing. Never reads as complete.
+pub const NOT_ASSESSED: &str = "not_assessed";
 
 pub const MAX_POINTS: usize = 2_000;
 pub const MAX_TIMESTAMPS: usize = 50_000;
 
-const ACCOUNTED: &[&str] = &[PRESENT, NO_SAMPLE_EXPECTED, LATE_ARRIVAL];
+const ACCOUNTED: &[&str] = &[PRESENT, NO_SAMPLE_EXPECTED, LATE_ARRIVAL, NOT_ASSESSED];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expectation {
@@ -91,7 +98,7 @@ impl CoverageReport {
 
     pub fn allows_commit(&self) -> bool {
         !self.points.is_empty()
-            && self.summary == COMPLETE
+            && (self.summary == COMPLETE || self.summary == NOT_ASSESSED)
             && self
                 .points
                 .iter()
@@ -226,6 +233,12 @@ pub fn reconcile(input: &ReconcileInput<'_>) -> Result<CoverageReport, CoverageE
             .any(|point| !ACCOUNTED.contains(&point.disposition.as_str()))
     {
         INCOMPLETE
+    } else if points.iter().any(|point| point.disposition == NOT_ASSESSED)
+        || points
+            .iter()
+            .all(|point| point.expected_slots == 0 && point.observed_slots == 0)
+    {
+        NOT_ASSESSED
     } else {
         COMPLETE
     };
@@ -276,7 +289,7 @@ fn assess_point(
             if in_window.is_empty() {
                 row(expected, EXPECTATION_UNSPECIFIED, 0, 0, 0)
             } else {
-                row(expected, PRESENT, 0, u32_len(in_window.len()), 0)
+                row(expected, NOT_ASSESSED, 0, u32_len(in_window.len()), 0)
             }
         }
         Expectation::Interval { cadence_secs } => assess_interval(
@@ -736,6 +749,59 @@ mod tests {
         assert!(report.allows_commit());
         assert_eq!(report.points[0].disposition, NO_SAMPLE_EXPECTED);
         assert_eq!(report.points[0].expected_slots, 0);
+        // Zero expected and zero observed slots is never a complete window.
+        assert_eq!(report.summary, NOT_ASSESSED);
+        assert_ne!(report.summary, COMPLETE);
+    }
+
+    #[test]
+    fn unspecified_samples_commit_but_stay_not_assessed() {
+        let start = ts(2026, 10, 19, 12, 0);
+        let end = ts(2026, 10, 19, 13, 0);
+        let report = run(
+            start,
+            end,
+            &[PointExpectation {
+                point_id: "raw".into(),
+                expectation: Expectation::Unspecified,
+            }],
+            &[obs("raw", &[start])],
+            &[],
+            true,
+        );
+        assert_eq!(report.points[0].disposition, NOT_ASSESSED);
+        assert_eq!(report.points[0].observed_slots, 1);
+        assert_eq!(report.summary, NOT_ASSESSED);
+        assert!(report.allows_commit());
+
+        // One unknown point keeps a window with an assessed point not assessed.
+        let mixed = run(
+            start,
+            end,
+            &[
+                interval("sat", 3600),
+                PointExpectation {
+                    point_id: "raw".into(),
+                    expectation: Expectation::Unspecified,
+                },
+            ],
+            &[obs("sat", &[start]), obs("raw", &[start])],
+            &[],
+            true,
+        );
+        assert_eq!(mixed.points[0].disposition, PRESENT);
+        assert_eq!(mixed.summary, NOT_ASSESSED);
+
+        // Control: the same window with only the cadence-bound point is complete.
+        let bound = run(
+            start,
+            end,
+            &[interval("sat", 3600)],
+            &[obs("sat", &[start])],
+            &[],
+            true,
+        );
+        assert_eq!(bound.summary, COMPLETE);
     }
 
     #[test]
