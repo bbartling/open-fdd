@@ -42,6 +42,10 @@ jobs:
           python3 scripts/test_ghcr_newest_by_created.py
           bash -n scripts/test_data_safe_defaults.sh
           ./scripts/test_data_safe_defaults.sh
+          bash -n scripts/ci/check_compose_env_passthrough.sh
+          ./scripts/ci/check_compose_env_passthrough.sh
+          bash -n tests/ops/test_assert_local_stack.sh
+          ./tests/ops/test_assert_local_stack.sh
           python3 scripts/timescale/test_data_safe_seed.py
           python3 scripts/archive/verify_ot_edge_snapshot.py
 

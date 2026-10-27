@@ -9,7 +9,8 @@
 #   (<COMPOSE_PROJECT_NAME>_openfdd-workspace / _openfdd-timescale).
 # - SQL schema/rule packs come from the image (/app/sql); no per-file binds.
 #   Central applies the forward-only schema itself on boot.
-# - NF provider creds are forwarded by name; provider_sites refers to them as env:NF_*.
+# - NF provider creds: optional gitignored env file (OPENFDD_NF_PROVIDER_CREDENTIALS_ENV);
+#   provider_sites JSON uses env:NAME refs. Stack secrets stay in repo-root .env only.
 # Requires Docker Compose >= 2.24.4 for !reset / !override.
 
 services:
@@ -17,12 +18,25 @@ services:
     image: ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG=sha-<7>}
     build: !reset null
     pull_policy: missing
+    env_file:
+      - path: ${OPENFDD_NF_PROVIDER_CREDENTIALS_ENV:-../config/nf/provider-credentials.env}
+        required: false
     environment:
       OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}
       OPENFDD_DATABASE_URL: ${OPENFDD_DATABASE_URL:?set OPENFDD_DATABASE_URL in .env}
       OPENFDD_SQL_ROOT: /app/sql/fdd
       OPENFDD_PROVIDER_SITES: ${OPENFDD_PROVIDER_SITES:-}
       OPENFDD_PROVIDER_POLL: ${OPENFDD_PROVIDER_POLL:-}
+      OPENFDD_PROVIDER_TICK_SECS: ${OPENFDD_PROVIDER_TICK_SECS:-}
+      OPENFDD_INGEST_CATCHUP_HOURS: ${OPENFDD_INGEST_CATCHUP_HOURS:-}
+      OPENFDD_INGEST_DAILY_CATCHUP_DAYS: ${OPENFDD_INGEST_DAILY_CATCHUP_DAYS:-}
+      OPENFDD_INGEST_PUBLICATION_DELAY_SECS: ${OPENFDD_INGEST_PUBLICATION_DELAY_SECS:-}
+      OPENFDD_AFDD_MODE: ${OPENFDD_AFDD_MODE:-}
+      OPENFDD_AFDD_BUILDING_ID: ${OPENFDD_AFDD_BUILDING_ID:-}
+      OPENFDD_AFDD_BUILDING_IDS: ${OPENFDD_AFDD_BUILDING_IDS:-}
+      OPENFDD_AFDD_INTERVAL_MINUTES: ${OPENFDD_AFDD_INTERVAL_MINUTES:-}
+      OPENFDD_AFDD_LOOKBACK_VALUE: ${OPENFDD_AFDD_LOOKBACK_VALUE:-}
+      OPENFDD_AFDD_LOOKBACK_UNIT: ${OPENFDD_AFDD_LOOKBACK_UNIT:-}
       NFURL: ${NFURL:-}
       NF_CLIENT_ID: ${NF_CLIENT_ID:-}
       NF_CLIENT_SECRET: ${NF_CLIENT_SECRET:-}

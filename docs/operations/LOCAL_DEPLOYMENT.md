@@ -73,9 +73,16 @@ product code.
    as the shape. Each file is one site object or a one-element array. Credential
    fields use distinct `env:NAME` refs per site, for example
    `env:NF_CLIENT_SECRET_SITE_A` and `env:NF_CLIENT_SECRET_SITE_B`.
-2. Add those names to the gitignored repo-root `.env`. `docker/compose.local.yml`
-   forwards provider-related variables into `central` by name (Wave 1a); add a
-   new `NF_CLIENT_*` pair to `.env` when you add a site — do not commit secrets.
+2. Put NF portal credential values in a **dedicated gitignored env file**, not the
+   whole stack `.env`. Default path: `config/nf/provider-credentials.env` (copy
+   from [`config/nf/provider-credentials.env.example`](../../config/nf/provider-credentials.env.example),
+   `chmod 600`). Override with `OPENFDD_NF_PROVIDER_CREDENTIALS_ENV` in repo-root
+   `.env` (for example `~/.config/openfdd/nf-provider-credentials.env`). Only
+   names referenced as `env:...` in provider JSON belong in that file — not
+   `OPENFDD_JWT_SECRET`, Timescale passwords, or other stack secrets.
+   `docker/compose.local.yml` loads that file into `central` optionally; legacy
+   single-site `NF_CLIENT_ID` / `NF_CLIENT_SECRET` / `NFURL` may still be set in
+   repo-root `.env` and are forwarded by name when present.
 3. Mount the sites directory read-only on central. The default local overlay
    binds `../scripts/nf` at `/config/nf:ro`. Prefer a host path outside the
    checkout, for example bind `~/.config/openfdd/sites` to `/config/nf/sites:ro`
@@ -109,6 +116,30 @@ Closeout runs on an owned local stack (Codex-owned qualification). The Railway p
 Maintenance prunes stopped containers and dangling images. It does not prune volumes. Volume prune requires `./scripts/openfdd_docker_maintenance.sh --prune-volumes --i-understand-data-loss` (or `--prune-volumes` with `OPENFDD_ALLOW_DESTRUCTIVE_DB=1`).
 
 Leave `OPENFDD_RESET_DB` unset on updates. A one-time historian purge is `scripts/timescale/purge_historian.py` with a fresh `OPENFDD_RESET_DB` token and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` (or `--reset-db` and `--i-understand-data-loss`). The same token does not purge again. Central startup uses that same rule and refuses a token that lacks the allow flag. Building 50 reseed (`scripts/timescale/auto_seed.py`) copies into an empty site. It deletes that site only when `OPENFDD_SEED_FORCE=1` and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` are both set.
+
+## Compose environment (central)
+
+The local stack merges `docker/compose.portal.yml`, `docker/compose.timescale.yml`, and `docker/compose.local.yml`. Operator tuning in repo-root `.env` is forwarded into the `central` service:
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENFDD_INGEST_CATCHUP_HOURS` | Hourly ingest catch-up bound per device |
+| `OPENFDD_INGEST_DAILY_CATCHUP_DAYS` | Daily ingest replay span |
+| `OPENFDD_INGEST_PUBLICATION_DELAY_SECS` | Delay after local midnight before daily windows enqueue |
+| `OPENFDD_PROVIDER_TICK_SECS` | Provider poller / ingest worker tick |
+| `OPENFDD_AFDD_MODE` | `bulk` (default) or `continuous` |
+| `OPENFDD_AFDD_BUILDING_ID` | Optional single-building AFDD scope |
+| `OPENFDD_AFDD_BUILDING_IDS` | Optional comma-separated building list |
+| `OPENFDD_AFDD_INTERVAL_MINUTES` | Continuous AFDD cadence |
+| `OPENFDD_AFDD_LOOKBACK_VALUE` / `OPENFDD_AFDD_LOOKBACK_UNIT` | Rolling lookback per AFDD cycle |
+
+Unset names stay unset inside central (compose uses `${VAR:-}`).
+
+The **Multi-site NF providers** section above covers site JSON paths and the
+narrow `OPENFDD_NF_PROVIDER_CREDENTIALS_ENV` file for per-site `env:NAME`
+values. See `.env.example` and [`INGEST_QUEUE.md`](INGEST_QUEUE.md).
+
+Post-re-pin smoke: `./scripts/ops/assert_local_stack_after_repin.sh sha-<7>` reads the build id from `GET /api/version` (anonymous `/api/health` is liveness-only).
 
 ## Anti-patterns
 

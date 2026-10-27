@@ -1,5 +1,11 @@
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
+## 2026-10-27 — 4.0.6 W1a repin assert + compose env passthrough
+
+- `assert_local_stack_after_repin.sh` reads build id from `GET /api/version`, prints explicit PASS/FAIL lines and `SUMMARY:`, optional `--skip-containers` for CI stub tests.
+- Portal/local compose forwards ingest, provider tick, and `OPENFDD_AFDD_*` vars; local overlay loads optional `OPENFDD_NF_PROVIDER_CREDENTIALS_ENV` (not repo-root `.env`).
+- CI: `scripts/ci/check_compose_env_passthrough.sh`, `tests/ops/test_assert_local_stack.sh` (T1401-1 / T1401-3 / T1403-3). Docs: `.env.example`, `LOCAL_DEPLOYMENT.md`. No VERSION bump.
+
 ## 2026-10-27 — CSP style-src split (4.0.6 W1c / #1130)
 
 - `frontend/web/nginx.conf`: `style-src` / `style-src-elem` `'self'` only; `style-src-attr 'unsafe-inline'` for Plotly attributes.
