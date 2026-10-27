@@ -539,14 +539,16 @@ pub fn site_backfill_payload_hash(
     start: DateTime<Utc>,
     end: DateTime<Utc>,
 ) -> String {
+    let start_text = start.to_rfc3339();
+    let end_text = end.to_rfc3339();
     scoped_digest(&[
         "site_backfill",
         tenant_id,
         canonical_site,
         provider_instance_id,
         model_revision,
-        start.to_rfc3339(),
-        end.to_rfc3339(),
+        start_text.as_str(),
+        end_text.as_str(),
     ])
 }
 

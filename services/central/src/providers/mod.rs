@@ -564,7 +564,7 @@ fn plan_point_rollups(
         .groups
         .iter()
         .filter(|group| {
-            super::http_policy::provider_ids_equivalent(
+            crate::providers::http_policy::provider_ids_equivalent(
                 &group.provider_instance_id,
                 &site.provider_instance_id,
             )
@@ -575,7 +575,7 @@ fn plan_point_rollups(
         .withheld
         .iter()
         .filter(|row| {
-            super::http_policy::provider_ids_equivalent(
+            crate::providers::http_policy::provider_ids_equivalent(
                 &row.provider_instance_id,
                 &site.provider_instance_id,
             )
