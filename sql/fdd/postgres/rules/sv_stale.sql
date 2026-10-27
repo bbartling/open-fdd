@@ -8,7 +8,51 @@
 -- window: one live sensor is enough to prove the feed is still updating.
 -- {{STALE_ROWS}} / {{STALE_ROWS_PRECEDING}} are derived from STALE_HOURS and
 -- POLL_SECONDS (DataFusion requires literal ROWS frame bounds).
-WITH win AS (
+-- Binding unit required per role (fdd.mask_sweep_val); duct static is not in the stale AND set.
+WITH bind AS (
+  SELECT
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_t') AS u_oa_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'mat') AS u_mat,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_t') AS u_zone_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'rat') AS u_rat,
+    MAX(a.unit) FILTER (WHERE a.role = 'sat') AS u_sat,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_supply_t') AS u_chw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'chw_return_t') AS u_chw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_supply_t') AS u_hw_supply_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'hw_return_t') AS u_hw_return_t,
+    MAX(a.unit) FILTER (WHERE a.role = 'oa_h') AS u_oa_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'ra_h') AS u_ra_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'zone_rh') AS u_zone_rh,
+    MAX(a.unit) FILTER (WHERE a.role = 'ma_h') AS u_ma_h,
+    MAX(a.unit) FILTER (WHERE a.role = 'sa_h') AS u_sa_h
+  FROM authorized_series a
+  JOIN equipment e ON e.building_id = a.site_id AND e.equipment_id = a.equipment_id
+  WHERE e.equipment_id = (SELECT MIN(equipment_id) FROM history)
+    AND (SELECT count(*)::int FROM authorized_series c
+         WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id AND c.role = a.role) = 1
+),
+gated AS (
+  SELECT
+    h.equipment_id,
+    h.timestamp_utc,
+    fdd.mask_sweep_val('oa_t', b.u_oa_t, h.oa_t) AS oa_t,
+    fdd.mask_sweep_val('mat', b.u_mat, h.mat) AS mat,
+    fdd.mask_sweep_val('zone_t', b.u_zone_t, h.zone_t) AS zone_t,
+    fdd.mask_sweep_val('rat', b.u_rat, h.rat) AS rat,
+    fdd.mask_sweep_val('sat', b.u_sat, h.sat) AS sat,
+    fdd.mask_sweep_val('chw_supply_t', b.u_chw_supply_t, h.chw_supply_t) AS chw_supply_t,
+    fdd.mask_sweep_val('chw_return_t', b.u_chw_return_t, h.chw_return_t) AS chw_return_t,
+    fdd.mask_sweep_val('hw_supply_t', b.u_hw_supply_t, h.hw_supply_t) AS hw_supply_t,
+    fdd.mask_sweep_val('hw_return_t', b.u_hw_return_t, h.hw_return_t) AS hw_return_t,
+    fdd.mask_sweep_val('oa_h', b.u_oa_h, h.oa_h) AS oa_h,
+    fdd.mask_sweep_val('ra_h', b.u_ra_h, h.ra_h) AS ra_h,
+    fdd.mask_sweep_val('zone_rh', b.u_zone_rh, h.zone_rh) AS zone_rh,
+    fdd.mask_sweep_val('ma_h', b.u_ma_h, h.ma_h) AS ma_h,
+    fdd.mask_sweep_val('sa_h', b.u_sa_h, h.sa_h) AS sa_h
+  FROM history h
+  CROSS JOIN bind b
+),
+win AS (
   SELECT
     equipment_id,
     timestamp_utc,
@@ -41,8 +85,20 @@ WITH win AS (
       - MIN(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_hw_return_t,
     COUNT(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_oa_h,
     MAX(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
-      - MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_oa_h
-  FROM history
+      - MIN(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_oa_h,
+    COUNT(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_ra_h,
+    MAX(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(ra_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_ra_h,
+    COUNT(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_zone_rh,
+    MAX(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(zone_rh) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_zone_rh,
+    COUNT(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_ma_h,
+    MAX(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(ma_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_ma_h,
+    COUNT(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS n_sa_h,
+    MAX(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW)
+      - MIN(sa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS BETWEEN {{STALE_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) AS span_sa_h
+  FROM gated
 ),
 scored AS (
   SELECT
@@ -57,7 +113,11 @@ scored AS (
       + CASE WHEN n_chw_return_t >= {{STALE_ROWS}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_supply_t >= {{STALE_ROWS}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_return_t >= {{STALE_ROWS}} THEN 1 ELSE 0 END
-      + CASE WHEN n_oa_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END AS roles_mapped,
+      + CASE WHEN n_oa_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_ra_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_zone_rh >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_ma_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END
+      + CASE WHEN n_sa_h >= {{STALE_ROWS}} THEN 1 ELSE 0 END AS roles_mapped,
     CASE WHEN n_oa_t >= {{STALE_ROWS}} AND span_oa_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_mat >= {{STALE_ROWS}} AND span_mat <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_zone_t >= {{STALE_ROWS}} AND span_zone_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
@@ -67,7 +127,11 @@ scored AS (
       + CASE WHEN n_chw_return_t >= {{STALE_ROWS}} AND span_chw_return_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_supply_t >= {{STALE_ROWS}} AND span_hw_supply_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_return_t >= {{STALE_ROWS}} AND span_hw_return_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
-      + CASE WHEN n_oa_h >= {{STALE_ROWS}} AND span_oa_h <= {{STALE_TOL}} THEN 1 ELSE 0 END AS roles_stale
+      + CASE WHEN n_oa_h >= {{STALE_ROWS}} AND span_oa_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_ra_h >= {{STALE_ROWS}} AND span_ra_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_zone_rh >= {{STALE_ROWS}} AND span_zone_rh <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_ma_h >= {{STALE_ROWS}} AND span_ma_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
+      + CASE WHEN n_sa_h >= {{STALE_ROWS}} AND span_sa_h <= {{STALE_TOL}} THEN 1 ELSE 0 END AS roles_stale
   FROM win
 ),
 base AS (

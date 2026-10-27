@@ -2015,4 +2015,123 @@ mod tests {
         upgrade.close().await;
         fdd_tsdb::clear_shared_pool();
     }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "OPENFDD_* env is process-global while disposable pack databases are connected"
+    )]
+    #[tokio::test]
+    async fn sv_range_skips_humidity_without_binding_unit() {
+        let Some(shared_url) = database_url() else {
+            eprintln!("skip: no postgres url");
+            return;
+        };
+        let admin = admin_url(&shared_url);
+        let admin_pool = match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(3))
+            .connect(&admin)
+            .await
+        {
+            Ok(pool) => pool,
+            Err(_) if explicit_database_url() => {
+                panic!("pack database admin connect failed");
+            }
+            Err(_) => {
+                eprintln!("skip: postgres admin unavailable");
+                return;
+            }
+        };
+        let timescale: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM pg_available_extensions WHERE name = 'timescaledb'
+             )",
+        )
+        .fetch_one(&admin_pool)
+        .await
+        .unwrap_or(false);
+        drop(admin_pool);
+        if !timescale {
+            if timescale_required() {
+                panic!("timescaledb extension is not available");
+            }
+            eprintln!("skip: timescaledb extension is not available");
+            return;
+        }
+        let _lock = crate::test_env_lock::lock_env();
+        let results = tempfile::tempdir().expect("results");
+        let _env = EnvHold::capture(&[
+            "OPENFDD_DATABASE_URL",
+            "OPENFDD_HISTORIAN",
+            "OPENFDD_SQL_ROOT",
+            "OPENFDD_SQL_RULES_DIR",
+            "OPENFDD_RULE_RESULTS_DIR",
+        ]);
+        std::env::remove_var("OPENFDD_RESET_DB");
+        std::env::remove_var("OPENFDD_ALLOW_DESTRUCTIVE_DB");
+        std::env::remove_var("OPENFDD_SQL_ROOT");
+        std::env::remove_var("OPENFDD_SQL_RULES_DIR");
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", results.path());
+
+        let db_name = format!("w3bunit{}", uuid::Uuid::new_v4().simple());
+        let _drop = DropDb {
+            admin: admin.clone(),
+            name: db_name.clone(),
+        };
+        let pool = create_database(&admin, &db_name).await;
+        let mut url = url::Url::parse(&admin).expect("admin");
+        url.set_path(&format!("/{db_name}"));
+        std::env::set_var("OPENFDD_DATABASE_URL", url.as_str());
+        fdd_tsdb::clear_shared_pool();
+        crate::db_lifecycle::apply_on_startup()
+            .await
+            .expect("db startup");
+
+        let site = format!("u{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
+        seed_dimensions(&pool, &site, &[("eq_ahu", "ahu")]).await;
+        for minutes in [0_i64, 5, 10, 15, 20] {
+            put_sample(&pool, &site, "eq_ahu", "fan_status", minutes, 1.0, None).await;
+            put_sample(&pool, &site, "eq_ahu", "ra_h", minutes, 150.0, None).await;
+        }
+        let run = crate::timescale_product::run_fdd_registry(&serde_json::json!({
+            "building_id": site,
+            "rule_ids": ["SV-RANGE", "SV-FLATLINE", "SV-STALE"],
+            "confirmation_seconds": 0,
+        }))
+        .await
+        .expect("sv sweep run");
+        let range = row(&run, "SV-RANGE", "eq_ahu");
+        assert_eq!(range["status"], "OK", "{range}");
+        assert!(
+            hours(range).abs() < 1.0 / 3600.0,
+            "ununit ra_h must not fault: {range}"
+        );
+        let flat = row(&run, "SV-FLATLINE", "eq_ahu");
+        assert_eq!(flat["status"], "OK", "{flat}");
+        let stale = row(&run, "SV-STALE", "eq_ahu");
+        assert_eq!(stale["status"], "OK", "{stale}");
+
+        sqlx::query(
+            "UPDATE role_map SET unit = '%RH'
+             WHERE building_id = $1 AND equipment_id = 'eq_ahu' AND role = 'ra_h'",
+        )
+        .bind(&site)
+        .execute(&pool)
+        .await
+        .expect("unit");
+        fdd_tsdb::clear_shared_pool();
+        let run2 = crate::timescale_product::run_fdd_registry(&serde_json::json!({
+            "building_id": site,
+            "rule_ids": ["SV-RANGE"],
+            "confirmation_seconds": 0,
+        }))
+        .await
+        .expect("sv range with unit");
+        let range2 = row(&run2, "SV-RANGE", "eq_ahu");
+        assert_eq!(range2["status"], "FAULT", "{range2}");
+        assert!(hours(range2) > 0.0, "{range2}");
+        pool.close().await;
+        fdd_tsdb::clear_shared_pool();
+    }
 }

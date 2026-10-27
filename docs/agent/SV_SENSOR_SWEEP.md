@@ -2,7 +2,7 @@
 
 Cycle 4. Pandas does **not** iterate every historian column. It sweeps
 `SENSOR_LIMITS` / `SWEEP_SENSOR_ROLES` in `open_fdd/rules/cookbook_catalog.py`
-(11 roles). SQL used to window only five air temps (`oa_t`, `mat`, `zone_t`,
+(15 roles: air/water temps, all mapped humidity roles, duct static). SQL used to window only five air temps (`oa_t`, `mat`, `zone_t`,
 `rat`, `sat`). Extra catalog analogs (CHWS/CHWR, HWS/HWR, OA humidity, duct
 static) faulted in pandas and stayed silent in SQL — the bulk of the dump
 leftover ~122 SV-* rows.
@@ -17,7 +17,7 @@ window that catalog:
 | `oa_t` / `mat` / `zone_t` / `rat` / `sat` | yes | yes | yes | yes |
 | `chw_supply_t` / `chw_return_t` | yes | yes | yes | yes |
 | `hw_supply_t` / `hw_return_t` | yes | yes | yes | yes |
-| `oa_h` | yes | yes | yes | yes |
+| `oa_h` / `ra_h` / `zone_rh` / `ma_h` / `sa_h` | yes | yes | yes | yes |
 | `duct_static` | no | no | yes | yes |
 
 Duct static is excluded from stale/flatline (`_NO_FLATLINE_ROLES`) because it

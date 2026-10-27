@@ -17,6 +17,13 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from open_fdd.rules.sensor_sweep_catalog import (
+    flatline_quantity_allowed,
+    limits_for_haystack_role,
+    quantity_for_haystack_role,
+    sweep_assessable_role,
+)
+
 # ---------------------------------------------------------------------------
 # Shared helpers (mirror cookbook "Setup & shared helpers")
 # ---------------------------------------------------------------------------
@@ -174,19 +181,28 @@ def flatline_mask(series: pd.Series, tol: float, window: int) -> pd.Series:
 # Per-sensor validation limits (imperial primary; from sensor_fault_defaults.json)
 # ---------------------------------------------------------------------------
 
+SWEEP_ROLE_CATALOG: tuple[str, ...] = (
+    "outside-air-temp",
+    "return-air-temp",
+    "mixed-air-temp",
+    "discharge-air-temp",
+    "zone-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "return-air-humidity",
+    "zone-air-humidity",
+    "mixed-air-humidity",
+    "supply-air-humidity",
+    "duct-static-pressure",
+)
+
 SENSOR_LIMITS: dict[str, dict[str, float]] = {
-    # role: hard low, hard high, spike per sample (°F unless noted)
-    "outside-air-temp": {"lo": -60.0, "hi": 130.0, "spike": 36.0},
-    "return-air-temp": {"lo": 40.0, "hi": 100.0, "spike": 12.0},
-    "mixed-air-temp": {"lo": -20.0, "hi": 110.0, "spike": 25.0},
-    "discharge-air-temp": {"lo": 30.0, "hi": 150.0, "spike": 40.0},
-    "zone-air-temp": {"lo": 40.0, "hi": 100.0, "spike": 12.0},
-    "chilled-water-supply-temp": {"lo": 30.0, "hi": 80.0, "spike": 20.0},
-    "chilled-water-return-temp": {"lo": 30.0, "hi": 90.0, "spike": 20.0},
-    "hot-water-supply-temp": {"lo": 40.0, "hi": 220.0, "spike": 60.0},
-    "hot-water-return-temp": {"lo": 40.0, "hi": 220.0, "spike": 60.0},
-    "outside-air-humidity": {"lo": 0.0, "hi": 100.0, "spike": 25.0},
-    "duct-static-pressure": {"lo": -1.0, "hi": 8.0, "spike": 2.0},
+    role: lim
+    for role in SWEEP_ROLE_CATALOG
+    if (lim := limits_for_haystack_role(role)) is not None
 }
 
 # Sensor roles the validation sweep will check on any equipment (if present)
@@ -195,8 +211,11 @@ SWEEP_SENSOR_ROLES = list(SENSOR_LIMITS.keys())
 # Flatline/stale detection targets analog temperature & humidity sensors only.
 # Pressure points (e.g. duct static) legitimately rest at ~0 when equipment is off,
 # so they would false-positive as "stuck" — exclude them from stuck-sensor sweeps.
-_NO_FLATLINE_ROLES = {"duct-static-pressure"}
-FLATLINE_SENSOR_ROLES = [r for r in SWEEP_SENSOR_ROLES if r not in _NO_FLATLINE_ROLES]
+FLATLINE_SENSOR_ROLES = [
+    r
+    for r in SWEEP_SENSOR_ROLES
+    if quantity_for_haystack_role(r) and flatline_quantity_allowed(quantity_for_haystack_role(r) or "")
+]
 
 
 def sensor_type_for_role(role: str) -> str:
@@ -436,12 +455,22 @@ LEGACY_SUPPLY_PARAM = lambda: CookbookParam(  # noqa: E731
 # ---------------------------------------------------------------------------
 
 
+def _units_map(d: pd.DataFrame) -> dict[str, str]:
+    raw = d.attrs.get("units_map")
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items() if v}
+    return {}
+
+
 def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     idx = d.index
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
+    units_map = _units_map(d)
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
+            continue
+        if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         lim = SENSOR_LIMITS[role]
@@ -467,8 +496,11 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     window = max(2, int(round(hours * 3600 / max(poll, 1))))
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
+    units_map = _units_map(d)
     for role in FLATLINE_SENSOR_ROLES:
         if role not in d.columns:
+            continue
+        if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         role_mask = flatline_mask(s, tol=tol, window=window)
@@ -483,8 +515,11 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     scale = _f(p, "spike_scale", 1.0)
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
+    units_map = _units_map(d)
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
+            continue
+        if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         type_scale = _role_type_scale(p, role, kind="spike")
@@ -501,7 +536,12 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     idx = d.index
     hours = _f(p, "stale_hours", 2.0)
     window = max(2, int(round(hours * 3600 / max(poll, 1))))
-    present = [r for r in FLATLINE_SENSOR_ROLES if r in d.columns]
+    units_map = _units_map(d)
+    present = [
+        r
+        for r in FLATLINE_SENSOR_ROLES
+        if r in d.columns and sweep_assessable_role(r, None, units_map)
+    ]
     if not present:
         _stash_sweep_evidence(d, {}, poll=poll, rule_tag="SV-STALE")
         return _false(idx)

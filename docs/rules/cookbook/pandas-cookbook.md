@@ -95,10 +95,12 @@ Every validated rule carries a default `confirm_seconds` (usually **300**). At 6
 
 Sensor-sweep rules apply to **every modeled sensor** present on the equipment (not a single fixed point).
 
+**Sweep catalog (SV-RANGE / SV-FLATLINE / SV-STALE):** pandas iterates `SENSOR_LIMITS` in `open_fdd/rules/cookbook_catalog.py` — air/water temperatures, humidity (`outside-air-humidity`, `return-air-humidity`, `zone-air-humidity`, `mixed-air-humidity`, `supply-air-humidity`), and `duct-static-pressure` with per-role hard limits (for example OAT −60–130°F, zone/RA 40–100°F, MAT −20–110°F, SAT 30–150°F, CHWS 30–80°F, CHWR 30–90°F, HWS/HWR 40–220°F, RH 0–100 %, duct static −1–8 in.w.c.). `FLATLINE_SENSOR_ROLES` / stale AND use the same catalog **minus** duct static (pressure legitimately rests near zero when off). Status, command, setpoint, and mode points are **not** sweep targets (`is_expected_constant_role` / `sweep_assessable_role`). A mapped analog with **no declared unit** in `units_map` (package / binding metadata) is **not assessed** — the sweep skips it rather than inferring scale from magnitude.
+
 ### SV-RANGE — Sensor out of hard range
 **Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
 **Mode:** sensor sweep (applies to every modeled sensor present)  
-**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F).  
+**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F, RH 0–100 %).  
 **Default confirmation:** 300 s
 
 **Tunable params**
@@ -116,8 +118,11 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     idx = d.index
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
+    units_map = d.attrs.get("units_map") or {}
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
+            continue
+        if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         lim = SENSOR_LIMITS[role]
@@ -159,8 +164,11 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     window = max(2, int(round(hours * 3600 / max(poll, 1))))
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
+    units_map = d.attrs.get("units_map") or {}
     for role in FLATLINE_SENSOR_ROLES:
         if role not in d.columns:
+            continue
+        if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         role_mask = flatline_mask(s, tol=tol, window=window)
@@ -232,7 +240,12 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     idx = d.index
     hours = _f(p, "stale_hours", 2.0)
     window = max(2, int(round(hours * 3600 / max(poll, 1))))
-    present = [r for r in FLATLINE_SENSOR_ROLES if r in d.columns]
+    units_map = d.attrs.get("units_map") or {}
+    present = [
+        r
+        for r in FLATLINE_SENSOR_ROLES
+        if r in d.columns and sweep_assessable_role(r, None, units_map)
+    ]
     if not present:
         _stash_sweep_evidence(d, {}, poll=poll, rule_tag="SV-STALE")
         return _false(idx)
