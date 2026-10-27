@@ -84,6 +84,30 @@ Maintenance prunes stopped containers and dangling images. It does not prune vol
 
 Leave `OPENFDD_RESET_DB` unset on updates. A one-time historian purge is `scripts/timescale/purge_historian.py` with a fresh `OPENFDD_RESET_DB` token and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` (or `--reset-db` and `--i-understand-data-loss`). The same token does not purge again. Central startup uses that same rule and refuses a token that lacks the allow flag. Building 50 reseed (`scripts/timescale/auto_seed.py`) copies into an empty site. It deletes that site only when `OPENFDD_SEED_FORCE=1` and `OPENFDD_ALLOW_DESTRUCTIVE_DB=1` are both set.
 
+## Compose environment (central)
+
+The local stack merges `docker/compose.portal.yml`, `docker/compose.timescale.yml`, and `docker/compose.local.yml`. Operator tuning in repo-root `.env` is forwarded into the `central` service:
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENFDD_INGEST_CATCHUP_HOURS` | Hourly ingest catch-up bound per device |
+| `OPENFDD_INGEST_DAILY_CATCHUP_DAYS` | Daily ingest replay span |
+| `OPENFDD_INGEST_PUBLICATION_DELAY_SECS` | Delay after local midnight before daily windows enqueue |
+| `OPENFDD_PROVIDER_TICK_SECS` | Provider poller / ingest worker tick |
+| `OPENFDD_AFDD_MODE` | `bulk` (default) or `continuous` |
+| `OPENFDD_AFDD_BUILDING_ID` | Optional single-building AFDD scope |
+| `OPENFDD_AFDD_BUILDING_IDS` | Optional comma-separated building list |
+| `OPENFDD_AFDD_INTERVAL_MINUTES` | Continuous AFDD cadence |
+| `OPENFDD_AFDD_LOOKBACK_VALUE` / `OPENFDD_AFDD_LOOKBACK_UNIT` | Rolling lookback per AFDD cycle |
+
+Unset names stay unset inside central (compose uses `${VAR:-}`).
+
+### Multi-site NF credentials
+
+`provider_sites` JSON references secrets as `env:NAME` (never literals). For more than one NF portal site, use **distinct env names per site** in `.env`, for example `NF_CLIENT_ID_SITE_A`, `NF_CLIENT_SECRET_SITE_A`, and optional `NFURL_SITE_A`, and point each site object at those names. `compose.local.yml` declares `env_file: ../.env` (optional) so every name in `.env` is visible to central without listing each site in the compose file. See `.env.example` and [`INGEST_QUEUE.md`](INGEST_QUEUE.md).
+
+Post-re-pin smoke: `./scripts/ops/assert_local_stack_after_repin.sh sha-<7>` reads the build id from `GET /api/version` (anonymous `/api/health` is liveness-only).
+
 ## Anti-patterns
 
 - Pasting a public URL for a local-only HTTP stack.
