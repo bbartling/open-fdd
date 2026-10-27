@@ -860,7 +860,7 @@ mod tests {
         assert_ne!(rev_bare, rev_eng);
         assert_eq!(model.equipment[0].points[0].unit.as_deref(), Some("degF"));
         use fdd_core::sensor_sweep::sweep_assessable_sql_role;
-        assert!(!sweep_assessable_sql_role("oa_t", bare.unit.as_deref()));
+        assert!(!sweep_assessable_sql_role("oa_t", None));
     }
 
     #[test]
