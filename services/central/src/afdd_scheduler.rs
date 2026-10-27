@@ -160,16 +160,18 @@ impl AfddSchedulerRuntime {
             store.seed_missing_from_legacy(&scheduled, &legacy);
             self.persist_checkpoint_store(&store)?;
         }
+        let count = scheduled.len();
+        let buildings = scheduled.join(",");
         *self
             .scheduled_buildings
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = scheduled;
-        if config.mode == AfddMode::Continuous && scheduled.is_empty() {
+        if config.mode == AfddMode::Continuous && count == 0 {
             warn!("continuous AFDD enabled but no buildings are scheduled");
-        } else if !scheduled.is_empty() {
+        } else if count > 0 {
             info!(
-                count = scheduled.len(),
-                buildings = %scheduled.join(","),
+                count,
+                buildings = %buildings,
                 "AFDD scheduled buildings"
             );
         }
@@ -247,7 +249,9 @@ impl AfddSchedulerRuntime {
         let building_id = building_id.to_string();
         block_on_async(async move {
             let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
-            tsdb.max_sample_ts(&building_id).await
+            tsdb.max_sample_ts(&building_id)
+                .await
+                .map_err(anyhow::Error::from)
         })
         .context("Timescale AFDD watermark query")
     }
@@ -1185,6 +1189,8 @@ mod tests {
     fn t1403_1_registry_payload_window_keys_match_chunk() {
         let start = Utc::now() - Duration::hours(6);
         let end = Utc::now();
+        let start_s = start.to_rfc3339();
+        let end_s = end.to_rfc3339();
         let payload = registry_run_payload("site-a", start, end, "scheduled", false, "run-1");
         assert_eq!(
             payload.get("start").and_then(Value::as_str),
@@ -1196,11 +1202,11 @@ mod tests {
         );
         assert_eq!(
             payload.get("start").and_then(Value::as_str),
-            Some(&start.to_rfc3339())
+            Some(start_s.as_str())
         );
         assert_eq!(
             payload.get("end").and_then(Value::as_str),
-            Some(&end.to_rfc3339())
+            Some(end_s.as_str())
         );
         assert_eq!(
             payload.get("building_id").and_then(Value::as_str),
@@ -1227,7 +1233,6 @@ mod contract_timescale {
     use chrono::TimeZone;
     use fdd_store::AfddConfig;
     use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch};
-    use serde_json::json;
 
     fn fixture_database_url() -> Option<String> {
         std::env::var("OPENFDD_LIFECYCLE_DATABASE_URL")
