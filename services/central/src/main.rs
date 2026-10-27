@@ -104,6 +104,7 @@ async fn main() -> anyhow::Result<()> {
         "openfdd-central boot"
     );
     let afdd_runtime = afdd_scheduler::AfddSchedulerRuntime::from_env()?;
+    afdd_runtime.validate_scheduled_buildings(&state)?;
     let afdd_task = afdd_scheduler::spawn(Arc::clone(&afdd_runtime));
     match jobs::recover_interrupted_runs() {
         Ok(n) if n > 0 => info!(recovered = n, "marked interrupted RUNNING jobs as FAILED"),
