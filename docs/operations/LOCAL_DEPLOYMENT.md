@@ -88,6 +88,69 @@ product code.
    `python3 scripts/nf/check_portal_fresh.py --env <secrets.env> --sites <site.json> --points <probes.json>`
    per portal (see [`scripts/nf/README.md`](../../scripts/nf/README.md)).
 
+## NF ingest backfill and throughput
+
+Device backfill (`POST /api/ingest/backfill`) enqueues at most **48** exact UTC
+hours for **one** committed plan group (`device_id`). Multi-device sites need
+many requests unless you use site backfill.
+
+**Site backfill** (`POST /api/ingest/backfill/site`, operator JWT) takes
+`canonical_site`, `provider_instance_id`, `idempotency_key`, and a half-open UTC
+hour range (`start`, `end`). It enqueues every group from the active committed
+plan (`schedule_plan_devices` on the active plan). One request is capped at
+**48** hours and **2048** device×hour jobs. Repeating the same idempotency key
+and range returns the same jobs (per-window logical keys dedupe in Postgres).
+
+Example (seven days, one site):
+
+```bash
+curl -s -X POST "$OPENFDD_API_BASE/api/ingest/backfill/site" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idempotency_key": "backfill-site-7d-2026-10-20",
+    "canonical_site": "YOUR_SITE_ID",
+    "provider_instance_id": "nf:your-connection-id",
+    "start": "2026-10-13T00:00:00Z",
+    "end": "2026-10-20T00:00:00Z"
+  }'
+```
+
+Watch drain with `GET /api/ingest/jobs?site_id=…` and **Operations →
+Providers**.
+
+### Tuning variables (compose / `.env`)
+
+Forwarded into `central` by `docker/compose.local.yml` and
+`docker/compose.portal.yml` (Wave 1a):
+
+| Variable | Role |
+| --- | --- |
+| `OPENFDD_INGEST_CATCHUP_HOURS` | Scheduler catch-up per device on startup (max 48). |
+| `OPENFDD_INGEST_DAILY_CATCHUP_DAYS` | Daily schedule catch-up depth (max 7). |
+| `OPENFDD_INGEST_PUBLICATION_DELAY_SECS` | Delay before a closed hour is planned. |
+| `OPENFDD_PROVIDER_TICK_SECS` | Provider scheduler tick (default 30). |
+| `OPENFDD_PROVIDER_MAX_CONCURRENT` | Parallel site polls (default 2). |
+| `OPENFDD_INGEST_PORTAL_MAX_IN_FLIGHT` / `OPENFDD_INGEST_PORTAL_MAX_PER_MINUTE` | Shared portal rate limits for all workers. |
+
+Measured throughput on a typical lab host is about **4–8 ingest jobs/min**
+when portal history is the bottleneck (34 groups × 18 hours ≈ 612 jobs is on the
+order of **1–3 hours** queue drain). Single-group sites often finish **48**
+windows in under **15 minutes**. Record your measured rate after each backfill;
+do not assume gap-free ingest.
+
+### Coverage cadence binding
+
+Verified coverage (`GET /api/ingest/gaps?view=status`) needs each approved plan
+point to carry an expectation: `history_mode` `interval` with `cadence_secs`, or
+`cov` with optional `heartbeat_secs`. Values come from Normal Framework point
+metadata on inventory sync, or from the engineer model overlay (`POST
+/api/model/point` — Wave 2c). Points with no binding stay **`not_assessed`**
+(`expected_slots: 0`); an empty gaps list does **not** mean complete coverage.
+Operations shows **Not assessed** with the reason (`cadence_not_bound` until
+cadence is bound). Provider health lists **approved** vs **withheld** plan
+points and withheld reasons (for example provisional points).
+
 ## MCP against local central
 
 ```bash

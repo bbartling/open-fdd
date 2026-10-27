@@ -56,6 +56,38 @@ describe("IngestCoverageStatus", () => {
     expect(screen.getByTestId("ingest-coverage-oldest-gap").textContent).toBe("None recorded");
   });
 
+  it("shows a prominent not assessed banner with the reason", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      state: "not_assessed",
+      state_reason: "cadence_not_bound",
+      providers: [
+        {
+          tenant_id: "lab",
+          schedule: { mode: "periodic", timezone: null },
+          planned_through: null,
+          next_run: null,
+          schedule_error: null,
+          gap_scan_truncated: false,
+          status: {
+            provider_instance_id: "nf:nf-site-a",
+            approved_points: 4,
+            withheld_points: 1,
+            discovered_points: 5,
+            verified_through: null,
+            oldest_gap: null,
+            state: "not_assessed",
+            state_reason: "cadence_not_bound",
+          },
+        },
+      ],
+    });
+    render(<IngestCoverageStatus siteId="SITE_A" />);
+    const banner = await screen.findByTestId("ingest-coverage-not-assessed");
+    expect(banner.textContent).toMatch(/Not assessed/);
+    expect(banner.textContent).toMatch(/cadence binding/i);
+  });
+
   it("shows an API error instead of an empty table", async () => {
     vi.mocked(apiFetch).mockRejectedValue(new ApiClientError("queue unavailable", 503));
     render(<IngestCoverageStatus siteId="SITE_A" />);

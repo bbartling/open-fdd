@@ -55,6 +55,16 @@ pub struct BackfillBody {
     pub windows: Vec<WindowBody>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SiteBackfillBody {
+    pub idempotency_key: String,
+    pub tenant_id: Option<String>,
+    pub canonical_site: String,
+    pub provider_instance_id: String,
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+}
+
 pub async fn list_jobs(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
@@ -262,6 +272,7 @@ async fn coverage_status(
     let delay = chrono::Duration::seconds(super::worker::publication_delay_secs() as i64);
     let window_secs = crate::providers::hourly::HourlyPolicy::from_env().window_secs;
     let mut overall = super::status::VERIFIED;
+    let mut provider_statuses = Vec::with_capacity(configs.len());
     let mut providers = Vec::with_capacity(configs.len());
     for config in configs {
         let tenant_id = config.tenant_id.as_str();
@@ -300,6 +311,7 @@ async fn coverage_status(
             planned_through.unwrap_or(DateTime::<Utc>::MAX_UTC),
         );
         overall = super::status::worse(overall, status.state);
+        provider_statuses.push(status.clone());
         let gap_scan_truncated = status.oldest_gap.is_none() && gaps.len() >= MAX_LIST as usize;
         let (mode, timezone) = match config.schedule {
             super::schedule::IngestSchedule::Periodic => ("periodic", None),
@@ -315,6 +327,7 @@ async fn coverage_status(
             "status": status,
         }));
     }
+    let state_reason = super::status::site_not_assessed_reason(&provider_statuses);
     Json(json!({
         "ok": true,
         "request_id": request_id,
@@ -322,6 +335,7 @@ async fn coverage_status(
         "site_id": site,
         "generated_at": now,
         "state": overall,
+        "state_reason": state_reason,
         "providers": providers,
     }))
     .into_response()
@@ -656,6 +670,228 @@ pub async fn backfill(
                     "scope": scope_json(&ctx),
                     "idempotency_key": body.idempotency_key,
                     "jobs": created,
+                })),
+            )
+                .into_response()
+        }
+        Ok(_) => json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "job not found",
+            &request_id,
+            false,
+        ),
+        Err(QueueError::Invalid(msg)) => json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_job",
+            &msg,
+            &request_id,
+            false,
+        ),
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn backfill_site(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Json(body): Json<SiteBackfillBody>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    if viewer_cannot_mutate(user.role) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "operator role required",
+            &request_id,
+            false,
+        );
+    }
+    if !valid_idempotency(&body.idempotency_key) {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_idempotency_key",
+            "idempotency_key must be 8 to 128 visible characters",
+            &request_id,
+            false,
+        );
+    }
+    let ctx = tenant_ctx(&state, &user).await;
+    if !ctx.allow_building(&body.canonical_site) {
+        return json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "site not found",
+            &request_id,
+            false,
+        );
+    }
+    let windows = match hourly_windows_between(body.start, body.end, MAX_SITE_BACKFILL_WINDOWS) {
+        Ok(rows) => rows,
+        Err(QueueError::Invalid(msg)) => {
+            return json_error(StatusCode::BAD_REQUEST, "invalid_window", &msg, &request_id, false)
+        }
+        Err(err) => return queue_err(&err, &request_id),
+    };
+    let plane = state.control_plane.read().await.clone();
+    let tenant_id = match derive_backfill_tenant(
+        &ctx,
+        &plane,
+        &state.providers.sites,
+        body.tenant_id.as_deref(),
+        &body.canonical_site,
+    ) {
+        Ok(tenant_id) => tenant_id,
+        Err(IdentityError::TenantRequired) => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "tenant_required",
+                "hub admin must name the tenant",
+                &request_id,
+                false,
+            )
+        }
+        Err(IdentityError::Mismatch | IdentityError::PlanMissing) => {
+            return json_error(
+                StatusCode::CONFLICT,
+                "identity_mismatch",
+                "backfill identity does not match the caller",
+                &request_id,
+                false,
+            )
+        }
+    };
+    let plan = {
+        let models = state
+            .providers
+            .models
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        models
+            .active_plan(&tenant_id, &body.canonical_site)
+            .cloned()
+    };
+    let plan = match plan {
+        Some(plan) => plan,
+        None => {
+            return json_error(
+                StatusCode::CONFLICT,
+                "plan_not_committed",
+                "no committed ingest plan for this site",
+                &request_id,
+                false,
+            )
+        }
+    };
+    if plan.tenant_id != tenant_id || plan.site_id != body.canonical_site {
+        return json_error(
+            StatusCode::CONFLICT,
+            "identity_mismatch",
+            "backfill identity does not match the committed plan",
+            &request_id,
+            false,
+        );
+    }
+    let connection_id = bound_provider_id(
+        &state.providers.sites,
+        &tenant_id,
+        &body.canonical_site,
+        &body.provider_instance_id,
+        &body.provider_instance_id,
+    );
+    let devices = match crate::providers::committed_model::schedule_plan_devices(
+        &tenant_id,
+        &body.canonical_site,
+        &connection_id,
+        &plan,
+    ) {
+        Ok(rows) => rows,
+        Err(code) => {
+            return json_error(
+                StatusCode::CONFLICT,
+                "plan_identity_mismatch",
+                code,
+                &request_id,
+                false,
+            )
+        }
+    };
+    if devices.is_empty() {
+        return json_error(
+            StatusCode::CONFLICT,
+            "plan_empty",
+            "committed plan has no ingest groups for this provider",
+            &request_id,
+            false,
+        );
+    }
+    let job_count = devices.len() * windows.len();
+    if job_count > MAX_SITE_BACKFILL_JOBS as usize {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "bound_exceeded",
+            &format!(
+                "site backfill would enqueue {job_count} jobs; the cap is {}",
+                MAX_SITE_BACKFILL_JOBS
+            ),
+            &request_id,
+            false,
+        );
+    }
+    let now = Utc::now();
+    let mut jobs = Vec::with_capacity(job_count);
+    for device in &devices {
+        for (start, end) in &windows {
+            jobs.push(NewJob {
+                tenant_id: tenant_id.clone(),
+                canonical_site: body.canonical_site.clone(),
+                provider_instance_id: device.provider_instance_id.clone(),
+                device_id: device.equipment_id.clone(),
+                model_revision: device.revision_id.clone(),
+                logical_window_start: *start,
+                logical_window_end: *end,
+                shard: String::new(),
+                not_before: now,
+                estimated_cost: device.estimated_cost,
+                requested_points_digest: None,
+            });
+        }
+    }
+    let claim = IdempotencyClaim {
+        actor: user.sub.clone(),
+        tenant_id: tenant_id.clone(),
+        client_key: body.idempotency_key.clone(),
+        object_id: site_backfill_object_id(&jobs[0]),
+        payload_hash: site_backfill_payload_hash(
+            &tenant_id,
+            &body.canonical_site,
+            &connection_id,
+            &plan.revision_id,
+            body.start,
+            body.end,
+        ),
+    };
+    match state
+        .ingest_queue
+        .site_backfill(jobs, body.start, body.end, now, &claim)
+        .await
+    {
+        Ok(created)
+            if created
+                .iter()
+                .all(|job| job_in_scope(&ctx, job) && job.tenant_id == tenant_id) =>
+        {
+            (
+                StatusCode::ACCEPTED,
+                Json(json!({
+                    "ok": true,
+                    "request_id": request_id,
+                    "scope": scope_json(&ctx),
+                    "idempotency_key": body.idempotency_key,
+                    "groups": devices.len(),
+                    "windows": windows.len(),
+                    "jobs": created.len(),
                 })),
             )
                 .into_response()

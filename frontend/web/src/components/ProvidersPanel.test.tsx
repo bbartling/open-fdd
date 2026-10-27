@@ -420,4 +420,42 @@ describe("ProvidersPanel", () => {
       /Job coverage is incomplete/,
     );
   });
+
+  it("shows approved and withheld point counts with reasons", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/providers/health") {
+        return {
+          ...healthBody(false),
+          sites: [
+            {
+              ...healthBody(false).sites[0],
+              approved_points: 4,
+              withheld_points: 1,
+              withheld_point_reasons: [
+                {
+                  equipment_id: "AHU_1",
+                  semantic_point_id: "mixed-air-temp",
+                  reason: "provisional",
+                },
+              ],
+            },
+          ],
+        };
+      }
+      if (path === "/api/providers/sites") return { sites: [] };
+      throw new ApiClientError("missing", 404);
+    });
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-approved-NF_EDGE").textContent).toBe("4");
+      expect(screen.getByTestId("provider-withheld-NF_EDGE").textContent).toBe("1");
+    });
+    fireEvent.click(screen.getByTestId("provider-open-NF_EDGE"));
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-withheld-reasons").textContent).toMatch(/provisional/);
+      expect(screen.getByTestId("provider-withheld-reasons").textContent).toMatch(
+        /mixed-air-temp/,
+      );
+    });
+  });
 });

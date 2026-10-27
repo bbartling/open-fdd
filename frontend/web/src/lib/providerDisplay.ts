@@ -27,6 +27,9 @@ export interface ProviderRow {
   endpoint?: string;
   pollSecs?: number;
   mappedPoints?: number;
+  approvedPoints?: number;
+  withheldPoints?: number;
+  withheldReasons?: Array<{ equipmentId: string; pointId: string; reason: string }>;
   clientIdConfigured?: boolean;
   transport?: string;
   lastPollAt?: string | null;
@@ -315,6 +318,15 @@ export function mergeProviderRows(
     row.consecutiveErrors = site.consecutive_errors ?? row.consecutiveErrors;
     row.status = site.health?.status ?? row.status;
     row.message = site.health?.message ?? row.message;
+    row.approvedPoints = site.approved_points ?? row.approvedPoints;
+    row.withheldPoints = site.withheld_points ?? row.withheldPoints;
+    if (site.withheld_point_reasons?.length) {
+      row.withheldReasons = site.withheld_point_reasons.map((entry) => ({
+        equipmentId: entry.equipment_id ?? "",
+        pointId: entry.semantic_point_id ?? "",
+        reason: entry.reason ?? "",
+      }));
+    }
   }
   return [...map.values()].sort((a, b) =>
     a.buildingId.localeCompare(b.buildingId) || a.provider.localeCompare(b.provider),

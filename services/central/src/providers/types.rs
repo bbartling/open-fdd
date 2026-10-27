@@ -58,6 +58,13 @@ pub struct ProviderHealth {
     pub last_error_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WithheldPointSummary {
+    pub equipment_id: String,
+    pub semantic_point_id: String,
+    pub reason: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SiteProviderHealth {
     pub building_id: String,
@@ -67,6 +74,14 @@ pub struct SiteProviderHealth {
     pub endpoint: String,
     pub poll_secs: u64,
     pub mapped_points: usize,
+    /// Approved points in the committed ingest plan for this connection.
+    #[serde(default)]
+    pub approved_points: usize,
+    /// Withheld provisional or unmapped points in the committed plan.
+    #[serde(default)]
+    pub withheld_points: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub withheld_point_reasons: Vec<WithheldPointSummary>,
     pub health: ProviderHealth,
     #[serde(default)]
     pub last_poll_at: Option<DateTime<Utc>>,

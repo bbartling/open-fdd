@@ -15,12 +15,13 @@ export interface CoverageStatusRow {
   discoveredPoints: number | null;
   withheldPoints: number | null;
   state: string;
+  stateReason: string | null;
   oldestGap: string | null;
   gapScanTruncated: boolean;
 }
 
 export type CoverageStatusView =
-  | { status: "ready"; state: string; rows: CoverageStatusRow[] }
+  | { status: "ready"; state: string; stateReason: string | null; rows: CoverageStatusRow[] }
   | { status: "unavailable"; reason: string }
   | { status: "error"; message: string };
 
@@ -30,6 +31,13 @@ const STATE_LABELS: Record<string, string> = {
   gap: "Gap",
   not_assessed: "Not assessed",
   not_configured: "No committed plan",
+};
+
+const STATE_REASON_LABELS: Record<string, string> = {
+  cadence_not_bound:
+    "Committed model points have no cadence binding (history_mode, cadence_secs, or heartbeat_secs from NF metadata or the model overlay). Coverage stays not assessed until cadence is bound.",
+  no_verified_cursor: "No verified hourly cursor yet for this provider.",
+  coverage_not_assessed: "Coverage is not assessed for this provider.",
 };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -56,6 +64,11 @@ export function coverageStateTone(state: string): StatusTone {
   if (state === "behind") return "warn";
   if (state === "gap") return "bad";
   return "neutral";
+}
+
+export function coverageStateReasonLabel(reason: string): string {
+  const key = reason.trim();
+  return STATE_REASON_LABELS[key] ?? `Not assessed (${key || "unknown"})`;
 }
 
 function oldestGapText(value: unknown): string | null {
@@ -89,6 +102,7 @@ function rowFrom(value: unknown, index: number): CoverageStatusRow {
     discoveredPoints: count(status.discovered_points),
     withheldPoints: count(status.withheld_points),
     state: text(status.state) ?? "",
+    stateReason: text(status.state_reason),
     oldestGap: oldestGapText(status.oldest_gap),
     gapScanTruncated: provider.gap_scan_truncated === true,
   };
@@ -110,6 +124,7 @@ export function coverageStatusFromFetch(fetched: OptionalFetch): CoverageStatusV
   return {
     status: "ready",
     state: text(body.state) ?? "",
+    stateReason: text(body.state_reason),
     rows: body.providers.map(rowFrom),
   };
 }

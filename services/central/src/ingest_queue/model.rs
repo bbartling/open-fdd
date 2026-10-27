@@ -9,6 +9,10 @@ use super::coverage::{CoverageReport, COMPLETE, INCOMPLETE};
 
 pub const COVERAGE_NOT_ASSESSED: &str = "not_assessed";
 pub const MAX_CATCHUP_HOURS: u32 = 48;
+/// Max UTC hours enqueued by one `POST /api/ingest/backfill/site` request.
+pub const MAX_SITE_BACKFILL_WINDOWS: u32 = MAX_CATCHUP_HOURS;
+/// Max device×hour jobs enqueued by one site backfill request.
+pub const MAX_SITE_BACKFILL_JOBS: u32 = 2048;
 pub const MAX_LIST: u32 = 200;
 /// Revision stamped on hourly jobs before plans were content-addressed.
 /// A backfill that still names it binds to the active plan.
@@ -363,11 +367,46 @@ pub fn bounded_id(value: &str) -> bool {
             .all(|c| !c.is_control() && c != ' ' && c != '\u{00a0}')
 }
 
+pub fn is_hour_start(start: DateTime<Utc>) -> bool {
+    start.minute() == 0 && start.second() == 0 && start.timestamp_subsec_micros() == 0
+}
+
 pub fn is_hour_window(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
-    end == start + chrono::Duration::hours(1)
-        && start.minute() == 0
-        && start.second() == 0
-        && start.timestamp_subsec_micros() == 0
+    end == start + chrono::Duration::hours(1) && is_hour_start(start)
+}
+
+/// Half-open UTC hour windows `[start, end)` aligned to exact hours.
+pub fn hourly_windows_between(
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    max_windows: u32,
+) -> Result<Vec<(DateTime<Utc>, DateTime<Utc>)>, QueueError> {
+    if end <= start {
+        return Err(QueueError::Invalid(
+            "backfill end must be after start".into(),
+        ));
+    }
+    if !is_hour_start(start) || !is_hour_start(end) {
+        return Err(QueueError::Invalid(
+            "backfill range must use exact UTC hour boundaries".into(),
+        ));
+    }
+    let mut windows = Vec::new();
+    let mut cursor = start;
+    while cursor < end {
+        if windows.len() >= max_windows as usize {
+            return Err(QueueError::Invalid(format!(
+                "backfill range exceeds {max_windows} hourly windows"
+            )));
+        }
+        let next = cursor + chrono::Duration::hours(1);
+        windows.push((cursor, next));
+        cursor = next;
+    }
+    if windows.is_empty() {
+        return Err(QueueError::Invalid("backfill range is empty".into()));
+    }
+    Ok(windows)
 }
 
 /// Queue jobs accept the configured window length (60..=3600 seconds), aligned
@@ -479,6 +518,36 @@ pub fn backfill_object_id(job: &NewJob) -> String {
         job.model_revision.as_str(),
     ]
     .join("\n")
+}
+
+pub fn site_backfill_object_id(job: &NewJob) -> String {
+    [
+        "site",
+        job.tenant_id.as_str(),
+        job.canonical_site.as_str(),
+        job.provider_instance_id.as_str(),
+        job.model_revision.as_str(),
+    ]
+    .join("\n")
+}
+
+pub fn site_backfill_payload_hash(
+    tenant_id: &str,
+    canonical_site: &str,
+    provider_instance_id: &str,
+    model_revision: &str,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> String {
+    scoped_digest(&[
+        "site_backfill",
+        tenant_id,
+        canonical_site,
+        provider_instance_id,
+        model_revision,
+        start.to_rfc3339(),
+        end.to_rfc3339(),
+    ])
 }
 
 pub fn backfill_payload_hash(jobs: &[NewJob]) -> Result<String, QueueError> {

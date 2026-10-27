@@ -7,6 +7,13 @@ export interface ProviderSiteHealth {
   endpoint?: string;
   poll_secs?: number;
   mapped_points?: number;
+  approved_points?: number;
+  withheld_points?: number;
+  withheld_point_reasons?: Array<{
+    equipment_id?: string;
+    semantic_point_id?: string;
+    reason?: string;
+  }>;
   last_poll_at?: string | null;
   last_ingested_points?: number;
   consecutive_errors?: number;

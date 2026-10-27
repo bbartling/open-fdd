@@ -10,7 +10,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::providers::committed_model::IngestPlan;
+use crate::providers::committed_model::{IngestPlan, PlannedPoint};
 use crate::providers::http_policy::provider_ids_equivalent;
 
 use super::coverage::NOT_ASSESSED;
@@ -52,6 +52,9 @@ pub struct ProviderStatus {
     pub devices: Vec<DeviceStatus>,
     pub oldest_gap: Option<OldestGap>,
     pub state: &'static str,
+    /// Why coverage is not assessed, when `state` is `not_assessed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state_reason: Option<&'static str>,
 }
 
 /// The worse of two states: gap, then not assessed, then behind, then verified.
@@ -61,6 +64,37 @@ pub fn worse(a: &'static str, b: &'static str) -> &'static str {
     } else {
         a
     }
+}
+
+/// A point contributes to assessed coverage only when cadence or COV is bound.
+pub fn point_cadence_bound(point: &PlannedPoint) -> bool {
+    match point.history_mode.as_deref() {
+        Some("interval") => point.cadence_secs.is_some_and(|secs| secs > 0),
+        Some("cov") => true,
+        _ => false,
+    }
+}
+
+fn plan_has_assessable_points(plan: &IngestPlan, provider_instance_id: &str) -> bool {
+    plan.groups
+        .iter()
+        .filter(|group| same_provider(&group.provider_instance_id, provider_instance_id))
+        .flat_map(|group| group.points.iter())
+        .any(point_cadence_bound)
+}
+
+fn not_assessed_reason(
+    plan: &IngestPlan,
+    provider_instance_id: &str,
+    devices: &[DeviceStatus],
+) -> &'static str {
+    if !plan_has_assessable_points(plan, provider_instance_id) {
+        return "cadence_not_bound";
+    }
+    if devices.iter().any(|row| row.state == NOT_ASSESSED && row.verified_through.is_none()) {
+        return "no_verified_cursor";
+    }
+    "coverage_not_assessed"
 }
 
 fn rank(state: &str) -> u8 {
@@ -123,6 +157,7 @@ pub fn provider_status(
             devices: Vec::new(),
             oldest_gap: None,
             state: NOT_CONFIGURED,
+            state_reason: None,
         };
     };
     let revision = plan.revision_id.as_str();
@@ -182,6 +217,11 @@ pub fn provider_status(
             state: job.state.clone(),
             code: job.safe_error_code.clone(),
         });
+    let state_reason = if state == NOT_ASSESSED {
+        Some(not_assessed_reason(plan, provider_instance_id, &devices))
+    } else {
+        None
+    };
     ProviderStatus {
         provider_instance_id: provider_instance_id.to_string(),
         model_revision: Some(plan.revision_id.clone()),
@@ -192,6 +232,20 @@ pub fn provider_status(
         devices,
         oldest_gap,
         state,
+        state_reason,
+    }
+}
+
+/// Site-level reason when every provider is not assessed for the same root cause.
+pub fn site_not_assessed_reason(statuses: &[ProviderStatus]) -> Option<&'static str> {
+    if statuses.is_empty() || statuses.iter().any(|row| row.state != NOT_ASSESSED) {
+        return None;
+    }
+    let first = statuses[0].state_reason?;
+    if statuses.iter().all(|row| row.state_reason == Some(first)) {
+        Some(first)
+    } else {
+        Some("coverage_not_assessed")
     }
 }
 
@@ -396,6 +450,26 @@ mod tests {
         assert_eq!(oldest.device_id, "ahu-2");
         assert_eq!(oldest.start, at("2026-10-20T10:00:00Z"));
         assert_eq!(oldest.state, "retry_wait");
+    }
+
+    #[test]
+    fn cadence_binding_drives_not_assessed_reason() {
+        let planned = at("2026-10-20T12:00:00Z");
+        let mut plan = plan();
+        plan.groups[0].points[0].history_mode = Some("interval".into());
+        plan.groups[0].points[0].cadence_secs = Some(300);
+        let status = provider_status(NF, Some(&plan), &[], &[], planned);
+        assert_eq!(status.state, NOT_ASSESSED);
+        assert_eq!(status.state_reason, Some("no_verified_cursor"));
+
+        for group in &mut plan.groups {
+            for point in &mut group.points {
+                point.history_mode = None;
+                point.cadence_secs = None;
+            }
+        }
+        let unbound = provider_status(NF, Some(&plan), &[], &[], planned);
+        assert_eq!(unbound.state_reason, Some("cadence_not_bound"));
     }
 
     #[test]
