@@ -16,7 +16,7 @@ Open-FDD is **local-first**. The typical bench path is a GHCR-pulled Compose sta
 |------|------------------------|
 | Dashboard + API are **plain HTTP** on the LAN | Expect `http://127.0.0.1:3000` (UI) and `http://127.0.0.1:8080` (API). **No product TLS termination on local Compose yet.** Login passwords and Bearer JWTs travel in the clear — **trusted/isolated LAN or VPN only**. For shared/untrusted networks, terminate TLS on an ops reverse proxy in front of Compose. |
 | Intended exposure | Host firewall / VPN / OT LAN only. Do **not** advertise local `:3000`/`:8080` to the public internet. |
-| Railway vs local | Railway public **web** may terminate TLS at the edge; local stack does **not** mirror that. Private Railway mesh to central is also plain HTTP on `*.railway.internal`. |
+| Cloud hosting | Retired. Railway and cloud web-app hosting are prohibited; hosting is the local single-host stack ([LOCAL_HOSTING.md](LOCAL_HOSTING.md)). |
 | Auth still required | Admin / agent JWT on central even over HTTP — never skip auth “because it’s local.” |
 
 If a customer needs HTTPS on-prem, use the supported **Caddy standalone HTTPS**
@@ -32,7 +32,7 @@ Named product recipes: **Recipe 1** cloud hub (mqtt+central+web, amd64) · **Rec
 
 | Helper | Named recipe | Compose | Use |
 |--------|--------------|---------|-----|
-| **`edge` + `compose.edge.railway.yml`** | optional WAN → Recipe 1 | fieldbus only → Railway MQTTS | Legacy (archived OT edge) |
+| **`edge` + `compose.edge.railway.yml` (removed, historical)** | optional WAN → Recipe 1 | fieldbus only → hub MQTTS (historical) | Legacy (archived OT edge) |
 | `csv` / `react` | **Recipe 2** (no/optional protocol) | web + central | Local CSV / broker-free edge lab |
 | `react-ot` / `standalone` | **Recipe 2** (+ local mqtt optional) | + fieldbus (+ mqtt) | Optional local OT lab (not closeout; no Pis) |
 
@@ -60,7 +60,7 @@ MQTT ACL for local: place under `deploy/mqtt/certs/acl` (tip mqtt images read `a
 
 ## Dual pipeline (retired for closeout)
 
-Patch-cycle OT is **one** MQTTS path: this x86 fieldbus → Railway. Raspberry Pis are not in stress. Optional local `react-ot` is a lab only — do not use it as the AFDD head-end. Hub bootstrap: [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md).
+Historical: patch-cycle OT was **one** MQTTS path (x86 fieldbus → the retired Railway hub). Optional local `react-ot` is a lab only — do not use it as the AFDD head-end. Current hosting: [`LOCAL_HOSTING.md`](LOCAL_HOSTING.md).
 
 ## MCP against local central
 
@@ -74,7 +74,7 @@ Use `http://` (not `https://`) for local Compose. See [`mcp/README.md`](../../mc
 
 ## Stress
 
-Closeout: [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) against **Railway**. ZAP targets the Railway public URL.
+Closeout runs on an owned local stack (Codex-owned qualification). The Railway public-URL closeout in [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) is historical.
 
 ## Data-safe updates
 
@@ -89,5 +89,5 @@ Leave `OPENFDD_RESET_DB` unset on updates. A one-time historian purge is `script
 - Pasting a public URL for a local-only HTTP stack.
 - Claiming “local has TLS” without an explicit Caddy/standalone HTTPS mode (or ops proxy).
 - Building central/web images locally on bensbench.
-- Pointing bosspi at local mqtt during Railway parity stress.
+- Re-adding Railway or any cloud web-app host.
 - `docker compose down -v`, `docker volume prune`, or `OPENFDD_RESET_DB` as part of an image update.

@@ -23,4 +23,4 @@ If the private reporting form is unavailable to you, contact the maintainer thro
 
 ## Deployment scope
 
-Open-FDD is currently local-first and intended primarily for LAN/VPN/OT deployments. Railway is an experimental CSV/package lab/demo path, not a claim of production public-internet hardening. Never commit deployment secrets, registry credentials, BAS credentials, JWT secrets, or admin passwords.
+Open-FDD is currently local-first and intended primarily for LAN/VPN/OT deployments. Hosting is the local single-host stack only; Railway and cloud web-app hosting are retired. Open-FDD makes no claim of production public-internet hardening. Never commit deployment secrets, registry credentials, BAS credentials, JWT secrets, or admin passwords.

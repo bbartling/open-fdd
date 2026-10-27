@@ -8,6 +8,8 @@ nav_exclude: true
 
 # AI / agent context handoff — Open-FDD (machine port)
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](../LOCAL_HOSTING.md).
+
 **Read this first** on a new machine or new Cursor chat. Prefer **in-repo** sources over chat memory. This file is the portable brain when bensbench dies.
 
 ## Machine / RAM constraints (bensbench x86)
@@ -28,7 +30,7 @@ nav_exclude: true
 | 3b | [`.cursor/plans/wave_u_security_hardening_master.plan.md`](../../.cursor/plans/wave_u_security_hardening_master.plan.md) | Cursor play target (Wave T SUPERSEDED) |
 | 4 | [`scripts/security/README.md`](../../../scripts/security/README.md) | Python harness (MT ACL/JWT) vs ZAP/Burp |
 | 5 | [`STRESS_CLOSEOUT.md`](../STRESS_CLOSEOUT.md) · [`PATCH_CYCLE.md`](../PATCH_CYCLE.md) | Handbook |
-| 6 | [`RAILWAY_DEPLOYMENT.md`](../RAILWAY_DEPLOYMENT.md) | Hub re-pin |
+| 6 | `RAILWAY_DEPLOYMENT.md` (removed, historical) | Hub re-pin |
 | 7 | [`openfdd_agent_spec/AGENTS.md`](../../openfdd_agent_spec/AGENTS.md) · [`CONTAINER_AGENT.md`](../../openfdd_agent_spec/CONTAINER_AGENT.md) | Agent rules |
 | 8 | Predecessor Wave S: [`.cursor/plans/wave_s_master_ecb88a61.plan.md`](../../.cursor/plans/wave_s_master_ecb88a61.plan.md) | Historical Soft-OPEN close |
 

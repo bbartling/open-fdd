@@ -1,5 +1,7 @@
 # Wave N — example control-plane files (no secrets)
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 Copy onto the Railway volume under `/workspace/openfdd/control_plane/` after backup.
 Set passwords via Railway env vars referenced by `password_env` — **never** commit real passwords.
 

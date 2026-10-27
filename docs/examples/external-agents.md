@@ -12,8 +12,8 @@ This keeps Open-FDD vendor-neutral, local-first, safe for OT networks, and indep
 
 ## Preferred workflow
 
-1. Bring up the stack locally or on the LAN/VPN (`./scripts/openfdd_stack_up.sh portal`), **or** a private Railway central + web (see [RAILWAY_DEPLOYMENT.md](../operations/RAILWAY_DEPLOYMENT.md)). Ingest is the Normal Framework portal API and CSV.
-2. Confirm health: `curl -fsS http://127.0.0.1:8080/api/health` (or Railway private URL).
+1. Bring up the local single-host stack (see [LOCAL_HOSTING.md](../operations/LOCAL_HOSTING.md)), reachable on loopback or the LAN/VPN. Ingest is the Normal Framework portal API and CSV.
+2. Confirm health: `curl -fsS http://127.0.0.1:8080/api/health` (or the host's LAN/VPN URL).
 3. Obtain an **operator** JWT — prefer `username=agent` + `OPENFDD_AGENT_PASSWORD`, or admin `POST /api/auth/agent-token`. Never print or commit tokens; never use the admin password as the MCP credential.
 4. Run `openfdd-mcp` **outside** the Open-FDD web UI (stdio JSON-RPC), with `OPENFDD_MCP_TOKEN` set to that JWT.
 5. Connect your external agent to MCP or REST (`GET /api/agent/tools`).
@@ -21,7 +21,7 @@ This keeps Open-FDD vendor-neutral, local-first, safe for OT networks, and indep
 7. Enable writes only with `OPENFDD_MCP_ALLOW_WRITES=1` and `confirm:true` on mutating tools.
 8. Never perform BACnet writes without explicit human approval.
 
-## Railway / remote deployments
+## Remote (LAN/VPN) access
 
 Remote FDD AI assistance must use the same JWT model as LAN:
 
@@ -31,7 +31,7 @@ Remote FDD AI assistance must use the same JWT model as LAN:
 | `OPENFDD_ADMIN_PASSWORD` | Browser admin UI + minting agent tokens |
 | `OPENFDD_AGENT_PASSWORD` | Dedicated agent login → operator JWT for MCP/Cursor |
 
-Keep central + MCP on Railway private networking. Public domain belongs on **web** only.
+Keep central + MCP on loopback or the LAN/VPN. Cloud web-app hosting (Railway etc.) is retired.
 
 ## Codex CLI (example)
 

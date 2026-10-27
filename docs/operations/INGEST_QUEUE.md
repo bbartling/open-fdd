@@ -1,7 +1,7 @@
 # Ingest queue (Wave-NF N8 / N10)
 
 Shared work list for portal history reads. Kubernetes is not required.
-Railway vertical sizing and a manually chosen replica count are not an autoscaler.
+Host vertical sizing and a manually chosen replica count are not an autoscaler.
 
 ## Stages
 

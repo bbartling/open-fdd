@@ -8,13 +8,13 @@ permalink: /quick-start/
 
 # Quick Start
 
-Install Open-FDD from GHCR, bring up **local** or **Railway** hubs, verify health, and follow backup → update → validate.
+Install Open-FDD from GHCR, bring up the **local single-host** stack, verify health, and follow backup → update → validate.
 
 | Guide | Audience |
 |-------|----------|
 | [Docker & GHCR](docker-ghcr.html) | Image channels and first pull |
 | [**Local stack (Compose)**](local-stack.html) | **Recipe 2** OT edge / LAN — central + web + protocol |
-| [**Railway hub**](railway-hub.html) | **Recipe 1** cloud hub — mqtt + central + web (amd64) |
+| [**Local hosting**](../operations/LOCAL_HOSTING.md) | Single-host stack, `.env` pin, re-pin + validate (Railway / cloud hosting retired) |
 | [Raspberry Pi edge](raspberry-pi-edge.html) | Recipe 2 on arm64 — Soft-OPEN until multi-arch tip boots |
 | [Site lifecycle](site-lifecycle.html) | Backup, update, restore |
 

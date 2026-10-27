@@ -13,7 +13,7 @@ cat >"$TMP" <<'EOF'
 Reply with exactly one line:
 GROK_KICKOFF_OK
 
-Then stop. Do not run Open-FDD stress or touch Railway.
+Then stop. Do not run Open-FDD stress or touch the running stack.
 EOF
 
 echo "== dry-run =="

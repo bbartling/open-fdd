@@ -37,6 +37,9 @@ are **Timescale + `sql/fdd/*.sql`**. Storage mandate: **Timescale/PostgreSQL onl
 one canonical telemetry write path, no dual record writing**; Parquet, Arrow, Arrow
 IPC, Feather and DataFusion are prohibited in product storage, caching, execution
 and dependencies ([`DATA_CONTRACT.md` § Storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
+Hosting mandate: **local single-host stack only**. Railway and any cloud web-app
+hosting (PaaS) are retired and prohibited, like DataFusion, Parquet and dual record
+writing; old Railway notes are `historical/non-executable`.
 Bring-up: [`docs/operations/TIMESCALE_WAVE_X.md`](../docs/operations/TIMESCALE_WAVE_X.md)
 · ADR-010 · ART REBOOT_SAFE under `/tmp/openfdd-softopen/3.6.0/`.
 
@@ -84,7 +87,7 @@ central/web — OOM risk. Ship code via PR → GH Actions →
 docker image prune -f
 docker images 'ghcr.io/bbartling/openfdd-*' --format '{{.Repository}}:{{.Tag}} {{.ID}}' | head
 
-# 2) pull + up (no rebuild) — local firewall path; Railway lab is central + web
+# 2) pull + up (no rebuild) — local firewall path (or ./scripts/openfdd_local_repin.sh sha-<7>)
 ./scripts/openfdd_stack_pull.sh portal
 ./scripts/openfdd_stack_up.sh portal --no-pull
 curl -fsS http://127.0.0.1:8080/api/health
@@ -123,9 +126,9 @@ Central writes no Parquet/Arrow/Feather, so there is no file eviction budget; da
 | Publish | Wait for GHCR Publish green on the merge sha |
 | Choose the image | `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web` |
 | Tip gate | `./scripts/check_ghcr_tip_stack.sh sha-<7>` |
-| Re-pin | Railway CLI backup, then central, then web after `/api/health` is 200 |
-| Smoke | `GET /api/health` on the pinned sha |
-| Qualification | Owned disposable central + web + Timescale. Not a public Railway ZAP. |
+| Re-pin | `./scripts/openfdd_local_repin.sh sha-<7>` (edits `OPENFDD_IMAGE_TAG` in `.env`, pull, `up -d --no-build`) |
+| Smoke | `./scripts/ops/assert_local_stack_after_repin.sh sha-<7>` (health, Timescale, `dual_write:false`, pins) |
+| Qualification | Owned disposable central + web + Timescale. Not a public-URL ZAP. |
 
 **Auth / MT smoke (Kali O2c — do not regress):** With `OPENFDD_JWT_SECRET` set, unauth
 `GET /api/tenants` (and capabilities / health/stack / building/snapshot /
@@ -134,9 +137,9 @@ readiness = `GET /api/health` only. Local regression:
 `cargo test -p openfdd-central --test preauth_disclosure`. Live ACL = gate 31;
 headers/`security.txt` = gate 34. Skill:
 [`skills/openfdd-mt-security/SKILL.md`](skills/openfdd-mt-security/SKILL.md).
-**Qualification:** an owned disposable central + web + Timescale stack, with authenticated portal checks and explicit budgets. A public Railway ZAP is not that check. Codex owns `scripts/stress/` and `scripts/qualification/`.
+**Qualification:** an owned disposable central + web + Timescale stack, with authenticated portal checks and explicit budgets. A public-URL ZAP is not that check. Codex owns `scripts/stress/` and `scripts/qualification/`.
 
-**Volume restore:** disposable empty volume only. Never restore over a live Railway workspace.
+**Volume restore:** disposable empty volume only. Never restore over a live stack workspace.
 
 Session log: [`SESSION_LOG.md`](SESSION_LOG.md). Machine port: [`AI_CONTEXT_HANDOFF.md`](../docs/operations/recovery/AI_CONTEXT_HANDOFF.md).
 

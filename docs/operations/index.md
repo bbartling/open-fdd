@@ -8,7 +8,7 @@ permalink: /operations/
 
 # Operations (removed from public docs)
 
-Operator bootstrap now lives under **[Quick Start]({{ site.baseurl }}/quick-start/)** (Local + Railway + Docker/GHCR).
+Operator bootstrap now lives under **[Quick Start]({{ site.baseurl }}/quick-start/)** (local single-host stack + Docker/GHCR; [Local hosting](LOCAL_HOSTING.md)).
 
 Agent / patch-train notes remain in the repo under `docs/operations/` but are **not** in the online left nav.
 

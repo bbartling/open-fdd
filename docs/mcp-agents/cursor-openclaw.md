@@ -8,13 +8,13 @@ nav_order: 3
 
 ## Cursor IDE
 
-1. Bring up the stack: `./scripts/openfdd_stack_up.sh standalone` (or Railway private central)
+1. Bring up the stack: the local single-host stack ([LOCAL_HOSTING.md](../operations/LOCAL_HOSTING.md))
 2. Obtain an **operator** JWT: `POST /api/auth/login` with `{"username":"agent","password":"$OPENFDD_AGENT_PASSWORD"}`  
    (or admin bearer → `POST /api/auth/agent-token`). Do **not** put `OPENFDD_ADMIN_PASSWORD` in MCP config.
 3. Configure the MCP server (`ghcr.io/bbartling/openfdd-mcp`) with `OPENFDD_API_BASE` → central and `OPENFDD_MCP_TOKEN` → that JWT
 4. Use tools for health, assignments, CSV preflight, rules, reports
 
-Railway: see [RAILWAY_DEPLOYMENT.md](../operations/RAILWAY_DEPLOYMENT.md) § Secure agent auth — secrets stay in Railway Variables; MCP stays private.
+Secrets stay in the gitignored `.env`; MCP stays private (loopback or LAN/VPN).
 
 Open-FDD does **not** ship an in-dashboard chatbot. Connect Cursor to **`openfdd-mcp`** (stdio) — see [external agents examples](../examples/external-agents.md).
 

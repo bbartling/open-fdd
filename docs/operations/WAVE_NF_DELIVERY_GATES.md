@@ -87,5 +87,5 @@ Now: the fixture half is in CI. **SoftOPEN defer —** the bounded real read-onl
 ## Phase 11 — Release
 
 Entry: Phase 10 fixture evidence is green and the status file is truthful.
-Exit: VERSION 4.0.0 images for central and web, newest-by-created pin, Railway re-pin, no fieldbus image, Grok proof on that sha, ACME only after the pilot is stable.
+Exit: VERSION 4.0.0 images for central and web, newest-by-created pin, stack re-pin (historically Railway; now the local stack), no fieldbus image, Grok proof on that sha, ACME only after the pilot is stable.
 Now: this gate document and `wave_nf_status.json` are the N13 record. Nothing is deployed. Nothing is qualified.

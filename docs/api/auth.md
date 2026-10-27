@@ -52,7 +52,7 @@ Returns an **operator** JWT (`sub=agent`). `ttl_secs` defaults to 3600 and is cl
 
 ## Credentials
 
-Set secrets in the deployment environment (Railway Variables, Compose env). Never commit or log secrets or JWTs.
+Set secrets in the deployment environment (the gitignored `.env` for Compose). Never commit or log secrets or JWTs.
 
 {: .warning }
-Do not expose the API on the public internet without TLS and network controls. On Railway, keep central and MCP private; put only web on a public domain.
+Do not expose the API on the public internet without TLS and network controls. On the local stack, keep central and MCP on loopback or the LAN/VPN.

@@ -47,7 +47,7 @@ Haystack hisRead (HTTPS) ───┘         │
 
 **Path split (#1017):** OT collectors publish MQTTS; Haystack history uses outbound HTTPS `hisRead` into the same central writer (MQTT optional). See [ADR historian ingest path split](adr-historian-ingest-path-split-1017.md). Do not run Haystack HTTP credentials inside the BACnet/Modbus process.
 
-Railway is a deployment target for the generic S3-compatible backend; it is not a storage-engine special case.
+Historical: Railway was once a deployment target for the generic S3-compatible backend; Railway and cloud web-app hosting are now retired.
 
 ## Current implementation
 
@@ -121,7 +121,7 @@ delete retired tombstones
 `openfdd_cli compact-history` offline (or hub-admin `POST /api/historian/compaction`
 with `confirm:true`). The **runtime coordinator** (`CompactionCoordinator`) serializes
 compaction against DataFusion scans — fail closed or wait — so Central never creates a
-publish-first duplicate-row window or a retire-first read gap. Prefer a Railway
+publish-first duplicate-row window or a retire-first read gap. Prefer a
 maintenance window for live compact. Continuous auto-scheduling remains opt-in later.
 
 ## Canonical dataset layout
@@ -235,7 +235,9 @@ The repository still has pre-canonical paths that H6/H7 must migrate or demote s
 
 No legacy data is deleted before its consumers and preservation/migration requirements are audited.
 
-## H5: S3-compatible storage and Railway
+## H5: S3-compatible storage and Railway (historical)
+
+> **Historical (Railway retired 2026-10-26).** Railway references in this section are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](../operations/LOCAL_HOSTING.md).
 
 The generic application configuration target is:
 
@@ -350,7 +352,7 @@ The key continuous-mode benchmark is not “how fast can Open-FDD scan 1 TB?” 
 2. **H2 Partitioned Parquet writer/micro-batches** — merged.
 3. **H3 DataFusion dataset registration/query safeguards** — merged.
 4. **H4 Offline local compaction** — merged.
-5. **H5 S3-compatible backend + central/Railway/MinIO wiring** — next.
+5. **H5 S3-compatible backend + central/MinIO wiring** — next.
 6. **H6 Migration + historian operator tooling** — not landed.
 7. **H7 Live ingest durability cutover** — shared micro-batch writer, graceful
    flush, local fieldbus HTTP delivery, and durable pending/committed receipts

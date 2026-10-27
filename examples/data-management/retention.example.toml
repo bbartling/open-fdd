@@ -14,7 +14,7 @@ keep_days = 180
 keep_all = true
 
 # Local/edge pool for historian + analytics result parquet.
-# Oldest part first. Railway volumes stay on their own policy unless
+# Oldest part first. Other host volumes stay on their own policy unless
 # OPENFDD_DATA_BUDGET_ENABLED=1. See docs/operations/DATA_RETENTION_BUDGET.md.
 [storage_cap]
 enabled = true

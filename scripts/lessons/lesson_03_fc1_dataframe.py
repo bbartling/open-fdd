@@ -13,7 +13,7 @@ Package seed short keys (opaque IRI suffix) are usually:
   duct_static, duct_static_sp, fan_cmd
 
   python scripts/lessons/lesson_03_fc1_dataframe.py \\
-    --base-url https://openfdd-web-production.up.railway.app --building-id SYNTH_03
+    --base-url http://127.0.0.1:8080 --building-id SYNTH_03
 
 Requires: ``pip install pandas open-fdd``. Soft-OPEN ≠ FQ. Synthetic sites only.
 """

@@ -63,8 +63,8 @@ When driving a **tiny-rev / ops closeout** (not Milestone A migration PRs):
 2. **One concern per PR** — harness fixes, product fixes, and docs-only fixes stay separate.
 3. **VERSION** — bump workspace patch only when product/runtime behavior changes (`docs/VERSIONING.md`).
 4. **Auth / MT security PRs** — update [`skills/openfdd-mt-security/SKILL.md`](skills/openfdd-mt-security/SKILL.md) + AGENTS rule **60b** when changing pre-auth routes, tenant ACL, CSP/`security.txt`, or MQTT ACL notes. Keep `cargo test -p openfdd-central --test preauth_disclosure` green.
-5. **Post-merge** — GHCR publish → backup + re-pin (Railway + local) → smoke → re-stress affected gate only. **Skip Railway re-pin while Kali owns the hub** unless operator OK.
-6. **Railway F1** — cloud pipeline stress (DF55, BUILDING_50, AFDD flood, bldg2) is logged under BUG_REPORT **Railway F1**; it does not block declaring local synthetic CSV FDD evidence.
+5. **Post-merge** — GHCR publish → tip gate → local re-pin (`scripts/openfdd_local_repin.sh`) → assert → re-qualify affected gate only. Railway / cloud web-app hosting is retired.
+6. **Railway F1 (historical)** — retired cloud pipeline stress (DF55, BUILDING_50, AFDD flood, bldg2) is logged under BUG_REPORT **Railway F1**; it does not block declaring local synthetic CSV FDD evidence.
 
 
 ## PR body template

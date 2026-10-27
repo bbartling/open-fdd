@@ -82,12 +82,12 @@ typst compile main.typ BUILDING_100_RCx_Lab_Report.pdf
 This path is **additive**. It does not render, replace, or overwrite the sacred
 BUILDING_100 Overview PDF, `main.typ`, or Overview PNG stems.
 
-AI agent reporting can consume FDD and analytics that Timescale SQL already ran on an Open-FDD instance (Railway or self-hosted), or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not Railway-only.
+AI agent reporting can consume FDD and analytics that Timescale SQL already ran on a self-hosted local Open-FDD instance, or crunch the same mapped roles locally with the PyPI pandas oracle on a CSV. Either path is valid: not compute-only, and not API-only.
 
-The reporter is not Railway-only. It draws from mapped roles (`RoleHistory`).
+The reporter is not tied to one host. It draws from mapped roles (`RoleHistory`).
 `open-fdd-anomaly report` loads a local device folder (`history_wide.csv` +
-`column_map.json`). The same template accepts a role-named frame from a Railway
-or self-hosted Open-FDD central (`OpenFddApiSource`; the class does not open
+`column_map.json`). The same template accepts a role-named frame from a self-hosted
+local Open-FDD central (`OpenFddApiSource`; the class does not open
 the network) or from a future vendor API (`VendorApiSource`). Export central or
 vendor history into the device folder, or pass a reader.
 
@@ -162,7 +162,7 @@ pass/fail bullet list in everyday words.
 | Economizer scatter | `build_economizer_delta_points` + `economizer_delta_scatter(..., viewport="bottom_left")`. `economizer_delta_frame` is the same function (older local trees). Keep the `build_economizer_delta_points` name. |
 | Agent notes | Optional prose in `ai_comments.json` (slots: sensor_checks, anomaly_screening, executive_summary, rcx_week, confirmed_faults, economizer). Empty slots are omitted. The PDF has no re-run command. |
 
-History sources (`HISTORY_SOURCES`): `device_folder` (local CSV + map; what the CLI loads), `openfdd_api` (Railway or self-hosted Open-FDD; pass a reader, no network inside the class), `vendor_api` (future vendor API; registered stub). All three land on mapped roles. `--week YYYY-MM-DD` pins seven days (April example `2026-04-06`). Omit it and the window is the 7 days in the month with the most fan-ON samples.
+History sources (`HISTORY_SOURCES`): `device_folder` (local CSV + map; what the CLI loads), `openfdd_api` (self-hosted local Open-FDD; pass a reader, no network inside the class), `vendor_api` (future vendor API; registered stub). All three land on mapped roles. `--week YYYY-MM-DD` pins seven days (April example `2026-04-06`). Omit it and the window is the 7 days in the month with the most fan-ON samples.
 
 Ordered sections for facility / RCx readers (keep this order):
 
@@ -180,11 +180,11 @@ Haystack exports store devices under `equip` (object). Flat sidecars use string 
 
 The names in this section are the external lab kit only. Do not copy `BUILDING_100`, `LAKESIDE_ES`, or a Detroit ACME address into a PyPI report default or a Timescale historian branch. Tests and ops may keep those names. Report and plot equipment still comes from `equipType` / `equipment_type`, roles, and the registry — do not prefer a fixture id, and do not substring-match `equipment_id` (`RTU_01` must not hit `RTU_010`). See [`openfdd-site-identity`](../openfdd-site-identity/SKILL.md).
 
-The single-AHU reporter above is not this site's Overview PDF, and it is not a Railway-only command.
+The single-AHU reporter above is not this site's Overview PDF, and it is not a central-only command.
 
-- Full-building Overview PDF: keep the legacy kit (`fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ`). Do not point that site at `build_single_system_report`.
-- Single-AHU pack: `open-fdd-anomaly report <folder> --compile` after a device folder is already on disk. That folder can be a local CSV export, a dump from Railway or a self-hosted Open-FDD central, or a mapped vendor export. CI uses `tests/reporting/fixtures/ahu_typst_mini/` (sample PDF `tests/reporting/fixtures/ahu_typst_mini_report.pdf`). Do not commit a multi-megabyte BUILDING_100 CSV. Do not add a local `build_april_report.py`.
-- When `OPENFDD_API_BASE` and a JWT already exist, inventory is `GET /api/csv/import/package/mapping?building_id=BUILDING_100` on whichever central that base URL points at (Railway or self-hosted). A local package zip can go through `scripts/agent_eplus_dump.sh` (engineering bundle). Neither call is required for the unit tests, and secrets stay out of CI.
+- Full-building Overview PDF: keep the legacy kit (its historically named `fetch_railway.py` → `render_plots.py` → `build_typst_body.py` → `main.typ`). Do not point that site at `build_single_system_report`.
+- Single-AHU pack: `open-fdd-anomaly report <folder> --compile` after a device folder is already on disk. That folder can be a local CSV export, a dump from a self-hosted local Open-FDD central, or a mapped vendor export. CI uses `tests/reporting/fixtures/ahu_typst_mini/` (sample PDF `tests/reporting/fixtures/ahu_typst_mini_report.pdf`). Do not commit a multi-megabyte BUILDING_100 CSV. Do not add a local `build_april_report.py`.
+- When `OPENFDD_API_BASE` and a JWT already exist, inventory is `GET /api/csv/import/package/mapping?building_id=BUILDING_100` on whichever central that base URL points at (the local stack by default, `http://127.0.0.1:8080`). A local package zip can go through `scripts/agent_eplus_dump.sh` (engineering bundle). Neither call is required for the unit tests, and secrets stay out of CI.
 
 ### Additive changes only
 

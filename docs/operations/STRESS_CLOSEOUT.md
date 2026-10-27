@@ -8,6 +8,8 @@ nav_exclude: true
 
 # Stress closeout — agent handbook
 
+> **Historical (Railway retired 2026-10-26).** Railway and cloud web-app hosting are retired; Railway references below are `historical/non-executable`. Hosting is the local single-host stack: [LOCAL_HOSTING.md](LOCAL_HOSTING.md).
+
 
 ## Current 4.0 portal tooling
 
@@ -77,7 +79,7 @@ Raspberry Pis are **out of** Open-FDD stress (bosspi / fake AHU `.13` / fake VAV
 ## Bootstrap before stress
 
 1. Tip Actions green + GHCR **Publish Open-FDD stack** success.
-2. **Railway:** backup → re-pin central → mqtt → web — [`RAILWAY_DEPLOYMENT.md`](RAILWAY_DEPLOYMENT.md) · skill [`openfdd-railway-cli`](../../openfdd_agent_spec/skills/openfdd-railway-cli/SKILL.md).
+2. **Railway:** backup → re-pin central → mqtt → web — `RAILWAY_DEPLOYMENT.md` (removed, historical) · skill `openfdd-railway-cli` (removed, historical).
 3. **Field:** `./scripts/openfdd_fieldbus_railway_up.sh sha-<7>` (stops local react-ot; host-net fieldbus → Railway). Kit via `POST /api/mqtt/edge-kits` (`bldg2` / `bensbench-1`).
 4. Then `./scripts/nightly-ot-bench/run_railway_hub_stress.sh`.
 

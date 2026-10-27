@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-shot purge of the Timescale historian.
 
-Image updates do not run this script. It is the explicit Railway (or local)
+Image updates do not run this script. It is the explicit local-stack
 opt-in for wiping every historian row once, before a Building 50 demo seed.
 
 Refuses unless both of these are set:

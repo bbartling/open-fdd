@@ -2,8 +2,8 @@
 name: openfdd-architecture
 description: >-
   Use when enforcing Open-FDD product boundaries: Timescale and PostgreSQL SQL
-  versus the pandas oracle, Normal Framework portal and CSV ingest, Railway
-  central and web, vibe19/vibe20 ownership, dual cookbooks, and the edge helper
+  versus the pandas oracle, Normal Framework portal and CSV ingest, local
+  single-host central and web, vibe19/vibe20 ownership, dual cookbooks, and the edge helper
   crate. Triggers on: architecture, ownership, pandas fallback, cookbook delete,
   Milestone A Phase 0, architecture_epoch.
 ---
@@ -24,7 +24,7 @@ Read [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and [`ownership.yaml`](../../own
   - Known gap, not permitted: the remaining `crates/fdd_store` Arrow / Parquet modules (historian sidecar, compaction, disk budget), removed in Wave P2. The analytics result cache is the PostgreSQL `analytics_result` table.
 - Production FDD and analytics = Timescale / PostgreSQL (`sql/fdd/`) on central. No silent pandas fallback ([ADR-010](../../../docs/architecture/adr-010-timescale-hard-cutover.md)).
 - Ingest = Normal Framework portal API and CSV. MQTT ingest is disabled by default in 4.x. MQTT, BACnet, Modbus, Haystack wire, and fieldbus are an unqualified archive. Historical, superseded by the Timescale-only mandate: MQTTS once kept a small ingest buffer keyed by the envelope site id. That buffer is not a live path and is not a second telemetry store.
-- Railway product services = central + web, with Timescale. Optional image: `openfdd-mcp`.
+- Product services = central + web, with Timescale, on the local single-host stack. Optional image: `openfdd-mcp`. Railway and any cloud web-app hosting are retired and prohibited.
 - Pandas oracle = `open_fdd.rules` + `analytics` — permanent, outside the product request path.
 - Both cookbooks stay. The SQL cookbook filename `datafusion-sql-cookbook.md` is an expression record, not the engine. See [`docs/COOKBOOK_OWNERSHIP.md`](../../docs/COOKBOOK_OWNERSHIP.md).
 - Sole product UI = React SPA (`frontend/web` → `openfdd-web`) → central `/api` only.

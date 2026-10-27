@@ -76,7 +76,7 @@ workspace/vibe21_artifacts/
 workspace/vibe21_venv/
 workspace/vibe21_jobs/
 
-# Local Railway/workspace backups (never commit)
+# Local workspace backups (never commit)
 openfdd-backups/
 .secrets/
 .worktrees/

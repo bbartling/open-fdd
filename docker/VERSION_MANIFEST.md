@@ -38,11 +38,13 @@ export OPENFDD_MQTT_IMAGE=ghcr.io/bbartling/openfdd-mqtt:sha-abc1234
 export OPENFDD_MCP_IMAGE=ghcr.io/bbartling/openfdd-mcp:sha-abc1234
 ```
 
-For Railway, the same `openfdd-web` image defaults to Compose upstream `central:8080` but can be pointed at Railway private DNS at runtime:
+The `openfdd-web` image defaults to Compose upstream `central:8080` and can be pointed at another private central at runtime:
 
 ```text
-OPENFDD_CENTRAL_UPSTREAM=openfdd-central.railway.internal:8080
+OPENFDD_CENTRAL_UPSTREAM=central:8080
 ```
+
+Railway and cloud web-app hosting are retired; hosting is the local single-host stack ([LOCAL_HOSTING.md](../docs/operations/LOCAL_HOSTING.md)).
 
 ## Version source of truth
 
@@ -61,7 +63,7 @@ Do not hand-maintain a stale SHA in this file. After a `master` merge:
 1. require the stack GHCR workflow and MCP GHCR workflow to complete successfully;
 2. run `./scripts/ghcr_newest_by_created.py openfdd-central` (and the corresponding images) to resolve the newest OCI `created` digest;
 3. verify `:nightly` matches the intended `sha-<7>` image before deploying;
-4. pin Railway/bench qualification to the immutable `sha-*` tag when reproducibility matters.
+4. pin the local stack and qualification to the immutable `sha-*` tag when reproducibility matters (`scripts/openfdd_local_repin.sh`).
 
 Product UI is **React** (`frontend/web` / `openfdd-web`).  
 Production FDD = DataFusion SQL (`sql_rules/`). Pandas cookbook stays as oracle (PyPI / vibe19).
