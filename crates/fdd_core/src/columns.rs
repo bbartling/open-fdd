@@ -134,6 +134,8 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "heating-sp" | "zone-heating-sp" => "heating_sp".into(),
         "zone-co2" | "co2" => "zone_co2".into(),
         "zone-air-humidity" | "zone-humidity" => "zone_rh".into(),
+        "mixed-air-humidity" => "ma_h".into(),
+        "supply-air-humidity" => "sa_h".into(),
         "zone-airflow" | "airflow" => "zone_flow".into(),
         "zone-airflow-sp" => "zone_airflow_sp".into(),
         "vav-total-airflow" => "vav_total_flow".into(),
@@ -252,8 +254,12 @@ pub fn normalize_role(role: &str) -> String {
         "hws_t" | "hw_supply" | "hwst" | "hws_t_f" | "hw_supply_t" => "hw_supply_t".into(),
         "hwr_t" | "hw_return" | "hwrt" | "hwr_t_f" | "hw_return_t" => "hw_return_t".into(),
         "oa_humidity" | "oa_h" | "relative_humidity_pct" | "oa_rh_pct" => "oa_h".into(),
-        "zone_rh" | "zone_humidity" | "zone_relative_humidity" | "space_rh" => "zone_rh".into(),
+        "zone_rh" | "zone_h" | "zone_humidity" | "zone_relative_humidity" | "space_rh" => {
+            "zone_rh".into()
+        }
         "ra_h" | "return_air_humidity" | "return_air_rh" | "rat_h" => "ra_h".into(),
+        "ma_h" | "mixed_air_humidity" | "mat_h" => "ma_h".into(),
+        "sa_h" | "supply_air_humidity" | "sat_h" => "sa_h".into(),
         "cooling_setpoint" | "effective_setpoint" | "clg_stpt" => "sat_sp".into(),
         "occ_mode" | "occupancy" | "occupied" | "schedule" => "occ_mode".into(),
         "return_fan" => "return_fan".into(),
@@ -305,6 +311,8 @@ pub const COOKBOOK_ROLES: &[&str] = &[
     "hw_return_t",
     "oa_h",
     "ra_h",
+    "ma_h",
+    "sa_h",
     "occ_mode",
     "return_fan",
     "elec_power",
@@ -354,6 +362,8 @@ pub fn is_known_cookbook_role(role: &str) -> bool {
             | "hw_return_t"
             | "oa_h"
             | "ra_h"
+            | "ma_h"
+            | "sa_h"
             | "occ_mode"
             | "return_fan"
             | "elec_power"

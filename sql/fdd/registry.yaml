@@ -1617,7 +1617,7 @@ rules:
     description: Sensor out of hard range
     required_roles: []
     # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, kwh, electric_kw, electric_kwh]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, kwh, electric_kw, electric_kwh]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1696,7 +1696,7 @@ rules:
     description: Sensor flatline (stuck)
     required_roles: []
     # Pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1855,7 +1855,7 @@ rules:
     # Pandas gate is `always` (sensor sweep); do not require fan_cmd.
     # Catalog matches pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
     required_roles: []
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

@@ -67,6 +67,11 @@
       "notes": "Declared only; 1 means 1% when percent, 100% when fraction."
     },
     {
+      "id": "relative_humidity",
+      "canonical_unit": "percent_0_100",
+      "aliases": ["%RH", "%", "RH", "percent_relative_humidity"]
+    },
+    {
       "id": "status",
       "canonical_unit": "boolean"
     },

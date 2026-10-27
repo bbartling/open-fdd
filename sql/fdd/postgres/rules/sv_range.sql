@@ -7,7 +7,8 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     oa_t, mat, zone_t, rat, sat,
-    chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static,
+    chw_supply_t, chw_return_t, hw_supply_t, hw_return_t,
+    oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static,
     fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
@@ -35,6 +36,10 @@ base AS (
       WHEN hw_supply_t IS NOT NULL AND (hw_supply_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_supply_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR hw_supply_t > 220.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
       WHEN hw_return_t IS NOT NULL AND (hw_return_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_return_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR hw_return_t > 220.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
       WHEN oa_h IS NOT NULL AND (oa_h = CAST('NaN' AS DOUBLE PRECISION) OR oa_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR oa_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN ra_h IS NOT NULL AND (ra_h = CAST('NaN' AS DOUBLE PRECISION) OR ra_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR ra_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN zone_rh IS NOT NULL AND (zone_rh = CAST('NaN' AS DOUBLE PRECISION) OR zone_rh < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR zone_rh > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN ma_h IS NOT NULL AND (ma_h = CAST('NaN' AS DOUBLE PRECISION) OR ma_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR ma_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
+      WHEN sa_h IS NOT NULL AND (sa_h = CAST('NaN' AS DOUBLE PRECISION) OR sa_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR sa_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
       WHEN duct_static IS NOT NULL AND (duct_static = CAST('NaN' AS DOUBLE PRECISION) OR duct_static < -1.0 * {{RANGE_SCALE_PRESSURE}} OR duct_static > 8.0 * {{RANGE_SCALE_PRESSURE}}) THEN 1
       ELSE 0
     END AS INT) AS raw_fault

@@ -7,6 +7,8 @@ use serde_json::json;
 use sqlx::Row;
 use std::collections::BTreeMap;
 
+use fdd_core::{is_expected_constant_role, sweep_assessable_sql_role};
+
 use super::{
     envelope, envelope_with_engine, finalize_historian, historian, resolve_query_version,
     AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest, QV_SENSOR_HEALTH,
@@ -48,10 +50,26 @@ pub struct SensorSeriesRow {
 }
 
 /// Compute per-(equipment_id, role) health stats from inline points.
+fn flatline_eligible(role: &str, unit: Option<&str>) -> bool {
+    if is_expected_constant_role(role) {
+        return false;
+    }
+    sweep_assessable_sql_role(role, unit)
+}
+
 pub fn compute_sensor_health(
     points: &[SensorPoint],
     flatline_min_n: usize,
     flatline_std_eps: f64,
+) -> Vec<SensorSeriesRow> {
+    compute_sensor_health_with_units(points, flatline_min_n, flatline_std_eps, None)
+}
+
+pub fn compute_sensor_health_with_units(
+    points: &[SensorPoint],
+    flatline_min_n: usize,
+    flatline_std_eps: f64,
+    units_by_role: Option<&BTreeMap<(String, String), String>>,
 ) -> Vec<SensorSeriesRow> {
     let mut by_key: BTreeMap<(String, String), Vec<Option<f64>>> = BTreeMap::new();
     for p in points {
@@ -104,7 +122,11 @@ pub fn compute_sensor_health(
             )
         };
 
-        let flatline_flag = n_finite as usize > flatline_min_n
+        let unit = units_by_role
+            .and_then(|m| m.get(&(equipment_id.clone(), role.clone())))
+            .map(String::as_str);
+        let flatline_flag = flatline_eligible(&role, unit)
+            && n_finite as usize > flatline_min_n
             && std.map(|s| s <= flatline_std_eps).unwrap_or(false);
 
         rows.push(SensorSeriesRow {
@@ -210,6 +232,7 @@ const SENSOR_HEALTH_SQL: &str = r#"
 SELECT
   a.equipment_id,
   a.role,
+  a.unit,
   a.openfdd_key,
   count(*)::bigint AS n,
   count(val) FILTER (
@@ -249,7 +272,7 @@ WHERE s.site_id = $1
     OR cardinality($4) = 0
     OR a.equipment_id = ANY ($4)
   )
-GROUP BY a.equipment_id, a.role, a.openfdd_key
+GROUP BY a.equipment_id, a.role, a.unit, a.openfdd_key
 ORDER BY a.equipment_id, a.role, a.openfdd_key
 "#;
 
@@ -375,15 +398,21 @@ fn series_row_from_sql(row: &sqlx::postgres::PgRow) -> Result<SensorSeriesRow> {
     let max = finite_stat(row, "max_val", round4)?;
     let mean = finite_stat(row, "mean_val", round4)?;
     let std = finite_stat(row, "std_val", round6)?;
-    let flatline_flag = n_finite > DEFAULT_FLATLINE_MIN_N as u64
+    let role = row
+        .try_get::<String, _>("role")
+        .context("sensor health role")?;
+    let unit = row
+        .try_get::<Option<String>, _>("unit")
+        .context("sensor health unit")?;
+    let unit_ref = unit.as_deref();
+    let flatline_flag = flatline_eligible(&role, unit_ref)
+        && n_finite > DEFAULT_FLATLINE_MIN_N as u64
         && std.is_some_and(|value| value <= DEFAULT_FLATLINE_STD_EPS);
     Ok(SensorSeriesRow {
         equipment_id: row
             .try_get::<String, _>("equipment_id")
             .context("sensor health equipment_id")?,
-        role: row
-            .try_get::<String, _>("role")
-            .context("sensor health role")?,
+        role,
         n,
         n_finite,
         coverage_pct,
@@ -485,7 +514,9 @@ mod tests {
         let pts: Vec<_> = (0..8)
             .map(|i| pt("SEN-1", "zone_t", i * 300, Some(72.0)))
             .collect();
-        let rows = compute_sensor_health(&pts, 5, 1e-9);
+        let mut units = BTreeMap::new();
+        units.insert(("SEN-1".into(), "zone_t".into()), "degF".into());
+        let rows = compute_sensor_health_with_units(&pts, 5, 1e-9, Some(&units));
         assert!(rows[0].flatline_flag);
         assert_eq!(rows[0].std, Some(0.0));
     }
@@ -497,6 +528,26 @@ mod tests {
             .collect();
         let rows = compute_sensor_health(&pts, 5, 1e-9);
         assert!(!rows[0].flatline_flag);
+    }
+
+    #[test]
+    fn status_role_never_flatlines_even_when_constant() {
+        let pts: Vec<_> = (0..8)
+            .map(|i| pt("AHU-1", "fan_status", i * 300, Some(1.0)))
+            .collect();
+        let rows = compute_sensor_health(&pts, 5, 1e-9);
+        assert!(!rows[0].flatline_flag);
+    }
+
+    #[test]
+    fn stuck_humidity_flatlines_with_declared_unit() {
+        let pts: Vec<_> = (0..8)
+            .map(|i| pt("AHU-1", "ra_h", i * 300, Some(42.0)))
+            .collect();
+        let mut units = BTreeMap::new();
+        units.insert(("AHU-1".into(), "ra_h".into()), "%RH".into());
+        let rows = compute_sensor_health_with_units(&pts, 5, 1e-9, Some(&units));
+        assert!(rows[0].flatline_flag);
     }
 
     #[test]
@@ -701,7 +752,7 @@ mod tests {
         assert_eq!(sat["missingness"], 0.125);
         assert_eq!(sat["flatline_flag"], false);
         assert_eq!(sat["mean"], 70.8571);
-        assert_eq!(flat["flatline_flag"], true);
+        assert_eq!(flat["flatline_flag"], false);
         assert_eq!(flat["std"], 0.0);
         assert_eq!(flat["coverage_pct"], 100.0);
         assert!(rows.iter().all(|row| row["equipment_id"] == "UNIT_1"));

@@ -29,6 +29,8 @@
   "zone_flow": "zone-airflow",
   "zone_airflow_sp": "zone-airflow-sp",
   "ra_h": "return-air-humidity",
+  "ma_h": "mixed-air-humidity",
+  "sa_h": "supply-air-humidity",
   "vav_total_flow": "vav-total-airflow",
   "min_flow_sp": "min-flow-sp",
   "chw_pump_status": "chw-pump-status",

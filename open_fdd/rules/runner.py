@@ -425,6 +425,18 @@ def run_cookbook_rule(
         # OAT-METEO needs both real sources — never inject web into oa_t for the compare.
         if rule.id != "OAT-METEO":
             d = inject_oa_t_for_physics(d)
+    if rule.sensor_sweep:
+        units: dict[str, str] = {}
+        role_units = d.attrs.get("role_units")
+        if isinstance(role_units, dict):
+            units.update({str(k): str(v) for k, v in role_units.items() if v})
+        column_map = d.attrs.get("column_map")
+        if isinstance(column_map, dict):
+            raw_units = column_map.get("units")
+            if isinstance(raw_units, dict):
+                units.update({str(k): str(v) for k, v in raw_units.items() if v})
+        if units:
+            d.attrs["units_map"] = units
     # Fingerprint after params resolve; still stamp skips that happen after params exist.
     missing = _missing_roles(rule, d)
     if missing:
