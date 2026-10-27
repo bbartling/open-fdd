@@ -2,17 +2,35 @@
 
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
-Aligns `cookbook_engine.ROLE_CANDIDATES` / `resolve_role()` with `fdd_core::normalize_role` and `load_column_role_map`.
+Aligns `open_fdd.role_candidates.ROLE_CANDIDATES` / `haystack_point_to_role()` with `fdd_core::normalize_role`, `normalize_haystack_slug`, and `load_column_role_map`.
+
+## NF tag normalization (#1405)
+
+Before the explicit Haystack slug table, `normalize_haystack_slug` applies framework-wide rules (every site):
+
+| Rule | Example in | Example out |
+| --- | --- | --- |
+| `-temperature` → `-temp` | `discharge-air-temperature-setpoint-active` | …`-temp`… |
+| `-setpoint` → `-sp` | `zone-air-temp-setpoint` | `zone-air-temp-sp` |
+| Drop trailing `-active` when tag contains `-sp` | `duct-static-pressure-setpoint-active` | `duct-static-pressure-sp` |
+| Leading `hw-` → `hot-water-` | `hw-supply-temp` | `hot-water-supply-temp` |
+| Leading `chw-` → `chilled-water-` | `chw-st` | `chilled-water-st` |
+| Drop trailing `-local` | `return-air-humidity-local` | `return-air-humidity` |
+
+New explicit slugs: `zone-airflow-sp` → `zone_airflow_sp`, `return-air-humidity` → `ra_h`.
+
+Golden snapshot: `crates/fdd_core/testdata/haystack_point_role_golden.json` (Rust + PyPI parity tests).
 
 ## Python source of truth
 
-- `fdd_app/backend/cookbook_engine.py` — `ROLE_CANDIDATES`, `resolve_role()`, `_KIND_ROLES`
+- `open_fdd/role_candidates.py` — `ROLE_CANDIDATES`, `normalize_haystack_slug`, `haystack_point_to_role`
+- Historical: `fdd_app/backend/cookbook_engine.py` — retired Streamlit oracle
 - `fdd_app/backend/economizer_point_mapping.json` — AHU column aliases
 - `fdd_app/sidecar/historian_export.py` — pivot export roles
 
 ## Rust implementation
 
-- `rust_fdd_core/crates/fdd_core/src/columns.rs` — `normalize_role`, `infer_role_from_column_name`, `load_column_role_map`
+- `crates/fdd_core/src/columns.rs` — `normalize_haystack_slug`, `haystack_point_to_role`, `normalize_role`, `infer_role_from_column_name`, `load_column_role_map`
 - Applied at Parquet ingest (`fdd_store/ingest.rs`) — first column wins per logical role
 
 ## Role candidate table (P0)
