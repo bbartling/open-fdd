@@ -26,6 +26,7 @@ ISSUE_1405_CASES = [
 def test_issue_1405_nf_tag_spellings_table() -> None:
     for tag, want in ISSUE_1405_CASES:
         assert haystack_point_to_role(tag) == want, f"tag {tag}"
+    assert haystack_point_to_role("chw_supply_t") == "chw_supply_t"
 
 
 def test_haystack_point_role_golden_snapshot_parity() -> None:

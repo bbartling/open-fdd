@@ -97,6 +97,14 @@ pub fn normalize_haystack_slug(point: &str) -> String {
 /// Same mapping as package ZIP ingest so `fdd_cli ingest` of synthetic fixtures
 /// produces `fan_status` / `zone_t` / `duct_static` columns, not `fan-status`.
 pub fn haystack_point_to_role(point: &str) -> String {
+    let raw = point.trim().to_lowercase();
+    // Snake-case cookbook roles (e.g. chw_supply_t) must not pass through hw-/chw- slug expansion.
+    if raw.contains('_') {
+        let role = normalize_role(&raw);
+        if is_known_cookbook_role(&role) {
+            return role;
+        }
+    }
     let slug = normalize_haystack_slug(point);
     match slug.as_str() {
         "discharge-air-temp" => "sat".into(),
@@ -825,6 +833,7 @@ mod tests {
                 "tag {tag} should map to {want}"
             );
         }
+        assert_eq!(haystack_point_to_role("chw_supply_t"), "chw_supply_t");
     }
 
     #[test]

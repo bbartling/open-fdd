@@ -179,6 +179,55 @@ ROLE_CANDIDATES: dict[str, str] = {
     "web_oa_t": "web_oa_t",
 }
 
+# Mirrors ``fdd_core::COOKBOOK_ROLES`` / ``is_known_cookbook_role``.
+KNOWN_COOKBOOK_ROLES = frozenset(
+    {
+        "fan_cmd",
+        "fan_status",
+        "sat",
+        "sat_sp",
+        "oa_t",
+        "rat",
+        "mat",
+        "web_oa_t",
+        "web_oa_dp",
+        "duct_static",
+        "duct_static_sp",
+        "oa_damper_pct",
+        "damper_pct",
+        "damper_cmd",
+        "clg_valve_pct",
+        "htg_valve_pct",
+        "reheat_valve_pct",
+        "zone_t",
+        "zone_air_temp_sp",
+        "cooling_sp",
+        "heating_sp",
+        "zone_co2",
+        "zone_rh",
+        "zone_flow",
+        "zone_airflow_sp",
+        "min_flow_sp",
+        "chw_supply_t",
+        "chw_return_t",
+        "chiller_power",
+        "chiller_amps",
+        "chiller_current",
+        "pump_status",
+        "hw_supply_t",
+        "hw_return_t",
+        "oa_h",
+        "ra_h",
+        "occ_mode",
+        "return_fan",
+        "elec_power",
+        "electric_kw",
+        "electric_kwh",
+        "kwh",
+        "gas_flow",
+    }
+)
+
 _HAYSTACK_SLUG_TO_ROLE: dict[str, str] = {
     "discharge-air-temp": "sat",
     "discharge-air-temp-sp": "sat_sp",
@@ -289,6 +338,11 @@ def normalize_role(role: str) -> str:
 
 
 def haystack_point_to_role(point: str) -> str:
+    raw = point.strip().lower()
+    if "_" in raw:
+        role = normalize_role(raw)
+        if role in KNOWN_COOKBOOK_ROLES:
+            return role
     slug = normalize_haystack_slug(point)
     if slug in _HAYSTACK_SLUG_TO_ROLE:
         return _HAYSTACK_SLUG_TO_ROLE[slug]
