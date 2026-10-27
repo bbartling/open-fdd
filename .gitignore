@@ -18,6 +18,7 @@
 __pycache__/
 .pytest_cache/
 /.env
+/config/nf/provider-credentials.env
 edge/workspace/
 services/central/workspace/
 auth.env.local

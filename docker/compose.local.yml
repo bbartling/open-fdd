@@ -9,7 +9,8 @@
 #   (<COMPOSE_PROJECT_NAME>_openfdd-workspace / _openfdd-timescale).
 # - SQL schema/rule packs come from the image (/app/sql); no per-file binds.
 #   Central applies the forward-only schema itself on boot.
-# - NF provider creds are forwarded by name; provider_sites refers to them as env:NF_*.
+# - NF provider creds: optional gitignored env file (OPENFDD_NF_PROVIDER_CREDENTIALS_ENV);
+#   provider_sites JSON uses env:NAME refs. Stack secrets stay in repo-root .env only.
 # Requires Docker Compose >= 2.24.4 for !reset / !override.
 
 services:
@@ -18,7 +19,7 @@ services:
     build: !reset null
     pull_policy: missing
     env_file:
-      - path: ../.env
+      - path: ${OPENFDD_NF_PROVIDER_CREDENTIALS_ENV:-../config/nf/provider-credentials.env}
         required: false
     environment:
       OPENFDD_SITE_ID: ${OPENFDD_SITE_ID:-local}

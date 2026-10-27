@@ -62,6 +62,39 @@ MQTT ACL for local: place under `deploy/mqtt/certs/acl` (tip mqtt images read `a
 
 Historical: patch-cycle OT was **one** MQTTS path (x86 fieldbus → the retired Railway hub). Optional local `react-ot` is a lab only — do not use it as the AFDD head-end. Current hosting: [`LOCAL_HOSTING.md`](LOCAL_HOSTING.md).
 
+## Multi-site NF providers (local stack)
+
+Run any number of NF portal sites from configuration only — no site names in
+product code.
+
+1. Copy real site files out of the repo (for example
+   `~/.config/openfdd/sites/site_a.json`). Use
+   [`scripts/nf/provider_sites.example.json`](../../scripts/nf/provider_sites.example.json)
+   as the shape. Each file is one site object or a one-element array. Credential
+   fields use distinct `env:NAME` refs per site, for example
+   `env:NF_CLIENT_SECRET_SITE_A` and `env:NF_CLIENT_SECRET_SITE_B`.
+2. Put NF portal credential values in a **dedicated gitignored env file**, not the
+   whole stack `.env`. Default path: `config/nf/provider-credentials.env` (copy
+   from [`config/nf/provider-credentials.env.example`](../../config/nf/provider-credentials.env.example),
+   `chmod 600`). Override with `OPENFDD_NF_PROVIDER_CREDENTIALS_ENV` in repo-root
+   `.env` (for example `~/.config/openfdd/nf-provider-credentials.env`). Only
+   names referenced as `env:...` in provider JSON belong in that file — not
+   `OPENFDD_JWT_SECRET`, Timescale passwords, or other stack secrets.
+   `docker/compose.local.yml` loads that file into `central` optionally; legacy
+   single-site `NF_CLIENT_ID` / `NF_CLIENT_SECRET` / `NFURL` may still be set in
+   repo-root `.env` and are forwarded by name when present.
+3. Mount the sites directory read-only on central. The default local overlay
+   binds `../scripts/nf` at `/config/nf:ro`. Prefer a host path outside the
+   checkout, for example bind `~/.config/openfdd/sites` to `/config/nf/sites:ro`
+   in a personal compose override, and set
+   `OPENFDD_PROVIDER_SITES=/config/nf/sites` (directory) or a comma-separated
+   list of files under that mount.
+4. Restart central after config changes. `GET /api/providers/sites` lists each
+   loaded site; a missing env ref fails only that site (`auth_not_configured`).
+5. After onboarding, run
+   `python3 scripts/nf/check_portal_fresh.py --env <secrets.env> --sites <site.json> --points <probes.json>`
+   per portal (see [`scripts/nf/README.md`](../../scripts/nf/README.md)).
+
 ## MCP against local central
 
 ```bash
@@ -102,9 +135,9 @@ The local stack merges `docker/compose.portal.yml`, `docker/compose.timescale.ym
 
 Unset names stay unset inside central (compose uses `${VAR:-}`).
 
-### Multi-site NF credentials
-
-`provider_sites` JSON references secrets as `env:NAME` (never literals). For more than one NF portal site, use **distinct env names per site** in `.env`, for example `NF_CLIENT_ID_SITE_A`, `NF_CLIENT_SECRET_SITE_A`, and optional `NFURL_SITE_A`, and point each site object at those names. `compose.local.yml` declares `env_file: ../.env` (optional) so every name in `.env` is visible to central without listing each site in the compose file. See `.env.example` and [`INGEST_QUEUE.md`](INGEST_QUEUE.md).
+The **Multi-site NF providers** section above covers site JSON paths and the
+narrow `OPENFDD_NF_PROVIDER_CREDENTIALS_ENV` file for per-site `env:NAME`
+values. See `.env.example` and [`INGEST_QUEUE.md`](INGEST_QUEUE.md).
 
 Post-re-pin smoke: `./scripts/ops/assert_local_stack_after_repin.sh sha-<7>` reads the build id from `GET /api/version` (anonymous `/api/health` is liveness-only).
 

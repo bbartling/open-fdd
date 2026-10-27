@@ -21,7 +21,8 @@ not a Soft-OPEN driver, and not a new GitHub repo. Haystack semantics stay.
 2. **Normalized samples** → existing Timescale writer (`SampleRow` /
    `TelemetryEnvelope` tags: `building_id`, `equipment_id`, `role`).
 3. **NF first robust driver** — OAuth client-credentials +
-   `POST /api/v1/point/query` (bosspi checkpoint). Ace IoT ships as a stub.
+   `GET /api/v1/point/data` (lab checkpoint via `scripts/nf/check_portal_fresh.py`).
+   Ace IoT ships as a stub.
 4. **Role / equipment identity via SPARQL + semantic_meta only** — inventory-
    approved roles from Haystack RDF templates, or explicit `provider_point_id` →
    `{equipment_id, role}` maps. **Forbidden on the product path:** substring,
@@ -50,8 +51,10 @@ not a Soft-OPEN driver, and not a new GitHub repo. Haystack semantics stay.
 ## Consequences
 
 - The local single-host stack can poll NF portals over HTTPS without MQTT/fieldbus.
-- ACME live NF retrofit waits until bosspi Soft-OPEN is stable (marinate) and
-  Grok deploy tools are rewritten for the slimmer stack.
+- Multi-site NF labs mount a read-only sites directory and per-site `env:NAME`
+  credential refs (`OPENFDD_PROVIDER_SITES` list or directory). Real site JSON
+  stays outside git (`scripts/nf/provider_sites.example.json` is the only
+  tracked template).
 - Soft-OPEN 3620 ART sweep remains deferred tip-bug backlog.
 
 ## Links

@@ -5,11 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
-COMPOSE_FILES=(
-  docker/compose.portal.yml
-  docker/compose.timescale.yml
-  docker/compose.local.yml
-)
+CREDENTIALS_ENV_PATTERN='OPENFDD_NF_PROVIDER_CREDENTIALS_ENV|provider-credentials\.env'
 
 required=(
   OPENFDD_INGEST_CATCHUP_HOURS
@@ -36,10 +32,18 @@ check_source_files() {
       fail=1
     fi
   done
-  if grep -q 'env_file:' docker/compose.local.yml && grep -qE '\.env' docker/compose.local.yml; then
-    echo "PASS: compose.local.yml declares optional repo-root .env for per-site NF credentials"
+  if grep -q 'env_file:' docker/compose.local.yml \
+    && grep -qE "$CREDENTIALS_ENV_PATTERN" docker/compose.local.yml \
+    && ! grep -qE 'path: \\.\\./\\.env' docker/compose.local.yml; then
+    echo "PASS: compose.local.yml loads optional NF provider credentials env file only"
   else
-    echo "FAIL: compose.local.yml must declare env_file for per-site NF credential names" >&2
+    echo "FAIL: compose.local.yml must use OPENFDD_NF_PROVIDER_CREDENTIALS_ENV / provider-credentials.env (not repo-root .env)" >&2
+    fail=1
+  fi
+  if [[ -f config/nf/provider-credentials.env.example ]]; then
+    echo "PASS: provider-credentials.env.example is present"
+  else
+    echo "FAIL: missing config/nf/provider-credentials.env.example" >&2
     fail=1
   fi
   return "$fail"
@@ -127,10 +131,12 @@ for name in "${required[@]}"; do
   fi
 done
 
-if grep -q 'env_file:' docker/compose.local.yml && grep -qE '\.env' docker/compose.local.yml; then
-  echo "PASS: compose.local.yml env_file forwards per-site credential names from .env"
+if grep -q 'env_file:' docker/compose.local.yml \
+  && grep -qE "$CREDENTIALS_ENV_PATTERN" docker/compose.local.yml \
+  && ! grep -qE 'path: \\.\\./\\.env' docker/compose.local.yml; then
+  echo "PASS: NF provider credentials use dedicated env_file path"
 else
-  echo "FAIL: compose.local.yml must declare env_file for per-site NF credential env names" >&2
+  echo "FAIL: central must load OPENFDD_NF_PROVIDER_CREDENTIALS_ENV / provider-credentials.env only" >&2
   fail=1
 fi
 

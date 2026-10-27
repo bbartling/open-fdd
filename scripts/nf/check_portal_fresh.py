@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
-"""Post-onboarding freshness check for an NF site, read through the REMOTE portal.
+"""Post-onboarding freshness check for one NF portal site (read-only).
 
-Default site is ACME. Reads NFURL / NF_CLIENT_ID / NF_CLIENT_SECRET from
-``~/.secrets/nf_acme.env`` (``--env`` to override), takes a token from
-``{NFURL}/api/v1/auth/token`` and reads the latest records with
-``GET {NFURL}/api/v1/point/data`` (read only; never POSTs data).
+Reads ``NFURL`` / ``NF_CLIENT_ID`` / ``NF_CLIENT_SECRET`` from ``--env``, takes a
+token from ``{NFURL}/api/v1/auth/token``, and reads the latest records with
+``GET {NFURL}/api/v1/point/data`` (never POSTs data).
 
-Points checked come from the site's provider_sites JSON (``--sites``):
+Point selection uses ``--sites`` (one site object or a one-element list in the
+file) plus either ``--points`` (JSON list of ``equipment_id`` / ``role`` objects,
+or ``EQUIP:ROLE`` lines) or repeatable ``--sample EQUIP:ROLE``. Every
+``equip_type: weather`` point in the site file is always checked.
 
-* a sample of BACnet points (RTU-01 supply/return/outside air, Tracer SC
-  outside air, a JCI and a Trane VAV zone temp, hot-water plant supply/return), and
-* every point with ``equip_type == "weather"`` (the Open-Meteo hook points).
+Every checked point must be numeric, newer than ``--max-age-min`` (default 30),
+and within a plausibility range. Weather hook points older than ``--warn-age-min``
+(default 25) print WARN but do not fail alone. Exit 0 prints PASS; FAIL exits 1.
+Secrets are never printed. NF ``DEGREES_CELSIUS`` values are converted to °F
+for the range check.
 
-Every checked point must have a numeric value newer than ``--max-age-min``
-(default 30, which covers the 5 min BACnet trend and the 20 min weather hook)
-and pass a plausibility range. A ``equip_type: weather`` point older than
-``--warn-age-min`` (default 25: one 20 min hook interval plus margin) prints
-WARN and does not fail by itself. Exit 0 prints PASS (WARN lines may precede
-it); a FAIL list exits 1. Secrets are never printed.
-
-Units come from the NF point (``GET /api/v1/point/points-id``). Points NF
-reports in DEGREES_CELSIUS (all ACME Trane VAVs) are converted to degF before
-the range check, so a 21 degC zone temp is checked as 70 degF.
-
-    python3 scripts/nf/check_acme_portal_fresh.py
-    python3 scripts/nf/check_acme_portal_fresh.py --env ~/.secrets/nf_other.env \
-        --sites scripts/nf/provider_sites.other.json
-    python3 scripts/nf/check_acme_portal_fresh.py --self-test
+    python3 scripts/nf/check_portal_fresh.py --env ~/.secrets/nf_site.env \\
+        --sites ~/.config/openfdd/sites/site_a.json --points probes.json
+    python3 scripts/nf/check_portal_fresh.py --self-test
 """
 
 from __future__ import annotations
@@ -42,28 +34,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SITES = ROOT / "scripts" / "nf" / "provider_sites.acme.json"
-DEFAULT_ENV = Path.home() / ".secrets" / "nf_acme.env"
 # The portal answers 403 to Python's default User-Agent.
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 openfdd-nf-fresh/1.0"
 CHICAGO = ZoneInfo("America/Chicago")
 # One 20-minute weather-hook interval plus margin. Older than this WARNs.
 # --max-age-min (default 30) remains the fail threshold.
 DEFAULT_WARN_AGE_MIN = 25.0
-
-# (equipment_id, role) samples; missing ones are skipped with a note, so the
-# script stays usable for other sites (pass --sample to replace the list).
-DEFAULT_SAMPLE = [
-    ("rtu_01", "supply-air-temp"),
-    ("rtu_01", "return-air-temp"),
-    ("rtu_01", "outside-air-temp"),
-    ("tracer_sc_01", "outside-air-temp"),
-    ("jci_vav_8", "zone-air-temp"),
-    ("trane_vav_11007", "zone-air-temp"),
-    ("hw_plant", "hw-supply-temp"),
-    ("hw_plant", "hw-return-temp"),
-]
 
 TEMP_F = (-40.0, 130.0)
 RANGES = {
@@ -140,6 +116,36 @@ def fetch_units(base: str, token: str, uuids: list[str]) -> dict[str, str]:
 
 
 UNIT_LABEL = {"DEGREES_FAHRENHEIT": "degF", "DEGREES_CELSIUS": "degC", "PERCENT": "%", "PERCENT_RELATIVE_HUMIDITY": "%RH"}
+
+
+def load_sample_points(path: Path) -> list[tuple[str, str]]:
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        raise SystemExit(f"FAIL: empty points file: {path}")
+    if text.startswith("["):
+        rows = json.loads(text)
+        out: list[tuple[str, str]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                raise SystemExit(f"FAIL: points file entries must be objects: {path}")
+            equip = str(row.get("equipment_id", "")).strip()
+            role = str(row.get("role", "")).strip()
+            if not equip or not role:
+                raise SystemExit(f"FAIL: each points entry needs equipment_id and role: {path}")
+            out.append((equip, role))
+        return out
+    out = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            raise SystemExit(f"FAIL: points line must be EQUIP:ROLE: {line}")
+        equip, role = line.split(":", 1)
+        out.append((equip.strip(), role.strip()))
+    if not out:
+        raise SystemExit(f"FAIL: no points in {path}")
+    return out
 
 
 def pick_points(sites_path: Path, sample: list[tuple[str, str]]) -> tuple[list[dict], list[str]]:
@@ -263,8 +269,13 @@ def run_freshness_self_test() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--env", type=Path, default=DEFAULT_ENV)
-    ap.add_argument("--sites", type=Path, default=DEFAULT_SITES)
+    ap.add_argument("--env", type=Path, help="env file with NFURL, NF_CLIENT_ID, NF_CLIENT_SECRET")
+    ap.add_argument("--sites", type=Path, help="provider_sites JSON for this portal (one site)")
+    ap.add_argument(
+        "--points",
+        type=Path,
+        help="probe list: JSON [{equipment_id, role}, ...] or EQUIP:ROLE lines",
+    )
     ap.add_argument("--max-age-min", type=float, default=30.0)
     ap.add_argument(
         "--warn-age-min",
@@ -288,9 +299,15 @@ def main() -> int:
     if args.self_test:
         return run_freshness_self_test()
 
-    sample = DEFAULT_SAMPLE
-    if args.sample:
+    if args.env is None or args.sites is None:
+        raise SystemExit("FAIL: --env and --sites are required (or use --self-test)")
+
+    if args.points is not None:
+        sample = load_sample_points(args.points.expanduser())
+    elif args.sample:
         sample = [tuple(s.split(":", 1)) for s in args.sample]  # type: ignore[misc]
+    else:
+        raise SystemExit("FAIL: pass --points <file> or at least one --sample EQUIP:ROLE")
 
     env = load_env(args.env.expanduser())
     base = env["NFURL"].rstrip("/")

@@ -71,11 +71,41 @@ fn header_index(headers: &csv::StringRecord, names: &[&str]) -> Option<usize> {
     None
 }
 
+/// Normalize NF/Haystack tag spellings before the explicit slug match table.
+/// Framework-level rules only — no per-site overrides.
+pub fn normalize_haystack_slug(point: &str) -> String {
+    let mut slug = point.trim().to_lowercase().replace([' ', '_'], "-");
+    slug = slug.replace("-temperature", "-temp");
+    slug = slug.replace("-setpoint", "-sp");
+    if slug.ends_with("-active") && slug.contains("-sp") {
+        if let Some(stripped) = slug.strip_suffix("-active") {
+            slug = stripped.to_string();
+        }
+    }
+    if let Some(rest) = slug.strip_prefix("hw-") {
+        slug = format!("hot-water-{rest}");
+    } else if let Some(rest) = slug.strip_prefix("chw-") {
+        slug = format!("chilled-water-{rest}");
+    }
+    if let Some(rest) = slug.strip_suffix("-local") {
+        slug = rest.to_string();
+    }
+    slug
+}
+
 /// Project-Haystack-style point tags (kebab or snake) → SQL cookbook roles.
 /// Same mapping as package ZIP ingest so `fdd_cli ingest` of synthetic fixtures
 /// produces `fan_status` / `zone_t` / `duct_static` columns, not `fan-status`.
 pub fn haystack_point_to_role(point: &str) -> String {
-    let slug = point.trim().to_lowercase().replace([' ', '_'], "-");
+    let raw = point.trim().to_lowercase();
+    // Snake-case cookbook roles (e.g. chw_supply_t) must not pass through hw-/chw- slug expansion.
+    if raw.contains('_') {
+        let role = normalize_role(&raw);
+        if is_known_cookbook_role(&role) {
+            return role;
+        }
+    }
+    let slug = normalize_haystack_slug(point);
     match slug.as_str() {
         "discharge-air-temp" => "sat".into(),
         "discharge-air-temp-sp" => "sat_sp".into(),
@@ -105,9 +135,11 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "zone-co2" | "co2" => "zone_co2".into(),
         "zone-air-humidity" | "zone-humidity" => "zone_rh".into(),
         "zone-airflow" | "airflow" => "zone_flow".into(),
+        "zone-airflow-sp" => "zone_airflow_sp".into(),
         "vav-total-airflow" => "vav_total_flow".into(),
         "min-flow-sp" => "min_flow_sp".into(),
-        "chw-pump-status" => "chw_pump_status".into(),
+        "return-air-humidity" => "ra_h".into(),
+        "chw-pump-status" | "chilled-water-pump-status" => "chw_pump_status".into(),
         "compressor-status" => "compressor_status".into(),
         "building-zone-load-satisfied" => "building_zone_load_satisfied".into(),
         "building-ahu-load-satisfied" => "building_ahu_load_satisfied".into(),
@@ -117,16 +149,16 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "vav-discharge-air-temp" => "vav_discharge_t".into(),
         "vav-inlet-air-temp" => "vav_inlet_t".into(),
         "ahu-discharge-air-temp" => "ahu_sat".into(),
-        "chilled-water-supply-temp" | "chw-st" => "chw_supply_t".into(),
-        "chilled-water-return-temp" | "chw-rt" => "chw_return_t".into(),
+        "chilled-water-supply-temp" | "chw-st" | "chilled-water-st" => "chw_supply_t".into(),
+        "chilled-water-return-temp" | "chw-rt" | "chilled-water-rt" => "chw_return_t".into(),
         "chilled-water-supply-temp-sp" => "chw_supply_sp".into(),
         "hot-water-supply-temp" => "hw_supply_t".into(),
         "hot-water-return-temp" => "hw_return_t".into(),
         "occupied" => "occ_mode".into(),
-        "chw-diff-pressure" => "chw_dp".into(),
-        "chw-diff-pressure-sp" => "chw_dp_sp".into(),
-        "chw-flow" => "chw_flow".into(),
-        "chw-pump-cmd" => "chw_pump_cmd".into(),
+        "chw-diff-pressure" | "chilled-water-diff-pressure" => "chw_dp".into(),
+        "chw-diff-pressure-sp" | "chilled-water-diff-pressure-sp" => "chw_dp_sp".into(),
+        "chw-flow" | "chilled-water-flow" => "chw_flow".into(),
+        "chw-pump-cmd" | "chilled-water-pump-cmd" => "chw_pump_cmd".into(),
         "cw-pump-cmd" => "cw_pump_cmd".into(),
         "tower-fan-cmd" | "cw-fan-cmd" => "tower_fan_cmd".into(),
         "condenser-water-supply-temp" => "cw_supply_t".into(),
@@ -208,6 +240,7 @@ pub fn normalize_role(role: &str) -> String {
             "vav_total_flow".into()
         }
         "airflow" | "actflow" | "flow_input" | "zone_flow" | "zone_airflow" => "zone_flow".into(),
+        "zone_airflow_sp" | "zone_airflow_setpoint" => "zone_airflow_sp".into(),
         "min_flow_sp" | "minflowsp" | "min_airflow" => "min_flow_sp".into(),
         "loop_enabled" | "pid_enable" => "loop_enabled".into(),
         "chws_t" | "chw_supply" | "chwst" | "chws_t_f" | "chw_supply_t" => "chw_supply_t".into(),
@@ -220,6 +253,7 @@ pub fn normalize_role(role: &str) -> String {
         "hwr_t" | "hw_return" | "hwrt" | "hwr_t_f" | "hw_return_t" => "hw_return_t".into(),
         "oa_humidity" | "oa_h" | "relative_humidity_pct" | "oa_rh_pct" => "oa_h".into(),
         "zone_rh" | "zone_humidity" | "zone_relative_humidity" | "space_rh" => "zone_rh".into(),
+        "ra_h" | "return_air_humidity" | "return_air_rh" | "rat_h" => "ra_h".into(),
         "cooling_setpoint" | "effective_setpoint" | "clg_stpt" => "sat_sp".into(),
         "occ_mode" | "occupancy" | "occupied" | "schedule" => "occ_mode".into(),
         "return_fan" => "return_fan".into(),
@@ -253,6 +287,7 @@ pub const COOKBOOK_ROLES: &[&str] = &[
     "zone_co2",
     "zone_rh",
     "zone_flow",
+    "zone_airflow_sp",
     "vav_total_flow",
     "min_flow_sp",
     "chiller_status",
@@ -269,6 +304,7 @@ pub const COOKBOOK_ROLES: &[&str] = &[
     "hw_supply_t",
     "hw_return_t",
     "oa_h",
+    "ra_h",
     "occ_mode",
     "return_fan",
     "elec_power",
@@ -306,6 +342,7 @@ pub fn is_known_cookbook_role(role: &str) -> bool {
             | "zone_co2"
             | "zone_rh"
             | "zone_flow"
+            | "zone_airflow_sp"
             | "min_flow_sp"
             | "chw_supply_t"
             | "chw_return_t"
@@ -316,6 +353,7 @@ pub fn is_known_cookbook_role(role: &str) -> bool {
             | "hw_supply_t"
             | "hw_return_t"
             | "oa_h"
+            | "ra_h"
             | "occ_mode"
             | "return_fan"
             | "elec_power"
@@ -774,5 +812,132 @@ mod tests {
         );
         assert_eq!(map.get("chws_t_f"), Some(&"chw_supply_t".to_string()));
         assert_eq!(map.get("chwr_t_f"), Some(&"chw_return_t".to_string()));
+    }
+
+    /// Issue #1405 — NF tag spellings normalize to existing or new cookbook roles.
+    #[test]
+    fn issue_1405_nf_tag_spellings_table() {
+        let cases = [
+            ("discharge-air-temperature-setpoint-active", "sat_sp"),
+            ("duct-static-pressure-setpoint-active", "duct_static_sp"),
+            ("hw-supply-temp", "hw_supply_t"),
+            ("hw-return-temp", "hw_return_t"),
+            ("zone-air-temp-setpoint", "zone_air_temp_sp"),
+            ("zone-airflow-setpoint", "zone_airflow_sp"),
+            ("return-air-humidity-local", "ra_h"),
+        ];
+        for (tag, want) in cases {
+            assert_eq!(
+                haystack_point_to_role(tag),
+                want,
+                "tag {tag} should map to {want}"
+            );
+        }
+        assert_eq!(haystack_point_to_role("chw_supply_t"), "chw_supply_t");
+    }
+
+    #[test]
+    #[ignore = "manual: regenerate crates/fdd_core/testdata/haystack_point_role_golden.json"]
+    fn emit_haystack_role_golden_json() {
+        const TAGS: &[&str] = &[
+            "discharge-air-temp",
+            "discharge-air-temp-sp",
+            "mixed-air-temp",
+            "return-air-temp",
+            "outside-air-temp",
+            "outside-air-temperature",
+            "bas-outside-air-temp",
+            "outside-air-humidity",
+            "outside-air-damper",
+            "cooling-valve",
+            "heating-valve",
+            "fan-cmd",
+            "return-fan-cmd",
+            "fan-status",
+            "duct-static-pressure",
+            "duct-static-pressure-sp",
+            "vav-pressure-request-sum",
+            "static-reset-request",
+            "cooling-coil-entering-temp",
+            "cooling-coil-leaving-temp",
+            "heating-coil-entering-temp",
+            "heating-coil-leaving-temp",
+            "chiller-status",
+            "loop-enabled",
+            "zone-air-temp",
+            "zone-air-temp-sp",
+            "cooling-sp",
+            "zone-cooling-sp",
+            "heating-sp",
+            "zone-heating-sp",
+            "zone-co2",
+            "co2",
+            "zone-air-humidity",
+            "zone-humidity",
+            "zone-airflow",
+            "airflow",
+            "vav-total-airflow",
+            "min-flow-sp",
+            "chw-pump-status",
+            "compressor-status",
+            "building-zone-load-satisfied",
+            "building-ahu-load-satisfied",
+            "damper",
+            "damper-position",
+            "damper-cmd",
+            "reheat-valve",
+            "vav-discharge-air-temp",
+            "vav-inlet-air-temp",
+            "ahu-discharge-air-temp",
+            "chilled-water-supply-temp",
+            "chw-st",
+            "chilled-water-return-temp",
+            "chw-rt",
+            "chilled-water-supply-temp-sp",
+            "hot-water-supply-temp",
+            "hot-water-return-temp",
+            "occupied",
+            "chw-diff-pressure",
+            "chw-diff-pressure-sp",
+            "chw-flow",
+            "chw-pump-cmd",
+            "cw-pump-cmd",
+            "tower-fan-cmd",
+            "cw-fan-cmd",
+            "condenser-water-supply-temp",
+            "condenser-water-return-temp",
+            "preheat-leaving-temp",
+            "web-outside-air-temp",
+            "web-outside-air-dewpoint",
+            "web-outside-air-wetbulb",
+            "web-outside-air-humidity",
+            "chiller-power",
+            "power",
+            "chiller-amps",
+            "chiller-current",
+            "pump-status",
+            "fan_cmd",
+        ];
+        let rows: Vec<(String, String)> = TAGS
+            .iter()
+            .map(|tag| (tag.to_string(), haystack_point_to_role(tag)))
+            .collect();
+        let json = serde_json::to_string_pretty(&rows).expect("serialize golden");
+        eprintln!("{json}");
+    }
+
+    /// Every pre-#1405 haystack slug in the golden file must keep the same role.
+    #[test]
+    fn haystack_point_role_golden_snapshot_unchanged() {
+        let raw = include_str!("../testdata/haystack_point_role_golden.json");
+        let rows: Vec<(String, String)> =
+            serde_json::from_str(raw).expect("golden JSON must parse");
+        for (tag, want) in rows {
+            assert_eq!(
+                haystack_point_to_role(&tag),
+                want,
+                "golden snapshot drift for tag {tag}"
+            );
+        }
     }
 }

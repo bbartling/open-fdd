@@ -1,4 +1,4 @@
-//! Load `OPENFDD_PROVIDER_SITES` (inline JSON or file path).
+//! Load `OPENFDD_PROVIDER_SITES` (inline JSON, one file, comma-separated files, or a directory of `*.json`).
 //!
 //! Shareable config stores `env:NAME` credential references. Missing, empty,
 //! or one-sided OAuth pairs fail configuration. Anonymous access is only the
@@ -219,6 +219,73 @@ fn load_sites_json(raw: &str) -> Result<Vec<SiteConfigRaw>, String> {
     }
 }
 
+enum ProviderSitesSpec {
+    Inline(String),
+    Files(Vec<std::path::PathBuf>),
+}
+
+fn collect_json_files_in_dir(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<(), String> {
+    let entries = std::fs::read_dir(dir).map_err(|_| "provider_config_unreadable".to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|_| "provider_config_unreadable".to_string())?;
+        let path = entry.path();
+        if path.is_file()
+            && path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
+        {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn expand_provider_site_spec(trimmed: &str) -> Result<ProviderSitesSpec, String> {
+    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        return Ok(ProviderSitesSpec::Inline(trimmed.to_string()));
+    }
+    let mut files = Vec::new();
+    for segment in trimmed.split(',') {
+        let seg = segment.trim();
+        if seg.is_empty() {
+            continue;
+        }
+        let path = Path::new(seg);
+        if !path.exists() {
+            return Err("provider_config_unreadable".into());
+        }
+        if path.is_dir() {
+            collect_json_files_in_dir(path, &mut files)?;
+        } else if path.is_file() {
+            files.push(path.to_path_buf());
+        } else {
+            return Err("provider_config_unreadable".into());
+        }
+    }
+    if files.is_empty() {
+        return Err("provider_config_unreadable".into());
+    }
+    files.sort();
+    files.dedup();
+    Ok(ProviderSitesSpec::Files(files))
+}
+
+fn load_site_raws_from_spec(trimmed: &str) -> Result<Vec<SiteConfigRaw>, String> {
+    match expand_provider_site_spec(trimmed)? {
+        ProviderSitesSpec::Inline(json) => load_sites_json(&json),
+        ProviderSitesSpec::Files(paths) => {
+            let mut all = Vec::new();
+            for path in paths {
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|_| "provider_config_unreadable".to_string())?;
+                all.extend(load_sites_json(&text)?);
+            }
+            Ok(all)
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ProviderConfigLoad {
     pub sites: Vec<SiteConfig>,
@@ -244,17 +311,19 @@ pub fn load_sites_from_env() -> Result<ProviderConfigLoad, String> {
         });
     };
     let trimmed = spec.trim();
-    let json = if trimmed.starts_with('{') || trimmed.starts_with('[') {
-        trimmed.to_string()
-    } else {
-        std::fs::read_to_string(Path::new(trimmed))
-            .map_err(|_| "provider_config_unreadable".to_string())?
-    };
-    load_sites_json_owned(&json)
+    if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        return load_sites_json_owned(trimmed);
+    }
+    let raws = load_site_raws_from_spec(trimmed)?;
+    load_sites_from_raws(raws)
 }
 
 pub fn load_sites_json_owned(json: &str) -> Result<ProviderConfigLoad, String> {
     let raws = load_sites_json(json)?;
+    load_sites_from_raws(raws)
+}
+
+fn load_sites_from_raws(raws: Vec<SiteConfigRaw>) -> Result<ProviderConfigLoad, String> {
     let mut sites = Vec::new();
     let mut failures = Vec::new();
     for raw in raws {
@@ -811,5 +880,91 @@ mod tests {
         assert_eq!(parse_transport(None), Ok(SiteTransport::Rest));
         assert_eq!(parse_transport(Some(" ")), Ok(SiteTransport::Rest));
         assert_eq!(parse_transport(Some("Grpc")), Ok(SiteTransport::Grpc));
+    }
+
+    fn nf_oauth_site_json(building_id: &str, id_env: &str, secret_env: &str) -> String {
+        format!(
+            r#"{{"building_id":"{building_id}","tenant_id":"tenant-a","provider":"nf","endpoint":"https://portal.example","client_id":"env:{id_env}","client_secret":"env:{secret_env}"}}"#
+        )
+    }
+
+    #[test]
+    fn multi_file_list_loads_two_sites_with_distinct_env_refs() {
+        let _guard = crate::test_env_lock::lock_env();
+        let dir = std::env::temp_dir().join(format!("ofdd-provider-sites-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let site_a = dir.join("site_a.json");
+        let site_b = dir.join("site_b.json");
+        std::fs::write(
+            &site_a,
+            nf_oauth_site_json("SITE_A", "NF_ID_A", "NF_SECRET_A"),
+        )
+        .expect("write site_a");
+        std::fs::write(
+            &site_b,
+            nf_oauth_site_json("SITE_B", "NF_ID_B", "NF_SECRET_B"),
+        )
+        .expect("write site_b");
+
+        std::env::set_var("NF_ID_A", "client-a");
+        std::env::set_var("NF_SECRET_A", "secret-a");
+        std::env::remove_var("NF_ID_B");
+        std::env::remove_var("NF_SECRET_B");
+
+        let spec = format!("{},{}", site_a.display(), site_b.display());
+        std::env::set_var("OPENFDD_PROVIDER_SITES", &spec);
+        let loaded = load_sites_from_env().expect("load");
+        std::env::remove_var("OPENFDD_PROVIDER_SITES");
+        std::env::remove_var("NF_ID_A");
+        std::env::remove_var("NF_SECRET_A");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(loaded.sites.len(), 1);
+        assert_eq!(loaded.sites[0].building_id, "SITE_A");
+        assert_eq!(loaded.failures.len(), 1);
+        assert_eq!(loaded.failures[0].building_id, "SITE_B");
+        assert_eq!(loaded.failures[0].code, "auth_not_configured");
+    }
+
+    #[test]
+    fn directory_of_json_files_loads_every_site() {
+        let _guard = crate::test_env_lock::lock_env();
+        let dir = std::env::temp_dir().join(format!("ofdd-provider-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        std::fs::write(
+            dir.join("alpha.json"),
+            nf_oauth_site_json("ALPHA", "NF_ID_ALPHA", "NF_SECRET_ALPHA"),
+        )
+        .expect("write alpha");
+        std::fs::write(
+            dir.join("beta.json"),
+            nf_oauth_site_json("BETA", "NF_ID_BETA", "NF_SECRET_BETA"),
+        )
+        .expect("write beta");
+
+        std::env::set_var("NF_ID_ALPHA", "id-alpha");
+        std::env::set_var("NF_SECRET_ALPHA", "sec-alpha");
+        std::env::set_var("NF_ID_BETA", "id-beta");
+        std::env::set_var("NF_SECRET_BETA", "sec-beta");
+
+        std::env::set_var("OPENFDD_PROVIDER_SITES", dir.to_string_lossy().as_ref());
+        let loaded = load_sites_from_env().expect("load");
+        std::env::remove_var("OPENFDD_PROVIDER_SITES");
+        std::env::remove_var("NF_ID_ALPHA");
+        std::env::remove_var("NF_SECRET_ALPHA");
+        std::env::remove_var("NF_ID_BETA");
+        std::env::remove_var("NF_SECRET_BETA");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(loaded.failures.is_empty());
+        assert_eq!(loaded.sites.len(), 2);
+        let ids: std::collections::BTreeSet<_> = loaded
+            .sites
+            .iter()
+            .map(|s| s.building_id.as_str())
+            .collect();
+        assert_eq!(ids, ["ALPHA", "BETA"].into_iter().collect());
     }
 }

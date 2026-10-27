@@ -13,50 +13,60 @@ python3 scripts/nf/read_sensors.py
 
 Or export those variables in the shell (no `.env` file).
 
-`NF_POINT_UUIDS` is a comma-separated list of provider point ids. Example maps
-live in `provider_sites.bosspi.example.json` (`provider_point_id`) and
-`bosspi_semantic_meta.json` (`point_id`).
+`NF_POINT_UUIDS` is a comma-separated list of provider point ids. The shipped
+shape-only example is [`provider_sites.example.json`](provider_sites.example.json).
 
 Product path is the Rust `DataProvider` NF driver ([Wave-NF plan](../../.cursor/plans/nf_portal_ingest_mega_rev_20261018.plan.md)). This script is the human/agent smoke only. History reads on the product path are `GET /api/v1/point/data`.
 
-## Site files
+## Site files (operator host)
 
-| File | Site |
-| --- | --- |
-| `provider_sites.bosspi.json` | Bench Pi, 5 points |
-| `provider_sites.bosspi.example.json` | Placeholder template |
-| `provider_sites.acme.json` | ACME, 233 points: 230 bare-minimum HVAC BACnet points (NF trend period 300 s) plus 3 Open-Meteo weather variables from the NF hook (20 min) |
+Real site JSON lives **outside git** (for example `~/.config/openfdd/sites/*.json`).
+The repo ships only [`provider_sites.example.json`](provider_sites.example.json)
+with placeholder hosts and per-site `env:NF_CLIENT_ID_*` / `env:NF_CLIENT_SECRET_*`
+names.
 
-Credentials stay in a `chmod 600` env file outside git; the JSON uses
-`env:NF_CLIENT_ID` / `env:NF_CLIENT_SECRET`. How to add a site, the hourly pull,
-and the 7-day NF window: [`openfdd-nf-provider`](../../openfdd_agent_spec/skills/openfdd-nf-provider/SKILL.md).
-Edge install, licensing, and trend periods: [`openfdd-nf-edge-bench`](../../openfdd_agent_spec/skills/openfdd-nf-edge-bench/SKILL.md).
+Central accepts:
+
+- inline JSON in `OPENFDD_PROVIDER_SITES`
+- one file path
+- a comma-separated list of site files
+- a directory of `*.json` site files (sorted by filename)
+
+Each site resolves its own `env:NAME` credential refs. A missing secret marks
+only that site `auth_not_configured`.
+
+Credentials stay in a `chmod 600` env file outside git. How to add a site, the
+hourly pull, and the 7-day NF window:
+[`openfdd-nf-provider`](../../openfdd_agent_spec/skills/openfdd-nf-provider/SKILL.md).
+Edge install, licensing, and trend periods:
+[`openfdd-nf-edge-bench`](../../openfdd_agent_spec/skills/openfdd-nf-edge-bench/SKILL.md).
 
 ## Freshness check (run after onboarding, and whenever data looks stale)
 
 ```bash
-python3 scripts/nf/check_acme_portal_fresh.py                       # ACME defaults, ~/.secrets/nf_acme.env
-python3 scripts/nf/check_acme_portal_fresh.py --env ~/.secrets/nf_<site>.env \
-    --sites scripts/nf/provider_sites.<site>.json --sample rtu_01:supply-air-temp
+python3 scripts/nf/check_portal_fresh.py \
+  --env ~/.secrets/nf_site.env \
+  --sites ~/.config/openfdd/sites/site_a.json \
+  --points ~/.config/openfdd/sites/site_a_probes.json
 ```
 
-It reads the **remote portal** only, using a browser-like User-Agent and the token from the
-env file's `NFURL` / `NF_CLIENT_ID` / `NF_CLIENT_SECRET`. Secrets are never printed. It
-checks a BACnet sample (RTU-01 SA/RA/OA, Tracer SC OA, a JCI and a Trane VAV zone temp,
-the HW plant supply and return) plus every `equip_type: weather` point. It prints point,
-value, units, last timestamp (America/Chicago) and age. A point fails if it is older than
-`--max-age-min` (30), null or non-numeric, or outside its range (°F −40..130 after a °C→°F
-conversion when NF reports Celsius, RH 0..100, HW 32..220, weather dewpoint ≤ dry bulb + 0.5).
-A weather point older than `--warn-age-min` (25: one 20 min hook interval plus margin)
-prints WARN and does not fail by itself. The script exits 1 with a FAIL list, or prints
-PASS. `python3 scripts/nf/check_acme_portal_fresh.py --self-test` checks the thresholds
-offline. Stdlib only.
+`--points` is a JSON list of `{equipment_id, role}` objects or `EQUIP:ROLE` lines.
+Repeat `--sample EQUIP:ROLE` instead of `--points` for a short probe list. The
+script always includes every `equip_type: weather` point from the site file.
+
+It reads the **remote portal** only, using a browser-like User-Agent and the
+token from the env file's `NFURL` / `NF_CLIENT_ID` / `NF_CLIENT_SECRET`. Secrets
+are never printed. Points fail when older than `--max-age-min` (30), null or
+non-numeric, or outside a plausible range (temperature, humidity, hot water).
+Weather points older than `--warn-age-min` (25) print WARN without failing alone.
+Exit 1 lists FAIL reasons; exit 0 prints PASS.
+`python3 scripts/nf/check_portal_fresh.py --self-test` checks thresholds offline.
+Stdlib only.
 
 ## NF hooks (JavaScript on the NF box)
 
 NF code is kept in this repo under [`hooks/`](hooks/README.md). That folder holds the
 hook source, a manifest, and `nf_app_sync.py` (push, run now, status, diff, pull back).
 Edit the code in the repo and push it. If someone edits it in the NF console, pull it
-back before committing. ACME runs `open_meteo_weather.js` every 20 min.
-Agents with the NF MCP connector should use `deploy_hook`, `manage_hooks` (`run`, `runs`, `logs`),
+back before committing. Agents with the NF MCP connector should use `deploy_hook`, `manage_hooks` (`run`, `runs`, `logs`),
 `read_values` and `diagnose`. See [`openfdd-nf-edge-bench`](../../openfdd_agent_spec/skills/openfdd-nf-edge-bench/SKILL.md).

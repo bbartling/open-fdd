@@ -1,0 +1,6 @@
+# Real NF site configs stay on the operator host (e.g. ~/.config/openfdd/sites/).
+provider_sites.*.json
+!provider_sites.example.json
+*_gateway.json
+*_semantic_meta.json
+.env
