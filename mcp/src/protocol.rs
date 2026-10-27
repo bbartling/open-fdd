@@ -61,8 +61,8 @@ impl Server {
     fn tools_list(&self) -> Vec<Value> {
         let mut tools = vec![
             tool("openfdd_health", "GET /api/health (public liveness)", json!({})),
-            tool("openfdd_provider_health", "GET /api/providers/health — Wave-NF portal driver health", json!({})),
-            tool("openfdd_provider_sites", "GET /api/providers/sites — configured provider sites + health", json!({})),
+            tool("openfdd_provider_health", "GET /api/providers/health — NF provider health (portal HTTPS or LAN gRPC transport)", json!({})),
+            tool("openfdd_provider_sites", "GET /api/providers/sites — configured provider sites (incl. NF transport rest|grpc) + health", json!({})),
             tool("openfdd_ingest_jobs", "GET /api/ingest/jobs — scoped durable ingest windows", json!({
                 "site_id": {"type": "string"},
                 "state": {"type": "string"},

@@ -562,7 +562,7 @@ impl BridgeClient {
                 "./scripts/openfdd_health_check.sh"
             ],
             "doc": "docs/quick-start/site-lifecycle.md",
-            "note": "MCP does not execute site update. Field drivers, the MQTT broker, and central MQTT ingest are archived. Product ingest is the Normal Framework portal and CSV."
+            "note": "MCP does not execute site update. Field drivers, the MQTT broker, and central MQTT ingest are archived. Product ingest is the Normal Framework API (portal HTTPS or LAN gRPC) and CSV."
         })
     }
 

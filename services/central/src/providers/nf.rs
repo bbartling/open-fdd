@@ -1,4 +1,5 @@
-//! Normal Framework portal HTTPS driver.
+//! Normal Framework portal HTTPS driver. The LAN gRPC history transport
+//! (`nf_transport.rs`) reuses its token, point-id and timestamp rules.
 //!
 //! History reads are `GET /api/v1/point/data`. `POST` on that path is a write
 //! and is never used here. OAuth token calls are `POST /api/v1/auth/token`.

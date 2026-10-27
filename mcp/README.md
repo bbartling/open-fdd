@@ -117,8 +117,8 @@ docker run -i --rm --network host \
 | Tool | Description |
 |------|-------------|
 | `openfdd_health` | Central liveness |
-| `openfdd_provider_health` | Portal driver health (`GET /api/providers/health`) |
-| `openfdd_provider_sites` | Configured provider sites |
+| `openfdd_provider_health` | NF provider health, portal HTTPS or LAN gRPC (`GET /api/providers/health`) |
+| `openfdd_provider_sites` | Configured provider sites, including each NF site's `transport` (`rest` or `grpc`) |
 | `openfdd_ingest_jobs` | Scoped durable ingest windows |
 | `openfdd_ingest_receipts` | Scoped commit receipts |
 | `openfdd_ingest_gaps` | Partial / failed / retry windows (`coverage` is not assessed) |

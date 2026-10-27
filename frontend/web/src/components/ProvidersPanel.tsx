@@ -11,6 +11,7 @@ import {
   type ProviderSiteHealth,
 } from "../api/providersApi";
 import {
+  connectionLabel,
   credentialRefLabel,
   isArchivedFieldDriver,
   jobCoverageWord,
@@ -252,6 +253,7 @@ export function ProvidersPanel() {
               <tr>
                 <th>Site</th>
                 <th>Provider</th>
+                <th>Connection</th>
                 <th>Status</th>
                 <th>Origin</th>
                 <th>Poll</th>
@@ -291,6 +293,9 @@ export function ProvidersPanel() {
                       </button>
                     </td>
                     <td>{providerLabel(row.provider)}</td>
+                    <td data-testid={`provider-connection-${row.buildingId}`}>
+                      {connectionLabel(row.provider, row.transport)}
+                    </td>
                     <td>
                       <span
                         className={`provider-status provider-status--${status.tone}`}

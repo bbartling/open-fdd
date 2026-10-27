@@ -8,7 +8,7 @@ No row below is **qualified**. No 4.0 image is claimed **deployed**. A lab smoke
 
 ## Product boundary
 
-Normal 4.0 ingest is HTTPS `DataProvider` drivers inside `openfdd-central`, writing normalized samples through the existing Timescale live-historian path. The product UI is `openfdd-web`.
+Normal 4.0 ingest is `DataProvider` drivers inside `openfdd-central`, writing normalized samples through the existing Timescale live-historian path. An NF site reads history over the portal HTTPS REST API (`transport: rest`, the default) or over the NF LAN gRPC `PointManager` API with TLS (`transport: grpc`). The transport is a validated per-site setting. Both feed the same ingest queue, planner and writer. There is no automatic fallback between them. The product UI is `openfdd-web`.
 
 | In the 4.0 product | Role |
 | --- | --- |
@@ -26,7 +26,8 @@ Normal 4.0 ingest is HTTPS `DataProvider` drivers inside `openfdd-central`, writ
 | ACME retrofit | Later (M13). This boundary does not change ACME |
 | Building 100 history | Must not be reseeded by this wave |
 | Data backups | Not part of 4.0 provider ingest |
-| NF `POST /api/v1/point/data` | A write. History reads are `GET /api/v1/point/data` only |
+| NF `POST /api/v1/point/data` | A write. REST history reads are `GET /api/v1/point/data` only |
+| NF gRPC write or control RPCs | Not called. The gRPC transport reads history (`PointManager.GetData`) only |
 
 Haystack roles stay. Remote Haystack transport retires with the OT pipelines. Roles on the provider path come from an explicit `provider_point_id` map or a SPARQL binding set. Display names do not invent roles.
 

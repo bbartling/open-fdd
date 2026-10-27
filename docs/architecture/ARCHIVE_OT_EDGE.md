@@ -10,7 +10,7 @@
 
 ## Policy
 
-4.0 product ingest is the Normal Framework portal and CSV into central, then Timescale. Haystack
+4.0 product ingest is the Normal Framework API (portal HTTPS or LAN gRPC) and CSV into central, then Timescale. Haystack
 **semantics**, RDF, SPARQL, roles, CSV import, and SQL FDD stay in the product library.
 BACnet, Modbus, the Haystack **wire** client, the MQTTS broker, and the MQTT client crate are archive-only.
 

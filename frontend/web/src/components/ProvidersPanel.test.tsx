@@ -119,6 +119,7 @@ describe("ProvidersPanel", () => {
               poll_secs: 3600,
               mapped_points: 5,
               client_id_configured: true,
+              transport: "rest",
             },
           ],
         };
@@ -130,6 +131,7 @@ describe("ProvidersPanel", () => {
       expect(screen.getByTestId("provider-status-NF_EDGE").textContent).toMatch(/Poll ok/);
     });
     expect(screen.getByTestId("provider-origin-NF_EDGE").textContent).toBe("https://portal.example");
+    expect(screen.getByTestId("provider-connection-NF_EDGE").textContent).toBe("Portal (HTTPS)");
     expect(screen.getByTestId("provider-last-success-NF_EDGE").textContent).toBe(
       "2026-10-19T10:00:00Z",
     );
@@ -299,6 +301,33 @@ describe("ProvidersPanel", () => {
     expect(errorCell.textContent).toBe("—");
     expect(errorCell.textContent).not.toMatch(/committed/);
     expect(screen.getByTestId("providers-health-table").textContent).toMatch(/Last ingested points/);
+  });
+
+  it("shows LAN (gRPC) for a gRPC site and not reported when config is missing", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/providers/health") return healthBody(false);
+      if (path === "/api/providers/sites") {
+        return { sites: [{ building_id: "NF_EDGE", provider: "nf", transport: "grpc" }] };
+      }
+      throw new ApiClientError("missing", 404);
+    });
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-connection-NF_EDGE").textContent).toBe("LAN (gRPC)");
+    });
+    expect(screen.getByTestId("providers-health-table").textContent).toMatch(/Connection/);
+    expect(screen.getByTestId("providers-health-table").textContent).not.toMatch(/Portal \(HTTPS\)/);
+  });
+
+  it("does not guess a connection when the sites config is unavailable", async () => {
+    vi.mocked(apiFetch).mockImplementation(async (path: string) => {
+      if (path === "/api/providers/health") return healthBody(false);
+      throw new ApiClientError("missing", 404);
+    });
+    renderPanel();
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-connection-NF_EDGE").textContent).toBe("not reported");
+    });
   });
 
   it("shows an error status message under Last error", async () => {

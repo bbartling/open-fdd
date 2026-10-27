@@ -10,7 +10,7 @@ connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 
 | Layer | Responsibility |
 | --- | --- |
-| **central** | Portal HTTPS ingest, **Timescale** historian, `.sql` FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python). Ingest is the Normal Framework portal and CSV only, through one Timescale telemetry writer. Timescale/PostgreSQL only: Parquet, Arrow, Arrow IPC, Feather and DataFusion are prohibited in product storage, caching, execution and dependencies ([storage mandate](openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory), [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)) |
+| **central** | NF ingest (portal HTTPS REST or LAN gRPC, per site), **Timescale** historian, `.sql` FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python). Ingest is the Normal Framework API (portal HTTPS REST or LAN gRPC, chosen per site with `transport: rest|grpc`, no automatic fallback) and CSV only, through one Timescale telemetry writer. Timescale/PostgreSQL only: Parquet, Arrow, Arrow IPC, Feather and DataFusion are prohibited in product storage, caching, execution and dependencies ([storage mandate](openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory), [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)) |
 | **web** | React product UI (`frontend/web`) — sole product UI ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
 | **fieldbus** | Archived OT drivers (BACnet / Modbus / Haystack wire). Not in the `portal` recipe. |
 | **mqtt** | Archived Mosquitto MQTTS broker. Not in the `portal` recipe. |
@@ -78,7 +78,7 @@ When changing Rust:
 - Never silently discard `Result`/`Option`; prefer `?` or explicit match/log. Last resort: `let _ = …;` + why.
 - Prefer `?` / combinators over `.unwrap()` on production paths. Tests may unwrap and expect (`allow-unwrap-in-tests` and `allow-expect-in-tests`). Product crates deny `clippy::unwrap_used` and `clippy::expect_used`.
 - Integration tests in `tests/` start with `#![cfg(test)]` so those switches, plus `allow-print-in-tests` and `allow-dbg-in-tests`, cover the whole file. Do not add `#[allow]`, `#![allow]`, or `#[expect]` to silence them.
-- Historian: **Timescale/PostgreSQL only** (`OPENFDD_DATABASE_URL` / `OPENFDD_HISTORIAN=timescale`) ([storage mandate](openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory), [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md), [`TIMESCALE_WAVE_X.md`](docs/operations/TIMESCALE_WAVE_X.md)). One validated, idempotent Timescale telemetry writer for NF REST, local NF gRPC (planned) and CSV. No dual record writing, no parallel historian, raw-data mirror, or legacy fallback. Do not add Parquet, Arrow, Arrow IPC, Feather or DataFusion to product storage, caching, execution or dependencies (`legacy-*` features stay OFF). Derived results persist in PostgreSQL or bounded memory. `crates/fdd_store` has no Parquet or Arrow code; keep it that way.
+- Historian: **Timescale/PostgreSQL only** (`OPENFDD_DATABASE_URL` / `OPENFDD_HISTORIAN=timescale`) ([storage mandate](openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory), [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md), [`TIMESCALE_WAVE_X.md`](docs/operations/TIMESCALE_WAVE_X.md)). One validated, idempotent Timescale telemetry writer for NF portal REST, NF LAN gRPC (per-site `transport`) and CSV. No dual record writing, no parallel historian, raw-data mirror, or legacy fallback. Do not add Parquet, Arrow, Arrow IPC, Feather or DataFusion to product storage, caching, execution or dependencies (`legacy-*` features stay OFF). Derived results persist in PostgreSQL or bounded memory. `crates/fdd_store` has no Parquet or Arrow code; keep it that way.
 
 Patch-cycle train after Plans 1–4: log gate FAILs in [`docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md`](docs/operations/BUG_REPORT_OT_MODBUS_HAYSTACK.md) **before** fixing → tiny rev bump (product only) → GHCR `sha-*` → re-pin → smoke → re-stress affected gate → move row to patched. Local synthetic CSV FDD and the live local-stack NF portal are separate stress tiers (see [`openfdd_agent_spec/CONTAINER_AGENT.md`](openfdd_agent_spec/CONTAINER_AGENT.md) § Ops patch cycle).
 
@@ -165,7 +165,7 @@ Runbook: [`docs/operations/LOCAL_HOSTING.md`](docs/operations/LOCAL_HOSTING.md).
 
 ## AFDD vs bulk FDD
 
-Same Timescale SQL registry. Bulk = CSV/package / manual run; continuous AFDD = opt-in timer + lookback on the Timescale historian (watermark/incremental — not full-DB every tick). Ingest is the Normal Framework portal and CSV. Multi-site isolation is by `building_id`. Full contract: [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
+Same Timescale SQL registry. Bulk = CSV/package / manual run; continuous AFDD = opt-in timer + lookback on the Timescale historian (watermark/incremental — not full-DB every tick). Ingest is the Normal Framework API (portal HTTPS or LAN gRPC per site) and CSV. Multi-site isolation is by `building_id`. Full contract: [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md).
 
 Product ingest has no `mqtts`, `local_fieldbus`, or `dual` mode. Those modes are `historical/non-executable` in [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](docs/archive/ai-agent/historical-3.5-ot-ops.md).
 
@@ -180,7 +180,7 @@ SPA shows `GET /api/health` → `{semver}+shortsha`. On each turnkey platform pa
 - Parquet, Apache Arrow, Arrow IPC, Feather and DataFusion are prohibited in active product storage, caching, execution and dependencies. Only `archive/` may contain them, labeled historical.
 - **Hosting is the local single-host stack only.** Railway and any cloud web-app hosting (PaaS) are retired and prohibited, like DataFusion, Parquet and dual record writing. Do not add Railway configs, CLI scripts, workflows, re-pin steps or credentials. Old Railway notes are `historical/non-executable`.
 - Derived FDD / analytics / RCx / sensor-fault results persist in PostgreSQL or bounded memory. There is no file-format result cache.
-- NF REST, local NF gRPC (planned) and CSV share one validated, idempotent Timescale telemetry writer. No parallel historian, raw-data mirror, or legacy fallback.
+- NF portal REST, NF LAN gRPC (per-site `transport`) and CSV share one validated, idempotent Timescale telemetry writer. No parallel historian, raw-data mirror, or legacy fallback.
 - Haystack RDF / parsed SPARQL, durable job and coverage metadata, audit logs, model snapshots and on-demand exports stay; none of them may become another raw telemetry store.
 - Python / pandas stays tooling-only (PyPI `open-fdd`, qualification, tests).
 - Agents follow the canonical spec in [`openfdd_agent_spec/`](openfdd_agent_spec/). Skills are authored only in `openfdd_agent_spec/skills/` and synced with `./scripts/openfdd_install_agent_skills.sh --sync`.

@@ -91,7 +91,7 @@ Heavy analytics/AFDD **shed** new work at `OPENFDD_MEMORY_SHED_FRACTION` (defaul
 
 ## Feather / Parquet dual-write
 
-**Forbidden.** Timescale is the sole product historian ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). NF REST, local NF gRPC (planned) and CSV share one validated, idempotent Timescale telemetry writer. Do not add a Feather / Parquet / Arrow hot tier, raw-data mirror, result-file cache, or legacy fallback for lookback, speed, or migration. The `{rule_id}.json` result files and windowed slices above are current behavior; the target is PostgreSQL result tables.
+**Forbidden.** Timescale is the sole product historian ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). NF portal REST, NF LAN gRPC (per-site `transport`) and CSV share one validated, idempotent Timescale telemetry writer. Do not add a Feather / Parquet / Arrow hot tier, raw-data mirror, result-file cache, or legacy fallback for lookback, speed, or migration. The `{rule_id}.json` result files and windowed slices above are current behavior; the target is PostgreSQL result tables.
 
 ## Suspend telemetry (per site/edge)
 

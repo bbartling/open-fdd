@@ -64,6 +64,8 @@ export interface ProviderSiteConfig {
   poll_secs?: number;
   mapped_points?: number;
   client_id_configured?: boolean;
+  /** NF history transport for this site: `rest` (portal HTTPS) or `grpc` (LAN). */
+  transport?: string;
 }
 
 export interface ProviderSitesBody {
