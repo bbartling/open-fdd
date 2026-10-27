@@ -834,6 +834,13 @@ fn queue_err(err: &super::model::QueueError, request_id: &str) -> Response {
             request_id,
             false,
         ),
+        QueueError::ReplayHorizon(msg) => json_error(
+            StatusCode::CONFLICT,
+            super::replay_horizon::REPLAY_HORIZON_EXCEEDED,
+            msg,
+            request_id,
+            false,
+        ),
         QueueError::Db(detail) => {
             tracing::debug!(
                 error = %super::model::redact_db_text(detail),

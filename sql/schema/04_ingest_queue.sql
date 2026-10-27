@@ -169,6 +169,21 @@ CREATE TABLE IF NOT EXISTS ingest_applied_sample (
   )
 );
 
+-- Retention scan for the replay ledger.
+CREATE INDEX IF NOT EXISTS ingest_applied_sample_site_ts_idx
+  ON ingest_applied_sample (tenant_id, canonical_site, ts);
+
+-- Replay horizon per tenant and site. Ledger rows before pruned_before may be
+-- gone, so a retry or backfill of a window that starts earlier is refused.
+-- pruned_before only moves forward.
+CREATE TABLE IF NOT EXISTS ingest_applied_sample_horizon (
+  tenant_id text NOT NULL,
+  canonical_site text NOT NULL,
+  pruned_before timestamptz,
+  updated_at timestamptz NOT NULL,
+  PRIMARY KEY (tenant_id, canonical_site)
+);
+
 -- Verified-coverage cursor per device and committed model revision.
 -- verified_through only moves forward. The hole columns name the first
 -- instant that is not covered by committed windows, when there is one.

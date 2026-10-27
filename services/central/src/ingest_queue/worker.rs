@@ -130,6 +130,7 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
             return Ok(());
         }
         enqueue_due_windows(state, now).await?;
+        prune_applied_ledger(state, now).await;
     }
     let claimed = state
         .ingest_queue
@@ -758,6 +759,67 @@ fn portal_throttled(err: &str) -> bool {
 
 /// Plan due windows and enqueue them. Identity mismatches are warned and
 /// written onto provider health; they are not dropped quietly.
+/// Last prune pass (unix seconds) in this process. The scheduler owner runs
+/// the ledger prune at most once per `PRUNE_INTERVAL_SECS`.
+static LAST_LEDGER_PRUNE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+const PRUNE_INTERVAL_SECS: i64 = 900;
+
+/// Prunes `ingest_applied_sample` for each configured site. An invalid
+/// retention setting skips the prune with a warning; nothing is clamped.
+async fn prune_applied_ledger(state: &Arc<AppState>, now: chrono::DateTime<Utc>) {
+    use std::sync::atomic::Ordering;
+    let last = LAST_LEDGER_PRUNE.load(Ordering::Relaxed);
+    if now.timestamp() - last < PRUNE_INTERVAL_SECS {
+        return;
+    }
+    LAST_LEDGER_PRUNE.store(now.timestamp(), Ordering::Relaxed);
+    let raw = match std::env::var(super::replay_horizon::RETENTION_ENV) {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => {
+            warn!(
+                env = super::replay_horizon::RETENTION_ENV,
+                "applied-sample retention is not valid text; ledger prune skipped"
+            );
+            return;
+        }
+    };
+    let retention = match super::replay_horizon::parse_retention(
+        raw.as_deref(),
+        crate::providers::hourly::HourlyPolicy::from_env().retention,
+        daily_catchup_days(),
+    ) {
+        Ok(retention) => retention,
+        Err(err) => {
+            warn!(error = %err, "ledger prune skipped");
+            return;
+        }
+    };
+    let (devices, _) = devices_from_state(state);
+    let mut sites: Vec<(String, String)> = devices
+        .into_iter()
+        .map(|(_, device)| (device.tenant_id, device.canonical_site))
+        .collect();
+    sites.sort();
+    sites.dedup();
+    for (tenant_id, site) in sites {
+        match state
+            .ingest_queue
+            .prune_applied_samples(&tenant_id, &site, now, retention)
+            .await
+        {
+            Ok(report) if report.deleted > 0 => info!(
+                site = %site,
+                deleted = report.deleted,
+                pruned_before = %report.pruned_before,
+                "applied-sample ledger pruned"
+            ),
+            Ok(_) => {}
+            Err(err) => warn!(site = %site, error = %err, "applied-sample ledger prune failed"),
+        }
+    }
+}
+
 pub(crate) async fn enqueue_due_windows(
     state: &Arc<AppState>,
     now: chrono::DateTime<Utc>,
