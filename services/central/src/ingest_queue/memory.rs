@@ -64,6 +64,7 @@ struct Inner {
     audit: VecDeque<AuditEvent>,
     applied: HashMap<AppliedKey, u64>,
     cursors: HashMap<CursorKey, CoverageCursor>,
+    horizons: HashMap<(String, String), DateTime<Utc>>,
 }
 
 #[derive(Clone)]
@@ -92,6 +93,7 @@ impl MemoryStore {
                 audit: VecDeque::new(),
                 applied: HashMap::new(),
                 cursors: HashMap::new(),
+                horizons: HashMap::new(),
             }),
         }
     }
@@ -299,22 +301,30 @@ impl MemoryStore {
             }
             return replay_jobs(&inner, &record.job_ids, &claim.tenant_id);
         }
-        let Some(job) = inner.jobs.iter_mut().find(|job| job.view.job_id == job_id) else {
+        let Some(idx) = inner.jobs.iter().position(|job| job.view.job_id == job_id) else {
             return Err(QueueError::NotFound);
         };
-        if job.view.tenant_id != claim.tenant_id {
+        let found = &inner.jobs[idx].view;
+        if found.tenant_id != claim.tenant_id {
             return Err(QueueError::NotFound);
         }
-        if !operator_retry_allowed(&job.view.state, job.view.safe_error_code.as_deref()) {
+        if !operator_retry_allowed(&found.state, found.safe_error_code.as_deref()) {
             return Err(QueueError::Invalid(
                 "job is not eligible for operator retry".into(),
             ));
         }
-        if job.view.state == JobState::Leased.as_str()
-            && job.view.lease_expiry.is_some_and(|exp| exp > now)
+        if found.state == JobState::Leased.as_str()
+            && found.lease_expiry.is_some_and(|exp| exp > now)
         {
             return Err(QueueError::Invalid("leased job cannot be retried".into()));
         }
+        refuse_before_horizon(
+            &inner,
+            &found.tenant_id,
+            &found.canonical_site,
+            found.logical_window_start,
+        )?;
+        let job = &mut inner.jobs[idx];
         job.view.state = JobState::Queued.as_str().to_string();
         job.view.not_before = now;
         job.view.lease_owner = None;
@@ -362,6 +372,14 @@ impl MemoryStore {
             }
             return replay_job_list(&inner, &record.job_ids, &claim.tenant_id);
         }
+        for job in &jobs {
+            refuse_before_horizon(
+                &inner,
+                &job.tenant_id,
+                &job.canonical_site,
+                job.logical_window_start,
+            )?;
+        }
         let mut created = Vec::new();
         for job in jobs {
             match enqueue_locked(&mut inner, job, now)? {
@@ -373,6 +391,52 @@ impl MemoryStore {
         let ids: Vec<Uuid> = created.iter().map(|job| job.job_id).collect();
         remember_idempotency(&mut inner, claim, "backfill", ids, None);
         Ok(created)
+    }
+
+    /// Memory mirror of the Postgres ledger prune: deletes ledger rows older
+    /// than the retention for one site, keeps rows of live jobs, and moves the
+    /// site's replay horizon forward.
+    pub fn prune_applied_samples(
+        &self,
+        tenant_id: &str,
+        canonical_site: &str,
+        now: DateTime<Utc>,
+        retention: chrono::Duration,
+    ) -> super::replay_horizon::PruneReport {
+        let mut inner = self.lock();
+        let oldest_live = inner
+            .jobs
+            .iter()
+            .filter(|job| {
+                job.view.tenant_id == tenant_id
+                    && job.view.canonical_site == canonical_site
+                    && [
+                        JobState::Queued.as_str(),
+                        JobState::Leased.as_str(),
+                        JobState::RetryWait.as_str(),
+                    ]
+                    .contains(&job.view.state.as_str())
+            })
+            .map(|job| job.view.logical_window_start)
+            .min();
+        let delete_below = super::replay_horizon::prune_cutoff(now, retention, oldest_live);
+        let before = inner.applied.len();
+        inner.applied.retain(|key, _| {
+            key.tenant_id != tenant_id
+                || key.canonical_site != canonical_site
+                || key.ts >= delete_below
+        });
+        let deleted = (before - inner.applied.len()) as u64;
+        let slot = (tenant_id.to_string(), canonical_site.to_string());
+        let pruned_before = inner
+            .horizons
+            .get(&slot)
+            .map_or(delete_below, |cut| (*cut).max(delete_below));
+        inner.horizons.insert(slot, pruned_before);
+        super::replay_horizon::PruneReport {
+            deleted,
+            pruned_before,
+        }
     }
 
     pub fn advance_cursor(&self, key: &CursorKey, now: DateTime<Utc>) -> Option<CoverageCursor> {
@@ -963,6 +1027,21 @@ fn filtered_jobs(jobs: &[StoredJob], filter: &ListFilter) -> Vec<JobView> {
     rows.sort_by_key(|row| Reverse(row.logical_window_start));
     rows.truncate(filter.limit as usize);
     rows
+}
+
+fn refuse_before_horizon(
+    inner: &Inner,
+    tenant_id: &str,
+    canonical_site: &str,
+    window_start: DateTime<Utc>,
+) -> Result<(), QueueError> {
+    let slot = (tenant_id.to_string(), canonical_site.to_string());
+    match inner.horizons.get(&slot) {
+        Some(cut) if super::replay_horizon::replay_refused(window_start, Some(*cut)) => Err(
+            QueueError::ReplayHorizon(super::replay_horizon::refusal_message(window_start, *cut)),
+        ),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]

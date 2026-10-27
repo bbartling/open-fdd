@@ -328,6 +328,8 @@ pub enum QueueError {
     NotFound,
     Conflict(String),
     Invalid(String),
+    /// The window starts before the site's applied-sample replay horizon.
+    ReplayHorizon(String),
     Db(String),
 }
 
@@ -347,6 +349,7 @@ impl std::fmt::Display for QueueError {
             Self::NotFound => write!(f, "not found"),
             Self::Conflict(msg) => write!(f, "{msg}"),
             Self::Invalid(msg) => write!(f, "{msg}"),
+            Self::ReplayHorizon(msg) => write!(f, "{msg}"),
             Self::Db(_) => write!(f, "queue database unavailable"),
         }
     }

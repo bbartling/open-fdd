@@ -9,6 +9,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use super::model::*;
+use super::replay_horizon;
 
 pub const SCHEMA_SQL: &str = include_str!("../../../../sql/schema/04_ingest_queue.sql");
 
@@ -648,6 +649,14 @@ pub async fn retry_job(
             "job is not eligible for operator retry".into(),
         ));
     }
+    refuse_before_replay_horizon(
+        &mut tx,
+        &job.tenant_id,
+        &job.canonical_site,
+        job.logical_window_start,
+        now,
+    )
+    .await?;
     let updated = sqlx::query(&format!(
         "UPDATE ingest_job SET state = 'queued', not_before = $2, lease_owner = NULL,
             lease_expiry = NULL, safe_error_code = NULL, updated_at = $2
@@ -691,7 +700,6 @@ pub async fn backfill(
             "idempotency key does not match the original request".into(),
         ));
     }
-    let _ = now;
     let mut tx = pool.begin().await.map_err(db_err)?;
     let reserved = lock_idempotency(&mut tx, "backfill", claim).await?;
     if !reserved.inserted {
@@ -703,6 +711,16 @@ pub async fn backfill(
         let views = load_jobs_for_replay(&mut tx, &reserved.job_ids, &claim.tenant_id).await?;
         tx.commit().await.map_err(db_err)?;
         return Ok(views);
+    }
+    for job in jobs {
+        refuse_before_replay_horizon(
+            &mut tx,
+            &job.tenant_id,
+            &job.canonical_site,
+            job.logical_window_start,
+            now,
+        )
+        .await?;
     }
     let mut views = Vec::new();
     for job in jobs {
@@ -1461,6 +1479,122 @@ fn i32_count(value: u32) -> i32 {
     i32::try_from(value).unwrap_or(i32::MAX)
 }
 
+/// Refuses a replay of a window that starts before the site's replay
+/// horizon. The horizon row is created if missing and read under a share lock,
+/// so a concurrent prune waits for this transaction.
+async fn refuse_before_replay_horizon(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: &str,
+    canonical_site: &str,
+    window_start: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<(), QueueError> {
+    sqlx::query(
+        "INSERT INTO ingest_applied_sample_horizon (tenant_id, canonical_site, pruned_before, updated_at)
+         VALUES ($1, $2, NULL, $3)
+         ON CONFLICT (tenant_id, canonical_site) DO NOTHING",
+    )
+    .bind(tenant_id)
+    .bind(canonical_site)
+    .bind(now)
+    .execute(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    let pruned_before: Option<DateTime<Utc>> = sqlx::query_scalar(
+        "SELECT pruned_before FROM ingest_applied_sample_horizon
+         WHERE tenant_id = $1 AND canonical_site = $2
+         FOR SHARE",
+    )
+    .bind(tenant_id)
+    .bind(canonical_site)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    match pruned_before {
+        Some(cut) if replay_horizon::replay_refused(window_start, Some(cut)) => Err(
+            QueueError::ReplayHorizon(replay_horizon::refusal_message(window_start, cut)),
+        ),
+        _ => Ok(()),
+    }
+}
+
+/// Deletes one batch of ledger rows older than the retention for one site and
+/// moves the site's replay horizon forward. Rows at or after the start of a
+/// queued, leased, or retry-wait job are kept.
+pub async fn prune_applied_samples(
+    pool: &PgPool,
+    tenant_id: &str,
+    canonical_site: &str,
+    now: DateTime<Utc>,
+    retention: chrono::Duration,
+) -> Result<replay_horizon::PruneReport, QueueError> {
+    sqlx::query(
+        "INSERT INTO ingest_applied_sample_horizon (tenant_id, canonical_site, pruned_before, updated_at)
+         VALUES ($1, $2, NULL, $3)
+         ON CONFLICT (tenant_id, canonical_site) DO NOTHING",
+    )
+    .bind(tenant_id)
+    .bind(canonical_site)
+    .bind(now)
+    .execute(pool)
+    .await
+    .map_err(db_err)?;
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    let stored: Option<DateTime<Utc>> = sqlx::query_scalar(
+        "SELECT pruned_before FROM ingest_applied_sample_horizon
+         WHERE tenant_id = $1 AND canonical_site = $2
+         FOR UPDATE",
+    )
+    .bind(tenant_id)
+    .bind(canonical_site)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    let oldest_live: Option<DateTime<Utc>> = sqlx::query_scalar(
+        "SELECT min(logical_window_start) FROM ingest_job
+         WHERE tenant_id = $1 AND canonical_site = $2
+           AND state IN ('queued', 'leased', 'retry_wait')",
+    )
+    .bind(tenant_id)
+    .bind(canonical_site)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    let delete_below = replay_horizon::prune_cutoff(now, retention, oldest_live);
+    let pruned_before = stored.map_or(delete_below, |cut| cut.max(delete_below));
+    let deleted = sqlx::query(
+        "DELETE FROM ingest_applied_sample WHERE ctid IN (
+            SELECT ctid FROM ingest_applied_sample
+            WHERE tenant_id = $1 AND canonical_site = $2 AND ts < $3
+            LIMIT $4
+         )",
+    )
+    .bind(tenant_id)
+    .bind(canonical_site)
+    .bind(delete_below)
+    .bind(replay_horizon::PRUNE_BATCH)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_err)?
+    .rows_affected();
+    sqlx::query(
+        "UPDATE ingest_applied_sample_horizon SET pruned_before = $3, updated_at = $4
+         WHERE tenant_id = $1 AND canonical_site = $2",
+    )
+    .bind(tenant_id)
+    .bind(canonical_site)
+    .bind(pruned_before)
+    .bind(now)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(replay_horizon::PruneReport {
+        deleted,
+        pruned_before,
+    })
+}
+
 fn db_err(err: sqlx::Error) -> QueueError {
     let mut text = err.to_string();
     if let Some(idx) = text.find("postgres://") {
@@ -1779,6 +1913,7 @@ mod tests {
             .expect("assert connection");
         for relation in [
             "public.ingest_applied_sample",
+            "public.ingest_applied_sample_horizon",
             "public.ingest_audit",
             "public.ingest_coverage_cursor",
             "public.ingest_scheduler_lease",

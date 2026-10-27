@@ -246,6 +246,28 @@ impl QueueClient {
         self.memory.backfill(jobs, now, claim)
     }
 
+    pub async fn prune_applied_samples(
+        &self,
+        tenant_id: &str,
+        canonical_site: &str,
+        now: DateTime<Utc>,
+        retention: chrono::Duration,
+    ) -> Result<super::replay_horizon::PruneReport, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            return postgres::prune_applied_samples(
+                &pool,
+                tenant_id,
+                canonical_site,
+                now,
+                retention,
+            )
+            .await;
+        }
+        Ok(self
+            .memory
+            .prune_applied_samples(tenant_id, canonical_site, now, retention))
+    }
+
     async fn pool_if_configured(&self) -> Result<Option<PgPool>, QueueError> {
         if !database_url_present() {
             return Ok(None);

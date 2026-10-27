@@ -54,6 +54,8 @@ RESET_TABLES = (
     "ingest_idempotency",
     "ingest_receipt",
     "ingest_coverage_cursor",
+    "ingest_applied_sample",
+    "ingest_applied_sample_horizon",
     "ingest_job",
     "ingest_scheduler_lease",
     "ingest_portal_budget",
