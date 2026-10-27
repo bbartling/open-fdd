@@ -395,6 +395,7 @@ impl MemoryStore {
                 end: job.logical_window_end,
                 state: job.state.clone(),
                 code: job.safe_error_code.clone(),
+                coverage: job.coverage.clone(),
             })
             .collect();
         let (verified_through, hole) = walk(current, &windows)?;
