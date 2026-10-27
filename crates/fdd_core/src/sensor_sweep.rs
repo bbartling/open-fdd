@@ -187,10 +187,8 @@ fn unit_declares_quantity(unit: Option<&str>, quantity: &str) -> bool {
             ) || raw.contains('%')
         }
         "air_pressure" => {
-            matches!(
-                t.as_str(),
-                "inwc" | "inh2o" | "inw.c." | "pa" | "pascal"
-            ) || raw.contains("w.c")
+            matches!(t.as_str(), "inwc" | "inh2o" | "inw.c." | "pa" | "pascal")
+                || raw.contains("w.c")
         }
         _ => false,
     }
