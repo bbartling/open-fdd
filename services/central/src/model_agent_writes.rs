@@ -1317,4 +1317,117 @@ mod tests {
         }
         fdd_tsdb::clear_shared_pool();
     }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_WORKSPACE for model point overlay API"
+    )]
+    async fn t1406_model_point_engineer_overlay_controls() {
+        let _env = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().expect("workspace");
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let _audit = EnvGuard::unset("OPENFDD_AUDIT_LOG_PATH");
+        let state = app_state("t1406-point-overlay-secret");
+        let app = crate::routes::router(Arc::clone(&state));
+        let bid = "T1406_OVERLAY";
+        let pid = "pt-oa-t";
+        let operator = token(&state, "op-t1406", Role::Operator);
+        let viewer = token(&state, "viewer-t1406", Role::Viewer);
+
+        let bad_unit = json!({
+            "confirm": true,
+            "building_id": bid,
+            "equipment_id": "AHU_1",
+            "point_id": pid,
+            "unit": "not_a_real_unit",
+            "quantity": "absolute_temperature"
+        });
+        let (status, json) =
+            call(&app, "POST", "/api/model/point", &operator, Some(bad_unit)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+        assert_eq!(json.get("ok").and_then(|v| v.as_bool()), Some(false));
+
+        let (status, json) = call(
+            &app,
+            "POST",
+            "/api/model/point",
+            &viewer,
+            Some(json!({
+                "confirm": true,
+                "building_id": bid,
+                "equipment_id": "AHU_1",
+                "point_id": pid,
+                "unit": "degF",
+                "quantity": "absolute_temperature"
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{json}");
+
+        let (status, json) = call(
+            &app,
+            "POST",
+            "/api/model/point",
+            &operator,
+            Some(json!({
+                "building_id": bid,
+                "equipment_id": "AHU_1",
+                "point_id": pid,
+                "unit": "degF",
+                "quantity": "absolute_temperature"
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+        assert_eq!(json["error"], "confirm_required");
+
+        let (status, json) = call(
+            &app,
+            "POST",
+            "/api/model/point",
+            &operator,
+            Some(json!({
+                "confirm": true,
+                "building_id": bid,
+                "equipment_id": "AHU_1",
+                "point_id": pid,
+                "unit": "degF",
+                "quantity": "absolute_temperature",
+                "primary_reference": true
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{json}");
+        assert_eq!(json.get("revision").and_then(|v| v.as_u64()), Some(1));
+
+        open_fdd_edge_prototype::auth::audit::flush_sink();
+        let events = audit_events(workspace.path(), "model.write");
+        assert!(
+            events.iter().any(|event| event["detail"]["outcome"] == "ok"
+                && event["detail"]["change"]["tool"] == "model.point.upsert"),
+            "{events:?}"
+        );
+
+        let overlay_path = workspace
+            .path()
+            .join("data/csv_buildings")
+            .join(bid)
+            .join("model_point_engineer_overlay.json");
+        assert!(
+            overlay_path.is_file(),
+            "engineer overlay is separate from TTL"
+        );
+        let store =
+            open_fdd_edge_prototype::csv_ingest::model_overlay::load_engineer_point_overlay(
+                overlay_path.parent().expect("parent"),
+            )
+            .expect("load");
+        let entry = store.points.get(pid).expect("entry");
+        assert_eq!(entry.unit.as_deref(), Some("degF"));
+        assert!(entry.primary_reference);
+
+        use fdd_core::sensor_sweep::sweep_assessable_sql_role;
+        assert!(sweep_assessable_sql_role("oa_t", entry.unit.as_deref()));
+    }
 }

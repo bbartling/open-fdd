@@ -255,6 +255,9 @@ impl Server {
                 "dis": {"type": "string"},
                 "openfdd_key": {"type": "string"},
                 "role": {"type": "string"},
+                "unit": {"type": "string", "description": "Engineer unit override (validated against metric_units.json for quantity)"},
+                "quantity": {"type": "string", "description": "Quantity id from sql/contract/metric_units.json"},
+                "primary_reference": {"type": "boolean", "description": "Mark as site primary reference for this role (e.g. local OAT)"},
                 "markers": {"type": "array", "items": {"type": "string"}},
                 "expected_revision": {"type": "integer"},
                 "dry_run": {"type": "boolean"}
@@ -883,6 +886,19 @@ mod model_write_tests {
             .iter()
             .filter_map(|t| t.get("name").and_then(Value::as_str).map(str::to_string))
             .collect();
+        let point_tool = Server::new(BridgeClient::from_env())
+            .tools_list()
+            .iter()
+            .find(|t| t.get("name").and_then(|n| n.as_str()) == Some("openfdd_model_point_upsert"))
+            .expect("point upsert tool");
+        let props = point_tool
+            .pointer("/inputSchema/properties")
+            .and_then(|v| v.as_object())
+            .expect("schema props");
+        assert!(props.contains_key("unit"));
+        assert!(props.contains_key("quantity"));
+        assert!(props.contains_key("primary_reference"));
+
         for expected in [
             "openfdd_model_semantic_meta_put",
             "openfdd_model_overlay_put",

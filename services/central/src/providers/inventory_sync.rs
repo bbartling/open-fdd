@@ -29,8 +29,8 @@ use serde::Serialize;
 use tracing::{debug, warn};
 
 use super::committed_model::{
-    model_from_json, model_from_point_map, BootstrapPoint, CommittedModel, CommittedModelStore,
-    ModelScope,
+    apply_engineer_point_overlays, model_from_json, model_from_point_map, validate_model,
+    BootstrapPoint, CommittedModel, CommittedModelStore, ModelScope,
 };
 use super::config::SiteConfig;
 use super::Runtime;
@@ -364,7 +364,7 @@ pub async fn apply_at(
         site_id: site.building_id.clone(),
         provider_instance_id: site.model.provider_instance_id.clone(),
     };
-    let model = match model_from_point_map(&scope, &entries) {
+    let mut model = match model_from_point_map(&scope, &entries) {
         Ok(model) => model,
         Err(err) => {
             warn!(building_id = %site.building_id, error = %err, "portal inventory plan invalid");
@@ -374,6 +374,20 @@ pub async fn apply_at(
             return outcome;
         }
     };
+    if let Err(err) = apply_engineer_point_overlays(building_root, &site.building_id, &mut model) {
+        warn!(building_id = %site.building_id, error = %err, "engineer point overlay merge failed");
+        outcome.errors.push("engineer_overlay_invalid".into());
+        outcome.degraded = true;
+        outcome.plan_retained = true;
+        return outcome;
+    }
+    if let Err(err) = validate_model(&model) {
+        warn!(building_id = %site.building_id, error = %err, "portal inventory plan invalid after engineer overlay");
+        outcome.errors.push("plan_invalid".into());
+        outcome.degraded = true;
+        outcome.plan_retained = true;
+        return outcome;
+    }
     {
         let mut models = runtime.models.lock().unwrap_or_else(|e| e.into_inner());
         match models.try_activate(None, &model) {
@@ -934,5 +948,44 @@ mod tests {
         };
         let model = model_from_point_map(&scope, &bootstrap_points(&snap)).expect("model");
         assert_eq!(model.equipment.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn engineer_overlay_merged_into_committed_model_after_sync() {
+        use super::committed_model::{apply_engineer_point_overlays, model_from_point_map};
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("SITE_OVL");
+        let snap = snapshot(V1);
+        let pid = "6a1f0c2a-0001-4000-8000-00000000a001";
+        apply_to_stores(None, &root, "SITE_OVL", SOURCE, &snap).await;
+        model_overlay::upsert_engineer_point_overlay(
+            &root,
+            "SITE_OVL",
+            pid,
+            Some("degF"),
+            Some("absolute_temperature"),
+            None,
+            false,
+        )
+        .expect("engineer");
+        let scope = ModelScope {
+            tenant_id: "tenant-a".into(),
+            site_id: "site-a".into(),
+            provider_instance_id: "nf-conn-a".into(),
+        };
+        let mut model = model_from_point_map(&scope, &bootstrap_points(&snap)).expect("model");
+        apply_engineer_point_overlays(&root, "SITE_OVL", &mut model).expect("merge");
+        let sat = model
+            .equipment
+            .iter()
+            .flat_map(|eq| eq.points.iter())
+            .find(|pt| pt.provider_point_id == pid)
+            .expect("sat");
+        assert_eq!(sat.unit.as_deref(), Some("degF"));
+        assert_eq!(sat.quantity.as_deref(), Some("absolute_temperature"));
+        apply_to_stores(None, &root, "SITE_OVL", SOURCE, &snap).await;
+        let mut again = model_from_point_map(&scope, &bootstrap_points(&snap)).expect("model");
+        apply_engineer_point_overlays(&root, "SITE_OVL", &mut again).expect("merge");
+        assert_eq!(again.equipment[0].points[0].unit.as_deref(), Some("degF"));
     }
 }

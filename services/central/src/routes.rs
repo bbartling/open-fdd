@@ -4454,6 +4454,12 @@ pub struct ModelPointBody {
     pub expected_revision: Option<u64>,
     #[serde(default)]
     pub dry_run: bool,
+    #[serde(default)]
+    pub unit: Option<String>,
+    #[serde(default)]
+    pub quantity: Option<String>,
+    #[serde(default)]
+    pub primary_reference: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4568,6 +4574,9 @@ pub async fn model_point_post(
     let openfdd_key = body.openfdd_key;
     let role = body.role;
     let markers = body.markers;
+    let unit = body.unit;
+    let quantity = body.quantity;
+    let primary_reference = body.primary_reference;
     let expected = body.expected_revision;
     let dry_run = body.dry_run;
     let result = tokio::task::spawn_blocking(move || {
@@ -4582,6 +4591,9 @@ pub async fn model_point_post(
                 openfdd_key: openfdd_key.as_deref(),
                 role: role.as_deref(),
                 markers: &markers,
+                unit: unit.as_deref(),
+                quantity: quantity.as_deref(),
+                primary_reference,
             },
             open_fdd_edge_prototype::csv_ingest::model_overlay::OverlayCasOpts {
                 expected_revision: expected,

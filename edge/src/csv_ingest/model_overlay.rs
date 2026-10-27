@@ -10,12 +10,13 @@
 //! - `POST/DELETE /api/model/equip|point` — equip/point upsert + tombstones
 //! - SPARQL query dataset — pack ∪ overlay (− tombstones)
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
+use once_cell::sync::Lazy;
 use oxigraph::io::{RdfFormat, RdfSerializer};
 use oxigraph::model::{GraphName, GraphNameRef, Literal, NamedNode, NamedOrBlankNode, Quad, Term};
 use oxigraph::store::Store;
@@ -35,6 +36,9 @@ pub const OVERLAY_TMP_SUFFIX: &str = ".tmp";
 /// BPS-compatible body size cap (chars).
 pub const MAX_TTL_CHARS: usize = 2_000_000;
 pub const WRITABLE_LAYER: &str = "model_overlay_ttl";
+/// Engineer unit / quantity / primary-reference overrides (not `ofdd:portalSource` TTL).
+pub const ENGINEER_POINT_OVERLAY_FILE: &str = "model_point_engineer_overlay.json";
+pub const ENGINEER_POINT_OVERLAY_SCHEMA: &str = "openfdd_model_point_engineer_overlay_v1";
 
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const XSD_BOOLEAN: &str = "http://www.w3.org/2001/XMLSchema#boolean";
@@ -787,6 +791,296 @@ pub struct PointUpsertFields<'a> {
     pub openfdd_key: Option<&'a str>,
     pub role: Option<&'a str>,
     pub markers: &'a [String],
+    pub unit: Option<&'a str>,
+    pub quantity: Option<&'a str>,
+    pub primary_reference: Option<bool>,
+}
+
+/// One engineer override row keyed by provider `point_id`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EngineerPointOverlayEntry {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quantity: Option<String>,
+    #[serde(default)]
+    pub primary_reference: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EngineerPointOverlayStore {
+    pub schema: String,
+    pub building_id: String,
+    #[serde(default)]
+    pub points: BTreeMap<String, EngineerPointOverlayEntry>,
+}
+
+fn engineer_overlay_path(building_root: &Path) -> PathBuf {
+    building_root.join(ENGINEER_POINT_OVERLAY_FILE)
+}
+
+fn norm_unit_token(raw: &str) -> String {
+    raw.trim()
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect()
+}
+
+#[derive(Debug, Deserialize)]
+struct MetricQuantityDef {
+    id: String,
+    #[serde(default)]
+    canonical_unit: Option<String>,
+    #[serde(default)]
+    pack_v1_unit: Option<String>,
+    #[serde(default)]
+    aliases: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MetricUnitsContract {
+    quantities: Vec<MetricQuantityDef>,
+}
+
+static METRIC_UNITS: Lazy<MetricUnitsContract> = Lazy::new(|| {
+    let raw = include_str!("../../../sql/contract/metric_units.json");
+    serde_json::from_str(raw).expect("metric_units.json")
+});
+
+fn quantity_exists(quantity: &str) -> bool {
+    let q = quantity.trim();
+    METRIC_UNITS.quantities.iter().any(|entry| entry.id == q)
+}
+
+fn unit_tokens_for_quantity(quantity: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for entry in &METRIC_UNITS.quantities {
+        if entry.id != quantity {
+            continue;
+        }
+        for alias in &entry.aliases {
+            out.push(norm_unit_token(alias));
+        }
+        if let Some(u) = entry.canonical_unit.as_deref() {
+            out.push(norm_unit_token(u));
+        }
+        if let Some(u) = entry.pack_v1_unit.as_deref() {
+            out.push(norm_unit_token(u));
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Validate engineer `unit` against `sql/contract/metric_units.json` for the declared quantity.
+pub fn validate_engineer_unit_quantity(unit: &str, quantity: &str) -> Result<(), String> {
+    let unit = unit.trim();
+    let quantity = quantity.trim();
+    if unit.is_empty() {
+        return Err("unit required when quantity is set".into());
+    }
+    if quantity.is_empty() {
+        return Err("quantity required when unit is set".into());
+    }
+    if !quantity_exists(quantity) {
+        return Err(format!("unknown quantity {quantity}"));
+    }
+    let token = norm_unit_token(unit);
+    if token.is_empty() {
+        return Err("malformed unit".into());
+    }
+    let allowed = unit_tokens_for_quantity(quantity);
+    if unit.contains('%') && quantity == "relative_humidity" {
+        return Ok(());
+    }
+    if allowed.iter().any(|t| *t == token) {
+        return Ok(());
+    }
+    Err(format!(
+        "unit {unit:?} is incompatible with quantity {quantity}"
+    ))
+}
+
+fn validate_engineer_patch(
+    unit: Option<&str>,
+    quantity: Option<&str>,
+    primary_reference: Option<bool>,
+) -> Result<(), String> {
+    let has_unit = unit.map(str::trim).is_some_and(|u| !u.is_empty());
+    let has_quantity = quantity.map(str::trim).is_some_and(|q| !q.is_empty());
+    if has_unit || has_quantity {
+        let u = unit.map(str::trim).filter(|s| !s.is_empty()).unwrap_or("");
+        let q = quantity
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("");
+        validate_engineer_unit_quantity(u, q)?;
+    }
+    if primary_reference == Some(true) {
+        if !has_unit && !has_quantity {
+            // primary reference alone is allowed (role already bound elsewhere)
+        }
+    }
+    Ok(())
+}
+
+pub fn load_engineer_point_overlay(
+    building_root: &Path,
+) -> Result<EngineerPointOverlayStore, String> {
+    let path = engineer_overlay_path(building_root);
+    if !path.is_file() {
+        return Ok(EngineerPointOverlayStore {
+            schema: ENGINEER_POINT_OVERLAY_SCHEMA.to_string(),
+            building_id: String::new(),
+            points: BTreeMap::new(),
+        });
+    }
+    let raw = fs::read_to_string(&path).map_err(|e| format!("read engineer overlay: {e}"))?;
+    let store: EngineerPointOverlayStore =
+        serde_json::from_str(&raw).map_err(|e| format!("parse engineer overlay: {e}"))?;
+    if store.schema != ENGINEER_POINT_OVERLAY_SCHEMA {
+        return Err(format!(
+            "engineer overlay schema must be {ENGINEER_POINT_OVERLAY_SCHEMA}"
+        ));
+    }
+    Ok(store)
+}
+
+fn save_engineer_point_overlay(
+    building_root: &Path,
+    building_id: &str,
+    store: &EngineerPointOverlayStore,
+    dry_run: bool,
+) -> Result<(), String> {
+    if dry_run {
+        return Ok(());
+    }
+    fs::create_dir_all(building_root).map_err(|e| format!("create building root: {e}"))?;
+    let dest = engineer_overlay_path(building_root);
+    let tmp = building_root.join(format!("{ENGINEER_POINT_OVERLAY_FILE}{OVERLAY_TMP_SUFFIX}"));
+    let body = serde_json::to_string_pretty(store).map_err(|e| format!("serialize: {e}"))?;
+    fs::write(&tmp, format!("{body}\n")).map_err(|e| format!("write engineer overlay tmp: {e}"))?;
+    fs::rename(&tmp, &dest).map_err(|e| format!("publish engineer overlay: {e}"))?;
+    if store.building_id != building_id {
+        return Err("engineer overlay building_id mismatch".into());
+    }
+    Ok(())
+}
+
+fn merge_engineer_patch(
+    existing: Option<&EngineerPointOverlayEntry>,
+    unit: Option<&str>,
+    quantity: Option<&str>,
+    primary_reference: Option<bool>,
+) -> EngineerPointOverlayEntry {
+    let mut entry = existing.cloned().unwrap_or_default();
+    if let Some(u) = unit {
+        let trimmed = u.trim();
+        entry.unit = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(q) = quantity {
+        let trimmed = q.trim();
+        entry.quantity = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(flag) = primary_reference {
+        entry.primary_reference = flag;
+    }
+    entry
+}
+
+pub fn upsert_engineer_point_overlay(
+    building_root: &Path,
+    building_id: &str,
+    point_id: &str,
+    unit: Option<&str>,
+    quantity: Option<&str>,
+    primary_reference: Option<bool>,
+    dry_run: bool,
+) -> Result<(), String> {
+    let pid = point_id.trim();
+    if pid.is_empty() {
+        return Err("point_id required".into());
+    }
+    if unit.is_none() && quantity.is_none() && primary_reference.is_none() {
+        return Ok(());
+    }
+    validate_engineer_patch(unit, quantity, primary_reference)?;
+    let mut store = load_engineer_point_overlay(building_root)?;
+    if store.building_id.is_empty() {
+        store.building_id = building_id.to_string();
+    } else if store.building_id != building_id {
+        return Err("engineer overlay building_id mismatch".into());
+    }
+    let merged = merge_engineer_patch(store.points.get(pid), unit, quantity, primary_reference);
+    store.points.insert(pid.to_string(), merged);
+    save_engineer_point_overlay(building_root, building_id, &store, dry_run)
+}
+
+pub fn remove_engineer_point_overlay(
+    building_root: &Path,
+    point_id: &str,
+    dry_run: bool,
+) -> Result<(), String> {
+    let pid = point_id.trim();
+    if pid.is_empty() {
+        return Ok(());
+    }
+    let mut store = load_engineer_point_overlay(building_root)?;
+    if store.points.remove(pid).is_none() {
+        return Ok(());
+    }
+    if store.points.is_empty() && store.building_id.is_empty() {
+        if dry_run {
+            return Ok(());
+        }
+        let path = engineer_overlay_path(building_root);
+        if path.is_file() {
+            fs::remove_file(&path).map_err(|e| format!("remove engineer overlay: {e}"))?;
+        }
+        return Ok(());
+    }
+    save_engineer_point_overlay(building_root, &store.building_id, &store, dry_run)
+}
+
+/// Effective unit for committed ingest: engineer overlay, then NF portal tag, then none.
+pub fn effective_point_unit(
+    portal_unit: Option<&str>,
+    entry: Option<&EngineerPointOverlayEntry>,
+) -> Option<String> {
+    if let Some(u) = entry
+        .and_then(|e| e.unit.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return Some(u.to_string());
+    }
+    portal_unit
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// Effective quantity for committed ingest (overlay only; portal inventory does not supply it).
+pub fn effective_point_quantity(entry: Option<&EngineerPointOverlayEntry>) -> Option<String> {
+    entry
+        .and_then(|e| e.quantity.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+pub fn effective_primary_reference(entry: Option<&EngineerPointOverlayEntry>) -> bool {
+    entry.map(|e| e.primary_reference).unwrap_or(false)
 }
 
 /// Upsert equipment into the writable overlay (BPS `POST /api/model/equip`).
@@ -898,6 +1192,9 @@ pub fn upsert_point(
         .filter(|s| !s.is_empty())
         .unwrap_or(pid)
         .to_string();
+    let engineer_unit = fields.unit;
+    let engineer_quantity = fields.quantity;
+    let engineer_primary = fields.primary_reference;
     let mutate = (|| -> Result<Vec<PortalTagDiagnostic>, String> {
         let site = ensure_site(&store, building_id)?;
         let equip = ensure_equip(&store, building_id, eid, &site)?;
@@ -946,6 +1243,27 @@ pub fn upsert_point(
             }));
         }
     };
+    if engineer_unit.is_some() || engineer_quantity.is_some() || engineer_primary.is_some() {
+        match upsert_engineer_point_overlay(
+            building_root,
+            building_id,
+            pid,
+            engineer_unit,
+            engineer_quantity,
+            engineer_primary,
+            opts.dry_run,
+        ) {
+            Ok(()) => {}
+            Err(e) => {
+                return Err(json!({
+                    "ok": false,
+                    "error": e,
+                    "building_id": building_id,
+                    "soft_open_neq_fq": true,
+                }));
+            }
+        }
+    }
     match commit_store(
         building_root,
         building_id,
@@ -1019,6 +1337,14 @@ pub fn delete_point(
         Ok(())
     })();
     if let Err(e) = mutate {
+        return Err(json!({
+            "ok": false,
+            "error": e,
+            "building_id": building_id,
+            "soft_open_neq_fq": true,
+        }));
+    }
+    if let Err(e) = remove_engineer_point_overlay(building_root, pid, dry_run) {
         return Err(json!({
             "ok": false,
             "error": e,
@@ -1320,6 +1646,12 @@ pub fn sync_portal_inventory(
             .extend(to_portal_diags(pid, &written.diagnostics));
         remove_subject(&store, &tombstone_uri(building_id, "point", pid)?)?;
         report.points_upserted += 1;
+    }
+
+    if allow_removals && !report.points_deleted.is_empty() {
+        for pid in &report.points_deleted {
+            let _ = remove_engineer_point_overlay(building_root, pid, false);
+        }
     }
 
     let after = quad_set(&store)?;
@@ -1734,6 +2066,9 @@ mod tests {
                 openfdd_key: None,
                 role: Some("discharge-air-temp"),
                 markers: &markers,
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts::default(),
         )
@@ -1751,6 +2086,9 @@ mod tests {
                 openfdd_key: None,
                 role: None,
                 markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts {
                 expected_revision: Some(1),
@@ -1772,6 +2110,9 @@ mod tests {
                 openfdd_key: None,
                 role: None,
                 markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts {
                 expected_revision: Some(0),
@@ -1808,6 +2149,9 @@ mod tests {
                 openfdd_key: Some("AHU-1.zone-air-temp"),
                 role: None,
                 markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts::default(),
         )
@@ -1848,6 +2192,9 @@ mod tests {
                 openfdd_key: Some("AHU-1.zone-air-temp"),
                 role: None,
                 markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts {
                 expected_revision: Some(2),
@@ -1887,6 +2234,9 @@ mod tests {
                 dis: Some("AHU X"),
                 kind: Some("ahu"),
                 markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts::default(),
         )
@@ -1901,6 +2251,9 @@ mod tests {
                 openfdd_key: None,
                 role: None,
                 markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts {
                 expected_revision: Some(1),
@@ -1953,6 +2306,9 @@ mod tests {
                 dis: Some("Overlay AHU"),
                 kind: Some("ahu"),
                 markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts::default(),
         )
@@ -2145,6 +2501,9 @@ SELECT ?sym WHERE {
                 openfdd_key: Some("EQ_HP.discharge-air-temp"),
                 role: Some("discharge-air-temp"),
                 markers: &point_markers,
+                unit: None,
+                quantity: None,
+                primary_reference: None,
             },
             OverlayCasOpts {
                 expected_revision: Some(1),
@@ -2243,6 +2602,106 @@ SELECT ?sym WHERE {
             outcomes(PID, "ext:sitePolicy"),
             vec!["extension".to_string()]
         );
+    }
+
+    #[test]
+    fn engineer_unit_overlay_survives_portal_resync() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let bid = "SITE_ENG_OVERLAY";
+        let pid = "6a1f0c2a-0001-4000-8000-00000000a001";
+        let portal = PortalPoint {
+            point_id: pid.to_string(),
+            equipment_id: "AHU_1".to_string(),
+            openfdd_key: "AHU_1.sat".into(),
+            role: "sat".into(),
+            dis: Some("Supply".into()),
+            unit: None,
+            markers: vec!["sensor".into(), "temp".into()],
+            kind: Some("Number".into()),
+            tz: None,
+            his: None,
+            his_mode: None,
+            enum_value: None,
+            ref_rel: None,
+            ref_id: None,
+        };
+        sync_portal_inventory(
+            root,
+            bid,
+            "nf:test",
+            &[PortalEquip {
+                equipment_id: "AHU_1".into(),
+                dis: Some("AHU".into()),
+                kind: Some("ahu".into()),
+                markers: vec![],
+            }],
+            &[portal],
+            true,
+        )
+        .expect("sync");
+        upsert_engineer_point_overlay(
+            root,
+            bid,
+            pid,
+            Some("degF"),
+            Some("absolute_temperature"),
+            Some(true),
+            false,
+        )
+        .expect("engineer");
+        let store = load_engineer_point_overlay(root).expect("load");
+        assert_eq!(
+            store.points.get(pid).and_then(|e| e.unit.as_deref()),
+            Some("degF")
+        );
+        let portal2 = PortalPoint {
+            point_id: pid.to_string(),
+            equipment_id: "AHU_1".to_string(),
+            openfdd_key: "AHU_1.sat".into(),
+            role: "sat".into(),
+            dis: Some("Supply renamed".into()),
+            unit: None,
+            markers: vec!["sensor".into(), "temp".into()],
+            kind: Some("Number".into()),
+            tz: None,
+            his: None,
+            his_mode: None,
+            enum_value: None,
+            ref_rel: None,
+            ref_id: None,
+        };
+        sync_portal_inventory(
+            root,
+            bid,
+            "nf:test",
+            &[PortalEquip {
+                equipment_id: "AHU_1".into(),
+                dis: Some("AHU".into()),
+                kind: Some("ahu".into()),
+                markers: vec![],
+            }],
+            &[portal2],
+            true,
+        )
+        .expect("resync");
+        let store2 = load_engineer_point_overlay(root).expect("reload");
+        let entry = store2.points.get(pid).expect("entry");
+        assert_eq!(entry.unit.as_deref(), Some("degF"));
+        assert_eq!(entry.quantity.as_deref(), Some("absolute_temperature"));
+        assert!(entry.primary_reference);
+        assert_eq!(
+            effective_point_unit(None, Some(entry)),
+            Some("degF".to_string())
+        );
+    }
+
+    #[test]
+    fn engineer_unit_validation_rejects_incompatible_pairs() {
+        assert!(validate_engineer_unit_quantity("degF", "absolute_temperature").is_ok());
+        assert!(validate_engineer_unit_quantity("%RH", "relative_humidity").is_ok());
+        assert!(validate_engineer_unit_quantity("not_a_unit", "absolute_temperature").is_err());
+        assert!(validate_engineer_unit_quantity("degF", "relative_humidity").is_err());
     }
 
     fn select_values(ttl: &str, query: &str, var: &str) -> Vec<String> {
