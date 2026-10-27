@@ -29,6 +29,7 @@ import {
   type ProviderWindowRow,
   type WindowLedgerView,
 } from "../lib/providerDisplay";
+import { IngestCoverageStatus } from "./IngestCoverageStatus";
 import { Button } from "./widgets";
 
 const PAGE_SIZE = 20;
@@ -342,6 +343,7 @@ export function ProvidersPanel() {
               message: selected.message,
             }).detail}
           </p>
+          <IngestCoverageStatus siteId={selected.buildingId} />
           <h3 id="provider-ledger-heading">Window ledger</h3>
           {ledgerError ? (
             <p className="error" data-testid="provider-ledger-error">

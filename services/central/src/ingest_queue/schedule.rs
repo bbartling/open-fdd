@@ -167,6 +167,30 @@ pub fn next_daily_run(
     Ok(local_midnight(tz, next)? + publication_delay)
 }
 
+/// Newest instant the schedule has planned through at `now`, and the next run
+/// strictly after `now`. Periodic runs ignore the per-device stagger.
+pub fn planned_horizon(
+    schedule: IngestSchedule,
+    now: DateTime<Utc>,
+    publication_delay: Duration,
+    window_secs: i64,
+) -> Result<(DateTime<Utc>, DateTime<Utc>), ScheduleError> {
+    match schedule {
+        IngestSchedule::Periodic => {
+            let step = window_secs.clamp(60, 3600);
+            let latest_end = floor_to_window(now - publication_delay, step);
+            Ok((
+                latest_end,
+                latest_end + Duration::seconds(step) + publication_delay,
+            ))
+        }
+        IngestSchedule::Daily { tz } => {
+            let (_, latest_end) = latest_daily_end(now, tz, publication_delay)?;
+            Ok((latest_end, next_daily_run(now, tz, publication_delay)?))
+        }
+    }
+}
+
 /// Largest slice length that is at most `window_secs` and keeps both day
 /// boundaries on the slice grid. One minute always qualifies for whole-minute
 /// offsets.
@@ -521,6 +545,42 @@ mod tests {
         assert_eq!(
             next_daily_run(at("2026-10-20T05:06:00Z"), tz, Duration::minutes(5)).unwrap(),
             at("2026-10-21T05:05:00Z")
+        );
+    }
+
+    #[test]
+    fn planned_horizon_names_the_planned_end_and_the_next_run() {
+        let delay = Duration::minutes(5);
+        assert_eq!(
+            planned_horizon(
+                IngestSchedule::Periodic,
+                at("2026-10-20T13:04:00Z"),
+                delay,
+                3600
+            )
+            .unwrap(),
+            (at("2026-10-20T12:00:00Z"), at("2026-10-20T13:05:00Z"))
+        );
+        assert_eq!(
+            planned_horizon(
+                IngestSchedule::Periodic,
+                at("2026-10-20T13:06:00Z"),
+                delay,
+                3600
+            )
+            .unwrap(),
+            (at("2026-10-20T13:00:00Z"), at("2026-10-20T14:05:00Z"))
+        );
+        let daily = IngestSchedule::Daily {
+            tz: "America/Chicago".parse().unwrap(),
+        };
+        assert_eq!(
+            planned_horizon(daily, at("2026-10-20T05:02:00Z"), delay, 3600).unwrap(),
+            (at("2026-10-19T05:00:00Z"), at("2026-10-20T05:05:00Z"))
+        );
+        assert_eq!(
+            planned_horizon(daily, at("2026-10-20T05:06:00Z"), delay, 3600).unwrap(),
+            (at("2026-10-20T05:00:00Z"), at("2026-10-21T05:05:00Z"))
         );
     }
 

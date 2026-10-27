@@ -60,6 +60,12 @@ A daily window with a recoverable gap or a retryable error waits for the next da
 
 `ingest_coverage_cursor` stores, per tenant, site, provider, device, and model revision, the instant through which every overlapping job is committed. It only moves forward. The first instant that is not verified is stored as a hole with the blocking job state and code, or `not_scheduled` when no job covers it.
 
+## Coverage status
+
+`GET /api/ingest/gaps?view=status&site_id=` reports, per configured provider, the schedule mode and timezone, the planned end (`planned_through`), the next run, the approved, withheld, and discovered point counts from the committed plan, and each device's verified cursor. It reads only stored rows: the active plan, `ingest_coverage_cursor`, and the gap list. It does not run a fetch.
+
+A device is `verified` only when its cursor reaches `planned_through`. Otherwise its hole decides: no hole, `not_scheduled`, `queued`, or `leased` is `behind`; a committed window with code `not_assessed` is `not_assessed`; any other hole (partial, retry wait, permanent failure, committed but incomplete) is `gap`. A device with no cursor is `not_assessed`, and a provider with no committed plan is `not_configured`. The provider and site take the worst device state. The oldest gap is the first gap row for the active revision within the first 200 rows; `gap_scan_truncated` is set when none matched. The Operations page shows this as **Schedule and coverage** under the selected site.
+
 ## HTTP and MCP
 
 JWT scoped like other tenant routes. Empty membership returns no rows. Operators (`confirm` on MCP, plus `OPENFDD_MCP_ALLOW_WRITES=1`) may retry or backfill with an idempotency key. Backfill accepts 1–48 exact UTC hours.
@@ -69,6 +75,7 @@ JWT scoped like other tenant routes. Empty membership returns no rows. Operators
 | GET | `/api/ingest/jobs` |
 | GET | `/api/ingest/receipts` |
 | GET | `/api/ingest/gaps` |
+| GET | `/api/ingest/gaps?view=status&site_id=` |
 | GET | `/api/ingest/queue` |
 | GET | `/api/ingest/queue/scale-preview` |
 | POST | `/api/ingest/jobs/{job_id}/retry` |

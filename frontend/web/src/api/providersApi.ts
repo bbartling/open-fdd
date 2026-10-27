@@ -148,3 +148,11 @@ export function ingestGapsPath(siteId: string): string {
   q.set("site_id", siteId);
   return `/api/ingest/gaps?${q.toString()}`;
 }
+
+/** Schedule and coverage status from stored cursors, the committed plan, and gaps. */
+export function ingestCoverageStatusPath(siteId: string): string {
+  const q = new URLSearchParams();
+  q.set("site_id", siteId);
+  q.set("view", "status");
+  return `/api/ingest/gaps?${q.toString()}`;
+}

@@ -28,6 +28,9 @@ pub struct ListQuery {
     pub site_id: Option<String>,
     pub state: Option<String>,
     pub limit: Option<u32>,
+    /// `status` on `/api/ingest/gaps` returns the site's schedule and
+    /// coverage status instead of the gap list.
+    pub view: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -161,6 +164,22 @@ pub async fn list_gaps(
 ) -> Response {
     let request_id = contract::ensure_request_id(&headers);
     let ctx = tenant_ctx(&state, &user).await;
+    match query.view.as_deref().map(str::trim) {
+        None | Some("") => {}
+        Some("status") => {
+            let site = query.site_id.as_deref().unwrap_or_default();
+            return coverage_status(&state, &ctx, site, &request_id).await;
+        }
+        Some(_) => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_view",
+                "view must be status or omitted",
+                &request_id,
+                false,
+            )
+        }
+    }
     let Some(filter) = scoped_filter(&ctx, &query, &request_id) else {
         return empty_named(&request_id, &ctx, "gaps");
     };
@@ -194,6 +213,118 @@ pub async fn list_gaps(
         }
         Err(err) => queue_err(&err, &request_id),
     }
+}
+
+/// Schedule and verified-coverage status for one site, per provider.
+/// Served as `GET /api/ingest/gaps?view=status&site_id=`.
+async fn coverage_status(
+    state: &Arc<AppState>,
+    ctx: &TenantContext,
+    site: &str,
+    request_id: &str,
+) -> Response {
+    let site = site.trim();
+    let not_found = || {
+        json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "site not found",
+            request_id,
+            false,
+        )
+    };
+    if site.is_empty() || !ctx.allow_building(site) {
+        return not_found();
+    }
+    let scoped_tenant = if ctx.multi_tenant && !ctx.hub_admin {
+        match ctx.tenant_id.clone() {
+            Some(tenant_id) => Some(tenant_id),
+            None => return not_found(),
+        }
+    } else {
+        None
+    };
+    let configs: Vec<&SiteConfig> = state
+        .providers
+        .sites
+        .iter()
+        .filter(|row| {
+            row.building_id == site
+                && scoped_tenant
+                    .as_deref()
+                    .is_none_or(|tenant_id| row.tenant_id == tenant_id)
+        })
+        .collect();
+    if configs.is_empty() {
+        return not_found();
+    }
+    let now = Utc::now();
+    let delay = chrono::Duration::seconds(super::worker::publication_delay_secs() as i64);
+    let window_secs = crate::providers::hourly::HourlyPolicy::from_env().window_secs;
+    let mut overall = super::status::VERIFIED;
+    let mut providers = Vec::with_capacity(configs.len());
+    for config in configs {
+        let tenant_id = config.tenant_id.as_str();
+        let plan = {
+            let models = state
+                .providers
+                .models
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            models.active_plan(tenant_id, site).cloned()
+        };
+        let cursors = match state.ingest_queue.list_cursors(tenant_id, site).await {
+            Ok(rows) => rows,
+            Err(err) => return queue_err(&err, request_id),
+        };
+        let filter = ListFilter {
+            sites: Some(vec![site.to_string()]),
+            tenant_id: Some(tenant_id.to_string()),
+            state: None,
+            limit: MAX_LIST,
+        };
+        let gaps = match state.ingest_queue.list_gaps(&filter).await {
+            Ok(rows) => rows,
+            Err(err) => return queue_err(&err, request_id),
+        };
+        let horizon = super::schedule::planned_horizon(config.schedule, now, delay, window_secs);
+        let (planned_through, next_run, schedule_error) = match horizon {
+            Ok((planned, next)) => (Some(planned), Some(next), None),
+            Err(err) => (None, None, Some(err.to_string())),
+        };
+        let status = super::status::provider_status(
+            &config.provider_instance_id,
+            plan.as_ref(),
+            &cursors,
+            &gaps,
+            planned_through.unwrap_or(DateTime::<Utc>::MAX_UTC),
+        );
+        overall = super::status::worse(overall, status.state);
+        let gap_scan_truncated = status.oldest_gap.is_none() && gaps.len() >= MAX_LIST as usize;
+        let (mode, timezone) = match config.schedule {
+            super::schedule::IngestSchedule::Periodic => ("periodic", None),
+            super::schedule::IngestSchedule::Daily { tz } => ("daily", Some(tz.name())),
+        };
+        providers.push(json!({
+            "tenant_id": tenant_id,
+            "schedule": { "mode": mode, "timezone": timezone },
+            "planned_through": planned_through,
+            "next_run": next_run,
+            "schedule_error": schedule_error,
+            "gap_scan_truncated": gap_scan_truncated,
+            "status": status,
+        }));
+    }
+    Json(json!({
+        "ok": true,
+        "request_id": request_id,
+        "scope": scope_json(ctx),
+        "site_id": site,
+        "generated_at": now,
+        "state": overall,
+        "providers": providers,
+    }))
+    .into_response()
 }
 
 pub async fn queue_metrics(
@@ -931,12 +1062,14 @@ mod tests {
             site_id: Some("site-b".into()),
             state: None,
             limit: None,
+            view: None,
         };
         assert!(scoped_filter(&ctx, &query, "req").is_none());
         let own = ListQuery {
             site_id: Some("site-a".into()),
             state: Some("queued".into()),
             limit: Some(10),
+            view: None,
         };
         let filter = scoped_filter(&ctx, &own, "req").unwrap();
         assert_eq!(filter.sites.unwrap(), vec!["site-a".to_string()]);
@@ -948,7 +1081,8 @@ mod tests {
             &ListQuery {
                 site_id: None,
                 state: None,
-                limit: None
+                limit: None,
+                view: None,
             },
             "req"
         )

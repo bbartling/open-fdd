@@ -307,7 +307,11 @@ mod live_routes {
 
     #[utoipa::path(
         get, path = "/api/ingest/gaps", tag = "ingest",
-        responses((status = 200, description = "Scoped gap windows; coverage is not assessed", body = serde_json::Value))
+        params(
+            ("site_id" = Option<String>, Query, description = "Site filter; required with view=status"),
+            ("view" = Option<String>, Query, description = "status returns schedule and verified-coverage status per provider instead of gap windows")
+        ),
+        responses((status = 200, description = "Scoped gap windows (coverage is not assessed), or with view=status the site's schedule and coverage status", body = serde_json::Value))
     )]
     pub fn ingest_gaps() {}
 

@@ -9,6 +9,7 @@ mod model;
 mod postgres;
 mod scale;
 pub(crate) mod schedule;
+mod status;
 mod worker;
 
 #[cfg(test)]

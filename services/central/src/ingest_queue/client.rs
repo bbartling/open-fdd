@@ -164,6 +164,18 @@ impl QueueClient {
         Ok(self.memory.advance_cursor(key, now))
     }
 
+    /// Stored verified-coverage cursors for one tenant site.
+    pub async fn list_cursors(
+        &self,
+        tenant_id: &str,
+        canonical_site: &str,
+    ) -> Result<Vec<CoverageCursor>, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            return cursor::list_postgres(&pool, tenant_id, canonical_site).await;
+        }
+        Ok(self.memory.list_cursors(tenant_id, canonical_site))
+    }
+
     pub async fn list_jobs(&self, filter: &ListFilter) -> Result<Vec<JobView>, QueueError> {
         if let Some(pool) = self.pool_if_configured().await? {
             return postgres::list_jobs(&pool, filter).await;

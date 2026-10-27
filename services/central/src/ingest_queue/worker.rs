@@ -956,7 +956,7 @@ fn tick_secs() -> u64 {
         .unwrap_or(15)
 }
 
-fn publication_delay_secs() -> u64 {
+pub(crate) fn publication_delay_secs() -> u64 {
     std::env::var("OPENFDD_INGEST_PUBLICATION_DELAY_SECS")
         .ok()
         .and_then(|value| value.parse().ok())

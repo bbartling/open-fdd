@@ -97,6 +97,57 @@ pub fn walk(
     Some((cursor, None))
 }
 
+/// Stored cursors for one tenant site, ordered by provider, device, revision.
+pub async fn list_postgres(
+    pool: &PgPool,
+    tenant_id: &str,
+    canonical_site: &str,
+) -> Result<Vec<CoverageCursor>, QueueError> {
+    let rows = sqlx::query(
+        "SELECT provider_instance_id, device_id, model_revision, verified_through,
+                hole_at, hole_state, hole_code, updated_at
+         FROM ingest_coverage_cursor
+         WHERE tenant_id = $1 AND canonical_site = $2
+         ORDER BY provider_instance_id, device_id, model_revision",
+    )
+    .bind(tenant_id)
+    .bind(canonical_site)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    let mut cursors = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let hole_at: Option<DateTime<Utc>> = row.try_get("hole_at").map_err(db_err)?;
+        let hole_state: Option<String> = row.try_get("hole_state").map_err(db_err)?;
+        let hole = match (hole_at, hole_state) {
+            (Some(at), Some(state)) => Some(CursorHole {
+                at,
+                state,
+                code: row.try_get("hole_code").map_err(db_err)?,
+            }),
+            (None, None) => None,
+            _ => {
+                return Err(QueueError::Db(
+                    "ingest_coverage_cursor hole is half set".into(),
+                ))
+            }
+        };
+        cursors.push(CoverageCursor {
+            key: CursorKey {
+                tenant_id: tenant_id.to_string(),
+                canonical_site: canonical_site.to_string(),
+                provider_instance_id: row.try_get("provider_instance_id").map_err(db_err)?,
+                device_id: row.try_get("device_id").map_err(db_err)?,
+                model_revision: row.try_get("model_revision").map_err(db_err)?,
+            },
+            verified_through: row.try_get("verified_through").map_err(db_err)?,
+            hole,
+            updated_at: row.try_get("updated_at").map_err(db_err)?,
+        });
+    }
+    Ok(cursors)
+}
+
 /// Recompute and store the cursor for one device revision in one transaction.
 pub async fn advance_postgres(
     pool: &PgPool,
