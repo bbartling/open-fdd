@@ -413,8 +413,15 @@ async fn selected_site_without_meters_does_not_show_another_campus() {
     .await;
     let mv_empty_body = mv_empty.to_string();
     assert_eq!(mv_empty_status, StatusCode::OK, "{mv_empty_body}");
-    assert_eq!(mv_empty["building_id"], EMPTY, "{mv_empty_body}");
-    assert_eq!(mv_empty["rows"].as_array().expect("rows").len(), 0);
+    let mv_env = crate::analytics_response_fixtures::analytics_envelope(&mv_empty);
+    assert_eq!(
+        mv_env
+            .pointer("/coverage/building_id")
+            .and_then(|v| v.as_str()),
+        Some(EMPTY),
+        "{mv_empty_body}"
+    );
+    assert_eq!(mv_env["rows"].as_array().expect("rows").len(), 0);
     assert!(!mv_empty_body.contains(INTERVAL_METER), "{mv_empty_body}");
 
     let (mv_own_status, mv_own) = send(
@@ -429,7 +436,14 @@ async fn selected_site_without_meters_does_not_show_another_campus() {
     .await;
     let mv_own_body = mv_own.to_string();
     assert_eq!(mv_own_status, StatusCode::OK, "{mv_own_body}");
-    assert_eq!(mv_own["building_id"], METERED, "{mv_own_body}");
+    let mv_own_env = crate::analytics_response_fixtures::analytics_envelope(&mv_own);
+    assert_eq!(
+        mv_own_env
+            .pointer("/coverage/building_id")
+            .and_then(|v| v.as_str()),
+        Some(METERED),
+        "{mv_own_body}"
+    );
     assert!(
         mv_own_body.contains(INTERVAL_METER),
         "metered site M&V rows missing: {mv_own_body}"

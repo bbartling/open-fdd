@@ -6,6 +6,10 @@ mod admin_cp;
 mod admitted_sample;
 mod afdd_scheduler;
 mod analytics;
+#[cfg(test)]
+mod analytics_response_fixtures;
+#[cfg(test)]
+mod analytics_result_cache_fixtures;
 mod audit;
 mod auth;
 mod building_sessions;

@@ -1154,7 +1154,11 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK, "inspect body {inspect}");
-        let points = inspect
+        let inspect_payload = inspect
+            .get("analytics")
+            .cloned()
+            .unwrap_or_else(|| inspect.clone());
+        let points = inspect_payload
             .get("points")
             .and_then(Value::as_array)
             .map(Vec::len)

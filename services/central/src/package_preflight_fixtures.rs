@@ -393,7 +393,11 @@ async fn post_vav(app: &axum::Router, building_id: &str) -> (StatusCode, Value) 
         )
         .await
         .expect("vav response");
-    read_response(response).await
+    let (status, body) = read_response(response).await;
+    (
+        status,
+        crate::analytics_response_fixtures::analytics_envelope(&body),
+    )
 }
 
 async fn read_response(response: axum::response::Response) -> (StatusCode, Value) {

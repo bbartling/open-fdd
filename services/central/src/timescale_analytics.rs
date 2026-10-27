@@ -1631,6 +1631,113 @@ fn diagnostic_envelope(query_id: &str, building_id: &str, rows: Vec<Value>) -> V
     env
 }
 
+/// Convert Timescale dispatch JSON into a cacheable [`AnalyticsEnvelope`].
+pub fn envelope_from_dispatch_value(
+    query_version: &str,
+    req: &AnalyticsRequest,
+    value: Value,
+) -> crate::analytics::AnalyticsEnvelope {
+    use crate::analytics::{finalize_historian, AnalyticsEnvelope, SCHEMA_VERSION};
+    use chrono::Utc;
+
+    if let Ok(env) = serde_json::from_value::<AnalyticsEnvelope>(value.clone()) {
+        return finalize_historian(req, env, query_version);
+    }
+    let obj = value.as_object().cloned().unwrap_or_default();
+    let rows = obj
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .map(|a| a.to_vec())
+        .unwrap_or_default();
+    let equipment = obj
+        .get("equipment")
+        .and_then(|v| v.as_array())
+        .map(|a| a.to_vec())
+        .unwrap_or_default();
+    let points = obj
+        .get("points")
+        .and_then(|v| v.as_array())
+        .map(|a| a.to_vec())
+        .unwrap_or_default();
+    let skipped = obj
+        .get("skipped")
+        .and_then(|v| v.as_array())
+        .map(|a| a.to_vec())
+        .unwrap_or_default();
+    let warnings = obj
+        .get("warnings")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|w| w.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    let coverage = obj.get("coverage").cloned();
+    let engine = obj
+        .get("engine")
+        .and_then(|v| v.as_str())
+        .unwrap_or("timescale-sql")
+        .to_string();
+    let schema_version = obj
+        .get("schema_version")
+        .and_then(|v| v.as_str())
+        .unwrap_or(SCHEMA_VERSION)
+        .to_string();
+    let generated_at = obj
+        .get("generated_at")
+        .and_then(|v| v.as_str())
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|t| t.with_timezone(&Utc))
+        .unwrap_or_else(Utc::now);
+    let qv = obj
+        .get("query_version")
+        .and_then(|v| v.as_str())
+        .unwrap_or(query_version);
+    let mut env = AnalyticsEnvelope {
+        schema_version,
+        query_version: qv.to_string(),
+        job_id: req.query.job_id.clone(),
+        run_id: req.query.run_id.clone(),
+        input_fingerprint: None,
+        generated_at,
+        engine,
+        coverage,
+        warnings,
+        rows,
+        equipment,
+        points,
+        skipped,
+    };
+    let dispatch_meta_keys = [
+        "query_id",
+        "building_id",
+        "site_id",
+        "note",
+        "sample_count",
+        "pack_version",
+        "analytics_pack",
+    ];
+    let scope_meta_keys = ["window_start", "window_end", "equipment_ids"];
+    let mut cov = env
+        .coverage
+        .as_ref()
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let mut merged = false;
+    for key in dispatch_meta_keys.iter().chain(scope_meta_keys.iter()) {
+        if let Some(v) = obj.get(*key) {
+            cov.insert((*key).to_string(), v.clone());
+            merged = true;
+        }
+    }
+    if merged {
+        env.coverage = Some(Value::Object(cov));
+    }
+    finalize_historian(req, env, query_version)
+}
+
 fn building_from(
     req: &AnalyticsRequest,
 ) -> Result<String, (axum::http::StatusCode, axum::Json<Value>)> {

@@ -113,7 +113,7 @@ async fn runtime_handler_reports_observation_counts_and_partial_weeks() {
     let app = crate::routes::router(state);
     let body = post_runtime(&app).await;
     assert!(
-        body.get("points").is_none(),
+        crate::analytics_response_fixtures::points_absent_or_empty(&body),
         "runtime stays row-only: {body}"
     );
     let rows = body["rows"].as_array().expect("runtime rows");
@@ -187,7 +187,9 @@ async fn post_runtime(app: &axum::Router) -> Value {
     let body: Value = serde_json::from_slice(&bytes)
         .unwrap_or_else(|_| json!({ "raw": String::from_utf8_lossy(&bytes).into_owned() }));
     assert_eq!(status, StatusCode::OK, "{body}");
-    body
+    body.get("analytics")
+        .cloned()
+        .unwrap_or_else(|| body.clone())
 }
 
 async fn apply_schema(pool: &PgPool) {

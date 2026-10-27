@@ -308,13 +308,13 @@ async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
     .await;
 
     let app = crate::routes::router(Arc::new(AppState::new()));
-    let (status, body) = post_matrix(&app, "/api/analytics/sensor-faults", &site_a).await;
-    assert_eq!(status, StatusCode::OK, "sensor-faults {body}");
+    let (status, raw) = post_matrix(&app, "/api/analytics/sensor-faults", &site_a).await;
+    assert_eq!(status, StatusCode::OK, "sensor-faults {raw}");
+    let body = crate::analytics_response_fixtures::analytics_envelope(&raw);
     assert_eq!(body["schema_version"], json!("diagnostic_matrix_v1"));
-    assert_eq!(body["query_version"], json!("diagnostic-matrix-v1"));
-    assert_eq!(body["query_id"], json!("sensor-faults"));
-    assert_eq!(body["site_id"], json!(site_a));
-    assert_eq!(body["building_id"], json!(site_a));
+    assert_eq!(body["query_version"], json!("sensor-faults-v1"));
+    assert_eq!(body["coverage"]["query_id"], json!("sensor-faults"));
+    assert_eq!(body["coverage"]["building_id"], json!(site_a));
     let sensor = index_rows(&body);
     assert_eq!(sensor.len(), 5, "sensor rows {body}");
     assert_eq!(
@@ -351,11 +351,12 @@ async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
         .iter()
         .all(|row| row["site_id"] == json!(site_a) && row.get("hunt_flag").is_none()));
 
-    let (status, body) = post_matrix(&app, "/api/analytics/pid-hunting", &site_a).await;
-    assert_eq!(status, StatusCode::OK, "pid-hunting {body}");
+    let (status, raw_hunt) = post_matrix(&app, "/api/analytics/pid-hunting", &site_a).await;
+    assert_eq!(status, StatusCode::OK, "pid-hunting {raw_hunt}");
+    let body = crate::analytics_response_fixtures::analytics_envelope(&raw_hunt);
     assert_eq!(body["schema_version"], json!("diagnostic_matrix_v1"));
-    assert_eq!(body["query_id"], json!("pid-hunting"));
-    assert_eq!(body["site_id"], json!(site_a));
+    assert_eq!(body["coverage"]["query_id"], json!("pid-hunting"));
+    assert_eq!(body["coverage"]["building_id"], json!(site_a));
     let hunt = index_rows(&body);
     assert_eq!(hunt.len(), 3, "pid rows {body}");
     assert_eq!(
@@ -383,15 +384,16 @@ async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
         .iter()
         .all(|row| row["site_id"] == json!(site_a) && row.get("fault_flag").is_none()));
 
-    let (status, body) = post_matrix(&app, "/api/analytics/sensor-faults", &site_b).await;
-    assert_eq!(status, StatusCode::OK, "site b sensor {body}");
+    let (status, raw_b) = post_matrix(&app, "/api/analytics/sensor-faults", &site_b).await;
+    assert_eq!(status, StatusCode::OK, "site b sensor {raw_b}");
+    let body = crate::analytics_response_fixtures::analytics_envelope(&raw_b);
     let foreign = index_rows(&body);
     assert_eq!(foreign.len(), 1, "site b rows {body}");
     assert_eq!(
         foreign[&("foreign_unit".into(), "sat".into())]["fault_flag"],
         json!("FLATLINE")
     );
-    assert_eq!(body["site_id"], json!(site_b));
+    assert_eq!(body["coverage"]["building_id"], json!(site_b));
     assert!(foreign
         .keys()
         .all(|(equipment, _)| equipment != "flat_unit"));
