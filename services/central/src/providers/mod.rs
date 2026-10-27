@@ -388,7 +388,7 @@ impl Runtime {
         for site in &mut body.sites {
             let Some(config) = self.sites.iter().find(|row| {
                 row.building_id == site.building_id
-                    && super::http_policy::provider_ids_equivalent(
+                    && crate::providers::http_policy::provider_ids_equivalent(
                         &row.provider_instance_id,
                         &site.provider_instance_id,
                     )
