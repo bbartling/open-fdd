@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -110,6 +111,26 @@ def main() -> None:
         fail("n12 live pilot must stay SoftOPEN defer —")
     if "live" not in n12["remaining"].lower() and "pilot" not in n12["remaining"].lower():
         fail("n12 remaining must name the deferred pilot")
+
+    portal_fresh = ROOT / "scripts" / "nf" / "check_portal_fresh.py"
+    if not portal_fresh.is_file():
+        fail(f"missing {portal_fresh}")
+
+    forbidden_tracked = (
+        "scripts/nf/provider_sites.acme.json",
+        "scripts/nf/provider_sites.bosspi.json",
+        "scripts/nf/bosspi_gateway.json",
+        "scripts/nf/bosspi_semantic_meta.json",
+        "scripts/nf/check_acme_portal_fresh.py",
+    )
+    for rel in forbidden_tracked:
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", rel],
+            cwd=ROOT,
+            capture_output=True,
+        )
+        if tracked.returncode == 0:
+            fail(f"site-named file must not be tracked: {rel}")
 
     print(f"wave-nf status: {len(seen)} items, deployed=false, qualified=false")
 

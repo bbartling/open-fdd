@@ -102,9 +102,10 @@ The console API calls behind it (HTTP Basic, local console only):
 
 1. `nf_app_sync.py run` shows `STATE_SUCCESS` with `write_path: sdk.http AddPointsData`.
 2. `nf_app_sync.py status`: later runs show `TRIGGER_SCHEDULE` 20 min apart.
-3. `python3 scripts/nf/check_acme_portal_fresh.py` prints PASS on the **remote
-   portal**. Weather points older than `--warn-age-min` (default 25, one 20 min
-   hook interval plus margin) print WARN and still pass until the 30 min fail.
+3. `python3 scripts/nf/check_portal_fresh.py --env <file> --sites <site.json>`
+   prints PASS on the **remote portal**. Weather points older than `--warn-age-min`
+   (default 25, one 20 min hook interval plus margin) print WARN and still pass
+   until the 30 min fail.
 
 ## Open-Meteo weather hook
 
@@ -113,11 +114,9 @@ The console API calls behind it (HTTP Basic, local console only):
 - Dewpoint: it writes Open-Meteo's `dew_point_2m`. It also computes Magnus
   (b = 17.62, c = 243.12 °C: γ = ln(RH/100) + bT/(c+T), Td = cγ/(b−γ)), logs both
   and the delta, and writes Magnus only when the API omits dewpoint. Observed delta ≈ 0.03 °F.
-- Points (ACME): `oa_dry_bulb_web` 6add01fc-4495-3bd2-9585-d761048e0289,
-  `oa_rh_web` 7a3095df-3fe7-3bce-9adc-33712b3cf950, `oa_dewpoint_web`
-  d1049ebb-cc7a-3371-979c-7e59a3f3c5ce. Roles `web-outside-air-temp`,
-  `web-outside-air-humidity` and `web-outside-air-dewpoint` (equip `weather`) keep them
-  apart from the site's own OA sensors.
+- Roles `web-outside-air-temp`, `web-outside-air-humidity` and
+  `web-outside-air-dewpoint` (equip `weather`) keep hook points apart from the
+  site's own OA sensors.
 - For a new site: copy the JS and manifest, change `SITE_NAME`/`LATITUDE`/`LONGITUDE`
   and the app id, `push`, then read the variable UUIDs from `/hooks/{hook}/data`
-  into that site's `provider_sites` JSON.
+  into that site's operator config JSON (outside git).

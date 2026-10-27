@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Live NF bosspi check. GET history only. Never POST /api/v1/point/data.
+"""Live NF portal check. GET history only. Never POST /api/v1/point/data.
 
 The owner's machine runs this after the GHCR refresh. This agent does not have
 the portal credentials.
@@ -11,8 +11,8 @@ Portal read (required):
     export NF_CLIENT_SECRET=...
     python3 scripts/nf/validate_live.py
 
-UUIDs default to the five bosspi ids in ``scripts/nf/provider_sites.bosspi.json``.
-``NF_POINT_UUIDS`` (comma-separated) overrides that list. The read is the last
+``NF_POINT_UUIDS`` (comma-separated) is required unless ``--sites`` supplies UUIDs
+from a provider site file. The read is the last
 completed hour: ``GET /api/v1/point/data?from.seconds=&to.seconds=&uuids=``.
 
 Central check (optional, after the hourly worker has run):
@@ -20,7 +20,7 @@ Central check (optional, after the hourly worker has run):
     export OPENFDD_CENTRAL_URL=http://127.0.0.1:8080
     export OPENFDD_ADMIN_USER=admin
     export OPENFDD_ADMIN_PASSWORD=...
-    export OPENFDD_PROVIDER_BUILDING_ID=BOSSPI
+    export OPENFDD_PROVIDER_BUILDING_ID=<building_id>
     python3 scripts/nf/validate_live.py
 
 That logs in, reads ``GET /api/providers/health``, and requires
@@ -49,7 +49,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SITES = ROOT / "scripts" / "nf" / "provider_sites.bosspi.json"
 UA = "openfdd-nf-validate-live/1.0"
 
 
@@ -62,18 +61,24 @@ def default_uuids() -> list[str]:
     raw = os.environ.get("NF_POINT_UUIDS", "").strip()
     if raw:
         return [part.strip() for part in raw.split(",") if part.strip()]
-    if not DEFAULT_SITES.is_file():
-        die(f"missing {DEFAULT_SITES}; set NF_POINT_UUIDS")
-    sites = json.loads(DEFAULT_SITES.read_text(encoding="utf-8"))
+    sites_path = os.environ.get("NF_SITES_PATH", "").strip()
+    if not sites_path:
+        die("set NF_POINT_UUIDS or NF_SITES_PATH to a provider site JSON file")
+    path = Path(sites_path).expanduser()
+    if not path.is_file():
+        die(f"NF_SITES_PATH not found: {path}")
+    sites = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(sites, dict):
+        sites = [sites]
     uuids = []
     for site in sites:
         for point in site.get("point_map") or []:
             uuid = str(point.get("provider_point_id") or "").strip()
             if uuid and uuid not in uuids:
                 uuids.append(uuid)
-    if len(uuids) < 5:
-        die(f"expected at least 5 bosspi UUIDs, found {len(uuids)}")
-    return uuids[:5]
+    if not uuids:
+        die(f"no provider_point_id entries in {path}")
+    return uuids
 
 
 def request_json(url: str, method: str, body: dict | None, headers: dict[str, str]) -> dict:
