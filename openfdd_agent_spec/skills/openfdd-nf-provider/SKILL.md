@@ -6,7 +6,7 @@ description: >-
   point_map roles, the hourly completed-hour portal pull, the 7-day NF history
   window, and backfill limits. Triggers on: NF provider, provider_sites,
   OPENFDD_PROVIDER_SITES, normal-online.net, point_map, NF_CLIENT_ID, hourly pull,
-  portal history gap, bosspi, ACME NF.
+  portal history gap, bosspi, ACME NF, NF transport, rest or grpc, LAN gRPC.
 ---
 
 # NF portal provider (Open-FDD central)
@@ -16,8 +16,9 @@ description: >-
 Open-FDD does not talk BACnet. A site runs **Normal Framework** at the edge. NF
 discovers and trends the BACnet points. Open-FDD central pulls that history over
 HTTPS from the NF portal tunnel (`https://<installation-uuid>.normal-online.net`)
-into Timescale. Code: [`services/central/src/providers/`](../../../services/central/src/providers/)
-(`config.rs`, `nf.rs`, `hourly.rs`, `poller.rs`, `map.rs`).
+into Timescale. A site can instead read history from the NF LAN gRPC API
+(`transport: "grpc"`, see below). Code: [`services/central/src/providers/`](../../../services/central/src/providers/)
+(`config.rs`, `nf.rs`, `nf_transport.rs`, `hourly.rs`, `poller.rs`, `map.rs`).
 
 Edge install, licensing, BACnet scan, and trend periods: [`openfdd-nf-edge-bench`](../openfdd-nf-edge-bench/SKILL.md).
 
@@ -53,6 +54,7 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
     "client_id": "env:NF_CLIENT_ID",
     "client_secret": "env:NF_CLIENT_SECRET",
     "poll_secs": 3600,
+    "transport": "rest",
     "point_map": [
       {
         "provider_point_id": "<nf point uuid>",
@@ -79,6 +81,25 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
 - `equip_type` is the classifier (rule 64). Do not encode type in `equipment_id`.
 - Anonymous access is lab-only (`auth_mode: "anonymous"`) and only with no
   credential fields. `network_scope: "private"` is needed for RFC1918 endpoints.
+- `transport` picks the NF history read for the site. It is validated config,
+  not a guess:
+  - `rest` (default when absent): portal HTTPS `GET /api/v1/point/data`. The
+    Connection column shows **Portal (HTTPS)**.
+  - `grpc`: NF LAN `PointManager.GetData` over TLS with certificate
+    verification, per-request deadlines and message limits
+    ([`crates/nf_grpc`](../../../crates/nf_grpc/)). The Connection column shows
+    **LAN (gRPC)**. Requires `provider: "nf"`, an `https://` endpoint and
+    `client_id` / `client_secret` (the bearer is minted the same way as REST).
+    Anonymous or `allow_insecure_http` sites are rejected
+    (`grpc_requires_credentials`, `grpc_tls_required`).
+  - Any other value fails the site with `transport_invalid`. A non-NF provider
+    with `grpc` fails with `transport_unsupported`.
+  - There is **no automatic fallback**. A failed gRPC read is a recorded gRPC
+    failure (`grpc_<status>` retry code on the ingest job), never a silent REST
+    retry. To switch, change `transport` and restart the stack you own.
+  - Both transports feed the same ingest queue, hourly planner and Timescale
+    writer, and produce the same normalized samples. Inventory sync still
+    uses the portal REST API.
 - `binding_set_path` / `binding_set_inline` can replace `point_map` with an
   inventory-approved Haystack binding set.
 
@@ -156,5 +177,6 @@ the site's own OA sensors.
   site. Those are `historical/non-executable` (see
   [`openfdd-bacnet-ot-debug`](../openfdd-bacnet-ot-debug/SKILL.md)).
 - Do not commit NF client secrets, portal passwords, or license material.
+- Do not call NF gRPC write or control RPCs. The gRPC transport is a history read.
 - Do not edit hook JS only in the NF console. Pull it back into `scripts/nf/hooks/` and commit it.
 - Empty charts with rows in Timescale are a role gap: [`openfdd-package-mapping`](../openfdd-package-mapping/SKILL.md).

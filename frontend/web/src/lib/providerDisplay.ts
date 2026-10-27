@@ -28,6 +28,7 @@ export interface ProviderRow {
   pollSecs?: number;
   mappedPoints?: number;
   clientIdConfigured?: boolean;
+  transport?: string;
   lastPollAt?: string | null;
   lastSuccessAt?: string | null;
   lastErrorAt?: string | null;
@@ -122,6 +123,28 @@ export function providerLabel(kind: string | null | undefined): string {
   if (k === "ace_iot" || k === "ace" || k === "ace-iot") return "Ace IoT";
   if (!k) return "—";
   return kind!.trim();
+}
+
+function isNfKind(kind: string | null | undefined): boolean {
+  const k = (kind ?? "").trim().toLowerCase();
+  return k === "nf" || k === "normal" || k === "normal_framework";
+}
+
+/**
+ * Connection column copy for the configured NF history transport.
+ * The value comes from the validated site config. The UI never guesses a
+ * transport and never implies a fallback between the two.
+ */
+export function connectionLabel(
+  provider: string | null | undefined,
+  transport: string | null | undefined,
+): string {
+  if (!isNfKind(provider)) return "—";
+  const t = (transport ?? "").trim().toLowerCase();
+  if (t === "grpc") return "LAN (gRPC)";
+  if (t === "rest") return "Portal (HTTPS)";
+  if (!t) return "not reported";
+  return "unsupported transport";
 }
 
 export function sanitizeProviderOrigin(endpoint: string | null | undefined): string {
@@ -276,6 +299,7 @@ export function mergeProviderRows(
     row.pollSecs = site.poll_secs ?? row.pollSecs;
     row.mappedPoints = site.mapped_points ?? row.mappedPoints;
     row.clientIdConfigured = site.client_id_configured ?? row.clientIdConfigured;
+    row.transport = site.transport ?? row.transport;
   }
   for (const site of health ?? []) {
     const buildingId = (site.building_id ?? "").trim();

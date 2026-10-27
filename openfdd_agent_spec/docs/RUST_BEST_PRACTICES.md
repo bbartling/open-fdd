@@ -1,6 +1,6 @@
 # Rust best practices (canonical review standard)
 
-This is the review standard for Open-FDD product Rust: the NF portal API and CSV ingest (`services/central` portal and CSV paths, the crates those paths link, and `mcp`). Suppression procedure stays in [`RUST_LINT_HYGIENE.md`](RUST_LINT_HYGIENE.md): no crate-wide `#![allow]`, smallest-scope `#[expect]` with a one-line constraint comment.
+This is the review standard for Open-FDD product Rust: the NF API (portal HTTPS REST and LAN gRPC history read) and CSV ingest (`services/central` portal and CSV paths, the crates those paths link, and `mcp`). Suppression procedure stays in [`RUST_LINT_HYGIENE.md`](RUST_LINT_HYGIENE.md): no crate-wide `#![allow]`, smallest-scope `#[expect]` with a one-line constraint comment.
 
 Product code does not contain legacy protocol implementations or dual-write paths. MQTT, BACnet, Haystack, Modbus, fieldbus, and the edge wire process are not product code. They live in `archive/` and are not workspace members, not CI build targets, and not compose services. Do not add them back. `services/central/src/ingest.rs` and `live_historian.rs` are the portal and CSV writer. They follow this deny set. There is no module-level allow for a protocol module. Dual-write (a second historian, a Parquet or Feather mirror, or a protocol bridge that writes the same sample twice) is forbidden on the product path. Timescale is the only product historian. The `edge` crate that remains in the workspace is the package and SQL helper central links, not a protocol driver.
 

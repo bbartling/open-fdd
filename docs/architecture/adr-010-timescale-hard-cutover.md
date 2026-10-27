@@ -17,7 +17,7 @@ only, one canonical telemetry write path, no dual record writing.** Parquet,
 Apache Arrow, Arrow IPC, Feather and DataFusion are prohibited in active product
 storage, caching, execution and dependencies — not only on the historian path.
 Derived FDD / analytics results persist in PostgreSQL or bounded memory. NF
-REST, local NF gRPC (planned) and CSV share one validated, idempotent Timescale
+portal REST, NF LAN gRPC (per-site `transport`) and CSV share one validated, idempotent Timescale
 telemetry writer. Canonical text:
 [`openfdd_agent_spec/DATA_CONTRACT.md` § Storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory).
 

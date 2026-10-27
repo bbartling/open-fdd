@@ -1,4 +1,4 @@
-//! Open-FDD Central — Normal Framework portal and CSV ingest, Timescale, REST.
+//! Open-FDD Central — Normal Framework API (portal HTTPS or LAN gRPC) and CSV ingest, Timescale, REST.
 
 mod actions;
 mod actions_scope;

@@ -48,7 +48,7 @@ Python tooling is for tests. A PyPI package ships pandas FDD for notebooks and c
 
 | Image | Role |
 |-------|------|
-| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | Normal Framework portal and CSV ingest, **Timescale** historian, SQL FDD, REST `/api` |
+| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | Normal Framework API (portal HTTPS or LAN gRPC) and CSV ingest, **Timescale** historian, SQL FDD, REST `/api` |
 | [`ghcr.io/bbartling/openfdd-web`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-web) | React operator SPA (browser → central `/api` only) |
 | [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Optional slim MCP stdio sidecar → central API |
 

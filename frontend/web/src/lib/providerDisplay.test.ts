@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  connectionLabel,
   credentialRefLabel,
   illustratedNfHistoryRead,
   interpretIngestLedger,
@@ -65,6 +66,25 @@ describe("provider display", () => {
     expect(rows[0]?.mappedPoints).toBe(5);
     expect(rows[0]?.status).toBe("not_configured");
     expect(credentialRefLabel(rows[0]?.clientIdConfigured)).toBe("not configured");
+  });
+
+  it("labels the configured NF transport without guessing or fallback", () => {
+    expect(connectionLabel("nf", "grpc")).toBe("LAN (gRPC)");
+    expect(connectionLabel("nf", "rest")).toBe("Portal (HTTPS)");
+    expect(connectionLabel("normal_framework", " GRPC ")).toBe("LAN (gRPC)");
+    expect(connectionLabel("nf", undefined)).toBe("not reported");
+    expect(connectionLabel("nf", "mqtt")).toBe("unsupported transport");
+    expect(connectionLabel("nf", "mqtt")).not.toMatch(/HTTPS|gRPC/);
+    expect(connectionLabel("ace_iot", "grpc")).toBe("—");
+  });
+
+  it("carries the config transport onto the merged row", () => {
+    const rows = mergeProviderRows(
+      [{ building_id: "NF_LAN", provider: "nf", health: { status: "ok" } }],
+      [{ building_id: "NF_LAN", provider: "nf", transport: "grpc" }],
+    );
+    expect(rows[0]?.transport).toBe("grpc");
+    expect(connectionLabel(rows[0]?.provider, rows[0]?.transport)).toBe("LAN (gRPC)");
   });
 
   it("labels sources as read-only facts", () => {

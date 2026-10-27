@@ -16,7 +16,7 @@ Read-first sidecar. JWT via `OPENFDD_MCP_TOKEN`. Bind `127.0.0.1` or site VLAN o
 2. **JWT inherit** — operator supplies bearer token; no embedded secrets.
 3. **Human approval** — writes, rule activation, restore, and field-bus tools require explicit operator ACK (phase 2).
 
-BACnet, Haystack wire, bench topology, and driver-status discovery are not in default 4.0 `tools/list`. Calling `openfdd_haystack_status`, `openfdd_haystack_test`, `openfdd_haystack_read`, `openfdd_bacnet_whois`, `openfdd_bacnet_read`, `openfdd_driver_status`, `openfdd_bench_topology`, or `driver_poll_status` returns a retired error and points at `archive/ot-edge`. Semantic SPARQL tools stay. Scoped portal tools `openfdd_provider_health` and `openfdd_provider_sites` stay.
+BACnet, Haystack wire, bench topology, and driver-status discovery are not in default 4.0 `tools/list`. Calling `openfdd_haystack_status`, `openfdd_haystack_test`, `openfdd_haystack_read`, `openfdd_bacnet_whois`, `openfdd_bacnet_read`, `openfdd_driver_status`, `openfdd_bench_topology`, or `driver_poll_status` returns a retired error and points at `archive/ot-edge`. Semantic SPARQL tools stay. Scoped provider tools `openfdd_provider_health` and `openfdd_provider_sites` stay. `openfdd_provider_sites` reports each NF site's `transport` (`rest` for portal HTTPS, `grpc` for LAN gRPC).
 
 ## Implemented tools (stdio)
 

@@ -28,7 +28,7 @@ rule.
 | Rule | Requirement |
 | --- | --- |
 | Telemetry store | Timescale on PostgreSQL is the only product store for telemetry. |
-| One writer | NF REST portal ingest, local NF gRPC (planned) and CSV / package import all call one validated, idempotent Timescale telemetry writer. There is no parallel historian, raw-data mirror, shadow copy, or legacy fallback. |
+| One writer | NF portal REST ingest, NF LAN gRPC history (per-site `transport`) and CSV / package import all call one validated, idempotent Timescale telemetry writer. There is no parallel historian, raw-data mirror, shadow copy, or legacy fallback. |
 | No dual record writing | A telemetry record is written once, to Timescale. Never write the same record to a second store (file, object store, cache, second database) for safety, speed, or migration. |
 | Prohibited formats and engines | Parquet, Apache Arrow, Arrow IPC, Feather and DataFusion are prohibited in active product storage, caching, execution and dependencies. Only `archive/` may contain them, labeled historical. |
 | Derived results | FDD and analytics results (rule results, Overview tables, health matrices, RCx presets, sensor-fault analytics) persist in PostgreSQL tables or live in bounded memory. There is no file-format result cache. |

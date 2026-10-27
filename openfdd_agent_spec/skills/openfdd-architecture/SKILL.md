@@ -2,7 +2,7 @@
 name: openfdd-architecture
 description: >-
   Use when enforcing Open-FDD product boundaries: Timescale and PostgreSQL SQL
-  versus the pandas oracle, Normal Framework portal and CSV ingest, Railway
+  versus the pandas oracle, Normal Framework API (portal HTTPS or LAN gRPC) and CSV ingest, Railway
   central and web, vibe19/vibe20 ownership, dual cookbooks, and the edge helper
   crate. Triggers on: architecture, ownership, pandas fallback, cookbook delete,
   Milestone A Phase 0, architecture_epoch.
@@ -19,7 +19,7 @@ Read [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and [`ownership.yaml`](../../own
 - **TIMESCALE/POSTGRESQL ONLY. ONE CANONICAL TELEMETRY WRITE PATH. NO DUAL RECORD WRITING.** Canonical text: [`DATA_CONTRACT.md` § Storage mandate](../../DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory).
   - Parquet, Apache Arrow, Arrow IPC, Feather and DataFusion are prohibited in active product storage, caching, execution and dependencies. Only `archive/` may contain them, labeled historical.
   - Derived FDD / analytics results persist in PostgreSQL or bounded memory.
-  - NF REST, local NF gRPC (planned) and CSV share one validated, idempotent Timescale telemetry writer. No parallel historian, raw-data mirror, or legacy fallback. That writer records changed sample ranges and advances the site data revision in the same transaction. An identical replay does not. One FDD result is the data revision, model revision, rule parameters, pack version, window, and quality and schedule policy (`fdd_tsdb::FddResultIdentity`).
+  - NF portal REST, NF LAN gRPC (per-site `transport`) and CSV share one validated, idempotent Timescale telemetry writer. No parallel historian, raw-data mirror, or legacy fallback. That writer records changed sample ranges and advances the site data revision in the same transaction. An identical replay does not. One FDD result is the data revision, model revision, rule parameters, pack version, window, and quality and schedule policy (`fdd_tsdb::FddResultIdentity`).
   - Haystack RDF / parsed SPARQL, durable job and coverage metadata, audit logs, model snapshots and on-demand exports stay; none may become another raw telemetry store.
   - Known gap, not permitted: the remaining `crates/fdd_store` Arrow / Parquet modules (historian sidecar, compaction, disk budget), removed in Wave P2. The analytics result cache is the PostgreSQL `analytics_result` table.
 - Production FDD and analytics = Timescale / PostgreSQL (`sql/fdd/`) on central. No silent pandas fallback ([ADR-010](../../../docs/architecture/adr-010-timescale-hard-cutover.md)).

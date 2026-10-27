@@ -412,7 +412,7 @@ mod live_routes {
     info(
         title = "Open-FDD Central API",
         version = "3.5.4",
-        description = "Open-FDD Central control plane — Normal Framework portal and CSV ingest, Timescale historian, and FDD.\n\n\
+        description = "Open-FDD Central control plane — Normal Framework API (portal HTTPS REST or LAN gRPC, per site) and CSV ingest, Timescale historian, and FDD.\n\n\
             **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
             except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
             Binding a non-loopback address without a strong JWT secret and admin password **fails closed**. \
