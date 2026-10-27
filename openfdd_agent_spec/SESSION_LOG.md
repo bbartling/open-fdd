@@ -1,5 +1,11 @@
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
+## 2026-10-27 — CSP style-src split (4.0.6 W1c / #1130)
+
+- `frontend/web/nginx.conf`: `style-src` / `style-src-elem` `'self'` only; `style-src-attr 'unsafe-inline'` for Plotly attributes.
+- Static `/plotly.css` + `plotly-csp-shim.js` so Plotly does not mount inline `<style>` nodes under strict CSP.
+- `ActionsPage.css` replaces inline `<style>`; CI `check_csp_headers.sh` + Playwright `e2e/csp-plotly.spec.ts` (T1130-1).
+
 ## 2026-10-26 — Data revision and changed ranges (W4a)
 
 - The Timescale sample writer records changed series spans in the same transaction as the sample write. The site data revision advances on an insert, a same-timestamp correction, or a delete. An identical replay does not advance it and records no span.
