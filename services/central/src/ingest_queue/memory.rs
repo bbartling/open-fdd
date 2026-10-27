@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use tracing::debug;
 use uuid::Uuid;
 
+use super::cursor::{walk, CoverageCursor, CursorKey, WindowState};
 use super::model::*;
 
 struct PortalBudget {
@@ -62,6 +63,7 @@ struct Inner {
     idempotency: HashMap<IdempotencyKey, IdempotencyRecord>,
     audit: VecDeque<AuditEvent>,
     applied: HashMap<AppliedKey, u64>,
+    cursors: HashMap<CursorKey, CoverageCursor>,
 }
 
 #[derive(Clone)]
@@ -89,6 +91,7 @@ impl MemoryStore {
                 idempotency: HashMap::new(),
                 audit: VecDeque::new(),
                 applied: HashMap::new(),
+                cursors: HashMap::new(),
             }),
         }
     }
@@ -370,6 +373,39 @@ impl MemoryStore {
         let ids: Vec<Uuid> = created.iter().map(|job| job.job_id).collect();
         remember_idempotency(&mut inner, claim, "backfill", ids, None);
         Ok(created)
+    }
+
+    pub fn advance_cursor(&self, key: &CursorKey, now: DateTime<Utc>) -> Option<CoverageCursor> {
+        let mut inner = self.lock();
+        let current = inner.cursors.get(key).map(|row| row.verified_through);
+        let windows: Vec<WindowState> = inner
+            .jobs
+            .iter()
+            .map(|job| &job.view)
+            .filter(|job| {
+                job.tenant_id == key.tenant_id
+                    && job.canonical_site == key.canonical_site
+                    && job.provider_instance_id == key.provider_instance_id
+                    && job.device_id == key.device_id
+                    && job.model_revision == key.model_revision
+                    && current.is_none_or(|at| job.logical_window_end > at)
+            })
+            .map(|job| WindowState {
+                start: job.logical_window_start,
+                end: job.logical_window_end,
+                state: job.state.clone(),
+                code: job.safe_error_code.clone(),
+            })
+            .collect();
+        let (verified_through, hole) = walk(current, &windows)?;
+        let row = CoverageCursor {
+            key: key.clone(),
+            verified_through: current.map_or(verified_through, |at| at.max(verified_through)),
+            hole,
+            updated_at: now,
+        };
+        inner.cursors.insert(key.clone(), row.clone());
+        Some(row)
     }
 
     pub fn list_jobs(&self, filter: &ListFilter) -> Vec<JobView> {

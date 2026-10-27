@@ -168,3 +168,24 @@ CREATE TABLE IF NOT EXISTS ingest_applied_sample (
     tenant_id, canonical_site, provider_instance_id, device_id, model_revision, point_id, ts
   )
 );
+
+-- Verified-coverage cursor per device and committed model revision.
+-- verified_through only moves forward. The hole columns name the first
+-- instant that is not covered by committed windows, when there is one.
+CREATE TABLE IF NOT EXISTS ingest_coverage_cursor (
+  tenant_id text NOT NULL,
+  canonical_site text NOT NULL,
+  provider_instance_id text NOT NULL,
+  device_id text NOT NULL,
+  model_revision text NOT NULL,
+  verified_through timestamptz NOT NULL,
+  hole_at timestamptz,
+  hole_state text,
+  hole_code text,
+  updated_at timestamptz NOT NULL,
+  PRIMARY KEY (tenant_id, canonical_site, provider_instance_id, device_id, model_revision),
+  CONSTRAINT ingest_coverage_cursor_hole_chk CHECK (
+    (hole_at IS NULL AND hole_state IS NULL AND hole_code IS NULL)
+    OR (hole_at IS NOT NULL AND hole_state IS NOT NULL AND hole_at >= verified_through)
+  )
+);

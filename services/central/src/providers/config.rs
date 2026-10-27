@@ -17,6 +17,7 @@ use super::http_policy::{canonicalize_provider_endpoint, connection_id};
 use super::map::{PointMapEntry, RoleResolver};
 use super::meteo::{self, MAX_METEO_SERIES};
 use super::types::ProviderKind;
+use crate::ingest_queue::schedule::IngestSchedule;
 use open_fdd_edge_prototype::csv_ingest::portal_ingest_sparql::{
     compile_bindings_from_snapshot, IngestSparqlScope,
 };
@@ -57,6 +58,12 @@ pub struct SiteConfigRaw {
     /// Decimal degrees. Required for `open_meteo`.
     #[serde(default)]
     pub longitude: Option<f64>,
+    /// `periodic` (default) or `daily` (previous local day after midnight).
+    #[serde(default)]
+    pub schedule_mode: Option<String>,
+    /// IANA zone for the daily policy, e.g. `America/Chicago`.
+    #[serde(default)]
+    pub schedule_timezone: Option<String>,
 }
 
 fn default_poll_secs() -> u64 {
@@ -76,6 +83,7 @@ pub struct SiteConfig {
     pub poll_secs: u64,
     pub latitude: Option<f64>,
     pub longitude: Option<f64>,
+    pub schedule: IngestSchedule,
     pub resolver: RoleResolver,
     pub model: CommittedModel,
 }
@@ -95,6 +103,7 @@ impl fmt::Debug for SiteConfig {
             .field("poll_secs", &self.poll_secs)
             .field("latitude", &self.latitude)
             .field("longitude", &self.longitude)
+            .field("schedule", &self.schedule)
             .field("mapped_points", &self.resolver.mapped_count())
             .finish()
     }
@@ -114,6 +123,7 @@ impl Clone for SiteConfig {
             poll_secs: self.poll_secs,
             latitude: self.latitude,
             longitude: self.longitude,
+            schedule: self.schedule,
             resolver: self.resolver.clone(),
             model: self.model.clone(),
         }
@@ -354,6 +364,10 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         }
     }
     let poll_secs = raw.poll_secs.clamp(15, 3600);
+    let schedule = IngestSchedule::parse(
+        raw.schedule_mode.as_deref(),
+        raw.schedule_timezone.as_deref(),
+    )?;
     Ok(SiteConfig {
         building_id,
         tenant_id,
@@ -366,6 +380,7 @@ fn site_from_raw(raw: SiteConfigRaw) -> Result<SiteConfig, String> {
         poll_secs,
         latitude,
         longitude,
+        schedule,
         resolver,
         model,
     })
@@ -637,5 +652,45 @@ mod tests {
         let loaded = load_sites_json_owned(raw).unwrap();
         assert!(loaded.sites.is_empty());
         assert_eq!(loaded.failures[0].code, "truncated_model");
+    }
+
+    fn nf_site(schedule: &str) -> String {
+        format!(
+            r#"{{"building_id":"SITE","tenant_id":"tenant-a","provider":"nf","endpoint":"https://portal.example","auth_mode":"anonymous"{schedule}}}"#
+        )
+    }
+
+    #[test]
+    fn site_schedule_defaults_to_periodic_and_accepts_daily() {
+        let loaded = load_sites_json_owned(&nf_site("")).unwrap();
+        assert!(loaded.failures.is_empty());
+        assert_eq!(loaded.sites[0].schedule, IngestSchedule::Periodic);
+        let loaded = load_sites_json_owned(&nf_site(
+            r#","schedule_mode":"daily","schedule_timezone":"America/Chicago""#,
+        ))
+        .unwrap();
+        assert!(loaded.failures.is_empty());
+        assert_eq!(
+            loaded.sites[0].schedule,
+            IngestSchedule::Daily {
+                tz: chrono_tz::America::Chicago
+            }
+        );
+    }
+
+    #[test]
+    fn site_schedule_rejects_bad_policy() {
+        for (fields, code) in [
+            (r#","schedule_mode":"daily""#, "schedule_timezone_required"),
+            (
+                r#","schedule_mode":"daily","schedule_timezone":"Nowhere/Land""#,
+                "schedule_timezone",
+            ),
+            (r#","schedule_mode":"weekly""#, "schedule_mode"),
+        ] {
+            let loaded = load_sites_json_owned(&nf_site(fields)).unwrap();
+            assert!(loaded.sites.is_empty(), "{fields}");
+            assert_eq!(loaded.failures[0].code, code, "{fields}");
+        }
     }
 }

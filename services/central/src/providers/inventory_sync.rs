@@ -747,6 +747,7 @@ mod tests {
             poll_secs: 300,
             latitude: None,
             longitude: None,
+            schedule: crate::ingest_queue::schedule::IngestSchedule::Periodic,
             resolver: crate::providers::map::RoleResolver::default(),
             model,
         }
