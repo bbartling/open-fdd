@@ -1712,22 +1712,25 @@ pub fn envelope_from_dispatch_value(
     let dispatch_meta_keys = [
         "query_id",
         "building_id",
+        "site_id",
         "note",
         "sample_count",
         "pack_version",
         "analytics_pack",
     ];
-    let has_meta = dispatch_meta_keys.iter().any(|key| obj.contains_key(*key));
-    if has_meta {
-        let mut cov = env
-            .coverage
-            .and_then(|v| v.as_object().cloned())
-            .unwrap_or_default();
-        for key in dispatch_meta_keys {
-            if let Some(v) = obj.get(key) {
-                cov.insert(key.to_string(), v.clone());
-            }
+    let scope_meta_keys = ["window_start", "window_end", "equipment_ids"];
+    let mut cov = env
+        .coverage
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    let mut merged = false;
+    for key in dispatch_meta_keys.iter().chain(scope_meta_keys.iter()) {
+        if let Some(v) = obj.get(*key) {
+            cov.insert((*key).to_string(), v.clone());
+            merged = true;
         }
+    }
+    if merged {
         env.coverage = Some(Value::Object(cov));
     }
     finalize_historian(req, env, query_version)
