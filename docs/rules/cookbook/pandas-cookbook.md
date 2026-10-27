@@ -1122,7 +1122,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 ### OAT-METEO — BAS outdoor-air sensor vs Open-Meteo
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F.  
+**Equation:** BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F after an as-of web alignment.  
 **Default confirmation:** 900 s
 
 **Required roles:** `outside-air-temp`, `web-outside-air-temp`
@@ -1132,19 +1132,20 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
 | `oat_err` | Max OAT disagreement | °F | 5.0 | 2.0–20.0 |
+| `web_cadence_seconds` | Web weather cadence | sec | 1200 | 300–7200 |
+| `web_asof_margin_seconds` | Web as-of margin | sec | 300 | 0–1800 |
+
+Web OAT is carried forward to each BAS timestamp. Samples whose last web value is older than `web_cadence_seconds + web_asof_margin_seconds` are not assessed (not fault time).
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
 
 def oat_vs_meteo(d, p, poll):
     """BAS outdoor-air sensor disagrees with Open-Meteo dry bulb by more than the threshold."""
-    if "web-outside-air-temp" not in d.columns:
-        return _false(d.index)
-    err = _f(p, "oat_err", 5.0)
-    return d["outside-air-temp"].notna() & d["web-outside-air-temp"].notna() & (d["outside-air-temp"].sub(d["web-outside-air-temp"]).abs() > err)
+    # See open_fdd.rules.cookbook_catalog.oat_vs_meteo for merge_asof + bound.
 
 d = apply_fault(d, oat_vs_meteo(d, params, POLL_SECONDS))
-d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
+d["fault_confirmed"] = confirm_fault(d["fault_raw"], poll_seconds=POLL_SECONDS, confirm_seconds=FAULT_CONFIRM_SECONDS)
 ```
 
 ### ECON-1 — Economizer stuck closed

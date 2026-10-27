@@ -1379,10 +1379,35 @@ def cw_fan_excess(d, p, poll):
 
 def oat_vs_meteo(d, p, poll):
     """BAS outdoor-air sensor disagrees with Open-Meteo dry bulb by more than the threshold."""
-    if "web-outside-air-temp" not in d.columns:
+    if "web-outside-air-temp" not in d.columns and "web_oat_native_frame" not in d.attrs:
         return _false(d.index)
     err = _f(p, "oat_err", 5.0)
-    return d["outside-air-temp"].notna() & d["web-outside-air-temp"].notna() & (d["outside-air-temp"].sub(d["web-outside-air-temp"]).abs() > err)
+    cadence = _f(p, "web_cadence_seconds", 1200.0)
+    margin = _f(p, "web_asof_margin_seconds", 300.0)
+    bound_s = cadence + margin
+    bas = pd.to_numeric(d["outside-air-temp"], errors="coerce")
+    if not isinstance(d.index, pd.DatetimeIndex):
+        web = pd.to_numeric(d["web-outside-air-temp"], errors="coerce")
+        return bas.notna() & web.notna() & (bas.sub(web).abs() > err)
+    web_native = d.attrs.get("web_oat_native_frame")
+    if isinstance(web_native, pd.DataFrame) and "web-outside-air-temp" in web_native.columns:
+        web_src = web_native[["web-outside-air-temp"]].sort_index()
+    else:
+        web_src = pd.DataFrame({"web-outside-air-temp": pd.to_numeric(d["web-outside-air-temp"], errors="coerce")})
+        web_src.index = d.index
+        web_src = web_src.dropna().sort_index()
+    left = pd.DataFrame({"outside-air-temp": bas}).sort_index()
+    merged = pd.merge_asof(
+        left,
+        web_src,
+        left_index=True,
+        right_index=True,
+        direction="backward",
+        tolerance=pd.Timedelta(seconds=bound_s),
+    )
+    web_aligned = merged["web-outside-air-temp"]
+    assessed = bas.notna() & web_aligned.notna()
+    return assessed & (bas.sub(web_aligned).abs() > err)
 
 
 # ---------------------------------------------------------------------------
@@ -1749,6 +1774,8 @@ RULES: list[CookbookRule] = [
         ["outside-air-temp", "web-outside-air-temp"], "BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F.",
         oat_vs_meteo, params=[
             CookbookParam("oat_err", "Max OAT disagreement", "°F", 2.0, 20.0, 0.5, 5.0, direction="fewer"),
+            CookbookParam("web_cadence_seconds", "Web weather cadence", "sec", 300.0, 7200.0, 300.0, 1200.0),
+            CookbookParam("web_asof_margin_seconds", "Web as-of margin", "sec", 0.0, 1800.0, 60.0, 300.0),
             CONFIRM_PARAM()], confirm_seconds=900),
 
     # --- Economizer & ventilation ---

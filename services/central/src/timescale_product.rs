@@ -2199,6 +2199,7 @@ async fn load_live_confirmed_fault(
         &roles,
         window_start,
         window_end,
+        None,
     )
     .await?;
     if n == 0 {
@@ -2384,6 +2385,13 @@ fn render_rule_sql(
     for (k, v) in rule_params(poll, confirm) {
         params.insert(k, v);
     }
+    if rule.rule_id.eq_ignore_ascii_case("OAT-METEO") {
+        let bound = web_asof_bound_seconds(&params);
+        params.insert(
+            "WEB_ASOF_BOUND_SECONDS".into(),
+            format!("{:.0}", bound.round()),
+        );
+    }
     Ok(substitute_sql(&raw, &params))
 }
 
@@ -2567,6 +2575,113 @@ fn row_fault_hours(row: &sqlx::postgres::PgRow) -> f64 {
     0.0
 }
 
+pub(crate) fn csv_building_root(building_id: &str) -> PathBuf {
+    open_fdd_edge_prototype::historian::store::workspace_dir()
+        .join("data")
+        .join("csv_buildings")
+        .join(building_id)
+}
+
+/// When OAT-METEO runs, local `oa_t` may come from the site primary reference binding.
+#[derive(Clone, Debug)]
+pub(crate) struct SiteOatReference {
+    pub openfdd_key: String,
+    pub equipment_id: String,
+    pub selection: String,
+}
+
+pub(crate) async fn resolve_site_oa_t_reference(
+    pool: &sqlx::PgPool,
+    building_id: &str,
+) -> Result<Option<SiteOatReference>> {
+    let rows = sqlx::query(
+        r"SELECT a.openfdd_key, a.equipment_id, pm.portal_point_id
+         FROM authorized_series a
+         JOIN equipment e
+           ON e.building_id = $1 AND e.equipment_id = a.equipment_id
+         JOIN point_map pm
+           ON pm.site_id = a.site_id AND pm.openfdd_key = a.openfdd_key
+         WHERE a.site_id = $1
+           AND a.role = 'oa_t'
+           AND lower(btrim(coalesce(e.equip_type, ''))) IN ('weather', 'ahu')
+           AND (
+             SELECT count(*) FROM authorized_series c
+             WHERE c.site_id = a.site_id
+               AND c.equipment_id = a.equipment_id
+               AND c.role = a.role
+           ) = 1
+         ORDER BY a.openfdd_key",
+    )
+    .bind(building_id)
+    .fetch_all(pool)
+    .await
+    .context("list site oa_t bindings")?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    let overlay = open_fdd_edge_prototype::csv_ingest::model_overlay::load_engineer_point_overlay(
+        csv_building_root(building_id).as_path(),
+    )
+    .ok();
+    let mut primaries: Vec<(String, String)> = Vec::new();
+    let mut all: Vec<(String, String, bool)> = Vec::new();
+    for row in rows {
+        let key: String = row.try_get("openfdd_key")?;
+        let equip: String = row.try_get("equipment_id")?;
+        let portal_point_id: Option<String> = row.try_get("portal_point_id")?;
+        let is_primary = overlay
+            .as_ref()
+            .and_then(|store| {
+                portal_point_id
+                    .as_ref()
+                    .and_then(|pid| store.points.get(pid))
+                    .map(|entry| entry.primary_reference)
+            })
+            .unwrap_or(false);
+        all.push((key.clone(), equip.clone(), is_primary));
+        if is_primary {
+            primaries.push((key, equip));
+        }
+    }
+    let (openfdd_key, equipment_id, selection) = if !primaries.is_empty() {
+        let (key, eq) = primaries
+            .into_iter()
+            .min_by(|a, b| a.0.cmp(&b.0))
+            .expect("non-empty primaries");
+        (key, eq, "primary_reference".to_string())
+    } else {
+        let (key, eq, _) = all
+            .into_iter()
+            .min_by(|a, b| a.0.cmp(&b.0))
+            .expect("non-empty oa_t bindings");
+        (key, eq, "default_lowest_binding".to_string())
+    };
+    Ok(Some(SiteOatReference {
+        openfdd_key,
+        equipment_id,
+        selection,
+    }))
+}
+
+#[derive(Clone)]
+pub(crate) struct HistoryFillOptions {
+    pub site_oa_t: Option<SiteOatReference>,
+}
+
+fn web_asof_bound_seconds(params: &std::collections::HashMap<String, String>) -> f64 {
+    let cadence = params
+        .get("WEB_CADENCE_SECONDS")
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(1200.0);
+    let margin = params
+        .get("WEB_ASOF_MARGIN_SECONDS")
+        .and_then(|v| v.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v >= 0.0)
+        .unwrap_or(300.0);
+    cadence + margin
+}
+
 async fn ensure_history_table(conn: &mut PgConnection, roles: &[String]) -> Result<()> {
     let mut cols = String::from("equipment_id text not null, timestamp_utc timestamptz not null");
     for r in roles {
@@ -2591,6 +2706,7 @@ async fn fill_history_for_equipment(
     roles: &[String],
     window_start: Option<&str>,
     window_end: Option<&str>,
+    fill: Option<&HistoryFillOptions>,
 ) -> Result<i64> {
     if roles.is_empty() {
         return Ok(0);
@@ -2603,16 +2719,37 @@ async fn fill_history_for_equipment(
     // $1..$3 are building, equipment, and roles. Admission binds follow those.
     let mut admit = crate::admitted_sample::AdmitBuilder::after_occupied(3);
     let mut max_cols = String::new();
+    let site_oa_key = fill
+        .and_then(|opts| opts.site_oa_t.as_ref())
+        .map(|r| r.openfdd_key.replace('\'', "''"));
     for role in roles {
         let admitted = admit.admitted_on_sample(role);
         let alias = crate::series_binding::quote_ident(role);
         let role_lit = role.replace('\'', "''");
-        let local = format!(
-            "MAX({admitted}) FILTER (WHERE a.equipment_id = $2 AND a.role = '{role_lit}' \
-               AND (SELECT count(*) FROM authorized_series c \
-                    WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id \
-                      AND c.role = a.role) = 1)"
-        );
+        let local = if role == "oa_t" {
+            if let Some(key_lit) = site_oa_key.as_deref() {
+                format!(
+                    "MAX({admitted}) FILTER (WHERE a.openfdd_key = '{key_lit}' AND a.role = '{role_lit}' \
+                       AND (SELECT count(*) FROM authorized_series c \
+                            WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id \
+                              AND c.role = a.role) = 1)"
+                )
+            } else {
+                format!(
+                    "MAX({admitted}) FILTER (WHERE a.equipment_id = $2 AND a.role = '{role_lit}' \
+                       AND (SELECT count(*) FROM authorized_series c \
+                            WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id \
+                              AND c.role = a.role) = 1)"
+                )
+            }
+        } else {
+            format!(
+                "MAX({admitted}) FILTER (WHERE a.equipment_id = $2 AND a.role = '{role_lit}' \
+                   AND (SELECT count(*) FROM authorized_series c \
+                        WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id \
+                          AND c.role = a.role) = 1)"
+            )
+        };
         if is_chw_plant_role(role) {
             max_cols.push_str(&format!(
                 ", COALESCE({local}, \
@@ -2671,6 +2808,15 @@ async fn fill_history_for_equipment(
     // Weather and CHW add only the one fallback equipment already chosen
     // for that role. An ambiguous role adds no timestamps.
     let mut spine = String::from("a.equipment_id = $2");
+    if let Some(site_oa) = fill.and_then(|opts| opts.site_oa_t.as_ref()) {
+        if roles.iter().any(|r| r == "oa_t") {
+            let key_lit = site_oa.openfdd_key.replace('\'', "''");
+            let eq_lit = site_oa.equipment_id.replace('\'', "''");
+            spine.push_str(&format!(
+                " OR (a.role = 'oa_t' AND a.openfdd_key = '{key_lit}' AND a.equipment_id = '{eq_lit}')"
+            ));
+        }
+    }
     for role in roles {
         let role_lit = role.replace('\'', "''");
         let type_filter = if is_weather_role(role) {
@@ -3512,6 +3658,15 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
         }
 
         let roles = rule_history_roles(rule);
+        let oat_fill = if rule.rule_id.eq_ignore_ascii_case("OAT-METEO") {
+            resolve_site_oa_t_reference(tsdb.pool(), &building_id)
+                .await?
+                .map(|site_oa| HistoryFillOptions {
+                    site_oa_t: Some(site_oa),
+                })
+        } else {
+            None
+        };
 
         let mut rule_rows = Vec::new();
         for (eq_id, _) in &run_targets {
@@ -3533,6 +3688,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 &roles,
                 window_start,
                 window_end,
+                oat_fill.as_ref(),
             )
             .await?;
             if n == 0 {
@@ -3680,6 +3836,22 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                                 "note": "confirm aggregate from eligible elapsed time"
                             },
                         });
+                        if rule.rule_id.eq_ignore_ascii_case("OAT-METEO") {
+                            if let Some(ref fill) = oat_fill {
+                                if let Some(ref site_oa) = fill.site_oa_t {
+                                    if let Some(obj) = row_json.as_object_mut() {
+                                        obj.insert(
+                                            "oat_reference".into(),
+                                            json!({
+                                                "openfdd_key": site_oa.openfdd_key,
+                                                "equipment_id": site_oa.equipment_id,
+                                                "selection": site_oa.selection,
+                                            }),
+                                        );
+                                    }
+                                }
+                            }
+                        }
                         crate::sql_pack::attach_ready_scope(&mut row_json, &scope);
                         rule_rows.push(row_json);
                     }
@@ -6036,6 +6208,10 @@ mod opaque_series_binding {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "oat_meteo_t1404_test.rs"]
+mod oat_meteo_t1404_test;
 
 #[cfg(test)]
 #[path = "duplicate_timestamp_parity.rs"]

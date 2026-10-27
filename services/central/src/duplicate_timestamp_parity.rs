@@ -139,7 +139,7 @@ async fn sql_fault_hours(tsdb: &Tsdb, site: &str, rule_id: &str, equipment_id: &
     ensure_history_table(&mut tx, &roles)
         .await
         .expect("history");
-    let n = fill_history_for_equipment(&mut tx, site, equipment_id, &roles, None, None)
+    let n = fill_history_for_equipment(&mut tx, site, equipment_id, &roles, None, None, None)
         .await
         .expect("fill");
     assert!(n > 0, "{rule_id}: pivot produced no rows");
