@@ -886,8 +886,8 @@ mod model_write_tests {
             .iter()
             .filter_map(|t| t.get("name").and_then(Value::as_str).map(str::to_string))
             .collect();
-        let point_tool = Server::new(BridgeClient::from_env())
-            .tools_list()
+        let tools = Server::new(BridgeClient::from_env()).tools_list();
+        let point_tool = tools
             .iter()
             .find(|t| t.get("name").and_then(|n| n.as_str()) == Some("openfdd_model_point_upsert"))
             .expect("point upsert tool");

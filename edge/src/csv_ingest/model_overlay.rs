@@ -843,9 +843,17 @@ struct MetricUnitsContract {
     quantities: Vec<MetricQuantityDef>,
 }
 
+fn parse_metric_units_contract(raw: &str) -> MetricUnitsContract {
+    match serde_json::from_str(raw) {
+        Ok(contract) => contract,
+        Err(err) => {
+            panic!("sql/contract/metric_units.json is invalid: {err}");
+        }
+    }
+}
+
 static METRIC_UNITS: Lazy<MetricUnitsContract> = Lazy::new(|| {
-    let raw = include_str!("../../../sql/contract/metric_units.json");
-    serde_json::from_str(raw).expect("metric_units.json")
+    parse_metric_units_contract(include_str!("../../../sql/contract/metric_units.json"))
 });
 
 fn quantity_exists(quantity: &str) -> bool {
@@ -895,7 +903,7 @@ pub fn validate_engineer_unit_quantity(unit: &str, quantity: &str) -> Result<(),
     if unit.contains('%') && quantity == "relative_humidity" {
         return Ok(());
     }
-    if allowed.iter().any(|t| *t == token) {
+    if allowed.contains(&token) {
         return Ok(());
     }
     Err(format!(
@@ -917,11 +925,6 @@ fn validate_engineer_patch(
             .filter(|s| !s.is_empty())
             .unwrap_or("");
         validate_engineer_unit_quantity(u, q)?;
-    }
-    if primary_reference == Some(true) {
-        if !has_unit && !has_quantity {
-            // primary reference alone is allowed (role already bound elsewhere)
-        }
     }
     Ok(())
 }
@@ -2234,9 +2237,6 @@ mod tests {
                 dis: Some("AHU X"),
                 kind: Some("ahu"),
                 markers: &[],
-                unit: None,
-                quantity: None,
-                primary_reference: None,
             },
             OverlayCasOpts::default(),
         )
@@ -2306,9 +2306,6 @@ mod tests {
                 dis: Some("Overlay AHU"),
                 kind: Some("ahu"),
                 markers: &[],
-                unit: None,
-                quantity: None,
-                primary_reference: None,
             },
             OverlayCasOpts::default(),
         )
