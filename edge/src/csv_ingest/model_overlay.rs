@@ -1013,7 +1013,7 @@ pub fn upsert_engineer_point_overlay(
     if unit.is_none() && quantity.is_none() && primary_reference.is_none() {
         return Ok(());
     }
-    validate_engineer_patch(unit, quantity, primary_reference)?;
+    validate_engineer_patch(unit, quantity)?;
     let mut store = load_engineer_point_overlay(building_root)?;
     if store.building_id.is_empty() {
         store.building_id = building_id.to_string();
