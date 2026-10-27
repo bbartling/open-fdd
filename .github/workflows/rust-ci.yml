@@ -158,6 +158,11 @@ jobs:
           npm run lint
           npm run test
           npm run build
+      - name: CSP header guard (nginx)
+        run: |
+          bash -n scripts/ci/check_csp_headers.sh
+          ./scripts/ci/check_csp_headers.sh --self-test
+          ./scripts/ci/check_csp_headers.sh
       - name: architecture policy + capability ledger
         run: |
           python3 -m pip install --user PyYAML

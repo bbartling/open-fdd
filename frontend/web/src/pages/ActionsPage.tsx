@@ -12,6 +12,7 @@ import {
   type ActionEntry,
 } from "../api/actionsApi";
 import { ApiClientError } from "../api/client";
+import "./ActionsPage.css";
 
 function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -254,50 +255,7 @@ export function ActionsPage() {
           yet. Receipts stay empty until those jobs are published. This log remains FDD, import,
           and analytics history.
         </p>
-        <style>{`
-          .actions-status { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; }
-          .actions-status--running { color: #b45309; animation: actions-pulse 1.4s ease-in-out infinite; }
-          .actions-status--ok { color: #15803d; }
-          .actions-status--partial { color: #b45309; }
-          .actions-status--fail { color: #b91c1c; }
-          @keyframes actions-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
-          .actions-detail-panel {
-            border: 1px solid var(--border, #d8d2cc);
-            border-radius: 8px;
-            padding: 1rem 1.1rem;
-            background: var(--surface-2, #faf8f6);
-          }
-          .actions-detail-panel__header {
-            display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center;
-            margin-bottom: 0.35rem;
-          }
-          .actions-detail-panel__pulse {
-            margin: 0.6rem 0;
-            padding: 0.55rem 0.75rem;
-            border-radius: 6px;
-            background: #fff7ed;
-            border: 1px solid #fdba74;
-            color: #9a3412;
-          }
-          .actions-detail-panel__metrics {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 0.55rem 1rem;
-            margin: 0.85rem 0;
-          }
-          .actions-detail-panel__metric { margin: 0; }
-          .actions-detail-panel__metric dt {
-            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;
-            color: var(--muted, #6b6560); margin: 0;
-          }
-          .actions-detail-panel__metric dd {
-            margin: 0.15rem 0 0; font-weight: 600; font-variant-numeric: tabular-nums;
-          }
-          .actions-table-wrap [data-row-id="${selected?.id ?? ""}"] {
-            outline: 2px solid color-mix(in srgb, var(--color-primary, #c23b3b) 45%, transparent);
-          }
-        `}</style>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+        <div className="actions-toolbar">
           <Button
             id="actions-refresh"
             label={loading ? "Loading…" : "Refresh"}
@@ -357,6 +315,9 @@ export function ActionsPage() {
           <DataTable
             id="actions-table"
             label="Recent actions"
+            rowClassName={(row) =>
+              row.id === selected?.id ? "actions-row--selected" : undefined
+            }
             columns={[
               { key: "status", header: "Status" },
               { key: "started_at", header: "Started" },
@@ -375,9 +336,9 @@ export function ActionsPage() {
             <h3>Detail</h3>
             <select
               data-testid="actions-detail-pick"
+              className="actions-detail-pick"
               value={selected.id}
               onChange={(e) => setSelectedId(e.target.value)}
-              style={{ marginBottom: "0.75rem" }}
             >
               {actions.map((a) => {
                 const shown = actionDisplayStatus(a);
