@@ -251,7 +251,7 @@ pub async fn persist_registry_run_timescale(
                             .await?;
                         }
                     }
-                } else if item.outcome != RuleOutcome::Skipped {
+                } else {
                     sqlx::query(
                         r#"
                         INSERT INTO fdd_run(
@@ -389,7 +389,7 @@ pub async fn active_generation_rows(
         r#"
         SELECT rule_id, detail
         FROM fdd_run
-        WHERE site_id = $1 AND detail->>'run_id' = $2 AND equipment_id <> ''
+        WHERE site_id = $1 AND detail->>'run_id' = $2
         ORDER BY rule_id, equipment_id
         "#,
     )
