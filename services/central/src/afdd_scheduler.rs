@@ -40,7 +40,6 @@ use crate::auth;
 use crate::canonical_state::CanonicalStateStore;
 use crate::state::AppState;
 
-const LATEST_TELEMETRY_WATERMARK_PATH: &str = "state/live-historian/latest-telemetry.json";
 const MAX_RECENT_CYCLES: usize = 50;
 const AFDD_RUNS_PREFIX: &str = "state/afdd/runs";
 
@@ -77,11 +76,6 @@ impl Drop for CancelBridge {
             handle.abort();
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct LatestTelemetryWatermark {
-    latest_persisted_timestamp_utc: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -226,22 +220,10 @@ impl AfddSchedulerRuntime {
         building_id: &str,
     ) -> Result<Option<AfddSchedulerCheckpoint>> {
         let store = self.load_checkpoint_store()?;
-        if let Some(cp) = store.checkpoint_for(building_id) {
-            return Ok(Some(cp.clone()));
+        match store.checkpoint_for(building_id) {
+            Some(cp) => Ok(Some(cp.clone())),
+            None => self.legacy_checkpoint(),
         }
-        self.legacy_checkpoint()
-    }
-
-    fn latest_telemetry(&self) -> Result<Option<DateTime<Utc>>> {
-        let Some(bytes) = self
-            .store
-            .read_optional(Path::new(LATEST_TELEMETRY_WATERMARK_PATH))?
-        else {
-            return Ok(None);
-        };
-        let watermark: LatestTelemetryWatermark =
-            serde_json::from_slice(&bytes).context("decode live telemetry watermark")?;
-        Ok(Some(watermark.latest_persisted_timestamp_utc))
     }
 
     /// Per-building watermark from Timescale `sample` max(ts) (Wave-X C6 / R8e).
@@ -787,17 +769,20 @@ impl AfddSchedulerRuntime {
         let checkpoint_store = self.load_checkpoint_store()?;
         let scheduled = self.scheduled_building_ids();
         let now = Utc::now();
-        let status = self
-            .status
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (last_error, recent_cycles, last_cycles_by_building) = {
+            let status = self
+                .status
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            (
+                status.last_error.clone(),
+                status.recent_cycles.clone(),
+                status.last_cycles_by_building.clone(),
+            )
+        };
         let timer_enabled = config.mode == AfddMode::Continuous;
         let schedule_kind = config.schedule_kind;
-        let watermark_source = if crate::timescale_historian::historian_is_timescale() {
-            "timescale_sample_max_ts"
-        } else {
-            "live_telemetry_file"
-        };
+        let watermark_source = "timescale_sample_max_ts";
         let mut sites = Vec::new();
         for building_id in &scheduled {
             let checkpoint = checkpoint_store.checkpoint_for(building_id).cloned();
@@ -807,7 +792,7 @@ impl AfddSchedulerRuntime {
                 .wall_clock_timezone
                 .as_deref()
                 .and_then(|tz| wall_clock_local_rfc3339(next_due, tz).ok());
-            let last_cycle = status.last_cycles_by_building.get(building_id);
+            let last_cycle = last_cycles_by_building.get(building_id);
             sites.push(json!({
                 "building_id": building_id,
                 "checkpoint": checkpoint,
@@ -834,8 +819,8 @@ impl AfddSchedulerRuntime {
             "result_write": "lookback_window",
             "lookback_matches_cadence": lookback_matches_cadence(&config),
             "timer_scope": timer_scope,
-            "last_error": status.last_error,
-            "recent_cycles": status.recent_cycles,
+            "last_error": last_error,
+            "recent_cycles": recent_cycles,
             "operator_schedule_editable": true,
             "operator_interval_minutes": OPERATOR_INTERVAL_MINUTES,
             "operator_lookback_days": OPERATOR_LOOKBACK_DAYS,
