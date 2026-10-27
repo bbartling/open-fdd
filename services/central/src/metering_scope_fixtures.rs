@@ -415,7 +415,9 @@ async fn selected_site_without_meters_does_not_show_another_campus() {
     assert_eq!(mv_empty_status, StatusCode::OK, "{mv_empty_body}");
     let mv_env = crate::analytics_response_fixtures::analytics_envelope(&mv_empty);
     assert_eq!(
-        mv_env.pointer("/coverage/building_id").and_then(|v| v.as_str()),
+        mv_env
+            .pointer("/coverage/building_id")
+            .and_then(|v| v.as_str()),
         Some(EMPTY),
         "{mv_empty_body}"
     );
