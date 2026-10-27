@@ -48,6 +48,16 @@ The gap API says `guarantee: bounded_windows_only` and `update_log: not_claimed`
 
 Writes of the same point and timestamp are idempotent. The first value is kept. A different value is a conflict and does not rewrite the stored bits. That ledger is queue state (`ingest_applied_sample`). It does not replace or rewrite historian samples. A receipt is written in the same transaction as a committed or partial finish. Retry, throttle, timeout, and a model change do not write a receipt and do not advance the job to `committed`. A model or point-set change observed at finish becomes `permanent_failure` / `model_revision_changed`.
 
+## Daily catch-up and the verified cursor
+
+A site can opt into a daily schedule with `schedule_mode = "daily"` and an IANA `schedule_timezone` (for example `America/Chicago`). The default is `periodic`, which keeps the hourly planner. A timezone without daily mode, daily mode without a timezone, or an unknown zone is rejected when the site config loads.
+
+In daily mode the planner enqueues the previous local day once local midnight plus the publication delay (`OPENFDD_INGEST_PUBLICATION_DELAY_SECS`, default 300) has passed. A day is 23, 24, or 25 hours across DST changes. Windows are cut at the largest of 1 h, 30 min, 15 min, 5 min, or 1 min that fits both day boundaries, so half-hour zones use 30-minute windows. `OPENFDD_INGEST_DAILY_CATCHUP_DAYS` (default 2, range 1-7) sets how many past days are re-planned. Existing windows are not duplicated.
+
+A daily window with a recoverable gap or a retryable error waits for the next daily run instead of retrying within the hour. When the next run would fall outside the source retention, the window becomes `permanent_failure` / `retention_exceeded`, it is listed as a gap, and operator retry is refused.
+
+`ingest_coverage_cursor` stores, per tenant, site, provider, device, and model revision, the instant through which every overlapping job is committed. It only moves forward. The first instant that is not verified is stored as a hole with the blocking job state and code, or `not_scheduled` when no job covers it.
+
 ## HTTP and MCP
 
 JWT scoped like other tenant routes. Empty membership returns no rows. Operators (`confirm` on MCP, plus `OPENFDD_MCP_ALLOW_WRITES=1`) may retry or backfill with an idempotency key. Backfill accepts 1–48 exact UTC hours.

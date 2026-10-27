@@ -1085,6 +1085,7 @@ mod tests {
             ("site", "site_id"),
             ("batch_job", "site_id"),
             ("ingest_job", "canonical_site"),
+            ("ingest_coverage_cursor", "canonical_site"),
             ("ingest_receipt", "canonical_site"),
             ("provider_hourly_job", "canonical_site"),
             ("provider_hourly_checkpoint", "canonical_site"),

@@ -9,6 +9,7 @@ use sqlx::PgPool;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use super::cursor::{self, CoverageCursor, CursorKey};
 use super::memory::MemoryStore;
 use super::model::*;
 use super::postgres;
@@ -149,6 +150,18 @@ impl QueueClient {
                 .map(Some),
             None => Ok(None),
         }
+    }
+
+    /// Recompute the verified-coverage cursor for one device revision.
+    pub async fn advance_cursor(
+        &self,
+        key: &CursorKey,
+        now: DateTime<Utc>,
+    ) -> Result<Option<CoverageCursor>, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            return cursor::advance_postgres(&pool, key, now).await;
+        }
+        Ok(self.memory.advance_cursor(key, now))
     }
 
     pub async fn list_jobs(&self, filter: &ListFilter) -> Result<Vec<JobView>, QueueError> {

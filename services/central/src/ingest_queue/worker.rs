@@ -24,7 +24,7 @@ use super::model::{
     points_digest, revision_still_owns, AppliedSample, FinishOutcome, FinishRequest, JobCounts,
     JobView, QueueError,
 };
-use super::schedule::{self, ScheduleDevice};
+use super::schedule::{self, IngestSchedule, ScheduleDevice};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcessRole {
@@ -147,18 +147,33 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
         let owner = owner.to_string();
         tasks.push(tokio::spawn(async move {
             let decision = execute_job(&state, &job).await;
-            let mut finish = FinishRequest::new(
-                owner,
-                job.job_id,
-                job.fencing_token,
-                Utc::now(),
+            let finished_at = Utc::now();
+            let hourly = crate::providers::hourly::HourlyPolicy::from_env();
+            let outcome = schedule::apply_daily_policy(
                 decision.outcome,
+                site_schedule(&state, &job.tenant_id, &job.canonical_site),
+                job.logical_window_start,
+                finished_at,
+                chrono::Duration::seconds(publication_delay_secs() as i64),
+                hourly.retention,
             );
+            let mut finish =
+                FinishRequest::new(owner, job.job_id, job.fencing_token, finished_at, outcome);
             finish.active_model_revision = decision.active_model_revision;
             finish.active_points_digest = decision.active_points_digest;
             finish.applied_samples = decision.applied_samples;
             if let Err(err) = state.ingest_queue.finish(&finish).await {
                 warn!(job_id = %job.job_id, error = %err, "ingest finish rejected");
+            }
+            let key = super::cursor::CursorKey {
+                tenant_id: job.tenant_id.clone(),
+                canonical_site: job.canonical_site.clone(),
+                provider_instance_id: job.provider_instance_id.clone(),
+                device_id: job.device_id.clone(),
+                model_revision: job.model_revision.clone(),
+            };
+            if let Err(err) = state.ingest_queue.advance_cursor(&key, Utc::now()).await {
+                warn!(job_id = %job.job_id, error = %err, "coverage cursor not advanced");
             }
         }));
     }
@@ -751,14 +766,43 @@ pub(crate) async fn enqueue_due_windows(
     for (building_id, code) in &mismatches {
         state.providers.note_plan_identity(building_id, code).await;
     }
-    let planned = schedule::due_windows(
-        now,
-        chrono::Duration::seconds(publication_delay_secs() as i64),
-        catchup_hours(),
-        300,
-        crate::providers::hourly::HourlyPolicy::from_env().window_secs,
-        &devices,
-    );
+    let delay = chrono::Duration::seconds(publication_delay_secs() as i64);
+    let window_secs = crate::providers::hourly::HourlyPolicy::from_env().window_secs;
+    let mut periodic = Vec::new();
+    let mut daily: Vec<(chrono_tz::Tz, Vec<ScheduleDevice>)> = Vec::new();
+    for (policy, device) in devices {
+        match policy {
+            IngestSchedule::Periodic => periodic.push(device),
+            IngestSchedule::Daily { tz } => match daily.iter_mut().find(|(zone, _)| *zone == tz) {
+                Some((_, group)) => group.push(device),
+                None => daily.push((tz, vec![device])),
+            },
+        }
+    }
+    let mut planned =
+        schedule::due_windows(now, delay, catchup_hours(), 300, window_secs, &periodic);
+    for (tz, group) in &daily {
+        match schedule::daily_windows(
+            now,
+            *tz,
+            delay,
+            daily_catchup_days(),
+            300,
+            window_secs,
+            group,
+        ) {
+            Ok(jobs) => planned.extend(jobs),
+            Err(err) => {
+                warn!(timezone = tz.name(), error = %err, "daily ingest windows not planned");
+                for device in group {
+                    state
+                        .providers
+                        .note_plan_identity(&device.canonical_site, "schedule_no_local_midnight")
+                        .await;
+                }
+            }
+        }
+    }
     let count = planned.len();
     for job in planned {
         state
@@ -770,7 +814,19 @@ pub(crate) async fn enqueue_due_windows(
     Ok(count)
 }
 
-fn devices_from_state(state: &AppState) -> (Vec<ScheduleDevice>, Vec<(String, &'static str)>) {
+/// Policy of the configured site that owns this job. Unknown sites stay periodic.
+fn site_schedule(state: &AppState, tenant_id: &str, canonical_site: &str) -> IngestSchedule {
+    state
+        .providers
+        .sites
+        .iter()
+        .find(|site| site.tenant_id == tenant_id && site.building_id == canonical_site)
+        .map_or(IngestSchedule::Periodic, |site| site.schedule)
+}
+
+type PlannedDevices = Vec<(IngestSchedule, ScheduleDevice)>;
+
+fn devices_from_state(state: &AppState) -> (PlannedDevices, Vec<(String, &'static str)>) {
     let mut devices = Vec::new();
     let mut mismatches = Vec::new();
     for site in &state.providers.sites {
@@ -815,7 +871,7 @@ fn devices_from_state(state: &AppState) -> (Vec<ScheduleDevice>, Vec<(String, &'
                                 .collect()
                         })
                         .unwrap_or_default();
-                    ScheduleDevice {
+                    let device = ScheduleDevice {
                         tenant_id: site.tenant_id.clone(),
                         canonical_site: site.building_id.clone(),
                         provider_instance_id: device.provider_instance_id,
@@ -823,7 +879,8 @@ fn devices_from_state(state: &AppState) -> (Vec<ScheduleDevice>, Vec<(String, &'
                         model_revision: device.revision_id,
                         estimated_cost: device.estimated_cost,
                         point_ids,
-                    }
+                    };
+                    (site.schedule, device)
                 }));
             }
             Err(code) => {
@@ -912,6 +969,15 @@ fn catchup_hours() -> u32 {
         .and_then(|value| value.parse().ok())
         .unwrap_or(6)
         .clamp(1, super::model::MAX_CATCHUP_HOURS)
+}
+
+/// Whole local days a daily-policy site re-plans per tick. Default 2.
+fn daily_catchup_days() -> u32 {
+    std::env::var("OPENFDD_INGEST_DAILY_CATCHUP_DAYS")
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(2)
+        .clamp(1, schedule::MAX_DAILY_CATCHUP_DAYS)
 }
 
 fn max_concurrent() -> usize {
@@ -1179,3 +1245,6 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod daily_catchup;

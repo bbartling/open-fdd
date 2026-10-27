@@ -1780,6 +1780,7 @@ mod tests {
         for relation in [
             "public.ingest_applied_sample",
             "public.ingest_audit",
+            "public.ingest_coverage_cursor",
             "public.ingest_scheduler_lease",
             "public.provider_hourly_job",
         ] {

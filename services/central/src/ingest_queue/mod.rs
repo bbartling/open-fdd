@@ -2,12 +2,13 @@
 
 mod client;
 mod coverage;
+pub(crate) mod cursor;
 pub(crate) mod http;
 mod memory;
 mod model;
 mod postgres;
 mod scale;
-mod schedule;
+pub(crate) mod schedule;
 mod worker;
 
 #[cfg(test)]
