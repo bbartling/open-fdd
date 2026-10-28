@@ -42,6 +42,10 @@ Edge install, licensing, BACnet scan, and trend periods: [`openfdd-nf-edge-bench
 5. Smoke one UUID with [`scripts/nf/read_sensors.py`](../../../scripts/nf/read_sensors.py)
    (`NF_POINT_UUIDS`), then check provider health in central.
 
+**NF MCP (read-only):** prefer the Normal Framework MCP connector for inventory
+and trend checks (`search_points`, `read_values`, `diagnose`) — not BACnet
+`control` or HVAC writes. Open-FDD central never needs NF write RPCs for ingest.
+
 Do not add a provider to a shared stack someone else is testing.
 
 ## provider_sites JSON
@@ -77,7 +81,11 @@ A list of site objects. Fields from `SiteConfigRaw` in `config.rs`:
   `unit`), `kind`, `semantic_point_id`, and `provisional: true` for a mapping
   not yet confirmed.
 - `units` is the site-file fallback when NF omits the unit or reports it as
-  unknown (JavaScript hook points often do). Ingest reads the NF unit first,
+  unknown (JavaScript hook points often do). After inventory sync, run a **units
+  audit**: list committed points with empty `unit` and declare them through
+  `POST /api/model/point` with `confirm:true` (or MCP `openfdd_model_point_upsert`).
+  See [`docs/modeling/provider-point-overlay.md`](../../../docs/modeling/provider-point-overlay.md).
+  Ingest reads the NF unit first,
   converts temperature to the historian canonical unit (`degF`, imperial-f-v1)
   on the existing sample before the single Timescale write, and keeps the
   source unit on the point (`source_unit`). If NF and `units` name different
@@ -169,10 +177,12 @@ readings (for example dewpoint above dry bulb) fail the run.
 Internet weather comes from an NF JavaScript hook. Open-FDD does not fetch it.
 The code is kept in this repo: [`scripts/nf/hooks/`](../../../scripts/nf/hooks/README.md)
 holds the hook source, its manifest, and `nf_app_sync.py` (push, run now, status,
-diff, pull). The hook's global variables are ordinary NF points. Add their UUIDs
-with `equip_type: weather` and the `web-outside-air-*` roles from
-[`sql/fdd/role_map.json`](../../../sql/fdd/role_map.json), so they never shadow
-the site's own OA sensors.
+diff, pull). **Declare the hook cadence in the manifest** (`mode: scheduled`, rrule
+with `DTSTART` + interval) so portal freshness checks and OAT-METEO **as-of bounds**
+use the same interval (for example 20 min hook → `web_cadence_seconds` near 1200
+plus margin in Lab). Tag web weather points distinctly from local BAS OAT: map hook
+variables with `equip_type: weather` and `web-outside-air-*` roles so they never
+shadow the site's own `outside-air-temp` sensors.
 
 ## Do not
 

@@ -1135,7 +1135,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 | `web_cadence_seconds` | Web weather cadence | sec | 1200 | 300–7200 |
 | `web_asof_margin_seconds` | Web as-of margin | sec | 300 | 0–1800 |
 
-Web OAT is carried forward to each BAS timestamp. Samples whose last web value is older than `web_cadence_seconds + web_asof_margin_seconds` are not assessed (not fault time).
+Web OAT is carried forward to each BAS timestamp. Samples whose last web value is older than `web_cadence_seconds + web_asof_margin_seconds` are not assessed (not fault time). Local `outside-air-temp` uses the binding marked `primary_reference` when set ([provider point overlay](../../modeling/provider-point-overlay.html)).
 
 ```python
 FAULT_CONFIRM_SECONDS = 900

@@ -8,11 +8,17 @@ nav_exclude: true
 
 # Build recipes
 
-Open-FDD ships two **named** product recipes. Compose helpers below map onto them.
+Open-FDD ships named product recipes. The **4.0 default** is the **`portal`** recipe:
+`openfdd-central` + `openfdd-web` + Timescale (`docker/compose.portal.yml`,
+`compose.timescale.yml`, optional `compose.local.yml`). Ingest is the Normal
+Framework portal API and CSV — no MQTT broker or fieldbus on this path. Compose
+helpers below also map onto legacy Recipe 1 / Recipe 2 names where those still
+apply for archived OT labs.
 
 | Named recipe | Best for | Services | Arch | Guide |
 | --- | --- | --- | --- | --- |
-| **Recipe 1 — cloud hub** (historical; Railway / cloud hosting retired) | cloud MQTTS hub | `openfdd-mqtt` + `openfdd-central` + `openfdd-web` | **linux/amd64 only** | Retired — use [Local hosting](LOCAL_HOSTING.md) |
+| **portal (4.0 default)** | NF + CSV lab / production UI | central + web + Timescale | **linux/amd64** (web/arm per publish) | [Local hosting](LOCAL_HOSTING.md) · [Local deployment](LOCAL_DEPLOYMENT.md) |
+| **Recipe 1 — cloud hub** (historical; Railway / cloud hosting retired) | cloud MQTTS hub | `openfdd-mqtt` + `openfdd-central` + `openfdd-web` | **linux/amd64 only** | Retired — use portal + [Local hosting](LOCAL_HOSTING.md) |
 | **Recipe 2 — OT edge** | Historical (archived OT): LAN/VPN OT host | `openfdd-central` + `openfdd-web` + protocol (fieldbus/…) | **amd64 + arm64** | [Local stack](../quick-start/local-stack.md) · [VM deployment](VM_DEPLOYMENT.md) |
 
 **Ingest on Recipe 2 (historical, superseded by the Timescale-only mandate):** protocol scrape → on-box central / Parquet / DataFusion (broker **not** required). Optional MQTTS publish to a Recipe 1 hub is **off by default**.
@@ -41,6 +47,7 @@ See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html
 
 | Helper | Named recipe | Compose file | Services | Use |
 |--------|--------------|--------------|----------|-----|
+| **`portal`** | **4.0 default** | `compose.portal.yml` + `compose.timescale.yml` (+ `compose.local.yml`) | central + web + Timescale | NF portal sites, CSV packages, AFDD, analytics cache |
 | `csv` | **Recipe 2** (no protocol) | `docker/compose.csv.yml` | central + web (`OPENFDD_MQTT_ENABLED=0`) | IT dashboard / CSV-package / broker-free edge |
 | `standalone` | **Recipe 2** (+ optional local mqtt) | `docker/compose.standalone.yml` | mqtt + central + web + fieldbus | single OT-connected host |
 | `central` | **Recipe 1** shape | `docker/compose.central.yml` | mqtt + central + web | hub for remote edges |
@@ -101,6 +108,22 @@ Pull without starting:
 After `csv` boot: UI on `http://<host>:3000`, API health on `http://<host>:8080/api/health`.
 
 ## Recipes in detail
+
+### portal — 4.0 default (central + web + Timescale)
+
+Normal Framework portal ingest, CSV packages, Timescale historian, PostgreSQL FDD
+results (`fdd_run`, …), and the `analytics_result` cache. No MQTT or fieldbus
+containers.
+
+```bash
+export OPENFDD_IMAGE_TAG=sha-<7>   # newest-by-created; see ghcr-images.md
+./scripts/openfdd_stack_up.sh portal
+```
+
+Operator env (AFDD all sites, ingest tuning, multi-site `OPENFDD_PROVIDER_SITES`)
+lives in repo-root `.env` and is forwarded by `docker/compose.local.yml`. Re-pin
+with `./scripts/openfdd_local_repin.sh` and `./scripts/ops/assert_local_stack_after_repin.sh`
+(version from `GET /api/version`).
 
 ### csv — recommended dashboard / CSV-package deployment
 

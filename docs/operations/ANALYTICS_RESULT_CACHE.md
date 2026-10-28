@@ -4,6 +4,19 @@
 
 Derived result rows for `/api/analytics/*` (including RCx presets and sensor-fault analytics) live in the PostgreSQL table `analytics_result`, next to the Timescale historian. They are recomputable output, not telemetry. The cache never writes files. It is not the AFDD `{rule_id}.json` blob under rule results.
 
+## Single compute path
+
+Every **computing** `POST /api/analytics/*` handler that materializes rows goes through
+one `result_cache` + `result_store` path in central (`services/central/src/routes.rs`,
+`cached_analytics!` macro family). That includes RCx presets, runtime and fuel
+analytics, BAS-vs-web-OAT, sensor-health, and the Overview health / weather /
+SQL-anomaly queries. Responses carry explicit `cache.hit`, `cache.miss`, and
+`cache.stale` (plus envelope `stale` when the scoped watermark or model revision moved).
+
+Static catalogs, inline demo payloads, and routes that only list metadata stay
+uncached by design (commented in the router). There is no second file-format or
+in-memory result store on the product path.
+
 ## Storage
 
 Table `analytics_result` (`sql/schema/02_openfdd_dims.sql`, columns added forward-only by `sql/schema/08_analytics_result_cache.sql`):

@@ -104,8 +104,10 @@ curl -s 'localhost:8080/api/v1/bacnet/scan?status_filter=ANY'   # wait for all D
 - Samples land on period boundaries. Verify with `GET /api/v1/point/data?from.seconds=&to.seconds=&uuids=`
   after two or three periods. `POST` on `/point/data` is a write; never use it to read.
 - Check units per device. One vendor may report zone temperature in °C and another
-  in °F. Flag the mix so Open-FDD ingest converts it. Also flag constant or
-  impossible readings, such as a negative relative humidity.
+  in °F. Flag the mix so Open-FDD ingest converts it. After central inventory sync,
+  list points with **empty units** in the committed model and declare them through
+  the engineer overlay (`POST /api/model/point` with `confirm:true`). Also flag
+  constant or impossible readings, such as a negative relative humidity.
 - No BACnet writes unless the owner asks. Periods, tags and quality rules are fine.
 - A health-page WARN or error rate is often one device (BACnet gateway timeouts on
   a single controller). Use `diagnose` before treating the site as down. A red
@@ -134,11 +136,15 @@ curl -s 'localhost:8080/api/v1/bacnet/scan?status_filter=ANY'   # wait for all D
 
 ## NF MCP connector (preferred path for agents)
 
-The Normal Framework MCP server (`https://portal.normal-online.net/mcp`) uses a
-Normal Online sign-in and reaches the box through the portal tunnel, so it needs
-no Tailscale, console password or SSH. Connect first:
-`connect` `use_site` with the installation UUID (the host part of `NFURL`).
-Re-run that whenever a call says "No site connected".
+The Normal Framework MCP server uses a Normal Online sign-in and reaches the box
+through the portal tunnel, so it needs no Tailscale, console password or SSH.
+Connect first: `connect` `use_site` with the installation UUID (the host part of
+the portal URL). Re-run that whenever a call says "No site connected".
+
+**Read-only for HVAC:** use MCP **read** tools for inventory, trends, and freshness
+(`search_points`, `read_values` `latest`/`history`, `diagnose`). Do **not** use
+`control` (BACnet writes) or other NF write paths on BAS points unless the owner
+explicitly asks. Open-FDD ingest is portal history read only.
 
 | Task | Tool / action |
 | --- | --- |
@@ -155,13 +161,18 @@ is still the source of truth for hook code. After `deploy_hook` or a `write_file
 copy the code back into `scripts/nf/hooks/`. `nf_app_sync.py` (console API) is the
 scripted fallback when the MCP is not connected.
 
-## NF JavaScript hooks (lessons learned, ACME NF 3.10.9)
+## NF JavaScript hooks (web weather and cadence)
 
 NF 3.10.x runs JavaScript hooks on the box (Applications SDK, Node runtime). Hooks
 can run on a schedule, on data, or on request, and they write NF variable points.
 The repo is the source of truth: code and config live in
 [`scripts/nf/hooks/`](../../../scripts/nf/hooks/README.md) (hook JS, `*.app.json`
 config with mode, rrule and variables, and `nf_app_sync.py`).
+
+**Cadence and tagging:** declare `mode: scheduled` with an rrule (`DTSTART` in UTC
++ interval) so freshness scripts and OAT-METEO as-of bounds match the hook grid.
+Tag hook outputs as **web weather** (`web-outside-air-*` roles, `equip_type:
+weather`) — never reuse local BAS outdoor-air role names on hook variables.
 
 **Workflow (MCP first, see above):**
 1. Read `nf://docs/hooks-guide`, then edit the JS in the repo.
@@ -226,10 +237,10 @@ points; do not leave a test value unnoted.
 **Validate:** run it now and get `STATE_SUCCESS` with your log line. Wait for two
 `TRIGGER_SCHEDULE` runs one interval apart. Check `read_values latest` on the variable
 UUIDs, then run `python3 scripts/nf/check_portal_fresh.py --env <file> --sites <site.json>`
-with `--points` or `--sample`; it must PASS on the remote portal. Warn when a hook
-point is older than one hook interval plus a margin
-(25 min for a 20 min hook, `--warn-age-min`) even while it is still under the 30 min
-fail. Spot-check that existing BACnet points kept their period.
+with `--points` or `--sample` using **out-of-tree** site configs; compare newest sample
+age to the hook cadence (PASS when every probe is within `--max-age-min`; WARN when
+older than one interval plus margin — see `openfdd-nf-provider`). Spot-check that
+existing BACnet points kept their period.
 
 ## Managed backup
 
