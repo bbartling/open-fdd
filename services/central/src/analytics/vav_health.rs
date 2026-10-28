@@ -204,7 +204,7 @@ async fn timescale_vav_matrix(
     let sample_rows = match sqlx::query(
         r#"
         WITH ordered AS (
-          SELECT openfdd_key, ts, val,
+          SELECT openfdd_key, ts, val, unit,
                  LEAD(ts) OVER (PARTITION BY openfdd_key ORDER BY ts) AS next_ts
           FROM sample
           WHERE site_id = $1
@@ -221,7 +221,16 @@ async fn timescale_vav_matrix(
                ), 0)::float8 AS span_s,
                COALESCE(SUM(
                  CASE
-                   WHEN next_ts IS NOT NULL AND (val < $5 OR val > $6)
+                   WHEN next_ts IS NULL OR btrim(coalesce(unit, '')) = '' THEN 0
+                   WHEN next_ts IS NOT NULL AND (
+                     CASE
+                       WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g'))
+                            IN ('c', 'degc', 'celsius')
+                         THEN val < (($5 - 32.0) * 5.0 / 9.0)
+                           OR val > (($6 - 32.0) * 5.0 / 9.0)
+                       ELSE val < $5 OR val > $6
+                     END
+                   )
                    THEN LEAST(EXTRACT(EPOCH FROM (next_ts - ts)), 3600.0)
                    ELSE 0
                  END

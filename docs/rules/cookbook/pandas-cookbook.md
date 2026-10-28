@@ -1613,7 +1613,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 ### VAV-1 — Zone comfort band
 **Family:** `vav` · **Equipment:** `vav`, `zone_other`, `heatpump`, `baseboard`  
-**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 70–75°F) during occupied hours when an occupancy column or Overview calendar is set (`require_occupied`, default on). Unoccupied setback stays on VAV-2.  
+**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 70–75°F) during occupied hours when an occupancy column or Overview calendar is set (`require_occupied`, default on). Without modeled occupancy or a site schedule, the rule is **not assessed** (`NOT_ASSESSED_NO_OCCUPANCY`, 0 fault hours). The comfort band is evaluated in the zone point's declared unit (°F or °C). Unoccupied setback stays on VAV-2.  
 **Default confirmation:** 900 s
 
 **Required roles:** `zone-air-temp`  
@@ -1631,10 +1631,9 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 FAULT_CONFIRM_SECONDS = 900
 
 def vav1(d, p, poll):
-    lo = _f(p, "zone_lo", 70.0)
-    hi = _f(p, "zone_hi", 75.0)
+    lo, hi = _zone_comfort_band(p, d.attrs.get("role_units") or d.attrs.get("units_map"))
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
-    occupied, _src = vav1_occupied_mask(d, p)  # default require_occupied=1
+    occupied, _src = vav1_occupied_mask(d, p)  # default require_occupied=1; no schedule → not assessed
     return zt.notna() & ((zt < lo) | (zt > hi)) & occupied
 
 d = apply_fault(d, vav1(d, params, POLL_SECONDS))

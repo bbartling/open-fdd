@@ -25,13 +25,13 @@ def test_vav1_faults_occupied_band_and_skips_unoccupied():
     assert list(raw.fillna(False)) == [True, False, False, True, False, True]
 
 
-def test_vav1_without_occupancy_evaluates_every_sample():
+def test_vav1_without_occupancy_is_not_assessed():
     df = _frame([80.0, 60.0, 72.0])
     raw = vav1(df, {}, 300.0)
-    assert list(raw.fillna(False)) == [True, True, False]
+    assert not raw.fillna(False).any()
 
 
-def test_vav1_require_occupied_off_includes_unoccupied():
+def test_vav1_require_occupied_off_includes_unoccupied_without_schedule():
     df = _frame([80.0, 80.0], ["occupied", "unoccupied"])
     raw = vav1(df, {"require_occupied": 0}, 300.0)
     assert list(raw.fillna(False)) == [True, True]

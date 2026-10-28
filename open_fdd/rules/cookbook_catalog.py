@@ -999,8 +999,8 @@ def vav1_occupied_mask(d: pd.DataFrame, p: dict | None = None) -> tuple[pd.Serie
 
     ``require_occupied`` defaults on. A mapped occupancy column or an Overview
     weekly calendar (``occupancy_schedule``) keeps unoccupied hours off this
-    rule so night setback stays on VAV-2. With neither signal, every row is
-    eligible — the schedule is not set.
+    rule so night setback stays on VAV-2. With neither signal, the rule is not
+    assessed (``ungated_no_occ``).
     """
     params = p or {}
     if _f(params, "require_occupied", 1.0) < 0.5:
@@ -1013,13 +1013,30 @@ def vav1_occupied_mask(d: pd.DataFrame, p: dict | None = None) -> tuple[pd.Serie
 
         mask = occupied_mask(d.index, OccupancySchedule.from_dict(sched))
         return mask.reindex(d.index).fillna(False), "occupancy_schedule"
-    return pd.Series(True, index=d.index), "ungated_no_occ"
+    return pd.Series(False, index=d.index), "ungated_no_occ"
+
+
+def _zone_comfort_band(p: dict | None, role_units: dict | None = None) -> tuple[float, float]:
+    lo = _f(p, "zone_lo", 70.0)
+    hi = _f(p, "zone_hi", 75.0)
+    unit = ""
+    if role_units:
+        unit = str(
+            role_units.get("zone-air-temp")
+            or role_units.get("zone_t")
+            or role_units.get("zone-air-temp".replace("-", "_"))
+            or ""
+        )
+    token = unit.strip().lower().replace(" ", "")
+    if token in {"c", "degc", "celsius", "°c"}:
+        lo = (lo - 32.0) * 5.0 / 9.0
+        hi = (hi - 32.0) * 5.0 / 9.0
+    return lo, hi
 
 
 def vav1(d, p, poll):
     """Comfort band during occupied hours when a schedule or occ column is set."""
-    lo = _f(p, "zone_lo", 70.0)
-    hi = _f(p, "zone_hi", 75.0)
+    lo, hi = _zone_comfort_band(p, d.attrs.get("role_units") or d.attrs.get("units_map"))
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     occupied, _src = vav1_occupied_mask(d, p)
     return zt.notna() & ((zt < lo) | (zt > hi)) & occupied

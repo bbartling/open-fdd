@@ -18,6 +18,7 @@ RuleStatus = Literal[
     "SKIPPED_MISSING_ROLES",
     "SKIPPED_EQUIPMENT_OFF",
     "NOT_APPLICABLE_EQUIPMENT_TYPE",
+    "NOT_ASSESSED_NO_OCCUPANCY",
     "ERROR",
 ]
 
@@ -243,6 +244,33 @@ def equipment_off(
         metrics=metrics or {},
         notes=notes
         or "SKIPPED_EQUIPMENT_OFF — equipment was not proven on during the analysis period.",
+        params_fingerprint=params_fingerprint,
+    )
+
+
+def not_assessed_no_occupancy(
+    rule_id: str,
+    equipment_id: str,
+    *,
+    site_id: str = "",
+    building_id: str = "",
+    equipment_type: str = "UNKNOWN",
+    params_fingerprint: str = "",
+) -> RuleResult:
+    return RuleResult(
+        rule_id=rule_id,
+        equipment_id=equipment_id,
+        site_id=site_id,
+        building_id=building_id,
+        equipment_type=equipment_type,
+        status="NOT_ASSESSED_NO_OCCUPANCY",
+        applicable=False,
+        fault_hours=0.0,
+        fault_pct=None,
+        notes=(
+            "NOT_ASSESSED_NO_OCCUPANCY — comfort band requires modeled occ_mode "
+            "or a site occupancy schedule."
+        ),
         params_fingerprint=params_fingerprint,
     )
 

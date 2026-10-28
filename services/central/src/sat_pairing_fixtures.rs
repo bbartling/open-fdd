@@ -321,7 +321,10 @@ async fn sat_scatter_binds_one_weather_series_and_scopes_the_window() {
     assert_eq!(vav["coverage"]["equipment_ids"], json!([VAV_1]));
     let vav_body = vav.to_string();
     assert!(!vav_body.contains(VAV_2), "{vav}");
-    assert!(!vav_body.contains("73"), "{vav}");
+    assert!(
+        rows.iter().all(|row| !near(row["val"].as_f64(), 73.0)),
+        "VAV_2 zone temperature leaked into scoped rcx/vav rows: {vav}"
+    );
 
     let inspect = post_json(
         &app,
