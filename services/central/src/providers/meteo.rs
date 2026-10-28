@@ -156,7 +156,7 @@ impl OpenMeteoDriver {
         series: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<map::HistoryFetchPage, FetchError> {
+    ) -> Result<HistoryFetchPage, FetchError> {
         let points = self
             .fetch_history(series, from, to)
             .await
@@ -169,7 +169,7 @@ impl OpenMeteoDriver {
                 .or_default()
                 .push(point);
         }
-        Ok(map::HistoryFetchPage {
+        Ok(HistoryFetchPage {
             series: grouped
                 .into_iter()
                 .map(|(provider_point_id, samples)| HistorySeries {

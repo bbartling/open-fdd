@@ -1,12 +1,12 @@
 //! Shared Postgres ingest queue, leases, and scoped job HTTP.
 
 mod client;
-mod coverage;
+pub(crate) mod coverage;
 pub(crate) mod cursor;
 pub(crate) mod http;
 mod memory;
 mod model;
-mod portal_env;
+pub(crate) mod portal_env;
 mod postgres;
 pub(crate) mod replay_horizon;
 mod scale;

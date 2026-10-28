@@ -751,7 +751,7 @@ fn parse_throttle_error(err: &str) -> (bool, Option<u64>) {
     if let Some(secs) = err.strip_prefix("throttled:") {
         match secs.parse::<u64>() {
             Ok(value) => return (true, Some(value)),
-            Err(()) => {
+            Err(_) => {
                 warn!(
                     raw = secs,
                     "portal throttle label had unparsable Retry-After seconds; treating as throttled without delay hint"

@@ -21,7 +21,7 @@ use super::hourly::FetchError;
 use super::http_policy::{
     HttpLimits, MAX_HISTORY_WINDOW, MAX_SAMPLES_PER_RESPONSE, MAX_UUIDS_TOTAL,
 };
-use super::map::{HistoryFetchPage, HistorySeries, RawProviderPoint};
+use super::map::{HistoryFetchPage, RawProviderPoint};
 use super::nf::{admit_source_ts, group_history, valid_point_id, NfPortalDriver};
 
 /// One history read failure, tagged with the transport that produced it.

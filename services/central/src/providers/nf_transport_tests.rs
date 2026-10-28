@@ -423,6 +423,7 @@ async fn grpc_reads_chunk_at_fifty_uuids_and_bounds_requests() {
         .read_history_page(&[], from, to)
         .await
         .unwrap()
+        .series
         .is_empty());
 }
 

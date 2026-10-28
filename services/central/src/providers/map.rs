@@ -345,7 +345,7 @@ pub struct HistorySeries {
 
 /// One bounded history read for ingest coverage. `complete` is false when paging
 /// stopped before the full window was retrieved.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HistoryFetchPage {
     pub series: Vec<HistorySeries>,
     pub complete: bool,

@@ -26,7 +26,7 @@ use super::map::{HistoryFetchPage, HistorySeries, RawProviderPoint};
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
 
 /// Raw samples from one bounded history read plus an explicit completeness flag.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PagedHistoryPoints {
     pub points: Vec<RawProviderPoint>,
     pub complete: bool,
