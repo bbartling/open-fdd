@@ -9,6 +9,7 @@
 --   $4 = equipment_ids (text[], NULL/empty = all)
 --   $5 = selected site oa_t openfdd_key (from resolve_site_oa_t_reference)
 --   $6 = web as-of bound seconds (web cadence + margin, same as OAT-METEO)
+--   $7 = row limit (caller-validated max_points)
 WITH web_unique AS (
   SELECT count(*) AS n
   FROM authorized_series c
@@ -22,7 +23,10 @@ web_points AS (
    AND u.openfdd_key = s.openfdd_key
   CROSS JOIN web_unique wu
   WHERE s.site_id = $1
-    AND ($2::timestamptz IS NULL OR s.ts >= $2)
+    AND (
+      $2::timestamptz IS NULL
+      OR s.ts >= $2 - make_interval(secs => ($6::double precision))
+    )
     AND ($3::timestamptz IS NULL OR s.ts < $3)
     AND u.role = 'web_oa_t'
     AND wu.n = 1
@@ -76,4 +80,4 @@ WHERE j.web_oa_t IS NOT NULL
   AND j.web_ts IS NOT NULL
   AND EXTRACT(EPOCH FROM (j.ts - j.web_ts)) <= $6
 ORDER BY j.ts DESC, j.equipment_id
-LIMIT 2000;
+LIMIT $7;

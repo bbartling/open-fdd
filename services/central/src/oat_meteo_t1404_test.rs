@@ -290,16 +290,24 @@ async fn t1404_primary_reference_selection() {
     purge(&pool, &site).await;
 }
 
-async fn run_bas_vs_web(pool: &sqlx::PgPool, site: &str) -> Value {
+async fn run_bas_vs_web(
+    pool: &sqlx::PgPool,
+    site: &str,
+    scope: &crate::timescale_analytics::AnalyticsSqlScope,
+) -> Value {
     let tsdb = Tsdb::from_pool(pool.clone());
+    crate::timescale_analytics::bas_vs_web_oat(&tsdb, site, scope, 2000)
+        .await
+        .expect("bas_vs_web_oat")
+}
+
+async fn run_bas_vs_web_open(pool: &sqlx::PgPool, site: &str) -> Value {
     let scope = crate::timescale_analytics::AnalyticsSqlScope {
         start: None,
         end: None,
         equipment_ids: Vec::new(),
     };
-    crate::timescale_analytics::bas_vs_web_oat(&tsdb, site, &scope)
-        .await
-        .expect("bas_vs_web_oat")
+    run_bas_vs_web(pool, site, &scope).await
 }
 
 #[tokio::test]
@@ -333,7 +341,7 @@ async fn t1404_3_bas_vs_web_primary_and_default_reference() {
     }
     upsert_samples(&pool, batch).await;
 
-    let default_body = run_bas_vs_web(&pool, &site).await;
+    let default_body = run_bas_vs_web_open(&pool, &site).await;
     let default_ref = default_body
         .get("oa_t_reference")
         .expect("oa_t_reference metadata");
@@ -382,7 +390,7 @@ async fn t1404_3_bas_vs_web_primary_and_default_reference() {
     )
     .expect("overlay");
 
-    let primary_body = run_bas_vs_web(&pool, &site).await;
+    let primary_body = run_bas_vs_web_open(&pool, &site).await;
     let primary_ref = primary_body
         .get("oa_t_reference")
         .expect("oa_t_reference metadata");
@@ -403,4 +411,52 @@ async fn t1404_3_bas_vs_web_primary_and_default_reference() {
         assert_eq!(row.get("bas_oa_t").and_then(|v| v.as_f64()), Some(50.0));
     }
     purge(&pool, &site).await;
+}
+
+#[tokio::test]
+async fn t1404_4_bas_vs_web_web_prefetch_before_window_start() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    apply_schema(&pool).await;
+    let site = format!("t1404d{}", uuid::Uuid::new_v4().simple());
+    purge(&pool, &site).await;
+    seed_site(&pool, &site).await;
+    bind_point(&pool, &site, "WX", "oa_t", "WX.oa_t_a", "pt-oa-a").await;
+    bind_point(&pool, &site, "WX", "web_oa_t", "WX.web_oa_t", "pt-web").await;
+
+    let t0 = Utc.with_ymd_and_hms(2026, 6, 1, 12, 0, 0).unwrap();
+    let mut batch = UpsertBatch::default();
+    batch.push(sample(&site, "WX", "web_oa_t", "WX.web_oa_t", -10, 48.0));
+    batch.push(sample(&site, "WX", "oa_t", "WX.oa_t_a", 5, 50.0));
+    upsert_samples(&pool, batch).await;
+
+    let scope = crate::timescale_analytics::AnalyticsSqlScope {
+        start: Some(t0),
+        end: Some(t0 + Duration::hours(2)),
+        equipment_ids: Vec::new(),
+    };
+    let body = run_bas_vs_web(&pool, &site, &scope).await;
+    let rows = body.get("rows").and_then(|v| v.as_array()).expect("rows");
+    assert_eq!(rows.len(), 1, "web sample before window start must as-of join: {body}");
+    assert_eq!(rows[0].get("bas_oa_t").and_then(|v| v.as_f64()), Some(50.0));
+    assert_eq!(rows[0].get("web_oa_t").and_then(|v| v.as_f64()), Some(48.0));
+    purge(&pool, &site).await;
+}
+
+#[test]
+fn bas_vs_web_cache_config_line_changes_with_primary_overlay() {
+    use crate::timescale_product::{bas_vs_web_oa_t_config_line, SiteOatReference};
+
+    let default = bas_vs_web_oa_t_config_line(Some(&SiteOatReference {
+        openfdd_key: "WX.oa_t_a".into(),
+        equipment_id: "WX".into(),
+        selection: "default_lowest_binding".into(),
+    }));
+    let primary = bas_vs_web_oa_t_config_line(Some(&SiteOatReference {
+        openfdd_key: "WX.oa_t_b".into(),
+        equipment_id: "WX".into(),
+        selection: "primary_reference".into(),
+    }));
+    assert_ne!(default, primary);
 }

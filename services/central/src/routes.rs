@@ -6697,7 +6697,14 @@ async fn analytics_bas_vs_web_oat(
         &headers,
         req,
         async {
-            let max_points = req.query.max_points.unwrap_or(2000);
+            let max_points = match analytics::historian::validated_bas_vs_web_max_points(
+                req.query.max_points,
+            ) {
+                Ok(n) => n as usize,
+                Err(msg) => {
+                    return analytics::envelope("bas-vs-web-oat-v4", &req.query, vec![msg]);
+                }
+            };
             // Default lookback + max-span gate (#1179); reject unbounded refresh.
             let window = analytics::historian::resolve_analytics_window(
                 req.query.start,

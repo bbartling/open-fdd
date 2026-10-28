@@ -232,6 +232,14 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
             .and_then(|v| v.as_str()),
         Some("default_lowest_binding")
     );
+    assert!(
+        bas.get("oa_t_reference").is_some(),
+        "HTTP envelope must expose oa_t_reference at top level: {bas}"
+    );
+    assert!(
+        bas.get("web_asof_bound_seconds").and_then(|v| v.as_f64()).is_some(),
+        "HTTP envelope must expose web_asof_bound_seconds: {bas}"
+    );
 
     let empty_runtime = post_analytics(&app, "/api/analytics/runtime", EMPTY, None).await;
     assert!(empty_runtime["rows"].as_array().expect("rows").is_empty());

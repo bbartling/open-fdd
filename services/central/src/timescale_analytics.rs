@@ -281,6 +281,7 @@ pub async fn bas_vs_web_oat(
     tsdb: &Tsdb,
     building_id: &str,
     scope: &AnalyticsSqlScope,
+    max_points: i64,
 ) -> Result<Value> {
     let pool = tsdb.pool();
     let bound = crate::timescale_product::oat_meteo_web_asof_bound_seconds();
@@ -306,6 +307,7 @@ pub async fn bas_vs_web_oat(
         .bind(scope.equipment_bind())
         .bind(&picked.openfdd_key)
         .bind(bound)
+        .bind(max_points)
         .fetch_all(pool)
         .await
         .context("bas_vs_web_oat")?;
@@ -329,14 +331,12 @@ pub async fn bas_vs_web_oat(
         None,
     );
     if let Some(obj) = body.as_object_mut() {
-        obj.insert(
-            "oa_t_reference".to_string(),
-            json!({
-                "openfdd_key": picked.openfdd_key,
-                "equipment_id": picked.equipment_id,
-                "selection": picked.selection,
-            }),
-        );
+        let oa_meta = json!({
+            "openfdd_key": picked.openfdd_key,
+            "equipment_id": picked.equipment_id,
+            "selection": picked.selection,
+        });
+        obj.insert("oa_t_reference".to_string(), oa_meta.clone());
         obj.insert("web_asof_bound_seconds".to_string(), json!(bound));
     }
     Ok(stamp_overview_dto(tsdb, building_id, scope, body).await)
@@ -1726,6 +1726,10 @@ pub fn envelope_from_dispatch_value(
         .get("query_version")
         .and_then(|v| v.as_str())
         .unwrap_or(query_version);
+    let oa_t_reference = obj.get("oa_t_reference").cloned();
+    let web_asof_bound_seconds = obj
+        .get("web_asof_bound_seconds")
+        .and_then(|v| v.as_f64());
     let mut env = AnalyticsEnvelope {
         schema_version,
         query_version: qv.to_string(),
@@ -1740,6 +1744,8 @@ pub fn envelope_from_dispatch_value(
         equipment,
         points,
         skipped,
+        oa_t_reference,
+        web_asof_bound_seconds,
     };
     let dispatch_meta_keys = [
         "query_id",
@@ -1794,6 +1800,38 @@ fn building_from(
     }
 }
 
+pub const BAS_VS_WEB_ROW_LIMIT_MAX: i64 = 2000;
+
+/// Row cap for bas-vs-web-oat SQL (`LIMIT $7`). Rejects out-of-range values; when
+/// omitted the endpoint uses [`BAS_VS_WEB_ROW_LIMIT_MAX`] explicitly.
+pub fn validated_bas_vs_web_max_points(max_points: Option<usize>) -> Result<i64, String> {
+    match max_points {
+        None => Ok(BAS_VS_WEB_ROW_LIMIT_MAX),
+        Some(0) => Err("max_points must be at least 1 for bas-vs-web-oat".into()),
+        Some(n) if n > BAS_VS_WEB_ROW_LIMIT_MAX as usize => Err(format!(
+            "max_points exceeds bas-vs-web-oat limit of {BAS_VS_WEB_ROW_LIMIT_MAX}"
+        )),
+        Some(n) => i64::try_from(n).map_err(|_| "max_points out of range".into()),
+    }
+}
+
+fn bas_vs_web_row_limit(
+    req: &AnalyticsRequest,
+) -> Result<i64, (axum::http::StatusCode, axum::Json<Value>)> {
+    crate::analytics::historian::validated_bas_vs_web_max_points(req.query.max_points).map_err(
+        |msg| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                axum::Json(json!({
+                    "ok": false,
+                    "error": msg,
+                    "engine": "timescale-sql",
+                })),
+            )
+        },
+    )
+}
+
 /// Universal product dispatch — never calls DataFusion.
 pub async fn respond_query(
     query_id: &str,
@@ -1816,7 +1854,10 @@ pub async fn respond_query(
     let scope = AnalyticsSqlScope::from_request(req);
     let result = match query_id {
         "runtime" => motor_weekly_runtime(&tsdb, &building, &scope).await,
-        "bas-vs-web-oat" => bas_vs_web_oat(&tsdb, &building, &scope).await,
+        "bas-vs-web-oat" => {
+            let max_points = bas_vs_web_row_limit(req)?;
+            bas_vs_web_oat(&tsdb, &building, &scope, max_points).await
+        }
         "ahu-health" => Ok(crate::analytics::plant_health::handle_ahu(req)
             .await
             .to_json()),
@@ -1979,8 +2020,12 @@ mod pack_version_tests {
             "bas-vs-web must enforce the OAT-METEO web as-of bound as $6"
         );
         assert!(
-            BAS_VS_WEB_SQL.contains("ORDER BY wp.ts DESC"),
-            "bas-vs-web must as-of join web OAT"
+            BAS_VS_WEB_SQL.contains("make_interval(secs => ($6::double precision))"),
+            "bas-vs-web must prefetch web samples before window start by the as-of bound"
+        );
+        assert!(
+            BAS_VS_WEB_SQL.contains("LIMIT $7"),
+            "bas-vs-web must bind row limit as $7"
         );
     }
 

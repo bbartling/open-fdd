@@ -22,6 +22,21 @@ pub const ANALYTICS_MAX_LOOKBACK_DAYS: i64 = 90;
 pub const BAS_VS_WEB_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 pub const RUNTIME_RETAIN_FALLBACK_DAYS: i64 = 365;
 pub const BAS_VS_WEB_RETAIN_FALLBACK_DAYS: i64 = RUNTIME_RETAIN_FALLBACK_DAYS;
+pub const BAS_VS_WEB_ROW_LIMIT_MAX: i64 = 2000;
+
+/// Row cap for bas-vs-web-oat SQL (`LIMIT $7`). Rejects out-of-range values; when
+/// omitted the HTTP handler uses [`BAS_VS_WEB_ROW_LIMIT_MAX`] explicitly.
+pub fn validated_bas_vs_web_max_points(max_points: Option<usize>) -> Result<i64, String> {
+    match max_points {
+        None => Ok(BAS_VS_WEB_ROW_LIMIT_MAX),
+        Some(0) => Err("max_points must be at least 1 for bas-vs-web-oat".into()),
+        Some(n) if n > BAS_VS_WEB_ROW_LIMIT_MAX as usize => Err(format!(
+            "max_points exceeds bas-vs-web-oat limit of {BAS_VS_WEB_ROW_LIMIT_MAX}"
+        )),
+        Some(n) => i64::try_from(n).map_err(|_| "max_points out of range".into()),
+    }
+}
+
 pub const RUNTIME_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 pub const MECH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 pub const MECH_RETAIN_FALLBACK_DAYS: i64 = 365;
@@ -219,7 +234,7 @@ pub async fn bas_vs_web_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let _ = (max_points, preferred_tenant);
+    let _ = preferred_tenant;
     if !crate::timescale_historian::historian_is_timescale() {
         return retired();
     }
@@ -240,7 +255,9 @@ pub async fn bas_vs_web_from_history(
         end,
         equipment_ids,
     };
-    let value = crate::timescale_analytics::bas_vs_web_oat(&tsdb, bid, &scope)
+    let limit = validated_bas_vs_web_max_points(Some(max_points))
+        .context("bas-vs-web-oat max_points")?;
+    let value = crate::timescale_analytics::bas_vs_web_oat(&tsdb, bid, &scope, limit)
         .await
         .context("bas_vs_web_oat timescale")?;
     let req = AnalyticsRequest {

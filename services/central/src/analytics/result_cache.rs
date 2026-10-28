@@ -235,7 +235,34 @@ pub async fn serve_with(
         #[cfg(test)]
         CacheWatch::Resolved(identity) => identity,
     };
-    let key = match cache_key(building_id, query_id, query_version, req, &identity) {
+    let config_extension = if query_id == "bas-vs-web-oat" {
+        match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(tsdb) => {
+                match crate::timescale_product::resolve_site_oa_t_reference(
+                    tsdb.pool(),
+                    building_id,
+                )
+                .await
+                {
+                    Ok(picked) => {
+                        crate::timescale_product::bas_vs_web_oa_t_config_line(picked.as_ref())
+                    }
+                    Err(_) => "oa_t_ref=unavailable".into(),
+                }
+            }
+            Err(_) => "oa_t_ref=unavailable".into(),
+        }
+    } else {
+        String::new()
+    };
+    let key = match cache_key(
+        building_id,
+        query_id,
+        query_version,
+        req,
+        &identity,
+        &config_extension,
+    ) {
         Ok(key) => key,
         Err(reason) => {
             let envelope = compute_with_admission_fallible(compute).await?;
@@ -345,17 +372,23 @@ fn cache_key(
     query_version: &str,
     req: &AnalyticsRequest,
     identity: &CacheIdentity,
+    config_extension: &str,
 ) -> Result<AnalyticsCacheKey, String> {
     fdd_store::safe_partition_value(building_id, "building_id").map_err(|e| e.to_string())?;
     fdd_store::safe_partition_value(query_id, "query_id").map_err(|e| e.to_string())?;
     fdd_store::safe_partition_value(query_version, "query_version").map_err(|e| e.to_string())?;
+    let material = if config_extension.is_empty() {
+        config_material(req, identity)
+    } else {
+        format!("{}\n{config_extension}", config_material(req, identity))
+    };
     Ok(AnalyticsCacheKey {
         building_id: building_id.to_string(),
         query_id: query_id.to_string(),
         query_version: query_version.to_string(),
         window_start: window_token(req.query.start),
         window_end: window_token(req.query.end),
-        config_hash: config_hash(&config_material(req, identity)),
+        config_hash: config_hash(&material),
     })
 }
 
@@ -434,13 +467,28 @@ fn canonical_json(value: &Value) -> String {
 }
 
 fn table_from_envelope(env: &AnalyticsEnvelope) -> AnalyticsResultTable {
+    let mut coverage = env.coverage.clone();
+    if env.oa_t_reference.is_some() || env.web_asof_bound_seconds.is_some() {
+        let mut cov = coverage
+            .as_ref()
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        if let Some(ref meta) = env.oa_t_reference {
+            cov.insert("oa_t_reference".into(), meta.clone());
+        }
+        if let Some(bound) = env.web_asof_bound_seconds {
+            cov.insert("web_asof_bound_seconds".into(), json!(bound));
+        }
+        coverage = Some(Value::Object(cov));
+    }
     AnalyticsResultTable {
         rows: env.rows.clone(),
         equipment: env.equipment.clone(),
         points: env.points.clone(),
         skipped: env.skipped.clone(),
         warnings: env.warnings.clone(),
-        coverage: env.coverage.clone(),
+        coverage,
         engine: env.engine.clone(),
         result_query_version: env.query_version.clone(),
     }
@@ -459,6 +507,18 @@ fn envelope_from_table(
     } else {
         table.result_query_version.clone()
     };
+    let (oa_t_reference, web_asof_bound_seconds) = table
+        .coverage
+        .as_ref()
+        .and_then(|v| v.as_object())
+        .map(|cov| {
+            (
+                cov.get("oa_t_reference").cloned(),
+                cov.get("web_asof_bound_seconds")
+                    .and_then(|v| v.as_f64()),
+            )
+        })
+        .unwrap_or((None, None));
     AnalyticsEnvelope {
         schema_version: SCHEMA_VERSION.into(),
         query_version,
@@ -477,6 +537,8 @@ fn envelope_from_table(
         equipment: table.equipment.clone(),
         points: table.points.clone(),
         skipped: table.skipped.clone(),
+        oa_t_reference,
+        web_asof_bound_seconds,
     }
 }
 
@@ -1090,6 +1152,31 @@ mod tests {
         );
     }
 
+    #[test]
+    fn bas_vs_web_config_hash_includes_oa_t_reference_line() {
+        let request = req("site-a");
+        let identity = timescale_identity("model-a", 1, "samples=1;series=1");
+        let default_key = cache_key(
+            "site-a",
+            "bas-vs-web-oat",
+            "bas-vs-web-oat-v4",
+            &request,
+            &identity,
+            "oa_t_ref=WX.oa_t_a=default_lowest_binding",
+        )
+        .unwrap();
+        let primary_key = cache_key(
+            "site-a",
+            "bas-vs-web-oat",
+            "bas-vs-web-oat-v4",
+            &request,
+            &identity,
+            "oa_t_ref=WX.oa_t_b=primary_reference",
+        )
+        .unwrap();
+        assert_ne!(default_key.config_hash, primary_key.config_hash);
+    }
+
     #[tokio::test]
     async fn incompatible_stamp_on_the_current_partition_recomputes() {
         let _cg = CgroupTestEnv::low_pressure();
@@ -1097,7 +1184,8 @@ mod tests {
         let sessions = Mutex::new(SessionBook::new(limits()));
         let request = req("site-a");
         let identity = timescale_identity("model-a", 1, "samples=1;series=1");
-        let key = cache_key("site-a", "rcx-preset", "rcx-preset-v1", &request, &identity).unwrap();
+        let key = cache_key("site-a", "rcx-preset", "rcx-preset-v1", &request, &identity, "")
+            .unwrap();
         let table = AnalyticsResultTable {
             rows: Vec::new(),
             equipment: Vec::new(),

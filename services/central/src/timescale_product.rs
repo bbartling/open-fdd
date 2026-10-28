@@ -2728,6 +2728,13 @@ pub(crate) async fn resolve_site_oa_t_reference(
     }))
 }
 
+pub(crate) fn bas_vs_web_oa_t_config_line(reference: Option<&SiteOatReference>) -> String {
+    match reference {
+        Some(r) => format!("oa_t_ref={}={}", r.openfdd_key, r.selection),
+        None => "oa_t_ref=none".into(),
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct HistoryFillOptions {
     pub site_oa_t: Option<SiteOatReference>,
