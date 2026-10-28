@@ -19,6 +19,7 @@ async fn pool() -> Option<sqlx::PgPool> {
 }
 
 async fn baseline_tables(pool: &sqlx::PgPool) {
+    crate::test_ddl::execute_idempotent_ddl(pool, "DROP VIEW IF EXISTS authorized_series").await;
     for statement in [
         "CREATE TABLE IF NOT EXISTS site (
             site_id text PRIMARY KEY,
