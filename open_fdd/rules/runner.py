@@ -356,6 +356,10 @@ def _params_for_rule(rule: cb.CookbookRule, params_by_rule: dict[str, dict]) -> 
         p.setdefault("require_operational_gate", 0.0)
     overrides = dict(params_by_rule.get(rule.id, {}))
     p.update(overrides)
+    for source in params_by_rule.values():
+        if isinstance(source, dict) and "occupancy_schedule" in source:
+            p.setdefault("occupancy_schedule", source["occupancy_schedule"])
+            break
     # Backward-compatible master sliders/session params. Canonical GL36 ε
     # parameters remain independently adjustable; a changed legacy master
     # intentionally updates each related sensor error unless that specific
@@ -546,6 +550,21 @@ def run_cookbook_rule(
                     f"SKIPPED_EQUIPMENT_OFF — operational gate '{gate_meta.get('gate_kind')}' "
                     f"via {gate_meta.get('gate_source')}: no proven-on samples."
                 ),
+                params_fingerprint=fp,
+            )
+        if (
+            rule.id == "VAV-1"
+            and gate_meta.get("gate_source") == "ungated_no_occ"
+            and float(params.get("require_occupied", 1.0)) >= 0.5
+        ):
+            from open_fdd.rules.base import not_assessed_no_occupancy
+
+            return not_assessed_no_occupancy(
+                rule.id,
+                equipment_id,
+                site_id=sid,
+                building_id=bid,
+                equipment_type=eq_type,
                 params_fingerprint=fp,
             )
 

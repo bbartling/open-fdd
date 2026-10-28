@@ -18,7 +18,7 @@ rules:
     equipment_kinds: [vav, zone_other, heatpump, baseboard]
     sql_file: vav1_comfort_fault.sql
     pandas_function: vav1
-    description: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2
+    description: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2; no occupancy model or schedule → NOT_ASSESSED_NO_OCCUPANCY
     required_roles: [zone_t]
     optional_roles: [occ_mode]
     output_columns: [equipment_id, fault_hours, fault_pct]

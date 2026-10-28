@@ -2,6 +2,8 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- zone_comfort_pct.sql
 -- Comfort is the share of eligible elapsed time inside the band, not a row count.
+-- History `zone_t` is admitted to pack °F before this rule runs; band placeholders
+-- ZONE_T_LO / ZONE_T_HI are °F. Analytics RCx rank uses declared sample units separately.
 WITH ordered AS (
   SELECT
     equipment_id,

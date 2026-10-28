@@ -39,6 +39,7 @@ mod mapping_revision;
 #[cfg(test)]
 mod metering_scope_fixtures;
 mod model_agent_writes;
+mod occupancy_calendar;
 mod models;
 #[cfg(test)]
 mod one_writer_fixtures;
@@ -75,6 +76,7 @@ mod test_env_lock;
 mod timescale_analytics;
 mod timescale_historian;
 mod timescale_product;
+mod zone_comfort_units;
 mod user_store;
 mod vibe21;
 mod wattlab_dump;

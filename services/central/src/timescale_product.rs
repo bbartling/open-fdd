@@ -1236,28 +1236,98 @@ pub async fn rcx_zone_comfort_rank(
     if ids.is_empty() {
         return Ok(None);
     }
-    let rows = sqlx::query(
+    let overlay = open_fdd_edge_prototype::csv_ingest::model_overlay::load_engineer_point_overlay(
+        csv_building_root(building_id).as_path(),
+    )
+    .ok();
+    let binding_rows = sqlx::query(
         r#"
-        SELECT
-          a.equipment_id,
-          (100.0 * AVG(CASE WHEN s.val BETWEEN $2 AND $3 THEN 1.0 ELSE 0.0 END))::float8 AS comfort_pct,
-          COUNT(*)::bigint AS n
-        FROM sample s
-        JOIN authorized_series a
-          ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
-        WHERE s.site_id = $1
+        SELECT a.equipment_id, a.openfdd_key, pm.portal_point_id,
+               (
+                 SELECT s.unit
+                 FROM sample s
+                 WHERE s.site_id = a.site_id
+                   AND s.openfdd_key = a.openfdd_key
+                   AND s.unit IS NOT NULL
+                   AND btrim(s.unit) <> ''
+                 ORDER BY s.ts DESC
+                 LIMIT 1
+               ) AS sample_unit
+        FROM authorized_series a
+        JOIN point_map pm
+          ON pm.site_id = a.site_id AND pm.openfdd_key = a.openfdd_key
+        WHERE a.site_id = $1
           AND a.role = 'zone_t'
-          AND a.equipment_id = ANY($4)
+          AND a.equipment_id = ANY($2)
           AND (
             SELECT count(*) FROM authorized_series c
             WHERE c.site_id = a.site_id
               AND c.equipment_id = a.equipment_id
               AND c.role = a.role
           ) = 1
+        "#,
+    )
+    .bind(building_id)
+    .bind(&ids)
+    .fetch_all(tsdb.pool())
+    .await
+    .context("rcx zone bindings")?;
+    let mut assessable: Vec<String> = Vec::new();
+    for row in &binding_rows {
+        let equipment_id: String = row.try_get("equipment_id")?;
+        let portal_point_id: Option<String> = row.try_get("portal_point_id")?;
+        let sample_unit: Option<String> = row.try_get("sample_unit")?;
+        let engineer = overlay.as_ref().and_then(|store| {
+            portal_point_id
+                .as_ref()
+                .and_then(|pid| store.points.get(pid))
+                .and_then(|entry| entry.unit.clone())
+        });
+        let effective = engineer.as_deref().or(sample_unit.as_deref());
+        if crate::zone_comfort_units::zone_temperature_unit_assessable(effective) {
+            assessable.push(equipment_id);
+        }
+    }
+    assessable.sort();
+    assessable.dedup();
+    if assessable.is_empty() {
+        return Ok(None);
+    }
+    let rows = sqlx::query(
+        r#"
+        WITH band AS (
+          SELECT $2::float8 AS lo_f, $3::float8 AS hi_f
+        )
+        SELECT
+          a.equipment_id,
+          (100.0 * AVG(
+            CASE
+              WHEN btrim(coalesce(s.unit, '')) = '' THEN NULL
+              WHEN lower(regexp_replace(coalesce(s.unit, ''), '[^a-zA-Z0-9]', '', 'g'))
+                   IN ('c', 'degc', 'celsius')
+                THEN CASE
+                  WHEN s.val BETWEEN ((band.lo_f - 32.0) * 5.0 / 9.0)
+                                 AND ((band.hi_f - 32.0) * 5.0 / 9.0)
+                  THEN 1.0 ELSE 0.0 END
+              ELSE CASE
+                WHEN s.val BETWEEN band.lo_f AND band.hi_f THEN 1.0 ELSE 0.0 END
+            END
+          ))::float8 AS comfort_pct,
+          COUNT(*) FILTER (
+            WHERE btrim(coalesce(s.unit, '')) <> ''
+          )::bigint AS n
+        FROM sample s
+        JOIN authorized_series a
+          ON a.site_id = s.site_id AND a.openfdd_key = s.openfdd_key
+        CROSS JOIN band
+        WHERE s.site_id = $1
+          AND a.role = 'zone_t'
+          AND a.equipment_id = ANY($4)
           AND s.val IS NOT NULL
           AND ($5::timestamptz IS NULL OR s.ts >= $5)
           AND ($6::timestamptz IS NULL OR s.ts < $6)
         GROUP BY a.equipment_id
+        HAVING COUNT(*) FILTER (WHERE btrim(coalesce(s.unit, '')) <> '') > 0
         ORDER BY comfort_pct ASC, a.equipment_id ASC
         LIMIT 200
         "#,
@@ -1265,7 +1335,7 @@ pub async fn rcx_zone_comfort_rank(
     .bind(building_id)
     .bind(comfort_low_f)
     .bind(comfort_high_f)
-    .bind(&ids)
+    .bind(&assessable)
     .bind(scope.start)
     .bind(scope.end)
     .fetch_all(tsdb.pool())
@@ -3706,6 +3776,40 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 }));
                 let _ = tx.rollback().await;
                 continue;
+            }
+            if rule.rule_id.eq_ignore_ascii_case("VAV-1") {
+                let require_occ = session_override
+                    .as_ref()
+                    .and_then(|m| m.get("require_occupied"))
+                    .copied()
+                    .unwrap_or(1.0);
+                if require_occ >= 0.5 {
+                    let has_modeled =
+                        crate::occupancy_calendar::history_has_modeled_occ_mode(&mut tx).await?;
+                    if !has_modeled {
+                        if let Some(sched) =
+                            crate::occupancy_calendar::occupancy_schedule_from_payload(payload)
+                        {
+                            crate::occupancy_calendar::synthesize_occ_mode_from_schedule(
+                                &mut tx, &sched,
+                            )
+                            .await?;
+                        } else {
+                            rule_rows.push(json!({
+                                "equipment_id": eq_id,
+                                "status": "NOT_ASSESSED_NO_OCCUPANCY",
+                                "fault_hours": 0.0,
+                                "covered_hours": 0.0,
+                                "fault_pct": Value::Null,
+                                "output_kind": "diagnostic",
+                                "sample_rows": n,
+                                "notes": "VAV-1 requires modeled occ_mode or a site occupancy schedule",
+                            }));
+                            let _ = tx.rollback().await;
+                            continue;
+                        }
+                    }
+                }
             }
             let (observed_start, observed_end) = history_observed_bounds(&mut tx).await?;
             let missing = missing_required_roles(&mut tx, &rule.required_roles).await?;
@@ -6217,6 +6321,8 @@ mod opaque_series_binding {
 #[cfg(test)]
 #[path = "oat_meteo_t1404_test.rs"]
 mod oat_meteo_t1404_test;
+#[path = "vav1_t1407_test.rs"]
+mod vav1_t1407_test;
 
 #[cfg(test)]
 #[path = "duplicate_timestamp_parity.rs"]

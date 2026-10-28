@@ -117,14 +117,17 @@ async fn seed_vav(pool: &sqlx::PgPool, site: &str, equipment_id: &str, values: &
     .expect("equipment");
     let key = format!("{equipment_id}.zone_t");
     for (minute, val) in values.iter().enumerate() {
-        sqlx::query("INSERT INTO sample(ts, site_id, openfdd_key, val) VALUES ($1, $2, $3, $4)")
-            .bind(at(u32::try_from(minute).expect("minute")))
-            .bind(site)
-            .bind(&key)
-            .bind(*val)
-            .execute(pool)
-            .await
-            .expect("sample");
+        sqlx::query(
+            "INSERT INTO sample(ts, site_id, openfdd_key, val, unit) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(at(u32::try_from(minute).expect("minute")))
+        .bind(site)
+        .bind(&key)
+        .bind(*val)
+        .bind("degF")
+        .execute(pool)
+        .await
+        .expect("sample");
     }
     crate::series_binding::bind_series(pool, site, equipment_id, "zone_t", &key).await;
 }
