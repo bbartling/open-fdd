@@ -745,7 +745,7 @@ fn throttle_backoff_secs(attempt: u32, retry_after: Option<u64>, jitter_key: &st
     delay
 }
 
-pub(crate) fn classify_poll_error(
+fn classify_poll_error(
     err: &str,
     attempt: u32,
     now: chrono::DateTime<Utc>,
@@ -1276,6 +1276,20 @@ mod tests {
             classify_poll_error("429", 8, now, 0),
             FinishOutcome::Retry { code, .. } if code == "throttled"
         ));
+    }
+
+    #[test]
+    fn t1423_2_retry_after_at_high_attempt_stays_retry_not_permanent() {
+        let now = Utc::now();
+        for attempt in [8_u32, 99] {
+            assert!(
+                matches!(
+                    classify_poll_error("throttled:4", attempt, now, 4),
+                    FinishOutcome::Retry { code, .. } if code == "throttled"
+                ),
+                "attempt {attempt} must stay retryable"
+            );
+        }
     }
 
     #[test]

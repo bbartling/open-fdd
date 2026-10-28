@@ -431,7 +431,7 @@ impl NfPortalDriver {
         let (status, bytes, retry_after) = self.send(&url, None, true, true).await?;
         self.ensure_success(status, retry_after)?;
         let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
-        parse_get_data_json(text, limits.max_samples_per_response)
+        parse_get_data_json_with_cap(text, limits.max_samples_per_response)
     }
 
     fn ensure_success(
@@ -1300,10 +1300,10 @@ pub(crate) fn next_history_page_start(
 }
 
 pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, ProviderError> {
-    parse_get_data_json(text, MAX_SAMPLES_PER_RESPONSE)
+    parse_get_data_json_with_cap(text, MAX_SAMPLES_PER_RESPONSE)
 }
 
-pub fn parse_get_data_json(
+pub fn parse_get_data_json_with_cap(
     text: &str,
     sample_cap: usize,
 ) -> Result<Vec<RawProviderPoint>, ProviderError> {
