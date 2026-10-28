@@ -255,8 +255,8 @@ pub async fn bas_vs_web_from_history(
         end,
         equipment_ids,
     };
-    let limit = validated_bas_vs_web_max_points(Some(max_points))
-        .context("bas-vs-web-oat max_points")?;
+    let limit =
+        validated_bas_vs_web_max_points(Some(max_points)).context("bas-vs-web-oat max_points")?;
     let value = crate::timescale_analytics::bas_vs_web_oat(&tsdb, bid, &scope, limit)
         .await
         .context("bas_vs_web_oat timescale")?;

@@ -1727,9 +1727,7 @@ pub fn envelope_from_dispatch_value(
         .and_then(|v| v.as_str())
         .unwrap_or(query_version);
     let oa_t_reference = obj.get("oa_t_reference").cloned();
-    let web_asof_bound_seconds = obj
-        .get("web_asof_bound_seconds")
-        .and_then(|v| v.as_f64());
+    let web_asof_bound_seconds = obj.get("web_asof_bound_seconds").and_then(|v| v.as_f64());
     let mut env = AnalyticsEnvelope {
         schema_version,
         query_version: qv.to_string(),

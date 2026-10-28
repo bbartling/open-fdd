@@ -514,8 +514,7 @@ fn envelope_from_table(
         .map(|cov| {
             (
                 cov.get("oa_t_reference").cloned(),
-                cov.get("web_asof_bound_seconds")
-                    .and_then(|v| v.as_f64()),
+                cov.get("web_asof_bound_seconds").and_then(|v| v.as_f64()),
             )
         })
         .unwrap_or((None, None));
@@ -1184,8 +1183,15 @@ mod tests {
         let sessions = Mutex::new(SessionBook::new(limits()));
         let request = req("site-a");
         let identity = timescale_identity("model-a", 1, "samples=1;series=1");
-        let key = cache_key("site-a", "rcx-preset", "rcx-preset-v1", &request, &identity, "")
-            .unwrap();
+        let key = cache_key(
+            "site-a",
+            "rcx-preset",
+            "rcx-preset-v1",
+            &request,
+            &identity,
+            "",
+        )
+        .unwrap();
         let table = AnalyticsResultTable {
             rows: Vec::new(),
             equipment: Vec::new(),

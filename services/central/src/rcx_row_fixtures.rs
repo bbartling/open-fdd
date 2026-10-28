@@ -237,7 +237,9 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
         "HTTP envelope must expose oa_t_reference at top level: {bas}"
     );
     assert!(
-        bas.get("web_asof_bound_seconds").and_then(|v| v.as_f64()).is_some(),
+        bas.get("web_asof_bound_seconds")
+            .and_then(|v| v.as_f64())
+            .is_some(),
         "HTTP envelope must expose web_asof_bound_seconds: {bas}"
     );
 

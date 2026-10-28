@@ -438,7 +438,11 @@ async fn t1404_4_bas_vs_web_web_prefetch_before_window_start() {
     };
     let body = run_bas_vs_web(&pool, &site, &scope).await;
     let rows = body.get("rows").and_then(|v| v.as_array()).expect("rows");
-    assert_eq!(rows.len(), 1, "web sample before window start must as-of join: {body}");
+    assert_eq!(
+        rows.len(),
+        1,
+        "web sample before window start must as-of join: {body}"
+    );
     assert_eq!(rows[0].get("bas_oa_t").and_then(|v| v.as_f64()), Some(50.0));
     assert_eq!(rows[0].get("web_oa_t").and_then(|v| v.as_f64()), Some(48.0));
     purge(&pool, &site).await;
