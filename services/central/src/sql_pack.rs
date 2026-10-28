@@ -432,44 +432,23 @@ async fn project_input(
     }
 }
 
-async fn point_map_has_quantity(conn: &mut PgConnection) -> Result<bool> {
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS (
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'point_map'
-              AND column_name = 'quantity'
-         )",
-    )
-    .fetch_one(&mut *conn)
-    .await
-    .context("point_map quantity column lookup")?;
-    Ok(exists)
-}
-
 async fn project_authorized_series(
     conn: &mut PgConnection,
     building_id: &str,
 ) -> Result<InputGate> {
-    let quantity_expr = if point_map_has_quantity(conn).await? {
-        "COALESCE(
-            NULLIF(btrim(pm.quantity), ''),
-            fdd.quantity_for_sql_role(rm.role)
-         )"
-    } else {
-        "fdd.quantity_for_sql_role(rm.role)"
-    };
-    let unit_expr = "COALESCE(NULLIF(btrim(rm.unit), ''), NULLIF(btrim(pm.unit), ''))";
-    let sql = format!(
-        "CREATE TEMP TABLE authorized_series ON COMMIT DROP AS
+    // Resolved binding metadata lives on point_map (overlay > NF tag > empty; #1429 /
+    // sql/schema/11_point_map_binding_metadata.sql). Empty quantity stays NULL (unresolved).
+    // Role→quantity defaults live in sql/fdd/postgres_helpers.sql (`fdd.quantity_for_sql_role`)
+    // for assessability helpers only; they are not copied into this projection.
+    let sql = "
+         CREATE TEMP TABLE authorized_series ON COMMIT DROP AS
          SELECT
            pm.site_id,
            pm.openfdd_key,
            rm.equipment_id,
            rm.role,
-           {unit_expr} AS unit,
-           {quantity_expr} AS quantity,
+           NULLIF(btrim(pm.unit), '') AS unit,
+           NULLIF(btrim(pm.quantity), '') AS quantity,
            pm.referenced,
            pm.portal_point_id,
            pm.provider_instance_id,
@@ -489,9 +468,8 @@ async fn project_authorized_series(
              SELECT COALESCE(b.site_id, b.building_id)
              FROM building b
              WHERE b.building_id = $1
-           )"
-    );
-    sqlx::query(&sql)
+           )";
+    sqlx::query(sql)
         .bind(building_id)
         .execute(&mut *conn)
         .await
@@ -1000,6 +978,11 @@ async fn relation_stats(conn: &mut PgConnection, relation: &str) -> Result<Value
                 .fetch_all(&mut *conn)
                 .await
                 .context("authorized_series equipment ids")?;
+        let site_ids: Vec<String> =
+            sqlx::query_scalar("SELECT DISTINCT site_id FROM authorized_series ORDER BY 1")
+                .fetch_all(&mut *conn)
+                .await
+                .context("authorized_series site ids")?;
         let rows: i64 = sqlx::query_scalar("SELECT COUNT(*)::bigint FROM authorized_series")
             .fetch_one(&mut *conn)
             .await
@@ -1007,6 +990,7 @@ async fn relation_stats(conn: &mut PgConnection, relation: &str) -> Result<Value
         return Ok(json!({
             "rows": rows,
             "equipment_ids": ids,
+            "site_ids": site_ids,
         }));
     }
     let (id_sql, value_sql) = match relation {
@@ -1372,6 +1356,23 @@ mod tests {
             .expect("fresh connect")
     }
 
+    /// #1429 adds `point_map.quantity`; disposable pack DBs bootstrap it until master carries
+    /// `sql/schema/11_point_map_binding_metadata.sql`.
+    async fn ensure_point_map_binding_metadata(pool: &PgPool) {
+        crate::test_ddl::execute_idempotent_ddl(
+            pool,
+            "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS quantity text",
+        )
+        .await;
+    }
+
+    async fn apply_pack_test_startup(pool: &PgPool) {
+        crate::db_lifecycle::apply_on_startup()
+            .await
+            .expect("db startup");
+        ensure_point_map_binding_metadata(pool).await;
+    }
+
     fn admin_url(database_url: &str) -> String {
         let mut url = url::Url::parse(database_url).expect("database url");
         url.set_path("/postgres");
@@ -1582,9 +1583,7 @@ mod tests {
         fresh_url.set_path(&format!("/{fresh_name}"));
         std::env::set_var("OPENFDD_DATABASE_URL", fresh_url.as_str());
         fdd_tsdb::clear_shared_pool();
-        crate::db_lifecycle::apply_on_startup()
-            .await
-            .expect("ordinary fresh startup");
+        apply_pack_test_startup(&fresh).await;
         let status = pack_status(&fresh).await.expect("fresh pack status");
         assert!(status.compatible, "{status:?}");
         assert!(status.helper_installed, "{status:?}");
@@ -2061,9 +2060,7 @@ mod tests {
         upgrade_url.set_path(&format!("/{upgrade_name}"));
         std::env::set_var("OPENFDD_DATABASE_URL", upgrade_url.as_str());
         fdd_tsdb::clear_shared_pool();
-        crate::db_lifecycle::apply_on_startup()
-            .await
-            .expect("upgrade startup");
+        apply_pack_test_startup(&upgrade).await;
         let after = counts(&upgrade, &kept).await;
         assert_eq!(after, before, "upgrade changed historian rows");
         let upgraded = pack_status(&upgrade).await.expect("upgraded pack");
@@ -2184,9 +2181,7 @@ mod tests {
         url.set_path(&format!("/{db_name}"));
         std::env::set_var("OPENFDD_DATABASE_URL", url.as_str());
         fdd_tsdb::clear_shared_pool();
-        crate::db_lifecycle::apply_on_startup()
-            .await
-            .expect("db startup");
+        apply_pack_test_startup(&pool).await;
 
         let site = format!("u{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
         seed_dimensions(&pool, &site, &[("eq_ahu", "ahu")]).await;
@@ -2213,8 +2208,8 @@ mod tests {
         assert_eq!(stale["status"], "OK", "{stale}");
 
         sqlx::query(
-            "UPDATE role_map SET unit = '%RH'
-             WHERE building_id = $1 AND equipment_id = 'eq_ahu' AND role = 'ra_h'",
+            "UPDATE point_map SET unit = '%RH'
+             WHERE site_id = $1 AND equipment_id = 'eq_ahu' AND role = 'ra_h'",
         )
         .bind(&site)
         .execute(&pool)
@@ -2303,20 +2298,26 @@ mod tests {
         url.set_path(&format!("/{db_name}"));
         std::env::set_var("OPENFDD_DATABASE_URL", url.as_str());
         fdd_tsdb::clear_shared_pool();
-        crate::db_lifecycle::apply_on_startup()
-            .await
-            .expect("db startup");
+        apply_pack_test_startup(&pool).await;
 
         let site = format!("s{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
         let foreign = format!("f{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
-        seed_dimensions(&pool, &site, &[("eq_ahu", "ahu")]).await;
+        seed_dimensions(
+            &pool,
+            &site,
+            &[("eq_ahu", "ahu"), ("eq_sp_only", "ahu")],
+        )
+        .await;
         seed_dimensions(&pool, &foreign, &[("eq_ahu", "ahu")]).await;
         for minutes in (0..269_i64).map(|idx| idx * 5) {
             put_sample(&pool, &site, "eq_ahu", "fan_status", minutes, 1.0, None).await;
             put_sample(&pool, &site, "eq_ahu", "ra_h", minutes, 45.0, Some("%RH")).await;
             put_sample(&pool, &site, "eq_ahu", "sat_sp", minutes, 55.0, None).await;
+            put_sample(&pool, &site, "eq_sp_only", "fan_status", minutes, 1.0, None).await;
+            put_sample(&pool, &site, "eq_sp_only", "sat_sp", minutes, 55.0, None).await;
         }
-        for minutes in [0_i64, 60, 120] {
+        for minutes in (0..269_i64).map(|idx| idx * 5) {
+            put_sample(&pool, &foreign, "eq_ahu", "fan_status", minutes, 1.0, None).await;
             put_sample(
                 &pool,
                 &foreign,
@@ -2329,16 +2330,16 @@ mod tests {
             .await;
         }
         sqlx::query(
-            "UPDATE role_map SET unit = '%RH'
-             WHERE building_id = $1 AND equipment_id = 'eq_ahu' AND role = 'ra_h'",
+            "UPDATE point_map SET unit = '%RH'
+             WHERE site_id = $1 AND equipment_id = 'eq_ahu' AND role = 'ra_h'",
         )
         .bind(&site)
         .execute(&pool)
         .await
         .expect("humidity unit");
         sqlx::query(
-            "UPDATE role_map SET unit = '%RH'
-             WHERE building_id = $1 AND equipment_id = 'eq_ahu' AND role = 'ra_h'",
+            "UPDATE point_map SET unit = '%RH'
+             WHERE site_id = $1 AND equipment_id = 'eq_ahu' AND role = 'ra_h'",
         )
         .bind(&foreign)
         .execute(&pool)
@@ -2381,22 +2382,51 @@ mod tests {
                 .is_some_and(|n| n > 0),
             "{auth}"
         );
+        let site_ids = auth
+            .get("site_ids")
+            .and_then(Value::as_array)
+            .expect("authorized_series site_ids");
+        assert_eq!(site_ids.len(), 1, "{auth}");
+        assert_eq!(site_ids[0].as_str(), Some(site.as_str()), "{auth}");
+        assert!(
+            !site_ids
+                .iter()
+                .any(|id| id.as_str() == Some(foreign.as_str())),
+            "foreign site must not appear in scoped authorized_series: {auth}"
+        );
 
         let stale = row(&run, "SV-STALE", "eq_ahu");
         assert_ne!(stale["status"], "SKIP_UNSUPPORTED", "{stale}");
         assert_eq!(stale["status"], "FAULT", "{stale}");
         assert!(hours(stale) > 0.0, "{stale}");
 
+        let flat_sp = row(&run, "SV-FLATLINE", "eq_sp_only");
+        assert_ne!(flat_sp["status"], "SKIP_UNSUPPORTED", "{flat_sp}");
+        assert_eq!(
+            flat_sp["status"], "OK",
+            "constant sat_sp alone must not flatline-fault: {flat_sp}"
+        );
+        let stale_sp = row(&run, "SV-STALE", "eq_sp_only");
+        assert_ne!(stale_sp["status"], "SKIP_UNSUPPORTED", "{stale_sp}");
+        assert_eq!(
+            stale_sp["status"], "OK",
+            "constant sat_sp alone must not stale-fault: {stale_sp}"
+        );
+
         fdd_tsdb::clear_shared_pool();
         let foreign_run = crate::timescale_product::run_fdd_registry(&serde_json::json!({
-            "building_id": site,
+            "building_id": foreign,
             "rule_ids": ["SV-RANGE"],
             "confirmation_seconds": 0,
         }))
         .await
-        .expect("scoped sv range run");
+        .expect("foreign sv range positive control");
         let foreign_range = row(&foreign_run, "SV-RANGE", "eq_ahu");
-        assert_ne!(foreign_range["status"], "FAULT", "{foreign_range}");
+        assert_eq!(
+            foreign_range["status"], "FAULT",
+            "out-of-range foreign humidity must range-fault: {foreign_range}"
+        );
+        assert!(hours(foreign_range) > 0.0, "{foreign_range}");
 
         pool.close().await;
         fdd_tsdb::clear_shared_pool();
