@@ -42,7 +42,7 @@ retest. Do not confuse those with this engineering OS.
 | `openfdd_agent_spec/` | Agent law, Milestone A, skills, session log |
 | Playground vibe19/20 | External demos; consumers of PyPI |
 
-**Package / timestamp contract (product + PyPI):** `timestamp_utc` is RFC3339 UTC (`Z` or `+00:00`). Rust ingest skips bad rows (no epoch 0 / now). Pandas oracle uses `open_fdd.timestamps.to_utc_datetime`. String `"equip"` on a Haystack sidecar is metadata. **Package authoring (any BAS job):** [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md). Modeling (compact map vs SCAFFOLD, HP buildings, readiness): [`../docs/modeling/`](../docs/modeling/). Aliases: [`../docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
+**Package / timestamp contract (product + PyPI):** `timestamp_utc` is RFC3339 UTC (`Z` or `+00:00`). Rust ingest skips bad rows (no epoch 0 / now). Pandas oracle uses `open_fdd.timestamps.to_utc_datetime`. String `"equip"` on a Haystack sidecar is metadata. **Package authoring (any BAS job):** [`../docs/agent/PACKAGE_AUTHORING.md`](../docs/agent/PACKAGE_AUTHORING.md). Modeling (compact map vs SCAFFOLD, HP buildings, readiness, provider unit overlay): [`../docs/modeling/`](../docs/modeling/) ([`provider-point-overlay.md`](../docs/modeling/provider-point-overlay.md)). Aliases: [`../docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](../docs/migration/vibe19/ROLE_MAPPING_PARITY.md).
 
 **Naming (code truth):**
 

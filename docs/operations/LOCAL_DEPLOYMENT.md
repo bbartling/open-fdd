@@ -196,7 +196,10 @@ The local stack merges `docker/compose.portal.yml`, `docker/compose.timescale.ym
 | `OPENFDD_AFDD_INTERVAL_MINUTES` | Continuous AFDD cadence |
 | `OPENFDD_AFDD_LOOKBACK_VALUE` / `OPENFDD_AFDD_LOOKBACK_UNIT` | Rolling lookback per AFDD cycle |
 
-Unset names stay unset inside central (compose uses `${VAR:-}`).
+For continuous AFDD across every loaded NF site, leave **`OPENFDD_AFDD_BUILDING_ID`**
+and **`OPENFDD_AFDD_BUILDING_IDS` unset** and set `OPENFDD_AFDD_MODE=continuous`
+(see [`AFDD_MODES.md`](AFDD_MODES.md)). Compose forwards the names above from
+repo-root `.env`; unset names stay unset inside central (`${VAR:-}`).
 
 The **Multi-site NF providers** section above covers site JSON paths and the
 narrow `OPENFDD_NF_PROVIDER_CREDENTIALS_ENV` file for per-site `env:NAME`

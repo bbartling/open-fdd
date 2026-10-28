@@ -35,4 +35,5 @@ Opaque point identity resolves via `GET /api/model/point-resolve` → SQL roles 
 | [Haystack model](haystack-model.html) | REST + SPARQL |
 | [Haystack RDF profile](haystack-rdf-profile.html) | Strict TTL projection |
 | [Zone terminals](zone-terminals.html) | FCU / UV stamps |
+| [Provider point overlay](provider-point-overlay.html) | Engineer `unit` / `quantity` / `primary_reference` via `POST /api/model/point` |
 | [Rule Cookbook]({{ site.baseurl }}/rules/) | SQL + pandas catalogs |

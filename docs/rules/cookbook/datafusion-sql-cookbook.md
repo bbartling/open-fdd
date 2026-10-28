@@ -900,25 +900,31 @@ WHERE equipment_id = 'equip:your-id'
 
 ### OAT-METEO — BAS outdoor-air sensor vs Open-Meteo
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F.  
-The shipped rule (`sql_rules/oat_meteo_fault.sql`) does not filter `equipment_id`. Applicability is registry `equipment_kinds: [ahu]` plus the package stamp, so `AC_1` stamped `ahu` is in scope and an id that starts with `AHU` but is stamped `vav` is not.  
+**Equation:** BAS outdoor-air sensor differs from Open-Meteo dry bulb by more than 5°F after an as-of web alignment.  
+The shipped rule (`sql/fdd/postgres/rules/oat_meteo_fault.sql`) does not filter `equipment_id`. Applicability is registry `equipment_kinds: [ahu]` plus the package stamp, so `AC_1` stamped `ahu` is in scope and an id that starts with `AHU` but is stamped `vav` is not.  
 **Default confirmation:** 900 s
 
 | Param | Label | Unit | Default | Range |
 |-------|-------|------|--------:|-------|
 | `oat_err` | Max OAT disagreement | °F | 5.0 | 2.0–20.0 |
+| `web_cadence_seconds` | Web weather cadence | sec | 1200 | 300–7200 |
+| `web_asof_margin_seconds` | Web as-of margin | sec | 300 | 0–1800 |
+
+Web OAT (`web_oa_t` on equipment or weather rows) is joined **as-of** each local BAS timestamp: carry the last web sample forward. Samples whose last web value is older than `web_cadence_seconds + web_asof_margin_seconds` are **not assessed** (not fault time). Local `oa_t` uses the point marked `primary_reference` for the role when set; see [`provider-point-overlay.md`](../../modeling/provider-point-overlay.html).
 
 ```sql
 -- confirmation_seconds: 900
 -- param: oat_err = 5.0
+-- param: web_cadence_seconds = 1200, web_asof_margin_seconds = 300
+-- assessable=false → not assessed; assessable=true and |oa_t - ref| > oat_err → fault_raw
 SELECT
-  timestamp, equipment_id, oa_t, oat_meteo,
+  timestamp, equipment_id, oa_t, ref_oa_t, assessable,
   CASE
-    WHEN oa_t IS NULL OR oat_meteo IS NULL THEN false
-    WHEN abs(oa_t - oat_meteo) > 5.0 THEN true
+    WHEN NOT assessable THEN NULL
+    WHEN abs(oa_t - ref_oa_t) > 5.0 THEN true
     ELSE false
   END AS fault_raw
-FROM telemetry_pivot
+FROM joined
 WHERE equipment_id = 'equip:your-ahu'
 ```
 
@@ -7589,10 +7595,11 @@ GROUP BY equipment_id;
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- oat_meteo_fault.sql — BAS OAT vs meteo reference (|Δ| > threshold) + confirm
--- Prefer equipment web_oa_t (pandas); fall back to a weather join only when the
--- equipment has no web reference. `weather` may resolve to a view spanning
--- several weather equipment rows, so collapse it to one row per timestamp first —
--- otherwise the join fans out and multiplies fault_hours.
+-- Web weather is joined as-of: carry the last web sample forward up to
+-- WEB_ASOF_BOUND_SECONDS (web cadence + margin from registry). Beyond that bound
+-- the local sample is not compared (not-assessed seconds, never a no-fault).
+-- Local oa_t uses primary_reference when set (engineer overlay); see docs/modeling/provider-point-overlay.md.
+-- Prefer equipment web_oa_t (pandas); fall back to weather rows when absent.
 -- Targeting is registry equipment_kinds (ahu) plus the package stamp applied
 -- after this query. This file does not filter equipment_id by prefix or LIKE.
 WITH wx AS (

@@ -14,7 +14,21 @@ Open-FDD uses **one** Timescale / PostgreSQL SQL registry (`sql/fdd`) for fault 
 
 ## Multi-site / Jobs
 
-Historian and FDD scope by **`building_id`**. Switching Jobs in the UI must not pause MQTT ingest or continuous AFDD on other buildings. Continuous AFDD can keep cycling on an OT site while an operator imports synthetic CSV and runs bulk FDD on another building.
+Historian and FDD scope by **`building_id`**. Switching Jobs in the UI must not pause NF portal ingest or continuous AFDD on other buildings. Continuous AFDD can keep cycling on one portal site while an operator imports synthetic CSV and runs bulk FDD on another building.
+
+### Continuous scope (env)
+
+When `OPENFDD_AFDD_MODE=continuous`, central resolves which buildings the timer runs:
+
+| Env | Behavior |
+| --- | --- |
+| `OPENFDD_AFDD_BUILDING_ID` unset and `OPENFDD_AFDD_BUILDING_IDS` empty | **All sites:** one registry run per enabled building (provider sites plus Timescale inventory, de-duplicated). Each run carries an explicit `building_id`. |
+| `OPENFDD_AFDD_BUILDING_ID=<id>` | Single-building scope when the list env is empty. |
+| `OPENFDD_AFDD_BUILDING_IDS=a,b,c` | Explicit comma-separated subset (wins over single id). Unknown ids fail at startup with a clear error. |
+
+Each scheduled site keeps its **own watermark and checkpoint**, so a slow site does not block others. Chunks stay bounded by lookback. `GET /api/afdd/status` (alias `/api/afdd/scheduler/status`) lists every scheduled site with last window and result summary.
+
+Compose forwards `OPENFDD_AFDD_*` and ingest tuning vars from repo-root `.env` through `docker/compose.local.yml` (see [`LOCAL_DEPLOYMENT.md`](LOCAL_DEPLOYMENT.md)).
 
 ## SkySpark-like continuous (opt-in)
 
@@ -38,7 +52,7 @@ OPENFDD_AFDD_LOOKBACK_UNIT=hours
 
 The timezone is an operator IANA name. `America/Chicago` is the lab recipe so the cycle can finish before a 06:00 digest. It is not a product default and it is not a building id. The analysis window still ends at the latest persisted telemetry watermark (`start = end − lookback`). A missed day while the process is down is one lookback-sized cycle (`catch_up`), not one full-history pass per missed day.
 
-Lookback bounds are passed as `start_utc` / `end_utc` on the registry run and applied as SQL window filters on Timescale `history` (and `weather` when present). The result write upserts only that window. Slices outside the window stay unchanged (`rows_sha256` on `GET /api/afdd/scheduler/result-slices`). There is no scheduler "update all". If the existing result file is missing, the window is the first slice. If it cannot be read or parsed, the publish fails and the file is left unchanged.
+Lookback bounds are passed as `start` and `end` on the registry run payload (UTC) and applied as SQL window filters on Timescale `history` (and `weather` when present). The result write upserts only that window. **`run_fdd_registry` persists runs to PostgreSQL** (`fdd_run`, `fdd_interval_result`, `fdd_incremental_checkpoint`); `/api/fdd/results` reads those tables. Legacy `{rule_id}.json` manifests under the workspace rule-results tree are not written on the Timescale path and may be removed manually after verification ([`LOCAL_HOSTING.md`](LOCAL_HOSTING.md)). Slices outside the AFDD window stay unchanged where windowed slice metadata exists (`rows_sha256` on `GET /api/afdd/scheduler/result-slices`). There is no scheduler "update all". If the existing result file is missing, the window is the first slice. If it cannot be read or parsed, the publish fails and the file is left unchanged.
 
 `lookback_matches_cadence` on scheduler status is true when that lookback equals the cadence: 24h for wall-clock, or `interval_minutes` for interval mode. A 3-hour interval with a 3-day lookback stays valid and reports false. Downtime does not stretch the window.
 
@@ -91,7 +105,7 @@ Heavy analytics/AFDD **shed** new work at `OPENFDD_MEMORY_SHED_FRACTION` (defaul
 
 ## Feather / Parquet dual-write
 
-**Forbidden.** Timescale is the sole product historian ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). NF portal REST, NF LAN gRPC (per-site `transport`) and CSV share one validated, idempotent Timescale telemetry writer. Do not add a Feather / Parquet / Arrow hot tier, raw-data mirror, result-file cache, or legacy fallback for lookback, speed, or migration. The `{rule_id}.json` result files and windowed slices above are current behavior; the target is PostgreSQL result tables.
+**Forbidden.** Timescale is the sole product historian ([ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). NF portal REST, NF LAN gRPC (per-site `transport`) and CSV share one validated, idempotent Timescale telemetry writer. Do not add a Feather / Parquet / Arrow hot tier, raw-data mirror, or legacy fallback for lookback, speed, or migration. AFDD and bulk FDD **results** belong in PostgreSQL (`fdd_run`, …) and bounded memory — not parallel manifest JSON stores.
 
 ## Suspend telemetry (per site/edge)
 
