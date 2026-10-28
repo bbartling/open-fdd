@@ -5,9 +5,11 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -31,6 +33,7 @@ def _load_capture():
 
 capture = _load_capture()
 baseline_io = importlib.import_module("si_cutover.baseline_io")
+baseline_history = importlib.import_module("si_cutover.baseline_history")
 
 
 class CaptureIpBaselineSelfTest(unittest.TestCase):
@@ -61,6 +64,138 @@ class CaptureIpBaselineSelfTest(unittest.TestCase):
             self.assertTrue(doc["files"][0]["sha256"])
 
 
+class CaptureRequirements(unittest.TestCase):
+    def test_require_database_url_missing_fails(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(SystemExit) as ctx:
+                capture.require_database_url()
+            self.assertIn("OPENFDD_DATABASE_URL", str(ctx.exception))
+
+    def test_main_exits_nonzero_on_pandas_pair_errors(self) -> None:
+        jwt = tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False)
+        sites = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        try:
+            jwt.write("OPENFDD_API_BASE=http://127.0.0.1:8080\n")
+            jwt.flush()
+            sites.write(json.dumps([{"building_id": "SITE_A"}]))
+            sites.flush()
+            env = {
+                "OPENFDD_DATABASE_URL": "postgresql://u:p@127.0.0.1:5432/openfdd",
+            }
+            summary = {
+                "building_id": "SITE_A",
+                "pandas_errors": ["FC1/AHU_1: boom"],
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                with mock.patch.object(capture, "load_dotenv_file"):
+                    with mock.patch.object(capture, "load_sites_config", return_value=[{"building_id": "SITE_A"}]):
+                        with mock.patch.object(capture, "load_rule_registry", return_value=[{"rule_id": "FC1"}]):
+                            with mock.patch.object(capture, "client") as client_cm:
+                                http = mock.MagicMock()
+                                client_cm.return_value.__enter__ = mock.Mock(return_value=http)
+                                client_cm.return_value.__exit__ = mock.Mock(return_value=False)
+                                with mock.patch.object(capture, "wait_until_ready"):
+                                    with mock.patch.object(capture, "login", return_value={}):
+                                        with mock.patch.object(capture, "health_shortsha", return_value="abc1234"):
+                                            with mock.patch.object(capture, "db_connect") as db_cm:
+                                                conn = mock.MagicMock()
+                                                db_cm.return_value.__enter__ = mock.Mock(return_value=conn)
+                                                db_cm.return_value.__exit__ = mock.Mock(return_value=False)
+                                                with mock.patch.object(
+                                                    capture,
+                                                    "capture_site",
+                                                    return_value=summary,
+                                                ):
+                                                    with mock.patch.object(capture, "require_pandas_oracle"):
+                                                        rc = capture.main(
+                                                            [
+                                                                "--jwt-env",
+                                                                jwt.name,
+                                                                "--sites-config",
+                                                                sites.name,
+                                                                "--skip-pandas",
+                                                            ]
+                                                        )
+            self.assertEqual(rc, 1)
+            with mock.patch.dict(os.environ, env, clear=False):
+                with mock.patch.object(capture, "load_dotenv_file"):
+                    with mock.patch.object(capture, "load_sites_config", return_value=[{"building_id": "SITE_A"}]):
+                        with mock.patch.object(capture, "load_rule_registry", return_value=[{"rule_id": "FC1"}]):
+                            with mock.patch.object(capture, "client") as client_cm:
+                                http = mock.MagicMock()
+                                client_cm.return_value.__enter__ = mock.Mock(return_value=http)
+                                client_cm.return_value.__exit__ = mock.Mock(return_value=False)
+                                with mock.patch.object(capture, "wait_until_ready"):
+                                    with mock.patch.object(capture, "login", return_value={}):
+                                        with mock.patch.object(capture, "health_shortsha", return_value="abc1234"):
+                                            with mock.patch.object(capture, "db_connect") as db_cm:
+                                                conn = mock.MagicMock()
+                                                db_cm.return_value.__enter__ = mock.Mock(return_value=conn)
+                                                db_cm.return_value.__exit__ = mock.Mock(return_value=False)
+                                                with mock.patch.object(
+                                                    capture,
+                                                    "capture_site",
+                                                    return_value=summary,
+                                                ):
+                                                    with mock.patch.object(capture, "require_pandas_oracle"):
+                                                        rc_ok = capture.main(
+                                                            [
+                                                                "--jwt-env",
+                                                                jwt.name,
+                                                                "--sites-config",
+                                                                sites.name,
+                                                                "--skip-pandas",
+                                                                "--allow-errors",
+                                                            ]
+                                                        )
+            self.assertEqual(rc_ok, 0)
+        finally:
+            os.unlink(jwt.name)
+            os.unlink(sites.name)
+
+
+class BaselineHistoryPaging(unittest.TestCase):
+    def test_load_samples_pages_beyond_5000(self) -> None:
+        page_size = baseline_history.PAGE_SIZE
+        total = page_size + 1500
+        start = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        all_rows = [(start + timedelta(minutes=i), float(i)) for i in range(total)]
+
+        conn = mock.MagicMock()
+        state = {"loads": 0}
+
+        def fetchone():
+            return (total,)
+
+        def fetchall():
+            if state["loads"] == 0:
+                state["loads"] = 1
+                return all_rows[:page_size]
+            if state["loads"] == 1:
+                state["loads"] = 2
+                return all_rows[page_size:]
+            return []
+
+        def make_cursor():
+            cur = mock.MagicMock()
+            cur.fetchone.side_effect = fetchone
+            cur.fetchall.side_effect = fetchall
+            return cur
+
+        conn.cursor.return_value.__enter__ = mock.Mock(side_effect=make_cursor)
+        conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+
+        loaded = baseline_history.load_samples_in_window(
+            conn,
+            site_id="B1",
+            openfdd_key="AHU_1.fan_status",
+            window_start="2026-06-01T00:00:00Z",
+            window_end="2026-06-08T00:00:00Z",
+            page_size=page_size,
+        )
+        self.assertEqual(len(loaded), total)
+
+
 class CaptureFixtureStack(unittest.TestCase):
     """Mocked stack run: output shapes and telemetry counts unchanged."""
 
@@ -71,14 +206,6 @@ class CaptureFixtureStack(unittest.TestCase):
             "run_id": "run-ci-1",
             "window_start": "2026-06-01T00:00:00Z",
             "window_end": "2026-06-02T00:00:00Z",
-            "results": [
-                {
-                    "rule_id": "FC1",
-                    "equipment_id": "AHU_1",
-                    "fault_hours": 0.05,
-                    "status": "FAULT",
-                }
-            ],
         }
         counts = {"sample": 12, "point_map": 4, "authorized_series": 4}
 
@@ -106,17 +233,32 @@ class CaptureFixtureStack(unittest.TestCase):
         fake_cursor = mock.MagicMock()
         fake_conn.cursor.return_value.__enter__ = mock.Mock(return_value=fake_cursor)
         fake_conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
-        fake_cursor.fetchone.side_effect = [(n,) for n in counts.values()] * 2
-        fake_cursor.fetchall.side_effect = [[], [], []]
+        count_values = [n for n in counts.values()] * 2
+        fake_cursor.fetchone.side_effect = [(n,) for n in count_values]
+        fake_cursor.fetchall.side_effect = [
+            [],
+            [("AHU_1.fan_status", "1")],
+        ]
+
+        sql_row = {
+            "building_id": building_id,
+            "rule_id": "FC1",
+            "equipment_id": "AHU_1",
+            "utc_day": "2026-06-01",
+            "fault_seconds": 180.0,
+            "covered_seconds": 3600.0,
+            "status": "FAULT",
+        }
 
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp)
-            with mock.patch.object(capture, "db_connect", return_value=fake_conn):
-                with mock.patch.object(capture, "analytics_rows_for_site", return_value=[]):
-                    with mock.patch.object(capture, "pandas_daily_rows", return_value=[]):
+            with mock.patch.object(capture, "fetch_sql_daily_rows", return_value=[sql_row]):
+                with mock.patch.object(capture, "fetch_run_status_rows", return_value={}):
+                    with mock.patch.object(capture, "analytics_rows_for_site", return_value=[]):
                         summary = capture.capture_site(
                             FakeHttp(),
                             {},
+                            fake_conn,
                             site={"building_id": building_id},
                             out_dir=out_dir,
                             rules=[{"rule_id": "FC1", "pandas_function": "fc1"}],
