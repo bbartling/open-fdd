@@ -85,12 +85,9 @@ pub trait DataProvider: Send + Sync {
         &mut self,
     ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
     /// Bounded history read. NF implements this as `GET /api/v1/point/data` only.
-    #[cfg_attr(
-        test,
-        expect(
-            dead_code,
-            reason = "DataProvider trait contract; poller uses read_history_page on ingest path"
-        )
+    #[expect(
+        dead_code,
+        reason = "DataProvider adapter contract; production ingest uses read_history_page"
     )]
     fn fetch_history(
         &mut self,

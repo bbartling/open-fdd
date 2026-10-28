@@ -475,6 +475,7 @@ impl NfPortalDriver {
             };
             cursor = next;
         }
+        let _ = super::error::PAGING_BOUNDARY_CODES;
         Ok(PagedHistoryPoints {
             points: out,
             complete: false,

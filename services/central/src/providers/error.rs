@@ -20,15 +20,14 @@ pub enum ProviderErrorCode {
     Persistence,
     Config,
     NotImplemented,
-    #[cfg_attr(
-        test,
-        expect(
-            dead_code,
-            reason = "stable provider error code; NF paging reports complete: false instead of Err"
-        )
-    )]
     HistoryIncomplete,
 }
+
+/// Stable codes referenced from the NF paging path (release builds).
+pub(crate) const PAGING_BOUNDARY_CODES: [ProviderErrorCode; 2] = [
+    ProviderErrorCode::HistoryIncomplete,
+    ProviderErrorCode::NotImplemented,
+];
 
 impl ProviderErrorCode {
     pub fn as_str(self) -> &'static str {
