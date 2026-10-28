@@ -26,27 +26,6 @@ async fn apply_schema(pool: &sqlx::PgPool) {
     crate::portal_inventory_fixtures::apply_schema(pool).await;
 }
 
-fn sat_point(unit: Option<&str>, his_mode: Option<&str>) -> InventoryPoint {
-    InventoryPoint {
-        portal_point_id: "pt-sat-t1406".into(),
-        display_name: None,
-        unit: unit.map(str::to_string),
-        equipment_id: "AHU_1".into(),
-        equip_type: Some("ahu".into()),
-        equip_dis: None,
-        equip_markers: vec!["ahu".into()],
-        role: "sat".into(),
-        markers: vec!["sensor".into(), "temp".into()],
-        kind: Some("Number".into()),
-        tz: None,
-        his: Some(true),
-        his_mode: his_mode.map(str::to_string),
-        enum_value: None,
-        ref_rel: None,
-        ref_id: None,
-    }
-}
-
 fn snapshot_with_id(
     portal_point_id: &str,
     unit: Option<&str>,
