@@ -16,10 +16,10 @@ use open_fdd_edge_prototype::csv_ingest::model_overlay::{
     effective_point_quantity, effective_point_unit, effective_primary_reference,
     load_engineer_point_overlay, EngineerPointOverlayEntry, EngineerPointOverlayPatch,
 };
-use sqlx::Row;
 use open_fdd_edge_prototype::csv_ingest::portal_ingest_sparql::{
     validate_binding_rows, validate_slug, validate_unit, IngestBindingRow,
 };
+use sqlx::Row;
 
 pub const SCHEMA: &str = "ofdd_portal_committed_model_v1";
 pub const PLAN_SCHEMA: &str = "ofdd_portal_ingest_plan_v1";

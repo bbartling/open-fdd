@@ -6,8 +6,8 @@ use open_fdd_edge_prototype::csv_ingest::model_overlay;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Row;
 
-use crate::providers::committed_model::refresh_point_map_overlay;
 use super::{apply_to_stores, InventoryDiagnostics, InventoryPoint, InventorySnapshot};
+use crate::providers::committed_model::refresh_point_map_overlay;
 
 const SOURCE: &str = "nf:t1406-2";
 
