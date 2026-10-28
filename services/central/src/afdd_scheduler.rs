@@ -24,7 +24,8 @@ use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use fdd_store::{
     apply_scheduler_config_update, lookback_equals_schedule_cadence, next_due_at,
-    parse_backfill_request, plan_bounded_backfill, plan_continuous_cycle, wall_clock_local_rfc3339,
+    parse_backfill_request, plan_bounded_backfill, plan_continuous_cycle,
+    plan_continuous_lookback_chunks, wall_clock_local_rfc3339,
     AfddBackfillChunk, AfddConfig, AfddCycleWindow, AfddMode, AfddOperatorSchedule,
     AfddSchedulerCheckpoint, AfddSchedulerCheckpointStore, SchedulerConfigUpdate,
     AFDD_SCHEDULER_CHECKPOINTS_PATH, AFDD_SCHEDULER_CHECKPOINT_PATH,
@@ -113,12 +114,77 @@ struct RuntimeStatus {
     last_error: Option<String>,
 }
 
+/// Parsed `OPENFDD_AFDD_CHUNK_HOURS`. Unset → 1 hour. Invalid values are errors surfaced in status.
+#[derive(Debug, Clone)]
+struct AfddChunkEnv {
+    hours: Option<u64>,
+    error: Option<String>,
+}
+
+impl AfddChunkEnv {
+    fn from_env() -> Self {
+        match std::env::var("OPENFDD_AFDD_CHUNK_HOURS") {
+            Err(_) => Self {
+                hours: Some(1),
+                error: None,
+            },
+            Ok(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    return Self {
+                        hours: None,
+                        error: Some(
+                            "OPENFDD_AFDD_CHUNK_HOURS is set but empty; use a positive integer or unset for default 1 hour"
+                                .into(),
+                        ),
+                    };
+                }
+                match trimmed.parse::<u64>() {
+                    Ok(0) => Self {
+                        hours: None,
+                        error: Some(
+                            "OPENFDD_AFDD_CHUNK_HOURS must be greater than zero".into(),
+                        ),
+                    },
+                    Ok(hours) => Self {
+                        hours: Some(hours),
+                        error: None,
+                    },
+                    Err(_) => Self {
+                        hours: None,
+                        error: Some(format!(
+                            "OPENFDD_AFDD_CHUNK_HOURS must be a positive integer (got {trimmed:?})"
+                        )),
+                    },
+                }
+            }
+        }
+    }
+
+    fn resolved_hours(&self) -> Result<u64> {
+        if let Some(message) = &self.error {
+            anyhow::bail!("{message}");
+        }
+        self.hours.ok_or_else(|| {
+            anyhow::anyhow!("OPENFDD_AFDD_CHUNK_HOURS is not configured")
+        })
+    }
+
+    fn configured_chunk_seconds(&self) -> Option<u64> {
+        self.error
+            .is_none()
+            .then(|| self.hours?)
+            .map(|hours| hours.saturating_mul(3600))
+    }
+}
+
 pub struct AfddSchedulerRuntime {
     config: Mutex<AfddConfig>,
     store: CanonicalStateStore,
     scope_locks: DashMap<String, Arc<AsyncMutex<()>>>,
     status: Mutex<RuntimeStatus>,
     scheduled_buildings: Mutex<Vec<String>>,
+    chunk_env: AfddChunkEnv,
 }
 
 impl AfddSchedulerRuntime {
@@ -142,6 +208,7 @@ impl AfddSchedulerRuntime {
             scope_locks: DashMap::new(),
             status: Mutex::new(RuntimeStatus::default()),
             scheduled_buildings: Mutex::new(Vec::new()),
+            chunk_env: AfddChunkEnv::from_env(),
         }))
     }
 
@@ -583,15 +650,14 @@ impl AfddSchedulerRuntime {
             );
         };
 
-        let chunk_hours = afdd_chunk_hours();
+        let chunk_hours = self.chunk_env.resolved_hours().context("AFDD chunk hours")?;
         let chunk_seconds = chunk_hours.saturating_mul(3600);
-        let time_chunks = plan_bounded_backfill(window.start_utc, window.end_utc, chunk_hours)
-            .unwrap_or_else(|_| {
-                vec![AfddBackfillChunk {
-                    start_utc: window.start_utc,
-                    end_utc: window.end_utc,
-                }]
-            });
+        let time_chunks = plan_continuous_lookback_chunks(
+            window.start_utc,
+            window.end_utc,
+            chunk_hours,
+        )
+        .context("plan continuous AFDD lookback chunks")?;
 
         if scope == "all" {
             anyhow::bail!("AFDD registry run requires an explicit building_id");
@@ -786,7 +852,8 @@ impl AfddSchedulerRuntime {
         let timer_enabled = config.mode == AfddMode::Continuous;
         let schedule_kind = config.schedule_kind;
         let watermark_source = "timescale_sample_max_ts";
-        let chunk_seconds = afdd_chunk_seconds();
+        let configured_chunk_seconds = self.chunk_env.configured_chunk_seconds();
+        let chunk_hours_config_error = self.chunk_env.error.clone();
         let latest_cycle = recent_cycles.front();
         let mut sites = Vec::new();
         for building_id in &scheduled {
@@ -807,9 +874,7 @@ impl AfddSchedulerRuntime {
                 "last_cycle": last_cycle,
                 "cycle_window_start": last_cycle.map(|r| r.start_utc),
                 "cycle_window_end": last_cycle.map(|r| r.end_utc),
-                "chunk_seconds": last_cycle
-                    .and_then(|r| r.chunk_seconds)
-                    .unwrap_or(chunk_seconds),
+                "chunk_seconds": last_cycle.and_then(|r| r.chunk_seconds),
             }));
         }
         let timer_scope = if scheduled.len() == 1 {
@@ -827,7 +892,8 @@ impl AfddSchedulerRuntime {
             "sites": sites,
             "watermark_source": watermark_source,
             "result_write": "lookback_window",
-            "chunk_seconds": chunk_seconds,
+            "chunk_seconds": configured_chunk_seconds,
+            "chunk_hours_config_error": chunk_hours_config_error,
             "cycle_window_start": latest_cycle.map(|r| r.start_utc),
             "cycle_window_end": latest_cycle.map(|r| r.end_utc),
             "lookback_equals_schedule_cadence": lookback_equals_schedule_cadence(&config),
@@ -889,18 +955,6 @@ pub(crate) fn collect_known_afdd_buildings(state: &AppState) -> Vec<String> {
         }
     }
     ids.into_iter().collect()
-}
-
-fn afdd_chunk_hours() -> u64 {
-    std::env::var("OPENFDD_AFDD_CHUNK_HOURS")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(1)
-}
-
-fn afdd_chunk_seconds() -> u64 {
-    afdd_chunk_hours().saturating_mul(3600)
 }
 
 fn result_scope_for(trigger: &str) -> &'static str {
@@ -1249,6 +1303,51 @@ mod tests {
     }
 
     #[test]
+    fn t1403_chunk_hours_unset_defaults_to_one_hour() {
+        let _lock = crate::test_env_lock::lock_env();
+        std::env::remove_var("OPENFDD_AFDD_CHUNK_HOURS");
+        let env = AfddChunkEnv::from_env();
+        assert!(env.error.is_none());
+        assert_eq!(env.resolved_hours().expect("hours"), 1);
+        assert_eq!(env.configured_chunk_seconds(), Some(3600));
+    }
+
+    #[test]
+    fn t1403_chunk_hours_invalid_zero_surfaces_config_error() {
+        let _lock = crate::test_env_lock::lock_env();
+        std::env::set_var("OPENFDD_AFDD_CHUNK_HOURS", "0");
+        let env = AfddChunkEnv::from_env();
+        assert!(env.error.is_some());
+        assert!(env.configured_chunk_seconds().is_none());
+        assert!(env.resolved_hours().is_err());
+        std::env::remove_var("OPENFDD_AFDD_CHUNK_HOURS");
+    }
+
+    #[test]
+    fn t1403_chunk_hours_unparseable_surfaces_config_error() {
+        let _lock = crate::test_env_lock::lock_env();
+        std::env::set_var("OPENFDD_AFDD_CHUNK_HOURS", "not-a-number");
+        let env = AfddChunkEnv::from_env();
+        assert!(env.error.is_some());
+        assert!(env.resolved_hours().is_err());
+        std::env::remove_var("OPENFDD_AFDD_CHUNK_HOURS");
+    }
+
+    #[test]
+    fn t1403_5_three_day_lookback_tiles_seventy_two_hour_chunks() {
+        use chrono::TimeZone;
+        let start = Utc.with_ymd_and_hms(2026, 7, 1, 0, 0, 0).unwrap();
+        let end = start + Duration::hours(72);
+        let chunks = plan_continuous_lookback_chunks(start, end, 1).expect("plan 72 chunks");
+        assert_eq!(chunks.len(), 72);
+        assert_eq!(chunks[0].start_utc, start);
+        assert_eq!(chunks[71].end_utc, end);
+        for pair in chunks.windows(2) {
+            assert_eq!(pair[0].end_utc, pair[1].start_utc);
+        }
+    }
+
+    #[test]
     fn t1403_2_explicit_building_ids_select_subset() {
         let config = AfddConfig {
             scope_building_ids: vec!["site-b".into(), "site-a".into()],
@@ -1391,6 +1490,19 @@ mod contract_timescale {
         assert!(known.iter().any(|id| id == &prov_a));
         assert!(known.iter().any(|id| id == &prov_b));
         assert!(!known.iter().any(|id| id == &csv_only));
+        // Provider sites come from OPENFDD_PROVIDER_SITES only; they are scheduled
+        // before Timescale has any sample rows for that building_id (#1403).
+        let tsdb_has_prov_a: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM site WHERE site_id = $1)",
+        )
+        .bind(&prov_a)
+        .fetch_one(tsdb.pool())
+        .await
+        .unwrap_or(false);
+        assert!(
+            !tsdb_has_prov_a,
+            "fixture expects provider ids not pre-seeded in Timescale"
+        );
         let scheduled = AfddConfig::default()
             .resolve_scheduled_buildings(&known)
             .expect("schedule providers");
@@ -1439,7 +1551,8 @@ mod contract_timescale {
         batch.push(SampleRow::new(t_sample, &site, "AHU_1.sat", Some(72.0)));
         tsdb.upsert_samples(&batch).await.expect("samples");
 
-        let chunks = fdd_store::plan_bounded_backfill(cycle_start, cycle_end, 1).expect("chunks");
+        let chunks =
+            fdd_store::plan_continuous_lookback_chunks(cycle_start, cycle_end, 1).expect("chunks");
         assert_eq!(chunks.len(), 24);
         for (idx, chunk) in chunks.iter().enumerate() {
             let payload = registry_run_payload(

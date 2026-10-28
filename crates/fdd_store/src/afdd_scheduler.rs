@@ -253,6 +253,34 @@ pub fn plan_bounded_backfill(
     Ok(chunks)
 }
 
+/// Max time slices for one continuous lookback (3-day operator cap at 1-hour chunks).
+pub const MAX_CONTINUOUS_LOOKBACK_CHUNKS: usize = 3 * 24;
+
+/// Tile a continuous-cycle lookback window for registry runs.
+///
+/// Unlike [`plan_bounded_backfill`], this is not capped at
+/// [`crate::MAX_AFDD_BACKFILL_CHUNKS`] (64). It is capped at
+/// [`MAX_CONTINUOUS_LOOKBACK_CHUNKS`] so a 3-day lookback at 1-hour chunks
+/// tiles without falling back to a single full-window pass.
+pub fn plan_continuous_lookback_chunks(
+    start_utc: DateTime<Utc>,
+    end_utc: DateTime<Utc>,
+    chunk_hours: u64,
+) -> Result<Vec<AfddBackfillChunk>> {
+    let chunks = plan_backfill_chunks(start_utc, end_utc, chunk_hours)?;
+    if chunks.is_empty() {
+        bail!("AFDD lookback window produced no time chunks");
+    }
+    if chunks.len() > MAX_CONTINUOUS_LOOKBACK_CHUNKS {
+        bail!(
+            "continuous AFDD lookback requires {} time chunks (max {} at 1-hour slices); increase OPENFDD_AFDD_CHUNK_HOURS or reduce lookback",
+            chunks.len(),
+            MAX_CONTINUOUS_LOOKBACK_CHUNKS
+        );
+    }
+    Ok(chunks)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,6 +378,19 @@ mod tests {
             plan_continuous_cycle(Some(&checkpoint), ts(9), Some(ts(8)), &config()).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn continuous_lookback_tiles_three_day_window_at_one_hour() {
+        let start = utc(2026, 6, 1, 0, 0);
+        let end = start + Duration::hours(72);
+        let chunks = plan_continuous_lookback_chunks(start, end, 1).unwrap();
+        assert_eq!(chunks.len(), 72);
+        assert_eq!(chunks[0].start_utc, start);
+        assert_eq!(chunks[71].end_utc, end);
+        for pair in chunks.windows(2) {
+            assert_eq!(pair[0].end_utc, pair[1].start_utc);
+        }
     }
 
     #[test]
