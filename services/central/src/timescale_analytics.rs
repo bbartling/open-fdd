@@ -1749,6 +1749,8 @@ pub fn envelope_from_dispatch_value(
         "sample_count",
         "pack_version",
         "analytics_pack",
+        "oa_t_reference",
+        "web_asof_bound_seconds",
     ];
     let scope_meta_keys = ["window_start", "window_end", "equipment_ids"];
     let mut cov = env

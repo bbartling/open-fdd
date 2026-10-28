@@ -227,6 +227,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     assert_eq!(t0_pairs.len(), 1, "expected one assessable t0 pair: {bas}");
     assert_eq!(
         bas.get("oa_t_reference")
+            .or_else(|| bas.get("coverage").and_then(|c| c.get("oa_t_reference")))
             .and_then(|v| v.get("selection"))
             .and_then(|v| v.as_str()),
         Some("default_lowest_binding")
