@@ -145,7 +145,8 @@ impl MetricUnitsContract {
                 let tok = normalize_alias(alias);
                 if !conversions_by_token.contains_key(&tok) {
                     return Err(ContractError::Invalid(format!(
-                        "quantity {} alias {alias} (token {tok}) has no source_unit_conversions row"
+                        "quantity {} alias {alias} (token {tok}) has no source_unit_conversions row",
+                        q.id
                     )));
                 }
             }
