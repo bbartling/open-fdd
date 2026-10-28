@@ -20,10 +20,6 @@ pub enum ProviderErrorCode {
     Persistence,
     Config,
     NotImplemented,
-    #[expect(
-        dead_code,
-        reason = "hourly partial pages use FetchError; the code stays on the provider contract"
-    )]
     HistoryIncomplete,
 }
 

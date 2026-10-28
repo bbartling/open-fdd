@@ -19,8 +19,8 @@ use super::error::{ProviderError, ProviderErrorCode};
 use super::hourly::{classify_history_status, FetchError};
 use super::http_policy::{
     acceptable_unit, build_provider_client, floor_timestamp_micros, quality_from_json,
-    read_body_bounded, retry_after_secs, status_error, HttpLimits, MAX_HISTORY_WINDOW, MAX_ID_LEN,
-    MAX_SAMPLES_PER_RESPONSE, MAX_UUIDS_PER_REQUEST, MAX_UUIDS_TOTAL,
+    read_body_bounded, retry_after_secs, status_error, HttpLimits, MAX_ID_LEN,
+    MAX_SAMPLES_PER_RESPONSE,
 };
 use super::map::{HistorySeries, RawProviderPoint};
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
@@ -1299,10 +1299,6 @@ pub(crate) fn next_history_page_start(
     }
 }
 
-pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, ProviderError> {
-    parse_get_data_json_with_cap(text, MAX_SAMPLES_PER_RESPONSE)
-}
-
 pub fn parse_get_data_json_with_cap(
     text: &str,
     sample_cap: usize,
@@ -1347,6 +1343,11 @@ pub fn parse_get_data_json_with_cap(
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, ProviderError> {
+    parse_get_data_json_with_cap(text, MAX_SAMPLES_PER_RESPONSE)
 }
 
 #[cfg(test)]
