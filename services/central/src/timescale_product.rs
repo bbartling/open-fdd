@@ -1284,7 +1284,9 @@ pub async fn rcx_zone_comfort_rank(
                 .and_then(|entry| entry.unit.clone())
         });
         let effective = engineer.as_deref().or(sample_unit.as_deref());
-        if crate::zone_comfort_units::zone_temperature_unit_assessable(effective) {
+        if crate::zone_comfort_units::comfort_band_in_unit(comfort_low_f, comfort_high_f, effective)
+            .is_some()
+        {
             assessable.push(equipment_id);
         }
     }

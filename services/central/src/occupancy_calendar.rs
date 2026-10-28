@@ -113,20 +113,19 @@ impl OccupancySchedule {
 }
 
 pub fn occupancy_schedule_from_payload(payload: &Value) -> Option<OccupancySchedule> {
-    for key in ["occupancy_schedule"] {
-        if let Some(sched) = payload.get(key) {
-            if let Some(parsed) = OccupancySchedule::from_json(sched) {
-                return Some(parsed);
-            }
+    const KEY: &str = "occupancy_schedule";
+    if let Some(sched) = payload.get(KEY) {
+        if let Some(parsed) = OccupancySchedule::from_json(sched) {
+            return Some(parsed);
         }
-        if let Some(sched) = payload
-            .get("params")
-            .and_then(|p| p.get(key))
-            .or_else(|| payload.get("config").and_then(|c| c.get(key)))
-        {
-            if let Some(parsed) = OccupancySchedule::from_json(sched) {
-                return Some(parsed);
-            }
+    }
+    if let Some(sched) = payload
+        .get("params")
+        .and_then(|p| p.get(KEY))
+        .or_else(|| payload.get("config").and_then(|c| c.get(KEY)))
+    {
+        if let Some(parsed) = OccupancySchedule::from_json(sched) {
+            return Some(parsed);
         }
     }
     None
