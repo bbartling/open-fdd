@@ -70,8 +70,8 @@ fn normalize_alias(alias: &str) -> String {
 
 impl MetricUnitsContract {
     pub fn from_json(json: &str) -> Result<Self, ContractError> {
-        let file: MetricUnitsFile = serde_json::from_str(json)
-            .map_err(|e| ContractError::Invalid(format!("json: {e}")))?;
+        let file: MetricUnitsFile =
+            serde_json::from_str(json).map_err(|e| ContractError::Invalid(format!("json: {e}")))?;
         let mut alias_to_quantity = HashMap::new();
         let mut quantities = HashMap::new();
         for q in file.quantities {
