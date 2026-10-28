@@ -6321,6 +6321,7 @@ mod opaque_series_binding {
 #[cfg(test)]
 #[path = "oat_meteo_t1404_test.rs"]
 mod oat_meteo_t1404_test;
+#[cfg(test)]
 #[path = "vav1_t1407_test.rs"]
 mod vav1_t1407_test;
 

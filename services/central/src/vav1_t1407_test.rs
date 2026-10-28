@@ -5,7 +5,7 @@ use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch};
 use serde_json::json;
 use sqlx::postgres::PgPoolOptions;
 
-use super::*;
+use super::rcx_zone_comfort_rank;
 
 const HELPERS: &str = include_str!("../../../sql/fdd/postgres/postgres_helpers.sql");
 const PACK_RUNTIME: &str = include_str!("../../../sql/schema/06_fdd_pack_runtime.sql");
@@ -155,7 +155,7 @@ fn result_row<'a>(
         .unwrap_or_else(|| panic!("missing {rule_id}/{equipment_id} in {body}"))
 }
 
-async fn run_vav1(pool: &sqlx::PgPool, site: &str, extra: serde_json::Value) -> serde_json::Value {
+async fn run_vav1(_pool: &sqlx::PgPool, site: &str, extra: serde_json::Value) -> serde_json::Value {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("db url");
     std::env::set_var("OPENFDD_DATABASE_URL", &url);
     std::env::set_var("OPENFDD_HISTORIAN", "timescale");

@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use serde_json::Value;
 use sqlx::PgConnection;
+use sqlx::Row;
 
 const WEEKDAYS: [&str; 7] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
