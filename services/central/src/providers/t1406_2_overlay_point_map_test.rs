@@ -6,8 +6,8 @@ use open_fdd_edge_prototype::csv_ingest::model_overlay;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Row;
 
-use super::{apply_to_stores, InventoryDiagnostics, InventoryPoint, InventorySnapshot};
 use super::committed_model::refresh_point_map_overlay;
+use super::{apply_to_stores, InventoryDiagnostics, InventoryPoint, InventorySnapshot};
 
 const SOURCE: &str = "nf:t1406-2";
 
@@ -98,13 +98,19 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     .fetch_one(&pool)
     .await
     .expect("point_map");
-    assert_eq!(row.get::<Option<String>, _>("unit").as_deref(), Some("degF"));
+    assert_eq!(
+        row.get::<Option<String>, _>("unit").as_deref(),
+        Some("degF")
+    );
     assert_eq!(
         row.get::<Option<String>, _>("quantity").as_deref(),
         Some("absolute_temperature")
     );
     assert_eq!(row.get::<Option<i64>, _>("cadence_secs"), Some(900));
-    assert_eq!(row.get::<Option<String>, _>("source_unit").as_deref(), Some("degC"));
+    assert_eq!(
+        row.get::<Option<String>, _>("source_unit").as_deref(),
+        Some("degC")
+    );
 
     let auth_unit: Option<String> = sqlx::query_scalar(
         "SELECT unit FROM authorized_series WHERE site_id = $1 AND role = 'sat'",
@@ -115,14 +121,7 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     .expect("authorized_series");
     assert_eq!(auth_unit.as_deref(), Some("degF"));
 
-    let resync = apply_to_stores(
-        Some(&tsdb),
-        &root,
-        site,
-        SOURCE,
-        &snapshot(None),
-    )
-    .await;
+    let resync = apply_to_stores(Some(&tsdb), &root, site, SOURCE, &snapshot(None)).await;
     assert!(resync.errors.is_empty(), "{:?}", resync.errors);
 
     let row = sqlx::query(
@@ -133,7 +132,10 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     .fetch_one(&pool)
     .await
     .expect("point_map after resync");
-    assert_eq!(row.get::<Option<String>, _>("unit").as_deref(), Some("degF"));
+    assert_eq!(
+        row.get::<Option<String>, _>("unit").as_deref(),
+        Some("degF")
+    );
     assert_eq!(
         row.get::<Option<String>, _>("quantity").as_deref(),
         Some("absolute_temperature")
@@ -150,14 +152,9 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     .expect("authorized_series after resync");
     assert_eq!(auth_unit.as_deref(), Some("degF"));
 
-    refresh_point_map_overlay(
-        &tsdb,
-        &root,
-        site,
-        &["pt-sat-t1406".to_string()],
-    )
-    .await
-    .expect("overlay refresh");
+    refresh_point_map_overlay(&tsdb, &root, site, &["pt-sat-t1406".to_string()])
+        .await
+        .expect("overlay refresh");
 
     for sql in [
         "DELETE FROM sample WHERE site_id = $1",
