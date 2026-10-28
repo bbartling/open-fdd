@@ -1214,7 +1214,7 @@ mod tests {
             &request,
             StaleAction::ServeStale,
             CacheWatch::Resolve,
-            async || Ok(envelope(QV_RUNTIME, &request.query, Vec::new())),
+            async || Ok(envelope("bas-vs-web-oat-v4", &request.query, Vec::new())),
         )
         .await
         .expect("serve");
