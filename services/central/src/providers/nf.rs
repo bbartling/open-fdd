@@ -14,6 +14,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use serde_json::Value;
 
+use super::driver_limits::HistoryDriverLimits;
 use super::error::{ProviderError, ProviderErrorCode};
 use super::hourly::{classify_history_status, FetchError};
 use super::http_policy::{
@@ -78,6 +79,10 @@ impl NfPortalDriver {
 
     pub fn provider_id(&self) -> &str {
         &self.provider_id
+    }
+
+    pub fn history_driver_limits(&self) -> HistoryDriverLimits {
+        HistoryDriverLimits::nf_portal()
     }
 
     pub fn health(&self, status: ProviderHealthStatus, message: Option<String>) -> ProviderHealth {
@@ -345,22 +350,22 @@ impl NfPortalDriver {
         from: DateTime<Utc>,
         to: DateTime<Utc>,
     ) -> Result<Vec<RawProviderPoint>, ProviderError> {
+        let limits = self.history_driver_limits();
         if uuids.is_empty() {
             return Ok(Vec::new());
         }
-        if uuids.len() > MAX_UUIDS_TOTAL {
+        if uuids.len() > limits.max_points_total {
             return Err(ProviderError::new(ProviderErrorCode::Contract));
         }
-        if to < from || to - from > MAX_HISTORY_WINDOW {
+        if to < from || to - from > limits.max_history_span {
             return Err(ProviderError::new(ProviderErrorCode::Contract));
         }
         let mut out = Vec::new();
-        for chunk in uuids.chunks(MAX_UUIDS_PER_REQUEST) {
-            let page = self.fetch_history_chunk(chunk, from, to).await?;
-            if out.len().saturating_add(page.len()) > MAX_SAMPLES_PER_RESPONSE {
-                return Err(ProviderError::new(ProviderErrorCode::BodyTooLarge));
-            }
-            out.extend(page);
+        for chunk in uuids.chunks(limits.max_points_per_request) {
+            let page = self
+                .fetch_history_chunk_paged(chunk, from, to, &limits)
+                .await?;
+            merge_history_samples(&mut out, page);
         }
         Ok(out)
     }
@@ -379,23 +384,54 @@ impl NfPortalDriver {
             .map_err(fetch_error_from_provider)
     }
 
-    async fn fetch_history_chunk(
+    pub(crate) async fn fetch_history_chunk_paged(
         &mut self,
         uuids: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
+        limits: &HistoryDriverLimits,
     ) -> Result<Vec<RawProviderPoint>, ProviderError> {
         for uuid in uuids {
             if !valid_point_id(uuid) {
                 return Err(ProviderError::new(ProviderErrorCode::InvalidSample));
             }
         }
+        if !limits.supports_paging {
+            return self.fetch_history_chunk_once(uuids, from, to, limits).await;
+        }
+        let mut out = Vec::new();
+        let mut cursor = from;
+        let guard_max = 512;
+        for _ in 0..guard_max {
+            let page = self
+                .fetch_history_chunk_once(uuids, cursor, to, limits)
+                .await?;
+            let capped = page.len() >= limits.max_samples_per_response;
+            merge_history_samples(&mut out, page);
+            if !capped {
+                return Ok(out);
+            }
+            let Some(next) = next_history_page_start(&out, cursor, to) else {
+                return Err(ProviderError::new(ProviderErrorCode::HistoryIncomplete));
+            };
+            cursor = next;
+        }
+        Err(ProviderError::new(ProviderErrorCode::HistoryIncomplete))
+    }
+
+    async fn fetch_history_chunk_once(
+        &mut self,
+        uuids: &[String],
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        limits: &HistoryDriverLimits,
+    ) -> Result<Vec<RawProviderPoint>, ProviderError> {
         debug_assert_eq!(history_http_method(), "GET");
         let url = build_history_read_url(&self.endpoint, uuids, from, to);
         let (status, bytes, retry_after) = self.send(&url, None, true, true).await?;
         self.ensure_success(status, retry_after)?;
         let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
-        parse_get_data_json(text)
+        parse_get_data_json(text, limits.max_samples_per_response)
     }
 
     fn ensure_success(
@@ -1237,7 +1273,40 @@ struct NfHistoryValue {
     quality: Option<Value>,
 }
 
+pub fn merge_history_samples(out: &mut Vec<RawProviderPoint>, page: Vec<RawProviderPoint>) {
+    for sample in page {
+        if out
+            .iter()
+            .any(|row| row.provider_point_id == sample.provider_point_id && row.ts == sample.ts)
+        {
+            continue;
+        }
+        out.push(sample);
+    }
+}
+
+pub(crate) fn next_history_page_start(
+    samples: &[RawProviderPoint],
+    window_from: DateTime<Utc>,
+    window_to: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let max_ts = samples.iter().map(|row| row.ts).max()?;
+    let next = max_ts + chrono::Duration::microseconds(1);
+    if next >= window_to || next <= window_from {
+        None
+    } else {
+        Some(next)
+    }
+}
+
 pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, ProviderError> {
+    parse_get_data_json(text, MAX_SAMPLES_PER_RESPONSE)
+}
+
+pub fn parse_get_data_json(
+    text: &str,
+    sample_cap: usize,
+) -> Result<Vec<RawProviderPoint>, ProviderError> {
     let parsed: GetDataResponse =
         serde_json::from_str(text).map_err(|_| ProviderError::contract())?;
     let mut out = Vec::new();
@@ -1272,7 +1341,7 @@ pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, Provider
                 source_quality,
                 attrs: serde_json::Map::new(),
             });
-            if out.len() > MAX_SAMPLES_PER_RESPONSE {
+            if out.len() > sample_cap {
                 return Err(ProviderError::new(ProviderErrorCode::BodyTooLarge));
             }
         }

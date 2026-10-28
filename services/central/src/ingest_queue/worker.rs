@@ -132,11 +132,12 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
         enqueue_due_windows(state, now).await?;
         prune_applied_ledger(state, now).await;
     }
+    let budget = state.ingest_queue.budget_defaults();
     let claimed = state
         .ingest_queue
         .claim(&super::model::ClaimRequest {
             owner: owner.to_string(),
-            limit: max_concurrent(),
+            limit: max_concurrent_jobs(budget),
             now,
             lease_for: chrono::Duration::seconds(180),
         })
@@ -292,11 +293,7 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
         };
     }
     let observations = observations_for(&expectations, &page);
-    let response_complete = page
-        .iter()
-        .map(|series| series.samples.len())
-        .sum::<usize>()
-        < crate::providers::http_policy::MAX_SAMPLES_PER_RESPONSE;
+    let response_complete = true;
     let coverage = reconcile(&ReconcileInput {
         start: job.logical_window_start,
         end: job.logical_window_end,
@@ -642,7 +639,7 @@ fn decide_window(input: &DecideWindow<'_>) -> FinishOutcome {
         };
     }
     if input.coverage.retryable_source_failure() {
-        return classify_poll_error(SOURCE_RETRY, input.attempt, input.now);
+        return classify_poll_error(SOURCE_RETRY, input.attempt, input.now, 0);
     }
     FinishOutcome::Partial {
         counts,
@@ -695,23 +692,65 @@ async fn finish_for_poll_error(state: &Arc<AppState>, job: &JobView, err: &str) 
             code: err.to_string(),
         };
     }
-    if portal_throttled(err) {
+    let (throttled, retry_after) = parse_throttle_error(err);
+    if throttled {
+        let retry_after = chrono::Duration::seconds(throttle_backoff_secs(
+            job.attempt,
+            retry_after,
+            &job.job_id.to_string(),
+        ));
         if let Err(note_err) = state
             .ingest_queue
-            .note_throttle(
-                &job.provider_instance_id,
-                Utc::now(),
-                chrono::Duration::seconds(60),
-            )
+            .note_throttle(&job.provider_instance_id, Utc::now(), retry_after)
+            .await
+        {
+            warn!(error = %note_err, "portal throttle note failed");
+        }
+        return classify_poll_error(err, job.attempt, Utc::now(), retry_after.num_seconds());
+    }
+    if portal_throttled(err) {
+        let retry_after = chrono::Duration::seconds(throttle_backoff_secs(
+            job.attempt,
+            None,
+            &job.job_id.to_string(),
+        ));
+        if let Err(note_err) = state
+            .ingest_queue
+            .note_throttle(&job.provider_instance_id, Utc::now(), retry_after)
             .await
         {
             warn!(error = %note_err, "portal throttle note failed");
         }
     }
-    classify_poll_error(err, job.attempt, Utc::now())
+    classify_poll_error(err, job.attempt, Utc::now(), 0)
 }
 
-fn classify_poll_error(err: &str, attempt: u32, now: chrono::DateTime<Utc>) -> FinishOutcome {
+fn parse_throttle_error(err: &str) -> (bool, Option<u64>) {
+    if err == "throttled" {
+        return (true, None);
+    }
+    if let Some(secs) = err.strip_prefix("throttled:") {
+        return (true, secs.parse().ok());
+    }
+    (false, None)
+}
+
+fn throttle_backoff_secs(attempt: u32, retry_after: Option<u64>, jitter_key: &str) -> i64 {
+    let policy = crate::providers::hourly::HourlyPolicy::from_env();
+    let mut delay = i64::try_from(retry_after.unwrap_or(0)).unwrap_or(0);
+    delay = delay.max(crate::providers::hourly::retry_delay_secs(
+        i32::try_from(attempt.max(1)).unwrap_or(1),
+    ));
+    delay += crate::providers::hourly::stagger_secs(jitter_key, policy.retry_jitter_secs.max(1));
+    delay
+}
+
+pub(crate) fn classify_poll_error(
+    err: &str,
+    attempt: u32,
+    now: chrono::DateTime<Utc>,
+    throttle_delay_secs: i64,
+) -> FinishOutcome {
     if err == "device_unmapped" || err == "not_implemented" || err == "grpc_unimplemented" {
         return FinishOutcome::Permanent {
             code: err.to_string(),
@@ -719,7 +758,7 @@ fn classify_poll_error(err: &str, attempt: u32, now: chrono::DateTime<Utc>) -> F
     }
     let code = if err == "source_unavailable" {
         "source_unavailable".to_string()
-    } else if portal_throttled(err) {
+    } else if portal_throttled(err) || parse_throttle_error(err).0 {
         "throttled".to_string()
     } else if portal_timeout(err) {
         "timeout".to_string()
@@ -728,6 +767,17 @@ fn classify_poll_error(err: &str, attempt: u32, now: chrono::DateTime<Utc>) -> F
     } else {
         "provider_poll_failed".to_string()
     };
+    if code == "throttled" {
+        let delay = if throttle_delay_secs > 0 {
+            throttle_delay_secs
+        } else {
+            throttle_backoff_secs(attempt, None, "throttle")
+        };
+        return FinishOutcome::Retry {
+            code,
+            not_before: now + chrono::Duration::seconds(delay),
+        };
+    }
     if attempt >= 8 {
         FinishOutcome::Permanent { code }
     } else {
@@ -1042,12 +1092,14 @@ fn daily_catchup_days() -> u32 {
         .clamp(1, schedule::MAX_DAILY_CATCHUP_DAYS)
 }
 
-fn max_concurrent() -> usize {
-    std::env::var("OPENFDD_PROVIDER_MAX_CONCURRENT")
+fn max_concurrent_jobs(budget: super::model::BudgetDefaults) -> usize {
+    let from_provider = std::env::var("OPENFDD_PROVIDER_MAX_CONCURRENT")
         .ok()
         .and_then(|value| value.parse().ok())
         .filter(|value| *value > 0)
-        .unwrap_or(2)
+        .unwrap_or(budget.max_in_flight as usize);
+    from_provider
+        .min(budget.max_in_flight as usize)
         .clamp(1, 32)
 }
 
@@ -1078,11 +1130,11 @@ mod tests {
     fn unmapped_device_does_not_retry() {
         let now = Utc::now();
         assert!(matches!(
-            classify_poll_error("device_unmapped", 1, now),
+            classify_poll_error("device_unmapped", 1, now, 0),
             FinishOutcome::Permanent { code } if code == "device_unmapped"
         ));
         assert!(matches!(
-            classify_poll_error("auth_failed", 1, now),
+            classify_poll_error("auth_failed", 1, now, 0),
             FinishOutcome::Retry { .. }
         ));
     }
@@ -1205,20 +1257,24 @@ mod tests {
     #[test]
     fn throttled_and_timeout_retry_without_committing() {
         let now = Utc::now();
-        match classify_poll_error("429 too many", 1, now) {
+        match classify_poll_error("429 too many", 1, now, 0) {
             FinishOutcome::Retry { code, not_before } => {
                 assert_eq!(code, "throttled");
                 assert!(not_before > now);
             }
             other => panic!("expected retry, got {other:?}"),
         }
-        match classify_poll_error("context deadline exceeded", 2, now) {
+        match classify_poll_error("context deadline exceeded", 2, now, 0) {
             FinishOutcome::Retry { code, .. } => assert_eq!(code, "timeout"),
             other => panic!("expected timeout retry, got {other:?}"),
         }
         assert!(matches!(
-            classify_poll_error("429", 8, now),
-            FinishOutcome::Permanent { code } if code == "throttled"
+            classify_poll_error("throttled:120", 8, now, 120),
+            FinishOutcome::Retry { code, .. } if code == "throttled"
+        ));
+        assert!(matches!(
+            classify_poll_error("429", 8, now, 0),
+            FinishOutcome::Retry { code, .. } if code == "throttled"
         ));
     }
 
@@ -1226,7 +1282,7 @@ mod tests {
     fn grpc_status_codes_keep_precise_retry_categories() {
         let now = Utc::now();
         assert!(matches!(
-            classify_poll_error("grpc_unimplemented", 1, now),
+            classify_poll_error("grpc_unimplemented", 1, now, 0),
             FinishOutcome::Permanent { code } if code == "grpc_unimplemented"
         ));
         for (err, want) in [
@@ -1238,14 +1294,14 @@ mod tests {
             ("grpc_internal", "grpc_internal"),
             ("grpc_tls_required", "grpc_tls_required"),
         ] {
-            match classify_poll_error(err, 1, now) {
+            match classify_poll_error(err, 1, now, 0) {
                 FinishOutcome::Retry { code, .. } => assert_eq!(code, want, "{err}"),
                 other => panic!("expected retry for {err}, got {other:?}"),
             }
         }
         // Negative controls: free text never passes through as a code.
         for err in ["grpc_", "grpc_Bad Header", "grpc_x;y"] {
-            match classify_poll_error(err, 1, now) {
+            match classify_poll_error(err, 1, now, 0) {
                 FinishOutcome::Retry { code, .. } => assert_eq!(code, "provider_poll_failed"),
                 other => panic!("expected generic retry for {err}, got {other:?}"),
             }

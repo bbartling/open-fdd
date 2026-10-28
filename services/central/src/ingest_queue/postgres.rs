@@ -446,7 +446,11 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
         FinishOutcome::Retry { code, not_before } => {
             let updated = sqlx::query(
                 "UPDATE ingest_job SET state = 'retry_wait', safe_error_code = $5,
-                    not_before = $6, lease_owner = NULL, lease_expiry = NULL, updated_at = $4
+                    not_before = $6, lease_owner = NULL, lease_expiry = NULL, updated_at = $4,
+                    attempt = CASE
+                      WHEN $5 = 'throttled' THEN GREATEST(attempt - 1, 0)
+                      ELSE attempt
+                    END
                  WHERE job_id = $1 AND lease_owner = $2 AND fencing_token = $3
                    AND state = 'leased' AND lease_expiry > $4",
             )

@@ -1,0 +1,287 @@
+//! W2d / #1423 driver acceptance: T1423-1 paging, T1423-2 throttle retry.
+
+use std::collections::HashSet;
+
+use chrono::{DateTime, TimeZone, Utc};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+
+use super::driver_limits::HistoryDriverLimits;
+use super::hourly::{classify_history_status, FetchError};
+use super::http_policy::{
+    HttpLimits, MAX_HISTORY_WINDOW, MAX_SAMPLES_PER_RESPONSE, MAX_UUIDS_PER_REQUEST,
+};
+use super::map::RawProviderPoint;
+use super::nf::{
+    build_history_read_url, merge_history_samples, next_history_page_start, NfPortalDriver,
+};
+
+const UUID: &str = "11111111-2222-3333-4444-555555555555";
+
+async fn read_http_request(sock: &mut tokio::net::TcpStream) -> String {
+    let mut buf = vec![0_u8; 8192];
+    let n = sock.read(&mut buf).await.unwrap_or(0);
+    String::from_utf8_lossy(&buf[..n]).into_owned()
+}
+
+fn paging_test_limits(sample_cap: usize) -> HistoryDriverLimits {
+    HistoryDriverLimits {
+        max_history_span: MAX_HISTORY_WINDOW,
+        max_points_per_request: MAX_UUIDS_PER_REQUEST,
+        max_points_total: 2,
+        max_samples_per_response: sample_cap,
+        supports_paging: true,
+    }
+}
+
+fn sample_series(count: usize, start: chrono::DateTime<Utc>) -> Vec<RawProviderPoint> {
+    (0..count)
+        .map(|index| RawProviderPoint {
+            provider_point_id: UUID.to_string(),
+            display_name: None,
+            ts: start + chrono::Duration::minutes(i64::try_from(index).unwrap_or(i64::MAX)),
+            val: f64::from(u32::try_from(index).unwrap_or(u32::MAX)),
+            unit: Some("degF".into()),
+            source_quality: None,
+            attrs: serde_json::Map::new(),
+        })
+        .collect()
+}
+
+fn history_json(samples: &[RawProviderPoint]) -> String {
+    let values: Vec<serde_json::Value> = samples
+        .iter()
+        .map(|row| {
+            serde_json::json!({
+                "double": row.val,
+                "ts": row.ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                "quality": "good"
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "data": [{
+            "uuid": UUID,
+            "values": values
+        }]
+    })
+    .to_string()
+}
+
+fn parse_history_from_seconds(req: &str) -> Option<i64> {
+    let line = req.lines().next()?;
+    let query = line.split('?').nth(1)?;
+    for part in query.split('&') {
+        if let Some(raw) = part.strip_prefix("from.seconds=") {
+            return raw.parse().ok();
+        }
+    }
+    None
+}
+
+fn parse_history_to_seconds(req: &str) -> Option<i64> {
+    let line = req.lines().next()?;
+    let query = line.split('?').nth(1)?;
+    for part in query.split('&') {
+        if let Some(raw) = part.strip_prefix("to.seconds=") {
+            return raw.parse().ok();
+        }
+    }
+    None
+}
+
+fn respond_json(status: &str, body: &str) -> String {
+    format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
+}
+
+#[tokio::test]
+async fn t1423_1_nf_fixture_pages_at_sample_cap_without_loss_or_duplicates() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let window_start = Utc.with_ymd_and_hms(2026, 10, 20, 8, 0, 0).unwrap();
+    let window_end = window_start + chrono::Duration::hours(2);
+    let all = sample_series(11, window_start);
+    let cap = 5_usize;
+    let limits = paging_test_limits(cap);
+    let history_calls = std::sync::Arc::new(tokio::sync::Mutex::new(0_usize));
+    let calls_task = std::sync::Arc::clone(&history_calls);
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                break;
+            };
+            let req = read_http_request(&mut sock).await;
+            if req.starts_with("GET /api/v1/point/data") {
+                let mut calls = calls_task.lock().await;
+                *calls += 1;
+                let from =
+                    DateTime::from_timestamp(parse_history_from_seconds(&req).unwrap_or(0), 0)
+                        .unwrap_or(window_start);
+                let to = DateTime::from_timestamp(parse_history_to_seconds(&req).unwrap_or(0), 0)
+                    .unwrap_or(window_end);
+                let mut page: Vec<_> = all
+                    .iter()
+                    .filter(|row| row.ts >= from && row.ts <= to)
+                    .cloned()
+                    .collect();
+                if page.len() > cap {
+                    page.truncate(cap);
+                }
+                let payload = respond_json("200 OK", &history_json(&page));
+                let _ = sock.write_all(payload.as_bytes()).await;
+            } else {
+                let payload = respond_json("404 Not Found", r#"{"error":"unexpected"}"#);
+                let _ = sock.write_all(payload.as_bytes()).await;
+            }
+        }
+    });
+    let mut driver = NfPortalDriver::new(
+        "nf:t1423",
+        format!("http://127.0.0.1:{port}"),
+        None,
+        None,
+        true,
+        HttpLimits::default(),
+    )
+    .unwrap();
+    let fetched = driver
+        .fetch_history_chunk_paged(&[UUID.to_string()], window_start, window_end, &limits)
+        .await
+        .unwrap();
+    assert_eq!(fetched.len(), all.len());
+    let keys: HashSet<_> = fetched
+        .iter()
+        .map(|row| (row.provider_point_id.as_str(), row.ts))
+        .collect();
+    assert_eq!(keys.len(), all.len());
+    for expected in &all {
+        assert!(keys.contains(&(expected.provider_point_id.as_str(), expected.ts)));
+    }
+    let call_count = *history_calls.lock().await;
+    assert_eq!(
+        call_count, 3,
+        "expected three paged GETs for 11 samples at cap 5"
+    );
+    let url = build_history_read_url(
+        &format!("http://127.0.0.1:{port}"),
+        &[UUID.to_string()],
+        window_start,
+        window_end,
+    );
+    assert!(url.contains("from.seconds="));
+}
+
+#[test]
+fn t1423_1_merge_and_cursor_helpers_match_driver_paging() {
+    let start = Utc.with_ymd_and_hms(2026, 10, 20, 9, 0, 0).unwrap();
+    let end = start + chrono::Duration::hours(1);
+    let all = sample_series(7, start);
+    let cap = 3_usize;
+    let mut out = Vec::new();
+    let mut cursor = start;
+    let mut guard = 0;
+    while guard < 16 {
+        guard += 1;
+        let page_end = cursor + chrono::Duration::minutes(30);
+        let slice_end = page_end.min(end);
+        let page: Vec<_> = all
+            .iter()
+            .filter(|row| row.ts >= cursor && row.ts <= slice_end)
+            .take(cap)
+            .cloned()
+            .collect();
+        let capped = page.len() >= cap;
+        merge_history_samples(&mut out, page);
+        if !capped {
+            break;
+        }
+        cursor = next_history_page_start(&out, cursor, end).expect("cursor");
+    }
+    assert_eq!(out.len(), all.len());
+}
+
+#[tokio::test]
+async fn t1423_2_portal_429_retry_after_never_permanent_failure() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let from = Utc.with_ymd_and_hms(2026, 10, 20, 10, 0, 0).unwrap();
+    let to = from + chrono::Duration::hours(1);
+    let throttled_once = std::sync::Arc::new(tokio::sync::Mutex::new(true));
+    let flag = std::sync::Arc::clone(&throttled_once);
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut sock, _)) = listener.accept().await else {
+                break;
+            };
+            let req = read_http_request(&mut sock).await;
+            if !req.starts_with("GET /api/v1/point/data") {
+                let _ = sock
+                    .write_all(
+                        respond_json("404 Not Found", r#"{"error":"unexpected"}"#).as_bytes(),
+                    )
+                    .await;
+                continue;
+            }
+            let mut once = flag.lock().await;
+            if *once {
+                *once = false;
+                let payload = "HTTP/1.1 429 Too Many Requests\r\nRetry-After: 4\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}";
+                let _ = sock.write_all(payload.as_bytes()).await;
+            } else {
+                let body = history_json(&[]);
+                let _ = sock
+                    .write_all(respond_json("200 OK", &body).as_bytes())
+                    .await;
+            }
+        }
+    });
+    let mut driver = NfPortalDriver::new(
+        "nf:t1423-throttle",
+        format!("http://127.0.0.1:{port}"),
+        None,
+        None,
+        true,
+        HttpLimits::default(),
+    )
+    .unwrap();
+    let err = driver
+        .read_history_page(&[UUID.to_string()], from, to)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        FetchError::Throttled {
+            retry_after_secs: Some(4)
+        }
+    );
+    assert_eq!(err.ingest_queue_label(), "throttled:4");
+    assert_eq!(
+        classify_history_status(429, Some(4)),
+        FetchError::Throttled {
+            retry_after_secs: Some(4)
+        }
+    );
+    let now = Utc::now();
+    for attempt in [8_u32, 99] {
+        assert!(
+            matches!(
+                crate::ingest_queue::worker::classify_poll_error("throttled:4", attempt, now, 4),
+                crate::ingest_queue::model::FinishOutcome::Retry { code, .. }
+                    if code == "throttled"
+            ),
+            "attempt {attempt} must stay retryable"
+        );
+    }
+}
+
+#[test]
+fn t1423_driver_limits_advertise_nf_portal_capability() {
+    let limits = HistoryDriverLimits::nf_portal();
+    assert_eq!(limits.max_history_span, MAX_HISTORY_WINDOW);
+    assert_eq!(limits.max_points_per_request, MAX_UUIDS_PER_REQUEST);
+    assert_eq!(limits.max_samples_per_response, MAX_SAMPLES_PER_RESPONSE);
+    assert!(limits.supports_paging);
+}

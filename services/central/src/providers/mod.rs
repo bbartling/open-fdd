@@ -5,6 +5,7 @@ pub mod committed_model;
 pub mod config;
 #[cfg(test)]
 pub mod conformance;
+pub mod driver_limits;
 pub mod error;
 pub mod hourly;
 pub mod hourly_exec;
@@ -24,6 +25,8 @@ pub mod writer;
 
 #[cfg(test)]
 mod fixture_acceptance;
+#[cfg(test)]
+mod t1423_driver_acceptance;
 
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;

@@ -41,6 +41,13 @@ impl HistoryFailure {
         }
     }
 
+    pub fn ingest_queue_label(&self) -> String {
+        match self {
+            Self::Rest(err) => err.ingest_queue_label(),
+            Self::Grpc(err) => format!("grpc_{}", err.as_str()),
+        }
+    }
+
     /// Category for the hourly scheduler.
     pub fn fetch_error(&self) -> FetchError {
         match self {

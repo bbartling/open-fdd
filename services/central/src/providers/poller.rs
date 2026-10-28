@@ -431,7 +431,7 @@ pub async fn fetch_device_window(
     let page = match transport.read_history_page(&ids, start, end).await {
         Ok(page) => page,
         Err(err) => {
-            let code = err.code();
+            let code = err.ingest_queue_label();
             runtime
                 .record_error(
                     &site.building_id,

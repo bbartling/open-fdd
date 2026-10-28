@@ -247,6 +247,9 @@ impl MemoryStore {
                     job.state = JobState::RetryWait.as_str().to_string();
                     job.safe_error_code = Some(code.clone());
                     job.not_before = *not_before;
+                    if code == "throttled" {
+                        job.attempt = job.attempt.saturating_sub(1);
+                    }
                     None
                 }
                 FinishOutcome::Permanent { code } => {
