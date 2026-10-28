@@ -2728,10 +2728,7 @@ async fn fill_history_for_equipment(
         let local = if role == "oa_t" {
             if let Some(key_lit) = site_oa_key.as_deref() {
                 format!(
-                    "MAX({admitted}) FILTER (WHERE a.openfdd_key = '{key_lit}' AND a.role = '{role_lit}' \
-                       AND (SELECT count(*) FROM authorized_series c \
-                            WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id \
-                              AND c.role = a.role) = 1)"
+                    "MAX({admitted}) FILTER (WHERE a.openfdd_key = '{key_lit}' AND a.role = '{role_lit}')"
                 )
             } else {
                 format!(
