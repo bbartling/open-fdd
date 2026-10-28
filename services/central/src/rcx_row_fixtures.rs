@@ -246,7 +246,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     );
     let empty_bas = post_analytics(&app, "/api/analytics/bas-vs-web-oat", EMPTY, None).await;
     assert!(
-        warning_text(&empty_bas).contains("BAS and web"),
+        warning_text(&empty_bas).contains("BAS vs web"),
         "{empty_bas}"
     );
 
