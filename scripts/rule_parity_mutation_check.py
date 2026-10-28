@@ -19,9 +19,12 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore
 
+import json
+
 ROOT = Path(__file__).resolve().parents[1]
 COOKBOOK = ROOT / "docs" / "rules" / "cookbook"
 REGISTRY = ROOT / "sql_rules" / "registry.yaml"
+TUNING = ROOT / "sql/fdd/tuning_catalog.json"
 
 MIN_RULE_HEADINGS = 62
 MIN_REGISTRY_RULES = 66
@@ -164,6 +167,26 @@ def check_multi_building_fixture_inventory() -> None:
         )
 
 
+def check_tuner_effects() -> None:
+    """T1284-1 D: every tuner declares branch_sensitive | no_op | unsupported."""
+    if not TUNING.is_file():
+        _fail(f"missing {TUNING.relative_to(ROOT)}")
+    sys.path.insert(0, str(ROOT / "scripts" / "ci"))
+    from unit_contract_lib import apply_tuning_catalog, load_json
+
+    data = load_json(TUNING)
+    expected = apply_tuning_catalog(json.loads(json.dumps(data)))
+    for rule_a, rule_b in zip(data["rules"], expected["rules"], strict=True):
+        rid = rule_a["rule_id"]
+        for key, param in (rule_a.get("parameters") or {}).items():
+            effect = param.get("effect")
+            if effect not in {"branch_sensitive", "no_op", "unsupported"}:
+                _fail(f"{rid}.{key} missing or invalid effect: {effect!r}")
+            if effect != rule_b["parameters"][key]["effect"]:
+                _fail(f"{rid}.{key} effect drift vs effect_in_sql policy")
+    print("PASS tuning_catalog tuner effect honesty")
+
+
 def main() -> int:
     print("== rule_parity_mutation_check (Milestone D2) ==")
     check_registry_count()
@@ -172,6 +195,7 @@ def main() -> int:
     check_mutation_paths()
     check_logical_keyword_mutation()
     check_multi_building_fixture_inventory()
+    check_tuner_effects()
     print("All rule parity mutation checks passed.")
     return 0
 

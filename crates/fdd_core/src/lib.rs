@@ -6,6 +6,7 @@ pub mod models;
 pub mod role_rank;
 pub mod sensor_sweep;
 pub mod units;
+pub mod units_contract;
 pub mod validate;
 
 pub use columns::{
@@ -27,5 +28,9 @@ pub use units::{
     is_temperature_role, lps_to_cfm, metric_select_list, pa_to_in_wc, sql_admit_val_expr,
     sql_temp_to_fahrenheit, sql_with_metric_to_imperial, FLOW_ROLES, PRESSURE_ROLES,
     TEMPERATURE_ROLES,
+};
+pub use units_contract::{
+    reject_unknown_alias, ContractError as MetricContractError, MetricUnitsContract,
+    METRIC_UNITS_JSON,
 };
 pub use validate::{validate_building, ValidationReport};

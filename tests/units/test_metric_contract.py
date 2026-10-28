@@ -23,7 +23,18 @@ def test_contract_files_exist():
     assert GOLDENS.is_file()
     body = json.loads(METRIC.read_text(encoding="utf-8"))
     assert body["contract_id"] == "openfdd-metric-units-v1"
-    assert body["processing_abi_target"] == "metric-c-v2"
+    assert body["processing_abi_current"] == "metric-c-v2"
+
+
+def test_t1284_unit_contract_check():
+    import subprocess
+
+    proc = subprocess.run(
+        ["python3", "scripts/ci/check_unit_contract.py"],
+        cwd=str(ROOT),
+        check=False,
+    )
+    assert proc.returncode == 0, "check_unit_contract.py must pass"
 
 
 def test_20c_admits_to_68f():

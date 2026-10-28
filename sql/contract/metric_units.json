@@ -1,79 +1,85 @@
 {
   "contract_id": "openfdd-metric-units-v1",
   "contract_version": "4.0.0",
-  "processing_abi_current": "imperial-f-v1",
-  "processing_abi_target": "metric-c-v2",
+  "processing_abi_current": "metric-c-v2",
   "notes": [
-    "Canonical TARGET processing is metric (°C, Δ°C, Pa, kPa, L/s, kW, kWh).",
-    "Current SQL FDD pack (77 rules) remains imperial-f-v1 until metric-v2 equations ship.",
-    "Admit path converts known source units into the active pack ABI before pivot/SQL.",
+    "Canonical processing and storage ABI is metric-c-v2 (°C, Δ°C, Pa, kPa, L/s, kW, kWh).",
+    "Rule SQL and historian values remain imperial-f-v1 on running stacks until W4 ingest/cutover land.",
+    "Declared source units convert once at ingest (W2b) or cutover (W2c); no query-time admit after W2b.",
     "Display preference is independent of processing and must not use ±32 on deltas/rates.",
     "Percent 0–100 vs fraction 0–1 is declared metadata — never inferred from magnitude.",
-    "FCU-DEADBAND uses DEADBAND_C (Celsius difference) even under imperial-f-v1 pack — see parameter kinds.",
+    "Parameter SI renames are published in parameter_si_rename_map.json; registry keys stay until W4/W2c migration.",
     "Pa per in.w.c. constant matches fdd_core::units::PA_PER_IN_WC (248.84)."
   ],
   "quantities": [
     {
       "id": "absolute_temperature",
       "canonical_unit": "degC",
-      "pack_v1_unit": "degF",
       "aliases": ["C", "°C", "degC", "celsius", "F", "°F", "degF", "fahrenheit"]
     },
     {
       "id": "temperature_difference",
       "canonical_unit": "delta_degC",
-      "pack_v1_unit": "delta_degF",
       "conversion": "scale_only",
-      "aliases": ["deltaC", "Δ°C", "K_diff", "deltaF", "Δ°F"]
+      "aliases": ["deltaC", "Δ°C", "K_diff", "deltaF", "Δ°F", "degF_delta", "degC_delta"]
     },
     {
       "id": "temperature_rate",
       "canonical_unit": "delta_degC_per_h",
-      "pack_v1_unit": "delta_degF_per_h",
-      "conversion": "scale_only"
+      "conversion": "scale_only",
+      "aliases": [
+        "delta_degC_per_h",
+        "Δ°C/h",
+        "degC_per_h",
+        "delta_degF_per_h",
+        "degF_per_h",
+        "Δ°F/h"
+      ]
     },
     {
       "id": "air_pressure",
       "canonical_unit": "Pa",
-      "pack_v1_unit": "in_wc",
-      "aliases": ["Pa", "pascal", "inH2O", "in.w.c.", "in_wc"]
+      "aliases": ["Pa", "pascal", "inH2O", "in.w.c.", "in_wc", "inwc"]
     },
     {
       "id": "hydronic_pressure",
       "canonical_unit": "kPa",
-      "pack_v1_unit": "psi",
       "aliases": ["kPa", "psi"]
     },
     {
       "id": "volumetric_flow",
       "canonical_unit": "L_per_s",
-      "pack_v1_unit": "cfm",
-      "aliases": ["L/s", "lps", "cfm", "m3/s"]
+      "aliases": ["L/s", "lps", "L_per_s", "cfm", "gpm", "m3/s"]
     },
     {
       "id": "power",
       "canonical_unit": "kW",
-      "aliases": ["kW", "W"]
+      "aliases": ["kW", "W", "kw"]
     },
     {
       "id": "interval_energy",
       "canonical_unit": "kWh",
-      "aliases": ["kWh", "Wh"]
+      "aliases": ["kWh", "Wh", "kwh"]
     },
     {
       "id": "percent",
       "canonical_unit": "percent_0_100",
-      "fraction_unit": "fraction_0_1",
-      "notes": "Declared only; 1 means 1% when percent, 100% when fraction."
+      "aliases": ["pct", "percent", "%", "percent_0_100"]
+    },
+    {
+      "id": "fraction",
+      "canonical_unit": "fraction_0_1",
+      "aliases": ["frac", "fraction", "fraction_0_1"]
     },
     {
       "id": "relative_humidity",
       "canonical_unit": "percent_0_100",
-      "aliases": ["%RH", "%", "RH", "percent_relative_humidity"]
+      "aliases": ["%RH", "RH", "percent_relative_humidity"]
     },
     {
       "id": "status",
-      "canonical_unit": "boolean"
+      "canonical_unit": "boolean",
+      "aliases": ["bool", "boolean"]
     },
     {
       "id": "occupancy_mode",
@@ -87,16 +93,29 @@
     "air_pressure",
     "hydronic_pressure",
     "volumetric_flow",
+    "power",
+    "interval_energy",
     "percent",
     "fraction",
+    "relative_humidity",
     "duration_seconds",
     "duration_minutes",
     "dimensionless",
+    "count",
     "boolean"
   ],
+  "unsupported_rules": [
+    {
+      "rule_id": "SV-RATE",
+      "status": "unsupported",
+      "reason": "time policy not versioned for metric-c-v2"
+    }
+  ],
+  "parameter_si_rename_map": "sql/contract/parameter_si_rename_map.json",
   "constants": {
     "PA_PER_IN_WC": 248.84,
     "LPS_PER_CFM": 0.471947,
-    "KPA_PER_PSI": 6.894757
+    "KPA_PER_PSI": 6.894757,
+    "GPM_TO_LPS": 0.0630902
   }
 }

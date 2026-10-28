@@ -1,13 +1,14 @@
 {
-  "golden_id": "openfdd-unit-vectors-v1",
+  "golden_id": "openfdd-unit-vectors-v2",
   "contract_version": "4.0.0",
+  "processing_abi": "metric-c-v2",
   "cases": [
     {
       "id": "abs_20C_eq_68F",
       "kind": "absolute_temperature",
       "metric": 20.0,
       "imperial": 68.0,
-      "expect_equal_after_admit_to_pack_v1": true
+      "note": "canonical SI storage; imperial source converts at ingest"
     },
     {
       "id": "delta_5F_is_2p777C",
@@ -15,6 +16,31 @@
       "imperial": 5.0,
       "metric": 2.777777777777778,
       "note": "scale only — never ±32"
+    },
+    {
+      "id": "rate_9F_per_h_is_5C_per_h",
+      "kind": "temperature_rate",
+      "imperial": 9.0,
+      "metric": 5.0,
+      "note": "Δ°F/h scale-only to Δ°C/h"
+    },
+    {
+      "id": "inwc_1_is_248p84_Pa",
+      "kind": "air_pressure",
+      "in_wc": 1.0,
+      "metric": 248.84
+    },
+    {
+      "id": "psi_1_is_6p894757_kPa",
+      "kind": "hydronic_pressure",
+      "psi": 1.0,
+      "metric": 6.894757
+    },
+    {
+      "id": "cfm_1_is_0p471947_Lps",
+      "kind": "volumetric_flow",
+      "cfm": 1.0,
+      "metric": 0.471947
     },
     {
       "id": "satdev_20C_vs_23C_exceeds_5F",

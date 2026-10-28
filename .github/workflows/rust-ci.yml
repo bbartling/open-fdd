@@ -98,6 +98,11 @@ jobs:
       - name: Cookbook + README docs integrity (59-rule floor, cookbook link)
         run: python3 scripts/cookbook_parity_check.py --docs-only
 
+      - name: Unit contract (T1284-1)
+        run: |
+          python3 scripts/ci/check_unit_contract.py
+          CARGO_TARGET_DIR=/tmp/ofdd-target-w2-unit-contract cargo test -p fdd_core units_contract::
+
       - name: Anti-hardcoding audit
         run: bash -n scripts/audit_no_private_bench_hardcoding.sh && ./scripts/audit_no_private_bench_hardcoding.sh
 
