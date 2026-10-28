@@ -163,15 +163,18 @@ async fn run_vav1(site: &str, extra: serde_json::Value) -> serde_json::Value {
     let mut payload = json!({
         "building_id": site,
         "confirmation_seconds": 0,
+        "rule_ids": ["VAV-1"],
     });
     if let Some(obj) = extra.as_object() {
         for (k, v) in obj {
             payload[k] = v.clone();
         }
     }
-    crate::timescale_product::run_fdd_registry(&payload)
+    let out = crate::timescale_product::run_fdd_registry(&payload)
         .await
-        .expect("run")
+        .expect("run");
+    fdd_tsdb::clear_shared_pool();
+    out
 }
 
 async fn release_test_pool(pool: sqlx::PgPool) {
