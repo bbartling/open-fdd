@@ -182,7 +182,12 @@ pub fn historian_rows(
     let overlay = open_fdd_edge_prototype::csv_ingest::model_overlay::load_engineer_point_overlay(
         building_root,
     )
-    .map_err(|e| format!("engineer overlay unreadable under {}: {e}", building_root.display()))?;
+    .map_err(|e| {
+        format!(
+            "engineer overlay unreadable under {}: {e}",
+            building_root.display()
+        )
+    })?;
     Ok(snapshot
         .points
         .iter()
@@ -246,12 +251,7 @@ pub async fn apply_to_stores(
             }
         };
         match tsdb
-            .sync_portal_inventory(
-                building_id,
-                provider_instance_id,
-                &rows,
-                snapshot.complete,
-            )
+            .sync_portal_inventory(building_id, provider_instance_id, &rows, snapshot.complete)
             .await
         {
             Ok(report) => {

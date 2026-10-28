@@ -185,7 +185,10 @@ pub async fn refresh_point_map_overlay(
         return Ok(());
     }
     let store = load_engineer_point_overlay(building_root).map_err(|e| {
-        format!("engineer overlay unreadable under {}: {e}", building_root.display())
+        format!(
+            "engineer overlay unreadable under {}: {e}",
+            building_root.display()
+        )
     })?;
     let mut patches = Vec::with_capacity(portal_point_ids.len());
     for pid in portal_point_ids {

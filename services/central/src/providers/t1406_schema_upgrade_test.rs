@@ -137,7 +137,10 @@ async fn t1406_authorized_series_view_upgrades_from_v406_column_order() {
     .fetch_one(&pool)
     .await
     .expect("authorized_series row");
-    assert_eq!(row.get::<Option<String>, _>("unit").as_deref(), Some("degF"));
+    assert_eq!(
+        row.get::<Option<String>, _>("unit").as_deref(),
+        Some("degF")
+    );
     assert_eq!(
         row.get::<Option<String>, _>("quantity").as_deref(),
         Some("absolute_temperature")
