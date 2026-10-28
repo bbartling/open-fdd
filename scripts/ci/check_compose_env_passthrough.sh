@@ -9,6 +9,75 @@ CREDENTIALS_ENV_PATTERN='OPENFDD_NF_PROVIDER_CREDENTIALS_ENV|provider-credential
 SITES_MOUNT_PATTERN='OPENFDD_SITES_DIR:-\$\{HOME\}/\.config/openfdd/sites'
 SITES_TARGET='/config/sites'
 
+# Same compose config volume entry: source, target /config/sites, read_only: true.
+central_sites_mount_readonly_ok() {
+  local central_block="$1"
+  local want_source="$2"
+  OPENFDD_SITES_MOUNT_WANT="$want_source" \
+    awk -v want="$want_source" -v target="$SITES_TARGET" '
+      function flush() {
+        if (e_target == target && e_source == want && e_ro == 1) {
+          ok = 1
+        }
+      }
+      /^      - type:/ {
+        flush()
+        e_source = ""
+        e_target = ""
+        e_ro = 0
+      }
+      /^        source: / {
+        e_source = substr($0, index($0, "source: ") + 8)
+        gsub(/^[ \t]+|[ \t]+$/, "", e_source)
+      }
+      /^        target: / {
+        e_target = substr($0, index($0, "target: ") + 8)
+        gsub(/^[ \t]+|[ \t]+$/, "", e_target)
+      }
+      /^        read_only: true$/ { e_ro = 1 }
+      END {
+        flush()
+        exit(ok ? 0 : 1)
+      }
+    ' <<<"$central_block"
+}
+
+run_sites_mount_matcher_self_test() {
+  local want="/tmp/ofdd-ci-sites-negative"
+  local block decoy
+  block='    volumes:
+      - type: bind
+        source: '"$want"'
+        target: '"$SITES_TARGET"'
+        read_only: false'
+  if central_sites_mount_readonly_ok "$block" "$want"; then
+    echo "FAIL: T1401-8 matcher must reject writable ${SITES_TARGET} entry" >&2
+    return 1
+  fi
+  decoy='    volumes:
+      - type: bind
+        source: '"$want"'
+        target: '"$SITES_TARGET"'
+      - type: bind
+        source: /config/nf
+        target: /config/nf
+        read_only: true'
+  if central_sites_mount_readonly_ok "$decoy" "$want"; then
+    echo "FAIL: T1401-8 matcher must not accept read_only on a different volume entry" >&2
+    return 1
+  fi
+  echo "PASS: T1401-8 negative control (matcher rejects non-RO ${SITES_TARGET})"
+  return 0
+}
+
+extract_central_block() {
+  awk '
+    /^  central:/ { in_central=1; next }
+    in_central && /^  [a-z]/ && !/^  central:/ { in_central=0 }
+    in_central { print }
+  '
+}
+
 required=(
   OPENFDD_INGEST_CATCHUP_HOURS
   OPENFDD_INGEST_DAILY_CATCHUP_DAYS
@@ -56,6 +125,11 @@ check_source_files() {
   fi
   return "$fail"
 }
+
+if ! run_sites_mount_matcher_self_test; then
+  echo "SUMMARY: FAIL compose env passthrough check (matcher self-test)" >&2
+  exit 1
+fi
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "NOTE: docker not installed; checking compose source only"
@@ -105,11 +179,7 @@ if ! config="$("${COMPOSE[@]}" config 2>"$config_err")"; then
 fi
 rm -f "$config_err"
 
-central_block="$(printf '%s\n' "$config" | awk '
-  /^  central:/ { in_central=1; next }
-  in_central && /^  [a-z]/ && !/^  central:/ { in_central=0 }
-  in_central { print }
-')"
+central_block="$(printf '%s\n' "$config" | extract_central_block)"
 
 if [[ -z "$central_block" ]]; then
   echo "FAIL: could not find central service in compose config" >&2
@@ -152,21 +222,25 @@ else
   fail=1
 fi
 
-central_volumes="$(printf '%s\n' "$central_block" | awk '
-  /^    volumes:/ { in_vol=1; next }
-  in_vol && /^    [a-z_]+:/ && !/^    volumes:/ { in_vol=0 }
-  in_vol { print }
-')"
-
-if printf '%s\n' "$central_volumes" | grep -qF "source: ${OPENFDD_SITES_DIR}" \
-  && printf '%s\n' "$central_volumes" | grep -qF "target: ${SITES_TARGET}" \
-  && printf '%s\n' "$central_volumes" | grep -q 'read_only: true'; then
+if central_sites_mount_readonly_ok "$central_block" "$OPENFDD_SITES_DIR"; then
   echo "PASS: central bind-mounts OPENFDD_SITES_DIR at ${SITES_TARGET}:ro (T1401-8)"
 else
-  echo "FAIL: central volumes must bind OPENFDD_SITES_DIR (${OPENFDD_SITES_DIR}) to ${SITES_TARGET} read-only" >&2
-  printf '%s\n' "$central_volumes" >&2
+  echo "FAIL: central must have one read-only bind: ${OPENFDD_SITES_DIR} -> ${SITES_TARGET}" >&2
+  printf '%s\n' "$central_block" | awk '/^    volumes:/,/^    [a-z_]+:/' >&2
   fail=1
 fi
+
+writable_local="$(mktemp)"
+sed 's|/config/sites:ro|/config/sites|' docker/compose.local.yml >"$writable_local"
+writable_config="$("${COMPOSE[@]}" -f docker/compose.portal.yml -f docker/compose.timescale.yml -f "$writable_local" config 2>/dev/null || true)"
+writable_central="$(printf '%s\n' "$writable_config" | extract_central_block)"
+if central_sites_mount_readonly_ok "$writable_central" "$OPENFDD_SITES_DIR"; then
+  echo "FAIL: T1401-8 negative control: writable sites mount must not pass" >&2
+  fail=1
+else
+  echo "PASS: T1401-8 negative control (compose without :ro on sites rejected)"
+fi
+rm -f "$writable_local"
 
 rm -rf "$CI_SITES_DIR"
 

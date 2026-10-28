@@ -88,11 +88,29 @@ product code.
    `/config/sites:ro` inside `central`. Docker Compose does **not** expand `~`;
    leave `OPENFDD_SITES_DIR` unset only when `HOME` is set in the shell that
    runs `docker compose`, or set `OPENFDD_SITES_DIR` explicitly in repo-root
-   `.env`. The overlay also binds `../scripts/nf` at `/config/nf:ro` (generic
-   helpers only). Set `OPENFDD_PROVIDER_SITES=/config/sites` (directory of
-   `*.json`) or a comma-separated list of files under that mount.
-4. Restart central after config changes. `GET /api/providers/sites` lists each
+   `.env`. **Before the first stack start**, create that host directory as the
+   operator user (Docker creates a missing short-syntax bind source as
+   **root-owned**):
+
+   ```bash
+   mkdir -p "${OPENFDD_SITES_DIR:-$HOME/.config/openfdd/sites}"
+   ```
+
+   The overlay also binds `../scripts/nf` at `/config/nf:ro` (generic helpers
+   only). Set `OPENFDD_PROVIDER_SITES=/config/sites` (directory of `*.json`) or
+   a comma-separated list of files under that mount.
+4. Reload provider config after edits. **`GET /api/providers/sites`** lists each
    loaded site; a missing env ref fails only that site (`auth_not_configured`).
+
+   - **JSON only** under an unchanged mount (same `OPENFDD_SITES_DIR` and
+     `OPENFDD_PROVIDER_SITES`): restart `central` is enough (`docker compose …
+     restart central`).
+   - **`OPENFDD_SITES_DIR` or `OPENFDD_PROVIDER_SITES` changed** in repo-root
+     `.env`: recreate `central` so bind mounts and env reload — run the same
+     `docker compose … up -d` you use for stack bring-up (for example
+     `./scripts/openfdd_stack_up.sh portal --no-pull` or
+     `./scripts/openfdd_local_repin.sh`; both already use `up -d --no-build`, not
+     restart-only).
 5. After onboarding, run
    `python3 scripts/nf/check_portal_fresh.py --env <secrets.env> --sites <site.json> --points <probes.json>`
    per portal (see [`scripts/nf/README.md`](../../scripts/nf/README.md)).
