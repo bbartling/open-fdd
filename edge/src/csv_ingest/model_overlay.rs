@@ -1031,10 +1031,7 @@ pub fn upsert_engineer_point_overlay(
     if pid.is_empty() {
         return Err("point_id required".into());
     }
-    if unit.is_none()
-        && quantity.is_none()
-        && cadence_secs.is_none()
-        && primary_reference.is_none()
+    if unit.is_none() && quantity.is_none() && cadence_secs.is_none() && primary_reference.is_none()
     {
         return Ok(());
     }

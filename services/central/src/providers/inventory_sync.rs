@@ -30,8 +30,8 @@ use tracing::{debug, warn};
 
 use super::committed_model::{
     apply_engineer_point_overlays, model_from_json, model_from_point_map,
-    resolve_point_map_binding, validate_model, BootstrapPoint, CommittedModel,
-    CommittedModelStore, ModelScope,
+    resolve_point_map_binding, validate_model, BootstrapPoint, CommittedModel, CommittedModelStore,
+    ModelScope,
 };
 use super::config::SiteConfig;
 use super::Runtime;
@@ -191,11 +191,8 @@ pub fn historian_rows(
             let entry = overlay
                 .as_ref()
                 .and_then(|store| store.points.get(&pt.portal_point_id));
-            let binding = resolve_point_map_binding(
-                pt.unit.as_deref(),
-                pt.his_mode.as_deref(),
-                entry,
-            );
+            let binding =
+                resolve_point_map_binding(pt.unit.as_deref(), pt.his_mode.as_deref(), entry);
             PortalInventoryPoint {
                 portal_point_id: pt.portal_point_id.clone(),
                 equipment_id: pt.equipment_id.clone(),

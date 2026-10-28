@@ -293,9 +293,7 @@ impl Tsdb {
             .await?;
             let candidate =
                 inventory_candidate_key(&point.equipment_id, &point.role, &point.portal_point_id);
-            let cadence_i64 = point
-                .cadence_secs
-                .and_then(|secs| i64::try_from(secs).ok());
+            let cadence_i64 = point.cadence_secs.and_then(|secs| i64::try_from(secs).ok());
             let key = upsert_portal_point(
                 &mut tx,
                 &PortalPointUpsert {
@@ -361,9 +359,7 @@ impl Tsdb {
         }
         let mut tx = self.pool().begin().await?;
         for patch in patches {
-            let cadence_i64 = patch
-                .cadence_secs
-                .and_then(|secs| i64::try_from(secs).ok());
+            let cadence_i64 = patch.cadence_secs.and_then(|secs| i64::try_from(secs).ok());
             let updated = sqlx::query(
                 r#"
                 UPDATE point_map

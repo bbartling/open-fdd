@@ -166,7 +166,9 @@ fn effective_point_cadence(
     }
 }
 
-fn load_overlay_store(building_root: &Path) -> Option<open_fdd_edge_prototype::csv_ingest::model_overlay::EngineerPointOverlayStore> {
+fn load_overlay_store(
+    building_root: &Path,
+) -> Option<open_fdd_edge_prototype::csv_ingest::model_overlay::EngineerPointOverlayStore> {
     load_engineer_point_overlay(building_root).ok()
 }
 
@@ -338,8 +340,7 @@ pub fn apply_engineer_point_overlays(
             if let Some(q) = effective_point_quantity(entry) {
                 point.quantity = Some(q);
             }
-            let (history_mode, cadence_secs) =
-                effective_point_cadence(None, entry);
+            let (history_mode, cadence_secs) = effective_point_cadence(None, entry);
             if history_mode.is_some() {
                 point.history_mode = history_mode;
             }
