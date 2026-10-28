@@ -77,11 +77,17 @@ pub(crate) async fn upsert_portal_point(
         ON CONFLICT (site_id, openfdd_key) DO UPDATE
           SET haystack_id = EXCLUDED.haystack_id,
               role = EXCLUDED.role,
-              unit = EXCLUDED.unit,
-              source_unit = EXCLUDED.source_unit,
-              quantity = EXCLUDED.quantity,
-              cadence_secs = EXCLUDED.cadence_secs,
-              history_mode = EXCLUDED.history_mode,
+              unit = CASE WHEN $12 THEN EXCLUDED.unit ELSE point_map.unit END,
+              source_unit = CASE
+                WHEN $12 THEN EXCLUDED.source_unit ELSE point_map.source_unit
+              END,
+              quantity = CASE WHEN $12 THEN EXCLUDED.quantity ELSE point_map.quantity END,
+              cadence_secs = CASE
+                WHEN $12 THEN EXCLUDED.cadence_secs ELSE point_map.cadence_secs
+              END,
+              history_mode = CASE
+                WHEN $12 THEN EXCLUDED.history_mode ELSE point_map.history_mode
+              END,
               equipment_id = EXCLUDED.equipment_id,
               portal_point_id = EXCLUDED.portal_point_id,
               provider_instance_id = COALESCE(
