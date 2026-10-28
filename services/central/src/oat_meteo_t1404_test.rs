@@ -210,19 +210,17 @@ async fn t1404_sql_asof_fixture_offsets_and_gap() {
         "fault_hours={fault_hours}"
     );
 
+    sqlx::query("DELETE FROM sample WHERE site_id = $1")
+        .bind(&site)
+        .execute(&pool)
+        .await
+        .expect("clear samples");
     let mut mild = UpsertBatch::default();
     for m in (0..=120).step_by(5) {
-        mild.push(sample(&site, "WX", "oa_t", "WX.oa_t_a", m + 200, 53.0));
+        mild.push(sample(&site, "WX", "oa_t", "WX.oa_t_a", m, 53.0));
     }
     for m in (0..=120).step_by(20) {
-        mild.push(sample(
-            &site,
-            "WX",
-            "web_oa_t",
-            "WX.web_oa_t",
-            m + 200,
-            50.0,
-        ));
+        mild.push(sample(&site, "WX", "web_oa_t", "WX.web_oa_t", m, 50.0));
     }
     upsert_samples(&pool, mild).await;
     let mild_hours = run_oat_meteo(&pool, &site, Some(fill)).await;
