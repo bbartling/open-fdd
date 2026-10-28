@@ -1226,6 +1226,7 @@ mod tests {
                 equip_type: Some(kind.into()),
                 role: role.into(),
                 source_unit: None,
+                source_history_mode: None,
                 unit: None,
                 quantity: None,
                 cadence_secs: None,

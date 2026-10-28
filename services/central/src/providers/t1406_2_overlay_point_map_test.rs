@@ -26,7 +26,7 @@ async fn apply_schema(pool: &sqlx::PgPool) {
     crate::portal_inventory_fixtures::apply_schema(pool).await;
 }
 
-fn sat_point(unit: Option<&str>) -> InventoryPoint {
+fn sat_point(unit: Option<&str>, his_mode: Option<&str>) -> InventoryPoint {
     InventoryPoint {
         portal_point_id: "pt-sat-t1406".into(),
         display_name: None,
@@ -40,20 +40,45 @@ fn sat_point(unit: Option<&str>) -> InventoryPoint {
         kind: Some("Number".into()),
         tz: None,
         his: Some(true),
-        his_mode: Some("interval".into()),
+        his_mode: his_mode.map(str::to_string),
         enum_value: None,
         ref_rel: None,
         ref_id: None,
     }
 }
 
-fn snapshot(unit: Option<&str>) -> InventorySnapshot {
+fn snapshot_with_id(
+    portal_point_id: &str,
+    unit: Option<&str>,
+    his_mode: Option<&str>,
+) -> InventorySnapshot {
     InventorySnapshot {
-        points: vec![sat_point(unit)],
+        points: vec![InventoryPoint {
+            portal_point_id: portal_point_id.into(),
+            display_name: None,
+            unit: unit.map(str::to_string),
+            equipment_id: "AHU_1".into(),
+            equip_type: Some("ahu".into()),
+            equip_dis: None,
+            equip_markers: vec!["ahu".into()],
+            role: "sat".into(),
+            markers: vec!["sensor".into(), "temp".into()],
+            kind: Some("Number".into()),
+            tz: None,
+            his: Some(true),
+            his_mode: his_mode.map(str::to_string),
+            enum_value: None,
+            ref_rel: None,
+            ref_id: None,
+        }],
         source_points: 1,
         complete: true,
         diagnostics: InventoryDiagnostics::default(),
     }
+}
+
+fn snapshot(unit: Option<&str>, his_mode: Option<&str>) -> InventorySnapshot {
+    snapshot_with_id("pt-sat-t1406", unit, his_mode)
 }
 
 #[tokio::test]
@@ -62,6 +87,7 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
         return;
     };
     let site = "T1406_POINT_MAP";
+    apply_schema(&pool).await;
     for sql in [
         "DELETE FROM sample WHERE site_id = $1",
         "DELETE FROM role_map WHERE building_id = $1",
@@ -70,7 +96,6 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     ] {
         sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
     }
-    apply_schema(&pool).await;
     let tsdb = Tsdb::from_pool(pool.clone());
     let dir = tempfile::tempdir().expect("tempdir");
     let root = dir.path().join(site);
@@ -89,7 +114,14 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     )
     .expect("overlay");
 
-    let first = apply_to_stores(Some(&tsdb), &root, site, SOURCE, &snapshot(Some("degC"))).await;
+    let first = apply_to_stores(
+        Some(&tsdb),
+        &root,
+        site,
+        SOURCE,
+        &snapshot(Some("degC"), Some("interval")),
+    )
+    .await;
     assert!(first.errors.is_empty(), "{:?}", first.errors);
 
     let row = sqlx::query(
@@ -123,7 +155,14 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     .expect("authorized_series");
     assert_eq!(auth_unit.as_deref(), Some("degF"));
 
-    let resync = apply_to_stores(Some(&tsdb), &root, site, SOURCE, &snapshot(None)).await;
+    let resync = apply_to_stores(
+        Some(&tsdb),
+        &root,
+        site,
+        SOURCE,
+        &snapshot(None, Some("interval")),
+    )
+    .await;
     assert!(resync.errors.is_empty(), "{:?}", resync.errors);
 
     let row = sqlx::query(
@@ -157,6 +196,74 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     refresh_point_map_overlay(&tsdb, &root, site, &["pt-sat-t1406".to_string()])
         .await
         .expect("overlay refresh");
+
+    for sql in [
+        "DELETE FROM sample WHERE site_id = $1",
+        "DELETE FROM role_map WHERE building_id = $1",
+        "DELETE FROM point_map WHERE site_id = $1",
+        "DELETE FROM equipment WHERE building_id = $1",
+    ] {
+        sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
+    }
+}
+
+#[tokio::test]
+async fn t1406_2_overlay_refresh_without_cadence_preserves_cov_history_mode() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    let site = "T1406_COV_REFRESH";
+    apply_schema(&pool).await;
+    for sql in [
+        "DELETE FROM sample WHERE site_id = $1",
+        "DELETE FROM role_map WHERE building_id = $1",
+        "DELETE FROM point_map WHERE site_id = $1",
+        "DELETE FROM equipment WHERE building_id = $1",
+    ] {
+        sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
+    }
+    let tsdb = Tsdb::from_pool(pool.clone());
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path().join(site);
+    let pid = "pt-cov-t1406";
+
+    let sync = apply_to_stores(
+        Some(&tsdb),
+        &root,
+        site,
+        SOURCE,
+        &snapshot_with_id(pid, Some("degC"), Some("cov")),
+    )
+    .await;
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+
+    model_overlay::upsert_engineer_point_overlay(
+        &root,
+        site,
+        pid,
+        model_overlay::EngineerPointOverlayPatch {
+            unit: Some("degF"),
+            quantity: Some("absolute_temperature"),
+            cadence_secs: None,
+            primary_reference: None,
+        },
+        false,
+    )
+    .expect("overlay unit only");
+
+    refresh_point_map_overlay(&tsdb, &root, site, &[pid.to_string()])
+        .await
+        .expect("overlay refresh");
+
+    let history_mode: Option<String> = sqlx::query_scalar(
+        "SELECT history_mode FROM point_map WHERE site_id = $1 AND portal_point_id = $2",
+    )
+    .bind(site)
+    .bind(pid)
+    .fetch_one(&pool)
+    .await
+    .expect("point_map history_mode");
+    assert_eq!(history_mode.as_deref(), Some("cov"));
 
     for sql in [
         "DELETE FROM sample WHERE site_id = $1",

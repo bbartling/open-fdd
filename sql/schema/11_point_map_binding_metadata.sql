@@ -3,6 +3,7 @@
 -- quantity and cadence_secs come from the engineer overlay when declared.
 
 ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_unit text;
+ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_history_mode text;
 ALTER TABLE point_map ADD COLUMN IF NOT EXISTS quantity text;
 ALTER TABLE point_map ADD COLUMN IF NOT EXISTS cadence_secs bigint;
 ALTER TABLE point_map ADD COLUMN IF NOT EXISTS history_mode text;

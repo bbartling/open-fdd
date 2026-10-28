@@ -178,19 +178,16 @@ pub fn overlay_rows(
 pub fn historian_rows(
     snapshot: &InventorySnapshot,
     building_root: &Path,
-    _building_id: &str,
-) -> Vec<PortalInventoryPoint> {
+) -> Result<Vec<PortalInventoryPoint>, String> {
     let overlay = open_fdd_edge_prototype::csv_ingest::model_overlay::load_engineer_point_overlay(
         building_root,
     )
-    .ok();
-    snapshot
+    .map_err(|e| format!("engineer overlay unreadable under {}: {e}", building_root.display()))?;
+    Ok(snapshot
         .points
         .iter()
         .map(|pt| {
-            let entry = overlay
-                .as_ref()
-                .and_then(|store| store.points.get(&pt.portal_point_id));
+            let entry = overlay.points.get(&pt.portal_point_id);
             let binding =
                 resolve_point_map_binding(pt.unit.as_deref(), pt.his_mode.as_deref(), entry);
             PortalInventoryPoint {
@@ -199,13 +196,14 @@ pub fn historian_rows(
                 equip_type: pt.equip_type.clone(),
                 role: pt.role.clone(),
                 source_unit: binding.source_unit,
+                source_history_mode: binding.source_history_mode,
                 unit: binding.unit,
                 quantity: binding.quantity,
                 cadence_secs: binding.cadence_secs,
                 history_mode: binding.history_mode,
             }
         })
-        .collect()
+        .collect())
 }
 
 /// Ingest bindings for the tagged points that carry an equipment type.
@@ -238,11 +236,20 @@ pub async fn apply_to_stores(
     let mut outcome = InventorySyncOutcome::default();
     let mut keys = BTreeMap::new();
     if let Some(tsdb) = tsdb {
+        let rows = match historian_rows(snapshot, building_root) {
+            Ok(rows) => rows,
+            Err(message) => {
+                warn!(%building_id, %message, "portal inventory overlay read failed");
+                outcome.errors.push("engineer_overlay_unreadable".into());
+                outcome.diagnostics.reason = Some(message);
+                return outcome;
+            }
+        };
         match tsdb
             .sync_portal_inventory(
                 building_id,
                 provider_instance_id,
-                &historian_rows(snapshot, building_root, building_id),
+                &rows,
                 snapshot.complete,
             )
             .await
@@ -1018,3 +1025,7 @@ mod tests {
 #[cfg(test)]
 #[path = "t1406_2_overlay_point_map_test.rs"]
 mod t1406_2_overlay_point_map_test;
+
+#[cfg(test)]
+#[path = "t1406_schema_upgrade_test.rs"]
+mod t1406_schema_upgrade_test;

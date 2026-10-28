@@ -452,6 +452,7 @@ async fn apply_historian_schema(pool: &PgPool) {
             ON point_map (site_id, portal_point_id)
             WHERE portal_point_id IS NOT NULL",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_unit text",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_history_mode text",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS quantity text",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS cadence_secs bigint",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS history_mode text",

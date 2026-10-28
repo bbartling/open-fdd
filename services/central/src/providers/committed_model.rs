@@ -123,6 +123,7 @@ pub struct CommittedPoint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PointMapBinding {
     pub source_unit: Option<String>,
+    pub source_history_mode: Option<String>,
     pub unit: Option<String>,
     pub quantity: Option<String>,
     pub history_mode: Option<String>,
@@ -139,11 +140,17 @@ pub fn resolve_point_map_binding(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    let source_history_mode = portal_his_mode
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     let unit = effective_point_unit(source_unit.as_deref(), overlay);
     let quantity = effective_point_quantity(overlay);
-    let (history_mode, cadence_secs) = effective_point_cadence(portal_his_mode, overlay);
+    let (history_mode, cadence_secs) =
+        effective_point_cadence(source_history_mode.as_deref(), overlay);
     PointMapBinding {
         source_unit,
+        source_history_mode,
         unit,
         quantity,
         history_mode,
@@ -167,12 +174,6 @@ fn effective_point_cadence(
     }
 }
 
-fn load_overlay_store(
-    building_root: &Path,
-) -> Option<open_fdd_edge_prototype::csv_ingest::model_overlay::EngineerPointOverlayStore> {
-    load_engineer_point_overlay(building_root).ok()
-}
-
 /// Re-resolve engineer overlay onto `point_map` after an overlay write.
 pub async fn refresh_point_map_overlay(
     tsdb: &fdd_tsdb::Tsdb,
@@ -183,11 +184,14 @@ pub async fn refresh_point_map_overlay(
     if portal_point_ids.is_empty() {
         return Ok(());
     }
-    let store = load_overlay_store(building_root);
+    let store = load_engineer_point_overlay(building_root).map_err(|e| {
+        format!("engineer overlay unreadable under {}: {e}", building_root.display())
+    })?;
     let mut patches = Vec::with_capacity(portal_point_ids.len());
     for pid in portal_point_ids {
         let row = sqlx::query(
-            "SELECT source_unit FROM point_map WHERE site_id = $1 AND portal_point_id = $2",
+            "SELECT source_unit, source_history_mode FROM point_map \
+             WHERE site_id = $1 AND portal_point_id = $2",
         )
         .bind(site_id)
         .bind(pid)
@@ -198,8 +202,15 @@ pub async fn refresh_point_map_overlay(
             continue;
         };
         let source_unit: Option<String> = row.try_get("source_unit").map_err(|e| e.to_string())?;
-        let entry = store.as_ref().and_then(|s| s.points.get(pid.as_str()));
-        let binding = resolve_point_map_binding(source_unit.as_deref(), None, entry);
+        let source_history_mode: Option<String> = row
+            .try_get("source_history_mode")
+            .map_err(|e| e.to_string())?;
+        let entry = store.points.get(pid.as_str());
+        let binding = resolve_point_map_binding(
+            source_unit.as_deref(),
+            source_history_mode.as_deref(),
+            entry,
+        );
         if let Some(unit) = binding.unit.as_deref() {
             validate_unit(unit)?;
         }

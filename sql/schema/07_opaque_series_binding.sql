@@ -20,6 +20,9 @@
 -- This statement creates a view. It does not rewrite sample rows.
 -- Rollback of the application can ignore the view. Dropping the view
 -- later does not remove samples, point_map rows, or role_map rows.
+--
+-- Column order: preserve 4.0.6 authorized_series columns, then append W1a
+-- binding metadata so CREATE OR REPLACE VIEW upgrades on live databases.
 
 CREATE OR REPLACE VIEW authorized_series AS
 SELECT
@@ -28,13 +31,13 @@ SELECT
   rm.equipment_id,
   rm.role,
   pm.unit,
-  pm.quantity,
-  pm.cadence_secs,
-  pm.history_mode,
   pm.referenced,
   pm.portal_point_id,
   pm.provider_instance_id,
-  pm.haystack_id
+  pm.haystack_id,
+  pm.quantity,
+  pm.cadence_secs,
+  pm.history_mode
 FROM point_map pm
 JOIN role_map rm
   ON rm.building_id = pm.site_id

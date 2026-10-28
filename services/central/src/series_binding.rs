@@ -51,6 +51,7 @@ pub async fn ensure_authorized_series(pool: &PgPool) {
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS referenced boolean NOT NULL DEFAULT true",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS provider_instance_id text",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_unit text",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_history_mode text",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS quantity text",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS cadence_secs bigint",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS history_mode text",

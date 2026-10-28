@@ -13,6 +13,10 @@ use sqlx::{Postgres, Row, Transaction};
 
 use crate::client::{Tsdb, TsdbError};
 
+fn cadence_u64_to_i64(secs: u64) -> Result<i64, TsdbError> {
+    i64::try_from(secs).map_err(|_| TsdbError::CadenceOutOfRange(secs))
+}
+
 pub(crate) struct PortalPointUpsert<'a> {
     pub site_id: &'a str,
     pub portal_point_id: &'a str,
@@ -23,6 +27,8 @@ pub(crate) struct PortalPointUpsert<'a> {
     pub unit: Option<&'a str>,
     /// NF portal tag unit only; updated on inventory sync.
     pub source_unit: Option<&'a str>,
+    /// NF portal history mode (`cov` / `interval`) from inventory sync.
+    pub source_history_mode: Option<&'a str>,
     pub quantity: Option<&'a str>,
     pub cadence_secs: Option<i64>,
     pub history_mode: Option<&'a str>,
@@ -69,31 +75,34 @@ pub(crate) async fn upsert_portal_point(
     let row = sqlx::query(
         r#"
         INSERT INTO point_map(
-          site_id, openfdd_key, haystack_id, role, unit, source_unit, quantity,
-          cadence_secs, history_mode, equipment_id,
+          site_id, openfdd_key, haystack_id, role, unit, source_unit, source_history_mode,
+          quantity, cadence_secs, history_mode, equipment_id,
           portal_point_id, provider_instance_id, referenced
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $3, $11, true)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $3, $12, true)
         ON CONFLICT (site_id, openfdd_key) DO UPDATE
           SET haystack_id = EXCLUDED.haystack_id,
               role = EXCLUDED.role,
-              unit = CASE WHEN $12 THEN EXCLUDED.unit ELSE point_map.unit END,
+              unit = CASE WHEN $13 THEN EXCLUDED.unit ELSE point_map.unit END,
               source_unit = CASE
-                WHEN $12 THEN EXCLUDED.source_unit ELSE point_map.source_unit
+                WHEN $13 THEN EXCLUDED.source_unit ELSE point_map.source_unit
               END,
-              quantity = CASE WHEN $12 THEN EXCLUDED.quantity ELSE point_map.quantity END,
+              source_history_mode = CASE
+                WHEN $13 THEN EXCLUDED.source_history_mode ELSE point_map.source_history_mode
+              END,
+              quantity = CASE WHEN $13 THEN EXCLUDED.quantity ELSE point_map.quantity END,
               cadence_secs = CASE
-                WHEN $12 THEN EXCLUDED.cadence_secs ELSE point_map.cadence_secs
+                WHEN $13 THEN EXCLUDED.cadence_secs ELSE point_map.cadence_secs
               END,
               history_mode = CASE
-                WHEN $12 THEN EXCLUDED.history_mode ELSE point_map.history_mode
+                WHEN $13 THEN EXCLUDED.history_mode ELSE point_map.history_mode
               END,
               equipment_id = EXCLUDED.equipment_id,
               portal_point_id = EXCLUDED.portal_point_id,
               provider_instance_id = COALESCE(
                 EXCLUDED.provider_instance_id, point_map.provider_instance_id
               ),
-              referenced = CASE WHEN $12 THEN true ELSE point_map.referenced END
+              referenced = CASE WHEN $13 THEN true ELSE point_map.referenced END
         RETURNING referenced
         "#,
     )
@@ -103,6 +112,7 @@ pub(crate) async fn upsert_portal_point(
     .bind(role)
     .bind(point.unit)
     .bind(point.source_unit)
+    .bind(point.source_history_mode)
     .bind(point.quantity)
     .bind(point.cadence_secs)
     .bind(point.history_mode)
@@ -202,6 +212,8 @@ pub struct PortalInventoryPoint {
     pub role: String,
     /// NF portal tag unit (may be empty).
     pub source_unit: Option<String>,
+    /// NF portal history mode from inventory sync.
+    pub source_history_mode: Option<String>,
     /// Resolved binding unit for authorized_series and role_map.
     pub unit: Option<String>,
     pub quantity: Option<String>,
@@ -299,7 +311,10 @@ impl Tsdb {
             .await?;
             let candidate =
                 inventory_candidate_key(&point.equipment_id, &point.role, &point.portal_point_id);
-            let cadence_i64 = point.cadence_secs.and_then(|secs| i64::try_from(secs).ok());
+            let cadence_i64 = match point.cadence_secs {
+                Some(secs) => Some(cadence_u64_to_i64(secs)?),
+                None => None,
+            };
             let key = upsert_portal_point(
                 &mut tx,
                 &PortalPointUpsert {
@@ -310,6 +325,7 @@ impl Tsdb {
                     role: &point.role,
                     unit: point.unit.as_deref(),
                     source_unit: point.source_unit.as_deref(),
+                    source_history_mode: point.source_history_mode.as_deref(),
                     quantity: point.quantity.as_deref(),
                     cadence_secs: cadence_i64,
                     history_mode: point.history_mode.as_deref(),
@@ -365,7 +381,10 @@ impl Tsdb {
         }
         let mut tx = self.pool().begin().await?;
         for patch in patches {
-            let cadence_i64 = patch.cadence_secs.and_then(|secs| i64::try_from(secs).ok());
+            let cadence_i64 = match patch.cadence_secs {
+                Some(secs) => Some(cadence_u64_to_i64(secs)?),
+                None => None,
+            };
             let updated = sqlx::query(
                 r#"
                 UPDATE point_map

@@ -16,6 +16,8 @@ pub enum TsdbError {
     MissingDatabaseUrl,
     #[error("invalid building id")]
     InvalidBuildingId,
+    #[error("cadence_secs {0} exceeds PostgreSQL bigint range")]
+    CadenceOutOfRange(u64),
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 }
@@ -234,6 +236,7 @@ impl Tsdb {
                                     role,
                                     unit: row.unit.as_deref(),
                                     source_unit: None,
+                                    source_history_mode: None,
                                     quantity: None,
                                     cadence_secs: None,
                                     history_mode: None,
