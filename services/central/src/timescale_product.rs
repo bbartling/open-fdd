@@ -2741,7 +2741,7 @@ pub(crate) fn oat_meteo_web_asof_bound_seconds() -> f64 {
     let Some(rule) = reg.rules.iter().find(|r| r.rule_id == "OAT-METEO") else {
         return 1500.0;
     };
-    let confirm = rule.confirm_seconds.unwrap_or(900);
+    let confirm = rule.confirm_seconds;
     let mut params = rule_params(300.0, confirm);
     if let Ok(tuning) = load_tuning_profiles(Path::new(&reg.rules_dir)) {
         if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
