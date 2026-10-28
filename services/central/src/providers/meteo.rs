@@ -14,7 +14,7 @@ use super::http_policy::{
     acceptable_unit, build_provider_client, floor_timestamp_micros, read_body_bounded,
     retry_after_secs, status_error, HttpLimits, MAX_SAMPLES_PER_RESPONSE,
 };
-use super::map::{HistorySeries, RawProviderPoint};
+use super::map::{HistoryFetchPage, HistorySeries, RawProviderPoint};
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
 
 pub const MAX_METEO_SERIES: usize = 8;
@@ -156,7 +156,7 @@ impl OpenMeteoDriver {
         series: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<HistorySeries>, FetchError> {
+    ) -> Result<map::HistoryFetchPage, FetchError> {
         let points = self
             .fetch_history(series, from, to)
             .await
@@ -169,13 +169,16 @@ impl OpenMeteoDriver {
                 .or_default()
                 .push(point);
         }
-        Ok(grouped
-            .into_iter()
-            .map(|(provider_point_id, samples)| HistorySeries {
-                provider_point_id,
-                samples,
-            })
-            .collect())
+        Ok(map::HistoryFetchPage {
+            series: grouped
+                .into_iter()
+                .map(|(provider_point_id, samples)| HistorySeries {
+                    provider_point_id,
+                    samples,
+                })
+                .collect(),
+            complete: true,
+        })
     }
 }
 

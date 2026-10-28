@@ -10,6 +10,7 @@ mod postgres;
 pub(crate) mod replay_horizon;
 mod scale;
 pub(crate) mod schedule;
+mod portal_env;
 mod status;
 mod worker;
 

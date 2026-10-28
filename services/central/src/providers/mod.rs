@@ -128,8 +128,8 @@ impl DataProvider for nf::NfPortalDriver {
         from: chrono::DateTime<chrono::Utc>,
         to: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<map::HistorySeries>, error::ProviderError> {
-        let points = nf::NfPortalDriver::fetch_history(self, point_ids, from, to).await?;
-        Ok(nf::group_history(points))
+        let paged = nf::NfPortalDriver::fetch_history(self, point_ids, from, to).await?;
+        Ok(nf::group_history(paged.points))
     }
 }
 
@@ -452,6 +452,8 @@ impl Runtime {
                     hourly_coverage: None,
                     capabilities: Vec::new(),
                     coverage_ledger: None,
+                    portal_throttled_since: None,
+                    portal_throttle_count: 0,
                 }],
                 config_error: None,
                 registry: Vec::new(),
@@ -624,6 +626,8 @@ fn health_row(
         hourly_coverage: None,
         capabilities: registry::capabilities_for(site.kind),
         coverage_ledger: None,
+        portal_throttled_since: None,
+        portal_throttle_count: 0,
     }
 }
 
@@ -652,6 +656,8 @@ fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
         hourly_coverage: None,
         capabilities: registry::capabilities_for(ProviderKind::Nf),
         coverage_ledger: None,
+        portal_throttled_since: None,
+        portal_throttle_count: 0,
     }
 }
 
@@ -833,6 +839,8 @@ mod tests {
             hourly_coverage: None,
             capabilities: Vec::new(),
             coverage_ledger: None,
+            portal_throttled_since: None,
+            portal_throttle_count: 0,
         }
     }
 

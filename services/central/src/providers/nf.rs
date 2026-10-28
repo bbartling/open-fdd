@@ -4,7 +4,7 @@
 //! History reads are `GET /api/v1/point/data`. `POST` on that path is a write
 //! and is never used here. OAuth token calls are `POST /api/v1/auth/token`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
@@ -22,8 +22,15 @@ use super::http_policy::{
     read_body_bounded, retry_after_secs, status_error, HttpLimits, MAX_ID_LEN,
     MAX_SAMPLES_PER_RESPONSE,
 };
-use super::map::{HistorySeries, RawProviderPoint};
+use super::map::{HistoryFetchPage, HistorySeries, RawProviderPoint};
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
+
+/// Raw samples from one bounded history read plus an explicit completeness flag.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PagedHistoryPoints {
+    pub points: Vec<RawProviderPoint>,
+    pub complete: bool,
+}
 
 #[derive(Clone)]
 pub struct NfPortalDriver {
@@ -349,10 +356,13 @@ impl NfPortalDriver {
         uuids: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<RawProviderPoint>, ProviderError> {
+    ) -> Result<PagedHistoryPoints, ProviderError> {
         let limits = self.history_driver_limits();
         if uuids.is_empty() {
-            return Ok(Vec::new());
+            return Ok(PagedHistoryPoints {
+                points: Vec::new(),
+                complete: true,
+            });
         }
         if uuids.len() > limits.max_points_total {
             return Err(ProviderError::new(ProviderErrorCode::Contract));
@@ -361,13 +371,21 @@ impl NfPortalDriver {
             return Err(ProviderError::new(ProviderErrorCode::Contract));
         }
         let mut out = Vec::new();
+        let mut seen: HashSet<(String, DateTime<Utc>)> = HashSet::new();
+        let mut complete = true;
         for chunk in uuids.chunks(limits.max_points_per_request) {
             let page = self
                 .fetch_history_chunk_paged(chunk, from, to, &limits)
                 .await?;
-            merge_history_samples(&mut out, page);
+            merge_history_samples(&mut out, page.points, &mut seen);
+            if !page.complete {
+                complete = false;
+            }
         }
-        Ok(out)
+        Ok(PagedHistoryPoints {
+            points: out,
+            complete,
+        })
     }
 
     /// One history page for the hourly scheduler. Transport stays the bounded
@@ -377,10 +395,14 @@ impl NfPortalDriver {
         uuids: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<HistorySeries>, FetchError> {
+    ) -> Result<HistoryFetchPage, FetchError> {
         debug_assert_eq!(history_http_method(), "GET");
-        super::DataProvider::fetch_history(self, uuids, from, to)
+        self.fetch_history(uuids, from, to)
             .await
+            .map(|paged| HistoryFetchPage {
+                series: group_history(paged.points),
+                complete: paged.complete,
+            })
             .map_err(fetch_error_from_provider)
     }
 
@@ -390,33 +412,71 @@ impl NfPortalDriver {
         from: DateTime<Utc>,
         to: DateTime<Utc>,
         limits: &HistoryDriverLimits,
-    ) -> Result<Vec<RawProviderPoint>, ProviderError> {
+    ) -> Result<PagedHistoryPoints, ProviderError> {
         for uuid in uuids {
             if !valid_point_id(uuid) {
                 return Err(ProviderError::new(ProviderErrorCode::InvalidSample));
             }
         }
         if !limits.supports_paging {
-            return self.fetch_history_chunk_once(uuids, from, to, limits).await;
+            let points = self.fetch_history_chunk_once(uuids, from, to, limits).await?;
+            return Ok(PagedHistoryPoints {
+                points,
+                complete: true,
+            });
         }
         let mut out = Vec::new();
+        let mut seen: HashSet<(String, DateTime<Utc>)> = HashSet::new();
+        let mut complete = true;
+        for uuid in uuids {
+            let point = self
+                .fetch_history_point_paged(uuid, from, to, limits)
+                .await?;
+            merge_history_samples(&mut out, point.points, &mut seen);
+            if !point.complete {
+                complete = false;
+            }
+        }
+        Ok(PagedHistoryPoints {
+            points: out,
+            complete,
+        })
+    }
+
+    async fn fetch_history_point_paged(
+        &mut self,
+        uuid: &str,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        limits: &HistoryDriverLimits,
+    ) -> Result<PagedHistoryPoints, ProviderError> {
+        let mut out = Vec::new();
+        let mut seen: HashSet<(String, DateTime<Utc>)> = HashSet::new();
         let mut cursor = from;
-        let guard_max = 512;
-        for _ in 0..guard_max {
+        for _ in 0..limits.max_history_pages {
             let page = self
-                .fetch_history_chunk_once(uuids, cursor, to, limits)
+                .fetch_history_chunk_once(&[uuid.to_string()], cursor, to, limits)
                 .await?;
             let capped = page.len() >= limits.max_samples_per_response;
-            merge_history_samples(&mut out, page);
+            merge_history_samples(&mut out, page, &mut seen);
             if !capped {
-                return Ok(out);
+                return Ok(PagedHistoryPoints {
+                    points: out,
+                    complete: true,
+                });
             }
-            let Some(next) = next_history_page_start(&out, cursor, to) else {
-                return Err(ProviderError::new(ProviderErrorCode::HistoryIncomplete));
+            let Some(next) = next_history_page_start_for_point(&out, uuid, cursor, to) else {
+                return Ok(PagedHistoryPoints {
+                    points: out,
+                    complete: false,
+                });
             };
             cursor = next;
         }
-        Err(ProviderError::new(ProviderErrorCode::HistoryIncomplete))
+        Ok(PagedHistoryPoints {
+            points: out,
+            complete: false,
+        })
     }
 
     async fn fetch_history_chunk_once(
@@ -1273,24 +1333,30 @@ struct NfHistoryValue {
     quality: Option<Value>,
 }
 
-pub fn merge_history_samples(out: &mut Vec<RawProviderPoint>, page: Vec<RawProviderPoint>) {
+pub fn merge_history_samples(
+    out: &mut Vec<RawProviderPoint>,
+    page: Vec<RawProviderPoint>,
+    seen: &mut HashSet<(String, DateTime<Utc>)>,
+) {
     for sample in page {
-        if out
-            .iter()
-            .any(|row| row.provider_point_id == sample.provider_point_id && row.ts == sample.ts)
-        {
-            continue;
+        let key = (sample.provider_point_id.clone(), sample.ts);
+        if seen.insert(key) {
+            out.push(sample);
         }
-        out.push(sample);
     }
 }
 
-pub(crate) fn next_history_page_start(
+pub(crate) fn next_history_page_start_for_point(
     samples: &[RawProviderPoint],
+    point_id: &str,
     window_from: DateTime<Utc>,
     window_to: DateTime<Utc>,
 ) -> Option<DateTime<Utc>> {
-    let max_ts = samples.iter().map(|row| row.ts).max()?;
+    let max_ts = samples
+        .iter()
+        .filter(|row| row.provider_point_id == point_id)
+        .map(|row| row.ts)
+        .max()?;
     let next = max_ts + chrono::Duration::microseconds(1);
     if next >= window_to || next <= window_from {
         None
@@ -1722,12 +1788,13 @@ mod tests {
         });
         let mut driver = lab_driver(port, "secret", HttpLimits::default());
         driver.authenticate().await.unwrap();
-        let points = driver
+        let page = driver
             .fetch_history(&["11111111-2222-3333-4444-555555555555".into()], from, to)
             .await
             .unwrap();
-        assert_eq!(points.len(), 1);
-        assert!((points[0].val - 70.5).abs() < 1e-9);
+        assert_eq!(page.points.len(), 1);
+        assert!(page.complete);
+        assert!((page.points[0].val - 70.5).abs() < 1e-9);
         let err = driver
             .fetch_history(&["11111111-2222-3333-4444-555555555555".into()], from, to)
             .await

@@ -343,6 +343,14 @@ pub struct HistorySeries {
     pub samples: Vec<RawProviderPoint>,
 }
 
+/// One bounded history read for ingest coverage. `complete` is false when paging
+/// stopped before the full window was retrieved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryFetchPage {
+    pub series: Vec<HistorySeries>,
+    pub complete: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawProviderPoint {
     pub provider_point_id: String,

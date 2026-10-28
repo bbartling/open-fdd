@@ -13,6 +13,9 @@ pub struct HistoryDriverLimits {
     pub max_points_per_request: usize,
     pub max_points_total: usize,
     pub max_samples_per_response: usize,
+    /// Maximum HTTP pages per point per window. Further pages are not requested;
+    /// the driver reports `complete: false` instead of silently truncating.
+    pub max_history_pages: usize,
     pub supports_paging: bool,
 }
 
@@ -23,6 +26,7 @@ impl HistoryDriverLimits {
             max_points_per_request: MAX_UUIDS_PER_REQUEST,
             max_points_total: MAX_UUIDS_TOTAL,
             max_samples_per_response: MAX_SAMPLES_PER_RESPONSE,
+            max_history_pages: 512,
             supports_paging: true,
         }
     }
