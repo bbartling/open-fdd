@@ -25,11 +25,10 @@ use dashmap::DashMap;
 use fdd_store::{
     apply_scheduler_config_update, lookback_equals_schedule_cadence, next_due_at,
     parse_backfill_request, plan_bounded_backfill, plan_continuous_cycle,
-    plan_continuous_lookback_chunks, wall_clock_local_rfc3339, AfddBackfillChunk, AfddConfig,
-    AfddCycleWindow, AfddMode, AfddOperatorSchedule, AfddSchedulerCheckpoint,
-    AfddSchedulerCheckpointStore, SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINTS_PATH,
-    AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES,
-    OPERATOR_LOOKBACK_DAYS,
+    plan_continuous_lookback_chunks, wall_clock_local_rfc3339, AfddConfig, AfddCycleWindow,
+    AfddMode, AfddOperatorSchedule, AfddSchedulerCheckpoint, AfddSchedulerCheckpointStore,
+    SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINTS_PATH, AFDD_SCHEDULER_CHECKPOINT_PATH,
+    AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -168,10 +167,10 @@ impl AfddChunkEnv {
     }
 
     fn configured_chunk_seconds(&self) -> Option<u64> {
-        self.error
-            .is_none()
-            .then(|| self.hours?)
-            .map(|hours| hours.saturating_mul(3600))
+        if self.error.is_some() {
+            return None;
+        }
+        self.hours.map(|hours| hours.saturating_mul(3600))
     }
 }
 
