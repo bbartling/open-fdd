@@ -724,8 +724,8 @@ async fn resolve_cache_identity_from(
 }
 
 async fn resolve_cache_identity_unconnected(
-    building_id: &str,
-    req: &AnalyticsRequest,
+    _building_id: &str,
+    _req: &AnalyticsRequest,
 ) -> CacheIdentity {
     let sql_pack = crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default();
     let reason = "timescale connect failed for analytics cache identity".to_string();
@@ -1197,13 +1197,30 @@ mod tests {
     #[tokio::test]
     async fn bas_vs_web_skips_cache_when_oa_t_key_resolution_unavailable() {
         let _cg = CgroupTestEnv::low_pressure();
-        let _lock = crate::test_env_lock::lock_env();
-        let prev_db = std::env::var("OPENFDD_DATABASE_URL").ok();
-        std::env::set_var(
-            "OPENFDD_DATABASE_URL",
-            "postgresql://invalid:invalid@127.0.0.1:9/nodb",
-        );
-        fdd_tsdb::clear_shared_pool();
+        struct DbUrlOverride {
+            prev: Option<String>,
+        }
+        impl DbUrlOverride {
+            fn invalid_localhost() -> Self {
+                let prev = std::env::var("OPENFDD_DATABASE_URL").ok();
+                std::env::set_var(
+                    "OPENFDD_DATABASE_URL",
+                    "postgresql://invalid:invalid@127.0.0.1:9/nodb",
+                );
+                fdd_tsdb::clear_shared_pool();
+                Self { prev }
+            }
+        }
+        impl Drop for DbUrlOverride {
+            fn drop(&mut self) {
+                match self.prev.take() {
+                    Some(v) => std::env::set_var("OPENFDD_DATABASE_URL", v),
+                    None => std::env::remove_var("OPENFDD_DATABASE_URL"),
+                }
+                fdd_tsdb::clear_shared_pool();
+            }
+        }
+        let _db = DbUrlOverride::invalid_localhost();
         let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let request = req("site-cache-skip");
@@ -1229,11 +1246,6 @@ mod tests {
             "expected cache bypass reason, got: {reason}"
         );
         assert_eq!(served.cache["hit"], false);
-        match prev_db {
-            Some(v) => std::env::set_var("OPENFDD_DATABASE_URL", v),
-            None => std::env::remove_var("OPENFDD_DATABASE_URL"),
-        }
-        fdd_tsdb::clear_shared_pool();
     }
 
     #[test]

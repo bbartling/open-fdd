@@ -3264,26 +3264,6 @@ fn hash_fdd_pack(root: &Path) -> Result<String, String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-pub(crate) async fn read_analytics_cache_input(
-    building_id: &str,
-    start: Option<DateTime<Utc>>,
-    end: Option<DateTime<Utc>>,
-    equipment_ids: &[String],
-) -> AnalyticsCacheInput {
-    let tsdb = match Tsdb::connect_from_env().await {
-        Ok(tsdb) => tsdb,
-        Err(err) => {
-            tracing::warn!(error = %err, "analytics cache timescale connect failed");
-            let reason = public_db_error("timescale connect", &err);
-            return AnalyticsCacheInput {
-                model_revision: Err(reason.clone()),
-                watermark: Err(reason),
-            };
-        }
-    };
-    read_analytics_cache_input_from(&tsdb, building_id, start, end, equipment_ids).await
-}
-
 pub(crate) async fn read_analytics_cache_input_from(
     tsdb: &Tsdb,
     building_id: &str,
