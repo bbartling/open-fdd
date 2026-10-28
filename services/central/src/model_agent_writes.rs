@@ -1225,7 +1225,11 @@ mod tests {
                 equipment_id: equip.into(),
                 equip_type: Some(kind.into()),
                 role: role.into(),
+                source_unit: None,
                 unit: None,
+                quantity: None,
+                cadence_secs: None,
+                history_mode: None,
             };
         let all = vec![
             point("p1", "AHU_1", "ahu", "sat"),

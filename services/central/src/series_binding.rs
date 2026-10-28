@@ -50,10 +50,10 @@ pub async fn ensure_authorized_series(pool: &PgPool) {
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS portal_point_id text",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS referenced boolean NOT NULL DEFAULT true",
         "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS provider_instance_id text",
-        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS equipment_id text",
-        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS role text",
-        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS haystack_id text",
-        "ALTER TABLE role_map ADD COLUMN IF NOT EXISTS unit text",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_unit text",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS quantity text",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS cadence_secs bigint",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS history_mode text",
     ] {
         crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
     }

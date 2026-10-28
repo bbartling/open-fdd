@@ -59,6 +59,7 @@ const SCHEMA_SQL: &[&str] = &[
     include_str!("../../../sql/schema/08_analytics_result_cache.sql"),
     include_str!("../../../sql/schema/09_data_revision.sql"),
     include_str!("../../../sql/schema/10_incremental_fdd.sql"),
+    include_str!("../../../sql/schema/11_point_map_binding_metadata.sql"),
 ];
 
 /// Tables whose rows mean this database is already in use.

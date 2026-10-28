@@ -19,7 +19,13 @@ pub(crate) struct PortalPointUpsert<'a> {
     pub provider_instance_id: Option<&'a str>,
     pub equipment_id: &'a str,
     pub role: &'a str,
+    /// Resolved binding unit (overlay > NF tag > empty).
     pub unit: Option<&'a str>,
+    /// NF portal tag unit only; updated on inventory sync.
+    pub source_unit: Option<&'a str>,
+    pub quantity: Option<&'a str>,
+    pub cadence_secs: Option<i64>,
+    pub history_mode: Option<&'a str>,
     /// Key used only when this portal point has no row yet.
     pub candidate_key: &'a str,
     /// Inventory sync marks the point referenced. Sample ingest leaves the flag.
@@ -63,20 +69,25 @@ pub(crate) async fn upsert_portal_point(
     let row = sqlx::query(
         r#"
         INSERT INTO point_map(
-          site_id, openfdd_key, haystack_id, role, unit, equipment_id,
+          site_id, openfdd_key, haystack_id, role, unit, source_unit, quantity,
+          cadence_secs, history_mode, equipment_id,
           portal_point_id, provider_instance_id, referenced
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $3, $7, true)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $3, $11, true)
         ON CONFLICT (site_id, openfdd_key) DO UPDATE
           SET haystack_id = EXCLUDED.haystack_id,
               role = EXCLUDED.role,
-              unit = COALESCE(EXCLUDED.unit, point_map.unit),
+              unit = EXCLUDED.unit,
+              source_unit = EXCLUDED.source_unit,
+              quantity = EXCLUDED.quantity,
+              cadence_secs = EXCLUDED.cadence_secs,
+              history_mode = EXCLUDED.history_mode,
               equipment_id = EXCLUDED.equipment_id,
               portal_point_id = EXCLUDED.portal_point_id,
               provider_instance_id = COALESCE(
                 EXCLUDED.provider_instance_id, point_map.provider_instance_id
               ),
-              referenced = CASE WHEN $8 THEN true ELSE point_map.referenced END
+              referenced = CASE WHEN $12 THEN true ELSE point_map.referenced END
         RETURNING referenced
         "#,
     )
@@ -85,6 +96,10 @@ pub(crate) async fn upsert_portal_point(
     .bind(point.portal_point_id)
     .bind(role)
     .bind(point.unit)
+    .bind(point.source_unit)
+    .bind(point.quantity)
+    .bind(point.cadence_secs)
+    .bind(point.history_mode)
     .bind(point.equipment_id)
     .bind(point.provider_instance_id)
     .bind(point.mark_referenced)
@@ -179,7 +194,24 @@ pub struct PortalInventoryPoint {
     pub equipment_id: String,
     pub equip_type: Option<String>,
     pub role: String,
+    /// NF portal tag unit (may be empty).
+    pub source_unit: Option<String>,
+    /// Resolved binding unit for authorized_series and role_map.
     pub unit: Option<String>,
+    pub quantity: Option<String>,
+    pub cadence_secs: Option<u64>,
+    pub history_mode: Option<String>,
+}
+
+/// Re-resolve overlay metadata onto existing point_map rows (overlay write path).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PointMapBindingPatch {
+    pub portal_point_id: String,
+    pub source_unit: Option<String>,
+    pub unit: Option<String>,
+    pub quantity: Option<String>,
+    pub cadence_secs: Option<u64>,
+    pub history_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -261,6 +293,9 @@ impl Tsdb {
             .await?;
             let candidate =
                 inventory_candidate_key(&point.equipment_id, &point.role, &point.portal_point_id);
+            let cadence_i64 = point
+                .cadence_secs
+                .and_then(|secs| i64::try_from(secs).ok());
             let key = upsert_portal_point(
                 &mut tx,
                 &PortalPointUpsert {
@@ -270,6 +305,10 @@ impl Tsdb {
                     equipment_id: &point.equipment_id,
                     role: &point.role,
                     unit: point.unit.as_deref(),
+                    source_unit: point.source_unit.as_deref(),
+                    quantity: point.quantity.as_deref(),
+                    cadence_secs: cadence_i64,
+                    history_mode: point.history_mode.as_deref(),
                     candidate_key: &candidate,
                     mark_referenced: true,
                 },
@@ -309,6 +348,65 @@ impl Tsdb {
         report.newly_unreferenced = dropped.len() as u64;
         tx.commit().await?;
         Ok(report)
+    }
+
+    /// Apply engineer-resolved binding fields to existing portal points.
+    pub async fn patch_point_map_bindings(
+        &self,
+        site_id: &str,
+        patches: &[PointMapBindingPatch],
+    ) -> Result<(), TsdbError> {
+        if patches.is_empty() {
+            return Ok(());
+        }
+        let mut tx = self.pool().begin().await?;
+        for patch in patches {
+            let cadence_i64 = patch
+                .cadence_secs
+                .and_then(|secs| i64::try_from(secs).ok());
+            let updated = sqlx::query(
+                r#"
+                UPDATE point_map
+                SET unit = $3,
+                    quantity = $4,
+                    cadence_secs = $5,
+                    history_mode = $6
+                WHERE site_id = $1 AND portal_point_id = $2
+                "#,
+            )
+            .bind(site_id)
+            .bind(&patch.portal_point_id)
+            .bind(patch.unit.as_deref())
+            .bind(patch.quantity.as_deref())
+            .bind(cadence_i64)
+            .bind(patch.history_mode.as_deref())
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+            if updated == 0 {
+                continue;
+            }
+            if let Some(unit) = patch.unit.as_deref() {
+                sqlx::query(
+                    r#"
+                    UPDATE role_map
+                    SET unit = $3
+                    WHERE building_id = $1
+                      AND openfdd_key IN (
+                        SELECT openfdd_key FROM point_map
+                        WHERE site_id = $1 AND portal_point_id = $2
+                      )
+                    "#,
+                )
+                .bind(site_id)
+                .bind(&patch.portal_point_id)
+                .bind(unit)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Unreferenced points that still hold samples (orphaned historian data).

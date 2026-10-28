@@ -29,6 +29,10 @@ const V1: &str = include_str!("providers/fixtures/nf_inventory_v1.json");
 const V2: &str = include_str!("providers/fixtures/nf_inventory_v2.json");
 const TOKEN: &str = r#"{"accessToken":"tok-w7n","expiresIn":3600}"#;
 const PORTAL_SCHEMA: &str = include_str!("../../../sql/schema/05_portal_inventory.sql");
+const BINDING_METADATA_SCHEMA: &str =
+    include_str!("../../../sql/schema/11_point_map_binding_metadata.sql");
+const AUTHORIZED_SERIES_VIEW: &str =
+    include_str!("../../../sql/schema/07_opaque_series_binding.sql");
 
 fn test_database_url() -> Option<String> {
     std::env::var("OPENFDD_TEST_DATABASE_URL")
@@ -104,6 +108,15 @@ pub(crate) async fn apply_schema(pool: &PgPool) {
         })
         .filter(|s| !s.trim().is_empty())
     {
+        crate::test_ddl::execute_idempotent_ddl(pool, &statement).await;
+    }
+    for statement in BINDING_METADATA_SCHEMA
+        .split(';')
+        .filter(|s| !s.trim().is_empty())
+    {
+        crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
+    }
+    for statement in crate::db_lifecycle::statements(AUTHORIZED_SERIES_VIEW) {
         crate::test_ddl::execute_idempotent_ddl(pool, &statement).await;
     }
 }

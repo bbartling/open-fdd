@@ -29,8 +29,9 @@ use serde::Serialize;
 use tracing::{debug, warn};
 
 use super::committed_model::{
-    apply_engineer_point_overlays, model_from_json, model_from_point_map, validate_model,
-    BootstrapPoint, CommittedModel, CommittedModelStore, ModelScope,
+    apply_engineer_point_overlays, model_from_json, model_from_point_map,
+    resolve_point_map_binding, validate_model, BootstrapPoint, CommittedModel,
+    CommittedModelStore, ModelScope,
 };
 use super::config::SiteConfig;
 use super::Runtime;
@@ -174,16 +175,38 @@ pub fn overlay_rows(
     (equipment.into_values().collect(), points)
 }
 
-pub fn historian_rows(snapshot: &InventorySnapshot) -> Vec<PortalInventoryPoint> {
+pub fn historian_rows(
+    snapshot: &InventorySnapshot,
+    building_root: &Path,
+    _building_id: &str,
+) -> Vec<PortalInventoryPoint> {
+    let overlay = open_fdd_edge_prototype::csv_ingest::model_overlay::load_engineer_point_overlay(
+        building_root,
+    )
+    .ok();
     snapshot
         .points
         .iter()
-        .map(|pt| PortalInventoryPoint {
-            portal_point_id: pt.portal_point_id.clone(),
-            equipment_id: pt.equipment_id.clone(),
-            equip_type: pt.equip_type.clone(),
-            role: pt.role.clone(),
-            unit: pt.unit.clone(),
+        .map(|pt| {
+            let entry = overlay
+                .as_ref()
+                .and_then(|store| store.points.get(&pt.portal_point_id));
+            let binding = resolve_point_map_binding(
+                pt.unit.as_deref(),
+                pt.his_mode.as_deref(),
+                entry,
+            );
+            PortalInventoryPoint {
+                portal_point_id: pt.portal_point_id.clone(),
+                equipment_id: pt.equipment_id.clone(),
+                equip_type: pt.equip_type.clone(),
+                role: pt.role.clone(),
+                source_unit: binding.source_unit,
+                unit: binding.unit,
+                quantity: binding.quantity,
+                cadence_secs: binding.cadence_secs,
+                history_mode: binding.history_mode,
+            }
         })
         .collect()
 }
@@ -222,7 +245,7 @@ pub async fn apply_to_stores(
             .sync_portal_inventory(
                 building_id,
                 provider_instance_id,
-                &historian_rows(snapshot),
+                &historian_rows(snapshot, building_root, building_id),
                 snapshot.complete,
             )
             .await
@@ -968,6 +991,7 @@ mod tests {
             Some("absolute_temperature"),
             None,
             false,
+            false,
         )
         .expect("engineer");
         let scope = ModelScope {
@@ -991,3 +1015,7 @@ mod tests {
         assert_eq!(again.equipment[0].points[0].unit.as_deref(), Some("degF"));
     }
 }
+
+#[cfg(test)]
+#[path = "t1406_2_overlay_point_map_test.rs"]
+mod t1406_2_overlay_point_map_test;
