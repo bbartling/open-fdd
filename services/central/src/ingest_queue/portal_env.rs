@@ -39,6 +39,15 @@ pub fn effective_max_concurrent_jobs(budget: BudgetDefaults) -> Result<usize, St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_test_guard() -> MutexGuard<'static, ()> {
+        ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
 
     struct EnvGuard {
         key: &'static str,
@@ -67,6 +76,7 @@ mod tests {
 
     #[test]
     fn unset_uses_documented_default() {
+        let _lock = env_test_guard();
         let _g = EnvGuard::set("OPENFDD_PROVIDER_MAX_CONCURRENT", None);
         assert_eq!(
             provider_max_concurrent_from_env().unwrap(),
@@ -76,6 +86,7 @@ mod tests {
 
     #[test]
     fn zero_and_garbage_are_config_errors() {
+        let _lock = env_test_guard();
         let _g = EnvGuard::set("OPENFDD_PROVIDER_MAX_CONCURRENT", Some("0"));
         assert!(provider_max_concurrent_from_env().is_err());
         let _g = EnvGuard::set("OPENFDD_PROVIDER_MAX_CONCURRENT", Some("nope"));

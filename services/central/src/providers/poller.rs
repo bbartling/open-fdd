@@ -895,7 +895,6 @@ impl HistorySource for NfHistory<'_> {
             self.transport
                 .read_history_page(&req.point_ids, req.from, req.to)
                 .await
-                .map(|page| page.series)
                 .map_err(|failure| {
                     warn!(
                         device_id = %req.device_id,
@@ -903,6 +902,13 @@ impl HistorySource for NfHistory<'_> {
                         "NF history read failed"
                     );
                     failure.fetch_error()
+                })
+                .and_then(|page| {
+                    if page.complete {
+                        Ok(page.series)
+                    } else {
+                        Err(super::hourly::FetchError::PartialSeries)
+                    }
                 })
         })
     }

@@ -419,12 +419,12 @@ impl NfPortalDriver {
             }
         }
         if !limits.supports_paging {
-            let points = self
+            let (points, response_at_cap) = self
                 .fetch_history_chunk_once(uuids, from, to, limits)
                 .await?;
             return Ok(PagedHistoryPoints {
                 points,
-                complete: true,
+                complete: !response_at_cap,
             });
         }
         let mut out = Vec::new();
@@ -456,10 +456,10 @@ impl NfPortalDriver {
         let mut seen: HashSet<(String, DateTime<Utc>)> = HashSet::new();
         let mut cursor = from;
         for _ in 0..limits.max_history_pages {
-            let page = self
+            let (page, response_at_cap) = self
                 .fetch_history_chunk_once(&[uuid.to_string()], cursor, to, limits)
                 .await?;
-            let capped = page.len() >= limits.max_samples_per_response;
+            let capped = response_at_cap;
             merge_history_samples(&mut out, page, &mut seen);
             if !capped {
                 return Ok(PagedHistoryPoints {
@@ -488,13 +488,14 @@ impl NfPortalDriver {
         from: DateTime<Utc>,
         to: DateTime<Utc>,
         limits: &HistoryDriverLimits,
-    ) -> Result<Vec<RawProviderPoint>, ProviderError> {
+    ) -> Result<(Vec<RawProviderPoint>, bool), ProviderError> {
         debug_assert_eq!(history_http_method(), "GET");
         let url = build_history_read_url(&self.endpoint, uuids, from, to);
         let (status, bytes, retry_after) = self.send(&url, None, true, true).await?;
         self.ensure_success(status, retry_after)?;
         let text = std::str::from_utf8(&bytes).map_err(|_| ProviderError::contract())?;
-        parse_get_data_json_with_cap(text, limits.max_samples_per_response)
+        let parsed = parse_get_data_json_with_cap(text, limits.max_samples_per_response)?;
+        Ok((parsed.points, parsed.raw_values_at_cap))
     }
 
     fn ensure_success(
@@ -1368,25 +1369,37 @@ pub(crate) fn next_history_page_start_for_point(
     }
 }
 
+pub struct GetDataParseOutcome {
+    pub points: Vec<RawProviderPoint>,
+    /// True when the portal JSON contained at least `sample_cap` raw value rows.
+    pub raw_values_at_cap: bool,
+}
+
 pub fn parse_get_data_json_with_cap(
     text: &str,
     sample_cap: usize,
-) -> Result<Vec<RawProviderPoint>, ProviderError> {
+) -> Result<GetDataParseOutcome, ProviderError> {
     let parsed: GetDataResponse =
         serde_json::from_str(text).map_err(|_| ProviderError::contract())?;
     let mut out = Vec::new();
+    let mut raw_values_seen = 0usize;
     for series in parsed.data {
         let Some(provider_point_id) = series.uuid.filter(|s| valid_point_id(s.trim())) else {
+            raw_values_seen = raw_values_seen.saturating_add(series.values.len());
             continue;
         };
         let unit = match series.units.as_deref() {
             Some(raw) => match acceptable_unit(raw) {
                 Some(unit) => Some(unit),
-                None => continue,
+                None => {
+                    raw_values_seen = raw_values_seen.saturating_add(series.values.len());
+                    continue;
+                }
             },
             None => None,
         };
         for value in series.values {
+            raw_values_seen += 1;
             let Some(val) = value.double.or(value.real) else {
                 continue;
             };
@@ -1411,12 +1424,15 @@ pub fn parse_get_data_json_with_cap(
             }
         }
     }
-    Ok(out)
+    Ok(GetDataParseOutcome {
+        points: out,
+        raw_values_at_cap: raw_values_seen >= sample_cap,
+    })
 }
 
 #[cfg(test)]
 pub fn parse_get_data_json(text: &str) -> Result<Vec<RawProviderPoint>, ProviderError> {
-    parse_get_data_json_with_cap(text, MAX_SAMPLES_PER_RESPONSE)
+    parse_get_data_json_with_cap(text, MAX_SAMPLES_PER_RESPONSE).map(|parsed| parsed.points)
 }
 
 #[cfg(test)]
