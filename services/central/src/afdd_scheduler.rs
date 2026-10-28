@@ -1492,6 +1492,10 @@ mod contract_timescale {
         std::env::remove_var("OPENFDD_AFDD_CHUNK_HOURS");
     }
 
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
+    )]
     #[tokio::test]
     async fn t1403_2_three_fixture_sites_and_unknown_id() {
         let Some(url) = fixture_database_url() else {
