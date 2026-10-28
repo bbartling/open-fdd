@@ -1,0 +1,196 @@
+{
+  "schema": "openfdd-si-parity-unit-scenarios-v1",
+  "processing_abi": "metric-c-v2",
+  "scenarios": [
+    {
+      "id": "all_ip_controller",
+      "note": "Single controller declared IP — canonical SI storage values",
+      "probes": [
+        {
+          "label": "oat",
+          "quantity": "absolute_temperature",
+          "source_unit": "degF",
+          "input": 50.0,
+          "metric": 10.0,
+          "tol": 1e-9
+        },
+        {
+          "label": "static",
+          "quantity": "air_pressure",
+          "source_unit": "inH2O",
+          "input": 0.5,
+          "metric": 124.42,
+          "tol": 1e-4
+        }
+      ]
+    },
+    {
+      "id": "all_si_controller",
+      "probes": [
+        {
+          "label": "oat",
+          "quantity": "absolute_temperature",
+          "source_unit": "degC",
+          "input": 21.0,
+          "metric": 21.0,
+          "tol": 1e-9
+        },
+        {
+          "label": "flow",
+          "quantity": "volumetric_flow",
+          "source_unit": "L/s",
+          "input": 2.0,
+          "metric": 2.0,
+          "tol": 1e-9
+        }
+      ]
+    },
+    {
+      "id": "mixed_devices_same_site",
+      "physical_pairs": [
+        {
+          "quantity": "absolute_temperature",
+          "ip_value": 68.0,
+          "ip_unit": "degF",
+          "si_value": 20.0,
+          "si_unit": "degC",
+          "tol": 1e-9
+        },
+        {
+          "quantity": "volumetric_flow",
+          "ip_value": 1000.0,
+          "ip_unit": "cfm",
+          "si_value": 471.947,
+          "si_unit": "L/s",
+          "tol": 1e-3
+        }
+      ]
+    },
+    {
+      "id": "effective_dated_unit_change",
+      "physical_pairs": [
+        {
+          "quantity": "absolute_temperature",
+          "ip_value": 32.0,
+          "ip_unit": "degF",
+          "si_value": 0.0,
+          "si_unit": "degC",
+          "tol": 1e-9
+        },
+        {
+          "quantity": "absolute_temperature",
+          "ip_value": 212.0,
+          "ip_unit": "degF",
+          "si_value": 100.0,
+          "si_unit": "degC",
+          "tol": 1e-9
+        }
+      ]
+    },
+    {
+      "id": "deadband_delta_no_offset",
+      "probes": [
+        {
+          "label": "deadband_F",
+          "quantity": "temperature_difference",
+          "source_unit": "degF_delta",
+          "input": 2.0,
+          "metric": 1.111111111111111,
+          "tol": 1e-12
+        },
+        {
+          "label": "deadband_C",
+          "quantity": "temperature_difference",
+          "source_unit": "degC_delta",
+          "input": 1.5,
+          "metric": 1.5,
+          "tol": 1e-12
+        }
+      ]
+    },
+    {
+      "id": "hydronic_and_flow",
+      "probes": [
+        {
+          "label": "gpm",
+          "quantity": "volumetric_flow",
+          "source_unit": "gpm",
+          "input": 120.0,
+          "metric": 7.570824,
+          "tol": 1e-6
+        },
+        {
+          "label": "psi",
+          "quantity": "hydronic_pressure",
+          "source_unit": "psi",
+          "input": 30.0,
+          "metric": 206.84271,
+          "tol": 1e-4
+        }
+      ]
+    },
+    {
+      "id": "energy_power",
+      "probes": [
+        {
+          "label": "kwh_interval",
+          "quantity": "interval_energy",
+          "source_unit": "kWh",
+          "input": 15.0,
+          "metric": 15.0,
+          "tol": 1e-9
+        },
+        {
+          "label": "kw",
+          "quantity": "power",
+          "source_unit": "kW",
+          "input": 25.0,
+          "metric": 25.0,
+          "tol": 1e-9
+        }
+      ]
+    },
+    {
+      "id": "percent_vs_fraction",
+      "probes": [
+        {
+          "label": "percent",
+          "quantity": "percent",
+          "source_unit": "%",
+          "input": 88.0,
+          "metric": 88.0,
+          "tol": 1e-12
+        },
+        {
+          "label": "fraction",
+          "quantity": "fraction",
+          "source_unit": "frac",
+          "input": 0.88,
+          "metric": 0.88,
+          "tol": 1e-12
+        }
+      ]
+    },
+    {
+      "id": "negative_missing_unknown_incompatible",
+      "expect_error": true,
+      "probes": [
+        {
+          "quantity": "absolute_temperature",
+          "source_unit": "",
+          "input": 70.0
+        },
+        {
+          "quantity": "absolute_temperature",
+          "source_unit": "bogus_unit",
+          "input": 70.0
+        },
+        {
+          "quantity": "absolute_temperature",
+          "source_unit": "psi",
+          "input": 14.7
+        }
+      ]
+    }
+  ]
+}

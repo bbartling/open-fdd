@@ -1,8 +1,78 @@
 {
-  "schema": "si-cutover-ip-golden-v1",
+  "analytics_rows": [
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "endpoint": "/api/analytics/oat_meteo",
+      "row": {
+        "mean_abs_diff_f": 1.25,
+        "pandas_mean_abs_diff_f": 1.2500005
+      }
+    }
+  ],
   "building_id": "SYNTH_SELFTEST",
-  "note": "Placeholder golden; W0c live capture replaces with real IP baseline rows.",
-  "sql_fdd_daily": [],
-  "analytics_rows": [],
-  "pandas_fdd_daily": []
+  "pandas_fdd_daily": [
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "AHU_1",
+      "fault_seconds": 120.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "FC1",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "VAV_1",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "VAV-1",
+      "status": "OK",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "SENSOR_1",
+      "fault_seconds": 3600.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "SV-FLATLINE",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    }
+  ],
+  "schema": "si-cutover-ip-golden-v1",
+  "sql_fdd_daily": [
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "AHU_1",
+      "fault_seconds": 120.0,
+      "rule_id": "FC1",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "VAV_1",
+      "fault_seconds": 0.0,
+      "rule_id": "VAV-1",
+      "status": "OK",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "SENSOR_1",
+      "fault_seconds": 3600.0,
+      "rule_id": "SV-FLATLINE",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    }
+  ]
 }
