@@ -23,12 +23,12 @@ use axum::{Json, Router};
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use fdd_store::{
-    apply_scheduler_config_update, lookback_matches_cadence, next_due_at, parse_backfill_request,
-    plan_bounded_backfill, plan_continuous_cycle, wall_clock_local_rfc3339, AfddBackfillChunk,
-    AfddConfig, AfddCycleWindow, AfddMode, AfddOperatorSchedule, AfddSchedulerCheckpoint,
-    AfddSchedulerCheckpointStore, SchedulerConfigUpdate, AFDD_SCHEDULER_CHECKPOINTS_PATH,
-    AFDD_SCHEDULER_CHECKPOINT_PATH, AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES,
-    OPERATOR_LOOKBACK_DAYS,
+    apply_scheduler_config_update, lookback_equals_schedule_cadence, next_due_at,
+    parse_backfill_request, plan_bounded_backfill, plan_continuous_cycle, wall_clock_local_rfc3339,
+    AfddBackfillChunk, AfddConfig, AfddCycleWindow, AfddMode, AfddOperatorSchedule,
+    AfddSchedulerCheckpoint, AfddSchedulerCheckpointStore, SchedulerConfigUpdate,
+    AFDD_SCHEDULER_CHECKPOINTS_PATH, AFDD_SCHEDULER_CHECKPOINT_PATH,
+    AFDD_SCHEDULER_RUNTIME_CONFIG_PATH, OPERATOR_INTERVAL_MINUTES, OPERATOR_LOOKBACK_DAYS,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -89,6 +89,9 @@ pub struct AfddCycleRecord {
     pub start_utc: DateTime<Utc>,
     pub end_utc: DateTime<Utc>,
     pub catch_up: bool,
+    /// Time-slice size used when evaluating [`start_utc`, `end_utc`] (seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_seconds: Option<u64>,
     /// `lookback_window` for the timer and run-now. `bounded_backfill` for an
     /// explicit range. Never an unbounded rewrite.
     pub result_scope: String,
@@ -142,7 +145,7 @@ impl AfddSchedulerRuntime {
         }))
     }
 
-    /// Resolve scheduled sites from env scope against provider + Timescale inventory.
+    /// Resolve scheduled sites from env scope against NF provider sites only.
     pub fn validate_scheduled_buildings(&self, state: &AppState) -> Result<()> {
         let known = collect_known_afdd_buildings(state);
         let config = self.config_snapshot();
@@ -256,6 +259,7 @@ impl AfddSchedulerRuntime {
             start_utc: window.start_utc,
             end_utc: window.end_utc,
             catch_up: window.catch_up,
+            chunk_seconds: None,
             result_scope: result_scope_for(trigger).into(),
             ok: true,
             error: None,
@@ -372,6 +376,7 @@ impl AfddSchedulerRuntime {
                 .max()
                 .unwrap_or_else(Utc::now),
             catch_up: false,
+            chunk_seconds: None,
             result_scope: result_scope_for("run_now").into(),
             ok,
             error: records.iter().find_map(|record| record.error.clone()),
@@ -578,11 +583,8 @@ impl AfddSchedulerRuntime {
             );
         };
 
-        let chunk_hours = std::env::var("OPENFDD_AFDD_CHUNK_HOURS")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .filter(|v| *v > 0)
-            .unwrap_or(1);
+        let chunk_hours = afdd_chunk_hours();
+        let chunk_seconds = chunk_hours.saturating_mul(3600);
         let time_chunks = plan_bounded_backfill(window.start_utc, window.end_utc, chunk_hours)
             .unwrap_or_else(|_| {
                 vec![AfddBackfillChunk {
@@ -732,6 +734,7 @@ impl AfddSchedulerRuntime {
             start_utc: window.start_utc,
             end_utc: window.end_utc,
             catch_up: window.catch_up,
+            chunk_seconds: Some(chunk_seconds),
             result_scope: result_scope_for(trigger).to_string(),
             ok,
             error: if ok {
@@ -783,6 +786,8 @@ impl AfddSchedulerRuntime {
         let timer_enabled = config.mode == AfddMode::Continuous;
         let schedule_kind = config.schedule_kind;
         let watermark_source = "timescale_sample_max_ts";
+        let chunk_seconds = afdd_chunk_seconds();
+        let latest_cycle = recent_cycles.front();
         let mut sites = Vec::new();
         for building_id in &scheduled {
             let checkpoint = checkpoint_store.checkpoint_for(building_id).cloned();
@@ -800,6 +805,11 @@ impl AfddSchedulerRuntime {
                 "next_due_at_utc": if timer_enabled { Some(next_due) } else { None },
                 "next_due_local": if timer_enabled { next_due_local } else { None },
                 "last_cycle": last_cycle,
+                "cycle_window_start": last_cycle.map(|r| r.start_utc),
+                "cycle_window_end": last_cycle.map(|r| r.end_utc),
+                "chunk_seconds": last_cycle
+                    .and_then(|r| r.chunk_seconds)
+                    .unwrap_or(chunk_seconds),
             }));
         }
         let timer_scope = if scheduled.len() == 1 {
@@ -817,7 +827,10 @@ impl AfddSchedulerRuntime {
             "sites": sites,
             "watermark_source": watermark_source,
             "result_write": "lookback_window",
-            "lookback_matches_cadence": lookback_matches_cadence(&config),
+            "chunk_seconds": chunk_seconds,
+            "cycle_window_start": latest_cycle.map(|r| r.start_utc),
+            "cycle_window_end": latest_cycle.map(|r| r.end_utc),
+            "lookback_equals_schedule_cadence": lookback_equals_schedule_cadence(&config),
             "timer_scope": timer_scope,
             "last_error": last_error,
             "recent_cycles": recent_cycles,
@@ -875,18 +888,19 @@ pub(crate) fn collect_known_afdd_buildings(state: &AppState) -> Vec<String> {
             ids.insert(trimmed.to_string());
         }
     }
-    if let Ok(registry_ids) = block_on_async(async {
-        let tsdb = fdd_tsdb::Tsdb::connect_from_env().await?;
-        tsdb.list_site_ids().await.map_err(anyhow::Error::from)
-    }) {
-        for id in registry_ids {
-            let trimmed = id.trim();
-            if !trimmed.is_empty() {
-                ids.insert(trimmed.to_string());
-            }
-        }
-    }
     ids.into_iter().collect()
+}
+
+fn afdd_chunk_hours() -> u64 {
+    std::env::var("OPENFDD_AFDD_CHUNK_HOURS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(1)
+}
+
+fn afdd_chunk_seconds() -> u64 {
+    afdd_chunk_hours().saturating_mul(3600)
 }
 
 fn result_scope_for(trigger: &str) -> &'static str {
@@ -1200,6 +1214,41 @@ mod tests {
     }
 
     #[test]
+    fn t1403_4_provider_scope_rejects_csv_building_id() {
+        let known = vec!["prov-a".into(), "prov-b".into()];
+        let scheduled = AfddConfig::default()
+            .resolve_scheduled_buildings(&known)
+            .expect("all provider sites");
+        assert_eq!(scheduled, vec!["prov-a", "prov-b"]);
+        let csv_only = "csv-package-site";
+        let err = AfddConfig {
+            scope_building_ids: vec![csv_only.into()],
+            ..AfddConfig::default()
+        }
+        .resolve_scheduled_buildings(&known)
+        .expect_err("csv id");
+        assert!(err.to_string().contains("NF provider site"));
+        assert!(!known.contains(&csv_only.to_string()));
+    }
+
+    #[test]
+    fn t1403_5_bounded_chunks_tile_24h_lookback_window() {
+        use chrono::TimeZone;
+        use fdd_store::plan_bounded_backfill;
+        let start = Utc.with_ymd_and_hms(2026, 6, 10, 12, 0, 0).unwrap();
+        let end = start + Duration::hours(24);
+        let chunks = plan_bounded_backfill(start, end, 1).expect("plan chunks");
+        assert_eq!(chunks.len(), 24);
+        assert_eq!(chunks[0].start_utc, start);
+        assert_eq!(chunks[23].end_utc, end);
+        for pair in chunks.windows(2) {
+            assert_eq!(pair[0].end_utc, pair[1].start_utc);
+        }
+        let window_seconds = (end - start).num_seconds();
+        assert_eq!(window_seconds, 24 * 3600);
+    }
+
+    #[test]
     fn t1403_2_explicit_building_ids_select_subset() {
         let config = AfddConfig {
             scope_building_ids: vec!["site-b".into(), "site-a".into()],
@@ -1313,6 +1362,142 @@ mod contract_timescale {
         reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
     )]
     #[tokio::test]
+    async fn t1403_4_collect_known_is_provider_sites_only() {
+        let Some(url) = fixture_database_url() else {
+            eprintln!("skip t1403_4: OPENFDD_LIFECYCLE_DATABASE_URL unset");
+            return;
+        };
+        let _lock = crate::test_env_lock::lock_env();
+        let prov_a = format!("p4a{}", uuid::Uuid::new_v4().simple());
+        let prov_b = format!("p4b{}", uuid::Uuid::new_v4().simple());
+        let csv_only = format!("csv{}", uuid::Uuid::new_v4().simple());
+        for id in [&prov_a, &prov_b, &csv_only] {
+            assert_disposable(id);
+        }
+        let sites_json = format!(
+            r#"[{{"building_id":"{prov_a}","tenant_id":"tenant-a","provider":"nf","endpoint":"https://portal.example","auth_mode":"anonymous"}},{{"building_id":"{prov_b}","tenant_id":"tenant-a","provider":"nf","endpoint":"https://portal.example","auth_mode":"anonymous"}}]"#
+        );
+        std::env::set_var("OPENFDD_PROVIDER_SITES", &sites_json);
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        let state = AppState::new();
+        let tsdb = Tsdb::connect(&url).await.expect("connect");
+        ensure_schema(&tsdb).await;
+        tsdb.ensure_site_building(&csv_only)
+            .await
+            .expect("csv site");
+        let known = collect_known_afdd_buildings(&state);
+        assert_eq!(known.len(), 2);
+        assert!(known.iter().any(|id| id == &prov_a));
+        assert!(known.iter().any(|id| id == &prov_b));
+        assert!(!known.iter().any(|id| id == &csv_only));
+        let scheduled = AfddConfig::default()
+            .resolve_scheduled_buildings(&known)
+            .expect("schedule providers");
+        assert_eq!(scheduled.len(), 2);
+        let startup_err = AfddConfig {
+            scope_building_ids: vec![csv_only.clone()],
+            ..AfddConfig::default()
+        }
+        .resolve_scheduled_buildings(&known)
+        .expect_err("csv in OPENFDD_AFDD_BUILDING_IDS");
+        assert!(startup_err.to_string().contains("NF provider site"));
+        let _ = tsdb.purge_building(&csv_only).await;
+        std::env::remove_var("OPENFDD_PROVIDER_SITES");
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
+    )]
+    #[tokio::test]
+    async fn t1403_5_fdd_run_windows_tile_cycle_lookback() {
+        let Some(url) = fixture_database_url() else {
+            eprintln!("skip t1403_5: OPENFDD_LIFECYCLE_DATABASE_URL unset");
+            return;
+        };
+        let _lock = crate::test_env_lock::lock_env();
+        let site = format!("p5{}", uuid::Uuid::new_v4().simple());
+        assert_disposable(&site);
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        std::env::set_var("OPENFDD_AFDD_CHUNK_HOURS", "1");
+        let results_dir = tempfile::tempdir().expect("results dir");
+        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", results_dir.path());
+
+        let tsdb = Tsdb::connect(&url).await.expect("connect");
+        ensure_schema(&tsdb).await;
+        tsdb.ensure_site_building(&site).await.expect("site");
+        tsdb.upsert_equipment(&site, "AHU_1", Some("ahu"))
+            .await
+            .expect("equipment");
+
+        let cycle_end = Utc.with_ymd_and_hms(2026, 6, 15, 0, 0, 0).unwrap();
+        let cycle_start = cycle_end - Duration::hours(24);
+        let t_sample = cycle_end - Duration::hours(1);
+        let mut batch = UpsertBatch::default();
+        batch.push(SampleRow::new(t_sample, &site, "AHU_1.sat", Some(72.0)));
+        tsdb.upsert_samples(&batch).await.expect("samples");
+
+        let chunks = fdd_store::plan_bounded_backfill(cycle_start, cycle_end, 1).expect("chunks");
+        assert_eq!(chunks.len(), 24);
+        for (idx, chunk) in chunks.iter().enumerate() {
+            let payload = registry_run_payload(
+                &site,
+                chunk.start_utc,
+                chunk.end_utc,
+                "scheduled",
+                false,
+                &format!("run-{idx}"),
+            );
+            let _ = crate::timescale_product::run_fdd_registry(&payload)
+                .await
+                .expect("chunk run");
+        }
+
+        #[derive(sqlx::FromRow)]
+        struct WinRow {
+            window_start: DateTime<Utc>,
+            window_end: DateTime<Utc>,
+        }
+        let windows: Vec<WinRow> = sqlx::query_as(
+            "SELECT DISTINCT window_start, window_end FROM fdd_run WHERE site_id = $1 ORDER BY window_start",
+        )
+        .bind(&site)
+        .fetch_all(tsdb.pool())
+        .await
+        .expect("windows");
+        assert_eq!(windows.len(), 24);
+        assert_eq!(windows[0].window_start, cycle_start);
+        assert_eq!(windows[23].window_end, cycle_end);
+        for pair in windows.windows(2) {
+            assert_eq!(pair[0].window_end, pair[1].window_start);
+        }
+        let record = AfddCycleRecord {
+            run_id: "contract".into(),
+            scope: site.clone(),
+            trigger: "scheduled".into(),
+            status: "completed".into(),
+            started_at_utc: Utc::now(),
+            finished_at_utc: Utc::now(),
+            start_utc: cycle_start,
+            end_utc: cycle_end,
+            catch_up: false,
+            chunk_seconds: Some(3600),
+            result_scope: "lookback_window".into(),
+            ok: true,
+            error: None,
+            rules_succeeded: Some(0),
+            rules_failed: Some(0),
+            rules_skipped: Some(0),
+        };
+        assert_eq!((record.end_utc - record.start_utc).num_seconds(), 24 * 3600);
+        assert_eq!(record.chunk_seconds, Some(3600));
+        let _ = tsdb.purge_building(&site).await;
+        std::env::remove_var("OPENFDD_AFDD_CHUNK_HOURS");
+    }
+
+    #[tokio::test]
     async fn t1403_2_three_fixture_sites_and_unknown_id() {
         let Some(url) = fixture_database_url() else {
             eprintln!("skip t1403_2: OPENFDD_LIFECYCLE_DATABASE_URL unset");
@@ -1334,7 +1519,7 @@ mod contract_timescale {
         for site in &sites {
             tsdb.ensure_site_building(site).await.expect("site");
         }
-        let known = tsdb.list_site_ids().await.expect("list");
+        let known = vec![sites[0].clone(), sites[1].clone(), sites[2].clone()];
         let scheduled = AfddConfig::default()
             .resolve_scheduled_buildings(&known)
             .expect("resolve all");
@@ -1349,7 +1534,7 @@ mod contract_timescale {
             .resolve_scheduled_buildings(&known)
             .expect_err("unknown")
             .to_string()
-            .contains("unknown building_id"));
+            .contains("NF provider site"));
         for site in &sites {
             let _ = tsdb.purge_building(site).await;
         }
