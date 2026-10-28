@@ -12,7 +12,8 @@ Versioned checksum ledger for **BPS ↔ OSS apples-to-apples** parity.
 
 | File | Role |
 | --- | --- |
-| [`metric_units.json`](metric_units.json) | Quantity registry, pack ABI (current `imperial-f-v1`, target `metric-c-v2`), constants |
+| [`metric_units.json`](metric_units.json) | Quantity registry; processing ABI **`metric-c-v2`** (contract); running SQL still imperial until W4/W2b |
+| [`parameter_si_rename_map.json`](parameter_si_rename_map.json) | Published SI parameter renames (registry keys unchanged until W2c) |
 | [`goldens/unit_vectors.json`](goldens/unit_vectors.json) | 20°C=68°F, Δ°F scale-only, percent/fraction, FCU deadband |
 
 Admit path converts known source units into the **active pack ABI** before SQL.

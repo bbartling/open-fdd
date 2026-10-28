@@ -29,7 +29,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [
@@ -79,7 +81,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -92,7 +96,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -105,7 +111,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "zone_t_lo": {
           "label": "Zone low",
@@ -118,7 +126,9 @@
           "sql_placeholder": "ZONE_T_LO",
           "key": "zone_t_lo",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "zone_t_hi": {
           "label": "Zone high",
@@ -131,7 +141,9 @@
           "sql_placeholder": "ZONE_T_HI",
           "key": "zone_t_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "require_occupied": {
           "label": "Require occupied",
@@ -144,7 +156,9 @@
           "sql_placeholder": "REQUIRE_OCCUPIED",
           "key": "require_occupied",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -156,7 +170,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -209,7 +225,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -222,7 +240,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -235,7 +255,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "setback_hi": {
           "label": "Setback high",
@@ -248,7 +270,9 @@
           "sql_placeholder": "SETBACK_HI",
           "key": "setback_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -260,7 +284,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -306,7 +332,9 @@
           "sql_placeholder": "ZONE_T_LO",
           "key": "zone_t_lo",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "zone_t_hi": {
           "label": "Zone comfort high (reference)",
@@ -319,7 +347,9 @@
           "sql_placeholder": "ZONE_T_HI",
           "key": "zone_t_hi",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -331,7 +361,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [],
@@ -371,7 +403,9 @@
           "sql_placeholder": "ZONE_T_LO",
           "key": "zone_t_lo",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "zone_t_hi": {
           "label": "Zone comfort high",
@@ -384,7 +418,9 @@
           "sql_placeholder": "ZONE_T_HI",
           "key": "zone_t_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -396,7 +432,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [
@@ -438,7 +476,9 @@
           "sql_placeholder": "ZONE_T_LO",
           "key": "zone_t_lo",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "zone_t_hi": {
           "label": "Zone comfort high",
@@ -451,7 +491,9 @@
           "sql_placeholder": "ZONE_T_HI",
           "key": "zone_t_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -463,7 +505,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [
@@ -512,7 +556,9 @@
           "sql_placeholder": "OAT_ERR",
           "key": "oat_err",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -524,7 +570,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "web_cadence_seconds": {
           "key": "web_cadence_seconds",
@@ -536,7 +584,9 @@
           "unit": "sec",
           "control": "slider",
           "sql_placeholder": "WEB_CADENCE_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_seconds",
+          "effect": "branch_sensitive"
         },
         "web_asof_margin_seconds": {
           "key": "web_asof_margin_seconds",
@@ -548,7 +598,9 @@
           "unit": "sec",
           "control": "slider",
           "sql_placeholder": "WEB_ASOF_MARGIN_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_seconds",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -604,7 +656,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -617,7 +671,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -630,7 +686,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -643,7 +701,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -656,7 +716,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "eps_sat": {
           "label": "SAT sensor eps",
@@ -669,7 +731,9 @@
           "sql_placeholder": "EPS_SAT",
           "key": "eps_sat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ_min_pos": {
           "label": "Econ damper min pos",
@@ -682,7 +746,9 @@
           "sql_placeholder": "ECON_MIN_POS",
           "key": "econ_min_pos",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "fraction",
+          "effect": "no_op"
         },
         "econ_full_open": {
           "label": "Econ damper full-open",
@@ -695,7 +761,9 @@
           "sql_placeholder": "ECON_FULL_OPEN",
           "key": "econ_full_open",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "clg_full_min": {
           "label": "Cooling valve full min",
@@ -708,7 +776,9 @@
           "sql_placeholder": "CLG_FULL_MIN",
           "key": "clg_full_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "oa_damper_econ_low": {
           "label": "OA damper economizer low",
@@ -721,7 +791,9 @@
           "sql_placeholder": "OA_DAMPER_ECON_LOW",
           "key": "oa_damper_econ_low",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -733,7 +805,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -790,7 +864,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -803,7 +879,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -816,7 +894,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "econ2_oat_hi": {
           "label": "OAT high cutoff",
@@ -829,7 +909,9 @@
           "sql_placeholder": "ECON2_OAT_HI",
           "key": "econ2_oat_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ2_damper": {
           "label": "Damper open frac",
@@ -842,7 +924,9 @@
           "sql_placeholder": "ECON2_DAMPER",
           "key": "econ2_damper",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -854,7 +938,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -908,7 +994,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -921,7 +1009,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -934,7 +1024,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -947,7 +1039,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -960,7 +1054,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "eps_dsp": {
           "label": "Duct-static error epsDSP (GL36 default 0.1 in.w.c.)",
@@ -973,7 +1069,9 @@
           "sql_placeholder": "EPS_DSP",
           "key": "eps_dsp",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "air_pressure",
+          "effect": "branch_sensitive"
         },
         "eps_vfd_spd": {
           "label": "VFD speed error epsVFDSPD (GL36 default 5%)",
@@ -986,7 +1084,9 @@
           "sql_placeholder": "EPS_VFD_SPD",
           "key": "eps_vfd_spd",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -998,7 +1098,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -1053,7 +1155,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -1066,7 +1170,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -1079,7 +1185,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -1092,7 +1200,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -1105,7 +1215,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "eps_rat": {
           "label": "RAT sensor eps",
@@ -1118,7 +1230,9 @@
           "sql_placeholder": "EPS_RAT",
           "key": "eps_rat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "eps_oat": {
           "label": "OAT sensor eps",
@@ -1131,7 +1245,9 @@
           "sql_placeholder": "EPS_OAT",
           "key": "eps_oat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "eps_mat": {
           "label": "MAT sensor eps",
@@ -1144,7 +1260,9 @@
           "sql_placeholder": "EPS_MAT",
           "key": "eps_mat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -1157,7 +1275,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -1169,7 +1289,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -1225,7 +1347,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -1238,7 +1362,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -1251,7 +1377,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -1264,7 +1392,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "eps_rat": {
           "label": "RAT sensor eps",
@@ -1277,7 +1407,9 @@
           "sql_placeholder": "EPS_RAT",
           "key": "eps_rat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "eps_oat": {
           "label": "OAT sensor eps",
@@ -1290,7 +1422,9 @@
           "sql_placeholder": "EPS_OAT",
           "key": "eps_oat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "eps_mat": {
           "label": "MAT sensor eps",
@@ -1303,7 +1437,9 @@
           "sql_placeholder": "EPS_MAT",
           "key": "eps_mat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -1316,7 +1452,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan ON fraction threshold",
@@ -1329,7 +1467,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -1341,7 +1481,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -1397,7 +1539,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -1410,7 +1554,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -1423,7 +1569,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -1436,7 +1584,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -1449,7 +1599,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "eps_sat": {
           "label": "SAT sensor eps",
@@ -1462,7 +1614,9 @@
           "sql_placeholder": "EPS_SAT",
           "key": "eps_sat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "htg_full_min": {
           "label": "Full-heating threshold (GL36 99%)",
@@ -1475,7 +1629,9 @@
           "sql_placeholder": "HTG_FULL_MIN",
           "key": "htg_full_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -1487,7 +1643,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -1544,7 +1702,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -1557,7 +1717,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -1570,7 +1732,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -1583,7 +1747,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -1596,7 +1762,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "supply_tol": {
           "label": "Supply tol (alias eps_sat)",
@@ -1609,7 +1777,9 @@
           "sql_placeholder": "SUPPLY_TOL",
           "key": "supply_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "eps_sat": {
           "label": "SAT sensor eps",
@@ -1622,7 +1792,9 @@
           "sql_placeholder": "EPS_SAT",
           "key": "eps_sat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "eps_mat": {
           "label": "MAT sensor eps",
@@ -1635,7 +1807,9 @@
           "sql_placeholder": "EPS_MAT",
           "key": "eps_mat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -1648,7 +1822,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
           "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
@@ -1661,7 +1837,9 @@
           "sql_placeholder": "DELTA_SUPPLY_FAN",
           "key": "delta_supply_fan",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ_min_pos": {
           "label": "Economizer OA damper minimum (fraction)",
@@ -1674,7 +1852,9 @@
           "sql_placeholder": "ECON_MIN_POS",
           "key": "econ_min_pos",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "clg_inactive_max": {
           "label": "Cooling valve inactive max (fraction)",
@@ -1687,7 +1867,9 @@
           "sql_placeholder": "CLG_INACTIVE_MAX",
           "key": "clg_inactive_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -1699,7 +1881,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -1757,7 +1941,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -1770,7 +1956,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -1783,7 +1971,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -1796,7 +1986,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -1809,7 +2001,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "eps_sat": {
           "label": "SAT sensor eps",
@@ -1822,7 +2016,9 @@
           "sql_placeholder": "EPS_SAT",
           "key": "eps_sat",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "eps_oat": {
           "label": "OAT sensor eps",
@@ -1835,7 +2031,9 @@
           "sql_placeholder": "EPS_OAT",
           "key": "eps_oat",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -1848,7 +2046,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
           "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
@@ -1861,7 +2061,9 @@
           "sql_placeholder": "DELTA_SUPPLY_FAN",
           "key": "delta_supply_fan",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ_min_pos": {
           "label": "Economizer OA damper minimum (fraction)",
@@ -1874,7 +2076,9 @@
           "sql_placeholder": "ECON_MIN_POS",
           "key": "econ_min_pos",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "clg_inactive_max": {
           "label": "Cooling valve inactive max (fraction)",
@@ -1887,7 +2091,9 @@
           "sql_placeholder": "CLG_INACTIVE_MAX",
           "key": "clg_inactive_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -1899,7 +2105,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -1959,7 +2167,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -1972,7 +2182,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -1985,7 +2197,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -1998,7 +2212,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -2011,7 +2227,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "eps_oat": {
           "label": "OAT sensor eps",
@@ -2024,7 +2242,9 @@
           "sql_placeholder": "EPS_OAT",
           "key": "eps_oat",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "eps_mat": {
           "label": "MAT sensor eps",
@@ -2037,7 +2257,9 @@
           "sql_placeholder": "EPS_MAT",
           "key": "eps_mat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ_full_open": {
           "label": "Econ damper full-open",
@@ -2050,7 +2272,9 @@
           "sql_placeholder": "ECON_FULL_OPEN",
           "key": "econ_full_open",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -2063,7 +2287,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "clg_on_min": {
           "label": "Cooling valve ON minimum (fraction)",
@@ -2076,7 +2302,9 @@
           "sql_placeholder": "CLG_ON_MIN",
           "key": "clg_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -2088,7 +2316,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -2146,7 +2376,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -2159,7 +2391,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -2172,7 +2406,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -2185,7 +2421,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -2198,7 +2436,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "eps_sat": {
           "label": "SAT sensor eps",
@@ -2211,7 +2451,9 @@
           "sql_placeholder": "EPS_SAT",
           "key": "eps_sat",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "eps_oat": {
           "label": "OAT sensor eps",
@@ -2224,7 +2466,9 @@
           "sql_placeholder": "EPS_OAT",
           "key": "eps_oat",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "econ_full_open": {
           "label": "Econ damper full-open",
@@ -2237,7 +2481,9 @@
           "sql_placeholder": "ECON_FULL_OPEN",
           "key": "econ_full_open",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -2250,7 +2496,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
           "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
@@ -2263,7 +2511,9 @@
           "sql_placeholder": "DELTA_SUPPLY_FAN",
           "key": "delta_supply_fan",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "clg_on_min": {
           "label": "Cooling valve ON minimum (fraction)",
@@ -2276,7 +2526,9 @@
           "sql_placeholder": "CLG_ON_MIN",
           "key": "clg_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -2288,7 +2540,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -2348,7 +2602,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -2361,7 +2617,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -2374,7 +2632,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -2387,7 +2647,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -2400,7 +2662,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "supply_tol": {
           "label": "Supply tol (alias eps_sat)",
@@ -2413,7 +2677,9 @@
           "sql_placeholder": "SUPPLY_TOL",
           "key": "supply_tol",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "eps_sat": {
           "label": "SAT sensor eps",
@@ -2426,7 +2692,9 @@
           "sql_placeholder": "EPS_SAT",
           "key": "eps_sat",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "eps_mat": {
           "label": "MAT sensor eps",
@@ -2439,7 +2707,9 @@
           "sql_placeholder": "EPS_MAT",
           "key": "eps_mat",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "econ_full_open": {
           "label": "Econ damper full-open",
@@ -2452,7 +2722,9 @@
           "sql_placeholder": "ECON_FULL_OPEN",
           "key": "econ_full_open",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -2465,7 +2737,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
           "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
@@ -2478,7 +2752,9 @@
           "sql_placeholder": "DELTA_SUPPLY_FAN",
           "key": "delta_supply_fan",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "clg_on_min": {
           "label": "Cooling valve ON minimum (fraction)",
@@ -2491,7 +2767,9 @@
           "sql_placeholder": "CLG_ON_MIN",
           "key": "clg_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "econ_min_pos": {
           "label": "Economizer OA damper minimum (fraction)",
@@ -2504,7 +2782,9 @@
           "sql_placeholder": "ECON_MIN_POS",
           "key": "econ_min_pos",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -2516,7 +2796,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -2577,7 +2859,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -2590,7 +2874,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -2603,7 +2889,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "econ1_oat_min": {
           "label": "Favorable OAT",
@@ -2616,7 +2904,9 @@
           "sql_placeholder": "ECON1_OAT_MIN",
           "key": "econ1_oat_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ1_damper_max": {
           "label": "Stuck-closed damper frac",
@@ -2629,7 +2919,9 @@
           "sql_placeholder": "ECON1_DAMPER_MAX",
           "key": "econ1_damper_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -2641,7 +2933,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -2696,7 +2990,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -2709,7 +3005,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -2722,7 +3020,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "oa_min_pct": {
           "label": "Min OA fraction",
@@ -2735,7 +3035,9 @@
           "sql_placeholder": "OA_MIN_PCT",
           "key": "oa_min_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "oat_rat_delta_min": {
           "label": "Min |RAT\u2212OAT| for OA-fraction estimate (\u00b0F)",
@@ -2748,7 +3050,9 @@
           "sql_placeholder": "OAT_RAT_DELTA_MIN",
           "key": "oat_rat_delta_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -2760,7 +3064,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -2834,7 +3140,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -2847,7 +3155,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -2860,7 +3170,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "range_scale_temperature": {
           "label": "Temp range scale",
@@ -2873,7 +3185,9 @@
           "sql_placeholder": "RANGE_SCALE_TEMPERATURE",
           "key": "range_scale_temperature",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "range_scale_humidity": {
           "label": "Humidity range scale",
@@ -2886,7 +3200,9 @@
           "sql_placeholder": "RANGE_SCALE_HUMIDITY",
           "key": "range_scale_humidity",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "range_scale_pressure": {
           "label": "Pressure / duct-static range scale",
@@ -2899,7 +3215,9 @@
           "sql_placeholder": "RANGE_SCALE_PRESSURE",
           "key": "range_scale_pressure",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -2911,7 +3229,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -2981,7 +3301,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -2994,7 +3316,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -3007,7 +3331,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "flatline_tol": {
           "label": "Flatline tolerance",
@@ -3020,7 +3346,9 @@
           "sql_placeholder": "FLATLINE_TOL",
           "key": "flatline_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "flatline_hours": {
           "label": "Flatline window",
@@ -3033,7 +3361,9 @@
           "sql_placeholder": "FLATLINE_HOURS",
           "key": "flatline_hours",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -3045,7 +3375,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -3116,7 +3448,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -3129,7 +3463,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -3142,7 +3478,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "spike_scale_pressure": {
           "label": "Spike scale pressure",
@@ -3155,7 +3493,9 @@
           "sql_placeholder": "SPIKE_SCALE_PRESSURE",
           "key": "spike_scale_pressure",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "spike_scale_humidity": {
           "label": "Spike scale humidity",
@@ -3168,7 +3508,9 @@
           "sql_placeholder": "SPIKE_SCALE_HUMIDITY",
           "key": "spike_scale_humidity",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "spike_scale_temperature": {
           "label": "Spike scale temperature",
@@ -3181,7 +3523,9 @@
           "sql_placeholder": "SPIKE_SCALE_TEMPERATURE",
           "key": "spike_scale_temperature",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "spike_scale": {
           "label": "Spike limit scale (global)",
@@ -3194,7 +3538,9 @@
           "sql_placeholder": "SPIKE_SCALE",
           "key": "spike_scale",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "dimensionless",
+          "effect": "no_op"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -3206,7 +3552,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -3272,7 +3620,9 @@
           "sql_placeholder": "STALE_HOURS",
           "key": "stale_hours",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "stale_tol": {
           "label": "Stale tolerance",
@@ -3285,7 +3635,9 @@
           "sql_placeholder": "STALE_TOL",
           "key": "stale_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -3297,7 +3649,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -3356,7 +3710,9 @@
           "sql_placeholder": "SENSOR_SPAN",
           "key": "sensor_span",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "unsupported"
         },
         "max_gap_hours": {
           "label": "Max sample gap",
@@ -3369,7 +3725,9 @@
           "sql_placeholder": "MAX_GAP_HOURS",
           "key": "max_gap_hours",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "unsupported"
         },
         "persistence_min": {
           "label": "Fault persistence",
@@ -3382,7 +3740,9 @@
           "sql_placeholder": "PERSISTENCE_MIN",
           "key": "persistence_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "unsupported"
         },
         "steady_fault_per_hour": {
           "label": "Steady-state slew limit",
@@ -3395,7 +3755,9 @@
           "sql_placeholder": "STEADY_FAULT_PER_HOUR",
           "key": "steady_fault_per_hour",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_rate",
+          "effect": "unsupported"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -3407,7 +3769,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "unsupported"
         }
       },
       "placeholders": [
@@ -3466,7 +3830,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -3479,7 +3845,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -3492,7 +3860,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "window_hours": {
           "label": "Hunting lookback window",
@@ -3505,7 +3875,9 @@
           "sql_placeholder": "WINDOW_HOURS",
           "key": "window_hours",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "change_deadband_pct": {
           "label": "Ignore changes below",
@@ -3518,7 +3890,9 @@
           "sql_placeholder": "CHANGE_DEADBAND_PCT",
           "key": "change_deadband_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "minimum_span_pct": {
           "label": "Minimum observed span",
@@ -3531,7 +3905,9 @@
           "sql_placeholder": "MINIMUM_SPAN_PCT",
           "key": "minimum_span_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "total_variation_fault_pct": {
           "label": "Total variation fault threshold",
@@ -3544,7 +3920,9 @@
           "sql_placeholder": "TOTAL_VARIATION_FAULT_PCT",
           "key": "total_variation_fault_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "minimum_equivalent_cycles": {
           "label": "Min equivalent cycles",
@@ -3557,7 +3935,9 @@
           "sql_placeholder": "MINIMUM_EQUIVALENT_CYCLES",
           "key": "minimum_equivalent_cycles",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "count",
+          "effect": "branch_sensitive"
         },
         "minimum_reversals": {
           "label": "Min direction reversals",
@@ -3570,7 +3950,9 @@
           "sql_placeholder": "MINIMUM_REVERSALS",
           "key": "minimum_reversals",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "count",
+          "effect": "branch_sensitive"
         },
         "minimum_coverage_pct": {
           "label": "Min window sample coverage",
@@ -3583,7 +3965,9 @@
           "sql_placeholder": "MINIMUM_COVERAGE_PCT",
           "key": "minimum_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -3595,7 +3979,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -3654,7 +4040,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -3667,7 +4055,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -3680,7 +4070,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -3693,7 +4085,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -3706,7 +4100,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "delta_os_max": {
           "label": "Max operating-state entries per hour",
@@ -3719,7 +4115,9 @@
           "sql_placeholder": "DELTA_OS_MAX",
           "key": "delta_os_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "count",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -3731,7 +4129,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -3787,7 +4187,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -3800,7 +4202,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -3813,7 +4217,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -3826,7 +4232,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -3839,7 +4247,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "eps_sat": {
           "label": "SAT sensor eps",
@@ -3852,7 +4262,9 @@
           "sql_placeholder": "EPS_SAT",
           "key": "eps_sat",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "eps_mat": {
           "label": "MAT sensor eps",
@@ -3865,7 +4277,9 @@
           "sql_placeholder": "EPS_MAT",
           "key": "eps_mat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -3878,7 +4292,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "htg_on_min": {
           "label": "Heating-command ON threshold",
@@ -3891,7 +4307,9 @@
           "sql_placeholder": "HTG_ON_MIN",
           "key": "htg_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
           "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
@@ -3904,7 +4322,9 @@
           "sql_placeholder": "DELTA_SUPPLY_FAN",
           "key": "delta_supply_fan",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -3916,7 +4336,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -3975,7 +4397,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -3988,7 +4412,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -4001,7 +4427,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "oat_rat_delta_min": {
           "label": "Min |OAT-RAT|",
@@ -4014,7 +4442,9 @@
           "sql_placeholder": "OAT_RAT_DELTA_MIN",
           "key": "oat_rat_delta_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -4027,7 +4457,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -4040,7 +4472,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "eps_airflow": {
           "label": "Airflow fraction eps",
@@ -4053,7 +4487,9 @@
           "sql_placeholder": "EPS_AIRFLOW",
           "key": "eps_airflow",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "min_cfm_design": {
           "label": "Design minimum outdoor airflow",
@@ -4066,7 +4502,9 @@
           "sql_placeholder": "MIN_CFM_DESIGN",
           "key": "min_cfm_design",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -4078,7 +4516,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -4136,7 +4576,9 @@
           "sql_placeholder": "CLG_ON_MIN",
           "key": "clg_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "minimum_active_coverage_pct": {
           "label": "Min active coverage",
@@ -4149,7 +4591,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -4162,7 +4606,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -4175,7 +4621,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -4188,7 +4636,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -4201,7 +4651,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "htg_on_min": {
           "label": "Heating on min",
@@ -4214,7 +4666,9 @@
           "sql_placeholder": "HTG_ON_MIN",
           "key": "htg_on_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "fraction",
+          "effect": "no_op"
         },
         "eps_cclt": {
           "label": "CHW coil leaving eps",
@@ -4227,7 +4681,9 @@
           "sql_placeholder": "EPS_CCLT",
           "key": "eps_cclt",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "eps_ccet": {
           "label": "CHW coil entering eps",
@@ -4240,7 +4696,9 @@
           "sql_placeholder": "EPS_CCET",
           "key": "eps_ccet",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "econ_min_pos": {
           "label": "Econ damper min pos",
@@ -4253,7 +4711,9 @@
           "sql_placeholder": "ECON_MIN_POS",
           "key": "econ_min_pos",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "fraction",
+          "effect": "no_op"
         },
         "delta_supply_fan": {
           "label": "Supply-fan delta",
@@ -4266,7 +4726,9 @@
           "sql_placeholder": "DELTA_SUPPLY_FAN",
           "key": "delta_supply_fan",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "clg_inactive_max": {
           "label": "Cooling inactive max",
@@ -4279,7 +4741,9 @@
           "sql_placeholder": "CLG_INACTIVE_MAX",
           "key": "clg_inactive_max",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "fraction",
+          "effect": "no_op"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -4292,7 +4756,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -4304,7 +4770,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -4367,7 +4835,9 @@
           "sql_placeholder": "HTG_ON_MIN",
           "key": "htg_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "minimum_active_coverage_pct": {
           "label": "Min active coverage",
@@ -4380,7 +4850,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -4393,7 +4865,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -4406,7 +4880,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "boolean",
+          "effect": "branch_sensitive"
         },
         "fan_on_min": {
           "label": "Fan-on command min",
@@ -4419,7 +4895,9 @@
           "sql_placeholder": "FAN_ON_MIN",
           "key": "fan_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_delay_min": {
           "label": "Mode delay after fan-on",
@@ -4432,7 +4910,9 @@
           "sql_placeholder": "MODE_DELAY_MIN",
           "key": "mode_delay_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         },
         "eps_hclt": {
           "label": "HW coil leaving eps",
@@ -4445,7 +4925,9 @@
           "sql_placeholder": "EPS_HCLT",
           "key": "eps_hclt",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "eps_hcet": {
           "label": "HW coil entering eps",
@@ -4458,7 +4940,9 @@
           "sql_placeholder": "EPS_HCET",
           "key": "eps_hcet",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "absolute_temperature",
+          "effect": "no_op"
         },
         "econ_min_pos": {
           "label": "Econ damper min pos",
@@ -4471,7 +4955,9 @@
           "sql_placeholder": "ECON_MIN_POS",
           "key": "econ_min_pos",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "fraction",
+          "effect": "no_op"
         },
         "econ_full_open": {
           "label": "Econ damper full-open",
@@ -4484,7 +4970,9 @@
           "sql_placeholder": "ECON_FULL_OPEN",
           "key": "econ_full_open",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "fraction",
+          "effect": "no_op"
         },
         "delta_supply_fan": {
           "label": "Supply-fan delta",
@@ -4497,7 +4985,9 @@
           "sql_placeholder": "DELTA_SUPPLY_FAN",
           "key": "delta_supply_fan",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "clg_on_min": {
           "label": "Cooling on min",
@@ -4510,7 +5000,9 @@
           "sql_placeholder": "CLG_ON_MIN",
           "key": "clg_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "clg_inactive_max": {
           "label": "Cooling inactive max",
@@ -4523,7 +5015,9 @@
           "sql_placeholder": "CLG_INACTIVE_MAX",
           "key": "clg_inactive_max",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "fraction",
+          "effect": "no_op"
         },
         "mix_tol": {
           "label": "Legacy master sensor tolerance (sets all eps values)",
@@ -4536,7 +5030,9 @@
           "sql_placeholder": "MIX_TOL",
           "key": "mix_tol",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -4548,7 +5044,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -4609,7 +5107,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -4622,7 +5122,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -4635,7 +5137,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "sat_dev_err": {
           "label": "SAT deviation",
@@ -4648,7 +5152,9 @@
           "sql_placeholder": "SAT_DEV_ERR",
           "key": "sat_dev_err",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -4660,7 +5166,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -4713,7 +5221,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -4726,7 +5236,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -4739,7 +5251,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "duct_high_margin": {
           "label": "High margin",
@@ -4752,7 +5266,9 @@
           "sql_placeholder": "DUCT_HIGH_MARGIN",
           "key": "duct_high_margin",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "air_pressure",
+          "effect": "branch_sensitive"
         },
         "pressure_on_min": {
           "label": "Pressure-on evidence",
@@ -4765,7 +5281,9 @@
           "sql_placeholder": "PRESSURE_ON_MIN",
           "key": "pressure_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "air_pressure",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -4777,7 +5295,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -4830,7 +5350,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -4843,7 +5365,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -4856,7 +5380,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "valve_open_pct": {
           "label": "Valve open threshold",
@@ -4869,7 +5395,9 @@
           "sql_placeholder": "VALVE_OPEN_PCT",
           "key": "valve_open_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -4881,7 +5409,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -4935,7 +5465,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -4948,7 +5480,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -4961,7 +5495,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "econ3_db_min": {
           "label": "Free-cool OA dry-bulb min",
@@ -4974,7 +5510,9 @@
           "sql_placeholder": "ECON3_DB_MIN",
           "key": "econ3_db_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ3_db_max": {
           "label": "Free-cool OA dry-bulb max",
@@ -4987,7 +5525,9 @@
           "sql_placeholder": "ECON3_DB_MAX",
           "key": "econ3_db_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ3_dp_max": {
           "label": "Free-cool OA dew point max",
@@ -5000,7 +5540,9 @@
           "sql_placeholder": "ECON3_DP_MAX",
           "key": "econ3_dp_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ3_damper_hi": {
           "label": "Integrated economizer damper",
@@ -5013,7 +5555,9 @@
           "sql_placeholder": "ECON3_DAMPER_HI",
           "key": "econ3_damper_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "clg_open_min": {
           "label": "Cooling valve open minimum",
@@ -5026,7 +5570,9 @@
           "sql_placeholder": "CLG_OPEN_MIN",
           "key": "clg_open_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -5038,7 +5584,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5096,7 +5644,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -5109,7 +5659,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -5122,7 +5674,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "preheat_over_f": {
           "label": "Preheat over \u0394T",
@@ -5135,7 +5689,9 @@
           "sql_placeholder": "PREHEAT_OVER_F",
           "key": "preheat_over_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "htg_open_min": {
           "label": "Heating valve open minimum",
@@ -5148,7 +5704,9 @@
           "sql_placeholder": "HTG_OPEN_MIN",
           "key": "htg_open_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -5160,7 +5718,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5213,7 +5773,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -5226,7 +5788,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -5239,7 +5803,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "econ6_oat_max_f": {
           "label": "Winter OAT ceiling",
@@ -5252,7 +5818,9 @@
           "sql_placeholder": "ECON6_OAT_MAX_F",
           "key": "econ6_oat_max_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ6_damper_max": {
           "label": "Winter min-OA damper",
@@ -5265,7 +5833,9 @@
           "sql_placeholder": "ECON6_DAMPER_MAX",
           "key": "econ6_damper_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -5277,7 +5847,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5332,7 +5904,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -5345,7 +5919,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -5358,7 +5934,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "econ7_db_min": {
           "label": "Econ-OK dry-bulb floor (freeze guard)",
@@ -5371,7 +5949,9 @@
           "sql_placeholder": "ECON7_DB_MIN",
           "key": "econ7_db_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ7_db_max": {
           "label": "Econ-OK dry-bulb max",
@@ -5384,7 +5964,9 @@
           "sql_placeholder": "ECON7_DB_MAX",
           "key": "econ7_db_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ7_dp_max": {
           "label": "Econ-OK dew point max",
@@ -5397,7 +5979,9 @@
           "sql_placeholder": "ECON7_DP_MAX",
           "key": "econ7_dp_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "econ7_damper_min": {
           "label": "Economizing damper threshold",
@@ -5410,7 +5994,9 @@
           "sql_placeholder": "ECON7_DAMPER_MIN",
           "key": "econ7_damper_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "clg_open_min": {
           "label": "Cooling valve open minimum",
@@ -5423,7 +6009,9 @@
           "sql_placeholder": "CLG_OPEN_MIN",
           "key": "clg_open_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -5435,7 +6023,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5492,7 +6082,9 @@
           "sql_placeholder": "MECH_OAT_MAX_F",
           "key": "mech_oat_max_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -5504,7 +6096,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5547,7 +6141,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5596,7 +6192,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -5609,7 +6207,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -5622,7 +6222,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "min_oa_frac": {
           "label": "Min OA fraction",
@@ -5635,7 +6237,9 @@
           "sql_placeholder": "MIN_OA_FRAC",
           "key": "min_oa_frac",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "oat_rat_guard": {
           "label": "OAT/RAT guard",
@@ -5648,7 +6252,9 @@
           "sql_placeholder": "OAT_RAT_GUARD",
           "key": "oat_rat_guard",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -5660,7 +6266,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5714,7 +6322,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -5727,7 +6337,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -5740,7 +6352,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "leak_delta": {
           "label": "Leak \u0394T",
@@ -5753,7 +6367,9 @@
           "sql_placeholder": "LEAK_DELTA",
           "key": "leak_delta",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -5765,7 +6381,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5819,7 +6437,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -5832,7 +6452,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -5845,7 +6467,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "sat_err": {
           "label": "SAT vs SP leak \u0394T",
@@ -5858,7 +6482,9 @@
           "sql_placeholder": "SAT_ERR",
           "key": "sat_err",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "mat_leak_delta": {
           "label": "SAT vs MAT leak \u0394T",
@@ -5871,7 +6497,9 @@
           "sql_placeholder": "MAT_LEAK_DELTA",
           "key": "mat_leak_delta",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -5883,7 +6511,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -5937,7 +6567,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -5950,7 +6582,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -5963,7 +6597,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "reheat_oat": {
           "label": "Warm OAT",
@@ -5976,7 +6612,9 @@
           "sql_placeholder": "REHEAT_OAT",
           "key": "reheat_oat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "reheat_pct": {
           "label": "Reheat frac",
@@ -5989,7 +6627,9 @@
           "sql_placeholder": "REHEAT_PCT",
           "key": "reheat_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "flow_on_min": {
           "label": "Airflow-on min",
@@ -6002,7 +6642,9 @@
           "sql_placeholder": "FLOW_ON_MIN",
           "key": "flow_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6014,7 +6656,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -6068,7 +6712,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -6081,7 +6727,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -6094,7 +6742,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "full_open_pct": {
           "label": "Full open frac",
@@ -6107,7 +6757,9 @@
           "sql_placeholder": "FULL_OPEN_PCT",
           "key": "full_open_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "flow_on_min": {
           "label": "Airflow-on min",
@@ -6120,7 +6772,9 @@
           "sql_placeholder": "FLOW_ON_MIN",
           "key": "flow_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "sustain_hours": {
           "label": "Sustain window",
@@ -6133,7 +6787,9 @@
           "sql_placeholder": "SUSTAIN_HOURS",
           "key": "sustain_hours",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6145,7 +6801,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -6199,7 +6857,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -6212,7 +6872,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -6225,7 +6887,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "flow_bias_cfm": {
           "label": "Airflow bias threshold",
@@ -6238,7 +6902,9 @@
           "sql_placeholder": "FLOW_BIAS_CFM",
           "key": "flow_bias_cfm",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "damper_closed_max": {
           "label": "Damper closed maximum",
@@ -6251,7 +6917,9 @@
           "sql_placeholder": "DAMPER_CLOSED_MAX",
           "key": "damper_closed_max",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6263,7 +6931,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -6315,7 +6985,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -6328,7 +7000,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -6341,7 +7015,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "free_cool_oat": {
           "label": "Free-cool OAT",
@@ -6354,7 +7030,9 @@
           "sql_placeholder": "FREE_COOL_OAT",
           "key": "free_cool_oat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "reheat_pct": {
           "label": "Reheat frac",
@@ -6367,7 +7045,9 @@
           "sql_placeholder": "REHEAT_PCT",
           "key": "reheat_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6379,7 +7059,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -6434,7 +7116,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -6447,7 +7131,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -6460,7 +7146,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "reheat_cmd": {
           "label": "Reheat open frac",
@@ -6473,7 +7161,9 @@
           "sql_placeholder": "REHEAT_CMD",
           "key": "reheat_cmd",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "min_rise": {
           "label": "Min temp rise",
@@ -6486,7 +7176,9 @@
           "sql_placeholder": "MIN_RISE",
           "key": "min_rise",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "flow_on_min": {
           "label": "Airflow-on min",
@@ -6499,7 +7191,9 @@
           "sql_placeholder": "FLOW_ON_MIN",
           "key": "flow_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6511,7 +7205,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -6566,7 +7262,9 @@
           "sql_placeholder": "DELTA_F",
           "key": "delta_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "flow_on_min": {
           "label": "Airflow-on min",
@@ -6579,7 +7277,9 @@
           "sql_placeholder": "FLOW_ON_MIN",
           "key": "flow_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6591,7 +7291,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -6640,7 +7342,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -6653,7 +7357,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -6666,7 +7372,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "high_min_flow_sp": {
           "label": "High min-flow SP",
@@ -6679,7 +7387,9 @@
           "sql_placeholder": "HIGH_MIN_FLOW_SP",
           "key": "high_min_flow_sp",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "flow_on_min": {
           "label": "Airflow-on min",
@@ -6692,7 +7402,9 @@
           "sql_placeholder": "FLOW_ON_MIN",
           "key": "flow_on_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "fixed_flow_hours": {
           "label": "Fixed-flow rolling window",
@@ -6705,7 +7417,9 @@
           "sql_placeholder": "FIXED_FLOW_HOURS",
           "key": "fixed_flow_hours",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "fixed_flow_max_std": {
           "label": "Fixed-flow max std",
@@ -6718,7 +7432,9 @@
           "sql_placeholder": "FIXED_FLOW_MAX_STD",
           "key": "fixed_flow_max_std",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "fixed_flow_min_mean": {
           "label": "Fixed-flow min mean",
@@ -6731,7 +7447,9 @@
           "sql_placeholder": "FIXED_FLOW_MIN_MEAN",
           "key": "fixed_flow_min_mean",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6743,7 +7461,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -6800,7 +7520,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -6813,7 +7535,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -6826,7 +7550,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "reset_err_f": {
           "label": "Reset error",
@@ -6839,7 +7565,9 @@
           "sql_placeholder": "RESET_ERR_F",
           "key": "reset_err_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "reset_sat_at_65": {
           "label": "SAT SP at 65F OAT",
@@ -6852,7 +7580,9 @@
           "sql_placeholder": "RESET_SAT_AT_65",
           "key": "reset_sat_at_65",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "reset_slope": {
           "label": "Reset slope",
@@ -6865,7 +7595,9 @@
           "sql_placeholder": "RESET_SLOPE",
           "key": "reset_slope",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "reset_oat_ref": {
           "label": "Reset OAT ref",
@@ -6878,7 +7610,9 @@
           "sql_placeholder": "RESET_OAT_REF",
           "key": "reset_oat_ref",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6890,7 +7624,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -6946,7 +7682,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -6959,7 +7697,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -6972,7 +7712,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "load_sat_hi": {
           "label": "Load satisfaction high (no-load fault)",
@@ -6985,7 +7727,9 @@
           "sql_placeholder": "LOAD_SAT_HI",
           "key": "load_sat_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -6997,7 +7741,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7054,7 +7800,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -7067,7 +7815,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -7080,7 +7830,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "min_dt": {
           "label": "Minimum delta-T",
@@ -7093,7 +7845,9 @@
           "sql_placeholder": "MIN_DT",
           "key": "min_dt",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7105,7 +7859,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7154,7 +7910,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -7167,7 +7925,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -7180,7 +7940,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "dp_margin": {
           "label": "DP margin",
@@ -7193,7 +7955,9 @@
           "sql_placeholder": "DP_MARGIN",
           "key": "dp_margin",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "hydronic_pressure",
+          "effect": "branch_sensitive"
         },
         "pump_hi": {
           "label": "Pump high-speed threshold",
@@ -7206,7 +7970,9 @@
           "sql_placeholder": "PUMP_HI",
           "key": "pump_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7218,7 +7984,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7268,7 +8036,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -7281,7 +8051,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -7294,7 +8066,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "sp_band": {
           "label": "SP band",
@@ -7307,7 +8081,9 @@
           "sql_placeholder": "SP_BAND",
           "key": "sp_band",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7319,7 +8095,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7367,7 +8145,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -7380,7 +8160,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -7393,7 +8175,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "flow_hi": {
           "label": "Flow high",
@@ -7406,7 +8190,9 @@
           "sql_placeholder": "FLOW_HI",
           "key": "flow_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "volumetric_flow",
+          "effect": "branch_sensitive"
         },
         "pump_hi": {
           "label": "Pump high-speed threshold",
@@ -7419,7 +8205,9 @@
           "sql_placeholder": "PUMP_HI",
           "key": "pump_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7431,7 +8219,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7487,7 +8277,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -7500,7 +8292,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -7513,7 +8307,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "cw_approach": {
           "label": "Design approach",
@@ -7526,7 +8322,9 @@
           "sql_placeholder": "CW_APPROACH",
           "key": "cw_approach",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "cw_slack": {
           "label": "Slack below target",
@@ -7539,7 +8337,9 @@
           "sql_placeholder": "CW_SLACK",
           "key": "cw_slack",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7551,7 +8351,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7608,7 +8410,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -7621,7 +8425,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -7634,7 +8440,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "approach_max_f": {
           "label": "Max approach at full fan",
@@ -7647,7 +8455,9 @@
           "sql_placeholder": "APPROACH_MAX_F",
           "key": "approach_max_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "tower_fan_hi": {
           "label": "Tower fan full-speed threshold",
@@ -7660,7 +8470,9 @@
           "sql_placeholder": "TOWER_FAN_HI",
           "key": "tower_fan_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7672,7 +8484,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7729,7 +8543,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -7742,7 +8558,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -7755,7 +8573,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "cw_approach": {
           "label": "Design approach",
@@ -7768,7 +8588,9 @@
           "sql_placeholder": "CW_APPROACH",
           "key": "cw_approach",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "excess_beyond_approach_f": {
           "label": "Excess beyond approach",
@@ -7781,7 +8603,9 @@
           "sql_placeholder": "EXCESS_BEYOND_APPROACH_F",
           "key": "excess_beyond_approach_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "tower_fan_hi": {
           "label": "Tower fan full-speed threshold",
@@ -7794,7 +8618,9 @@
           "sql_placeholder": "TOWER_FAN_HI",
           "key": "tower_fan_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7806,7 +8632,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7861,7 +8689,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -7874,7 +8704,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -7887,7 +8719,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "min_sat": {
           "label": "Min discharge SAT",
@@ -7900,7 +8734,9 @@
           "sql_placeholder": "MIN_SAT",
           "key": "min_sat",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "zone_cold": {
           "label": "Zone cold threshold",
@@ -7913,7 +8749,9 @@
           "sql_placeholder": "ZONE_COLD",
           "key": "zone_cold",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7925,7 +8763,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7973,7 +8813,9 @@
           "sql_placeholder": "SPIKE_LIMIT",
           "key": "spike_limit",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -7985,7 +8827,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8034,7 +8878,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -8047,7 +8893,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -8060,7 +8908,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "duct_hi": {
           "label": "Duct static high",
@@ -8073,7 +8923,9 @@
           "sql_placeholder": "DUCT_HI",
           "key": "duct_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "air_pressure",
+          "effect": "branch_sensitive"
         },
         "request_lo": {
           "label": "Request sum low",
@@ -8086,7 +8938,9 @@
           "sql_placeholder": "REQUEST_LO",
           "key": "request_lo",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "count",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8098,7 +8952,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8152,7 +9008,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -8165,7 +9023,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -8178,7 +9038,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "hwst_hi": {
           "label": "HWST high",
@@ -8191,7 +9053,9 @@
           "sql_placeholder": "HWST_HI",
           "key": "hwst_hi",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "request_lo": {
           "label": "Request sum low",
@@ -8204,7 +9068,9 @@
           "sql_placeholder": "REQUEST_LO",
           "key": "request_lo",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "count",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8216,7 +9082,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8270,7 +9138,9 @@
           "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
           "key": "minimum_active_coverage_pct",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "percent",
+          "effect": "no_op"
         },
         "startup_delay_min": {
           "label": "Startup delay",
@@ -8283,7 +9153,9 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "key": "startup_delay_min",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         },
         "require_operational_gate": {
           "label": "Require operational gate",
@@ -8296,7 +9168,9 @@
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
           "key": "require_operational_gate",
           "control": "slider",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "boolean",
+          "effect": "no_op"
         },
         "chw_lo": {
           "label": "CHWS low",
@@ -8309,7 +9183,9 @@
           "sql_placeholder": "CHW_LO",
           "key": "chw_lo",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "request_lo": {
           "label": "Request sum low",
@@ -8322,7 +9198,9 @@
           "sql_placeholder": "REQUEST_LO",
           "key": "request_lo",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "count",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8334,7 +9212,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8390,7 +9270,9 @@
           "sql_placeholder": "ZONE_T_LO",
           "key": "comfort_low_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "comfort_high_f": {
           "label": "Zone comfort high",
@@ -8403,7 +9285,9 @@
           "sql_placeholder": "ZONE_T_HI",
           "key": "comfort_high_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "absolute_temperature",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8415,7 +9299,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8468,7 +9354,9 @@
           "sql_placeholder": "ALWAYS_ON_PCT",
           "key": "always_on_pct",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8480,7 +9368,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8528,7 +9418,9 @@
           "sql_placeholder": "NULL_FRACTION",
           "key": "null_fraction",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8540,7 +9432,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [
@@ -8596,7 +9490,9 @@
           "sql_placeholder": "VALVE_OPEN",
           "key": "valve_open",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "coil_delta_f": {
           "label": "Minimum heating rise",
@@ -8609,7 +9505,9 @@
           "sql_placeholder": "COIL_DELTA_F",
           "key": "coil_delta_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8621,7 +9519,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8677,7 +9577,9 @@
           "sql_placeholder": "VALVE_OPEN",
           "key": "valve_open",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8689,7 +9591,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8744,7 +9648,9 @@
           "sql_placeholder": "PASS_DELTA_F",
           "key": "pass_delta_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8756,7 +9662,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8811,7 +9719,9 @@
           "sql_placeholder": "PASS_DELTA_F",
           "key": "pass_delta_f",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8823,7 +9733,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8878,7 +9790,9 @@
           "sql_placeholder": "COMMAND_MIN",
           "key": "command_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "position_error": {
           "label": "Position error",
@@ -8891,7 +9805,9 @@
           "sql_placeholder": "POSITION_ERROR",
           "key": "position_error",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8903,7 +9819,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8959,7 +9877,9 @@
           "sql_placeholder": "CO2_HIGH_PPM",
           "key": "co2_high_ppm",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "dimensionless",
+          "effect": "branch_sensitive"
         },
         "damper_low": {
           "label": "Low damper command",
@@ -8972,7 +9892,9 @@
           "sql_placeholder": "DAMPER_LOW",
           "key": "damper_low",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -8984,7 +9906,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "duration_minutes",
+          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -9031,7 +9955,9 @@
           "sql_placeholder": "DEADBAND_C",
           "key": "deadband_c",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "temperature_difference",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -9043,7 +9969,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [
@@ -9090,7 +10018,9 @@
           "sql_placeholder": "MODE_VALVE_MIN",
           "key": "mode_valve_min",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "fraction",
+          "effect": "branch_sensitive"
         },
         "mode_changes": {
           "label": "Mode changes",
@@ -9103,7 +10033,9 @@
           "sql_placeholder": "MODE_CHANGES",
           "key": "mode_changes",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "count",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -9115,7 +10047,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [
@@ -9164,7 +10098,9 @@
           "sql_placeholder": "UTIL_PCT_ERR",
           "key": "util_pct_err",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "percent",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -9176,7 +10112,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [
@@ -9224,7 +10162,9 @@
           "sql_placeholder": "UTIL_INTERVAL_MAE",
           "key": "util_interval_mae",
           "control": "slider",
-          "effect_in_sql": true
+          "effect_in_sql": true,
+          "kind": "interval_energy",
+          "effect": "branch_sensitive"
         },
         "confirm_min": {
           "key": "confirm_min",
@@ -9236,7 +10176,9 @@
           "unit": "min",
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": false
+          "effect_in_sql": false,
+          "kind": "duration_minutes",
+          "effect": "no_op"
         }
       },
       "placeholders": [

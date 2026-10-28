@@ -1,4 +1,4 @@
-# SQL rule registry — source of truth for DataFusion deterministic rules.
+# SQL rule registry — source of truth for Timescale/PostgreSQL FDD rules.
 # Python oracle mapping: see fdd_app/export_pandas_oracle.py SQL_TO_COOKBOOK
 
 rules:
@@ -35,6 +35,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -44,6 +45,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -53,6 +55,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       zone_t_lo:
@@ -62,6 +65,7 @@ rules:
         max: 72.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
       zone_t_hi:
@@ -71,6 +75,7 @@ rules:
         max: 85.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_HI
       require_occupied:
@@ -80,6 +85,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OCCUPIED
       confirm_seconds:
@@ -89,6 +95,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -112,6 +119,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -121,6 +129,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -130,6 +139,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       setback_hi:
@@ -139,6 +149,7 @@ rules:
         max: 72.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SETBACK_HI
       confirm_seconds:
@@ -148,6 +159,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -170,6 +182,7 @@ rules:
         max: 72.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
       zone_t_hi:
@@ -179,6 +192,7 @@ rules:
         max: 85.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_HI
 
@@ -201,6 +215,7 @@ rules:
         max: 72.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
       zone_t_hi:
@@ -210,6 +225,7 @@ rules:
         max: 85.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_HI
 
@@ -232,6 +248,7 @@ rules:
         max: 72.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
       zone_t_hi:
@@ -241,6 +258,7 @@ rules:
         max: 85.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_HI
 
@@ -265,6 +283,7 @@ rules:
         max: 20.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: OAT_ERR
       confirm_seconds:
@@ -274,6 +293,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       web_cadence_seconds:
@@ -283,6 +303,7 @@ rules:
         max: 7200
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: WEB_CADENCE_SECONDS
       web_asof_margin_seconds:
@@ -292,6 +313,7 @@ rules:
         max: 1800
         step: 60
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: WEB_ASOF_MARGIN_SECONDS
 
@@ -317,6 +339,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -326,6 +349,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -335,6 +359,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -344,6 +369,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -353,6 +379,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       eps_sat:
@@ -362,6 +389,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       econ_min_pos:
@@ -371,6 +399,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_MIN_POS
       econ_full_open:
@@ -380,6 +409,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_FULL_OPEN
       clg_full_min:
@@ -389,6 +419,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_FULL_MIN
       oa_damper_econ_low:
@@ -398,6 +429,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: OA_DAMPER_ECON_LOW
       confirm_seconds:
@@ -407,6 +439,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -431,6 +464,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -440,6 +474,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -449,6 +484,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       econ2_oat_hi:
@@ -458,6 +494,7 @@ rules:
         max: 80.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON2_OAT_HI
       econ2_damper:
@@ -467,6 +504,7 @@ rules:
         max: 0.9
         step: 0.02
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON2_DAMPER
       confirm_seconds:
@@ -476,6 +514,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -500,6 +539,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -509,6 +549,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -518,6 +559,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -527,6 +569,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -536,6 +579,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       eps_dsp:
@@ -545,6 +589,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: inwc
+        kind: air_pressure
         frontend_control: slider
         sql_placeholder: EPS_DSP
       eps_vfd_spd:
@@ -554,6 +599,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: EPS_VFD_SPD
       confirm_seconds:
@@ -563,6 +609,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -587,6 +634,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -596,6 +644,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -605,6 +654,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       mode_delay_min:
@@ -614,6 +664,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       fan_on_min:
@@ -623,6 +674,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       eps_rat:
@@ -632,6 +684,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_RAT
       eps_oat:
@@ -641,6 +694,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
@@ -650,6 +704,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_MAT
       mix_tol:
@@ -659,6 +714,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       confirm_seconds:
@@ -668,6 +724,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -692,6 +749,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -701,6 +759,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -710,6 +769,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       mode_delay_min:
@@ -719,6 +779,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       eps_rat:
@@ -728,6 +789,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_RAT
       eps_oat:
@@ -737,6 +799,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
@@ -746,6 +809,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_MAT
       mix_tol:
@@ -755,6 +819,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       fan_on_min:
@@ -764,6 +829,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       confirm_seconds:
@@ -773,6 +839,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -798,6 +865,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -807,6 +875,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -816,6 +885,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       mode_delay_min:
@@ -825,6 +895,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       fan_on_min:
@@ -834,6 +905,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       eps_sat:
@@ -843,6 +915,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       htg_full_min:
@@ -852,6 +925,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: HTG_FULL_MIN
       confirm_seconds:
@@ -861,6 +935,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -885,6 +960,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -894,6 +970,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -903,6 +980,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -912,6 +990,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -921,6 +1000,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       supply_tol:
@@ -930,6 +1010,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SUPPLY_TOL
       eps_sat:
@@ -939,6 +1020,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
@@ -948,6 +1030,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_MAT
       mix_tol:
@@ -957,6 +1040,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
@@ -966,6 +1050,7 @@ rules:
         max: 5.0
         step: 0.05
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       econ_min_pos:
@@ -975,6 +1060,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_MIN_POS
       clg_inactive_max:
@@ -984,6 +1070,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_INACTIVE_MAX
       confirm_seconds:
@@ -993,6 +1080,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -1017,6 +1105,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1026,6 +1115,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1035,6 +1125,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -1044,6 +1135,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -1053,6 +1145,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       eps_sat:
@@ -1062,6 +1155,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_oat:
@@ -1071,6 +1165,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_OAT
       mix_tol:
@@ -1080,6 +1175,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
@@ -1089,6 +1185,7 @@ rules:
         max: 5.0
         step: 0.05
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       econ_min_pos:
@@ -1098,6 +1195,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_MIN_POS
       clg_inactive_max:
@@ -1107,6 +1205,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_INACTIVE_MAX
       confirm_seconds:
@@ -1116,6 +1215,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -1140,6 +1240,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1149,6 +1250,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1158,6 +1260,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -1167,6 +1270,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -1176,6 +1280,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       eps_oat:
@@ -1185,6 +1290,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
@@ -1194,6 +1300,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_MAT
       econ_full_open:
@@ -1203,6 +1310,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_FULL_OPEN
       mix_tol:
@@ -1212,6 +1320,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       clg_on_min:
@@ -1221,6 +1330,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_ON_MIN
       confirm_seconds:
@@ -1230,6 +1340,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -1254,6 +1365,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1263,6 +1375,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1272,6 +1385,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -1281,6 +1395,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -1290,6 +1405,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       eps_sat:
@@ -1299,6 +1415,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_oat:
@@ -1308,6 +1425,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_OAT
       econ_full_open:
@@ -1317,6 +1435,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_FULL_OPEN
       mix_tol:
@@ -1326,6 +1445,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
@@ -1335,6 +1455,7 @@ rules:
         max: 5.0
         step: 0.05
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       clg_on_min:
@@ -1344,6 +1465,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_ON_MIN
       confirm_seconds:
@@ -1353,6 +1475,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -1377,6 +1500,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1386,6 +1510,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1395,6 +1520,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -1404,6 +1530,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -1413,6 +1540,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       supply_tol:
@@ -1422,6 +1550,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SUPPLY_TOL
       eps_sat:
@@ -1431,6 +1560,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
@@ -1440,6 +1570,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_MAT
       econ_full_open:
@@ -1449,6 +1580,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_FULL_OPEN
       mix_tol:
@@ -1458,6 +1590,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
@@ -1467,6 +1600,7 @@ rules:
         max: 5.0
         step: 0.05
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       clg_on_min:
@@ -1476,6 +1610,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_ON_MIN
       econ_min_pos:
@@ -1485,6 +1620,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_MIN_POS
       confirm_seconds:
@@ -1494,6 +1630,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -1518,6 +1655,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1527,6 +1665,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1536,6 +1675,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       econ1_oat_min:
@@ -1545,6 +1685,7 @@ rules:
         max: 70.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON1_OAT_MIN
       econ1_damper_max:
@@ -1554,6 +1695,7 @@ rules:
         max: 0.2
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON1_DAMPER_MAX
 
@@ -1578,6 +1720,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1587,6 +1730,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1596,6 +1740,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       oa_min_pct:
@@ -1605,6 +1750,7 @@ rules:
         max: 40.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: OA_MIN_PCT
       oat_rat_delta_min:
@@ -1614,6 +1760,7 @@ rules:
         max: 10.0
         step: 0.1
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: OAT_RAT_DELTA_MIN
       confirm_seconds:
@@ -1623,6 +1770,7 @@ rules:
         max: 3600
         step: 300
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -1650,6 +1798,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1659,6 +1808,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1668,6 +1818,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -1677,6 +1828,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       range_scale_temperature:
@@ -1686,6 +1838,7 @@ rules:
         max: 2.0
         step: 0.1
         unit: x
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: RANGE_SCALE_TEMPERATURE
       range_scale_humidity:
@@ -1695,6 +1848,7 @@ rules:
         max: 2.0
         step: 0.1
         unit: x
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: RANGE_SCALE_HUMIDITY
       range_scale_pressure:
@@ -1704,6 +1858,7 @@ rules:
         max: 2.0
         step: 0.1
         unit: x
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: RANGE_SCALE_PRESSURE
 
@@ -1729,6 +1884,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1738,6 +1894,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1747,6 +1904,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -1756,6 +1914,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       flatline_tol:
@@ -1765,6 +1924,7 @@ rules:
         max: 1.0
         step: 0.02
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: FLATLINE_TOL
       flatline_hours:
@@ -1774,6 +1934,7 @@ rules:
         max: 12.0
         step: 0.25
         unit: h
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: FLATLINE_HOURS
 
@@ -1799,6 +1960,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -1808,6 +1970,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -1817,6 +1980,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       spike_scale_pressure:
@@ -1826,6 +1990,7 @@ rules:
         max: 4.0
         step: 0.25
         unit: x
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: SPIKE_SCALE_PRESSURE
       spike_scale_humidity:
@@ -1835,6 +2000,7 @@ rules:
         max: 4.0
         step: 0.25
         unit: x
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: SPIKE_SCALE_HUMIDITY
       spike_scale_temperature:
@@ -1844,6 +2010,7 @@ rules:
         max: 4.0
         step: 0.25
         unit: x
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: SPIKE_SCALE_TEMPERATURE
       confirm_seconds:
@@ -1853,6 +2020,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       spike_scale:
@@ -1862,6 +2030,7 @@ rules:
         max: 3.0
         step: 0.25
         unit: x
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: SPIKE_SCALE
 
@@ -1888,6 +2057,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       stale_hours:
@@ -1897,6 +2067,7 @@ rules:
         max: 12.0
         step: 0.5
         unit: h
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: STALE_HOURS
       stale_tol:
@@ -1906,6 +2077,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: STALE_TOL
 
@@ -1931,6 +2103,7 @@ rules:
         max: 500.0
         step: 1.0
         unit: unit
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: SENSOR_SPAN
       max_gap_hours:
@@ -1940,6 +2113,7 @@ rules:
         max: 12.0
         step: 0.1
         unit: h
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: MAX_GAP_HOURS
       confirm_seconds:
@@ -1949,6 +2123,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       persistence_min:
@@ -1958,6 +2133,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: PERSISTENCE_MIN
       steady_fault_per_hour:
@@ -1967,6 +2143,7 @@ rules:
         max: 60.0
         step: 0.5
         unit: degF_per_h
+        kind: temperature_rate
         frontend_control: slider
         sql_placeholder: STEADY_FAULT_PER_HOUR
 
@@ -1991,6 +2168,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2000,6 +2178,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2009,6 +2188,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -2018,6 +2198,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       window_hours:
@@ -2027,6 +2208,7 @@ rules:
         max: 4.0
         step: 0.25
         unit: h
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: WINDOW_HOURS
       change_deadband_pct:
@@ -2036,6 +2218,7 @@ rules:
         max: 10.0
         step: 0.5
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: CHANGE_DEADBAND_PCT
       minimum_span_pct:
@@ -2045,6 +2228,7 @@ rules:
         max: 100.0
         step: 5.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_SPAN_PCT
       total_variation_fault_pct:
@@ -2054,6 +2238,7 @@ rules:
         max: 2000.0
         step: 50.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: TOTAL_VARIATION_FAULT_PCT
       minimum_equivalent_cycles:
@@ -2063,6 +2248,7 @@ rules:
         max: 10.0
         step: 0.5
         unit: count
+        kind: count
         frontend_control: slider
         sql_placeholder: MINIMUM_EQUIVALENT_CYCLES
       minimum_reversals:
@@ -2072,6 +2258,7 @@ rules:
         max: 20.0
         step: 1.0
         unit: count
+        kind: count
         frontend_control: slider
         sql_placeholder: MINIMUM_REVERSALS
       minimum_coverage_pct:
@@ -2081,6 +2268,7 @@ rules:
         max: 100.0
         step: 5.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_COVERAGE_PCT
 
@@ -2105,6 +2293,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2114,6 +2303,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2123,6 +2313,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -2132,6 +2323,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -2141,6 +2333,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       confirm_seconds:
@@ -2150,6 +2343,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       delta_os_max:
@@ -2159,6 +2353,7 @@ rules:
         max: 30.0
         step: 1.0
         unit: count
+        kind: count
         frontend_control: slider
         sql_placeholder: DELTA_OS_MAX
 
@@ -2183,6 +2378,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2192,6 +2388,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2201,6 +2398,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       mode_delay_min:
@@ -2210,6 +2408,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       fan_on_min:
@@ -2219,6 +2418,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       eps_sat:
@@ -2228,6 +2428,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
@@ -2237,6 +2438,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_MAT
       confirm_seconds:
@@ -2246,6 +2448,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       mix_tol:
@@ -2255,6 +2458,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       htg_on_min:
@@ -2264,6 +2468,7 @@ rules:
         max: 0.25
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: HTG_ON_MIN
       delta_supply_fan:
@@ -2273,6 +2478,7 @@ rules:
         max: 5.0
         step: 0.05
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
 
@@ -2297,6 +2503,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2306,6 +2513,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2315,6 +2523,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       oat_rat_delta_min:
@@ -2324,6 +2533,7 @@ rules:
         max: 30.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: OAT_RAT_DELTA_MIN
       mode_delay_min:
@@ -2333,6 +2543,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       fan_on_min:
@@ -2342,6 +2553,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       eps_airflow:
@@ -2351,6 +2563,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: EPS_AIRFLOW
       confirm_seconds:
@@ -2360,6 +2573,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       min_cfm_design:
@@ -2369,6 +2583,7 @@ rules:
         max: 200000.0
         step: 100.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: MIN_CFM_DESIGN
 
@@ -2393,6 +2608,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_ON_MIN
       minimum_active_coverage_pct:
@@ -2402,6 +2618,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2411,6 +2628,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2420,6 +2638,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -2429,6 +2648,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -2438,6 +2658,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       htg_on_min:
@@ -2447,6 +2668,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: HTG_ON_MIN
       eps_cclt:
@@ -2456,6 +2678,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_CCLT
       eps_ccet:
@@ -2465,6 +2688,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_CCET
       econ_min_pos:
@@ -2474,6 +2698,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_MIN_POS
       delta_supply_fan:
@@ -2483,6 +2708,7 @@ rules:
         max: 5.0
         step: 0.05
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       clg_inactive_max:
@@ -2492,6 +2718,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_INACTIVE_MAX
       confirm_seconds:
@@ -2501,6 +2728,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       mix_tol:
@@ -2510,6 +2738,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
 
@@ -2534,6 +2763,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: HTG_ON_MIN
       minimum_active_coverage_pct:
@@ -2543,6 +2773,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2552,6 +2783,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2561,6 +2793,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       fan_on_min:
@@ -2570,6 +2803,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
       mode_delay_min:
@@ -2579,6 +2813,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       eps_hclt:
@@ -2588,6 +2823,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_HCLT
       eps_hcet:
@@ -2597,6 +2833,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_HCET
       econ_min_pos:
@@ -2606,6 +2843,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_MIN_POS
       econ_full_open:
@@ -2615,6 +2853,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON_FULL_OPEN
       delta_supply_fan:
@@ -2624,6 +2863,7 @@ rules:
         max: 5.0
         step: 0.05
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       clg_on_min:
@@ -2633,6 +2873,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_ON_MIN
       clg_inactive_max:
@@ -2642,6 +2883,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_INACTIVE_MAX
       confirm_seconds:
@@ -2651,6 +2893,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       mix_tol:
@@ -2660,6 +2903,7 @@ rules:
         max: 10.0
         step: 0.25
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
 
@@ -2684,6 +2928,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2693,6 +2938,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2702,6 +2948,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -2711,6 +2958,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       sat_dev_err:
@@ -2720,6 +2968,7 @@ rules:
         max: 15.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SAT_DEV_ERR
 
@@ -2744,6 +2993,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2753,6 +3003,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2762,6 +3013,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -2771,6 +3023,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       duct_high_margin:
@@ -2780,6 +3033,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: in_wc
+        kind: air_pressure
         frontend_control: slider
         sql_placeholder: DUCT_HIGH_MARGIN
       pressure_on_min:
@@ -2789,6 +3043,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: in_wc
+        kind: air_pressure
         frontend_control: slider
         sql_placeholder: PRESSURE_ON_MIN
 
@@ -2813,6 +3068,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2822,6 +3078,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2831,6 +3088,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -2840,6 +3098,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       valve_open_pct:
@@ -2849,6 +3108,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: VALVE_OPEN_PCT
 
@@ -2873,6 +3133,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2882,6 +3143,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2891,6 +3153,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -2900,6 +3163,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       econ3_db_min:
@@ -2909,6 +3173,7 @@ rules:
         max: 68.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON3_DB_MIN
       econ3_db_max:
@@ -2918,6 +3183,7 @@ rules:
         max: 80.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON3_DB_MAX
       econ3_dp_max:
@@ -2927,6 +3193,7 @@ rules:
         max: 68.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON3_DP_MAX
       econ3_damper_hi:
@@ -2936,6 +3203,7 @@ rules:
         max: 1.0
         step: 0.02
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON3_DAMPER_HI
       clg_open_min:
@@ -2945,6 +3213,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_OPEN_MIN
 
@@ -2969,6 +3238,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -2978,6 +3248,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -2987,6 +3258,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -2996,6 +3268,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       preheat_over_f:
@@ -3005,6 +3278,7 @@ rules:
         max: 8.0
         step: 0.1
         unit: degF
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: PREHEAT_OVER_F
       htg_open_min:
@@ -3014,6 +3288,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: HTG_OPEN_MIN
 
@@ -3038,6 +3313,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3047,6 +3323,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3056,6 +3333,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3065,6 +3343,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       econ6_oat_max_f:
@@ -3074,6 +3353,7 @@ rules:
         max: 40.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON6_OAT_MAX_F
       econ6_damper_max:
@@ -3083,6 +3363,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON6_DAMPER_MAX
 
@@ -3107,6 +3388,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3116,6 +3398,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3125,6 +3408,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3134,6 +3418,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       econ7_db_min:
@@ -3143,6 +3428,7 @@ rules:
         max: 50.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON7_DB_MIN
       econ7_db_max:
@@ -3152,6 +3438,7 @@ rules:
         max: 80.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON7_DB_MAX
       econ7_dp_max:
@@ -3161,6 +3448,7 @@ rules:
         max: 68.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON7_DP_MAX
       econ7_damper_min:
@@ -3170,6 +3458,7 @@ rules:
         max: 0.9
         step: 0.02
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ECON7_DAMPER_MIN
       clg_open_min:
@@ -3179,6 +3468,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_OPEN_MIN
 
@@ -3203,6 +3493,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       mech_oat_max_f:
@@ -3212,6 +3503,7 @@ rules:
         max: 65.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MECH_OAT_MAX_F
 
@@ -3235,6 +3527,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -3259,6 +3552,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3268,6 +3562,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3277,6 +3572,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3286,6 +3582,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       min_oa_frac:
@@ -3295,6 +3592,7 @@ rules:
         max: 0.4
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: MIN_OA_FRAC
       oat_rat_guard:
@@ -3304,6 +3602,7 @@ rules:
         max: 6.0
         step: 0.1
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: OAT_RAT_GUARD
 
@@ -3328,6 +3627,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3337,6 +3637,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3346,6 +3647,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3355,6 +3657,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       leak_delta:
@@ -3364,6 +3667,7 @@ rules:
         max: 6.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: LEAK_DELTA
 
@@ -3388,6 +3692,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3397,6 +3702,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3406,6 +3712,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3415,6 +3722,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       sat_err:
@@ -3424,6 +3732,7 @@ rules:
         max: 8.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SAT_ERR
       mat_leak_delta:
@@ -3433,6 +3742,7 @@ rules:
         max: 12.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MAT_LEAK_DELTA
 
@@ -3457,6 +3767,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3466,6 +3777,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3475,6 +3787,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3484,6 +3797,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       reheat_oat:
@@ -3493,6 +3807,7 @@ rules:
         max: 90.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: REHEAT_OAT
       reheat_pct:
@@ -3502,6 +3817,7 @@ rules:
         max: 1.0
         step: 0.02
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: REHEAT_PCT
       flow_on_min:
@@ -3511,6 +3827,7 @@ rules:
         max: 200.0
         step: 5.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
 
@@ -3535,6 +3852,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3544,6 +3862,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3553,6 +3872,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3562,6 +3882,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       full_open_pct:
@@ -3571,6 +3892,7 @@ rules:
         max: 1.0
         step: 0.005
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: FULL_OPEN_PCT
       flow_on_min:
@@ -3580,6 +3902,7 @@ rules:
         max: 200.0
         step: 5.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
       sustain_hours:
@@ -3589,6 +3912,7 @@ rules:
         max: 6.0
         step: 0.5
         unit: h
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: SUSTAIN_HOURS
 
@@ -3613,6 +3937,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3622,6 +3947,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3631,6 +3957,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3640,6 +3967,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       flow_bias_cfm:
@@ -3649,6 +3977,7 @@ rules:
         max: 200.0
         step: 5.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_BIAS_CFM
       damper_closed_max:
@@ -3658,6 +3987,7 @@ rules:
         max: 0.5
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: DAMPER_CLOSED_MAX
 
@@ -3682,6 +4012,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3691,6 +4022,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3700,6 +4032,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       free_cool_oat:
@@ -3709,6 +4042,7 @@ rules:
         max: 75.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: FREE_COOL_OAT
       reheat_pct:
@@ -3718,6 +4052,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: REHEAT_PCT
       confirm_seconds:
@@ -3727,6 +4062,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -3751,6 +4087,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3760,6 +4097,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3769,6 +4107,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3778,6 +4117,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       reheat_cmd:
@@ -3787,6 +4127,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: REHEAT_CMD
       min_rise:
@@ -3796,6 +4137,7 @@ rules:
         max: 15.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIN_RISE
       flow_on_min:
@@ -3805,6 +4147,7 @@ rules:
         max: 200.0
         step: 5.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
 
@@ -3829,6 +4172,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       delta_f:
@@ -3838,6 +4182,7 @@ rules:
         max: 25.0
         step: 0.5
         unit: degF
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DELTA_F
       flow_on_min:
@@ -3847,6 +4192,7 @@ rules:
         max: 200.0
         step: 5.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
 
@@ -3871,6 +4217,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3880,6 +4227,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3889,6 +4237,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -3898,6 +4247,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       high_min_flow_sp:
@@ -3907,6 +4257,7 @@ rules:
         max: 2000.0
         step: 10.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: HIGH_MIN_FLOW_SP
       flow_on_min:
@@ -3916,6 +4267,7 @@ rules:
         max: 200.0
         step: 5.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
       fixed_flow_hours:
@@ -3925,6 +4277,7 @@ rules:
         max: 6.0
         step: 0.25
         unit: h
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: FIXED_FLOW_HOURS
       fixed_flow_max_std:
@@ -3934,6 +4287,7 @@ rules:
         max: 80.0
         step: 1.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FIXED_FLOW_MAX_STD
       fixed_flow_min_mean:
@@ -3943,6 +4297,7 @@ rules:
         max: 2000.0
         step: 10.0
         unit: cfm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FIXED_FLOW_MIN_MEAN
 
@@ -3967,6 +4322,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -3976,6 +4332,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -3985,6 +4342,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       reset_err_f:
@@ -3994,6 +4352,7 @@ rules:
         max: 10.0
         step: 0.5
         unit: degF
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: RESET_ERR_F
       reset_sat_at_65:
@@ -4003,6 +4362,7 @@ rules:
         max: 65.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: RESET_SAT_AT_65
       reset_slope:
@@ -4012,6 +4372,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: RESET_SLOPE
       reset_oat_ref:
@@ -4021,6 +4382,7 @@ rules:
         max: 80.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: RESET_OAT_REF
       confirm_seconds:
@@ -4030,6 +4392,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
@@ -4054,6 +4417,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4063,6 +4427,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4072,6 +4437,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4081,6 +4447,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       load_sat_hi:
@@ -4090,6 +4457,7 @@ rules:
         max: 1.0
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: LOAD_SAT_HI
 
@@ -4114,6 +4482,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4123,6 +4492,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4132,6 +4502,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4141,6 +4512,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       min_dt:
@@ -4150,6 +4522,7 @@ rules:
         max: 12.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIN_DT
 
@@ -4173,6 +4546,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4182,6 +4556,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4191,6 +4566,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4200,6 +4576,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       dp_margin:
@@ -4209,6 +4586,7 @@ rules:
         max: 6.0
         step: 0.1
         unit: psi
+        kind: hydronic_pressure
         frontend_control: slider
         sql_placeholder: DP_MARGIN
       pump_hi:
@@ -4218,6 +4596,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: PUMP_HI
 
@@ -4241,6 +4620,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4250,6 +4630,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4259,6 +4640,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4268,6 +4650,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       sp_band:
@@ -4277,6 +4660,7 @@ rules:
         max: 6.0
         step: 0.1
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SP_BAND
 
@@ -4300,6 +4684,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4309,6 +4694,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4318,6 +4704,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4327,6 +4714,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       flow_hi:
@@ -4336,6 +4724,7 @@ rules:
         max: 3000.0
         step: 50.0
         unit: gpm
+        kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_HI
       pump_hi:
@@ -4345,6 +4734,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: PUMP_HI
 
@@ -4369,6 +4759,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4378,6 +4769,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4387,6 +4779,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4396,6 +4789,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       cw_approach:
@@ -4405,6 +4799,7 @@ rules:
         max: 15.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: CW_APPROACH
       cw_slack:
@@ -4414,6 +4809,7 @@ rules:
         max: 6.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: CW_SLACK
 
@@ -4438,6 +4834,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4447,6 +4844,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4456,6 +4854,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4465,6 +4864,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       approach_max_f:
@@ -4474,6 +4874,7 @@ rules:
         max: 15.0
         step: 0.5
         unit: degF
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: APPROACH_MAX_F
       tower_fan_hi:
@@ -4483,6 +4884,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: TOWER_FAN_HI
 
@@ -4507,6 +4909,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4516,6 +4919,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4525,6 +4929,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4534,6 +4939,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       cw_approach:
@@ -4543,6 +4949,7 @@ rules:
         max: 15.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: CW_APPROACH
       excess_beyond_approach_f:
@@ -4552,6 +4959,7 @@ rules:
         max: 20.0
         step: 0.5
         unit: degF
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EXCESS_BEYOND_APPROACH_F
       tower_fan_hi:
@@ -4561,6 +4969,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: TOWER_FAN_HI
 
@@ -4585,6 +4994,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4594,6 +5004,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4603,6 +5014,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4612,6 +5024,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       min_sat:
@@ -4621,6 +5034,7 @@ rules:
         max: 110.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIN_SAT
       zone_cold:
@@ -4630,6 +5044,7 @@ rules:
         max: 72.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_COLD
 
@@ -4653,6 +5068,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       spike_limit:
@@ -4662,6 +5078,7 @@ rules:
         max: 40.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SPIKE_LIMIT
 
@@ -4686,6 +5103,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4695,6 +5113,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4704,6 +5123,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4713,6 +5133,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       duct_hi:
@@ -4722,6 +5143,7 @@ rules:
         max: 3.0
         step: 0.05
         unit: in_wc
+        kind: air_pressure
         frontend_control: slider
         sql_placeholder: DUCT_HI
       request_lo:
@@ -4731,6 +5153,7 @@ rules:
         max: 10.0
         step: 0.5
         unit: count
+        kind: count
         frontend_control: slider
         sql_placeholder: REQUEST_LO
 
@@ -4755,6 +5178,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4764,6 +5188,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4773,6 +5198,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4782,6 +5208,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       hwst_hi:
@@ -4791,6 +5218,7 @@ rules:
         max: 200.0
         step: 1.0
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: HWST_HI
       request_lo:
@@ -4800,6 +5228,7 @@ rules:
         max: 10.0
         step: 0.5
         unit: count
+        kind: count
         frontend_control: slider
         sql_placeholder: REQUEST_LO
 
@@ -4824,6 +5253,7 @@ rules:
         max: 100.0
         step: 1.0
         unit: pct
+        kind: percent
         frontend_control: slider
         sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
       startup_delay_min:
@@ -4833,6 +5263,7 @@ rules:
         max: 60.0
         step: 1.0
         unit: min
+        kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
       require_operational_gate:
@@ -4842,6 +5273,7 @@ rules:
         max: 1.0
         step: 1.0
         unit: bool
+        kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
@@ -4851,6 +5283,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       chw_lo:
@@ -4860,6 +5293,7 @@ rules:
         max: 55.0
         step: 0.5
         unit: degF
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: CHW_LO
       request_lo:
@@ -4869,6 +5303,7 @@ rules:
         max: 10.0
         step: 0.5
         unit: count
+        kind: count
         frontend_control: slider
         sql_placeholder: REQUEST_LO
 
@@ -4897,6 +5332,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       comfort_low_f:
@@ -4906,6 +5342,7 @@ rules:
         max: 80.0
         step: 0.5
         unit: °F
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
       comfort_high_f:
@@ -4915,6 +5352,7 @@ rules:
         max: 90.0
         step: 0.5
         unit: °F
+        kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_HI
 
@@ -4939,6 +5377,7 @@ rules:
         max: 3600.0
         step: 300.0
         unit: sec
+        kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
       always_on_pct:
@@ -4948,6 +5387,7 @@ rules:
         max: 1.0
         step: 0.01
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: ALWAYS_ON_PCT
 
@@ -4972,6 +5412,7 @@ rules:
         max: 1
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: NULL_FRACTION
   - rule_id: FCU-HTG-COIL
@@ -4995,6 +5436,7 @@ rules:
         max: 1
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: VALVE_OPEN
       coil_delta_f:
@@ -5004,6 +5446,7 @@ rules:
         max: 20
         step: 0.5
         unit: degF
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: COIL_DELTA_F
   - rule_id: FCU-CLG-COIL
@@ -5027,6 +5470,7 @@ rules:
         max: 1
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: VALVE_OPEN
   - rule_id: FCU-VALVE-PASS-HTG
@@ -5050,6 +5494,7 @@ rules:
         max: 20
         step: 0.5
         unit: degF
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: PASS_DELTA_F
   - rule_id: FCU-VALVE-PASS-CLG
@@ -5073,6 +5518,7 @@ rules:
         max: 20
         step: 0.5
         unit: degF
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: PASS_DELTA_F
   - rule_id: FCU-DAMPER-POS
@@ -5096,6 +5542,7 @@ rules:
         max: 1
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: COMMAND_MIN
       position_error:
@@ -5105,6 +5552,7 @@ rules:
         max: 0.5
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: POSITION_ERROR
   - rule_id: FCU-CO2-DAMPER
@@ -5128,6 +5576,7 @@ rules:
         max: 2000
         step: 50
         unit: ppm
+        kind: dimensionless
         frontend_control: slider
         sql_placeholder: CO2_HIGH_PPM
       damper_low:
@@ -5137,6 +5586,7 @@ rules:
         max: 0.5
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: DAMPER_LOW
   - rule_id: FCU-DEADBAND
@@ -5159,6 +5609,7 @@ rules:
         max: 5
         step: 0.1
         unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DEADBAND_C
   - rule_id: FCU-MODE-CYCLE
@@ -5181,6 +5632,7 @@ rules:
         max: 0.5
         step: 0.05
         unit: frac
+        kind: fraction
         frontend_control: slider
         sql_placeholder: MODE_VALVE_MIN
       mode_changes:
@@ -5190,6 +5642,7 @@ rules:
         max: 20
         step: 1
         unit: count
+        kind: count
         frontend_control: slider
         sql_placeholder: MODE_CHANGES
 
@@ -5214,6 +5667,7 @@ rules:
         max: 50.0
         step: 1.0
         unit: '%'
+        kind: percent
         frontend_control: slider
         sql_placeholder: UTIL_PCT_ERR
 
@@ -5238,5 +5692,6 @@ rules:
         max: 100.0
         step: 0.5
         unit: kWh
+        kind: interval_energy
         frontend_control: slider
         sql_placeholder: UTIL_INTERVAL_MAE
