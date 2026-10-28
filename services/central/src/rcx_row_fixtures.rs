@@ -220,7 +220,9 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     assert!(!bas_rows.is_empty(), "{bas}");
     let t0_pairs: Vec<_> = bas_rows
         .iter()
-        .filter(|row| row.get("bas_oa_t") == Some(&json!(50.0)) && row.get("web_oa_t") == Some(&json!(48.0)))
+        .filter(|row| {
+            row.get("bas_oa_t") == Some(&json!(50.0)) && row.get("web_oa_t") == Some(&json!(48.0))
+        })
         .collect();
     assert_eq!(t0_pairs.len(), 1, "expected one assessable t0 pair: {bas}");
     assert_eq!(
