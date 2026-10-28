@@ -10,7 +10,7 @@ use super::rcx_zone_comfort_rank;
 const HELPERS: &str = include_str!("../../../sql/fdd/postgres/postgres_helpers.sql");
 const PACK_RUNTIME: &str = include_str!("../../../sql/schema/06_fdd_pack_runtime.sql");
 
-async fn pool() -> Option<sqlx::PgPool> {
+async fn connect_test_pool() -> Option<sqlx::PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
         .filter(|v| !v.trim().is_empty())?;
@@ -181,7 +181,7 @@ async fn release_test_pool(pool: sqlx::PgPool) {
 
 #[tokio::test]
 async fn t1407_vav1_occupancy_and_comfort_units() {
-    let Some(pool) = pool().await else {
+    let Some(pool) = connect_test_pool().await else {
         eprintln!("SKIP t1407_vav1_occupancy_and_comfort_units: OPENFDD_TEST_DATABASE_URL unset");
         return;
     };
@@ -314,7 +314,7 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     );
 
     fdd_tsdb::clear_shared_pool();
-    let Some(pool) = pool().await else {
+    let Some(pool) = connect_test_pool().await else {
         eprintln!("SKIP t1407 rank/cleanup: OPENFDD_TEST_DATABASE_URL unset");
         return;
     };
