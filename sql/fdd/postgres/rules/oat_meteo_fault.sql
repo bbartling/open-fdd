@@ -4,7 +4,7 @@
 -- Web weather is joined as-of: carry the last web sample forward up to
 -- WEB_ASOF_BOUND_SECONDS (web cadence + margin from registry). Beyond that bound
 -- the local sample is not compared (not-assessed seconds, never a no-fault).
--- Prefer equipment web_oa_t (pandas); fall back to weather rows when absent.
+-- Prefer equipment web_oa_t (matches the reference oracle); fall back to weather rows when absent.
 -- Targeting is registry equipment_kinds (ahu) plus the package stamp applied
 -- after this query. This file does not filter equipment_id by prefix or LIKE.
 WITH web_points AS (
