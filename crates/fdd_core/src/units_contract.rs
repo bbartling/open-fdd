@@ -100,11 +100,11 @@ impl MetricUnitsContract {
     pub fn from_json(json: &str) -> Result<Self, ContractError> {
         let file: MetricUnitsFile =
             serde_json::from_str(json).map_err(|e| ContractError::Invalid(format!("json: {e}")))?;
-        let mut quantities = HashMap::new();
+        let mut quantities: HashMap<String, QuantityDef> = HashMap::new();
         for q in &file.quantities {
             quantities.insert(q.id.clone(), q.clone());
         }
-        let mut conversions_by_token = HashMap::new();
+        let mut conversions_by_token: HashMap<String, ConversionEntry> = HashMap::new();
         for row in &file.source_unit_conversions {
             if !quantities.contains_key(&row.quantity) {
                 return Err(ContractError::Invalid(format!(
