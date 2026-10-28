@@ -55,11 +55,11 @@ const SCHEMA_SQL: &[&str] = &[
     // Canonical helper body. Installed on every fresh start and forward upgrade.
     include_str!("../../../sql/fdd/postgres/postgres_helpers.sql"),
     include_str!("../../../sql/schema/06_fdd_pack_runtime.sql"),
+    include_str!("../../../sql/schema/11_point_map_binding_metadata.sql"),
     include_str!("../../../sql/schema/07_opaque_series_binding.sql"),
     include_str!("../../../sql/schema/08_analytics_result_cache.sql"),
     include_str!("../../../sql/schema/09_data_revision.sql"),
     include_str!("../../../sql/schema/10_incremental_fdd.sql"),
-    include_str!("../../../sql/schema/11_point_map_binding_metadata.sql"),
 ];
 
 /// Tables whose rows mean this database is already in use.

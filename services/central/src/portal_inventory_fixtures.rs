@@ -110,11 +110,8 @@ pub(crate) async fn apply_schema(pool: &PgPool) {
     {
         crate::test_ddl::execute_idempotent_ddl(pool, &statement).await;
     }
-    for statement in BINDING_METADATA_SCHEMA
-        .split(';')
-        .filter(|s| !s.trim().is_empty())
-    {
-        crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
+    for statement in crate::db_lifecycle::statements(BINDING_METADATA_SCHEMA) {
+        crate::test_ddl::execute_idempotent_ddl(pool, &statement).await;
     }
     for statement in crate::db_lifecycle::statements(AUTHORIZED_SERIES_VIEW) {
         crate::test_ddl::execute_idempotent_ddl(pool, &statement).await;
