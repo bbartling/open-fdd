@@ -156,9 +156,6 @@ fn result_row<'a>(
 }
 
 async fn run_vav1(site: &str, extra: serde_json::Value) -> serde_json::Value {
-    let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("db url");
-    std::env::set_var("OPENFDD_DATABASE_URL", &url);
-    std::env::set_var("OPENFDD_HISTORIAN", "timescale");
     fdd_tsdb::clear_shared_pool();
     let mut payload = json!({
         "building_id": site,
@@ -177,17 +174,15 @@ async fn run_vav1(site: &str, extra: serde_json::Value) -> serde_json::Value {
     out
 }
 
-async fn release_test_pool(pool: sqlx::PgPool) {
-    pool.close().await;
-    fdd_tsdb::clear_shared_pool();
-}
-
 #[tokio::test]
 async fn t1407_vav1_occupancy_and_comfort_units() {
     let Some(pool) = connect_test_pool().await else {
         eprintln!("SKIP t1407_vav1_occupancy_and_comfort_units: OPENFDD_TEST_DATABASE_URL unset");
         return;
     };
+    let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("db url");
+    std::env::set_var("OPENFDD_DATABASE_URL", &url);
+    std::env::set_var("OPENFDD_HISTORIAN", "timescale");
     apply_schema(&pool).await;
     let token = uuid::Uuid::new_v4().simple().to_string();
     let site_no_occ = format!("t1407a{}", &token[..6]);
@@ -285,8 +280,6 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     )
     .await;
 
-    release_test_pool(pool).await;
-
     let no_occ = run_vav1(&site_no_occ, json!({})).await;
     let skip = result_row(&no_occ, "VAV-1", "VAV_A");
     assert_eq!(
@@ -317,10 +310,6 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     );
 
     fdd_tsdb::clear_shared_pool();
-    let Some(pool) = connect_test_pool().await else {
-        eprintln!("SKIP t1407 rank/cleanup: OPENFDD_TEST_DATABASE_URL unset");
-        return;
-    };
     let rank = rcx_zone_comfort_rank(
         &site_c,
         &["vav"],
