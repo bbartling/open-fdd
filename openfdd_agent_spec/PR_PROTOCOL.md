@@ -76,7 +76,7 @@ Machine manifest: [`ownership.yaml`](ownership.yaml) → `portal_stress_qualific
 | **Codex** | Optional reviewer only — nothing waits on Codex for stress closeout or the 4.0.7 SI patch cycle |
 
 - Product, SPA, or guidance-only PRs **must not** edit Grok-owned paths; open a dedicated Grok row (for example 4.0.7 W0a / W0b / W3 / W8).
-- When ownership or gate contracts change, update [`skills/openfdd-stress-closeout/SKILL.md`](skills/openfdd-stress-closeout/SKILL.md) in the same PR and run `./scripts/openfdd_install_agent_skills.sh --sync`.
+- When ownership or gate contracts change, update [`skills/openfdd-stress-closeout/SKILL.md`](skills/openfdd-stress-closeout/SKILL.md) and [`skills/openfdd-mt-security/SKILL.md`](skills/openfdd-mt-security/SKILL.md) in the same PR and run `./scripts/openfdd_install_agent_skills.sh --sync`.
 - Each cloud agent **watches its own PR** until every required GitHub check is green; fix failures on the same branch — do not stop at PR open and do not open a second PR for the same row.
 
 
