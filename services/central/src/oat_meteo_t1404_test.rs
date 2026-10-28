@@ -1,8 +1,8 @@
-//! T1404-1 / T1404-2: OAT-METEO as-of join and primary local OAT reference.
+//! T1404-1 / T1404-2 / T1404-3: OAT-METEO as-of join, primary local OAT, bas-vs-web parity.
 
 use chrono::{Duration, TimeZone, Utc};
 use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch};
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Row;
 
@@ -287,5 +287,120 @@ async fn t1404_primary_reference_selection() {
     };
     let fault_hours = run_oat_meteo(&pool, &site, Some(fill)).await;
     assert_eq!(fault_hours, 0.0);
+    purge(&pool, &site).await;
+}
+
+async fn run_bas_vs_web(pool: &sqlx::PgPool, site: &str) -> Value {
+    let tsdb = Tsdb::from_pool(pool.clone());
+    let scope = crate::timescale_analytics::AnalyticsSqlScope {
+        start: None,
+        end: None,
+        equipment_ids: Vec::new(),
+    };
+    crate::timescale_analytics::bas_vs_web_oat(&tsdb, site, &scope)
+        .await
+        .expect("bas_vs_web_oat")
+}
+
+#[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize OPENFDD_WORKSPACE for engineer overlay file"
+)]
+async fn t1404_3_bas_vs_web_primary_and_default_reference() {
+    let _env = crate::test_env_lock::lock_env();
+    let workspace = tempfile::tempdir().expect("workspace");
+    let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+
+    let Some(pool) = pool().await else {
+        return;
+    };
+    apply_schema(&pool).await;
+    let site = format!("t1404c{}", uuid::Uuid::new_v4().simple());
+    purge(&pool, &site).await;
+    seed_site(&pool, &site).await;
+    bind_point(&pool, &site, "WX", "oa_t", "WX.oa_t_a", "pt-oa-a").await;
+    bind_point(&pool, &site, "WX", "oa_t", "WX.oa_t_b", "pt-oa-b").await;
+    bind_point(&pool, &site, "WX", "web_oa_t", "WX.web_oa_t", "pt-web").await;
+
+    let mut batch = UpsertBatch::default();
+    for m in (0..=60).step_by(5) {
+        batch.push(sample(&site, "WX", "oa_t", "WX.oa_t_a", m, 57.0));
+        batch.push(sample(&site, "WX", "oa_t", "WX.oa_t_b", m, 50.0));
+    }
+    for m in (0..=60).step_by(20) {
+        batch.push(sample(&site, "WX", "web_oa_t", "WX.web_oa_t", m, 50.0));
+    }
+    upsert_samples(&pool, batch).await;
+
+    let default_body = run_bas_vs_web(&pool, &site).await;
+    let default_ref = default_body
+        .get("oa_t_reference")
+        .expect("oa_t_reference metadata");
+    assert_eq!(
+        default_ref.get("selection").and_then(|v| v.as_str()),
+        Some("default_lowest_binding")
+    );
+    assert_eq!(
+        default_ref.get("openfdd_key").and_then(|v| v.as_str()),
+        Some("WX.oa_t_a")
+    );
+    let default_rows = default_body
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .expect("rows");
+    assert!(
+        !default_rows.is_empty(),
+        "expected assessable bas-vs-web rows"
+    );
+    for row in default_rows {
+        assert_eq!(row.get("bas_oa_t").and_then(|v| v.as_f64()), Some(57.0));
+    }
+    let mut per_ts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for row in default_rows {
+        if let Some(ts) = row.get("ts").and_then(|v| v.as_str()) {
+            *per_ts.entry(ts.to_string()).or_insert(0) += 1;
+        }
+    }
+    assert!(
+        per_ts.values().all(|&n| n == 1),
+        "each timestamp must return one row: {per_ts:?}"
+    );
+
+    let root = csv_building_root(&site);
+    std::fs::create_dir_all(&root).expect("dir");
+    let overlay = json!({
+        "schema": "openfdd_model_point_engineer_overlay_v1",
+        "building_id": site,
+        "points": {
+            "pt-oa-b": { "primary_reference": true }
+        }
+    });
+    std::fs::write(
+        root.join("model_point_engineer_overlay.json"),
+        serde_json::to_string_pretty(&overlay).expect("json"),
+    )
+    .expect("overlay");
+
+    let primary_body = run_bas_vs_web(&pool, &site).await;
+    let primary_ref = primary_body
+        .get("oa_t_reference")
+        .expect("oa_t_reference metadata");
+    assert_eq!(
+        primary_ref.get("selection").and_then(|v| v.as_str()),
+        Some("primary_reference")
+    );
+    assert_eq!(
+        primary_ref.get("openfdd_key").and_then(|v| v.as_str()),
+        Some("WX.oa_t_b")
+    );
+    let primary_rows = primary_body
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .expect("rows");
+    assert!(!primary_rows.is_empty());
+    for row in primary_rows {
+        assert_eq!(row.get("bas_oa_t").and_then(|v| v.as_f64()), Some(50.0));
+    }
     purge(&pool, &site).await;
 }

@@ -2733,6 +2733,29 @@ pub(crate) struct HistoryFillOptions {
     pub site_oa_t: Option<SiteOatReference>,
 }
 
+/// Web weather as-of tolerance shared by OAT-METEO and bas-vs-web-oat analytics.
+pub(crate) fn oat_meteo_web_asof_bound_seconds() -> f64 {
+    let Ok(reg) = load_reg() else {
+        return 1500.0;
+    };
+    let Some(rule) = reg.rules.iter().find(|r| r.rule_id == "OAT-METEO") else {
+        return 1500.0;
+    };
+    let confirm = rule.confirm_seconds.unwrap_or(900);
+    let mut params = rule_params(300.0, confirm);
+    if let Ok(tuning) = load_tuning_profiles(Path::new(&reg.rules_dir)) {
+        if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
+            for (k, v) in tuned {
+                if k == "CONFIRM_SECONDS" || k == "CONFIRM_ROWS" {
+                    continue;
+                }
+                params.insert(k, v);
+            }
+        }
+    }
+    web_asof_bound_seconds(&params)
+}
+
 fn web_asof_bound_seconds(params: &std::collections::HashMap<String, String>) -> f64 {
     let cadence = params
         .get("WEB_CADENCE_SECONDS")

@@ -6692,7 +6692,7 @@ async fn analytics_bas_vs_web_oat(
     req.read_tenant_id = preferred_tenant_for_building_read(&ctx, req.query.building_id.as_deref());
     cached_analytics!(
         "bas-vs-web-oat",
-        "bas-vs-web-oat-v3",
+        "bas-vs-web-oat-v4",
         &state,
         &headers,
         req,
@@ -6707,7 +6707,7 @@ async fn analytics_bas_vs_web_oat(
             let (start, end) = match window {
                 Ok((s, e)) => (Some(s), e),
                 Err(msg) => {
-                    return analytics::envelope("bas-vs-web-oat-v3", &req.query, vec![msg]);
+                    return analytics::envelope("bas-vs-web-oat-v4", &req.query, vec![msg]);
                 }
             };
             match analytics::historian::bas_vs_web_from_history(
@@ -6722,7 +6722,7 @@ async fn analytics_bas_vs_web_oat(
             {
                 Ok(Some(env)) => env,
                 Ok(None) => analytics::envelope_with_engine(
-                    "bas-vs-web-oat-v3",
+                    "bas-vs-web-oat-v4",
                     &req.query,
                     vec![
                         "BAS vs web OAT unavailable — need distinct oa_t and web OAT \
@@ -6734,7 +6734,7 @@ async fn analytics_bas_vs_web_oat(
                 Err(e) => {
                     tracing::warn!(error = %e, "bas-vs-web-oat historian path failed");
                     analytics::envelope(
-                        "bas-vs-web-oat-v3",
+                        "bas-vs-web-oat-v4",
                         &req.query,
                         vec![format!("bas-vs-web-oat failed: {e}")],
                     )

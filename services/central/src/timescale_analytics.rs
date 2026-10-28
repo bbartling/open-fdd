@@ -188,7 +188,10 @@ fn empty_row_reason(query_id: &str, dt_min_f: Option<f64>) -> String {
                 .into()
         }
         "bas-vs-web-oat" => {
-            "no coincident BAS and web outdoor-air samples for this site and window".into()
+            "no assessable BAS vs web outdoor-air pairs for this site and window \
+             (need mapped oa_t and web_oa_t, primary or default site OAT binding, \
+             and web within the OAT-METEO as-of bound)"
+                .into()
         }
         other => format!("no rows for {other}"),
     }
@@ -279,13 +282,31 @@ pub async fn bas_vs_web_oat(
     building_id: &str,
     scope: &AnalyticsSqlScope,
 ) -> Result<Value> {
-    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
+    let pool = tsdb.pool();
+    let bound = crate::timescale_product::oat_meteo_web_asof_bound_seconds();
+    let oa_ref = crate::timescale_product::resolve_site_oa_t_reference(pool, building_id)
+        .await
+        .context("resolve site oa_t for bas-vs-web-oat")?;
+    let Some(picked) = oa_ref else {
+        let body = finish_row_envelope(
+            "bas-vs-web-oat",
+            building_id,
+            Vec::new(),
+            scope,
+            "bas-vs-web-oat",
+            None,
+        );
+        return Ok(stamp_overview_dto(tsdb, building_id, scope, body).await);
+    };
+
     let rows = sqlx::query(BAS_VS_WEB_SQL)
         .bind(building_id)
         .bind(scope.start)
         .bind(scope.end)
         .bind(scope.equipment_bind())
-        .fetch_all(tsdb.pool())
+        .bind(&picked.openfdd_key)
+        .bind(bound)
+        .fetch_all(pool)
         .await
         .context("bas_vs_web_oat")?;
 
@@ -299,7 +320,7 @@ pub async fn bas_vs_web_oat(
             "delta_f": r.try_get::<f64, _>("delta_f").ok(),
         }));
     }
-    let body = finish_row_envelope(
+    let mut body = finish_row_envelope(
         "bas-vs-web-oat",
         building_id,
         out,
@@ -307,6 +328,17 @@ pub async fn bas_vs_web_oat(
         "bas-vs-web-oat",
         None,
     );
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert(
+            "oa_t_reference".to_string(),
+            json!({
+                "openfdd_key": picked.openfdd_key,
+                "equipment_id": picked.equipment_id,
+                "selection": picked.selection,
+            }),
+        );
+        obj.insert("web_asof_bound_seconds".to_string(), json!(bound));
+    }
     Ok(stamp_overview_dto(tsdb, building_id, scope, body).await)
 }
 
@@ -1931,6 +1963,22 @@ mod pack_version_tests {
         assert!(
             ECONOMIZER_SQL.contains("mat_resid_f"),
             "MAT residual is the mixing-model difference"
+        );
+    }
+
+    #[test]
+    fn bas_vs_web_sql_uses_primary_key_and_asof_bound() {
+        assert!(
+            BAS_VS_WEB_SQL.contains("u.openfdd_key = $5"),
+            "bas-vs-web must bind the shared site oa_t key"
+        );
+        assert!(
+            BAS_VS_WEB_SQL.contains("<= $6"),
+            "bas-vs-web must enforce the OAT-METEO web as-of bound as $6"
+        );
+        assert!(
+            BAS_VS_WEB_SQL.contains("ORDER BY wp.ts DESC"),
+            "bas-vs-web must as-of join web OAT"
         );
     }
 

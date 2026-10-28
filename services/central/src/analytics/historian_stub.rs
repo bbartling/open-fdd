@@ -8,10 +8,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 
-use crate::analytics::AnalyticsEnvelope;
+use crate::analytics::{AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest};
 
 pub const SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 pub const RUNTIME_DEFAULT_LOOKBACK_DAYS: i64 = 7;
@@ -219,15 +219,43 @@ pub async fn bas_vs_web_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let _ = (
-        equipment_filter,
-        max_points,
-        building_id,
-        preferred_tenant,
+    let _ = (max_points, preferred_tenant);
+    if !crate::timescale_historian::historian_is_timescale() {
+        return retired();
+    }
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    let tsdb = fdd_tsdb::Tsdb::connect_from_env()
+        .await
+        .context("timescale connect for bas-vs-web-oat")?;
+    let mut equipment_ids = equipment_filter
+        .map(|ids| ids.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    equipment_ids.retain(|id| !id.trim().is_empty());
+    equipment_ids.sort();
+    equipment_ids.dedup();
+    let scope = crate::timescale_analytics::AnalyticsSqlScope {
         start,
         end,
-    );
-    retired()
+        equipment_ids,
+    };
+    let value = crate::timescale_analytics::bas_vs_web_oat(&tsdb, bid, &scope)
+        .await
+        .context("bas_vs_web_oat timescale")?;
+    let req = AnalyticsRequest {
+        query: AnalyticsQuery {
+            building_id: Some(bid.to_string()),
+            start,
+            end,
+            equipment_ids: equipment_filter.map(|ids| ids.to_vec()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    Ok(Some(
+        crate::timescale_analytics::envelope_from_dispatch_value("bas-vs-web-oat-v4", &req, value),
+    ))
 }
 
 pub async fn inspect_from_history(
