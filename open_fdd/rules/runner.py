@@ -64,7 +64,10 @@ def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFram
 
     out = df.copy()
     if weather is not None and not weather.empty:
-        wx = enrich_weather_frame(weather).reindex(out.index)
+        wx_full = enrich_weather_frame(weather)
+        if "web-outside-air-temp" in wx_full.columns:
+            out.attrs["web_oat_native_frame"] = wx_full[["web-outside-air-temp"]].copy()
+        wx = wx_full.reindex(out.index)
         for col in wx.columns:
             if col not in out.columns:
                 out[col] = wx[col]

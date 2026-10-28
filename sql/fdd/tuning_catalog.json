@@ -525,12 +525,39 @@
           "control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true
+        },
+        "web_cadence_seconds": {
+          "key": "web_cadence_seconds",
+          "label": "Web weather cadence",
+          "default": 1200.0,
+          "min": 300.0,
+          "max": 7200.0,
+          "step": 300.0,
+          "unit": "sec",
+          "control": "slider",
+          "sql_placeholder": "WEB_CADENCE_SECONDS",
+          "effect_in_sql": true
+        },
+        "web_asof_margin_seconds": {
+          "key": "web_asof_margin_seconds",
+          "label": "Web as-of margin",
+          "default": 300.0,
+          "min": 0.0,
+          "max": 1800.0,
+          "step": 60.0,
+          "unit": "sec",
+          "control": "slider",
+          "sql_placeholder": "WEB_ASOF_MARGIN_SECONDS",
+          "effect_in_sql": true
         }
       },
       "placeholders": [
         "CONFIRM_ROWS",
         "OAT_ERR",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "WEB_ASOF_BOUND_SECONDS",
+        "WEB_CADENCE_SECONDS",
+        "WEB_ASOF_MARGIN_SECONDS"
       ],
       "controls_without_sql_effect": [],
       "port_status": "adapted_not_postgresql_execution_qualified"

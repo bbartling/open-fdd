@@ -1,16 +1,24 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- oat_meteo_fault.sql — BAS OAT vs meteo reference (|Δ| > threshold) + confirm
--- Prefer equipment web_oa_t (pandas); fall back to a weather join only when the
--- equipment has no web reference. `weather` may resolve to a view spanning
--- several weather equipment rows, so collapse it to one row per timestamp first —
--- otherwise the join fans out and multiplies fault_hours.
+-- Web weather is joined as-of: carry the last web sample forward up to
+-- WEB_ASOF_BOUND_SECONDS (web cadence + margin from registry). Beyond that bound
+-- the local sample is not compared (not-assessed seconds, never a no-fault).
+-- Prefer equipment web_oa_t (matches the reference oracle); fall back to weather rows when absent.
 -- Targeting is registry equipment_kinds (ahu) plus the package stamp applied
 -- after this query. This file does not filter equipment_id by prefix or LIKE.
-WITH wx AS (
-  SELECT timestamp_utc, MAX(oa_t) AS wx_oa_t
+WITH web_points AS (
+  SELECT timestamp_utc, web_oa_t AS ref_val
   FROM weather
-  WHERE oa_t IS NOT NULL
+  WHERE web_oa_t IS NOT NULL
+  UNION ALL
+  SELECT timestamp_utc, web_oa_t AS ref_val
+  FROM history
+  WHERE web_oa_t IS NOT NULL
+),
+web_dedup AS (
+  SELECT timestamp_utc, MAX(ref_val) AS ref_val
+  FROM web_points
   GROUP BY timestamp_utc
 ),
 joined AS (
@@ -18,25 +26,59 @@ joined AS (
     h.equipment_id,
     h.timestamp_utc,
     h.oa_t,
-    COALESCE(h.web_oa_t, wx.wx_oa_t) AS ref_oa_t
+    (
+      SELECT d.timestamp_utc
+      FROM web_dedup d
+      WHERE d.timestamp_utc <= h.timestamp_utc
+      ORDER BY d.timestamp_utc DESC
+      LIMIT 1
+    ) AS ref_ts,
+    (
+      SELECT d.ref_val
+      FROM web_dedup d
+      WHERE d.timestamp_utc <= h.timestamp_utc
+      ORDER BY d.timestamp_utc DESC
+      LIMIT 1
+    ) AS ref_oa_t,
+    CASE
+      WHEN h.oa_t IS NULL THEN false
+      WHEN (
+        SELECT d.ref_val
+        FROM web_dedup d
+        WHERE d.timestamp_utc <= h.timestamp_utc
+        ORDER BY d.timestamp_utc DESC
+        LIMIT 1
+      ) IS NULL THEN false
+      WHEN EXTRACT(EPOCH FROM (
+        h.timestamp_utc - (
+          SELECT d.timestamp_utc
+          FROM web_dedup d
+          WHERE d.timestamp_utc <= h.timestamp_utc
+          ORDER BY d.timestamp_utc DESC
+          LIMIT 1
+        )
+      )) > {{WEB_ASOF_BOUND_SECONDS}}
+      THEN false
+      ELSE true
+    END AS assessable
   FROM history h
-  LEFT JOIN wx
-    ON h.timestamp_utc = wx.timestamp_utc
-   AND h.web_oa_t IS NULL
 ),
 base AS (
   SELECT
     equipment_id,
     timestamp_utc,
+    assessable,
     CAST(CASE
-      WHEN oa_t IS NOT NULL AND ref_oa_t IS NOT NULL AND ABS(oa_t - ref_oa_t) > {{OAT_ERR}}
-      THEN 1 ELSE 0 END AS INT) AS raw_fault
+      WHEN NOT assessable THEN NULL
+      WHEN ABS(oa_t - ref_oa_t) > {{OAT_ERR}} THEN 1
+      ELSE 0 END AS INT) AS raw_fault
   FROM joined
 ),
 elapsed_hold AS (
   SELECT
     stepped.*,
     CASE
+      WHEN NOT assessable THEN 0.0
       WHEN stepped.dt_seconds IS NULL
         OR stepped.dt_seconds <= 0.0
         OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
@@ -62,8 +104,10 @@ lagged AS (
   SELECT
     *,
     CASE
+      WHEN NOT assessable THEN 1
       WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
        AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
+       AND COALESCE(LAG(assessable) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), false)
       THEN 0 ELSE 1
     END AS is_new_streak
   FROM elapsed_hold
@@ -88,13 +132,17 @@ final AS (
   SELECT
     equipment_id,
     held_seconds,
-    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
+    CASE
+      WHEN assessable AND raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1
+      ELSE 0
+    END AS confirmed
   FROM ranked
 )
 SELECT
   equipment_id,
   SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
   SUM(held_seconds) / 3600.0 AS covered_hours,
-  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END)
+    / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;

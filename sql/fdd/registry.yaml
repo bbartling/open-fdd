@@ -276,6 +276,24 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
+      web_cadence_seconds:
+        label: Web weather cadence
+        default: 1200
+        min: 300
+        max: 7200
+        step: 300
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: WEB_CADENCE_SECONDS
+      web_asof_margin_seconds:
+        label: Web as-of margin
+        default: 300
+        min: 0
+        max: 1800
+        step: 60
+        unit: sec
+        frontend_control: slider
+        sql_placeholder: WEB_ASOF_MARGIN_SECONDS
 
   - rule_id: FC13-SAT-HIGH
     equipment_kinds: [ahu]
