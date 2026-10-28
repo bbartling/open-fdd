@@ -20,6 +20,13 @@ pub enum ProviderErrorCode {
     Persistence,
     Config,
     NotImplemented,
+    #[cfg_attr(
+        test,
+        expect(
+            dead_code,
+            reason = "stable provider error code; NF paging reports complete: false instead of Err"
+        )
+    )]
     HistoryIncomplete,
 }
 

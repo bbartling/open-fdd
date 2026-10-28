@@ -491,3 +491,10 @@ fn t1423_driver_limits_advertise_nf_portal_capability() {
     assert_eq!(limits.max_history_pages, 512);
     assert!(limits.supports_paging);
 }
+
+#[test]
+fn t1423_history_incomplete_error_code_is_constructible() {
+    use super::error::{ProviderError, ProviderErrorCode};
+    let err = ProviderError::new(ProviderErrorCode::HistoryIncomplete);
+    assert_eq!(err.code, ProviderErrorCode::HistoryIncomplete);
+}

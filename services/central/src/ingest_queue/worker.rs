@@ -133,7 +133,7 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
         prune_applied_ledger(state, now).await;
     }
     let budget = state.ingest_queue.budget_defaults();
-    let claim_limit = max_concurrent_jobs(budget).map_err(|err| err.to_string())?;
+    let claim_limit = max_concurrent_jobs(budget)?;
     let claimed = state
         .ingest_queue
         .claim(&super::model::ClaimRequest {

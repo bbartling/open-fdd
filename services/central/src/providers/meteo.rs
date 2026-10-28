@@ -567,12 +567,13 @@ mod tests {
             .read_history_page(&series3(), utc(2026, 10, 18, 14), utc(2026, 10, 18, 16))
             .await
             .unwrap();
-        let points: usize = page.iter().map(|series| series.samples.len()).sum();
+        let series = &page.series;
+        let points: usize = series.iter().map(|s| s.samples.len()).sum();
         assert_eq!(points, 8);
-        assert_eq!(page.len(), 3);
-        assert!(page
+        assert_eq!(series.len(), 3);
+        assert!(series
             .iter()
-            .all(|series| series3().contains(&series.provider_point_id)));
+            .all(|s| series3().contains(&s.provider_point_id)));
         let req = seen.lock().await.clone();
         assert!(req.starts_with("GET /v1/forecast?"), "{req}");
         assert!(!req.starts_with("POST"));
