@@ -30,7 +30,7 @@ pub use units::{
     TEMPERATURE_ROLES,
 };
 pub use units_contract::{
-    reject_unknown_alias, ContractError as MetricContractError, MetricUnitsContract,
-    METRIC_UNITS_JSON,
+    normalize_alias, reject_unknown_alias, ContractError as MetricContractError,
+    MetricUnitsContract, ALIAS_NORMALIZE_GOLDENS_JSON, METRIC_UNITS_JSON,
 };
 pub use validate::{validate_building, ValidationReport};

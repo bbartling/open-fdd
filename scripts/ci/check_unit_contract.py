@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -12,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "ci"))
 
 from unit_contract_lib import (  # noqa: E402
+    ALIAS_GOLDENS,
     GOLDENS,
     MANIFEST,
     METRIC_UNITS,
@@ -19,13 +19,17 @@ from unit_contract_lib import (  # noqa: E402
     RENAME_MAP,
     TUNING,
     apply_tuning_catalog,
+    assert_metadata_only_registry_diff,
+    assert_metadata_only_tuning_diff,
+    build_conversion_index,
     collect_alias_map,
+    convert_to_canonical,
     derive_tuner_effect,
     infer_kind,
-    inject_registry_kinds,
     load_json,
     normalize_alias,
     registry_param_blocks,
+    registry_param_kind,
     sha256_file,
 )
 
@@ -49,9 +53,37 @@ def check_metric_units() -> None:
         fail("SV-RATE must be listed unsupported in metric_units.json")
     try:
         collect_alias_map(body)
+        build_conversion_index(body)
     except ValueError as exc:
         fail(str(exc))
     print("PASS metric_units.json structure")
+
+
+def check_every_alias_converts() -> None:
+    metric = load_json(METRIC_UNITS)
+    by_token = build_conversion_index(metric)
+    for q in metric.get("quantities", []):
+        if q["id"] == "occupancy_mode":
+            continue
+        for alias in q.get("aliases") or []:
+            tok = normalize_alias(alias)
+            if tok not in by_token:
+                fail(f"alias {alias!r} (token {tok}) has no conversion row")
+            try:
+                convert_to_canonical(metric, q["id"], 1.0, alias)
+            except ValueError as exc:
+                fail(f"convert failed for {q['id']} alias {alias!r}: {exc}")
+    print(f"PASS all quantity aliases convert ({len(by_token)} tokens)")
+
+
+def check_alias_normalize_goldens() -> None:
+    if not ALIAS_GOLDENS.is_file():
+        fail("missing alias_normalize_tokens.json")
+    for case in load_json(ALIAS_GOLDENS)["cases"]:
+        got = normalize_alias(case["input"])
+        if got != case["token"]:
+            fail(f"normalize_alias({case['input']!r}) = {got!r}, want {case['token']!r}")
+    print("PASS alias_normalize_tokens.json (Python)")
 
 
 def check_rename_map() -> None:
@@ -88,40 +120,17 @@ def check_manifest_digest() -> None:
     print("PASS manifest metric_units_sha256 and processing_abi")
 
 
-def registry_param_kind(text: str, key: str, unit: str) -> str | None:
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if not re.match(rf"^      {re.escape(key)}:\s*$", line):
-            continue
-        saw_unit = False
-        for j in range(i + 1, len(lines)):
-            row = lines[j]
-            if re.match(r"^      \w", row):
-                break
-            if not row.startswith("        "):
-                break
-            if re.match(rf"^        unit: {re.escape(unit)}\s*$", row):
-                saw_unit = True
-                continue
-            if saw_unit:
-                m = re.match(r"^        kind: (\S+)\s*$", row)
-                if m:
-                    return m.group(1)
-        return None
-    return None
-
-
 def check_registry_kinds() -> None:
     text = REGISTRY.read_text(encoding="utf-8")
     missing = []
-    for key, unit, _ in registry_param_blocks(text):
-        kind = registry_param_kind(text, key, unit)
+    for rule_id, key, unit, _ in registry_param_blocks(text):
+        kind = registry_param_kind(text, rule_id, key, unit)
         if kind is None:
-            missing.append(key)
+            missing.append(f"{rule_id}.{key}")
             continue
         expected = infer_kind(key, unit)
         if kind != expected:
-            fail(f"registry {key}: kind {kind} != expected {expected}")
+            fail(f"registry {rule_id}.{key}: kind {kind} != expected {expected}")
     if missing:
         fail(f"registry parameters missing kind: {missing[:20]} (total {len(missing)})")
     print(f"PASS registry.yaml parameter kinds ({len(list(registry_param_blocks(text)))})")
@@ -144,44 +153,47 @@ def check_tuning_catalog() -> None:
             derived = derive_tuner_effect(rid, pa[key].get("effect_in_sql"))
             if pa[key].get("effect") != derived:
                 fail(f"{rid}.{key} effect must match derive_tuner_effect")
-    print(f"PASS tuning_catalog kinds and tuner effects")
+    print("PASS tuning_catalog kinds and tuner effects")
 
 
 def check_goldens_roundtrip() -> None:
-    """Rust fdd_core tests own vector math; here we verify golden file coverage."""
     if not GOLDENS.is_file():
         fail("missing unit_vectors.json")
-    cases = load_json(GOLDENS)["cases"]
-    required_kinds = {
-        "absolute_temperature",
-        "temperature_difference",
-        "temperature_rate",
-        "air_pressure",
-        "hydronic_pressure",
-        "volumetric_flow",
-        "percent",
-        "fraction",
-    }
-    seen = {c.get("kind") for c in cases}
-    missing = required_kinds - seen
-    if missing:
-        fail(f"unit_vectors.json missing kinds: {sorted(missing)}")
     metric = load_json(METRIC_UNITS)
-    aliases = collect_alias_map(metric)
-    for alias in ("degf", "degc", "inwc", "cfm", "psi", "deltaf", "degfperh"):
-        if alias not in aliases:
-            fail(f"expected alias token {alias!r} in metric_units.json")
-    print("PASS unit_vectors.json coverage")
+    for case in load_json(GOLDENS)["cases"]:
+        qty = case.get("quantity")
+        src = case.get("source_unit")
+        inp = case.get("input")
+        want = case.get("metric")
+        if qty is None:
+            continue
+        tol = case.get("tol", 1e-9)
+        got = convert_to_canonical(metric, qty, float(inp), str(src))
+        if abs(got - float(want)) > float(tol):
+            fail(f"{case['id']}: got {got} want {want}")
+    print("PASS unit_vectors.json conversion goldens (Python)")
+
+
+def check_metadata_only_diff() -> None:
+    try:
+        assert_metadata_only_registry_diff()
+        assert_metadata_only_tuning_diff()
+    except (AssertionError, RuntimeError) as exc:
+        fail(str(exc))
+    print("PASS registry.yaml and tuning_catalog.json differ from master only by kind/effect")
 
 
 def main() -> int:
     print("== check_unit_contract (T1284-1) ==")
     check_metric_units()
+    check_every_alias_converts()
+    check_alias_normalize_goldens()
     check_rename_map()
     check_manifest_digest()
     check_registry_kinds()
     check_tuning_catalog()
     check_goldens_roundtrip()
+    check_metadata_only_diff()
     print("All unit contract checks passed.")
     return 0
 

@@ -1,83 +1,127 @@
 {
-  "golden_id": "openfdd-unit-vectors-v2",
+  "golden_id": "openfdd-unit-vectors-v3",
   "contract_version": "4.0.0",
   "processing_abi": "metric-c-v2",
   "cases": [
     {
       "id": "abs_20C_eq_68F",
-      "kind": "absolute_temperature",
+      "quantity": "absolute_temperature",
+      "source_unit": "degF",
+      "input": 68.0,
       "metric": 20.0,
-      "imperial": 68.0,
-      "note": "canonical SI storage; imperial source converts at ingest"
+      "tol": 1e-9
     },
     {
       "id": "delta_5F_is_2p777C",
-      "kind": "temperature_difference",
-      "imperial": 5.0,
+      "quantity": "temperature_difference",
+      "source_unit": "deltaF",
+      "input": 5.0,
       "metric": 2.777777777777778,
-      "note": "scale only — never ±32"
+      "tol": 1e-12
+    },
+    {
+      "id": "k_diff_identity",
+      "quantity": "temperature_difference",
+      "source_unit": "K_diff",
+      "input": 3.0,
+      "metric": 3.0,
+      "tol": 1e-12
+    },
+    {
+      "id": "degC_delta_identity",
+      "quantity": "temperature_difference",
+      "source_unit": "degC_delta",
+      "input": 2.5,
+      "metric": 2.5,
+      "tol": 1e-12
+    },
+    {
+      "id": "degF_delta_scale",
+      "quantity": "temperature_difference",
+      "source_unit": "degF_delta",
+      "input": 9.0,
+      "metric": 5.0,
+      "tol": 1e-12
     },
     {
       "id": "rate_9F_per_h_is_5C_per_h",
-      "kind": "temperature_rate",
-      "imperial": 9.0,
+      "quantity": "temperature_rate",
+      "source_unit": "degF_per_h",
+      "input": 9.0,
       "metric": 5.0,
-      "note": "Δ°F/h scale-only to Δ°C/h"
+      "tol": 1e-12
+    },
+    {
+      "id": "rate_delta_F_per_hour",
+      "quantity": "temperature_rate",
+      "source_unit": "Δ°F/h",
+      "input": 18.0,
+      "metric": 10.0,
+      "tol": 1e-12
     },
     {
       "id": "inwc_1_is_248p84_Pa",
-      "kind": "air_pressure",
-      "in_wc": 1.0,
-      "metric": 248.84
+      "quantity": "air_pressure",
+      "source_unit": "inH2O",
+      "input": 1.0,
+      "metric": 248.84,
+      "tol": 1e-6
     },
     {
       "id": "psi_1_is_6p894757_kPa",
-      "kind": "hydronic_pressure",
-      "psi": 1.0,
-      "metric": 6.894757
+      "quantity": "hydronic_pressure",
+      "source_unit": "psi",
+      "input": 1.0,
+      "metric": 6.894757,
+      "tol": 1e-6
     },
     {
       "id": "cfm_1_is_0p471947_Lps",
-      "kind": "volumetric_flow",
-      "cfm": 1.0,
-      "metric": 0.471947
+      "quantity": "volumetric_flow",
+      "source_unit": "cfm",
+      "input": 1.0,
+      "metric": 0.471947,
+      "tol": 1e-9
     },
     {
-      "id": "satdev_20C_vs_23C_exceeds_5F",
-      "kind": "scenario",
-      "sat_C": 20.0,
-      "sp_C": 23.0,
-      "tol_F": 5.0,
-      "expect_fault_when_admitted_to_F": true
+      "id": "m3s_1_is_1000_Lps",
+      "quantity": "volumetric_flow",
+      "source_unit": "m3/s",
+      "input": 1.0,
+      "metric": 1000.0,
+      "tol": 1e-9
     },
     {
-      "id": "satdev_20C_vs_68F_sp_no_fault",
-      "kind": "scenario",
-      "sat_C": 20.0,
-      "sp_F": 68.0,
-      "tol_F": 5.0,
-      "expect_fault_when_admitted_to_F": false
+      "id": "percent_alias",
+      "quantity": "percent",
+      "source_unit": "%",
+      "input": 42.0,
+      "metric": 42.0,
+      "tol": 1e-12
     },
     {
-      "id": "fcu_deadband_23_minus_21p5_C",
-      "kind": "fcu_deadband_C",
-      "clg_sp_C": 23.0,
-      "htg_sp_C": 21.5,
-      "deadband_C": 2.0,
-      "delta_C": 1.5,
-      "expect_fault": true
+      "id": "fraction_alias",
+      "quantity": "fraction",
+      "source_unit": "frac",
+      "input": 0.75,
+      "metric": 0.75,
+      "tol": 1e-12
     },
     {
-      "id": "percent_declared",
-      "kind": "percent",
-      "values_percent": [0.0, 0.5, 1.0, 1.01, 50.0, 100.0],
-      "expect_fraction": [0.0, 0.005, 0.01, 0.0101, 0.5, 1.0]
+      "id": "kbtu_h_to_kw",
+      "quantity": "power",
+      "source_unit": "kBtu/h",
+      "input": 10.0,
+      "metric": 2.9307107,
+      "tol": 1e-6
     },
     {
-      "id": "fraction_declared",
-      "kind": "fraction",
-      "values_fraction": [0.0, 0.5, 1.0],
-      "expect_fraction": [0.0, 0.5, 1.0]
+      "id": "ton_to_kw",
+      "quantity": "power",
+      "source_unit": "ton",
+      "input": 1.0,
+      "metric": 3.5168525,
+      "tol": 1e-6
     }
   ]
 }

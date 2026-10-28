@@ -12,8 +12,8 @@
   ],
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
-  "file_count": 109,
-  "pack_sha256": "61112dc83c1424088dbc452c16cb31f92a5b19c850a5cbc0727a0a9a1be703cd",
+  "file_count": 110,
+  "pack_sha256": "15b12a2043007879014190bab0108f01a691579c52de775373bf1df67110e2aa",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -432,7 +432,7 @@
     },
     {
       "path": "sql/fdd/registry.yaml",
-      "sha256": "c90dd6a4758434c8c792a4bf97a04820056efe220e0340656ebbd8f2f84c27f8",
+      "sha256": "627dbeab199cafd8e84182a743953e7350976523eb01b1efec3e96ff65195da4",
       "bytes": 153906
     },
     {
@@ -542,13 +542,13 @@
     },
     {
       "path": "sql/contract/metric_units.json",
-      "sha256": "bd6e33af404f267edc5b85aa3c27da2dc2f21dcc86a01faeb25b78db1c5815a9",
-      "bytes": 3468
+      "sha256": "9b580ec56fe379ecfc6e4b5c41db8abced39318f3a0e4aab8b612479ba76ee8c",
+      "bytes": 8508
     },
     {
       "path": "sql/contract/goldens/unit_vectors.json",
-      "sha256": "8207b336f6828b1f45bd210b51db726c1595218204fd74b202eb8746a41fb0fe",
-      "bytes": 2008
+      "sha256": "8a9e8798f6055ace3910e815e41ee51c98c7805f773968ed4581980ed1ddb2cc",
+      "bytes": 2772
     },
     {
       "path": "sql/contract/README.md",
@@ -559,6 +559,11 @@
       "path": "sql/contract/parameter_si_rename_map.json",
       "sha256": "2fe2fc81b0bb96c062b4fdefebb35967dfd8abab845a2f1feb8b67a100ee5aba",
       "bytes": 801
+    },
+    {
+      "path": "sql/contract/goldens/alias_normalize_tokens.json",
+      "sha256": "932ed6fe7ff88512fd342a16bac16e37e4f9f10344b09e663d49ed5791cf017b",
+      "bytes": 1705
     }
   ],
   "metric_units": "sql/contract/metric_units.json",
@@ -566,6 +571,6 @@
   "processing_abi_current": "metric-c-v2",
   "processing_abi_target": "metric-c-v2",
   "processing_abi": "metric-c-v2",
-  "metric_units_sha256": "bd6e33af404f267edc5b85aa3c27da2dc2f21dcc86a01faeb25b78db1c5815a9",
+  "metric_units_sha256": "9b580ec56fe379ecfc6e4b5c41db8abced39318f3a0e4aab8b612479ba76ee8c",
   "metric_storage_status": "contract_defined"
 }

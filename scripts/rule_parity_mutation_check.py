@@ -187,6 +187,50 @@ def check_tuner_effects() -> None:
     print("PASS tuning_catalog tuner effect honesty")
 
 
+def check_tuner_effect_sql_mutations() -> None:
+    """branch_sensitive must change rendered SQL; no_op must not."""
+    sys.path.insert(0, str(ROOT / "sql" / "fdd"))
+    from render_rule import render  # noqa: E402
+
+    from unit_contract_lib import load_json
+
+    data = load_json(TUNING)
+    branch_hits = 0
+    noop_hits = 0
+    for rule in data["rules"]:
+        rid = rule["rule_id"]
+        params = rule.get("parameters") or {}
+        try:
+            base = render(rid)
+        except (ValueError, OSError):
+            continue
+        for key, param in params.items():
+            effect = param.get("effect")
+            if effect == "unsupported":
+                continue
+            lo, hi, default = param["min"], param["max"], param["default"]
+            alt = hi if hi != default else lo
+            if alt == default:
+                continue
+            try:
+                mutated = render(rid, overrides={key: alt})
+            except ValueError:
+                continue
+            if effect == "branch_sensitive":
+                if mutated == base:
+                    _fail(f"{rid}.{key} branch_sensitive but rendered SQL unchanged")
+                branch_hits += 1
+            elif effect == "no_op" and mutated != base:
+                _fail(f"{rid}.{key} no_op but rendered SQL changed")
+            elif effect == "no_op":
+                noop_hits += 1
+    if branch_hits < 5:
+        _fail(f"branch_sensitive mutation coverage too thin ({branch_hits})")
+    if noop_hits < 5:
+        _fail(f"no_op mutation coverage too thin ({noop_hits})")
+    print(f"PASS tuner effect SQL mutations (branch_sensitive={branch_hits}, no_op={noop_hits})")
+
+
 def main() -> int:
     print("== rule_parity_mutation_check (Milestone D2) ==")
     check_registry_count()
@@ -196,6 +240,7 @@ def main() -> int:
     check_logical_keyword_mutation()
     check_multi_building_fixture_inventory()
     check_tuner_effects()
+    check_tuner_effect_sql_mutations()
     print("All rule parity mutation checks passed.")
     return 0
 

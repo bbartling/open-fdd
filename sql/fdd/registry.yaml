@@ -1,4 +1,4 @@
-# SQL rule registry — source of truth for DataFusion deterministic rules.
+# SQL rule registry — source of truth for Timescale/PostgreSQL FDD rules.
 # Python oracle mapping: see fdd_app/export_pandas_oracle.py SQL_TO_COOKBOOK
 
 rules:
