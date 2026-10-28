@@ -39,8 +39,8 @@ mod mapping_revision;
 #[cfg(test)]
 mod metering_scope_fixtures;
 mod model_agent_writes;
-mod occupancy_calendar;
 mod models;
+mod occupancy_calendar;
 #[cfg(test)]
 mod one_writer_fixtures;
 mod openapi;
@@ -76,10 +76,10 @@ mod test_env_lock;
 mod timescale_analytics;
 mod timescale_historian;
 mod timescale_product;
-mod zone_comfort_units;
 mod user_store;
 mod vibe21;
 mod wattlab_dump;
+mod zone_comfort_units;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
