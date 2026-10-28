@@ -83,12 +83,14 @@ product code.
    `docker/compose.local.yml` loads that file into `central` optionally; legacy
    single-site `NF_CLIENT_ID` / `NF_CLIENT_SECRET` / `NFURL` may still be set in
    repo-root `.env` and are forwarded by name when present.
-3. Mount the sites directory read-only on central. The default local overlay
-   binds `../scripts/nf` at `/config/nf:ro`. Prefer a host path outside the
-   checkout, for example bind `~/.config/openfdd/sites` to `/config/nf/sites:ro`
-   in a personal compose override, and set
-   `OPENFDD_PROVIDER_SITES=/config/nf/sites` (directory) or a comma-separated
-   list of files under that mount.
+3. Mount the sites directory read-only on central. `docker/compose.local.yml`
+   binds `${OPENFDD_SITES_DIR:-${HOME}/.config/openfdd/sites}` on the host to
+   `/config/sites:ro` inside `central`. Docker Compose does **not** expand `~`;
+   leave `OPENFDD_SITES_DIR` unset only when `HOME` is set in the shell that
+   runs `docker compose`, or set `OPENFDD_SITES_DIR` explicitly in repo-root
+   `.env`. The overlay also binds `../scripts/nf` at `/config/nf:ro` (generic
+   helpers only). Set `OPENFDD_PROVIDER_SITES=/config/sites` (directory of
+   `*.json`) or a comma-separated list of files under that mount.
 4. Restart central after config changes. `GET /api/providers/sites` lists each
    loaded site; a missing env ref fails only that site (`auth_not_configured`).
 5. After onboarding, run

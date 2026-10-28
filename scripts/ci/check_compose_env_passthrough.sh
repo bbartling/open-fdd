@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 CREDENTIALS_ENV_PATTERN='OPENFDD_NF_PROVIDER_CREDENTIALS_ENV|provider-credentials\.env'
+SITES_MOUNT_PATTERN='OPENFDD_SITES_DIR:-\$\{HOME\}/\.config/openfdd/sites'
+SITES_TARGET='/config/sites'
 
 required=(
   OPENFDD_INGEST_CATCHUP_HOURS
@@ -46,6 +48,12 @@ check_source_files() {
     echo "FAIL: missing config/nf/provider-credentials.env.example" >&2
     fail=1
   fi
+  if grep -qE "${SITES_MOUNT_PATTERN}.*:${SITES_TARGET}:ro" docker/compose.local.yml; then
+    echo "PASS: compose.local.yml binds OPENFDD_SITES_DIR default to ${SITES_TARGET}:ro (T1401-8 source)"
+  else
+    echo "FAIL: compose.local.yml must bind \${OPENFDD_SITES_DIR:-\${HOME}/.config/openfdd/sites} to ${SITES_TARGET}:ro" >&2
+    fail=1
+  fi
   return "$fail"
 }
 
@@ -83,6 +91,10 @@ export OPENFDD_AFDD_BUILDING_IDS=__ci_afdd_blds__
 export OPENFDD_AFDD_INTERVAL_MINUTES=__ci_afdd_ivl__
 export OPENFDD_AFDD_LOOKBACK_VALUE=__ci_afdd_lb_val__
 export OPENFDD_AFDD_LOOKBACK_UNIT=__ci_afdd_lb_unit__
+
+CI_SITES_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ofdd-sites-mount.XXXXXX")"
+export OPENFDD_SITES_DIR="$CI_SITES_DIR"
+export HOME="${HOME:-/home/ci}"
 
 config_err="$(mktemp)"
 if ! config="$("${COMPOSE[@]}" config 2>"$config_err")"; then
@@ -139,6 +151,24 @@ else
   echo "FAIL: central must load OPENFDD_NF_PROVIDER_CREDENTIALS_ENV / provider-credentials.env only" >&2
   fail=1
 fi
+
+central_volumes="$(printf '%s\n' "$central_block" | awk '
+  /^    volumes:/ { in_vol=1; next }
+  in_vol && /^    [a-z_]+:/ && !/^    volumes:/ { in_vol=0 }
+  in_vol { print }
+')"
+
+if printf '%s\n' "$central_volumes" | grep -qF "source: ${OPENFDD_SITES_DIR}" \
+  && printf '%s\n' "$central_volumes" | grep -qF "target: ${SITES_TARGET}" \
+  && printf '%s\n' "$central_volumes" | grep -q 'read_only: true'; then
+  echo "PASS: central bind-mounts OPENFDD_SITES_DIR at ${SITES_TARGET}:ro (T1401-8)"
+else
+  echo "FAIL: central volumes must bind OPENFDD_SITES_DIR (${OPENFDD_SITES_DIR}) to ${SITES_TARGET} read-only" >&2
+  printf '%s\n' "$central_volumes" >&2
+  fail=1
+fi
+
+rm -rf "$CI_SITES_DIR"
 
 if [[ "$fail" -ne 0 ]]; then
   echo "SUMMARY: FAIL compose env passthrough check" >&2
