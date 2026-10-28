@@ -32,8 +32,8 @@ stop_stub() {
   kill -KILL "$pid" 2>/dev/null || true
 }
 
-GOOD_VERSION='{"ok":true,"service":"openfdd-central","version":"4.0.5+c5ebca25e4f5","historian":"timescale","dual_write":false}'
-BAD_VERSION='{"ok":true,"service":"openfdd-central","version":"4.0.5+deadbeef0000","historian":"timescale","dual_write":false}'
+GOOD_VERSION='{"ok":true,"service":"openfdd-central","version":"4.0.6+c5ebca25e4f5","historian":"timescale","dual_write":false}'
+BAD_VERSION='{"ok":true,"service":"openfdd-central","version":"4.0.6+deadbeef0000","historian":"timescale","dual_write":false}'
 NO_VERSION='{"ok":true,"service":"openfdd-central","historian":"timescale","dual_write":false}'
 
 run_case() {

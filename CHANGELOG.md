@@ -4,6 +4,21 @@
 
 ## Unreleased
 
+## 4.0.6 — 2026-10-28
+
+Workspace patch after the 4.0.6 issue cycle on master. `/api/health` and `/api/version` report `4.0.6+<sha>`. PyPI `open-fdd` stays **4.4.9**. No SQL or product behavior changes in this bump PR.
+
+- **#1401** — Local stack repin assert, compose env passthrough, multi-site provider config, site backfill, coverage visibility, provider point counts.
+- **#1402** — FDD results in Timescale and a single analytics result cache path.
+- **#1403** — AFDD continuous scheduler scope and window contract.
+- **#1404** — OAT–METEO as-of join and primary local outdoor-air reference.
+- **#1405** — General Haystack tag normalization and added zone airflow / return-air humidity roles.
+- **#1406** — Engineer unit, quantity, and primary-reference overlay on provider points.
+- **#1407** — VAV-1 occupancy gate and comfort band in declared units.
+- **#1408** — Sensor validation sweeps by quantity and sensor-health flatline scope.
+- **#1130** — CSP `style-src` split; Plotly inline attributes via `style-src-attr` only.
+- Follow-on merge and qualification work tracked under **#1409–#1421** (neutral; see linked PRs on the cycle board).
+
 ## 4.0.2 — 2026-10-20
 
 Workspace patch on master `5d56bf32` (4.0.1). `/api/health` reports `4.0.2+<sha>`. PyPI `open-fdd` stays **4.4.9**. `archive/` is unchanged. Default startup still does not purge Timescale or reseed.
