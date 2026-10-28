@@ -6,7 +6,7 @@ use open_fdd_edge_prototype::csv_ingest::model_overlay;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::Row;
 
-use super::committed_model::refresh_point_map_overlay;
+use crate::providers::committed_model::refresh_point_map_overlay;
 use super::{apply_to_stores, InventoryDiagnostics, InventoryPoint, InventorySnapshot};
 
 const SOURCE: &str = "nf:t1406-2";
@@ -79,10 +79,12 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
         &root,
         site,
         "pt-sat-t1406",
-        Some("degF"),
-        Some("absolute_temperature"),
-        Some(900),
-        false,
+        model_overlay::EngineerPointOverlayPatch {
+            unit: Some("degF"),
+            quantity: Some("absolute_temperature"),
+            cadence_secs: Some(900),
+            primary_reference: None,
+        },
         false,
     )
     .expect("overlay");

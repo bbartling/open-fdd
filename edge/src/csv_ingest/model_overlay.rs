@@ -1017,25 +1017,34 @@ fn merge_engineer_patch(
     entry
 }
 
+/// Optional engineer overlay fields for one portal point (W1a binding metadata).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EngineerPointOverlayPatch<'a> {
+    pub unit: Option<&'a str>,
+    pub quantity: Option<&'a str>,
+    pub cadence_secs: Option<u64>,
+    pub primary_reference: Option<bool>,
+}
+
 pub fn upsert_engineer_point_overlay(
     building_root: &Path,
     building_id: &str,
     point_id: &str,
-    unit: Option<&str>,
-    quantity: Option<&str>,
-    cadence_secs: Option<u64>,
-    primary_reference: Option<bool>,
+    patch: EngineerPointOverlayPatch<'_>,
     dry_run: bool,
 ) -> Result<(), String> {
     let pid = point_id.trim();
     if pid.is_empty() {
         return Err("point_id required".into());
     }
-    if unit.is_none() && quantity.is_none() && cadence_secs.is_none() && primary_reference.is_none()
+    if patch.unit.is_none()
+        && patch.quantity.is_none()
+        && patch.cadence_secs.is_none()
+        && patch.primary_reference.is_none()
     {
         return Ok(());
     }
-    validate_engineer_patch(unit, quantity, cadence_secs)?;
+    validate_engineer_patch(patch.unit, patch.quantity, patch.cadence_secs)?;
     let mut store = load_engineer_point_overlay(building_root)?;
     if store.building_id.is_empty() {
         store.building_id = building_id.to_string();
@@ -1044,10 +1053,10 @@ pub fn upsert_engineer_point_overlay(
     }
     let merged = merge_engineer_patch(
         store.points.get(pid),
-        unit,
-        quantity,
-        cadence_secs,
-        primary_reference,
+        patch.unit,
+        patch.quantity,
+        patch.cadence_secs,
+        patch.primary_reference,
     );
     store.points.insert(pid.to_string(), merged);
     save_engineer_point_overlay(building_root, building_id, &store, dry_run)
@@ -1275,10 +1284,12 @@ pub fn upsert_point(
             building_root,
             building_id,
             pid,
-            engineer_unit,
-            engineer_quantity,
-            None,
-            engineer_primary,
+            EngineerPointOverlayPatch {
+                unit: engineer_unit,
+                quantity: engineer_quantity,
+                cadence_secs: None,
+                primary_reference: engineer_primary,
+            },
             opts.dry_run,
         ) {
             Ok(()) => {}
@@ -2666,10 +2677,12 @@ SELECT ?sym WHERE {
             root,
             bid,
             pid,
-            Some("degF"),
-            Some("absolute_temperature"),
-            None,
-            Some(true),
+            EngineerPointOverlayPatch {
+                unit: Some("degF"),
+                quantity: Some("absolute_temperature"),
+                cadence_secs: None,
+                primary_reference: Some(true),
+            },
             false,
         )
         .expect("engineer");

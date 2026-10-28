@@ -984,10 +984,12 @@ mod tests {
             &root,
             "SITE_OVL",
             pid,
-            Some("degF"),
-            Some("absolute_temperature"),
-            None,
-            false,
+            model_overlay::EngineerPointOverlayPatch {
+                unit: Some("degF"),
+                quantity: Some("absolute_temperature"),
+                cadence_secs: None,
+                primary_reference: None,
+            },
             false,
         )
         .expect("engineer");
