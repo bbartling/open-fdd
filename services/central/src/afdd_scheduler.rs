@@ -1455,12 +1455,7 @@ mod contract_timescale {
                 .expect("chunk run");
         }
 
-        #[derive(sqlx::FromRow)]
-        struct WinRow {
-            window_start: DateTime<Utc>,
-            window_end: DateTime<Utc>,
-        }
-        let windows: Vec<WinRow> = sqlx::query_as(
+        let windows: Vec<(DateTime<Utc>, DateTime<Utc>)> = sqlx::query_as(
             "SELECT DISTINCT window_start, window_end FROM fdd_run WHERE site_id = $1 ORDER BY window_start",
         )
         .bind(&site)
@@ -1468,10 +1463,10 @@ mod contract_timescale {
         .await
         .expect("windows");
         assert_eq!(windows.len(), 24);
-        assert_eq!(windows[0].window_start, cycle_start);
-        assert_eq!(windows[23].window_end, cycle_end);
+        assert_eq!(windows[0].0, cycle_start);
+        assert_eq!(windows[23].1, cycle_end);
         for pair in windows.windows(2) {
-            assert_eq!(pair[0].window_end, pair[1].window_start);
+            assert_eq!(pair[0].1, pair[1].0);
         }
         let record = AfddCycleRecord {
             run_id: "contract".into(),
