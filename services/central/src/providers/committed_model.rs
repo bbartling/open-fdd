@@ -880,6 +880,7 @@ fn reject_forbidden_keys(value: &Value, path: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use open_fdd_edge_prototype::csv_ingest::model_overlay::EngineerPointOverlayPatch;
     use open_fdd_edge_prototype::csv_ingest::portal_ingest_sparql::{
         compile_bindings_from_snapshot, IngestSparqlScope,
     };
