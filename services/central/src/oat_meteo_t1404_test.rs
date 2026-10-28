@@ -9,6 +9,7 @@ use sqlx::Row;
 use super::*;
 
 const HELPERS: &str = include_str!("../../../sql/fdd/postgres/postgres_helpers.sql");
+const PACK_RUNTIME: &str = include_str!("../../../sql/schema/06_fdd_pack_runtime.sql");
 
 async fn pool() -> Option<sqlx::PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
@@ -23,17 +24,24 @@ async fn pool() -> Option<sqlx::PgPool> {
 
 async fn apply_schema(pool: &sqlx::PgPool) {
     crate::portal_inventory_fixtures::apply_schema(pool).await;
+    crate::series_binding::ensure_authorized_series(pool).await;
     let mut conn = pool.acquire().await.expect("conn");
     sqlx::query("SELECT pg_advisory_lock(70317)")
         .execute(&mut *conn)
         .await
         .expect("lock");
     let installed = sqlx::raw_sql(HELPERS).execute(&mut *conn).await;
+    installed.expect("helpers");
+    for statement in crate::db_lifecycle::statements(PACK_RUNTIME) {
+        sqlx::raw_sql(&statement)
+            .execute(&mut *conn)
+            .await
+            .expect("pack runtime");
+    }
     sqlx::query("SELECT pg_advisory_unlock(70317)")
         .execute(&mut *conn)
         .await
         .expect("unlock");
-    installed.expect("helpers");
 }
 
 async fn purge(pool: &sqlx::PgPool, site: &str) {
@@ -151,9 +159,17 @@ async fn run_oat_meteo(pool: &sqlx::PgPool, site: &str, fill: Option<HistoryFill
         .await
         .expect("fill");
     assert!(n > 0, "history rows");
-    crate::sql_pack::prepare_rule_inputs(&mut tx, site, None, None, &sql, true)
-        .await
-        .expect("inputs");
+    match crate::sql_pack::prepare_rule_inputs(&mut tx, site, None, None, &sql, true).await {
+        Ok(crate::sql_pack::InputGate::Ready(_)) => {}
+        Ok(crate::sql_pack::InputGate::Stop(stop)) => {
+            let _ = tx.rollback().await;
+            panic!("prepare_rule_inputs stopped: {stop:?}");
+        }
+        Err(err) => {
+            let _ = tx.rollback().await;
+            panic!("prepare_rule_inputs: {err:?}");
+        }
+    }
     let row = sqlx::query(&sql).fetch_one(&mut *tx).await.expect("rule");
     let _ = tx.rollback().await;
     row.try_get::<f64, _>("fault_hours").unwrap_or(0.0)

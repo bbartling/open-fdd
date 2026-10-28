@@ -2604,12 +2604,6 @@ pub(crate) async fn resolve_site_oa_t_reference(
          WHERE a.site_id = $1
            AND a.role = 'oa_t'
            AND lower(btrim(coalesce(e.equip_type, ''))) IN ('weather', 'ahu')
-           AND (
-             SELECT count(*) FROM authorized_series c
-             WHERE c.site_id = a.site_id
-               AND c.equipment_id = a.equipment_id
-               AND c.role = a.role
-           ) = 1
          ORDER BY a.openfdd_key",
     )
     .bind(building_id)
