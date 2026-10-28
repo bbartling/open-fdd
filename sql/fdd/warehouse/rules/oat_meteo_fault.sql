@@ -21,21 +21,33 @@ joined AS (
     h.equipment_id,
     h.timestamp_utc,
     h.oa_t,
-    w.ref_val AS ref_oa_t,
+    (
+      SELECT d.ref_val
+      FROM web_dedup d
+      WHERE d.timestamp_utc <= h.timestamp_utc
+      ORDER BY d.timestamp_utc DESC
+      LIMIT 1
+    ) AS ref_oa_t,
     CASE
-      WHEN h.oa_t IS NULL OR w.ref_val IS NULL OR w.ref_ts IS NULL THEN false
-      WHEN DATEDIFF('second', w.ref_ts, h.timestamp_utc) > {{WEB_ASOF_BOUND_SECONDS}}
+      WHEN h.oa_t IS NULL THEN false
+      WHEN (
+        SELECT d.ref_val
+        FROM web_dedup d
+        WHERE d.timestamp_utc <= h.timestamp_utc
+        ORDER BY d.timestamp_utc DESC
+        LIMIT 1
+      ) IS NULL THEN false
+      WHEN DATEDIFF('second', (
+        SELECT d.timestamp_utc
+        FROM web_dedup d
+        WHERE d.timestamp_utc <= h.timestamp_utc
+        ORDER BY d.timestamp_utc DESC
+        LIMIT 1
+      ), h.timestamp_utc) > {{WEB_ASOF_BOUND_SECONDS}}
       THEN false
       ELSE true
     END AS assessable
   FROM history h
-  LEFT JOIN LATERAL (
-    SELECT d.timestamp_utc AS ref_ts, d.ref_val
-    FROM web_dedup d
-    WHERE d.timestamp_utc <= h.timestamp_utc
-    ORDER BY d.timestamp_utc DESC
-    LIMIT 1
-  ) w ON true
 ),
 base AS (
   SELECT

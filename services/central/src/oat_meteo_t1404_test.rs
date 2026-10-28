@@ -24,10 +24,16 @@ async fn pool() -> Option<sqlx::PgPool> {
 async fn apply_schema(pool: &sqlx::PgPool) {
     crate::portal_inventory_fixtures::apply_schema(pool).await;
     let mut conn = pool.acquire().await.expect("conn");
-    sqlx::raw_sql(HELPERS)
+    sqlx::query("SELECT pg_advisory_lock(70317)")
         .execute(&mut *conn)
         .await
-        .expect("helpers");
+        .expect("lock");
+    let installed = sqlx::raw_sql(HELPERS).execute(&mut *conn).await;
+    sqlx::query("SELECT pg_advisory_unlock(70317)")
+        .execute(&mut *conn)
+        .await
+        .expect("unlock");
+    installed.expect("helpers");
 }
 
 async fn purge(pool: &sqlx::PgPool, site: &str) {
