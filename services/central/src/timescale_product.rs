@@ -2837,6 +2837,23 @@ async fn fill_history_for_equipment(
         .map(|r| crate::series_binding::quote_ident(r))
         .collect::<Vec<_>>()
         .join(", ");
+    let binding_guard = if let Some(site_oa) = fill.and_then(|opts| opts.site_oa_t.as_ref()) {
+        let key_lit = site_oa.openfdd_key.replace('\'', "''");
+        let eq_lit = site_oa.equipment_id.replace('\'', "''");
+        format!(
+            "AND (
+               (a.role = 'oa_t' AND a.openfdd_key = '{key_lit}' AND a.equipment_id = '{eq_lit}')
+               OR (SELECT count(*) FROM authorized_series c
+                   WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id
+                     AND c.role = a.role) = 1
+             )"
+        )
+    } else {
+        "AND (SELECT count(*) FROM authorized_series c
+             WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id
+               AND c.role = a.role) = 1"
+            .to_string()
+    };
     let sql = format!(
         r#"
 INSERT INTO history (equipment_id, timestamp_utc, {insert_cols})
@@ -2847,9 +2864,7 @@ JOIN authorized_series a
 WHERE s.site_id = $1
   AND a.role = ANY($3)
   AND ({spine})
-  AND (SELECT count(*) FROM authorized_series c
-       WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id
-         AND c.role = a.role) = 1{window_sql}
+  {binding_guard}{window_sql}
 GROUP BY s.ts
 "#
     );
