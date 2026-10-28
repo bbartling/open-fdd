@@ -30,14 +30,19 @@ from si_cutover import parity_chain as pc  # noqa: E402
 def run_fixtures_only() -> int:
     results = pc.run_fixture_stages()
     total, errors = pc.summarize(results)
+    stage_map = {r.stage: r for r in results}
     for r in results:
         safe_print(
             f"  {r.stage}: comparisons={r.comparisons} "
             f"{'OK' if not r.errors else 'FAIL ' + '; '.join(r.errors[:3])}"
         )
-        if r.comparisons > 0 and not r.errors:
+        if r.stage in ("P0", "P1", "P2") and r.comparisons > 0 and not r.errors:
             record_check(f"si_parity.{r.stage}", True, comparisons=r.comparisons)
-        elif r.errors:
+        elif r.stage in ("P0", "P1", "P2") and r.errors:
+            record_check(f"si_parity.{r.stage}", False, comparisons=r.comparisons)
+        elif r.comparisons > 0 and not r.errors and r.stage not in ("P0", "P1", "P2"):
+            record_check(f"si_parity.{r.stage}", True, comparisons=r.comparisons)
+        elif r.errors and r.stage not in ("P0", "P1", "P2"):
             record_check(f"si_parity.{r.stage}", False, comparisons=r.comparisons)
     if errors:
         safe_print(f"FAIL si-parity: {len(errors)} error(s); first: {errors[0]}")
@@ -45,11 +50,15 @@ def run_fixtures_only() -> int:
     if total < 1:
         safe_print("BLOCKED si-parity: zero comparisons")
         return EXIT_BLOCKED
-    per_stage = [r for r in results if r.comparisons > 0]
-    if len(per_stage) < 3:
-        safe_print(f"BLOCKED si-parity: need nonzero counts in P0/P1/P2 stages, got {len(per_stage)}")
-        return EXIT_BLOCKED
-    safe_print(f"PASS si-parity fixtures ({total} comparisons across {len(per_stage)} stages)")
+    for required in ("P0", "P1", "P2"):
+        st = stage_map.get(required)
+        if st is None or st.comparisons < 1 or st.errors:
+            safe_print(
+                f"BLOCKED si-parity: stage {required} needs nonzero comparisons and no errors "
+                f"(got comparisons={getattr(st, 'comparisons', 0)})"
+            )
+            return EXIT_BLOCKED
+    safe_print(f"PASS si-parity fixtures ({total} comparisons; P0/P1/P2 nonzero)")
     return EXIT_PASS
 
 
@@ -87,7 +96,14 @@ def run_t1284_4_mutation_self_test() -> int:
     if comparisons < 1:
         safe_print("FAIL T1284-4: no cases exercised")
         return EXIT_FAIL
-    safe_print(f"PASS T1284-4 mutation guard ({comparisons} temperature cases rejected)")
+    broken = pc.verify_unit_vector_goldens(mutated)
+    if not broken.errors:
+        safe_print("FAIL T1284-4: mutated contract did not fail unit_vectors parity")
+        return EXIT_FAIL
+    safe_print(
+        f"PASS T1284-4 mutation guard ({comparisons} vector cases; "
+        f"fixtures would fail: {broken.errors[0][:80]})"
+    )
     record_check("T1284-4.unit_mutation", True, comparisons=comparisons)
     return EXIT_PASS
 

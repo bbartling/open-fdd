@@ -60,9 +60,11 @@ class SiParityChainTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0)
 
-    def test_carryover_rules_listed(self) -> None:
-        for rule_id in ("VAV-1", "SV-FLATLINE", "OAT-METEO"):
-            self.assertIn(rule_id, self.pc.CARRYOVER_RULES_P0)
+    def test_p0_carryover_rules_in_golden(self) -> None:
+        golden = self.pc.load_ip_golden(self.pc.IP_GOLDENS_DIR / "SYNTH_SELFTEST.json")
+        carry = self.pc.verify_p0_carryover_coverage(golden)
+        self.assertEqual(carry.errors, ())
+        self.assertGreaterEqual(carry.comparisons, len(self.pc.CARRYOVER_RULES_P0))
 
 
 if __name__ == "__main__":

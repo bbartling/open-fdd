@@ -128,7 +128,34 @@ def compare_p0_ip_golden(golden: dict[str, Any]) -> StageResult:
             errors.append(f"P0 status {key}: sql={sql.get('status')} pandas={other.get('status')}")
     if not sql_rows:
         errors.append("P0: golden has no sql_fdd_daily rows")
+    carry = verify_p0_carryover_coverage(golden)
+    comparisons += carry.comparisons
+    errors.extend(carry.errors)
     return StageResult("P0", comparisons, tuple(errors))
+
+
+def verify_p0_carryover_coverage(golden: dict[str, Any]) -> StageResult:
+    """#1404 / #1407 / #1408: carry-over rules must appear in the ip golden at P0."""
+    sql_rules = {str(r.get("rule_id", "")) for r in golden.get("sql_fdd_daily") or []}
+    analytics_endpoints = {
+        str(r.get("endpoint", "")) for r in golden.get("analytics_rows") or []
+    }
+    errors: list[str] = []
+    comparisons = 0
+    for rule_id in CARRYOVER_RULES_P0:
+        if rule_id == "OAT-METEO":
+            if rule_id in sql_rules:
+                comparisons += 1
+            elif "/api/analytics/oat_meteo" in analytics_endpoints:
+                comparisons += 1
+            else:
+                errors.append(f"P0 carry-over: missing OAT-METEO (rule or analytics row)")
+            continue
+        if rule_id not in sql_rules:
+            errors.append(f"P0 carry-over: missing rule {rule_id} in sql_fdd_daily")
+            continue
+        comparisons += 1
+    return StageResult("P0-carryover", comparisons, tuple(errors))
 
 
 def compare_p0_analytics_golden(golden: dict[str, Any]) -> StageResult:
@@ -154,8 +181,8 @@ def compare_p0_analytics_golden(golden: dict[str, Any]) -> StageResult:
     return StageResult("P0-analytics", comparisons, tuple(errors))
 
 
-def verify_unit_vector_goldens() -> StageResult:
-    metric = _metric_doc()
+def verify_unit_vector_goldens(metric: dict[str, Any] | None = None) -> StageResult:
+    doc = metric if metric is not None else _metric_doc()
     cases = json.loads(UNIT_VECTORS.read_text(encoding="utf-8")).get("cases") or []
     errors: list[str] = []
     comparisons = 0
@@ -166,7 +193,7 @@ def verify_unit_vector_goldens() -> StageResult:
         expect = float(case["metric"])
         tol = float(case.get("tol", 1e-9))
         try:
-            got = uc.convert_to_canonical(metric, qid, inp, src)
+            got = uc.convert_to_canonical(doc, qid, inp, src)
         except ValueError as exc:
             errors.append(f"unit_vectors {case['id']}: {exc}")
             continue

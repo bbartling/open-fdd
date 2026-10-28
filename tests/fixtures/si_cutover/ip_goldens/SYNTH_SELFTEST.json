@@ -10,6 +10,7 @@
     }
   ],
   "building_id": "SYNTH_SELFTEST",
+  "note": "Fixture ip golden for CI P0; W0c live capture replaces per-site files.",
   "pandas_fdd_daily": [
     {
       "building_id": "SYNTH_SELFTEST",
@@ -43,6 +44,39 @@
       "rule_id": "SV-FLATLINE",
       "status": "FAULT",
       "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "SENSOR_2",
+      "fault_seconds": 900.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "SV-RANGE",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "SENSOR_3",
+      "fault_seconds": 600.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "SV-STALE",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "WEATHER_1",
+      "fault_seconds": 1800.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "OAT-METEO",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
     }
   ],
   "schema": "si-cutover-ip-golden-v1",
@@ -71,6 +105,33 @@
       "equipment_id": "SENSOR_1",
       "fault_seconds": 3600.0,
       "rule_id": "SV-FLATLINE",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "SENSOR_2",
+      "fault_seconds": 900.0,
+      "rule_id": "SV-RANGE",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "SENSOR_3",
+      "fault_seconds": 600.0,
+      "rule_id": "SV-STALE",
+      "status": "FAULT",
+      "utc_day": "2026-06-01"
+    },
+    {
+      "building_id": "SYNTH_SELFTEST",
+      "covered_seconds": 3600.0,
+      "equipment_id": "WEATHER_1",
+      "fault_seconds": 1800.0,
+      "rule_id": "OAT-METEO",
       "status": "FAULT",
       "utc_day": "2026-06-01"
     }

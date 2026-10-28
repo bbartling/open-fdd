@@ -133,11 +133,11 @@
       "id": "energy_power",
       "probes": [
         {
-          "label": "kwh_interval",
+          "label": "kwh",
           "quantity": "interval_energy",
           "source_unit": "kWh",
-          "input": 15.0,
-          "metric": 15.0,
+          "input": 100.0,
+          "metric": 100.0,
           "tol": 1e-9
         },
         {
