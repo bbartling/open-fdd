@@ -137,7 +137,7 @@ readiness = `GET /api/health` only. Local regression:
 `cargo test -p openfdd-central --test preauth_disclosure`. Live ACL = gate 31;
 headers/`security.txt` = gate 34. Skill:
 [`skills/openfdd-mt-security/SKILL.md`](skills/openfdd-mt-security/SKILL.md).
-**Qualification:** an owned disposable central + web + Timescale stack, with authenticated portal checks and explicit budgets. A public-URL ZAP is not that check. Codex owns `scripts/stress/` and `scripts/qualification/`.
+**Qualification:** an owned disposable central + web + Timescale stack, with authenticated portal checks and explicit budgets. A public-URL ZAP is not that check. Grok cloud agents own `scripts/stress/`, `scripts/qualification/`, `scripts/security/`, and related tests ([`ownership.yaml`](ownership.yaml) → `portal_stress_qualification_security`; Codex optional reviewer).
 
 **Volume restore:** disposable empty volume only. Never restore over a live stack workspace.
 

@@ -126,6 +126,28 @@ components:
     canonical_owner: openfdd-mcp
     role: read_first_central_tools
 
+  portal_stress_qualification_security:
+    canonical_owner: grok_cloud_agents
+    role: harness_implementation_live_stress_closeout_and_ci
+    optional_reviewers:
+      - codex_cli
+    paths:
+      - scripts/stress/
+      - scripts/qualification/
+      - scripts/security/
+      - tests/qualification/
+      - tests/security/
+    ci_workflows:
+      - .github/workflows/appsec.yml
+    skills:
+      - openfdd-stress-closeout
+      - openfdd-mt-security
+    note: >-
+      Grok cloud agents own stress gates, portal qualification recipes, security
+      probe tooling, offline qualification/security tests, and related CI steps
+      (4.0.7 patch cycle). Codex is an optional reviewer — not on the critical path.
+      Product or guidance-only PRs must not edit these paths without a Grok-owned row.
+
 # Milestone C0 — documentation sections that must not be vibe-coded away.
 protected_docs:
   root_readme_navigation:

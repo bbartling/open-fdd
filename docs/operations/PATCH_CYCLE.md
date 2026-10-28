@@ -14,7 +14,7 @@ Railway hub train (backup → `railway` re-pin central → mqtt → web → publ
 stress) is `historical/non-executable`; see git history and
 [`patch_trains/`](patch_trains/) for the record.
 
-Qualification entry (tiers + manifest): [`scripts/qualification/README.md`](../../scripts/qualification/README.md) (Codex-owned).
+Qualification entry (tiers + manifest): [`scripts/qualification/README.md`](../../scripts/qualification/README.md) (Grok cloud-agent owned; Codex optional reviewer — [`ownership.yaml`](../../openfdd_agent_spec/ownership.yaml)).
 **Machine death / new bench (historical):** [`BENCH_RECOVERY.md`](BENCH_RECOVERY.md).
 
 ## Rev bump rule
@@ -43,7 +43,7 @@ SHA=$(./scripts/ghcr_newest_by_created.py openfdd-central | cut -f2)
 ```
 
 Qualification runs on an owned disposable central + web + Timescale stack
-(Codex-owned under `scripts/qualification/`), never against a public URL.
+(Grok-owned under `scripts/stress/`, `scripts/qualification/`, and `scripts/security/` — see [`ownership.yaml`](../../openfdd_agent_spec/ownership.yaml)), never against a public URL.
 
 ## Anti-patterns
 

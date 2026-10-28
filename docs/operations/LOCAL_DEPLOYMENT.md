@@ -170,7 +170,7 @@ Use `http://` (not `https://`) for local Compose. See [`mcp/README.md`](../../mc
 
 ## Stress
 
-Closeout runs on an owned local stack (Codex-owned qualification). The Railway public-URL closeout in [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) is historical.
+Closeout runs on an owned local stack (Grok-owned qualification harness — [`openfdd_agent_spec/ownership.yaml`](../../openfdd_agent_spec/ownership.yaml)). The Railway public-URL closeout in [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) is historical.
 
 ## Data-safe updates
 
