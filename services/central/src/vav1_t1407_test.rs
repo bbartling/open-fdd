@@ -155,10 +155,11 @@ fn result_row<'a>(
         .unwrap_or_else(|| panic!("missing {rule_id}/{equipment_id} in {body}"))
 }
 
-async fn run_vav1(site: &str, extra: serde_json::Value) -> serde_json::Value {
+async fn run_vav1(site: &str, equipment_id: &str, extra: serde_json::Value) -> serde_json::Value {
     fdd_tsdb::clear_shared_pool();
     let mut payload = json!({
         "building_id": site,
+        "equipment_id": equipment_id,
         "confirmation_seconds": 0,
         "rule_ids": ["VAV-1"],
     });
@@ -280,7 +281,7 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     )
     .await;
 
-    let no_occ = run_vav1(&site_no_occ, json!({})).await;
+    let no_occ = run_vav1(&site_no_occ, "VAV_A", json!({})).await;
     let skip = result_row(&no_occ, "VAV-1", "VAV_A");
     assert_eq!(
         skip.get("status").and_then(|v| v.as_str()),
@@ -290,6 +291,7 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
 
     let with_sched = run_vav1(
         &site_sched,
+        "VAV_B",
         json!({
             "occupancy_schedule": {
                 "timezone": "UTC",
