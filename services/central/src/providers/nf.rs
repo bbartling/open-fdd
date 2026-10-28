@@ -1361,7 +1361,8 @@ pub(crate) fn next_history_page_start_for_point(
         .filter(|row| row.provider_point_id == point_id)
         .map(|row| row.ts)
         .max()?;
-    let next = max_ts + chrono::Duration::microseconds(1);
+    // Portal `from.seconds` is whole seconds; advance at least one second past the last sample.
+    let next = max_ts + chrono::Duration::seconds(1);
     if next >= window_to || next <= window_from {
         None
     } else {
