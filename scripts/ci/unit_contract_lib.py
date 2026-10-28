@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -234,16 +235,50 @@ def strip_registry_metadata(doc: Any) -> Any:
     return doc
 
 
+def ensure_origin_master_ref() -> str:
+    """Resolve a ref for master/base file content (shallow CI checkouts may lack origin/master)."""
+    override = os.environ.get("UNIT_CONTRACT_BASE_REF", "").strip()
+    candidates = [override] if override else []
+    base = os.environ.get("GITHUB_BASE_REF", "master").strip() or "master"
+    candidates.extend([f"origin/{base}", "origin/master", base, "master"])
+    for ref in candidates:
+        if not ref:
+            continue
+        proc = subprocess.run(
+            ["git", "rev-parse", "--verify", ref],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            return ref
+    fetch = subprocess.run(
+        ["git", "fetch", "origin", f"{base}:refs/remotes/origin/{base}", "--depth=1"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if fetch.returncode != 0:
+        raise RuntimeError(
+            "could not resolve or fetch base ref for metadata diff "
+            f"(tried {candidates!r}): {fetch.stderr}"
+        )
+    return f"origin/{base}"
+
+
 def git_show_master(relpath: str) -> str:
+    ref = ensure_origin_master_ref()
     proc = subprocess.run(
-        ["git", "show", f"origin/master:{relpath}"],
+        ["git", "show", f"{ref}:{relpath}"],
         cwd=ROOT,
         check=False,
         capture_output=True,
         text=True,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"git show origin/master:{relpath} failed: {proc.stderr}")
+        raise RuntimeError(f"git show {ref}:{relpath} failed: {proc.stderr}")
     return proc.stdout
 
 
