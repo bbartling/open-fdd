@@ -176,7 +176,12 @@ async fn run_vav1(site: &str, equipment_id: &str, extra: serde_json::Value) -> s
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize OPENFDD_DATABASE_URL with other Timescale registry tests"
+)]
 async fn t1407_vav1_occupancy_and_comfort_units() {
+    let _env = crate::test_env_lock::lock_env();
     let Some(pool) = connect_test_pool().await else {
         eprintln!("SKIP t1407_vav1_occupancy_and_comfort_units: OPENFDD_TEST_DATABASE_URL unset");
         return;
@@ -193,6 +198,7 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     for site in [&site_no_occ, &site_sched, &site_c] {
         purge(&pool, site).await;
     }
+    fdd_tsdb::clear_shared_pool();
 
     seed_vav_site(&pool, &site_no_occ, "VAV_A").await;
     bind_role(&pool, &site_no_occ, "VAV_A", "zone_t", "VAV_A.zt", "pt-a").await;
@@ -335,4 +341,5 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     for site in [&site_no_occ, &site_sched, &site_c] {
         purge(&pool, site).await;
     }
+    fdd_tsdb::clear_shared_pool();
 }
