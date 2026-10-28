@@ -20,9 +20,21 @@ For each configured site (JWT env file + sites JSON — no site names in code):
     default)
   * Sample row counts + sha256 manifest under ``~/openfdd-si-cutover/baseline-<sha>-<date>/``
 
-``OPENFDD_DATABASE_URL`` is mandatory for capture mode. ``open_fdd`` + ``pandas``
-are mandatory unless ``--skip-pandas``. Exit non-zero on any ``error`` pair unless
-``--allow-errors`` (recorded in the manifest).
+``OPENFDD_DATABASE_URL`` or ``--database-url`` is mandatory for capture mode.
+Compose ``.env`` often points at the Timescale **container** hostname; on the
+host running this script use the published port, for example
+``postgresql://openfdd:PASSWORD@127.0.0.1:5432/openfdd`` (match user/db from
+``.env`` / ``OPENFDD_TIMESCALE_PASSWORD``).
+
+Login: ``--jwt-env PATH`` loads ``OPENFDD_API_BASE``, ``OPENFDD_AGENT_PASSWORD``,
+and related keys into the process (values are never printed). ``--password`` wins
+when passed explicitly; otherwise ``login`` uses ``OPENFDD_AGENT_PASSWORD`` from
+that file or the environment.
+
+``open_fdd`` + ``pandas`` are mandatory unless ``--skip-pandas``. Host-side DB
+access needs ``psycopg[binary]`` (see ``scripts/qualification/requirements.txt``).
+Exit non-zero on any ``error`` pair unless ``--allow-errors`` (recorded in the
+manifest).
 
 CI: ``--self-test`` (offline shapes); ``--emit-ip-goldens DIR`` for W0c fixtures.
 """
@@ -143,13 +155,33 @@ def require_database_url() -> str:
     url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
     if not url:
         raise SystemExit(
-            "OPENFDD_DATABASE_URL is required for capture mode (Timescale SQL baseline)"
+            "Timescale URL required for capture mode: set OPENFDD_DATABASE_URL or "
+            "pass --database-url (host example: "
+            "postgresql://openfdd:PASSWORD@127.0.0.1:5432/openfdd)"
         )
     return url
 
 
+def resolve_capture_password(args: argparse.Namespace) -> str | None:
+    """Login password after ``--jwt-env`` is loaded; never log or print."""
+    if args.password:
+        return str(args.password)
+    return (
+        os.environ.get("OPENFDD_AGENT_PASSWORD")
+        or os.environ.get("OPENFDD_STRESS_PASS")
+        or os.environ.get("OPENFDD_ADMIN_PASSWORD")
+    )
+
+
 def db_connect():
-    import psycopg
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise SystemExit(
+            "psycopg is required for capture mode (Timescale SQL reads). Install with: "
+            "python3 -m pip install 'psycopg[binary]' "
+            "(listed in scripts/qualification/requirements.txt for stress tooling)"
+        ) from exc
 
     return psycopg.connect(require_database_url())
 
@@ -509,7 +541,7 @@ def collect_pandas_fdd_rows(
     window_end: str,
     pandas_max_rules: int | None,
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
-    from open_fdd.analytics.units import apply_unit_metadata
+    from open_fdd.analytics.units import stamp_display_units
     from open_fdd.rules import RULES_BY_ID, run_rule
 
     import pandas as pd
@@ -586,7 +618,7 @@ def collect_pandas_fdd_rows(
                 out.append({**base, "pair_status": "error", "reason": str(exc)})
                 coverage["error"] += 1
                 continue
-            apply_unit_metadata(frame, {"unit_system": "imperial"})
+            stamp_display_units(frame, {"unit_system": "imperial"})
             start = pd.Timestamp(window_start, tz="UTC")
             end = pd.Timestamp(window_end, tz="UTC")
             frame = frame.loc[(frame.index >= start) & (frame.index < end)]
@@ -880,7 +912,16 @@ def run_self_test() -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     add_connection_args(ap)
-    ap.add_argument("--jwt-env", type=Path, help="dotenv file with API base URL and credentials")
+    ap.add_argument(
+        "--database-url",
+        default=None,
+        help="Timescale URL for host-side capture (overrides OPENFDD_DATABASE_URL)",
+    )
+    ap.add_argument(
+        "--jwt-env",
+        type=Path,
+        help="dotenv file with OPENFDD_API_BASE, OPENFDD_AGENT_PASSWORD, etc.",
+    )
     ap.add_argument("--sites-config", type=Path, help="JSON list of sites (building_id, window)")
     ap.add_argument("--output-dir", type=Path, help="Override ~/openfdd-si-cutover/baseline-…")
     ap.add_argument("--skip-pandas", action="store_true", help="Skip pandas IP recompute")
@@ -911,6 +952,8 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--jwt-env and --sites-config are required unless --self-test")
 
     load_dotenv_file(args.jwt_env.expanduser())
+    if args.database_url:
+        os.environ["OPENFDD_DATABASE_URL"] = str(args.database_url).strip()
     require_database_url()
     if not args.skip_pandas:
         require_pandas_oracle()
@@ -926,7 +969,7 @@ def main(argv: list[str] | None = None) -> int:
     all_errors: list[str] = []
     with client(base) as http:
         wait_until_ready(http)
-        headers = login(http, user=args.user, password=args.password)
+        headers = login(http, user=args.user, password=resolve_capture_password(args))
         shortsha = health_shortsha(http, headers)
         out_dir = args.output_dir or default_output_dir(shortsha)
         out_dir.mkdir(parents=True, exist_ok=True)

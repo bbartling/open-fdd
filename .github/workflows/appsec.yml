@@ -93,7 +93,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install isolated qualification tooling dependencies
-        run: python3 -m pip install --quiet -r scripts/qualification/requirements.txt
+        run: |
+          python3 -m pip install --quiet -r scripts/qualification/requirements.txt
+          python3 -m pip install --quiet -e ".[oracle]"
       - name: Offline security unittests (E01–E08 + inventory)
         run: python3 -B -m unittest discover -s tests/security -v
       - name: Qualification unittests
