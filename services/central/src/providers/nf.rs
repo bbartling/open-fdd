@@ -419,7 +419,9 @@ impl NfPortalDriver {
             }
         }
         if !limits.supports_paging {
-            let points = self.fetch_history_chunk_once(uuids, from, to, limits).await?;
+            let points = self
+                .fetch_history_chunk_once(uuids, from, to, limits)
+                .await?;
             return Ok(PagedHistoryPoints {
                 points,
                 complete: true,

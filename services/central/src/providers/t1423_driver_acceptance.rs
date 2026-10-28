@@ -210,7 +210,10 @@ async fn t1423_1_two_points_cap_truncates_without_cross_point_loss() {
     let cap = 5_usize;
     let limits = paging_test_limits(cap, 512);
     let catalog: HashMap<String, Vec<RawProviderPoint>> = [
-        (UUID_A.to_string(), sample_series_for(UUID_A, 3, window_start)),
+        (
+            UUID_A.to_string(),
+            sample_series_for(UUID_A, 3, window_start),
+        ),
         (
             UUID_B.to_string(),
             sample_series_for(UUID_B, 8, window_start),
@@ -228,9 +231,8 @@ async fn t1423_1_two_points_cap_truncates_without_cross_point_loss() {
             if !req.starts_with("GET /api/v1/point/data") {
                 continue;
             }
-            let from =
-                DateTime::from_timestamp(parse_history_from_seconds(&req).unwrap_or(0), 0)
-                    .unwrap_or(window_start);
+            let from = DateTime::from_timestamp(parse_history_from_seconds(&req).unwrap_or(0), 0)
+                .unwrap_or(window_start);
             let to = DateTime::from_timestamp(parse_history_to_seconds(&req).unwrap_or(0), 0)
                 .unwrap_or(window_end);
             let point_id = history_uuids(&req)
@@ -314,9 +316,8 @@ async fn t1423_1_max_pages_reports_incomplete_without_error() {
             if !req.starts_with("GET /api/v1/point/data") {
                 continue;
             }
-            let from =
-                DateTime::from_timestamp(parse_history_from_seconds(&req).unwrap_or(0), 0)
-                    .unwrap_or(window_start);
+            let from = DateTime::from_timestamp(parse_history_from_seconds(&req).unwrap_or(0), 0)
+                .unwrap_or(window_start);
             let to = DateTime::from_timestamp(parse_history_to_seconds(&req).unwrap_or(0), 0)
                 .unwrap_or(window_end);
             let mut page: Vec<_> = all_server
@@ -361,9 +362,7 @@ fn t1423_incomplete_driver_page_blocks_window_commit() {
         end,
         expectations: &[PointExpectation {
             point_id: UUID_A.into(),
-            expectation: Expectation::Interval {
-                cadence_secs: 300,
-            },
+            expectation: Expectation::Interval { cadence_secs: 300 },
         }],
         observations: &[PointObservation {
             point_id: UUID_A.into(),

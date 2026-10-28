@@ -17,7 +17,9 @@ use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
 use super::hourly::{assess_page, HourlyPolicy, LogicalWindow};
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
-use super::map::{normalize_mapped, DevicePoints, HistoryFetchPage, HistorySeries, ResolvedRole, RoleResolver};
+use super::map::{
+    normalize_mapped, DevicePoints, HistoryFetchPage, HistorySeries, ResolvedRole, RoleResolver,
+};
 use super::meteo::OpenMeteoDriver;
 use super::nf_transport::NfTransport;
 use super::store::StoreOpen;
@@ -37,8 +39,9 @@ fn poll_enabled() -> bool {
 }
 
 fn max_concurrent() -> Result<usize, String> {
-    crate::ingest_queue::portal_env::provider_max_concurrent_from_env()
-        .and_then(|value| usize::try_from(value).map_err(|_| "OPENFDD_PROVIDER_MAX_CONCURRENT overflow".into()))
+    crate::ingest_queue::portal_env::provider_max_concurrent_from_env().and_then(|value| {
+        usize::try_from(value).map_err(|_| "OPENFDD_PROVIDER_MAX_CONCURRENT overflow".into())
+    })
 }
 
 fn tick_secs() -> u64 {
