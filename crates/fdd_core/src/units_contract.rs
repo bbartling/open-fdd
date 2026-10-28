@@ -118,6 +118,13 @@ impl MetricUnitsContract {
         Ok(qid.as_str())
     }
 
+    pub fn canonical_unit(&self, quantity_id: &str) -> Result<&str, ContractError> {
+        self.quantities
+            .get(quantity_id)
+            .map(|q| q.canonical_unit.as_str())
+            .ok_or_else(|| ContractError::UnsupportedQuantity(quantity_id.to_string()))
+    }
+
     pub fn convert_to_canonical(
         &self,
         quantity_id: &str,
@@ -134,8 +141,15 @@ impl MetricUnitsContract {
             .quantities
             .get(quantity_id)
             .ok_or_else(|| ContractError::UnsupportedQuantity(quantity_id.to_string()))?;
+        let scale_only = q.conversion.as_deref() == Some("scale_only");
+        let _canonical = q.canonical_unit.as_str();
         match quantity_id {
             "absolute_temperature" => {
+                if scale_only {
+                    return Err(ContractError::Invalid(format!(
+                        "absolute_temperature cannot use scale_only conversion (canonical {_canonical})"
+                    )));
+                }
                 let tok = normalize_alias(source_unit);
                 if matches!(tok.as_str(), "f" | "degf" | "fahrenheit") {
                     Ok((value - 32.0) * 5.0 / 9.0)
@@ -144,6 +158,11 @@ impl MetricUnitsContract {
                 }
             }
             "temperature_difference" => {
+                if !scale_only {
+                    return Err(ContractError::Invalid(format!(
+                        "temperature_difference requires scale_only (canonical {_canonical})"
+                    )));
+                }
                 let tok = normalize_alias(source_unit);
                 if tok.contains('f') || tok == "deltaf" {
                     Ok(value * 5.0 / 9.0)
@@ -152,6 +171,11 @@ impl MetricUnitsContract {
                 }
             }
             "temperature_rate" => {
+                if !scale_only {
+                    return Err(ContractError::Invalid(format!(
+                        "temperature_rate requires scale_only (canonical {_canonical})"
+                    )));
+                }
                 let tok = normalize_alias(source_unit);
                 if tok.contains('f') {
                     Ok(value * 5.0 / 9.0)
@@ -203,13 +227,12 @@ impl MetricUnitsContract {
             }
             "percent" | "fraction" | "relative_humidity" => Ok(value),
             "status" => Ok(value),
-            "occupancy_mode" => Err(ContractError::UnsupportedQuantity(
-                "occupancy_mode".to_string(),
-            )),
-            _ => {
-                let _ = q;
-                Err(ContractError::UnsupportedQuantity(quantity_id.to_string()))
-            }
+            "occupancy_mode" => Err(ContractError::UnsupportedQuantity(format!(
+                "occupancy_mode (canonical {_canonical})"
+            ))),
+            _ => Err(ContractError::UnsupportedQuantity(format!(
+                "{quantity_id} (canonical {_canonical})"
+            ))),
         }
     }
 }
