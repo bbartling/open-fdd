@@ -155,7 +155,7 @@ fn result_row<'a>(
         .unwrap_or_else(|| panic!("missing {rule_id}/{equipment_id} in {body}"))
 }
 
-async fn run_vav1(_pool: &sqlx::PgPool, site: &str, extra: serde_json::Value) -> serde_json::Value {
+async fn run_vav1(site: &str, extra: serde_json::Value) -> serde_json::Value {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("db url");
     std::env::set_var("OPENFDD_DATABASE_URL", &url);
     std::env::set_var("OPENFDD_HISTORIAN", "timescale");
@@ -172,6 +172,11 @@ async fn run_vav1(_pool: &sqlx::PgPool, site: &str, extra: serde_json::Value) ->
     crate::timescale_product::run_fdd_registry(&payload)
         .await
         .expect("run")
+}
+
+async fn release_test_pool(pool: sqlx::PgPool) {
+    pool.close().await;
+    fdd_tsdb::clear_shared_pool();
 }
 
 #[tokio::test]
@@ -277,7 +282,9 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     )
     .await;
 
-    let no_occ = run_vav1(&pool, &site_no_occ, json!({})).await;
+    release_test_pool(pool).await;
+
+    let no_occ = run_vav1(&site_no_occ, json!({})).await;
     let skip = result_row(&no_occ, "VAV-1", "VAV_A");
     assert_eq!(
         skip.get("status").and_then(|v| v.as_str()),
@@ -286,7 +293,6 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     assert_eq!(skip.get("fault_hours").and_then(|v| v.as_f64()), Some(0.0));
 
     let with_sched = run_vav1(
-        &pool,
         &site_sched,
         json!({
             "occupancy_schedule": {
@@ -307,11 +313,11 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
         "{evaluated}"
     );
 
-    std::env::set_var(
-        "OPENFDD_DATABASE_URL",
-        std::env::var("OPENFDD_TEST_DATABASE_URL").expect("db url"),
-    );
     fdd_tsdb::clear_shared_pool();
+    let Some(pool) = pool().await else {
+        eprintln!("SKIP t1407 rank/cleanup: OPENFDD_TEST_DATABASE_URL unset");
+        return;
+    };
     let rank = rcx_zone_comfort_rank(
         &site_c,
         &["vav"],
