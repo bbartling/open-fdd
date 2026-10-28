@@ -41,26 +41,18 @@ pub enum OccupancyScheduleResolution {
 #[derive(Debug, Clone)]
 pub struct DaySchedule {
     pub occupied: bool,
-    pub start: String,
-    pub end: String,
     start_minutes: u32,
     end_minutes: u32,
 }
 
 impl DaySchedule {
-    fn from_parts(
-        occupied: bool,
-        start: String,
-        end: String,
-    ) -> Result<Self, OccupancyScheduleError> {
-        let (sh, sm) = parse_hhmm(&start)
+    fn from_parts(occupied: bool, start: &str, end: &str) -> Result<Self, OccupancyScheduleError> {
+        let (sh, sm) = parse_hhmm(start)
             .map_err(|e| OccupancyScheduleError::new(format!("day start `{start}`: {e}")))?;
-        let (eh, em) = parse_hhmm(&end)
+        let (eh, em) = parse_hhmm(end)
             .map_err(|e| OccupancyScheduleError::new(format!("day end `{end}`: {e}")))?;
         Ok(Self {
             occupied,
-            start,
-            end,
             start_minutes: sh * 60 + sm,
             end_minutes: eh * 60 + em,
         })
@@ -156,7 +148,7 @@ impl OccupancySchedule {
                 .and_then(Value::as_str)
                 .unwrap_or("18:00")
                 .to_string();
-            let day = DaySchedule::from_parts(occupied, start, end)
+            let day = DaySchedule::from_parts(occupied, &start, &end)
                 .map_err(|e| OccupancyScheduleError::new(format!("{key}: {}", e.message)))?;
             days.insert(key.to_string(), day);
         }
@@ -200,20 +192,21 @@ impl OccupancySchedule {
 
 pub fn resolve_occupancy_schedule_from_payload(payload: &Value) -> OccupancyScheduleResolution {
     const KEY: &str = "occupancy_schedule";
-    for sched in [
-        payload.get(KEY),
-        payload
-            .get("params")
-            .and_then(|p| p.get(KEY))
-            .or_else(|| payload.get("config").and_then(|c| c.get(KEY))),
-    ]
-    .into_iter()
-    .flatten()
+    if let Some(sched) = payload.get(KEY) {
+        return match OccupancySchedule::try_from_json(sched) {
+            Ok(parsed) => OccupancyScheduleResolution::Valid(parsed),
+            Err(err) => OccupancyScheduleResolution::Invalid(err),
+        };
+    }
+    if let Some(sched) = payload
+        .get("params")
+        .and_then(|p| p.get(KEY))
+        .or_else(|| payload.get("config").and_then(|c| c.get(KEY)))
     {
-        match OccupancySchedule::try_from_json(sched) {
-            Ok(parsed) => return OccupancyScheduleResolution::Valid(parsed),
-            Err(err) => return OccupancyScheduleResolution::Invalid(err),
-        }
+        return match OccupancySchedule::try_from_json(sched) {
+            Ok(parsed) => OccupancyScheduleResolution::Valid(parsed),
+            Err(err) => OccupancyScheduleResolution::Invalid(err),
+        };
     }
     OccupancyScheduleResolution::Absent
 }
