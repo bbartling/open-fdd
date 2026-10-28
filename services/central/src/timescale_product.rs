@@ -3789,26 +3789,50 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                     let has_modeled =
                         crate::occupancy_calendar::history_has_modeled_occ_mode(&mut tx).await?;
                     if !has_modeled {
-                        if let Some(sched) =
-                            crate::occupancy_calendar::occupancy_schedule_from_payload(payload)
-                        {
-                            crate::occupancy_calendar::synthesize_occ_mode_from_schedule(
-                                &mut tx, &sched,
-                            )
-                            .await?;
-                        } else {
-                            rule_rows.push(json!({
-                                "equipment_id": eq_id,
-                                "status": "NOT_ASSESSED_NO_OCCUPANCY",
-                                "fault_hours": 0.0,
-                                "covered_hours": 0.0,
-                                "fault_pct": Value::Null,
-                                "output_kind": "diagnostic",
-                                "sample_rows": n,
-                                "notes": "VAV-1 requires modeled occ_mode or a site occupancy schedule",
-                            }));
-                            let _ = tx.rollback().await;
-                            continue;
+                        match crate::occupancy_calendar::resolve_occupancy_schedule_from_payload(
+                            payload,
+                        ) {
+                            crate::occupancy_calendar::OccupancyScheduleResolution::Valid(
+                                sched,
+                            ) => {
+                                crate::occupancy_calendar::synthesize_occ_mode_from_schedule(
+                                    &mut tx, &sched,
+                                )
+                                .await?;
+                            }
+                            crate::occupancy_calendar::OccupancyScheduleResolution::Invalid(
+                                err,
+                            ) => {
+                                rule_rows.push(json!({
+                                    "equipment_id": eq_id,
+                                    "status": "NOT_ASSESSED_NO_OCCUPANCY",
+                                    "fault_hours": 0.0,
+                                    "covered_hours": 0.0,
+                                    "fault_pct": Value::Null,
+                                    "output_kind": "diagnostic",
+                                    "sample_rows": n,
+                                    "input_condition": "occupancy_schedule_invalid",
+                                    "notes": format!(
+                                        "VAV-1 occupancy schedule invalid: {err}"
+                                    ),
+                                }));
+                                let _ = tx.rollback().await;
+                                continue;
+                            }
+                            crate::occupancy_calendar::OccupancyScheduleResolution::Absent => {
+                                rule_rows.push(json!({
+                                    "equipment_id": eq_id,
+                                    "status": "NOT_ASSESSED_NO_OCCUPANCY",
+                                    "fault_hours": 0.0,
+                                    "covered_hours": 0.0,
+                                    "fault_pct": Value::Null,
+                                    "output_kind": "diagnostic",
+                                    "sample_rows": n,
+                                    "notes": "VAV-1 requires modeled occ_mode or a site occupancy schedule",
+                                }));
+                                let _ = tx.rollback().await;
+                                continue;
+                            }
                         }
                     }
                 }
