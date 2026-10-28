@@ -230,43 +230,55 @@ pub async fn serve_with(
         ));
     };
 
+    let tsdb = if matches!(watch, CacheWatch::Resolve) {
+        fdd_tsdb::Tsdb::connect_from_env().await.ok()
+    } else {
+        None
+    };
+
     let identity = match watch {
-        CacheWatch::Resolve => resolve_cache_identity(building_id, req).await,
+        CacheWatch::Resolve => {
+            if let Some(ref db) = tsdb {
+                resolve_cache_identity_from(db, building_id, req).await
+            } else {
+                resolve_cache_identity_unconnected(building_id, req).await
+            }
+        }
         #[cfg(test)]
         CacheWatch::Resolved(identity) => identity,
     };
-    let config_extension = if query_id == "bas-vs-web-oat" {
-        match fdd_tsdb::Tsdb::connect_from_env().await {
-            Ok(tsdb) => {
-                match crate::timescale_product::resolve_site_oa_t_reference(
-                    tsdb.pool(),
-                    building_id,
-                )
-                .await
-                {
-                    Ok(picked) => {
-                        crate::timescale_product::bas_vs_web_oa_t_config_line(picked.as_ref())
+
+    let key = if query_id == "bas-vs-web-oat" {
+        let Some(db) = tsdb.as_ref() else {
+            let envelope = compute_with_admission_fallible(compute).await?;
+            return Ok(skipped(
+                envelope,
+                started,
+                "timescale connect failed for bas-vs-web-oat cache key",
+            ));
+        };
+        match bas_vs_web_cache_extension(db, building_id).await {
+            Ok(ext) => {
+                match cache_key(building_id, query_id, query_version, req, &identity, &ext) {
+                    Ok(key) => key,
+                    Err(reason) => {
+                        let envelope = compute_with_admission_fallible(compute).await?;
+                        return Ok(skipped(envelope, started, &reason));
                     }
-                    Err(_) => "oa_t_ref=unavailable".into(),
                 }
             }
-            Err(_) => "oa_t_ref=unavailable".into(),
+            Err(reason) => {
+                let envelope = compute_with_admission_fallible(compute).await?;
+                return Ok(skipped(envelope, started, &reason));
+            }
         }
     } else {
-        String::new()
-    };
-    let key = match cache_key(
-        building_id,
-        query_id,
-        query_version,
-        req,
-        &identity,
-        &config_extension,
-    ) {
-        Ok(key) => key,
-        Err(reason) => {
-            let envelope = compute_with_admission_fallible(compute).await?;
-            return Ok(skipped(envelope, started, &reason));
+        match cache_key(building_id, query_id, query_version, req, &identity, "") {
+            Ok(key) => key,
+            Err(reason) => {
+                let envelope = compute_with_admission_fallible(compute).await?;
+                return Ok(skipped(envelope, started, &reason));
+            }
         }
     };
 
@@ -666,10 +678,27 @@ fn provenance_for(
     }
 }
 
-async fn resolve_cache_identity(building_id: &str, req: &AnalyticsRequest) -> CacheIdentity {
+async fn bas_vs_web_cache_extension(
+    tsdb: &fdd_tsdb::Tsdb,
+    building_id: &str,
+) -> Result<String, String> {
+    let picked = crate::timescale_product::resolve_site_oa_t_reference(tsdb.pool(), building_id)
+        .await
+        .map_err(|err| format!("oa_t reference for bas-vs-web cache: {err}"))?;
+    Ok(crate::timescale_product::bas_vs_web_oa_t_config_line(
+        picked.as_ref(),
+    ))
+}
+
+async fn resolve_cache_identity_from(
+    tsdb: &fdd_tsdb::Tsdb,
+    building_id: &str,
+    req: &AnalyticsRequest,
+) -> CacheIdentity {
     let sql_pack = crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default();
     let equipment = req.query.equipment_ids.clone().unwrap_or_default();
-    let input = crate::timescale_product::read_analytics_cache_input(
+    let input = crate::timescale_product::read_analytics_cache_input_from(
+        tsdb,
         building_id,
         req.query.start,
         req.query.end,
@@ -691,6 +720,20 @@ async fn resolve_cache_identity(building_id: &str, req: &AnalyticsRequest) -> Ca
         sql_pack,
         model_revision,
         watermark,
+    }
+}
+
+async fn resolve_cache_identity_unconnected(
+    building_id: &str,
+    req: &AnalyticsRequest,
+) -> CacheIdentity {
+    let sql_pack = crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default();
+    let reason = "timescale connect failed for analytics cache identity".to_string();
+    CacheIdentity {
+        result_contract: ANALYTICS_RESULT_CONTRACT.into(),
+        sql_pack,
+        model_revision: String::new(),
+        watermark: InputWatermark::Unavailable { reason },
     }
 }
 
@@ -1149,6 +1192,48 @@ mod tests {
             persisted.envelope.generated_at,
             refreshed.envelope.generated_at
         );
+    }
+
+    #[tokio::test]
+    async fn bas_vs_web_skips_cache_when_oa_t_key_resolution_unavailable() {
+        let _cg = CgroupTestEnv::low_pressure();
+        let _lock = crate::test_env_lock::lock_env();
+        let prev_db = std::env::var("OPENFDD_DATABASE_URL").ok();
+        std::env::set_var(
+            "OPENFDD_DATABASE_URL",
+            "postgresql://invalid:invalid@127.0.0.1:9/nodb",
+        );
+        fdd_tsdb::clear_shared_pool();
+        let store = mem_store();
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let request = req("site-cache-skip");
+        let served = serve_with(
+            &store,
+            &sessions,
+            ("bas-vs-web-oat", "bas-vs-web-oat-v4"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolve,
+            async || Ok(envelope(QV_RUNTIME, &request.query, Vec::new())),
+        )
+        .await
+        .expect("serve");
+        assert_eq!(served.cache["skipped"], true);
+        let reason = served
+            .cache
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(
+            reason.contains("timescale connect") || reason.contains("oa_t reference"),
+            "expected cache bypass reason, got: {reason}"
+        );
+        assert_eq!(served.cache["hit"], false);
+        match prev_db {
+            Some(v) => std::env::set_var("OPENFDD_DATABASE_URL", v),
+            None => std::env::remove_var("OPENFDD_DATABASE_URL"),
+        }
+        fdd_tsdb::clear_shared_pool();
     }
 
     #[test]

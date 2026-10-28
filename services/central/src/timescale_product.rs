@@ -2458,7 +2458,7 @@ fn render_rule_sql(
         params.insert(k, v);
     }
     if rule.rule_id.eq_ignore_ascii_case("OAT-METEO") {
-        let bound = web_asof_bound_seconds(&params);
+        let bound = web_asof_bound_seconds(&params)?;
         params.insert(
             "WEB_ASOF_BOUND_SECONDS".into(),
             format!("{:.0}", bound.round()),
@@ -2741,40 +2741,50 @@ pub(crate) struct HistoryFillOptions {
 }
 
 /// Web weather as-of tolerance shared by OAT-METEO and bas-vs-web-oat analytics.
-pub(crate) fn oat_meteo_web_asof_bound_seconds() -> f64 {
-    let Ok(reg) = load_reg() else {
-        return 1500.0;
-    };
-    let Some(rule) = reg.rules.iter().find(|r| r.rule_id == "OAT-METEO") else {
-        return 1500.0;
-    };
+pub(crate) fn oat_meteo_web_asof_bound_seconds() -> Result<f64> {
+    let reg = load_reg()?;
+    let rule = reg
+        .rules
+        .iter()
+        .find(|r| r.rule_id == "OAT-METEO")
+        .ok_or_else(|| anyhow::anyhow!("OAT-METEO rule missing from FDD registry"))?;
     let confirm = rule.confirm_seconds;
     let mut params = rule_params(300.0, confirm);
-    if let Ok(tuning) = load_tuning_profiles(Path::new(&reg.rules_dir)) {
-        if let Ok(tuned) = effective_param_strings(rule, &tuning, None, None, None) {
-            for (k, v) in tuned {
-                if k == "CONFIRM_SECONDS" || k == "CONFIRM_ROWS" {
-                    continue;
-                }
-                params.insert(k, v);
-            }
+    let tuning = load_tuning_profiles(Path::new(&reg.rules_dir))
+        .context("load OAT-METEO tuning profiles")?;
+    let tuned = effective_param_strings(rule, &tuning, None, None, None)
+        .context("resolve OAT-METEO effective param strings")?;
+    for (k, v) in tuned {
+        if k == "CONFIRM_SECONDS" || k == "CONFIRM_ROWS" {
+            continue;
         }
+        params.insert(k, v);
     }
     web_asof_bound_seconds(&params)
 }
 
-fn web_asof_bound_seconds(params: &std::collections::HashMap<String, String>) -> f64 {
+fn web_asof_bound_seconds(params: &std::collections::HashMap<String, String>) -> Result<f64> {
     let cadence = params
         .get("WEB_CADENCE_SECONDS")
-        .and_then(|v| v.parse::<f64>().ok())
-        .filter(|v| v.is_finite() && *v > 0.0)
-        .unwrap_or(1200.0);
+        .ok_or_else(|| anyhow::anyhow!("WEB_CADENCE_SECONDS missing from OAT-METEO params"))?
+        .parse::<f64>()
+        .context("parse WEB_CADENCE_SECONDS")?;
+    if !cadence.is_finite() || cadence <= 0.0 {
+        return Err(anyhow::anyhow!(
+            "WEB_CADENCE_SECONDS must be finite and > 0"
+        ));
+    }
     let margin = params
         .get("WEB_ASOF_MARGIN_SECONDS")
-        .and_then(|v| v.parse::<f64>().ok())
-        .filter(|v| v.is_finite() && *v >= 0.0)
-        .unwrap_or(300.0);
-    cadence + margin
+        .ok_or_else(|| anyhow::anyhow!("WEB_ASOF_MARGIN_SECONDS missing from OAT-METEO params"))?
+        .parse::<f64>()
+        .context("parse WEB_ASOF_MARGIN_SECONDS")?;
+    if !margin.is_finite() || margin < 0.0 {
+        return Err(anyhow::anyhow!(
+            "WEB_ASOF_MARGIN_SECONDS must be finite and >= 0"
+        ));
+    }
+    Ok(cadence + margin)
 }
 
 async fn ensure_history_table(conn: &mut PgConnection, roles: &[String]) -> Result<()> {
@@ -6374,6 +6384,9 @@ mod opaque_series_binding {
     }
 }
 
+#[cfg(test)]
+#[path = "oat_meteo_bound_contract_test.rs"]
+mod oat_meteo_bound_contract_test;
 #[cfg(test)]
 #[path = "oat_meteo_t1404_test.rs"]
 mod oat_meteo_t1404_test;

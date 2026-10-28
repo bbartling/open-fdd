@@ -284,7 +284,8 @@ pub async fn bas_vs_web_oat(
     max_points: i64,
 ) -> Result<Value> {
     let pool = tsdb.pool();
-    let bound = crate::timescale_product::oat_meteo_web_asof_bound_seconds();
+    let bound = crate::timescale_product::oat_meteo_web_asof_bound_seconds()
+        .context("OAT-METEO web as-of bound for bas-vs-web-oat")?;
     let oa_ref = crate::timescale_product::resolve_site_oa_t_reference(pool, building_id)
         .await
         .context("resolve site oa_t for bas-vs-web-oat")?;
