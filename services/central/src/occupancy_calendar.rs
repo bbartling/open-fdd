@@ -134,7 +134,7 @@ impl OccupancySchedule {
             .map_err(|_| OccupancyScheduleError::new(format!("invalid timezone `{timezone}`")))?;
         let raw_days = obj.get("days").and_then(Value::as_object);
         let mut days = std::collections::HashMap::new();
-        for &key in WEEKDAYS {
+        for key in WEEKDAYS {
             let row = raw_days.and_then(|d| d.get(key)).and_then(Value::as_object);
             let legacy_sat = if key == "sat" {
                 raw_days.and_then(|d| d.get("discharge-air-temp"))
