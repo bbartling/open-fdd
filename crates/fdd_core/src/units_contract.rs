@@ -96,12 +96,32 @@ pub fn normalize_alias(alias: &str) -> String {
     out
 }
 
+fn validate_quantity_conversion_metadata(q: &QuantityDef) -> Result<(), ContractError> {
+    match q.conversion.as_deref() {
+        None => Ok(()),
+        Some("scale_only") => {
+            if q.id != "temperature_difference" && q.id != "temperature_rate" {
+                return Err(ContractError::Invalid(format!(
+                    "quantity {} has conversion scale_only but is not a delta/rate quantity",
+                    q.id
+                )));
+            }
+            Ok(())
+        }
+        Some(other) => Err(ContractError::Invalid(format!(
+            "quantity {} has unknown conversion metadata {other}",
+            q.id
+        ))),
+    }
+}
+
 impl MetricUnitsContract {
     pub fn from_json(json: &str) -> Result<Self, ContractError> {
         let file: MetricUnitsFile =
             serde_json::from_str(json).map_err(|e| ContractError::Invalid(format!("json: {e}")))?;
         let mut quantities: HashMap<String, QuantityDef> = HashMap::new();
         for q in &file.quantities {
+            validate_quantity_conversion_metadata(q)?;
             quantities.insert(q.id.clone(), q.clone());
         }
         let mut conversions_by_token: HashMap<String, ConversionEntry> = HashMap::new();
