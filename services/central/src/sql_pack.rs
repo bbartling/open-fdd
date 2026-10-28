@@ -2302,12 +2302,7 @@ mod tests {
 
         let site = format!("s{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
         let foreign = format!("f{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
-        seed_dimensions(
-            &pool,
-            &site,
-            &[("eq_ahu", "ahu"), ("eq_sp_only", "ahu")],
-        )
-        .await;
+        seed_dimensions(&pool, &site, &[("eq_ahu", "ahu"), ("eq_sp_only", "ahu")]).await;
         seed_dimensions(&pool, &foreign, &[("eq_ahu", "ahu")]).await;
         for minutes in (0..269_i64).map(|idx| idx * 5) {
             put_sample(&pool, &site, "eq_ahu", "fan_status", minutes, 1.0, None).await;
