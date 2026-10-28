@@ -302,19 +302,9 @@ def main(argv: list[str] | None = None) -> int:
             _check_comfort(http, headers, building_id, minimum=args.min_comfort_equipment),
         ]
 
-    return combine(codes)
-
-
-def combine(codes: list[int]) -> int:
-    if not codes:
-        safe_print("\nBLOCKED 09 — no analytics checks ran")
-        return EXIT_BLOCKED
-    if any(c not in (EXIT_PASS, EXIT_BLOCKED) for c in codes):
-        safe_print("\nFAIL 09 — analytics SQL↔pandas divergence")
-        return EXIT_FAIL
-    if any(c == EXIT_BLOCKED for c in codes):
-        safe_print("\nBLOCKED 09 — required analytics comparisons did not run")
-        return EXIT_BLOCKED
+    code = combine(codes)
+    if code != EXIT_PASS:
+        return code
     if args.si_parity_chain:
         from si_cutover import parity_chain as pc  # noqa: E402
 
@@ -328,6 +318,19 @@ def combine(codes: list[int]) -> int:
             return EXIT_BLOCKED
         record_check("si_parity.P0.analytics", True, comparisons=p0a.comparisons)
         safe_print(f"  si-parity P0 analytics: {p0a.comparisons} row(s)")
+    return code
+
+
+def combine(codes: list[int]) -> int:
+    if not codes:
+        safe_print("\nBLOCKED 09 — no analytics checks ran")
+        return EXIT_BLOCKED
+    if any(c not in (EXIT_PASS, EXIT_BLOCKED) for c in codes):
+        safe_print("\nFAIL 09 — analytics SQL↔pandas divergence")
+        return EXIT_FAIL
+    if any(c == EXIT_BLOCKED for c in codes):
+        safe_print("\nBLOCKED 09 — required analytics comparisons did not run")
+        return EXIT_BLOCKED
     safe_print("\nPASS 09 — analytics SQL ↔ pandas")
     return EXIT_PASS
 
