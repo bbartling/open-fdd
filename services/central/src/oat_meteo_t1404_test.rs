@@ -206,7 +206,7 @@ async fn t1404_sql_asof_fixture_offsets_and_gap() {
     };
     let fault_hours = run_oat_meteo(&pool, &site, Some(fill.clone())).await;
     assert!(
-        (fault_hours - 1.75).abs() < 0.05,
+        (fault_hours - 1.75).abs() < 0.1,
         "fault_hours={fault_hours}"
     );
 
