@@ -31,7 +31,7 @@ impl fmt::Display for OccupancyScheduleError {
 impl std::error::Error for OccupancyScheduleError {}
 
 /// Whether the run payload carried a usable site occupancy schedule.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum OccupancyScheduleResolution {
     Absent,
     Valid(OccupancySchedule),
@@ -134,11 +134,9 @@ impl OccupancySchedule {
             .map_err(|_| OccupancyScheduleError::new(format!("invalid timezone `{timezone}`")))?;
         let raw_days = obj.get("days").and_then(Value::as_object);
         let mut days = std::collections::HashMap::new();
-        for key in WEEKDAYS {
-            let row = raw_days
-                .and_then(|d| d.get(*key))
-                .and_then(Value::as_object);
-            let legacy_sat = if *key == "sat" {
+        for &key in WEEKDAYS {
+            let row = raw_days.and_then(|d| d.get(key)).and_then(Value::as_object);
+            let legacy_sat = if key == "sat" {
                 raw_days.and_then(|d| d.get("discharge-air-temp"))
             } else {
                 None
@@ -147,7 +145,7 @@ impl OccupancySchedule {
             let occupied = row
                 .and_then(|r| r.get("occupied"))
                 .and_then(Value::as_bool)
-                .unwrap_or(!matches!(*key, "sat" | "sun"));
+                .unwrap_or(!matches!(key, "sat" | "sun"));
             let start = row
                 .and_then(|r| r.get("start"))
                 .and_then(Value::as_str)
