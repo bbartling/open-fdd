@@ -336,7 +336,7 @@ pub async fn bas_vs_web_oat(
             "equipment_id": picked.equipment_id,
             "selection": picked.selection,
         });
-        obj.insert("oa_t_reference".to_string(), oa_meta.clone());
+        obj.insert("oa_t_reference".to_string(), oa_meta);
         obj.insert("web_asof_bound_seconds".to_string(), json!(bound));
     }
     Ok(stamp_overview_dto(tsdb, building_id, scope, body).await)
@@ -1795,21 +1795,6 @@ fn building_from(
                 "engine": "timescale-sql",
             })),
         )),
-    }
-}
-
-pub const BAS_VS_WEB_ROW_LIMIT_MAX: i64 = 2000;
-
-/// Row cap for bas-vs-web-oat SQL (`LIMIT $7`). Rejects out-of-range values; when
-/// omitted the endpoint uses [`BAS_VS_WEB_ROW_LIMIT_MAX`] explicitly.
-pub fn validated_bas_vs_web_max_points(max_points: Option<usize>) -> Result<i64, String> {
-    match max_points {
-        None => Ok(BAS_VS_WEB_ROW_LIMIT_MAX),
-        Some(0) => Err("max_points must be at least 1 for bas-vs-web-oat".into()),
-        Some(n) if n > BAS_VS_WEB_ROW_LIMIT_MAX as usize => Err(format!(
-            "max_points exceeds bas-vs-web-oat limit of {BAS_VS_WEB_ROW_LIMIT_MAX}"
-        )),
-        Some(n) => i64::try_from(n).map_err(|_| "max_points out of range".into()),
     }
 }
 
