@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 
 use open_fdd_edge_prototype::csv_ingest::model_overlay::{
     effective_point_quantity, effective_point_unit, effective_primary_reference,
-    load_engineer_point_overlay, EngineerPointOverlayEntry, EngineerPointOverlayPatch,
+    load_engineer_point_overlay, EngineerPointOverlayEntry,
 };
 use open_fdd_edge_prototype::csv_ingest::portal_ingest_sparql::{
     validate_binding_rows, validate_slug, validate_unit, IngestBindingRow,
