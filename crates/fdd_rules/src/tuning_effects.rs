@@ -32,14 +32,18 @@ static CATALOG: OnceLock<HashMap<String, HashMap<String, TuningParam>>> = OnceLo
 fn tuning_catalog_path() -> PathBuf {
     if let Ok(dir) = std::env::var("OPENFDD_SQL_RULES_DIR") {
         let base = PathBuf::from(dir);
+        let in_dir = base.join("tuning_catalog.json");
+        if in_dir.is_file() {
+            return in_dir;
+        }
         if let Some(parent) = base.parent() {
-            let candidate = parent.join("fdd/tuning_catalog.json");
-            if candidate.is_file() {
-                return candidate;
+            let sibling = parent.join("fdd/tuning_catalog.json");
+            if sibling.is_file() {
+                return sibling;
             }
         }
     }
-    PathBuf::from("sql/fdd/tuning_catalog.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../sql/fdd/tuning_catalog.json")
 }
 
 fn load_catalog_map() -> HashMap<String, HashMap<String, TuningParam>> {

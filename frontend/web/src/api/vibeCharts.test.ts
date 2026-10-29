@@ -447,8 +447,9 @@ describe("vibeCharts", () => {
     const points = Array.from({ length: 5 }, () => ({
       identifiable: true,
       equipment_id: "AHU_1",
-      delta_or_f: 18,
-      delta_mr_f: 9,
+      // API metric-c-v2 stores temperature deltas in kelvin (scale-only display).
+      delta_or_f: 10,
+      delta_mr_f: 5,
     }));
     const fig = econDeltaScatter(points, 10, "metric");
     const trace = fig?.data.find((item) => item.name === "AHU_1");
@@ -456,6 +457,6 @@ describe("vibeCharts", () => {
     expect(trace?.y?.[0]).toBeCloseTo(5, 5);
     expect(String(fig?.layout?.xaxis?.title)).toContain("Δ°C");
     expect(String(fig?.layout?.title)).not.toContain("10°C");
-    expect(String(fig?.layout?.title)).toContain("5.6");
+    expect(String(fig?.layout?.title)).toContain("10.0");
   });
 });
