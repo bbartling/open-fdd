@@ -18,7 +18,7 @@ use chrono_tz::Tz;
 
 use crate::providers::hourly::floor_to_window;
 
-use super::model::{gap_recoverable, FinishOutcome, NewJob, MAX_CATCHUP_HOURS};
+use super::model::{gap_recoverable, FinishOutcome, NewJob, JOB_SHARD_LIVE, MAX_CATCHUP_HOURS};
 
 /// Upper bound on whole local days planned per scheduler tick. Older days are
 /// a backfill.
@@ -116,7 +116,7 @@ pub fn due_windows(
                 model_revision: device.model_revision.clone(),
                 logical_window_start,
                 logical_window_end,
-                shard: String::new(),
+                shard: JOB_SHARD_LIVE.to_string(),
                 not_before,
                 estimated_cost: device.estimated_cost.max(1),
                 requested_points_digest: Some(super::model::points_digest(&device.point_ids)),
@@ -249,7 +249,7 @@ pub fn daily_windows(
                     model_revision: device.model_revision.clone(),
                     logical_window_start: slice_start,
                     logical_window_end: slice_end,
-                    shard: String::new(),
+                    shard: JOB_SHARD_LIVE.to_string(),
                     not_before,
                     estimated_cost: device.estimated_cost.max(1),
                     requested_points_digest: Some(super::model::points_digest(&device.point_ids)),

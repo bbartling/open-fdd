@@ -1,7 +1,7 @@
 //! metric-c-v2 unit contract (`sql/contract/metric_units.json`).
 //!
 //! Conversions are driven only by `source_unit_conversions` in the contract JSON.
-//! Query-time imperial admit (`units::admit_value_to_pack_v1`) stays until W2b/W5c.
+//! Ingest converts declared units once in `fdd_tsdb` (W2b); pivot/SQL read `s.val`.
 
 use serde::Deserialize;
 use std::collections::HashMap;

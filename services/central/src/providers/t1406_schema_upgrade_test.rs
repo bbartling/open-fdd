@@ -1,25 +1,93 @@
 //! T1406: upgrade from 4.0.6 authorized_series view to W1a binding metadata.
+//!
+//! Uses a disposable database so `DROP VIEW authorized_series` never races shared
+//! CI Postgres used by inventory overlay tests.
 
 use sqlx::postgres::PgPoolOptions;
-use sqlx::Row;
+use sqlx::{PgPool, Row};
 
 const OLD_VIEW: &str = include_str!("../../../../sql/schema/fixtures/authorized_series_v4_0_6.sql");
 const BINDING_DDL: &str = include_str!("../../../../sql/schema/11_point_map_binding_metadata.sql");
 const NEW_VIEW: &str = include_str!("../../../../sql/schema/07_opaque_series_binding.sql");
-const UPGRADE_TEST_LOCK: i64 = 14_061_406;
 
-async fn pool() -> Option<sqlx::PgPool> {
+fn admin_postgres_url(database_url: &str) -> String {
+    let mut url = url::Url::parse(database_url).expect("database url");
+    url.set_path("/postgres");
+    url.to_string()
+}
+
+struct IsolatedDb {
+    admin: String,
+    name: String,
+}
+
+impl Drop for IsolatedDb {
+    fn drop(&mut self) {
+        let admin = self.admin.clone();
+        let name = self.name.clone();
+        if !name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        {
+            return;
+        }
+        let _ = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("drop runtime");
+            runtime.block_on(async move {
+                let Ok(pool) = PgPoolOptions::new()
+                    .max_connections(1)
+                    .connect(&admin)
+                    .await
+                else {
+                    return;
+                };
+                let sql = format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)");
+                let _ = sqlx::query(&sql).execute(&pool).await;
+            });
+        })
+        .join();
+    }
+}
+
+async fn create_isolated_pool(admin_url: &str, name: &str) -> PgPool {
+    let admin = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(admin_url)
+        .await
+        .expect("admin connect");
+    let sql = format!("CREATE DATABASE {name}");
+    sqlx::query(&sql)
+        .execute(&admin)
+        .await
+        .expect("create database");
+    let mut url = url::Url::parse(admin_url).expect("admin url");
+    url.set_path(&format!("/{name}"));
+    PgPoolOptions::new()
+        .max_connections(2)
+        .connect(url.as_str())
+        .await
+        .expect("isolated connect")
+}
+
+async fn isolated_pool() -> Option<(PgPool, IsolatedDb)> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
         .filter(|v| !v.trim().is_empty())?;
-    PgPoolOptions::new()
-        .max_connections(2)
-        .connect(&url)
-        .await
-        .ok()
+    let admin = admin_postgres_url(&url);
+    let name = format!("t1406upg{}", uuid::Uuid::new_v4().simple());
+    assert!(
+        name.chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_'),
+        "invalid database name"
+    );
+    let pool = create_isolated_pool(&admin, &name).await;
+    Some((pool, IsolatedDb { admin, name }))
 }
 
-async fn baseline_tables(pool: &sqlx::PgPool) {
+async fn baseline_tables(pool: &PgPool) {
     crate::test_ddl::execute_idempotent_ddl(pool, "DROP VIEW IF EXISTS authorized_series CASCADE")
         .await;
     for statement in [
@@ -60,15 +128,10 @@ async fn baseline_tables(pool: &sqlx::PgPool) {
 
 #[tokio::test]
 async fn t1406_authorized_series_view_upgrades_from_v406_column_order() {
-    let Some(pool) = pool().await else {
+    let Some((pool, _drop)) = isolated_pool().await else {
         return;
     };
     let site = "T1406_SCHEMA_UPGRADE";
-    sqlx::query("SELECT pg_advisory_lock($1)")
-        .bind(UPGRADE_TEST_LOCK)
-        .execute(&pool)
-        .await
-        .expect("upgrade test lock");
     baseline_tables(&pool).await;
 
     sqlx::query("INSERT INTO site (site_id) VALUES ($1) ON CONFLICT DO NOTHING")
@@ -160,17 +223,4 @@ async fn t1406_authorized_series_view_upgrades_from_v406_column_order() {
         row.get::<Option<String>, _>("history_mode").as_deref(),
         Some("interval")
     );
-
-    for sql in [
-        "DELETE FROM role_map WHERE building_id = $1",
-        "DELETE FROM point_map WHERE site_id = $1",
-        "DELETE FROM site WHERE site_id = $1",
-    ] {
-        sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
-    }
-    sqlx::query("SELECT pg_advisory_unlock($1)")
-        .bind(UPGRADE_TEST_LOCK)
-        .execute(&pool)
-        .await
-        .expect("upgrade test unlock");
 }
