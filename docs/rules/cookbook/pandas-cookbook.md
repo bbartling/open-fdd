@@ -1150,7 +1150,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], poll_seconds=POLL_SECONDS, 
 
 ### ECON-1 — Economizer stuck closed
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on, OA damper < 5%, OAT > 12.8°C (`econ1_oat_min`, SI storage; display may show °F).  
+**Equation:** Fan on, OA damper < 5%, OAT > 55°F (should be economizing).  
 **Default confirmation:** 600 s
 
 **Required roles:** `fan-cmd`, `outside-air-damper`, `outside-air-temp`

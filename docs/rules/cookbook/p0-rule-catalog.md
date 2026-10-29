@@ -44,7 +44,7 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | `AHU-DUCTHI` | `ahu` | ahu | duct-static-pressure, duct-static-pressure-sp | 300 | Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catc… |
 | `AHU-SIMUL` | `ahu` | ahu | heating-valve, cooling-valve | 300 | Heating valve > 10% AND cooling valve > 10% at once. |
 | `OAT-METEO` | `ahu` | ahu | outside-air-temp, web-outside-air-temp | 900 | BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F. |
-| `ECON-1` | `ahu` | ahu | fan-cmd, outside-air-damper, outside-air-temp | 600 | Fan on, OA damper < 5%, OAT > 12.8°C (55°F equivalent; SI storage default). |
+| `ECON-1` | `ahu` | ahu | fan-cmd, outside-air-damper, outside-air-temp | 600 | Fan on, OA damper < 5%, OAT > 55°F (should be economizing). |
 | `ECON-2` | `ahu` | ahu | outside-air-temp, outside-air-damper | 300 | OAT > 63°F AND OA damper > 42% (should be at minimum). |
 | `ECON-3` | `ahu` | ahu | outside-air-damper, cooling-valve | 300 | Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from… |
 | `ECON-4` | `ahu` | ahu | mixed-air-temp, return-air-temp, outside-air-temp, fan-cmd | 600 | Fan on, \\|RAT−OAT\\| > 2.2°F, estimated OA fraction < 21%. |
