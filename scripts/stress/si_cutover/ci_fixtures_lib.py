@@ -460,9 +460,9 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
         if unit in ("percent", "pct"):
             q = "dimensionless"
         elif unit in ("inWC", "in_wc"):
-            q = "pressure"
+            q = "air_pressure"
         elif unit == "cfm":
-            q = "volumetric_flow_rate"
+            q = "volumetric_flow"
         series = pd.to_numeric(out[col], errors="coerce")
         converted = []
         for v in series:
@@ -477,7 +477,14 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
             except ValueError:
                 converted.append(v)
         out[col] = converted
-        role_units[str(col)] = "°C" if q == "absolute_temperature" else unit
+        if q == "absolute_temperature":
+            role_units[str(col)] = "°C"
+        elif q == "air_pressure":
+            role_units[str(col)] = "Pa"
+        elif q == "volumetric_flow":
+            role_units[str(col)] = "L/s"
+        else:
+            role_units[str(col)] = unit
     out.attrs["unit_system"] = "metric"
     out.attrs["role_units"] = role_units
     _apply_unit_metadata(out, "metric")

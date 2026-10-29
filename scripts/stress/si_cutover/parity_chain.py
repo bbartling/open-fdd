@@ -862,7 +862,8 @@ def verify_vav1_rule_si_threshold_mutation() -> StageResult:
     params_ip = cfl.rule_params_from_registry(rule)
     params_si = cfl.convert_params_to_si(rule, params_ip, metric)
     params_broken = dict(params_si)
-    params_broken["eps_dsp"] = float(params_si.get("eps_dsp", 0.12)) + 1.0
+    # +1 in.w.c. in SI (Pa) — must change the fault mask vs golden IP seconds.
+    params_broken["eps_dsp"] = float(params_si.get("eps_dsp", 0.12)) + 248.84
     poll = float(golden.get("poll_seconds") or 300.0)
 
     def _fault_seconds(result, index) -> float:
