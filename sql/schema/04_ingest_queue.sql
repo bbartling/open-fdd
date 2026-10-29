@@ -204,3 +204,16 @@ CREATE TABLE IF NOT EXISTS ingest_coverage_cursor (
     OR (hole_at IS NOT NULL AND hole_state IS NOT NULL AND hole_at >= verified_through)
   )
 );
+
+-- Provider data start and binding creation for gap-only planning (#1423).
+CREATE TABLE IF NOT EXISTS ingest_device_binding (
+  tenant_id text NOT NULL,
+  canonical_site text NOT NULL,
+  provider_instance_id text NOT NULL,
+  device_id text NOT NULL,
+  model_revision text NOT NULL,
+  binding_created_at timestamptz NOT NULL,
+  provider_data_start timestamptz,
+  updated_at timestamptz NOT NULL,
+  PRIMARY KEY (tenant_id, canonical_site, provider_instance_id, device_id, model_revision)
+);

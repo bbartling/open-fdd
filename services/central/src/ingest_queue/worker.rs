@@ -208,11 +208,12 @@ impl WindowDecision {
 
 async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
     let plan = {
-        let models = state
-            .providers
-            .models
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Ok(models) = state.providers.models.lock() else {
+            warn!("provider model mutex poisoned during ingest execute");
+            return WindowDecision::bare(FinishOutcome::Permanent {
+                code: "internal_lock_poisoned".into(),
+            });
+        };
         match models.active_plan(&job.tenant_id, &job.canonical_site) {
             Some(plan) if committed_tuple_matches(job, plan) => Some(plan.clone()),
             Some(_) | None => None,
@@ -240,6 +241,13 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
             active_model_revision: active_revision,
             active_points_digest: active_digest,
         };
+    }
+    if let Ok(Some(provider_start)) = state.ingest_queue.provider_data_start_for_job(job).await {
+        if job.logical_window_end <= provider_start {
+            return WindowDecision::bare(FinishOutcome::Permanent {
+                code: super::model::NOT_EXPECTED_CODE.into(),
+            });
+        }
     }
     let Some(site) = state.providers.sites.iter().find(|site| {
         site.building_id == job.canonical_site
@@ -275,11 +283,12 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
     let response_complete = fetched.complete;
     let page = fetched.series;
     let plan_after = {
-        let models = state
-            .providers
-            .models
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Ok(models) = state.providers.models.lock() else {
+            warn!("provider model mutex poisoned during ingest execute");
+            return WindowDecision::bare(FinishOutcome::Permanent {
+                code: "internal_lock_poisoned".into(),
+            });
+        };
         models
             .active_plan(&job.tenant_id, &job.canonical_site)
             .filter(|active| committed_tuple_matches(job, active))
@@ -375,6 +384,12 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
         detail.as_str(),
     )
     .await;
+    if !applied.is_empty() {
+        state
+            .ingest_queue
+            .learn_provider_data_start_from_samples(job, &applied, Utc::now())
+            .await;
+    }
     WindowDecision {
         outcome,
         applied_samples: applied,
@@ -765,12 +780,59 @@ fn parse_throttle_error(err: &str) -> (bool, Option<u64>) {
 
 fn throttle_backoff_secs(attempt: u32, retry_after: Option<u64>, jitter_key: &str) -> i64 {
     let policy = crate::providers::hourly::HourlyPolicy::from_env();
-    let mut delay = i64::try_from(retry_after.unwrap_or(0)).unwrap_or(0);
-    delay = delay.max(crate::providers::hourly::retry_delay_secs(
-        i32::try_from(attempt.max(1)).unwrap_or(1),
+    let delay = match retry_after {
+        None => 0,
+        Some(secs) => match i64::try_from(secs) {
+            Ok(value) => value,
+            Err(_) => {
+                warn!(
+                    retry_after_secs = secs,
+                    "Retry-After seconds overflowed i64; saturating to i64::MAX"
+                );
+                i64::MAX
+            }
+        },
+    };
+    let attempt_index = match i32::try_from(attempt) {
+        Ok(value) if value >= 1 => value,
+        Ok(_) => {
+            warn!(
+                attempt,
+                "retry attempt zero is invalid; using attempt 1 for exponential backoff"
+            );
+            1
+        }
+        Err(_) => {
+            warn!(
+                attempt,
+                "retry attempt overflowed i32; using i32::MAX for exponential backoff"
+            );
+            i32::MAX
+        }
+    };
+    let mut total = delay.max(crate::providers::hourly::retry_delay_secs(attempt_index));
+    let jitter_cap = match i32::try_from(policy.retry_jitter_secs) {
+        Ok(value) if value >= 1 => value,
+        Ok(_) => {
+            warn!(
+                jitter = policy.retry_jitter_secs,
+                "retry_jitter_secs zero is invalid; using 1 second jitter cap"
+            );
+            1
+        }
+        Err(_) => {
+            warn!(
+                jitter = policy.retry_jitter_secs,
+                "retry_jitter_secs overflowed i32; saturating jitter cap"
+            );
+            i32::MAX
+        }
+    };
+    total = total.saturating_add(crate::providers::hourly::stagger_secs(
+        jitter_key,
+        i64::from(jitter_cap),
     ));
-    delay += crate::providers::hourly::stagger_secs(jitter_key, policy.retry_jitter_secs.max(1));
-    delay
+    total
 }
 
 fn classify_poll_error(
@@ -1312,6 +1374,18 @@ mod tests {
                 "attempt {attempt} must stay retryable"
             );
         }
+    }
+
+    #[test]
+    fn throttle_backoff_retry_after_overflow_uses_saturated_delay() {
+        let delay = throttle_backoff_secs(1, Some(u64::MAX), "job-overflow");
+        assert_eq!(delay, i64::MAX);
+    }
+
+    #[test]
+    fn throttle_backoff_zero_attempt_uses_logged_attempt_one_base() {
+        let delay = throttle_backoff_secs(0, None, "job-zero");
+        assert!(delay >= 30);
     }
 
     #[test]

@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::sync::Mutex;
+use tracing::warn;
 use uuid::Uuid;
 
 use super::cursor::{self, CoverageCursor, CursorKey};
@@ -238,6 +239,18 @@ impl QueueClient {
         self.memory.retry_job(job_id, now, claim)
     }
 
+    pub async fn cancel_jobs(
+        &self,
+        filter: CancelFilter,
+        now: DateTime<Utc>,
+        claim: &IdempotencyClaim,
+    ) -> Result<CancelOutcome, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            return postgres::cancel_jobs(&pool, &filter, now, claim).await;
+        }
+        self.memory.cancel_jobs(&filter, now, claim)
+    }
+
     pub async fn backfill(
         &self,
         jobs: Vec<NewJob>,
@@ -285,6 +298,65 @@ impl QueueClient {
         Ok(self
             .memory
             .prune_applied_samples(tenant_id, canonical_site, now, retention))
+    }
+
+    pub(crate) async fn postgres_pool(&self) -> Result<Option<PgPool>, QueueError> {
+        self.pool_if_configured().await
+    }
+
+    pub async fn provider_data_start_for_job(
+        &self,
+        job: &JobView,
+    ) -> Result<Option<DateTime<Utc>>, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            return Ok(super::binding_state::load_binding_state(
+                &pool,
+                &job.tenant_id,
+                &job.canonical_site,
+                &job.provider_instance_id,
+                &job.device_id,
+                &job.model_revision,
+            )
+            .await?
+            .and_then(|row| row.provider_data_start));
+        }
+        Ok(None)
+    }
+
+    pub async fn learn_provider_data_start_from_samples(
+        &self,
+        job: &JobView,
+        samples: &[AppliedSample],
+        now: DateTime<Utc>,
+    ) {
+        if samples.is_empty() {
+            return;
+        }
+        let Some(first) = samples.first() else {
+            return;
+        };
+        let mut earliest = first.ts;
+        for sample in samples.iter().skip(1) {
+            if sample.ts < earliest {
+                earliest = sample.ts;
+            }
+        }
+        if let Ok(Some(pool)) = self.pool_if_configured().await {
+            if let Err(err) = super::binding_state::learn_provider_data_start(
+                &pool,
+                &job.tenant_id,
+                &job.canonical_site,
+                &job.provider_instance_id,
+                &job.device_id,
+                &job.model_revision,
+                earliest,
+                now,
+            )
+            .await
+            {
+                warn!(error = %err, job_id = %job.job_id, "provider data start not recorded");
+            }
+        }
     }
 
     async fn pool_if_configured(&self) -> Result<Option<PgPool>, QueueError> {

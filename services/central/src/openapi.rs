@@ -334,6 +334,13 @@ mod live_routes {
         responses((status = 202, description = "Enqueue all plan groups for a bounded UTC hour range", body = serde_json::Value))
     )]
     pub fn ingest_backfill_site() {}
+
+    #[utoipa::path(
+        post, path = "/api/ingest/jobs/cancel", tag = "ingest",
+        request_body = serde_json::Value,
+        responses((status = 200, description = "Cancel queued and retry_wait ingest jobs in scope", body = serde_json::Value))
+    )]
+    pub fn ingest_jobs_cancel() {}
 }
 
 #[derive(OpenApi)]
@@ -352,6 +359,7 @@ mod live_routes {
         live_routes::ingest_queue_metrics,
         live_routes::ingest_backfill,
         live_routes::ingest_backfill_site,
+        live_routes::ingest_jobs_cancel,
         crate::routes::fdd_run,
         crate::routes::fdd_status,
         crate::routes::auth_status,

@@ -440,7 +440,8 @@ pub fn validate_new_job(job: &NewJob) -> Result<(), QueueError> {
     }
     if !is_aligned_window(job.logical_window_start, job.logical_window_end) {
         return Err(QueueError::Invalid(
-            "logical window must be a half-open aligned 60 to 3600 second UTC window".into(),
+            "logical window must be a half-open aligned UTC window within the driver span cap"
+                .into(),
         ));
     }
     Ok(())
@@ -469,12 +470,18 @@ pub fn rollup_coverage<'a>(summaries: impl IntoIterator<Item = &'a str>) -> &'st
     }
 }
 
+/// Longest logical window the NF driver accepts on one job (`MAX_HISTORY_WINDOW`).
+pub fn max_logical_window_secs() -> i64 {
+    crate::providers::http_policy::MAX_HISTORY_WINDOW.num_seconds()
+}
+
 pub fn is_aligned_window(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
     if start.timestamp_subsec_micros() != 0 {
         return false;
     }
     let secs = (end - start).num_seconds();
-    (60..=3600).contains(&secs) && start.timestamp().rem_euclid(secs) == 0
+    let max = max_logical_window_secs();
+    (60..=max).contains(&secs) && start.timestamp().rem_euclid(secs) == 0
 }
 
 pub fn operator_retry_allowed(state: &str, code: Option<&str>) -> bool {
@@ -511,6 +518,59 @@ pub fn retry_object_id(job_id: Uuid) -> String {
 pub fn retry_payload_hash(tenant_id: &str, job_id: Uuid) -> String {
     scoped_digest(&["retry", tenant_id, &job_id.to_string()])
 }
+
+#[derive(Debug, Clone)]
+pub struct CancelFilter {
+    pub tenant_id: String,
+    pub canonical_site: Option<String>,
+    pub provider_instance_id: Option<String>,
+    pub device_id: Option<String>,
+    pub window_start: Option<DateTime<Utc>>,
+    pub window_end: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CancelOutcome {
+    pub cancelled: u32,
+    pub job_ids: Vec<Uuid>,
+}
+
+pub fn cancel_filter_digest(filter: &CancelFilter) -> String {
+    let site = filter.canonical_site.as_deref().unwrap_or("");
+    let provider = filter.provider_instance_id.as_deref().unwrap_or("");
+    let device = filter.device_id.as_deref().unwrap_or("");
+    let start = filter
+        .window_start
+        .map(|ts| ts.to_rfc3339())
+        .unwrap_or_default();
+    let end = filter
+        .window_end
+        .map(|ts| ts.to_rfc3339())
+        .unwrap_or_default();
+    scoped_digest(&[
+        "cancel_filter",
+        filter.tenant_id.as_str(),
+        site,
+        provider,
+        device,
+        start.as_str(),
+        end.as_str(),
+    ])
+}
+
+pub fn cancel_object_id(filter: &CancelFilter) -> String {
+    format!("{}\n{}", filter.tenant_id, cancel_filter_digest(filter))
+}
+
+pub fn cancel_payload_hash(filter: &CancelFilter) -> String {
+    scoped_digest(&[
+        "cancel",
+        filter.tenant_id.as_str(),
+        cancel_filter_digest(filter).as_str(),
+    ])
+}
+
+pub const NOT_EXPECTED_CODE: &str = "not_expected";
 
 pub fn backfill_object_id(job: &NewJob) -> String {
     [

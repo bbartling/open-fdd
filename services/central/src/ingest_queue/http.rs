@@ -53,6 +53,8 @@ pub struct BackfillBody {
     pub device_id: String,
     pub model_revision: Option<String>,
     pub windows: Vec<WindowBody>,
+    #[serde(default)]
+    pub force: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +65,19 @@ pub struct SiteBackfillBody {
     pub provider_instance_id: String,
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CancelBody {
+    pub idempotency_key: String,
+    pub tenant_id: Option<String>,
+    pub canonical_site: Option<String>,
+    pub provider_instance_id: Option<String>,
+    pub device_id: Option<String>,
+    pub window_start: Option<DateTime<Utc>>,
+    pub window_end: Option<DateTime<Utc>>,
 }
 
 pub async fn list_jobs(
@@ -627,7 +642,8 @@ pub async fn backfill(
         &body.provider_instance_id,
         &identity.provider_instance_id,
     );
-    let mut jobs = Vec::new();
+    let now = Utc::now();
+    let mut window_pairs = Vec::with_capacity(body.windows.len());
     for window in &body.windows {
         if !is_hour_window(window.start, window.end) {
             return json_error(
@@ -638,25 +654,88 @@ pub async fn backfill(
                 false,
             );
         }
-        jobs.push(super::model::NewJob {
-            tenant_id: identity.tenant_id.clone(),
-            canonical_site: body.canonical_site.clone(),
-            provider_instance_id: identity.provider_instance_id.clone(),
-            device_id: identity.device_id.clone(),
-            model_revision: identity.model_revision.clone(),
-            logical_window_start: window.start,
-            logical_window_end: window.end,
-            shard: String::new(),
-            not_before: Utc::now(),
-            estimated_cost: 1,
-            requested_points_digest: None,
-        });
+        window_pairs.push((window.start, window.end));
+    }
+    let point_keys = plan
+        .as_ref()
+        .and_then(|active| {
+            active
+                .groups
+                .iter()
+                .find(|group| {
+                    group.equipment_id == identity.device_id
+                        && group.provider_instance_id == identity.provider_instance_id
+                })
+                .map(super::gap_backfill::point_keys_for_group)
+        })
+        .unwrap_or_default();
+    let (gap_plan, jobs) = match state.ingest_queue.postgres_pool().await {
+        Ok(Some(pool)) => match super::gap_backfill::plan_explicit_windows(
+            &pool,
+            &identity.tenant_id,
+            &body.canonical_site,
+            &identity.provider_instance_id,
+            &identity.device_id,
+            &identity.model_revision,
+            &point_keys,
+            &window_pairs,
+            body.force,
+            now,
+        )
+        .await
+        {
+            Ok((plan, jobs)) => (Some(plan), jobs),
+            Err(err) => return queue_err(&err, &request_id),
+        },
+        Ok(None) => {
+            let mut jobs = Vec::new();
+            for (start, end) in &window_pairs {
+                jobs.push(NewJob {
+                    tenant_id: identity.tenant_id.clone(),
+                    canonical_site: body.canonical_site.clone(),
+                    provider_instance_id: identity.provider_instance_id.clone(),
+                    device_id: identity.device_id.clone(),
+                    model_revision: identity.model_revision.clone(),
+                    logical_window_start: *start,
+                    logical_window_end: *end,
+                    shard: String::new(),
+                    not_before: now,
+                    estimated_cost: 1,
+                    requested_points_digest: None,
+                });
+            }
+            (None, jobs)
+        }
+        Err(err) => return queue_err(&err, &request_id),
+    };
+    if jobs.is_empty() && gap_plan.is_none() {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_job",
+            "gap planner produced no jobs",
+            &request_id,
+            false,
+        );
+    }
+    if jobs.is_empty() {
+        return (
+            StatusCode::ACCEPTED,
+            Json(json!({
+                "ok": true,
+                "request_id": request_id,
+                "scope": scope_json(&ctx),
+                "idempotency_key": body.idempotency_key,
+                "jobs": [],
+                "gap_plan": gap_plan.as_ref().map(gap_plan_json),
+            })),
+        )
+            .into_response();
     }
     let claim = match backfill_claim(&user.sub, &body.idempotency_key, &jobs) {
         Ok(claim) => claim,
         Err(err) => return queue_err(&err, &request_id),
     };
-    match state.ingest_queue.backfill(jobs, Utc::now(), &claim).await {
+    match state.ingest_queue.backfill(jobs, now, &claim).await {
         Ok(created)
             if created
                 .iter()
@@ -670,6 +749,7 @@ pub async fn backfill(
                     "scope": scope_json(&ctx),
                     "idempotency_key": body.idempotency_key,
                     "jobs": created,
+                    "gap_plan": gap_plan.as_ref().map(gap_plan_json),
                 })),
             )
                 .into_response()
@@ -846,23 +926,70 @@ pub async fn backfill_site(
         );
     }
     let now = Utc::now();
-    let mut jobs = Vec::with_capacity(job_count);
-    for device in &devices {
-        for (start, end) in &windows {
-            jobs.push(NewJob {
-                tenant_id: tenant_id.clone(),
-                canonical_site: body.canonical_site.clone(),
-                provider_instance_id: device.provider_instance_id.clone(),
-                device_id: device.equipment_id.clone(),
-                model_revision: device.revision_id.clone(),
-                logical_window_start: *start,
-                logical_window_end: *end,
-                shard: String::new(),
-                not_before: now,
-                estimated_cost: device.estimated_cost,
-                requested_points_digest: None,
-            });
+    let mut jobs = Vec::new();
+    let mut gap_plans = Vec::new();
+    if let Ok(Some(pool)) = state.ingest_queue.postgres_pool().await {
+        for device in &devices {
+            let Some(group) = plan.groups.iter().find(|group| {
+                group.equipment_id == device.equipment_id
+                    && group.provider_instance_id == device.provider_instance_id
+            }) else {
+                continue;
+            };
+            match super::gap_backfill::plan_device_gap_backfill(
+                &pool,
+                &tenant_id,
+                &body.canonical_site,
+                group,
+                &device.revision_id,
+                body.start,
+                body.end,
+                body.force,
+                now,
+            )
+            .await
+            {
+                Ok((plan, device_jobs)) => {
+                    gap_plans.push(plan);
+                    jobs.extend(device_jobs);
+                }
+                Err(err) => return queue_err(&err, &request_id),
+            }
         }
+    } else {
+        for device in &devices {
+            for (start, end) in &windows {
+                jobs.push(NewJob {
+                    tenant_id: tenant_id.clone(),
+                    canonical_site: body.canonical_site.clone(),
+                    provider_instance_id: device.provider_instance_id.clone(),
+                    device_id: device.equipment_id.clone(),
+                    model_revision: device.revision_id.clone(),
+                    logical_window_start: *start,
+                    logical_window_end: *end,
+                    shard: String::new(),
+                    not_before: now,
+                    estimated_cost: device.estimated_cost,
+                    requested_points_digest: None,
+                });
+            }
+        }
+    }
+    if jobs.is_empty() {
+        return (
+            StatusCode::ACCEPTED,
+            Json(json!({
+                "ok": true,
+                "request_id": request_id,
+                "scope": scope_json(&ctx),
+                "idempotency_key": body.idempotency_key,
+                "groups": devices.len(),
+                "windows": windows.len(),
+                "jobs": [],
+                "gap_plans": gap_plans.iter().map(gap_plan_json).collect::<Vec<_>>(),
+            })),
+        )
+            .into_response();
     }
     let claim = IdempotencyClaim {
         actor: user.sub.clone(),
@@ -898,6 +1025,8 @@ pub async fn backfill_site(
                     "groups": devices.len(),
                     "windows": windows.len(),
                     "jobs": created.len(),
+                    "gap_plans": gap_plans.iter().map(gap_plan_json).collect::<Vec<_>>(),
+                    "created_jobs": created,
                 })),
             )
                 .into_response()
@@ -912,6 +1041,113 @@ pub async fn backfill_site(
         Err(QueueError::Invalid(msg)) => json_error(
             StatusCode::BAD_REQUEST,
             "invalid_job",
+            &msg,
+            &request_id,
+            false,
+        ),
+        Err(err) => queue_err(&err, &request_id),
+    }
+}
+
+pub async fn cancel_jobs(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Json(body): Json<CancelBody>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    if viewer_cannot_mutate(user.role) {
+        return json_error(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "operator role required",
+            &request_id,
+            false,
+        );
+    }
+    if !valid_idempotency(&body.idempotency_key) {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_idempotency_key",
+            "idempotency_key must be 8 to 128 visible characters",
+            &request_id,
+            false,
+        );
+    }
+    let ctx = tenant_ctx(&state, &user).await;
+    let tenant_id = match cancel_tenant(&ctx, body.tenant_id.as_deref()) {
+        Ok(tenant_id) => tenant_id,
+        Err(IdentityError::TenantRequired) => {
+            return json_error(
+                StatusCode::BAD_REQUEST,
+                "tenant_required",
+                "hub admin must name the tenant",
+                &request_id,
+                false,
+            )
+        }
+        Err(IdentityError::Mismatch) => {
+            return json_error(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "site not found",
+                &request_id,
+                false,
+            )
+        }
+        Err(IdentityError::PlanMissing) => {
+            return json_error(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "site not found",
+                &request_id,
+                false,
+            )
+        }
+    };
+    if let Some(site) = body.canonical_site.as_deref() {
+        if !ctx.allow_building(site) {
+            return json_error(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "site not found",
+                &request_id,
+                false,
+            );
+        }
+    }
+    let filter = CancelFilter {
+        tenant_id: tenant_id.clone(),
+        canonical_site: body.canonical_site.clone(),
+        provider_instance_id: body.provider_instance_id.clone(),
+        device_id: body.device_id.clone(),
+        window_start: body.window_start,
+        window_end: body.window_end,
+    };
+    let claim = IdempotencyClaim {
+        actor: user.sub.clone(),
+        tenant_id: tenant_id.clone(),
+        client_key: body.idempotency_key.clone(),
+        object_id: cancel_object_id(&filter),
+        payload_hash: cancel_payload_hash(&filter),
+    };
+    match state
+        .ingest_queue
+        .cancel_jobs(filter, Utc::now(), &claim)
+        .await
+    {
+        Ok(outcome) => Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "idempotency_key": body.idempotency_key,
+            "cancelled": outcome.cancelled,
+            "job_ids": outcome.job_ids,
+        }))
+        .into_response(),
+        Err(QueueError::Conflict(msg)) => json_error(
+            StatusCode::CONFLICT,
+            "idempotency_conflict",
             &msg,
             &request_id,
             false,
@@ -1102,6 +1338,31 @@ fn queue_err(err: &super::model::QueueError, request_id: &str) -> Response {
 fn valid_idempotency(value: &str) -> bool {
     let n = value.chars().count();
     (8..=128).contains(&n) && value.chars().all(|ch| !ch.is_control() && ch != ' ')
+}
+
+fn cancel_tenant(ctx: &TenantContext, requested: Option<&str>) -> Result<String, IdentityError> {
+    if ctx.multi_tenant && !ctx.hub_admin {
+        let tenant = ctx.tenant_id.clone().ok_or(IdentityError::Mismatch)?;
+        if requested.is_some_and(|want| want != tenant) {
+            return Err(IdentityError::Mismatch);
+        }
+        return Ok(tenant);
+    }
+    if let Some(want) = requested {
+        return Ok(want.to_string());
+    }
+    ctx.tenant_id.clone().ok_or(IdentityError::TenantRequired)
+}
+
+fn gap_plan_json(plan: &super::gap_planner::GapPlanResult) -> Value {
+    json!({
+        "expected_start": plan.expected_start,
+        "last_stored_ts": plan.last_stored_ts,
+        "planned": plan.planned,
+        "skipped_stored": plan.skipped_stored,
+        "not_expected": plan.not_expected,
+        "counts": plan.counts,
+    })
 }
 
 pub fn viewer_cannot_mutate(role: Role) -> bool {
