@@ -136,7 +136,7 @@
     },
     {
       "equipment_id": "AHU_CASE_FC1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
       "sql_si_fault_seconds": null,
@@ -145,7 +145,7 @@
     },
     {
       "equipment_id": "AHU_CASE_FC1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
       "sql_si_fault_seconds": null,
@@ -154,7 +154,7 @@
     },
     {
       "equipment_id": "AHU_CASE_FC1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
       "sql_si_fault_seconds": null,
@@ -163,7 +163,7 @@
     },
     {
       "equipment_id": "AHU_CASE_FC1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
       "sql_si_fault_seconds": null,
@@ -172,7 +172,7 @@
     },
     {
       "equipment_id": "AHU_CASE_FC1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
       "sql_si_fault_seconds": null,
@@ -328,7 +328,7 @@
   "pandas_fdd_daily": [
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -339,7 +339,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -350,7 +350,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -361,7 +361,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -372,7 +372,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -383,7 +383,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -482,7 +482,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -493,7 +493,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -504,7 +504,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -515,7 +515,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -526,7 +526,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -537,7 +537,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -680,7 +680,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -691,7 +691,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -702,7 +702,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -713,7 +713,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -724,7 +724,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -735,7 +735,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1054,7 +1054,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1065,7 +1065,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1076,7 +1076,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1087,7 +1087,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1098,7 +1098,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1109,7 +1109,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1153,7 +1153,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1164,7 +1164,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1175,7 +1175,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1186,7 +1186,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1197,7 +1197,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1208,7 +1208,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1514,7 +1514,7 @@
   "pandas_si_daily": [
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1525,7 +1525,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1536,7 +1536,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1547,7 +1547,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1558,7 +1558,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1569,7 +1569,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1591,7 +1591,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1602,7 +1602,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1613,7 +1613,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1624,7 +1624,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1635,7 +1635,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1646,7 +1646,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1668,7 +1668,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1679,7 +1679,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1690,7 +1690,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1701,7 +1701,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1712,7 +1712,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1723,7 +1723,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1745,7 +1745,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1756,7 +1756,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1767,7 +1767,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1778,7 +1778,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1789,7 +1789,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1800,7 +1800,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1822,7 +1822,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1833,7 +1833,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1844,7 +1844,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1855,7 +1855,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1866,7 +1866,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1877,7 +1877,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1904,7 +1904,7 @@
   "sql_fdd_daily": [
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1915,7 +1915,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1926,7 +1926,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1937,7 +1937,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1948,7 +1948,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1959,7 +1959,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2058,7 +2058,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2069,7 +2069,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2080,7 +2080,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2091,7 +2091,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2102,7 +2102,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2113,7 +2113,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2256,9 +2256,9 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 28500.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "FC1",
@@ -2267,9 +2267,9 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 28500.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "FC1",
@@ -2278,9 +2278,9 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 28500.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "FC1",
@@ -2289,9 +2289,9 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 28500.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "FC1",
@@ -2300,9 +2300,9 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 28500.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "FC1",
@@ -2311,7 +2311,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2388,7 +2388,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2399,7 +2399,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2410,7 +2410,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2421,7 +2421,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2432,7 +2432,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2443,7 +2443,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2696,7 +2696,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2707,7 +2707,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2718,7 +2718,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2729,7 +2729,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2740,7 +2740,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2751,7 +2751,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2795,7 +2795,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2806,7 +2806,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2817,7 +2817,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2828,7 +2828,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2839,7 +2839,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2850,7 +2850,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2927,7 +2927,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2938,7 +2938,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2949,7 +2949,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2960,7 +2960,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2971,7 +2971,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2982,7 +2982,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "computed",

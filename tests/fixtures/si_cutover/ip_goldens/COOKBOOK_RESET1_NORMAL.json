@@ -10,8 +10,8 @@
   "p2_si_pairs": [
     {
       "equipment_id": "equip:test-ahu",
-      "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
+      "pandas_si_fault_seconds": null,
+      "pandas_si_status": "missing_si_cell",
       "rule_id": "RESET-1",
       "sql_si_fault_seconds": null,
       "sql_si_status": "pending_W4",
@@ -930,17 +930,6 @@
     "WX-1"
   ],
   "pandas_si_daily": [
-    {
-      "building_id": "COOKBOOK_RESET1_NORMAL",
-      "covered_seconds": 120.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "RESET-1",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
     {
       "building_id": "COOKBOOK_RESET1_NORMAL",
       "covered_seconds": 120.0,

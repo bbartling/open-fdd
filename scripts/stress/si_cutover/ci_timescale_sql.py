@@ -21,6 +21,7 @@ from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
     frame_column_to_sql_role,
     registry_role_column,
 )
+from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_registry  # noqa: E402
 
 PENDING_W4 = "pending_W4"
 SI_SQL_PACK_AVAILABLE = False  # W4 ships metric SQL pack; until then P2 sql_si is pending.
@@ -84,45 +85,6 @@ def render_rule_sql(
 
     rule_id = str(rule["rule_id"])
     return render(rule_id, poll_seconds=poll_seconds, overrides=overrides, dialect="postgres")
-
-
-def _catalog_param_keys(rule_id: str) -> set[str]:
-    import json
-
-    rules = json.loads((REPO / "sql" / "fdd" / "tuning_catalog.json").read_text(encoding="utf-8"))[
-        "rules"
-    ]
-    row = next(r for r in rules if str(r.get("rule_id")) == rule_id)
-    return set((row.get("parameters") or {}).keys())
-
-
-def catalog_overrides_from_registry(
-    rule: dict[str, Any], params: dict[str, float]
-) -> dict[str, float]:
-    """Map registry.yaml parameter defaults to tuning_catalog override keys."""
-    keys = _catalog_param_keys(str(rule["rule_id"]))
-    out: dict[str, float] = {}
-    for name, val in params.items():
-        if name in keys:
-            out[name] = float(val)
-        elif name == "confirm_seconds" and "confirm_min" in keys:
-            out["confirm_min"] = float(val) / 60.0
-    return out
-
-
-def pandas_aligned_sql_overrides(
-    rule: dict[str, Any],
-    ip_frame,
-    params: dict[str, float],
-    *,
-    poll_seconds: float,
-) -> dict[str, float]:
-    """Align SQL MODE_DELAY with pandas registry startup_delay_min (minutes)."""
-    rule_id = str(rule["rule_id"])
-    overrides = catalog_overrides_from_registry(rule, params)
-    if "mode_delay_min" in _catalog_param_keys(rule_id):
-        overrides["mode_delay_min"] = float(params.get("startup_delay_min", 0.0))
-    return overrides
 
 
 def rewrite_fault_series(sql: str, equipment_id: str) -> str | None:
@@ -431,9 +393,7 @@ def run_sql_ip_for_dataset(
             if not rule.get("sql_file"):
                 continue
             params = (params_by_rule or {}).get(rule_id) or {}
-            render_overrides = pandas_aligned_sql_overrides(
-                rule, frame, params, poll_seconds=poll_seconds
-            )
+            render_overrides = catalog_overrides_from_registry(rule, params)
             cur.execute("SAVEPOINT si_cutover_rule")
             daily, err = execute_sql_rule_daily(
                 cur,

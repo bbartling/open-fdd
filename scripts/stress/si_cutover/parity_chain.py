@@ -91,7 +91,10 @@ def build_si_parity_report(
     scope: set[str] | None,
     scope_label: str,
     blocking: bool,
+    excluded: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    from scripts.stress.si_cutover.product_sql_params import MODE_DELAY_DEFAULT_VS_STARTUP
+
     stage_map = {r.stage: r for r in results}
     p0 = stage_map.get("P0")
     p1 = stage_map.get("P1")
@@ -99,23 +102,41 @@ def build_si_parity_report(
     p0_struct = list(p0.structured) if p0 else []
     p1_struct = list(p1.structured) if p1 else []
     p0_counts = {"sql_row_missing": 0, "value_mismatch": 0, "other": 0}
+    p0_reason_counts: dict[str, int] = {}
     for cell in p0_struct:
         kind = str(cell.get("kind") or "other")
         p0_counts[kind] = p0_counts.get(kind, 0) + 1
+        reason = cell.get("mismatch_reason")
+        if reason:
+            rs = str(reason)
+            p0_reason_counts[rs] = p0_reason_counts.get(rs, 0) + 1
     p1_by_rule: dict[str, int] = {}
     for cell in p1_struct:
         rid = str(cell.get("rule_id") or "?")
         p1_by_rule[rid] = p1_by_rule.get(rid, 0) + 1
+    ex = excluded if excluded is not None else collect_excluded_rule_dataset_pairs()
+    ex_summary = excluded_summary_by_reason(ex)
     return {
         "schema": "openfdd-si-parity-report-v1",
         "scope": scope_label,
         "scope_rules": sorted(scope) if scope else ["*"],
         "blocking": blocking,
+        "excluded": {
+            "pair_count": len(ex),
+            "by_reason": ex_summary,
+            "pairs": ex,
+        },
         "stages": {
             "P0": {
                 "comparisons": p0.comparisons if p0 else 0,
                 "mismatch_count": len(p0.errors) if p0 else 0,
                 "by_kind": p0_counts,
+                "value_mismatch_by_reason": p0_reason_counts,
+                "product_findings": {
+                    MODE_DELAY_DEFAULT_VS_STARTUP: p0_reason_counts.get(
+                        MODE_DELAY_DEFAULT_VS_STARTUP, 0
+                    ),
+                },
                 "cells": p0_struct,
             },
             "P1": {
@@ -392,6 +413,48 @@ def min_p2_cells(golden: dict[str, Any]) -> int:
     return len([p for p in golden.get("p2_si_pairs") or [] if p.get("utc_day")])
 
 
+def collect_excluded_rule_dataset_pairs() -> list[dict[str, Any]]:
+    """Rule×dataset pairs skipped by shared eligibility (not in P0/P1 comparison matrix)."""
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+
+    rules = cfl.load_rule_registry()
+    pandas_rules = {str(r["rule_id"]) for r in cfl.pandas_rules(rules)}
+    out: list[dict[str, Any]] = []
+    for spec in cfl.iter_dataset_specs():
+        ip_frame = cfl.prepare_ip_frame(
+            spec.source["frame"],
+            building_id=spec.building_id,
+            equipment_id=spec.equipment_id,
+            equipment_type=spec.equipment_type,
+        )
+        for rule in rules:
+            rule_id = str(rule.get("rule_id") or "")
+            if rule_id not in pandas_rules:
+                continue
+            ok, reason = cfl.rule_pair_eligible(
+                rule, ip_frame, equipment_type=spec.equipment_type
+            )
+            if ok:
+                continue
+            out.append(
+                {
+                    "building_id": spec.building_id,
+                    "rule_id": rule_id,
+                    "equipment_id": spec.equipment_id,
+                    "reason": reason,
+                }
+            )
+    return out
+
+
+def excluded_summary_by_reason(excluded: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in excluded:
+        reason = str(row.get("reason") or "unknown")
+        counts[reason] = counts.get(reason, 0) + 1
+    return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
 def verify_pandas_errors(golden: dict[str, Any]) -> StageResult:
     errors_list = [r for r in golden.get("pandas_fdd_daily") or [] if r.get("pair_status") == "error"]
     building = golden.get("building_id", "?")
@@ -411,6 +474,13 @@ def compare_p0_all_goldens(
     *,
     scope: set[str] | None = None,
 ) -> StageResult:
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+    from scripts.stress.si_cutover.product_sql_params import (
+        MODE_DELAY_DEFAULT_VS_STARTUP,
+        p0_value_mismatch_reason,
+    )
+
+    rules_by_id = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
     errors: list[str] = []
     structured: list[dict[str, Any]] = []
     comparisons = 0
@@ -436,6 +506,7 @@ def compare_p0_all_goldens(
                         "rule_id": key[1],
                         "equipment_id": key[2],
                         "utc_day": key[3],
+                        "blocks_gate": True,
                     }
                 )
                 continue
@@ -447,17 +518,22 @@ def compare_p0_all_goldens(
                     f"sql_ip={srow.get('fault_seconds')}"
                 )
                 errors.append(msg)
-                structured.append(
-                    {
-                        "kind": "value_mismatch",
-                        "building_id": key[0],
-                        "rule_id": key[1],
-                        "equipment_id": key[2],
-                        "utc_day": key[3],
-                        "pandas_ip_seconds": float(prow.get("fault_seconds", 0)),
-                        "sql_ip_seconds": float(srow.get("fault_seconds", 0)),
-                    }
-                )
+                rule = rules_by_id.get(rule_id) or {"rule_id": rule_id}
+                params = cfl.rule_params_from_registry(rule)
+                mismatch_reason = p0_value_mismatch_reason(rule_id, params)
+                cell: dict[str, Any] = {
+                    "kind": "value_mismatch",
+                    "building_id": key[0],
+                    "rule_id": key[1],
+                    "equipment_id": key[2],
+                    "utc_day": key[3],
+                    "pandas_ip_seconds": float(prow.get("fault_seconds", 0)),
+                    "sql_ip_seconds": float(srow.get("fault_seconds", 0)),
+                    "blocks_gate": mismatch_reason != MODE_DELAY_DEFAULT_VS_STARTUP,
+                }
+                if mismatch_reason:
+                    cell["mismatch_reason"] = mismatch_reason
+                structured.append(cell)
         sub_a = compare_p0_analytics_golden(golden)
         if scope is None:
             comparisons += sub_a.comparisons

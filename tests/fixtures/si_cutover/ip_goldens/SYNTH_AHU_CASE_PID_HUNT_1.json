@@ -91,7 +91,7 @@
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "pandas_si_fault_seconds": 3599.9999999999995,
+      "pandas_si_fault_seconds": 3600.0,
       "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": null,
@@ -290,7 +290,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -301,7 +301,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -312,7 +312,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -323,7 +323,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -334,7 +334,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -345,7 +345,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -796,7 +796,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -807,7 +807,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -818,7 +818,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 3600.0,
       "pair_status": "computed",
@@ -829,7 +829,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -840,7 +840,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -851,7 +851,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -895,7 +895,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -906,7 +906,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -917,7 +917,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -928,7 +928,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -939,7 +939,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -950,7 +950,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1256,7 +1256,7 @@
   "pandas_si_daily": [
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1267,7 +1267,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1278,7 +1278,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1289,7 +1289,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1300,7 +1300,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1311,7 +1311,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1333,7 +1333,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1344,7 +1344,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1355,7 +1355,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 3600.0,
       "pair_status": "computed",
@@ -1366,7 +1366,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1377,7 +1377,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1388,7 +1388,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1410,7 +1410,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1421,7 +1421,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1432,7 +1432,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1443,7 +1443,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1454,7 +1454,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1465,7 +1465,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1580,7 +1580,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1591,7 +1591,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1602,7 +1602,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1613,7 +1613,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1624,7 +1624,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1635,7 +1635,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1844,7 +1844,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1855,7 +1855,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1866,7 +1866,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1877,7 +1877,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1888,7 +1888,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1899,7 +1899,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2152,7 +2152,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2163,7 +2163,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2174,7 +2174,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 3600.0,
       "pair_status": "computed",
@@ -2185,7 +2185,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2196,7 +2196,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2207,7 +2207,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2251,7 +2251,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2262,7 +2262,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2273,7 +2273,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2284,7 +2284,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2295,7 +2295,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2306,7 +2306,7 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",

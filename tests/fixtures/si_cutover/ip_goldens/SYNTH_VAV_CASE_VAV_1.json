@@ -73,7 +73,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": null,
@@ -82,7 +82,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": null,
@@ -91,7 +91,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": null,
@@ -100,7 +100,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": null,
@@ -109,7 +109,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28799.999999999996,
+      "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": null,
@@ -325,7 +325,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24899.999999999996,
+      "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
       "sql_si_fault_seconds": null,
@@ -334,7 +334,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24899.999999999996,
+      "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
       "sql_si_fault_seconds": null,
@@ -343,7 +343,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24899.999999999996,
+      "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
       "sql_si_fault_seconds": null,
@@ -352,7 +352,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24899.999999999996,
+      "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
       "sql_si_fault_seconds": null,
@@ -361,7 +361,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24899.999999999996,
+      "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
       "sql_si_fault_seconds": null,
@@ -963,7 +963,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 4500.0,
       "pair_status": "computed",
@@ -974,7 +974,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 4500.0,
       "pair_status": "computed",
@@ -985,7 +985,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 3900.0,
       "pair_status": "computed",
@@ -996,7 +996,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 4500.0,
       "pair_status": "computed",
@@ -1007,7 +1007,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 4500.0,
       "pair_status": "computed",
@@ -1018,7 +1018,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1040,7 +1040,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1051,7 +1051,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1062,7 +1062,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1073,7 +1073,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1084,7 +1084,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1095,7 +1095,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1117,7 +1117,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1128,7 +1128,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1139,7 +1139,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1150,7 +1150,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1161,7 +1161,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1172,7 +1172,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1194,7 +1194,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1205,7 +1205,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1216,7 +1216,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 600.0,
       "pair_status": "computed",
@@ -1227,7 +1227,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1238,7 +1238,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1249,7 +1249,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1271,7 +1271,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1282,7 +1282,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1293,7 +1293,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1304,7 +1304,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1315,7 +1315,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1326,7 +1326,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1447,7 +1447,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -1458,7 +1458,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -1469,7 +1469,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -1480,7 +1480,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -1491,7 +1491,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -1502,7 +1502,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1643,7 +1643,7 @@
   "pandas_si_daily": [
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1654,7 +1654,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1665,7 +1665,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1676,7 +1676,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1687,7 +1687,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1698,7 +1698,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1720,7 +1720,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1731,7 +1731,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1742,7 +1742,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1753,7 +1753,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1764,7 +1764,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 28800.0,
       "pair_status": "computed",
@@ -1775,7 +1775,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1797,7 +1797,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1808,7 +1808,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1819,7 +1819,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1830,7 +1830,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1841,7 +1841,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1852,7 +1852,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1874,7 +1874,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1885,7 +1885,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1896,7 +1896,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1907,7 +1907,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1918,7 +1918,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1929,7 +1929,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1951,7 +1951,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1962,7 +1962,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1973,7 +1973,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1984,7 +1984,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -1995,7 +1995,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2006,7 +2006,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2028,7 +2028,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -2039,7 +2039,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -2050,7 +2050,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -2061,7 +2061,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -2072,7 +2072,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -2083,7 +2083,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2682,7 +2682,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 14400.0,
       "pair_status": "computed",
@@ -2693,7 +2693,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 14400.0,
       "pair_status": "computed",
@@ -2704,7 +2704,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 13800.0,
       "pair_status": "computed",
@@ -2715,7 +2715,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 14400.0,
       "pair_status": "computed",
@@ -2726,7 +2726,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 14400.0,
       "pair_status": "computed",
@@ -2737,7 +2737,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 14400.0,
       "pair_status": "computed",
@@ -2759,7 +2759,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2770,7 +2770,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2781,7 +2781,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2792,7 +2792,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2803,7 +2803,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2814,7 +2814,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2836,7 +2836,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2847,7 +2847,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2858,7 +2858,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2869,7 +2869,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2880,7 +2880,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2891,7 +2891,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2913,7 +2913,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2924,7 +2924,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2935,7 +2935,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 600.0,
       "pair_status": "computed",
@@ -2946,7 +2946,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2957,7 +2957,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2968,7 +2968,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -2990,7 +2990,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -3001,7 +3001,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -3012,7 +3012,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -3023,7 +3023,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -3034,7 +3034,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -3045,7 +3045,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
@@ -3166,7 +3166,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -3177,7 +3177,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -3188,7 +3188,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -3199,7 +3199,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -3210,7 +3210,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 24900.0,
       "pair_status": "computed",
@@ -3221,7 +3221,7 @@
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
+      "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "computed",
