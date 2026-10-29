@@ -232,11 +232,11 @@ pub fn migrate_session_config_files(site_id: &str) -> Result<i64, String> {
     });
     let out = put_session_config(&body);
     if out.get("ok") != Some(&json!(true)) {
-        return Err(out
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("session config save failed")
-            .to_string());
+        let msg = match out.get("error").and_then(Value::as_str) {
+            Some(s) => s.to_string(),
+            None => "session config save failed".to_string(),
+        };
+        return Err(msg);
     }
     Ok(touched)
 }
