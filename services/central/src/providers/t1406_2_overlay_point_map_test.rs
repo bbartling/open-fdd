@@ -10,6 +10,24 @@ use super::{apply_to_stores, InventoryDiagnostics, InventoryPoint, InventorySnap
 use crate::providers::committed_model::refresh_point_map_overlay;
 
 const SOURCE: &str = "nf:t1406-2";
+/// Serialize with `t1406_schema_upgrade_test` (drops/recreates `authorized_series`).
+const T1406_POSTGRES_LOCK: i64 = 14_061_406;
+
+async fn lock_t1406_postgres(pool: &sqlx::PgPool) {
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(T1406_POSTGRES_LOCK)
+        .execute(pool)
+        .await
+        .expect("t1406 postgres test lock");
+}
+
+async fn unlock_t1406_postgres(pool: &sqlx::PgPool) {
+    sqlx::query("SELECT pg_advisory_unlock($1)")
+        .bind(T1406_POSTGRES_LOCK)
+        .execute(pool)
+        .await
+        .expect("t1406 postgres test unlock");
+}
 
 async fn pool() -> Option<sqlx::PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
@@ -65,6 +83,7 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     let Some(pool) = pool().await else {
         return;
     };
+    lock_t1406_postgres(&pool).await;
     let site = "T1406_POINT_MAP";
     apply_schema(&pool).await;
     for sql in [
@@ -184,6 +203,7 @@ async fn t1406_2_overlay_metadata_survives_inventory_resync() {
     ] {
         sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
     }
+    unlock_t1406_postgres(&pool).await;
 }
 
 #[tokio::test]
@@ -191,6 +211,7 @@ async fn t1406_2_overlay_refresh_without_cadence_preserves_cov_history_mode() {
     let Some(pool) = pool().await else {
         return;
     };
+    lock_t1406_postgres(&pool).await;
     let site = "T1406_COV_REFRESH";
     apply_schema(&pool).await;
     for sql in [
@@ -252,6 +273,7 @@ async fn t1406_2_overlay_refresh_without_cadence_preserves_cov_history_mode() {
     ] {
         sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
     }
+    unlock_t1406_postgres(&pool).await;
 }
 
 #[tokio::test]
@@ -259,6 +281,7 @@ async fn t1406_2_patch_binding_clears_role_map_unit() {
     let Some(pool) = pool().await else {
         return;
     };
+    lock_t1406_postgres(&pool).await;
     let site = "T1406_UNIT_CLEAR";
     apply_schema(&pool).await;
     for sql in [
@@ -363,4 +386,5 @@ async fn t1406_2_patch_binding_clears_role_map_unit() {
     ] {
         sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
     }
+    unlock_t1406_postgres(&pool).await;
 }

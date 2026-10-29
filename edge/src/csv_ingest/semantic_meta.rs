@@ -461,6 +461,11 @@ pub fn building_revision_path(building_root: &Path) -> PathBuf {
     building_root.join(SEMANTIC_META_REVISION_FILE)
 }
 
+/// Whether committed native `semantic_meta.json` exists for the building root.
+pub fn semantic_model_present(building_root: &Path) -> bool {
+    matches!(load_persisted(building_root), Ok(Some(_)))
+}
+
 /// Load tip meta and verify companion head hash (HR-07 recovery).
 pub fn load_persisted(building_root: &Path) -> Result<Option<SemanticMetaV1>, String> {
     let _lock = SiteLock::acquire(building_root)?;
@@ -802,6 +807,14 @@ mod tests {
         assert_eq!(loaded.points[0].column, "SAT");
         assert_eq!(loaded.revision.as_deref(), Some(rev.revision.as_str()));
         assert!(revision_object_path(dir.path(), &rev.revision).is_file());
+    }
+
+    #[test]
+    fn semantic_model_present_tracks_committed_meta() {
+        let dir = tempdir().unwrap();
+        assert!(!semantic_model_present(dir.path()));
+        persist_atomic(dir.path(), sample_meta(), None).unwrap();
+        assert!(semantic_model_present(dir.path()));
     }
 
     #[test]

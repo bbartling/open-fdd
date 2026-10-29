@@ -39,6 +39,21 @@ pub struct HourlyPolicy {
     pub window_secs: i64,
 }
 
+/// Inclusive bounds for ingest logical window length (shared with ASAP catch-up).
+pub const INGEST_WINDOW_SECS_MIN: i64 = 60;
+pub const INGEST_WINDOW_SECS_MAX: i64 = 3600;
+
+/// Reject out-of-range ingest window configuration (no silent clamp).
+pub fn validate_ingest_window_secs(window_secs: i64) -> Result<i64, String> {
+    if (INGEST_WINDOW_SECS_MIN..=INGEST_WINDOW_SECS_MAX).contains(&window_secs) {
+        Ok(window_secs)
+    } else {
+        Err(format!(
+            "ingest window_secs must be {INGEST_WINDOW_SECS_MIN}..={INGEST_WINDOW_SECS_MAX}, got {window_secs}"
+        ))
+    }
+}
+
 impl Default for HourlyPolicy {
     fn default() -> Self {
         Self {

@@ -16,7 +16,7 @@ SPARQL. Update when routes land. Tip authority: Wave S2 ADR
 | SPA Mapping TTL | `GET /api/csv/import/package/mapping/ttl?building_id=` | JWT + building scope | **Shipped** | Prefix `urn:openfdd:ns#`; dual TS/Rust exporters; skips `parent_ahu_source=inferred` |
 | SPA Mapping export | browser download of same JSON/TTL | JWT | **Shipped** | Building membership checked; hub-root storage (see [tenant storage honesty](tenant-storage-honesty.md)) |
 | Central package RDF dataset | `GET /api/csv/import/package/mapping/haystack-dataset?building_id=` | JWT + building scope | **Shipped (C4 H8)** | Derived from committed `semantic_meta` + pinned defs (`ofdd_haystack_central_dataset_v1`); not edge prototype graph |
-| Central SPARQL | `POST /api/model/sparql` | JWT + building scope | **Shipped (C4 H9 templates)** | Server `query_id` templates → `ofdd_haystack_typed_bindings_v1`; free-form `query` rejected; consumers (H10+) still required to close #1002 |
+| Central SPARQL | `POST /api/model/sparql` | JWT + building scope | **Shipped (C4 H9 templates)** | Server `query_id` templates → `ofdd_haystack_typed_bindings_v1`; **`404`** when no committed `semantic_meta.json` (`present: false`); **`400`** when `equipment_id` is absent from semantic_meta or inventory is incomplete; overlay Turtle is scoped to `equipment_id` when set |
 | Central SPARQL consumers | `POST /api/model/sparql/consumers` | JWT + building scope | **Shipped (C4 H10/H11)** | FDD role_map + history approved provider/series + ECM plan; no arbitrary URL fetch |
 | Central SPARQL catalog | `GET /api/model/sparql/predefined` | JWT | **Shipped (C4 H9)** | Lists template ids / SELECT bodies over package RDF |
 | Legacy edge | edge model SPARQL (+ predefined) | JWT (edge) | **Legacy / edge path** | Prefix `https://open-fdd.dev/model#`; Oxigraph; not the package TTL dataset |
@@ -24,6 +24,7 @@ SPARQL. Update when routes land. Tip authority: Wave S2 ADR
 | Graph store (process) | in-process Oxigraph on edge | N/A | **Legacy** | Global `data/model/*` — not MT ACL ([DM-05 honesty](tenant-storage-honesty.md)) |
 | Dataset registry | `GET/DELETE /api/datasets` | JWT + building scope | **Shipped** (3.5.31) | Foreign `building_id` → 403 |
 | Session / roles | `/api/fdd/session-config` | JWT + building scope | **Shipped** | Wave O ACL |
+| FDD equipment inventory | `GET /api/fdd/equipment?building_id=` | JWT + building scope | **Shipped** | Timescale-stamped inventory; with `building_id`, adds `semantic_model_present` (committed native `semantic_meta.json`); omit `building_id` → field omitted |
 | Model/ECM stress gate | `36_model_ecm_qualification.sh` | stress profile | **Wired (CI/smoke); FQ on S4** | See gate script + Wave S4 MEGA |
 | Strict Haystack TTL | `GET /api/csv/import/package/mapping/haystack.ttl?building_id=` | JWT + building scope | **Shipped (C3)** | Profile [`haystack-rdf-profile.md`](haystack-rdf-profile.md); requires `semantic_meta.json` |
 | Strict Haystack projection JSON | `GET /api/csv/import/package/mapping/haystack-projection?building_id=` | JWT + building scope | **Shipped (C3)** | Turtle + omission report (`ofdd_haystack_projection_report_v1`) |

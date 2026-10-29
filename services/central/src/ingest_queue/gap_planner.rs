@@ -22,6 +22,8 @@ pub struct GapPlanCounts {
     pub planned: u32,
     pub skipped_stored: u32,
     pub not_expected: u32,
+    /// Hourly windows missing before range merge.
+    pub missing_hours: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -110,6 +112,8 @@ pub fn plan_gap_windows(input: GapPlanInput<'_>) -> Result<GapPlanResult, String
         cursor = next;
     }
 
+    let missing_hour_count =
+        u32::try_from(missing_hours.len()).map_err(|_| "missing hour count overflow")?;
     let planned = merge_missing_hours(missing_hours, span_cap)?;
     let counts = GapPlanCounts {
         planned: u32::try_from(planned.len()).map_err(|_| "planned window count overflow")?,
@@ -117,6 +121,7 @@ pub fn plan_gap_windows(input: GapPlanInput<'_>) -> Result<GapPlanResult, String
             .map_err(|_| "skipped_stored count overflow")?,
         not_expected: u32::try_from(not_expected.len())
             .map_err(|_| "not_expected count overflow")?,
+        missing_hours: missing_hour_count,
     };
     Ok(GapPlanResult {
         planned,

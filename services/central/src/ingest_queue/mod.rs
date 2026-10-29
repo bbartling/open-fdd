@@ -1,6 +1,9 @@
 //! Shared Postgres ingest queue, leases, and scoped job HTTP.
 
+mod asap_mode;
 mod binding_state;
+mod catchup_registry;
+mod catchup_view;
 mod client;
 pub(crate) mod coverage;
 pub(crate) mod cursor;
@@ -27,6 +30,8 @@ mod replay_horizon_acceptance;
 mod scope_acceptance;
 #[cfg(test)]
 mod site_backfill_acceptance;
+#[cfg(test)]
+mod t1423_asap_acceptance;
 #[cfg(test)]
 mod t1423_gap_planner_acceptance;
 #[cfg(test)]
