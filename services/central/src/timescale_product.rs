@@ -3060,10 +3060,13 @@ fn rule_file(
 
 fn metric_unit_for_column(column: &str) -> (&'static str, &'static str) {
     if let Some(quantity) = crate::si_api_response::metric_column_quantity(column) {
-        if let Ok(contract) = fdd_core::units_contract::MetricUnitsContract::load_embedded() {
-            if let Ok(unit) = contract.canonical_unit(quantity) {
-                return (quantity, unit);
-            }
+        let unit = match quantity {
+            "absolute_temperature" => "degC",
+            "percent" => "percent_0_100",
+            _ => "",
+        };
+        if !unit.is_empty() {
+            return (quantity, unit);
         }
     }
     match column {
