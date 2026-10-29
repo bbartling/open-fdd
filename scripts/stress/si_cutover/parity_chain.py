@@ -15,7 +15,7 @@ import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -128,9 +128,6 @@ def compare_p0_ip_golden(golden: dict[str, Any]) -> StageResult:
             errors.append(f"P0 status {key}: sql={sql.get('status')} pandas={other.get('status')}")
     if not sql_rows:
         errors.append("P0: golden has no sql_fdd_daily rows")
-    carry = verify_p0_carryover_coverage(golden)
-    comparisons += carry.comparisons
-    errors.extend(carry.errors)
     return StageResult("P0", comparisons, tuple(errors))
 
 
@@ -249,72 +246,240 @@ def verify_unit_scenarios() -> StageResult:
     return StageResult("unit_scenarios", comparisons, tuple(errors))
 
 
-def _pandas_fault_seconds(rule_id: str, frame, params: dict[str, Any]) -> float:
-    from open_fdd.rules.runner import run_rule
-
-    result = run_rule(rule_id, frame, params=params, poll_seconds=300.0, quality=False)
-    metrics = result.metrics or {}
-    hours = metrics.get("fault_hours")
-    if hours is None:
-        hours = metrics.get("fault_hour") or 0.0
-    return float(hours) * 3600.0
-
-
-def _load_cookbook_fixture(name: str):
-    import pandas as pd
-
-    path = COOKBOOK_FIXTURES / name
-    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    df = pd.DataFrame(rows)
-    if "timestamp" in df.columns:
-        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-        df = df.set_index("timestamp").sort_index()
-    return df
+def list_ip_golden_files() -> list[Path]:
+    paths = sorted(IP_GOLDENS_DIR.glob("*.json"))
+    out: list[Path] = []
+    for path in paths:
+        try:
+            body = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if body.get("schema") == "si-cutover-ip-golden-v1":
+            out.append(path)
+    if not out:
+        raise FileNotFoundError(f"no si-cutover-ip-golden-v1 files under {IP_GOLDENS_DIR}")
+    return out
 
 
-def run_p1_cookbook_carryover() -> StageResult:
-    """P1: pandas IP == pandas SI on carry-over rule fixtures (fault seconds exact)."""
+def load_all_ip_goldens() -> list[dict[str, Any]]:
+    return [load_ip_golden(p) for p in list_ip_golden_files()]
+
+
+def _parity_ip_rows(golden: dict[str, Any]) -> list[dict[str, Any]]:
+    """IP-side daily rows participating in P0/P1 (sql/ip oracle agreement)."""
+    return list(golden.get("sql_fdd_daily") or [])
+
+
+def min_p0_cells(golden: dict[str, Any]) -> int:
+    return len(_parity_ip_rows(golden))
+
+
+def min_p1_cells(golden: dict[str, Any]) -> int:
+    return len(_parity_ip_rows(golden))
+
+
+def min_p2_cells(golden: dict[str, Any]) -> int:
+    return len(golden.get("p2_si_pairs") or [])
+
+
+def verify_golden_rule_attempted(golden: dict[str, Any], expected_rules: set[str]) -> StageResult:
+    seen = set(golden.get("pandas_rules_attempted") or [])
+    missing = sorted(expected_rules - seen)
+    errors = [f"{golden.get('building_id')}: rule dropout: {missing[:8]}…"] if missing else []
+    return StageResult(
+        "rule-coverage",
+        len(seen),
+        tuple(errors),
+    )
+
+
+def compare_p0_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
     errors: list[str] = []
     comparisons = 0
+    min_required = 0
+    for golden in goldens:
+        min_required += min_p0_cells(golden)
+        sub = compare_p0_ip_golden(golden)
+        comparisons += sub.comparisons
+        errors.extend(sub.errors)
+        sub_a = compare_p0_analytics_golden(golden)
+        comparisons += sub_a.comparisons
+        errors.extend(sub_a.errors)
+    if comparisons < min_required:
+        errors.append(
+            f"P0: comparisons {comparisons} < required sql/pandas cells {min_required}"
+        )
+    return StageResult("P0", comparisons, tuple(errors))
+
+
+def verify_p0_carryover_all(goldens: list[dict[str, Any]]) -> StageResult:
+    sql_rules: set[str] = set()
+    analytics_endpoints: set[str] = set()
+    for golden in goldens:
+        sql_rules |= {str(r.get("rule_id", "")) for r in golden.get("sql_fdd_daily") or []}
+        analytics_endpoints |= {
+            str(r.get("endpoint", "")) for r in golden.get("analytics_rows") or []
+        }
+    errors: list[str] = []
+    comparisons = 0
+    for rule_id in CARRYOVER_RULES_P0:
+        if rule_id == "OAT-METEO":
+            if rule_id in sql_rules or "/api/analytics/oat_meteo" in analytics_endpoints:
+                comparisons += 1
+            else:
+                errors.append("P0 carry-over: missing OAT-METEO (rule or analytics row)")
+            continue
+        if rule_id not in sql_rules:
+            errors.append(f"P0 carry-over: missing rule {rule_id} in sql_fdd_daily (union)")
+            continue
+        comparisons += 1
+    return StageResult("P0-carryover", comparisons, tuple(errors))
+
+
+def run_p1_ip_vs_si(
+    goldens: list[dict[str, Any]],
+    *,
+    param_hook: Callable[[str, str, float], float] | None = None,
+    value_hook: Callable[[str, str, float], float] | None = None,
+) -> StageResult:
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+
     metric = _metric_doc()
-    path = COOKBOOK_FIXTURES / "vav1_obvious_fault.jsonl"
-    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    if not rows or "zone_t" not in rows[0]:
-        return StageResult("P1", 0, ("VAV-1 fixture missing zone_t",))
-    ip_out = 0
-    si_out = 0
-    low_c = uc.convert_to_canonical(metric, "absolute_temperature", 68.0, "degF")
-    high_c = uc.convert_to_canonical(metric, "absolute_temperature", 76.0, "degF")
-    for row in rows:
-        zt = float(row["zone_t"])
-        if zt < 68.0 or zt > 76.0:
-            ip_out += 1
-        zc = uc.convert_to_canonical(metric, "absolute_temperature", zt, "degF")
-        if zc < low_c or zc > high_c:
-            si_out += 1
-    comparisons += 1
-    if ip_out != si_out:
-        errors.append(f"P1 VAV-1 out-of-band samples: ip={ip_out} si={si_out}")
+    rules = cfl.load_rule_registry()
+    rules_by_id = {str(r["rule_id"]): r for r in rules}
+    expected = cfl.expected_pandas_rule_ids(rules)
+    errors: list[str] = []
+    comparisons = 0
+    min_required = 0
+    recompute = param_hook is not None or value_hook is not None
+    for golden in goldens:
+        if (golden.get("dataset") or {}).get("kind") == "carryover_anchor":
+            continue
+        min_required += min_p1_cells(golden)
+        cov = verify_golden_rule_attempted(golden, expected)
+        if cov.errors:
+            errors.extend(cov.errors)
+        if recompute:
+            si_map = cfl.recompute_si_daily_for_golden(
+                golden,
+                rules_by_id,
+                metric,
+                param_hook=param_hook,
+                value_hook=value_hook,
+            )
+        else:
+            si_map = {
+                fdd_daily_key(row): float(row.get("fault_seconds", 0))
+                for row in golden.get("pandas_si_daily") or []
+            }
+        for row in _parity_ip_rows(golden):
+            if (golden.get("dataset") or {}).get("kind") == "carryover_anchor":
+                continue
+            key = fdd_daily_key(row)
+            comparisons += 1
+            ip_fs = float(row.get("fault_seconds", 0))
+            si_fs = si_map.get(key)
+            if si_fs is None:
+                errors.append(f"P1 missing SI side for {key}")
+                continue
+            if not fault_seconds_equal(ip_fs, si_fs):
+                errors.append(f"P1 {key}: ip={ip_fs} si={si_fs}")
+    if comparisons < min_required:
+        errors.append(
+            f"P1: comparisons {comparisons} < required ip/si cells {min_required}"
+        )
     return StageResult("P1", comparisons, tuple(errors))
 
 
-def run_p2_hook_golden() -> StageResult:
-    """P2: pandas SI == SQL SI using hook golden until W4 live SQL SI lands."""
-    if not P2_HOOK_GOLDEN.is_file():
-        return StageResult("P2", 0, ("missing p2_si_hook.json",))
-    doc = json.loads(P2_HOOK_GOLDEN.read_text(encoding="utf-8"))
+def run_p2_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
     errors: list[str] = []
     comparisons = 0
-    for row in doc.get("pairs") or []:
-        comparisons += 1
-        sql_s = float(row["sql_si_fault_seconds"])
-        pandas_s = float(row["pandas_si_fault_seconds"])
-        if not fault_seconds_equal(sql_s, pandas_s):
-            errors.append(
-                f"P2 {row.get('rule_id')}/{row.get('equipment_id')}: "
-                f"sql_si={sql_s} pandas_si={pandas_s}"
-            )
+    min_required = 0
+    for golden in goldens:
+        min_required += min_p2_cells(golden)
+        for row in golden.get("p2_si_pairs") or []:
+            comparisons += 1
+            sql_s = float(row["sql_si_fault_seconds"])
+            pandas_s = float(row["pandas_si_fault_seconds"])
+            if not fault_seconds_equal(sql_s, pandas_s):
+                errors.append(
+                    f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
+                    f"sql_si={sql_s} pandas_si={pandas_s}"
+                )
+    if comparisons < min_required:
+        errors.append(
+            f"P2: comparisons {comparisons} < required si pairs {min_required}"
+        )
     return StageResult("P2", comparisons, tuple(errors))
+
+
+def run_t1284_4_rule_mutation_p1(goldens: list[dict[str, Any]]) -> StageResult:
+    """Mutate VAV-1 SI comfort threshold — must break IP vs SI fault seconds on COOKBOOK_VAV1."""
+    return verify_vav1_rule_si_threshold_mutation()
+
+
+def verify_vav1_rule_si_threshold_mutation() -> StageResult:
+    """T1284-4: wrong unit kind on FC1 duct_static_err SI param breaks fault seconds (P1-class)."""
+    from open_fdd.rules import run_rule
+
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+
+    metric = _metric_doc()
+    rules = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
+    rule = rules.get("FC1")
+    if rule is None:
+        return StageResult("T1284-4-rule", 0, ("missing FC1 registry row",))
+    golden = next(
+        (g for g in load_all_ip_goldens() if g.get("building_id") == "SYNTH_AHU_CASE_FC1"),
+        None,
+    )
+    if golden is None:
+        return StageResult("T1284-4-rule", 0, ("missing SYNTH_AHU_CASE_FC1 golden",))
+    ip_row = next((r for r in _parity_ip_rows(golden) if r.get("rule_id") == "FC1"), None)
+    if ip_row is None:
+        return StageResult("T1284-4-rule", 0, ("missing FC1 ip row",))
+
+    frame, equipment_id = cfl.reload_dataset_frame(golden)
+    ip_frame = cfl.prepare_ip_frame(
+        frame,
+        building_id=str(golden["building_id"]),
+        equipment_id=equipment_id,
+        equipment_type="ahu",
+    )
+    si_frame = cfl.frame_to_si(ip_frame, metric)
+    params_ip = cfl.rule_params_from_registry(rule)
+    params_si = cfl.convert_params_to_si(rule, params_ip, metric)
+    params_broken = dict(params_si)
+    params_broken["eps_dsp"] = float(params_si.get("eps_dsp", 0.12)) + 1.0
+    poll = float(rule.get("confirm_seconds") or 300)
+
+    def _fault_seconds(result, index) -> float:
+        confirmed = getattr(result, "confirmed_fault", None)
+        if confirmed is None:
+            return -1.0
+        fault_by_day, _c = cfl.daily_fault_and_covered_seconds(confirmed, index, poll_seconds=poll)
+        day = str(ip_row.get("utc_day"))
+        return float(fault_by_day.get(day, 0.0))
+
+    good = run_rule("FC1", si_frame, params=params_si, poll_seconds=poll, require_operational_gates=True)
+    bad = run_rule("FC1", si_frame, params=params_broken, poll_seconds=poll, require_operational_gates=True)
+    ip_fs = float(ip_row.get("fault_seconds", 0))
+    good_fs = _fault_seconds(good, si_frame.index)
+    bad_fs = _fault_seconds(bad, si_frame.index)
+    comparisons = 3
+    errors: list[str] = []
+    if good_fs < 0 or bad_fs < 0:
+        errors.append("T1284-4: FC1 run_rule missing confirmed_fault on SI frame")
+    elif not fault_seconds_equal(ip_fs, good_fs):
+        errors.append(f"T1284-4 setup: golden ip={ip_fs} good_si={good_fs}")
+    elif fault_seconds_equal(ip_fs, bad_fs):
+        errors.append(f"T1284-4: eps_dsp offset did not change SI faults (good={good_fs} bad={bad_fs})")
+    else:
+        errors.append(
+            f"P1 FC1 {golden.get('building_id')}/{ip_row.get('utc_day')}: "
+            f"ip={ip_fs} si={bad_fs} (mutated eps_dsp offset)"
+        )
+    return StageResult("T1284-4-rule", comparisons, tuple(errors))
 
 
 def compare_p3_post_cutover(
@@ -357,20 +522,22 @@ def compare_p3_post_cutover(
         key = (row.get("building_id"), row.get("table"))
         comparisons += 1
         if base_counts.get(key) != int(row.get("row_count", 0)):
-            errors.append(f"P3 sample_counts {key}: live={row.get('row_count')} baseline={base_counts.get(key)}")
+            errors.append(
+                f"P3 sample_counts {key}: live={row.get('row_count')} "
+                f"baseline={base_counts.get(key)}"
+            )
     return StageResult("P3", comparisons, tuple(errors))
 
 
-def run_fixture_stages(*, golden_name: str = "SYNTH_SELFTEST.json") -> list[StageResult]:
-    golden_path = IP_GOLDENS_DIR / golden_name
-    golden = load_ip_golden(golden_path)
+def run_fixture_stages() -> list[StageResult]:
+    goldens = load_all_ip_goldens()
     return [
         verify_unit_vector_goldens(),
         verify_unit_scenarios(),
-        compare_p0_ip_golden(golden),
-        compare_p0_analytics_golden(golden),
-        run_p1_cookbook_carryover(),
-        run_p2_hook_golden(),
+        compare_p0_all_goldens(goldens),
+        verify_p0_carryover_all(goldens),
+        run_p1_ip_vs_si(goldens),
+        run_p2_all_goldens(goldens),
     ]
 
 

@@ -4,7 +4,8 @@ on:
   push:
     branches: [master, main]
     paths:
-      - "scripts/stress/**"
+      - "scripts/ci/check_ip_goldens_frozen.py"
+      - "scripts/stress/si_cutover/**"
       - "scripts/qualification/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
@@ -14,7 +15,8 @@ on:
   pull_request:
     branches: [master, main]
     paths:
-      - "scripts/stress/**"
+      - "scripts/ci/check_ip_goldens_frozen.py"
+      - "scripts/stress/si_cutover/**"
       - "scripts/qualification/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
@@ -45,6 +47,9 @@ jobs:
 
       - name: Unit contract (T1284-1 baseline)
         run: python3 scripts/ci/check_unit_contract.py
+
+      - name: Frozen ip goldens (W0c regen must match)
+        run: python3 scripts/ci/check_ip_goldens_frozen.py
 
       - name: SI parity chain P0–P2 on fixtures
         run: python3 scripts/stress/si_parity_gate.py --fixtures-only

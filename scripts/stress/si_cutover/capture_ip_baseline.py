@@ -989,10 +989,25 @@ def main(argv: list[str] | None = None) -> int:
         metavar="DIR",
         help="Write tests/fixtures/si_cutover/ip_goldens/*.json from capture output",
     )
+    ap.add_argument(
+        "--ci-fixtures-emit-goldens",
+        type=Path,
+        metavar="DIR",
+        help="Offline: emit ip goldens from cookbook + SYNTH CI fixtures (no stack)",
+    )
     args = ap.parse_args(argv)
 
     if args.self_test:
         return run_self_test()
+
+    if args.ci_fixtures_emit_goldens:
+        if str(REPO) not in sys.path:
+            sys.path.insert(0, str(REPO))
+        from si_cutover.ci_fixtures_lib import emit_all_goldens
+
+        paths = emit_all_goldens(args.ci_fixtures_emit_goldens)
+        safe_print(f"PASS ci-fixtures emit — {len(paths)} golden(s) → {args.ci_fixtures_emit_goldens}")
+        return 0
 
     if not args.jwt_env or not args.sites_config:
         ap.error("--jwt-env and --sites-config are required unless --self-test")

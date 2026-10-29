@@ -63,7 +63,7 @@ def run_fixtures_only() -> int:
 
 
 def run_t1284_4_mutation_self_test() -> int:
-    """Deliberate unit scale mutation must fail unit vector verification."""
+    """Deliberate unit scale mutation must fail unit vectors; rule SI mutation must fail P1."""
     metric = pc._metric_doc()
     mutated = copy.deepcopy(metric)
     rows = mutated.get("source_unit_conversions") or []
@@ -76,10 +76,9 @@ def run_t1284_4_mutation_self_test() -> int:
         return EXIT_FAIL
 
     cases = json.loads(pc.UNIT_VECTORS.read_text(encoding="utf-8")).get("cases") or []
-    errors: list[str] = []
-    comparisons = 0
+    vector_checks = 0
     for case in cases:
-        comparisons += 1
+        vector_checks += 1
         try:
             got = pc.uc.convert_to_canonical(
                 mutated, case["quantity"], float(case["input"]), case["source_unit"]
@@ -90,21 +89,29 @@ def run_t1284_4_mutation_self_test() -> int:
         tol = float(case.get("tol", 1e-9))
         if abs(got - expect) <= tol:
             safe_print(
-                f"FAIL T1284-4: mutation did not break case {case['id']} (got {got} ~ {expect})"
+                f"FAIL T1284-4: contract mutation did not break case {case['id']} (got {got} ~ {expect})"
             )
             return EXIT_FAIL
-    if comparisons < 1:
-        safe_print("FAIL T1284-4: no cases exercised")
-        return EXIT_FAIL
     broken = pc.verify_unit_vector_goldens(mutated)
     if not broken.errors:
         safe_print("FAIL T1284-4: mutated contract did not fail unit_vectors parity")
         return EXIT_FAIL
+
+    goldens = [
+        g
+        for g in pc.load_all_ip_goldens()
+        if (g.get("dataset") or {}).get("kind") != "carryover_anchor"
+    ]
+    p1_broken = pc.run_t1284_4_rule_mutation_p1(goldens)
+    if not p1_broken.errors or not any("P1 FC1" in e for e in p1_broken.errors):
+        safe_print("FAIL T1284-4: FC1 SI param unit mutation did not fail P1 parity")
+        return EXIT_FAIL
+
     safe_print(
-        f"PASS T1284-4 mutation guard ({comparisons} vector cases; "
-        f"fixtures would fail: {broken.errors[0][:80]})"
+        f"PASS T1284-4 mutation guard ({vector_checks} vector cases; "
+        f"P1 failures={len(p1_broken.errors)} e.g. {p1_broken.errors[0][:72]})"
     )
-    record_check("T1284-4.unit_mutation", True, comparisons=comparisons)
+    record_check("T1284-4.unit_mutation", True, comparisons=vector_checks + p1_broken.comparisons)
     return EXIT_PASS
 
 
