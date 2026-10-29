@@ -131,11 +131,15 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
             return Ok(());
         }
         enqueue_due_windows(state, now).await?;
-        if should_run_asap_tick(now) {
-            LAST_ASAP_TICK.store(now.timestamp(), Ordering::Relaxed);
-            if let Err(err) = run_asap_cycle(state, now).await {
-                warn!(error = %err, "ASAP catch-up cycle failed");
+        match should_run_asap_tick(now) {
+            Ok(true) => {
+                LAST_ASAP_TICK.store(now.timestamp(), Ordering::Relaxed);
+                if let Err(err) = run_asap_cycle(state, now).await {
+                    warn!(error = %err, "ASAP catch-up cycle failed");
+                }
             }
+            Ok(false) => {}
+            Err(err) => warn!(error = %err, "ASAP catch-up tick skipped (config)"),
         }
         prune_applied_ledger(state, now).await;
     }
@@ -171,15 +175,22 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
                 FinishRequest::new(owner, job.job_id, job.fencing_token, finished_at, outcome);
             finish.active_model_revision = decision.active_model_revision;
             finish.active_points_digest = decision.active_points_digest;
-            let sample_count = u64::try_from(decision.applied_samples.len()).unwrap_or(0);
             finish.applied_samples = decision.applied_samples;
             if let Err(err) = state.ingest_queue.finish(&finish).await {
                 warn!(job_id = %job.job_id, error = %err, "ingest finish rejected");
-            } else if sample_count > 0 {
-                let key = super::binding_state::DeviceBindingKey::from_job(&job);
-                if let Ok(mut guard) = state.ingest_queue.catchup_registry().write() {
-                    guard.record_finish(&key, finished_at, sample_count);
+            } else if let Ok(sample_count) = u64::try_from(finish.applied_samples.len()) {
+                if sample_count > 0 {
+                    let key = super::binding_state::DeviceBindingKey::from_job(&job);
+                    if let Ok(mut guard) = state.ingest_queue.catchup_registry().write() {
+                        guard.record_finish(&key, finished_at, sample_count);
+                    }
                 }
+            } else {
+                warn!(
+                    job_id = %job.job_id,
+                    len = finish.applied_samples.len(),
+                    "ingest finish sample count does not fit u64; catch-up rate not updated"
+                );
             }
             let key = super::cursor::CursorKey {
                 tenant_id: job.tenant_id.clone(),
@@ -1081,21 +1092,28 @@ pub(crate) async fn enqueue_due_windows(
 
 static LAST_ASAP_TICK: AtomicI64 = AtomicI64::new(0);
 
-fn should_run_asap_tick(now: chrono::DateTime<Utc>) -> bool {
-    let cfg = super::asap_mode::AsapConfig::from_env();
+fn should_run_asap_tick(now: chrono::DateTime<Utc>) -> Result<bool, String> {
+    let cfg = super::asap_mode::AsapConfig::from_env()?;
+    let tick_secs = i64::try_from(cfg.tick_secs)
+        .map_err(|_| "OPENFDD_INGEST_ASAP_TICK_SECS out of range for system clock".to_string())?;
     let last = LAST_ASAP_TICK.load(Ordering::Relaxed);
     if last == 0 {
-        return true;
+        return Ok(true);
     }
-    now.timestamp().saturating_sub(last) >= i64::try_from(cfg.tick_secs).unwrap_or(15)
+    let elapsed = now
+        .timestamp()
+        .checked_sub(last)
+        .ok_or_else(|| "ASAP tick clock went backwards".to_string())?;
+    Ok(elapsed >= tick_secs)
 }
 
 async fn run_asap_cycle(state: &Arc<AppState>, now: chrono::DateTime<Utc>) -> Result<(), String> {
-    let config = super::asap_mode::AsapConfig::from_env();
+    let config = super::asap_mode::AsapConfig::from_env()?;
     let (devices, _) = devices_from_state(state);
     let delay = chrono::Duration::seconds(publication_delay_secs() as i64);
-    let window_secs = crate::providers::hourly::HourlyPolicy::from_env().window_secs;
-    let step = window_secs.clamp(60, 3600);
+    let step = crate::providers::hourly::validate_ingest_window_secs(
+        crate::providers::hourly::HourlyPolicy::from_env().window_secs,
+    )?;
     let target_end = crate::providers::hourly::floor_to_window(now - delay, step);
     let Some(pool) = state
         .ingest_queue
@@ -1110,7 +1128,7 @@ async fn run_asap_cycle(state: &Arc<AppState>, now: chrono::DateTime<Utc>) -> Re
         if enqueued_total >= config.max_jobs_per_tick {
             break;
         }
-        let budget_left = config.max_jobs_per_tick.saturating_sub(enqueued_total);
+        let budget_left = config.max_jobs_per_tick - enqueued_total;
         let n = process_asap_device(AsapDeviceCycleInput {
             state,
             pool: &pool,
@@ -1123,7 +1141,9 @@ async fn run_asap_cycle(state: &Arc<AppState>, now: chrono::DateTime<Utc>) -> Re
             budget_left,
         })
         .await?;
-        enqueued_total = enqueued_total.saturating_add(n);
+        enqueued_total = enqueued_total
+            .checked_add(n)
+            .ok_or_else(|| "ASAP catch-up enqueue total overflow".to_string())?;
     }
     Ok(())
 }
@@ -1223,7 +1243,7 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
         delay,
         step,
         config.threshold_windows,
-    );
+    )?;
     let throttle = state
         .ingest_queue
         .portal_budget_status(&device.provider_instance_id, now)
@@ -1233,10 +1253,9 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
         .ingest_queue
         .catchup_registry()
         .read()
-        .ok()
-        .map(|guard| guard.rows_per_minute(&key))
-        .unwrap_or(0.0);
-    let eta = super::asap_mode::eta_seconds(decision.missing_windows, step, rows_per_minute);
+        .map_err(|_| "catchup registry lock poisoned".to_string())?
+        .rows_per_minute(&key);
+    let eta = super::asap_mode::eta_seconds(decision.missing_windows, step, rows_per_minute)?;
     if let Ok(mut guard) = state.ingest_queue.catchup_registry().write() {
         guard.update_device(
             &key,
@@ -1280,7 +1299,9 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
             .await
             .map_err(|err| err.to_string())?;
         if matches!(outcome, EnqueueOutcome::Created(_)) {
-            enqueued = enqueued.saturating_add(1);
+            enqueued = enqueued
+                .checked_add(1)
+                .ok_or_else(|| "ASAP catch-up per-device enqueue overflow".to_string())?;
         }
     }
     Ok(enqueued)

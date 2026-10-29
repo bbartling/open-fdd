@@ -65,11 +65,14 @@ impl CatchupRegistry {
         entry.throttle_tokens_remaining = update.throttle_tokens_remaining;
     }
 
-    pub fn rows_per_minute(&self, key: &DeviceBindingKey) -> f64 {
-        self.devices
-            .get(key)
-            .map(|entry| entry.rows_per_minute)
-            .unwrap_or(0.0)
+    pub fn rows_per_minute(&self, key: &DeviceBindingKey) -> Option<f64> {
+        self.devices.get(key).and_then(|entry| {
+            if entry.sample_times.is_empty() {
+                None
+            } else {
+                Some(entry.rows_per_minute)
+            }
+        })
     }
 }
 

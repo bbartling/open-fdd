@@ -3,12 +3,12 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
-use serde_json::{json, Value};
+use serde_json::json;
 use sqlx::PgPool;
 
 use crate::providers::committed_model::IngestPlan;
 use crate::providers::config::SiteConfig;
-use crate::providers::hourly::floor_to_window;
+use crate::providers::hourly::{floor_to_window, validate_ingest_window_secs, HourlyPolicy};
 use crate::providers::http_policy::provider_ids_equivalent;
 use crate::state::AppState;
 
@@ -30,10 +30,9 @@ pub async fn site_catchup_json(
     configs: &[&SiteConfig],
     now: DateTime<Utc>,
 ) -> Result<Vec<Value>, String> {
-    let config = AsapConfig::from_env();
+    let config = AsapConfig::from_env()?;
     let delay = Duration::seconds(publication_delay_secs() as i64);
-    let window_secs = crate::providers::hourly::HourlyPolicy::from_env().window_secs;
-    let step = window_secs.clamp(60, 3600);
+    let step = validate_ingest_window_secs(HourlyPolicy::from_env().window_secs)?;
     let target_end = floor_to_window(now - delay, step);
     let mut providers = Vec::new();
     for site_cfg in configs {
@@ -69,9 +68,8 @@ pub async fn site_catchup_json(
                 .ingest_queue
                 .catchup_registry()
                 .read()
-                .ok()
-                .map(|guard| guard.rows_per_minute(&key))
-                .unwrap_or(0.0);
+                .map_err(|_| "catchup registry lock poisoned".to_string())?
+                .rows_per_minute(&key);
             let row = device_row(DeviceCatchupRowInput {
                 pool,
                 state,
@@ -109,7 +107,7 @@ struct DeviceCatchupRowInput<'a> {
     delay: Duration,
     step: i64,
     config: AsapConfig,
-    rows_per_minute: f64,
+    rows_per_minute: Option<f64>,
 }
 
 async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
@@ -181,8 +179,8 @@ async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
         delay,
         step,
         config.threshold_windows,
-    );
-    let eta = eta_seconds(decision.missing_windows, step, rows_per_minute);
+    )?;
+    let eta = eta_seconds(decision.missing_windows, step, rows_per_minute)?;
     let throttle = state
         .ingest_queue
         .portal_budget_status(provider_instance_id, now)

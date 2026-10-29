@@ -1,13 +1,24 @@
 //! ASAP catch-up mode (#1423 part c): enter on backlog, exit near now, live poll priority.
 
 use chrono::{DateTime, Duration, Utc};
+use tracing::info;
 
-use crate::providers::hourly::floor_to_window;
+use crate::providers::hourly::{floor_to_window, validate_ingest_window_secs};
 
 use super::gap_planner::{plan_gap_windows, GapPlanInput, GapPlanResult};
 
 pub const MODE_NORMAL: &str = "normal";
 pub const MODE_ASAP: &str = "asap";
+
+const THRESHOLD_DEFAULT: u32 = 6;
+const THRESHOLD_MIN: u32 = 1;
+const THRESHOLD_MAX: u32 = 48;
+const TICK_SECS_DEFAULT: u64 = 15;
+const TICK_SECS_MIN: u64 = 5;
+const TICK_SECS_MAX: u64 = 300;
+const MAX_JOBS_DEFAULT: u32 = 8;
+const MAX_JOBS_MIN: u32 = 1;
+const MAX_JOBS_MAX: u32 = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AsapConfig {
@@ -17,15 +28,27 @@ pub struct AsapConfig {
 }
 
 impl AsapConfig {
-    pub fn from_env() -> Self {
-        let threshold_windows = env_u32("OPENFDD_INGEST_ASAP_THRESHOLD_WINDOWS", 6).clamp(1, 48);
-        let tick_secs = env_u64("OPENFDD_INGEST_ASAP_TICK_SECS", 15).clamp(5, 300);
-        let max_jobs_per_tick = env_u32("OPENFDD_INGEST_ASAP_MAX_JOBS_PER_TICK", 8).clamp(1, 32);
-        Self {
-            threshold_windows,
-            tick_secs,
-            max_jobs_per_tick,
-        }
+    pub fn from_env() -> Result<Self, String> {
+        Ok(Self {
+            threshold_windows: env_u32_bounded(
+                "OPENFDD_INGEST_ASAP_THRESHOLD_WINDOWS",
+                THRESHOLD_DEFAULT,
+                THRESHOLD_MIN,
+                THRESHOLD_MAX,
+            )?,
+            tick_secs: env_u64_bounded(
+                "OPENFDD_INGEST_ASAP_TICK_SECS",
+                TICK_SECS_DEFAULT,
+                TICK_SECS_MIN,
+                TICK_SECS_MAX,
+            )?,
+            max_jobs_per_tick: env_u32_bounded(
+                "OPENFDD_INGEST_ASAP_MAX_JOBS_PER_TICK",
+                MAX_JOBS_DEFAULT,
+                MAX_JOBS_MIN,
+                MAX_JOBS_MAX,
+            )?,
+        })
     }
 }
 
@@ -53,18 +76,18 @@ pub struct ModeDecision {
 }
 
 /// Whether `last_stored_ts` is within one ingest window of the publication horizon.
+/// `validated_window_secs` must come from [`validate_ingest_window_secs`].
 pub fn within_one_window_of_now(
     last_stored: Option<DateTime<Utc>>,
     now: DateTime<Utc>,
     publication_delay: Duration,
-    window_secs: i64,
+    validated_window_secs: i64,
 ) -> bool {
-    let step = window_secs.clamp(60, 3600);
-    let target = floor_to_window(now - publication_delay, step);
+    let target = floor_to_window(now - publication_delay, validated_window_secs);
     let Some(last) = last_stored else {
         return false;
     };
-    last + Duration::seconds(step) >= target
+    last + Duration::seconds(validated_window_secs) >= target
 }
 
 pub fn decide_mode(
@@ -74,8 +97,8 @@ pub fn decide_mode(
     publication_delay: Duration,
     window_secs: i64,
     threshold_windows: u32,
-) -> ModeDecision {
-    let step = window_secs.clamp(60, 3600);
+) -> Result<ModeDecision, String> {
+    let step = validate_ingest_window_secs(window_secs)?;
     let target_through = floor_to_window(now - publication_delay, step);
     let missing = plan.counts.missing_hours;
     let mode = if within_one_window_of_now(last_stored, now, publication_delay, step) {
@@ -85,44 +108,81 @@ pub fn decide_mode(
     } else {
         CatchupMode::Normal
     };
-    ModeDecision {
+    Ok(ModeDecision {
         mode,
         missing_windows: missing,
         target_through,
-    }
+    })
 }
 
 pub fn plan_backlog(input: GapPlanInput<'_>) -> Result<GapPlanResult, String> {
     plan_gap_windows(input)
 }
 
-pub fn eta_seconds(missing_windows: u32, window_secs: i64, rows_per_minute: f64) -> Option<i64> {
+pub fn eta_seconds(
+    missing_windows: u32,
+    window_secs: i64,
+    rows_per_minute: Option<f64>,
+) -> Result<Option<i64>, String> {
     if missing_windows == 0 {
-        return Some(0);
+        return Ok(Some(0));
     }
-    if rows_per_minute <= 0.0 {
-        return None;
+    let Some(rows_per_minute) = rows_per_minute else {
+        return Ok(None);
+    };
+    if rows_per_minute <= 0.0 || !rows_per_minute.is_finite() {
+        return Ok(None);
     }
-    let step = window_secs.clamp(60, 3600);
+    let step = validate_ingest_window_secs(window_secs)?;
     let windows_per_minute = (rows_per_minute * 60.0 / (step as f64)).max(0.01);
     let minutes = f64::from(missing_windows) / windows_per_minute;
     if !minutes.is_finite() {
-        return None;
+        return Ok(None);
     }
-    Some((minutes.ceil() as i64).saturating_mul(60))
+    let whole_minutes = minutes.ceil() as i64;
+    whole_minutes
+        .checked_mul(60)
+        .ok_or_else(|| "ASAP catch-up ETA seconds overflow".to_string())
+        .map(Some)
 }
 
-fn env_u32(key: &str, default: u32) -> u32 {
+fn env_u32_bounded(key: &str, default: u32, min: u32, max: u32) -> Result<u32, String> {
     match std::env::var(key) {
-        Ok(raw) if !raw.trim().is_empty() => raw.trim().parse().unwrap_or(default),
-        _ => default,
+        Err(_) | Ok(ref raw) if raw.trim().is_empty() => {
+            info!(env = key, default, min, max, "using default ASAP ingest config (unset)");
+            Ok(default)
+        }
+        Ok(raw) => {
+            let parsed = raw.trim().parse::<u32>().map_err(|_| {
+                format!("{key}={raw:?}: invalid unsigned integer for ASAP ingest config")
+            })?;
+            if !(min..=max).contains(&parsed) {
+                return Err(format!(
+                    "{key}={parsed}: out of range (must be {min}..={max})"
+                ));
+            }
+            Ok(parsed)
+        }
     }
 }
 
-fn env_u64(key: &str, default: u64) -> u64 {
+fn env_u64_bounded(key: &str, default: u64, min: u64, max: u64) -> Result<u64, String> {
     match std::env::var(key) {
-        Ok(raw) if !raw.trim().is_empty() => raw.trim().parse().unwrap_or(default),
-        _ => default,
+        Err(_) | Ok(ref raw) if raw.trim().is_empty() => {
+            info!(env = key, default, min, max, "using default ASAP ingest config (unset)");
+            Ok(default)
+        }
+        Ok(raw) => {
+            let parsed = raw.trim().parse::<u64>().map_err(|_| {
+                format!("{key}={raw:?}: invalid unsigned integer for ASAP ingest config")
+            })?;
+            if !(min..=max).contains(&parsed) {
+                return Err(format!(
+                    "{key}={parsed}: out of range (must be {min}..={max})"
+                ));
+            }
+            Ok(parsed)
+        }
     }
 }
 
@@ -152,7 +212,8 @@ mod tests {
             max_span: MAX_HISTORY_WINDOW,
         })
         .expect("plan");
-        let decision = decide_mode(&plan, Some(h(1)), h(12), Duration::seconds(300), 3600, 3);
+        let decision = decide_mode(&plan, Some(h(1)), h(12), Duration::seconds(300), 3600, 3)
+            .expect("decide");
         assert_eq!(decision.mode, CatchupMode::Asap);
         assert!(decision.missing_windows > 3);
     }
@@ -178,7 +239,8 @@ mod tests {
             max_span: MAX_HISTORY_WINDOW,
         })
         .expect("plan");
-        let decision = decide_mode(&plan, Some(last), now, Duration::seconds(300), 3600, 1);
+        let decision = decide_mode(&plan, Some(last), now, Duration::seconds(300), 3600, 1)
+            .expect("decide");
         assert_eq!(decision.mode, CatchupMode::Normal);
     }
 }

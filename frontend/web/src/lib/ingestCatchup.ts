@@ -74,13 +74,17 @@ export function ingestCatchupFromFetch(fetched: OptionalFetch): IngestCatchupVie
         lastStored: device.last_stored_ts ?? "—",
         missingWindows: device.missing_windows ?? 0,
         rowsPerMinute:
-          device.rows_per_minute != null && Number.isFinite(device.rows_per_minute)
-            ? device.rows_per_minute.toFixed(1)
-            : "—",
+          device.rows_per_minute == null
+            ? "unknown"
+            : Number.isFinite(device.rows_per_minute)
+              ? device.rows_per_minute.toFixed(1)
+              : "unknown",
         eta:
-          device.eta_seconds != null && device.eta_seconds >= 0
-            ? `${Math.ceil(device.eta_seconds / 60)} min`
-            : "—",
+          device.eta_seconds == null
+            ? "unknown"
+            : device.eta_seconds >= 0
+              ? `${Math.ceil(device.eta_seconds / 60)} min`
+              : "unknown",
         throttle: device.throttle?.state ?? "—",
       });
     }

@@ -285,18 +285,23 @@ impl MemoryStore {
         &self,
         provider_instance_id: &str,
         now: DateTime<Utc>,
-    ) -> super::postgres::PortalBudgetStatus {
+    ) -> Result<super::postgres::PortalBudgetStatus, QueueError> {
         let inner = self.lock();
         let Some(budget) = inner.budgets.get(provider_instance_id) else {
-            return super::postgres::PortalBudgetStatus {
+            return Ok(super::postgres::PortalBudgetStatus {
                 paused_until: None,
                 tokens_remaining: None,
-            };
+            });
         };
-        super::postgres::PortalBudgetStatus {
+        let tokens_remaining = i32::try_from(budget.tokens).map_err(|_| {
+            QueueError::Invalid(format!(
+                "portal budget token count overflow for provider {provider_instance_id}"
+            ))
+        })?;
+        Ok(super::postgres::PortalBudgetStatus {
             paused_until: budget.paused_until.filter(|until| *until > now),
-            tokens_remaining: i32::try_from(budget.tokens).ok(),
-        }
+            tokens_remaining: Some(tokens_remaining),
+        })
     }
 
     pub fn retry_job(
