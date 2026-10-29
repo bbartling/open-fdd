@@ -892,6 +892,7 @@ fn backfill(
             "start": start,
             "end": start + Duration::hours(1),
         }],
+        "force": true,
     })
 }
 

@@ -21,7 +21,7 @@ use super::hourly::FetchError;
 use super::http_policy::{
     HttpLimits, MAX_HISTORY_WINDOW, MAX_SAMPLES_PER_RESPONSE, MAX_UUIDS_TOTAL,
 };
-use super::map::{HistorySeries, RawProviderPoint};
+use super::map::{HistoryFetchPage, RawProviderPoint};
 use super::nf::{admit_source_ts, group_history, valid_point_id, NfPortalDriver};
 
 /// One history read failure, tagged with the transport that produced it.
@@ -37,6 +37,13 @@ impl HistoryFailure {
     pub fn code(&self) -> String {
         match self {
             Self::Rest(err) => err.code().to_string(),
+            Self::Grpc(err) => format!("grpc_{}", err.as_str()),
+        }
+    }
+
+    pub fn ingest_queue_label(&self) -> String {
+        match self {
+            Self::Rest(err) => err.ingest_queue_label(),
             Self::Grpc(err) => format!("grpc_{}", err.as_str()),
         }
     }
@@ -155,7 +162,7 @@ impl NfTransport {
         uuids: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<HistorySeries>, HistoryFailure> {
+    ) -> Result<HistoryFetchPage, HistoryFailure> {
         let Some(session) = self.grpc.as_mut() else {
             return self
                 .driver
@@ -173,9 +180,12 @@ async fn read_grpc_history(
     uuids: &[String],
     from: DateTime<Utc>,
     to: DateTime<Utc>,
-) -> Result<Vec<HistorySeries>, HistoryFailure> {
+) -> Result<HistoryFetchPage, HistoryFailure> {
     if uuids.is_empty() {
-        return Ok(Vec::new());
+        return Ok(HistoryFetchPage {
+            series: Vec::new(),
+            complete: true,
+        });
     }
     // Same request bounds as the REST read.
     if uuids.len() > MAX_UUIDS_TOTAL || to < from || to - from > MAX_HISTORY_WINDOW {
@@ -216,7 +226,12 @@ async fn read_grpc_history(
                 driver.forget_token();
             }
             Err(err) => return Err(HistoryFailure::Grpc(err)),
-            Ok(points) => return Ok(group_history(points)),
+            Ok(points) => {
+                return Ok(HistoryFetchPage {
+                    series: group_history(points),
+                    complete: true,
+                });
+            }
         }
     }
     Err(HistoryFailure::Grpc(NfGrpcError::AuthFailed))

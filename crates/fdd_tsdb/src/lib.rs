@@ -25,7 +25,8 @@ pub use incremental_store::{
 };
 pub use package_seed::{append_package_equipment, remap_equipment_roles, seed_package_dir};
 pub use portal::{
-    HistorianPoint, PortalInventoryPoint, PortalInventoryReport, PurgeReport, PurgeTarget,
+    HistorianPoint, PointMapBindingPatch, PortalInventoryPoint, PortalInventoryReport, PurgeReport,
+    PurgeTarget,
 };
 pub use revision::{
     changed_ranges_after, current_data_revision, ensure_revision_schema, quality_keeps_sample,

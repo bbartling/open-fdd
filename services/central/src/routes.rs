@@ -134,6 +134,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(ingest_queue::http::retry_job),
         )
         .route(
+            "/api/ingest/jobs/cancel",
+            post(ingest_queue::http::cancel_jobs),
+        )
+        .route(
             "/api/ingest/receipts",
             get(ingest_queue::http::list_receipts),
         )
@@ -4595,6 +4599,9 @@ pub async fn model_point_post(
     let primary_reference = body.primary_reference;
     let expected = body.expected_revision;
     let dry_run = body.dry_run;
+    let engineer_write = unit.is_some() || quantity.is_some() || primary_reference.is_some();
+    let refresh_site = building_id.clone();
+    let refresh_point = point_id.clone();
     let result = tokio::task::spawn_blocking(move || {
         let root = csv_building_root(&building_id);
         open_fdd_edge_prototype::csv_ingest::model_overlay::upsert_point(
@@ -4625,7 +4632,47 @@ pub async fn model_point_post(
             "soft_open_neq_fq": true,
         }))
     });
-    overlay_mutate_result(result)
+    match result {
+        Ok(body) if engineer_write && !dry_run => {
+            if crate::timescale_historian::historian_is_timescale() {
+                let tsdb = fdd_tsdb::Tsdb::shared().await.map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(json!({
+                            "ok": false,
+                            "error": format!(
+                                "engineer overlay was written but point_map was not refreshed: {e}"
+                            ),
+                            "soft_open_neq_fq": true,
+                        })),
+                    )
+                })?;
+                let root = csv_building_root(&refresh_site);
+                let point_ids = vec![refresh_point];
+                let refresh = crate::providers::committed_model::refresh_point_map_overlay(
+                    &tsdb,
+                    &root,
+                    &refresh_site,
+                    &point_ids,
+                )
+                .await;
+                if let Err(err) = refresh {
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "ok": false,
+                            "error": format!(
+                                "engineer overlay was written but point_map was not refreshed: {err}"
+                            ),
+                            "soft_open_neq_fq": true,
+                        })),
+                    ));
+                }
+            }
+            overlay_mutate_result(Ok(body))
+        }
+        other => overlay_mutate_result(other),
+    }
 }
 
 /// Soft-OPEN: delete/hide point via overlay tombstone (BPS `DELETE /api/model/point`).
@@ -6692,12 +6739,18 @@ async fn analytics_bas_vs_web_oat(
     req.read_tenant_id = preferred_tenant_for_building_read(&ctx, req.query.building_id.as_deref());
     cached_analytics!(
         "bas-vs-web-oat",
-        "bas-vs-web-oat-v3",
+        "bas-vs-web-oat-v4",
         &state,
         &headers,
         req,
         async {
-            let max_points = req.query.max_points.unwrap_or(2000);
+            let max_points =
+                match analytics::historian::validated_bas_vs_web_max_points(req.query.max_points) {
+                    Ok(n) => n as usize,
+                    Err(msg) => {
+                        return analytics::envelope("bas-vs-web-oat-v4", &req.query, vec![msg]);
+                    }
+                };
             // Default lookback + max-span gate (#1179); reject unbounded refresh.
             let window = analytics::historian::resolve_analytics_window(
                 req.query.start,
@@ -6707,7 +6760,7 @@ async fn analytics_bas_vs_web_oat(
             let (start, end) = match window {
                 Ok((s, e)) => (Some(s), e),
                 Err(msg) => {
-                    return analytics::envelope("bas-vs-web-oat-v3", &req.query, vec![msg]);
+                    return analytics::envelope("bas-vs-web-oat-v4", &req.query, vec![msg]);
                 }
             };
             match analytics::historian::bas_vs_web_from_history(
@@ -6722,7 +6775,7 @@ async fn analytics_bas_vs_web_oat(
             {
                 Ok(Some(env)) => env,
                 Ok(None) => analytics::envelope_with_engine(
-                    "bas-vs-web-oat-v3",
+                    "bas-vs-web-oat-v4",
                     &req.query,
                     vec![
                         "BAS vs web OAT unavailable — need distinct oa_t and web OAT \
@@ -6734,7 +6787,7 @@ async fn analytics_bas_vs_web_oat(
                 Err(e) => {
                     tracing::warn!(error = %e, "bas-vs-web-oat historian path failed");
                     analytics::envelope(
-                        "bas-vs-web-oat-v3",
+                        "bas-vs-web-oat-v4",
                         &req.query,
                         vec![format!("bas-vs-web-oat failed: {e}")],
                     )

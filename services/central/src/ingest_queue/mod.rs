@@ -1,11 +1,15 @@
 //! Shared Postgres ingest queue, leases, and scoped job HTTP.
 
+mod binding_state;
 mod client;
-mod coverage;
+pub(crate) mod coverage;
 pub(crate) mod cursor;
+mod gap_backfill;
+pub(crate) mod gap_planner;
 pub(crate) mod http;
 mod memory;
 mod model;
+pub(crate) mod portal_env;
 mod postgres;
 pub(crate) mod replay_horizon;
 mod scale;
@@ -23,6 +27,8 @@ mod replay_horizon_acceptance;
 mod scope_acceptance;
 #[cfg(test)]
 mod site_backfill_acceptance;
+#[cfg(test)]
+mod t1423_gap_planner_acceptance;
 #[cfg(test)]
 mod upgrade_acceptance;
 #[cfg(test)]

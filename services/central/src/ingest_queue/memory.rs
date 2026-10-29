@@ -247,6 +247,9 @@ impl MemoryStore {
                     job.state = JobState::RetryWait.as_str().to_string();
                     job.safe_error_code = Some(code.clone());
                     job.not_before = *not_before;
+                    if code == "throttled" {
+                        job.attempt = job.attempt.saturating_sub(1);
+                    }
                     None
                 }
                 FinishOutcome::Permanent { code } => {
@@ -339,6 +342,90 @@ impl MemoryStore {
             Some(view.job_id),
         );
         Ok(view)
+    }
+
+    pub fn cancel_jobs(
+        &self,
+        filter: &CancelFilter,
+        now: DateTime<Utc>,
+        claim: &IdempotencyClaim,
+    ) -> Result<CancelOutcome, QueueError> {
+        if claim.object_id != cancel_object_id(filter)
+            || claim.payload_hash != cancel_payload_hash(filter)
+        {
+            return Err(QueueError::Conflict(
+                "idempotency key does not match the original request".into(),
+            ));
+        }
+        let mut inner = self.lock();
+        let key = idempotency_key(claim, "cancel");
+        if let Some(record) = inner.idempotency.get(&key) {
+            if record.object_id != claim.object_id || record.payload_hash != claim.payload_hash {
+                return Err(QueueError::Conflict(
+                    "idempotency key does not match the original request".into(),
+                ));
+            }
+            let views = replay_job_list(&inner, &record.job_ids, &claim.tenant_id)?;
+            let job_ids: Vec<Uuid> = views.iter().map(|job| job.job_id).collect();
+            let cancelled = u32::try_from(job_ids.len())
+                .map_err(|_| QueueError::Invalid("cancelled job count overflow".into()))?;
+            return Ok(CancelOutcome { cancelled, job_ids });
+        }
+        let mut cancelled_ids = Vec::new();
+        for job in &mut inner.jobs {
+            if job.view.tenant_id != filter.tenant_id {
+                continue;
+            }
+            if !matches!(job.view.state.as_str(), "queued" | "retry_wait") {
+                continue;
+            }
+            if filter
+                .canonical_site
+                .as_ref()
+                .is_some_and(|site| site != &job.view.canonical_site)
+            {
+                continue;
+            }
+            if filter
+                .provider_instance_id
+                .as_ref()
+                .is_some_and(|provider| provider != &job.view.provider_instance_id)
+            {
+                continue;
+            }
+            if filter
+                .device_id
+                .as_ref()
+                .is_some_and(|device| device != &job.view.device_id)
+            {
+                continue;
+            }
+            if filter
+                .window_start
+                .is_some_and(|start| job.view.logical_window_start < start)
+            {
+                continue;
+            }
+            if filter
+                .window_end
+                .is_some_and(|end| job.view.logical_window_end > end)
+            {
+                continue;
+            }
+            job.view.state = JobState::Cancelled.as_str().to_string();
+            job.view.lease_owner = None;
+            job.view.lease_expiry = None;
+            job.view.safe_error_code = Some("cancelled".into());
+            job.view.not_before = now;
+            cancelled_ids.push(job.view.job_id);
+        }
+        remember_idempotency(&mut inner, claim, "cancel", cancelled_ids.clone(), None);
+        let cancelled = u32::try_from(cancelled_ids.len())
+            .map_err(|_| QueueError::Invalid("cancelled job count overflow".into()))?;
+        Ok(CancelOutcome {
+            cancelled,
+            job_ids: cancelled_ids,
+        })
     }
 
     pub fn backfill(

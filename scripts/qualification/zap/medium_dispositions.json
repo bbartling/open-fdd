@@ -3,16 +3,6 @@
   "dispositions": [],
   "pending_rebind": [
     {
-      "plugin_id": "10055",
-      "alert_name": "CSP: style-src unsafe-inline",
-      "component": "openfdd-web",
-      "host_scope": "disposable_web_central",
-      "owner": "cursor-astra-c-zap",
-      "rationale": "Product nginx CSP intentionally allows style-src 'unsafe-inline' for React/Vite inline styles. Plugin-level acceptance retired; re-bind each observed instance (method + route + param + evidence_sha256) from alerts.derived.json after the next disposable scan.",
-      "retest": "Replace unsafe-inline with style hashes/nonces after SPA stylesheet extraction",
-      "candidate_binding": "ghcr_web_disposable_af"
-    },
-    {
       "plugin_id": "90003",
       "alert_name": "Sub Resource Integrity Attribute Missing",
       "component": "openfdd-web",

@@ -137,6 +137,7 @@ def apply_schema(conn) -> None:
         "02_openfdd_dims.sql",
         "03_wide_history_helper.sql",
         "05_portal_inventory.sql",
+        "11_point_map_binding_metadata.sql",
         "07_opaque_series_binding.sql",
     ):
         for stmt in _statements((schema / name).read_text(encoding="utf-8")):

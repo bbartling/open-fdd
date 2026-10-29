@@ -23,14 +23,14 @@ require() {
   fi
 }
 
-require crates/fdd_store/src/afdd_scheduler.rs "fn lookback_matches_cadence"
+require crates/fdd_store/src/afdd_scheduler.rs "fn lookback_equals_schedule_cadence"
 require crates/fdd_store/src/afdd_scheduler.rs "fn wall_clock_due"
 require crates/fdd_store/src/afdd_scheduler.rs "wall_clock_downtime_is_one_lookback_window"
 require crates/fdd_store/src/afdd_window.rs "fn merge_windowed_rule_result"
 require crates/fdd_store/src/afdd_window.rs "fn rule_result_window_fingerprints"
 require crates/fdd_store/src/afdd_window.rs '"update_all"'
 require services/central/src/afdd_scheduler.rs "result-slices"
-require services/central/src/afdd_scheduler.rs "lookback_matches_cadence"
+require services/central/src/afdd_scheduler.rs "lookback_equals_schedule_cadence"
 python3 scripts/gates/afdd_slice_identity.py
 
 if [[ "$CARGO" -eq 1 ]]; then

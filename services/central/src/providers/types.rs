@@ -98,6 +98,16 @@ pub struct SiteProviderHealth {
     /// N7 ledger from hourly jobs and receipts. Absent until a tick has run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coverage_ledger: Option<CoverageLedger>,
+    /// First portal throttle in the current episode (429 / retry_wait).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub portal_throttled_since: Option<DateTime<Utc>>,
+    /// Count of throttled ingest outcomes since the last complete history read.
+    #[serde(default, skip_serializing_if = "portal_throttle_count_is_zero")]
+    pub portal_throttle_count: u32,
+}
+
+fn portal_throttle_count_is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

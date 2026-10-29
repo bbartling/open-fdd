@@ -271,6 +271,21 @@ def build_plan(args: argparse.Namespace) -> list[Step]:
              required_checks=("semantic_meta_dry_run", "stale_revision", "overlay_dry_run",
                               "equip_dry_run", "agent_context", "ttl_parsed")),
     ]
+    if args.with_si_parity_chain:
+        plan.append(
+            Step(
+                "si_parity_gate.py",
+                required=True,
+                extra_args=("--fixtures-only",),
+                required_checks=(
+                    "si_parity.P0",
+                    "si_parity.P1",
+                    "si_parity.P2",
+                ),
+                minimum_comparisons=3,
+            )
+        )
+    return plan
 
 
 def print_report(report: GateReport) -> None:
@@ -347,6 +362,11 @@ def main(argv: list[str] | None = None) -> int:
         "--summary-json",
         default=None,
         help="write the per-step verdict summary to this JSON file",
+    )
+    p.add_argument(
+        "--with-si-parity-chain",
+        action="store_true",
+        help="Run required si_parity_gate.py P0–P2 on repo fixtures after gate 10",
     )
     p.add_argument("--scripts-dir", default=None, help=argparse.SUPPRESS)
     args = p.parse_args(argv)

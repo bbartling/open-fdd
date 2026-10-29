@@ -259,13 +259,14 @@ async fn rest_and_grpc_fixtures_produce_identical_samples() {
 
     assert_eq!(via_rest, via_grpc);
     // Positive control: the fixture is not trivially empty.
-    assert_eq!(via_grpc.len(), 2);
-    let a = &via_grpc[0];
+    assert!(via_grpc.complete);
+    assert_eq!(via_grpc.series.len(), 2);
+    let a = &via_grpc.series[0];
     assert_eq!(a.provider_point_id, POINT_A);
     let vals: Vec<f64> = a.samples.iter().map(|s| s.val).collect();
     assert_eq!(vals, vec![71.3, 55.125, 0.1]);
     assert_eq!(a.samples[1].ts.timestamp_subsec_nanos(), 123_456_000);
-    let b = &via_grpc[1];
+    let b = &via_grpc.series[1];
     assert_eq!(b.samples.len(), 1);
     assert_eq!(b.samples[0].val, -12.5);
     assert_eq!(b.samples[0].ts.timestamp_subsec_nanos(), 0);
@@ -361,7 +362,7 @@ async fn unauthenticated_reissues_the_token_once() {
     let (from, to) = window();
     let mut grpc = grpc_transport("nf:reissue", &endpoint, &fake, Limits::default()).await;
     let page = grpc.read_history_page(&ids(), from, to).await.unwrap();
-    assert_eq!(page.len(), 2);
+    assert_eq!(page.series.len(), 2);
     assert_eq!(fake.seen().history_batches.len(), 2);
     let log = portal.lock().unwrap();
     assert_eq!(log.token_posts, 2);
@@ -422,6 +423,7 @@ async fn grpc_reads_chunk_at_fifty_uuids_and_bounds_requests() {
         .read_history_page(&[], from, to)
         .await
         .unwrap()
+        .series
         .is_empty());
 }
 

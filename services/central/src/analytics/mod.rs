@@ -175,6 +175,10 @@ pub struct AnalyticsEnvelope {
     pub points: Vec<Value>,
     #[serde(default)]
     pub skipped: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oa_t_reference: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_asof_bound_seconds: Option<f64>,
 }
 
 impl AnalyticsEnvelope {
@@ -213,6 +217,8 @@ pub fn envelope_with_engine(
         equipment: Vec::new(),
         points: Vec::new(),
         skipped: Vec::new(),
+        oa_t_reference: None,
+        web_asof_bound_seconds: None,
     }
 }
 

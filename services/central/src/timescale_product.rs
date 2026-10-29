@@ -2458,7 +2458,7 @@ fn render_rule_sql(
         params.insert(k, v);
     }
     if rule.rule_id.eq_ignore_ascii_case("OAT-METEO") {
-        let bound = web_asof_bound_seconds(&params);
+        let bound = web_asof_bound_seconds(&params)?;
         params.insert(
             "WEB_ASOF_BOUND_SECONDS".into(),
             format!("{:.0}", bound.round()),
@@ -2728,23 +2728,63 @@ pub(crate) async fn resolve_site_oa_t_reference(
     }))
 }
 
+pub(crate) fn bas_vs_web_oa_t_config_line(reference: Option<&SiteOatReference>) -> String {
+    match reference {
+        Some(r) => format!("oa_t_ref={}={}", r.openfdd_key, r.selection),
+        None => "oa_t_ref=none".into(),
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct HistoryFillOptions {
     pub site_oa_t: Option<SiteOatReference>,
 }
 
-fn web_asof_bound_seconds(params: &std::collections::HashMap<String, String>) -> f64 {
+/// Web weather as-of tolerance shared by OAT-METEO and bas-vs-web-oat analytics.
+pub(crate) fn oat_meteo_web_asof_bound_seconds() -> Result<f64> {
+    let reg = load_reg()?;
+    let rule = reg
+        .rules
+        .iter()
+        .find(|r| r.rule_id == "OAT-METEO")
+        .ok_or_else(|| anyhow::anyhow!("OAT-METEO rule missing from FDD registry"))?;
+    let confirm = rule.confirm_seconds;
+    let mut params = rule_params(300.0, confirm);
+    let tuning = load_tuning_profiles(Path::new(&reg.rules_dir))
+        .context("load OAT-METEO tuning profiles")?;
+    let tuned = effective_param_strings(rule, &tuning, None, None, None)
+        .context("resolve OAT-METEO effective param strings")?;
+    for (k, v) in tuned {
+        if k == "CONFIRM_SECONDS" || k == "CONFIRM_ROWS" {
+            continue;
+        }
+        params.insert(k, v);
+    }
+    web_asof_bound_seconds(&params)
+}
+
+fn web_asof_bound_seconds(params: &std::collections::HashMap<String, String>) -> Result<f64> {
     let cadence = params
         .get("WEB_CADENCE_SECONDS")
-        .and_then(|v| v.parse::<f64>().ok())
-        .filter(|v| v.is_finite() && *v > 0.0)
-        .unwrap_or(1200.0);
+        .ok_or_else(|| anyhow::anyhow!("WEB_CADENCE_SECONDS missing from OAT-METEO params"))?
+        .parse::<f64>()
+        .context("parse WEB_CADENCE_SECONDS")?;
+    if !cadence.is_finite() || cadence <= 0.0 {
+        return Err(anyhow::anyhow!(
+            "WEB_CADENCE_SECONDS must be finite and > 0"
+        ));
+    }
     let margin = params
         .get("WEB_ASOF_MARGIN_SECONDS")
-        .and_then(|v| v.parse::<f64>().ok())
-        .filter(|v| v.is_finite() && *v >= 0.0)
-        .unwrap_or(300.0);
-    cadence + margin
+        .ok_or_else(|| anyhow::anyhow!("WEB_ASOF_MARGIN_SECONDS missing from OAT-METEO params"))?
+        .parse::<f64>()
+        .context("parse WEB_ASOF_MARGIN_SECONDS")?;
+    if !margin.is_finite() || margin < 0.0 {
+        return Err(anyhow::anyhow!(
+            "WEB_ASOF_MARGIN_SECONDS must be finite and >= 0"
+        ));
+    }
+    Ok(cadence + margin)
 }
 
 async fn ensure_history_table(conn: &mut PgConnection, roles: &[String]) -> Result<()> {
@@ -3222,26 +3262,6 @@ fn hash_fdd_pack(root: &Path) -> Result<String, String> {
         hasher.update(&bytes);
     }
     Ok(hex::encode(hasher.finalize()))
-}
-
-pub(crate) async fn read_analytics_cache_input(
-    building_id: &str,
-    start: Option<DateTime<Utc>>,
-    end: Option<DateTime<Utc>>,
-    equipment_ids: &[String],
-) -> AnalyticsCacheInput {
-    let tsdb = match Tsdb::connect_from_env().await {
-        Ok(tsdb) => tsdb,
-        Err(err) => {
-            tracing::warn!(error = %err, "analytics cache timescale connect failed");
-            let reason = public_db_error("timescale connect", &err);
-            return AnalyticsCacheInput {
-                model_revision: Err(reason.clone()),
-                watermark: Err(reason),
-            };
-        }
-    };
-    read_analytics_cache_input_from(&tsdb, building_id, start, end, equipment_ids).await
 }
 
 pub(crate) async fn read_analytics_cache_input_from(
@@ -6344,6 +6364,9 @@ mod opaque_series_binding {
     }
 }
 
+#[cfg(test)]
+#[path = "oat_meteo_bound_contract_test.rs"]
+mod oat_meteo_bound_contract_test;
 #[cfg(test)]
 #[path = "oat_meteo_t1404_test.rs"]
 mod oat_meteo_t1404_test;

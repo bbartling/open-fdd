@@ -29,8 +29,9 @@ use serde::Serialize;
 use tracing::{debug, warn};
 
 use super::committed_model::{
-    apply_engineer_point_overlays, model_from_json, model_from_point_map, validate_model,
-    BootstrapPoint, CommittedModel, CommittedModelStore, ModelScope,
+    apply_engineer_point_overlays, model_from_json, model_from_point_map,
+    resolve_point_map_binding, validate_model, BootstrapPoint, CommittedModel, CommittedModelStore,
+    ModelScope,
 };
 use super::config::SiteConfig;
 use super::Runtime;
@@ -174,16 +175,38 @@ pub fn overlay_rows(
     (equipment.into_values().collect(), points)
 }
 
-pub fn historian_rows(snapshot: &InventorySnapshot) -> Vec<PortalInventoryPoint> {
+pub fn historian_rows(
+    snapshot: &InventorySnapshot,
+    building_root: &Path,
+) -> Result<Vec<PortalInventoryPoint>, String> {
+    let overlay = open_fdd_edge_prototype::csv_ingest::model_overlay::load_engineer_point_overlay(
+        building_root,
+    )
+    .map_err(|e| {
+        format!(
+            "engineer overlay unreadable under {}: {e}",
+            building_root.display()
+        )
+    })?;
     snapshot
         .points
         .iter()
-        .map(|pt| PortalInventoryPoint {
-            portal_point_id: pt.portal_point_id.clone(),
-            equipment_id: pt.equipment_id.clone(),
-            equip_type: pt.equip_type.clone(),
-            role: pt.role.clone(),
-            unit: pt.unit.clone(),
+        .map(|pt| {
+            let entry = overlay.points.get(&pt.portal_point_id);
+            let binding =
+                resolve_point_map_binding(pt.unit.as_deref(), pt.his_mode.as_deref(), entry)?;
+            Ok(PortalInventoryPoint {
+                portal_point_id: pt.portal_point_id.clone(),
+                equipment_id: pt.equipment_id.clone(),
+                equip_type: pt.equip_type.clone(),
+                role: pt.role.clone(),
+                source_unit: binding.source_unit,
+                source_history_mode: binding.source_history_mode,
+                unit: binding.unit,
+                quantity: binding.quantity,
+                cadence_secs: binding.cadence_secs,
+                history_mode: binding.history_mode,
+            })
         })
         .collect()
 }
@@ -218,13 +241,17 @@ pub async fn apply_to_stores(
     let mut outcome = InventorySyncOutcome::default();
     let mut keys = BTreeMap::new();
     if let Some(tsdb) = tsdb {
+        let rows = match historian_rows(snapshot, building_root) {
+            Ok(rows) => rows,
+            Err(message) => {
+                warn!(%building_id, %message, "portal inventory overlay read failed");
+                outcome.errors.push("engineer_overlay_unreadable".into());
+                outcome.diagnostics.reason = Some(message);
+                return outcome;
+            }
+        };
         match tsdb
-            .sync_portal_inventory(
-                building_id,
-                provider_instance_id,
-                &historian_rows(snapshot),
-                snapshot.complete,
-            )
+            .sync_portal_inventory(building_id, provider_instance_id, &rows, snapshot.complete)
             .await
         {
             Ok(report) => {
@@ -964,9 +991,12 @@ mod tests {
             &root,
             "SITE_OVL",
             pid,
-            Some("degF"),
-            Some("absolute_temperature"),
-            None,
+            model_overlay::EngineerPointOverlayPatch {
+                unit: Some("degF"),
+                quantity: Some("absolute_temperature"),
+                cadence_secs: None,
+                primary_reference: None,
+            },
             false,
         )
         .expect("engineer");
@@ -991,3 +1021,15 @@ mod tests {
         assert_eq!(again.equipment[0].points[0].unit.as_deref(), Some("degF"));
     }
 }
+
+#[cfg(test)]
+#[path = "t1406_2_overlay_point_map_test.rs"]
+mod t1406_2_overlay_point_map_test;
+
+#[cfg(test)]
+#[path = "t1406_schema_upgrade_test.rs"]
+mod t1406_schema_upgrade_test;
+
+#[cfg(test)]
+#[path = "t1406_binding_resolution_test.rs"]
+mod t1406_binding_resolution_test;

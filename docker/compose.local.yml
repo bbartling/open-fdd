@@ -11,6 +11,8 @@
 #   Central applies the forward-only schema itself on boot.
 # - NF provider creds: optional gitignored env file (OPENFDD_NF_PROVIDER_CREDENTIALS_ENV);
 #   provider_sites JSON uses env:NAME refs. Stack secrets stay in repo-root .env only.
+# - Operator site JSON (outside git): OPENFDD_SITES_DIR on the host → /config/sites:ro
+#   (default ${HOME}/.config/openfdd/sites — Compose does not expand ~).
 # Requires Docker Compose >= 2.24.4 for !reset / !override.
 
 services:
@@ -43,6 +45,7 @@ services:
     volumes: !override
       - openfdd-workspace:/workspace
       - ../scripts/nf:/config/nf:ro
+      - ${OPENFDD_SITES_DIR:-${HOME}/.config/openfdd/sites}:/config/sites:ro
 
   timescale:
     environment:

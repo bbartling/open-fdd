@@ -24,6 +24,8 @@ Flow:
 
 Fail-closed by default. ``--allow-satdev-drift`` downgrades only AHU-SATDEV
 SQL↔oracle mismatch to WARN (lab emergency; do not weaken default).
+``--si-parity-chain`` also runs offline P0 ip-golden checks (exact fault seconds)
+for carry-over rules documented in ``si_cutover/parity_chain.py``.
 Missing roles, fewer than ``MIN_SAMPLES`` history rows, or fewer than
 ``--min-rules`` compared rules exit 2 (BLOCKED); divergence exits 1 (FAIL).
 
@@ -403,6 +405,11 @@ def main(argv: list[str] | None = None) -> int:
         default=len(_checks("")),
         help="exact-identity SQL↔pandas rule comparisons required for PASS (>= 1; default all)",
     )
+    ap.add_argument(
+        "--si-parity-chain",
+        action="store_true",
+        help="After gate 08, run offline P0 ip-golden parity (SYNTH_SELFTEST fixture)",
+    )
     args = ap.parse_args(argv)
     if args.min_rules < 1:
         ap.error("--min-rules must be >= 1 (zero comparisons is never a pass)")
@@ -559,6 +566,19 @@ def main(argv: list[str] | None = None) -> int:
             f"{blocked} blocked (seed the synthetic fixture)"
         )
         return EXIT_BLOCKED
+    if args.si_parity_chain:
+        from si_cutover import parity_chain as pc  # noqa: E402
+
+        golden = pc.load_ip_golden(pc.IP_GOLDENS_DIR / "SYNTH_SELFTEST.json")
+        p0 = pc.compare_p0_ip_golden(golden)
+        if p0.errors:
+            safe_print(f"FAIL si-parity P0 (08 hook): {'; '.join(p0.errors)}")
+            return EXIT_FAIL
+        if p0.comparisons < 1:
+            safe_print("BLOCKED si-parity P0 (08 hook): zero comparisons")
+            return EXIT_BLOCKED
+        record_check("si_parity.P0.golden", True, comparisons=p0.comparisons)
+        safe_print(f"  si-parity P0 golden: {p0.comparisons} row(s) exact")
     safe_print(f"\nPASS 08 — SQL FDD ↔ pandas via SPARQL (strict, {compared} rules)")
     return EXIT_PASS
 

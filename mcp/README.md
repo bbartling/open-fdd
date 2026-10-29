@@ -123,6 +123,7 @@ docker run -i --rm --network host \
 | `openfdd_ingest_receipts` | Scoped commit receipts |
 | `openfdd_ingest_gaps` | Partial / failed / retry windows (`coverage` is not assessed) |
 | `openfdd_ingest_queue` | Backlog age and portal in-flight; no live autoscaler |
+| `openfdd_ingest_jobs_cancel` | Cancel queued / retry_wait ingest jobs (operator, idempotent) |
 | `openfdd_model_sparql_catalog` | Predefined SPARQL queries |
 | `openfdd_model_sparql` | Execute SPARQL SELECT on Haystack RDF |
 | `openfdd_model_sites` | Site list |

@@ -1,7 +1,8 @@
-//! Active SQL pack ABI is imperial-f-v1 (°F / in.w.c. / cfm).
-//! Target processing contract is metric-c-v2 (°C / Pa / L/s) — see
-//! `sql/contract/metric_units.json`. Admit known source units into the pack ABI
-//! before pivot/SQL. Display preference is independent of processing.
+//! Running stacks still evaluate SQL in imperial-f-v1 (°F / in.w.c. / cfm).
+//! The processing ABI contract is metric-c-v2 (°C / Pa / L/s) — see
+//! `sql/contract/metric_units.json` and `units_contract`. Admit known source units
+//! into the pack ABI before pivot/SQL until W2b removes this path. Display
+//! preference is independent of processing.
 
 /// Temperature cookbook roles stored as °C when `unit_system` is metric|si.
 /// `dry_bulb_f` is already Fahrenheit even if the session is metric — never convert.

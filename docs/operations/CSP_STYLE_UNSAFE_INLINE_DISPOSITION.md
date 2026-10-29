@@ -56,6 +56,5 @@ Component styles live in `ActionsPage.css` (no inline `<style>` block in React).
 
 ## ZAP / disposition
 
-Codex-owned passive ZAP may still list historical 10055 rows until the disposition
-file is updated on a qualified tip. This document tracks the **product** header shape;
+Grok-owned passive ZAP on a disposable stack may still list historical plugin rows until dispositions are updated on a qualified tip. Plugin **10055** was removed from `medium_dispositions.json` after the 28 Oct baseline (no document-level `style-src unsafe-inline`). This document tracks the **product** header shape;
 live scan evidence belongs in the private qualification report.

@@ -1,0 +1,21 @@
+{
+  "schema": "openfdd-si-parity-w4-families-v1",
+  "issue": "1284",
+  "families": {
+    "W4b_fc1_duct_static": {
+      "wave": "W4b",
+      "description": "FC1 duct static (GL36 A) — T1284-4 blocking scope",
+      "rules": ["FC1"]
+    },
+    "W4e_sensor_validation": {
+      "wave": "W4e",
+      "description": "Sensor validation SV-* — pandas SI vs IP parity row",
+      "rules": ["SV-RANGE", "SV-FLATLINE", "SV-RATE", "SV-SPIKE", "SV-STALE"]
+    },
+    "W3_full_matrix": {
+      "wave": "W3",
+      "description": "Full cookbook + SYNTH ip golden matrix (report-only on chain PR)",
+      "rules": ["*"]
+    }
+  }
+}

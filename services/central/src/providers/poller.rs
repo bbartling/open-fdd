@@ -17,7 +17,9 @@ use super::ace_stub::AceIotStubDriver;
 use super::config::SiteConfig;
 use super::hourly::{assess_page, HourlyPolicy, LogicalWindow};
 use super::hourly_exec::{run_hourly_tick, FetchRequest, HistorySource, SampleWriter, TickInput};
-use super::map::{normalize_mapped, DevicePoints, HistorySeries, ResolvedRole, RoleResolver};
+use super::map::{
+    normalize_mapped, DevicePoints, HistoryFetchPage, HistorySeries, ResolvedRole, RoleResolver,
+};
 use super::meteo::OpenMeteoDriver;
 use super::nf_transport::NfTransport;
 use super::store::StoreOpen;
@@ -36,12 +38,10 @@ fn poll_enabled() -> bool {
         .is_some_and(|v| matches!(v.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
 }
 
-fn max_concurrent() -> usize {
-    std::env::var("OPENFDD_PROVIDER_MAX_CONCURRENT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .filter(|n| *n > 0)
-        .unwrap_or(2)
+fn max_concurrent() -> Result<usize, String> {
+    crate::ingest_queue::portal_env::provider_max_concurrent_from_env().and_then(|value| {
+        usize::try_from(value).map_err(|_| "OPENFDD_PROVIDER_MAX_CONCURRENT overflow".into())
+    })
 }
 
 fn tick_secs() -> u64 {
@@ -68,7 +68,14 @@ pub fn spawn_with_shutdown(
             return;
         }
         info!(sites = sites.len(), "provider poller starting");
-        let sem = Arc::new(Semaphore::new(max_concurrent()));
+        let concurrent = match max_concurrent() {
+            Ok(value) => value,
+            Err(err) => {
+                warn!(error = %err, "invalid OPENFDD_PROVIDER_MAX_CONCURRENT; provider poller idle");
+                return;
+            }
+        };
+        let sem = Arc::new(Semaphore::new(concurrent));
         let mut handles = Vec::new();
         for site in sites {
             let state = Arc::clone(&state);
@@ -389,7 +396,7 @@ pub async fn fetch_device_window(
     device_id: &str,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
-) -> Result<Vec<HistorySeries>, String> {
+) -> Result<HistoryFetchPage, String> {
     if !matches!(site.kind, super::types::ProviderKind::Nf) {
         return Err("not_implemented".into());
     }
@@ -431,7 +438,7 @@ pub async fn fetch_device_window(
     let page = match transport.read_history_page(&ids, start, end).await {
         Ok(page) => page,
         Err(err) => {
-            let code = err.code();
+            let code = err.ingest_queue_label();
             runtime
                 .record_error(
                     &site.building_id,
@@ -439,9 +446,15 @@ pub async fn fetch_device_window(
                     Some(code.clone()),
                 )
                 .await;
+            if code.starts_with("throttled") {
+                runtime.record_portal_throttle(&site.building_id).await;
+            }
             return Err(code);
         }
     };
+    if page.complete {
+        runtime.clear_portal_throttle(&site.building_id).await;
+    }
     Ok(page)
 }
 
@@ -890,6 +903,13 @@ impl HistorySource for NfHistory<'_> {
                     );
                     failure.fetch_error()
                 })
+                .and_then(|page| {
+                    if page.complete {
+                        Ok(page.series)
+                    } else {
+                        Err(super::hourly::FetchError::PartialSeries)
+                    }
+                })
         })
     }
 }
@@ -914,6 +934,7 @@ impl HistorySource for MeteoHistory<'_> {
             self.driver
                 .read_history_page(&req.point_ids, req.from, req.to)
                 .await
+                .map(|page| page.series)
         })
     }
 }
@@ -1097,6 +1118,35 @@ impl Runtime {
             }
             site.consecutive_errors = site.consecutive_errors.saturating_add(1);
             site.health.last_error_at = Some(Utc::now());
+        }
+    }
+
+    pub async fn record_portal_throttle(&self, building_id: &str) {
+        let mut guard = self.health.lock().await;
+        if let Some(site) = guard
+            .sites
+            .iter_mut()
+            .find(|s| s.building_id == building_id)
+        {
+            let now = Utc::now();
+            site.portal_throttle_count = site.portal_throttle_count.saturating_add(1);
+            if site.portal_throttled_since.is_none() {
+                site.portal_throttled_since = Some(now);
+            }
+            site.health.status = ProviderHealthStatus::Degraded;
+            site.health.message = Some("throttled".into());
+        }
+    }
+
+    pub async fn clear_portal_throttle(&self, building_id: &str) {
+        let mut guard = self.health.lock().await;
+        if let Some(site) = guard
+            .sites
+            .iter_mut()
+            .find(|s| s.building_id == building_id)
+        {
+            site.portal_throttle_count = 0;
+            site.portal_throttled_since = None;
         }
     }
 }

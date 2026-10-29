@@ -190,10 +190,11 @@ async fn run_daily(store: &MemoryStore, driver: &mut NfPortalDriver, now: DateTi
         }
         for job in claimed {
             let uuids = vec![SAT.to_string(), RAT.to_string()];
-            let page = driver
+            let fetched = driver
                 .read_history_page(&uuids, job.logical_window_start, job.logical_window_end)
                 .await
                 .unwrap();
+            let page = fetched.series;
             let observations = observations_for(&expectations, &page);
             let report = reconcile(&ReconcileInput {
                 start: job.logical_window_start,
@@ -201,7 +202,7 @@ async fn run_daily(store: &MemoryStore, driver: &mut NfPortalDriver, now: DateTi
                 expectations: &expectations,
                 observations: &observations,
                 prior: &job.point_coverage,
-                response_complete: true,
+                response_complete: fetched.complete,
             })
             .unwrap();
             let applied = applied_samples(&page, job.logical_window_start, job.logical_window_end);
@@ -215,6 +216,7 @@ async fn run_daily(store: &MemoryStore, driver: &mut NfPortalDriver, now: DateTi
                 now,
                 written: &EMPTY_RECEIPT,
                 applied: &applied,
+                jitter_key: "daily-test",
             });
             let outcome = apply_daily_policy(
                 outcome,

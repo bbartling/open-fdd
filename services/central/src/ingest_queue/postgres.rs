@@ -446,7 +446,11 @@ pub async fn finish(pool: &PgPool, req: &FinishRequest) -> Result<Option<Receipt
         FinishOutcome::Retry { code, not_before } => {
             let updated = sqlx::query(
                 "UPDATE ingest_job SET state = 'retry_wait', safe_error_code = $5,
-                    not_before = $6, lease_owner = NULL, lease_expiry = NULL, updated_at = $4
+                    not_before = $6, lease_owner = NULL, lease_expiry = NULL, updated_at = $4,
+                    attempt = CASE
+                      WHEN $5 = 'throttled' THEN GREATEST(attempt - 1, 0)
+                      ELSE attempt
+                    END
                  WHERE job_id = $1 AND lease_owner = $2 AND fencing_token = $3
                    AND state = 'leased' AND lease_expiry > $4",
             )
@@ -793,6 +797,71 @@ pub async fn site_backfill(
     store_idempotency_result(&mut tx, "site_backfill", claim, &ids, None).await?;
     tx.commit().await.map_err(db_err)?;
     Ok(views)
+}
+
+pub async fn cancel_jobs(
+    pool: &PgPool,
+    filter: &CancelFilter,
+    now: DateTime<Utc>,
+    claim: &IdempotencyClaim,
+) -> Result<CancelOutcome, QueueError> {
+    if claim.object_id != cancel_object_id(filter)
+        || claim.payload_hash != cancel_payload_hash(filter)
+    {
+        return Err(QueueError::Conflict(
+            "idempotency key does not match the original request".into(),
+        ));
+    }
+    let mut tx = pool.begin().await.map_err(db_err)?;
+    let reserved = lock_idempotency(&mut tx, "cancel", claim).await?;
+    if !reserved.inserted {
+        if !binding_matches(&reserved, claim) {
+            return Err(QueueError::Conflict(
+                "idempotency key does not match the original request".into(),
+            ));
+        }
+        let views = load_jobs_for_replay(&mut tx, &reserved.job_ids, &claim.tenant_id).await?;
+        let job_ids: Vec<Uuid> = views.iter().map(|job| job.job_id).collect();
+        let cancelled = u32::try_from(job_ids.len())
+            .map_err(|_| QueueError::Invalid("cancelled job count overflow".into()))?;
+        tx.commit().await.map_err(db_err)?;
+        return Ok(CancelOutcome { cancelled, job_ids });
+    }
+    let rows = sqlx::query_scalar::<_, String>(
+        "UPDATE ingest_job SET state = 'cancelled', lease_owner = NULL, lease_expiry = NULL,
+            safe_error_code = 'cancelled', updated_at = $1
+         WHERE tenant_id = $2
+           AND state IN ('queued', 'retry_wait')
+           AND ($3::text IS NULL OR canonical_site = $3)
+           AND ($4::text IS NULL OR provider_instance_id = $4)
+           AND ($5::text IS NULL OR device_id = $5)
+           AND ($6::timestamptz IS NULL OR logical_window_start >= $6)
+           AND ($7::timestamptz IS NULL OR logical_window_end <= $7)
+         RETURNING job_id",
+    )
+    .bind(now)
+    .bind(&filter.tenant_id)
+    .bind(filter.canonical_site.as_deref())
+    .bind(filter.provider_instance_id.as_deref())
+    .bind(filter.device_id.as_deref())
+    .bind(filter.window_start)
+    .bind(filter.window_end)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(db_err)?;
+    let job_ids: Result<Vec<Uuid>, QueueError> = rows
+        .iter()
+        .map(|raw| {
+            Uuid::parse_str(raw)
+                .map_err(|_| QueueError::Db("cancel returned an invalid job id".into()))
+        })
+        .collect();
+    let job_ids = job_ids?;
+    store_idempotency_result(&mut tx, "cancel", claim, &job_ids, None).await?;
+    let cancelled = u32::try_from(job_ids.len())
+        .map_err(|_| QueueError::Invalid("cancelled job count overflow".into()))?;
+    tx.commit().await.map_err(db_err)?;
+    Ok(CancelOutcome { cancelled, job_ids })
 }
 
 pub async fn list_gaps(pool: &PgPool, filter: &ListFilter) -> Result<Vec<JobView>, QueueError> {

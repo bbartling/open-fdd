@@ -1,0 +1,27 @@
+{
+  "schema": "si-parity-p2-hook-v1",
+  "note": "Hook golden until W4 ships SQL SI rules; pairs must stay equal.",
+  "pairs": [
+    {
+      "rule_id": "FC1",
+      "equipment_id": "AHU_HOOK",
+      "utc_day": "2026-06-01",
+      "sql_si_fault_seconds": 3300.0,
+      "pandas_si_fault_seconds": 3300.0
+    },
+    {
+      "rule_id": "VAV-1",
+      "equipment_id": "VAV_HOOK",
+      "utc_day": "2026-06-01",
+      "sql_si_fault_seconds": 900.0,
+      "pandas_si_fault_seconds": 900.0
+    },
+    {
+      "rule_id": "SV-FLATLINE",
+      "equipment_id": "SENSOR_HOOK",
+      "utc_day": "2026-06-01",
+      "sql_si_fault_seconds": 3600.0,
+      "pandas_si_fault_seconds": 3600.0
+    }
+  ]
+}
