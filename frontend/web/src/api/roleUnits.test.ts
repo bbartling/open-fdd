@@ -122,6 +122,14 @@ describe("quantity round-trips", () => {
   });
 
   it("converts a stored sample by quantity, not by a shared axis offset", () => {
+    expect(displayStoredQuantity(22.22222222222222, "absolute_temperature", "degC", "metric")).toBeCloseTo(
+      22.22222222222222,
+      9,
+    );
+    expect(displayStoredQuantity(22.22222222222222, "absolute_temperature", "degC", "imperial")).toBeCloseTo(
+      72,
+      6,
+    );
     expect(displayStoredQuantity(32, "absolute_temperature", "°F", "metric")).toBe(0);
     expect(displayStoredQuantity(32, "dry_bulb_temperature", "°F", "metric")).toBe(0);
     expect(displayStoredQuantity(32, "wet_bulb_temperature", "°F", "metric")).toBe(0);
@@ -139,5 +147,26 @@ describe("quantity round-trips", () => {
     expect(displayStoredQuantity(10, "minutes", "min", "metric")).toBe(10);
     expect(displayStoredQuantity(70, "absolute_temperature", "°F", "imperial")).toBe(70);
     expect(displayStoredQuantity(10, "temperature_difference", "°F", "imperial")).toBe(10);
+  });
+});
+
+/** T1284-5 — SI API fixtures convert at display time (#1284 W5a). */
+describe("T1284-5 display preference", () => {
+  it("shows °C in SI mode and °F in imperial for absolute SI storage", () => {
+    const c = 21.0;
+    expect(displayStoredQuantity(c, "absolute_temperature", "degC", "metric")).toBeCloseTo(21, 9);
+    expect(displayStoredQuantity(c, "absolute_temperature", "degC", "imperial")).toBeCloseTo(69.8, 6);
+    expect(displayUnitLabel("degC", "metric", "temperature")).toBe("°C");
+    expect(displayUnitLabel("degC", "imperial", "temperature")).toBe("°F");
+  });
+
+  it("converts a 10 K delta to 18 °F in imperial (not 50 °F)", () => {
+    const shown = displayScalar(10, "K_diff", "imperial", "temperature_difference", "eps_mat");
+    expect(shown).toBeCloseTo(18, 9);
+    expect(shown).not.toBeCloseTo(50, 3);
+    expect(displayScalar(10, "K_diff", "metric", "temperature_difference", "eps_mat")).toBeCloseTo(
+      10,
+      9,
+    );
   });
 });

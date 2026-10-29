@@ -79,6 +79,7 @@ mod timescale_product;
 mod user_store;
 mod vibe21;
 mod wattlab_dump;
+mod si_api_response;
 mod zone_comfort_units;
 
 use std::net::SocketAddr;

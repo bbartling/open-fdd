@@ -66,14 +66,14 @@ fn safe_ident(name: &str) -> bool {
     !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// Quantity and display unit for an RCx role. Unknown roles stay unlabeled.
-/// Storage stays canonical °F / in. w.c.; the client converts for display.
+/// Quantity and canonical SI unit for an RCx role. Unknown roles stay unlabeled.
+/// Historian values are metric-c-v2; the SPA converts to the user display preference.
 fn role_measure(role: &str) -> (&'static str, &'static str) {
     match role {
-        "duct_static" | "duct_static_sp" | "duct_sp" | "static_sp" => ("air_pressure", "in. w.c."),
+        "duct_static" | "duct_static_sp" | "duct_sp" | "static_sp" => ("air_pressure", "Pa"),
         "sat" | "mat" | "rat" | "oa_t" | "web_oa_t" | "web_wb_t" | "zone_t" | "chw_supply_t"
         | "chw_return_t" | "cw_supply_t" | "cw_return_t" | "hw_supply_t" | "hw_return_t" => {
-            ("absolute_temperature", "°F")
+            ("absolute_temperature", "degC")
         }
         _ => ("other", ""),
     }
@@ -140,7 +140,7 @@ fn delta_measure(primary: &str, companion: &str) -> Option<(&'static str, &'stat
         )
     };
     if temperature(primary) && temperature(companion) {
-        Some(("temperature_difference", "°F"))
+        Some(("temperature_difference", "delta_degC"))
     } else {
         None
     }
@@ -3059,12 +3059,18 @@ fn rule_file(
     }
 }
 
-fn metric_unit_for_column(column: &str) -> &'static str {
+fn metric_unit_for_column(column: &str) -> (&'static str, &'static str) {
+    if let Some(quantity) = crate::si_api_response::metric_column_quantity(column) {
+        if let Ok(contract) = fdd_core::units_contract::MetricUnitsContract::load_embedded() {
+            if let Ok(unit) = contract.canonical_unit(quantity) {
+                return (quantity, unit);
+            }
+        }
+    }
     match column {
-        "avg_zone_temp" | "min_zone_temp" | "max_zone_temp" => "degF",
-        "comfort_pct" => "pct",
-        "fan_runtime_hours" | "total_hours" => "h",
-        _ => "",
+        "fan_runtime_hours" | "total_hours" => ("other", "h"),
+        "comfort_pct" => ("percent", "percent_0_100"),
+        _ => ("other", ""),
     }
 }
 
@@ -3138,11 +3144,37 @@ fn metric_payload(
     } else {
         values.get(name).cloned().unwrap_or(Value::Null)
     };
+    let (quantity, unit_label) = metric_unit_for_column(name);
+    let si_value = match (&value, name.is_empty()) {
+        (_, true) => value,
+        (Value::Number(n), false) => {
+            if let Some(raw) = n.as_f64() {
+                if let Some(qty) = crate::si_api_response::metric_column_quantity(name) {
+                    let src = crate::si_api_response::default_pack_source_unit(qty);
+                    if !src.is_empty() {
+                        if let Ok(si) = crate::si_api_response::value_to_si(qty, src, raw) {
+                            json!(si.value)
+                        } else {
+                            value
+                        }
+                    } else {
+                        value
+                    }
+                } else {
+                    value
+                }
+            } else {
+                value
+            }
+        }
+        _ => value,
+    };
     let unknown = facts.observed_start.is_none() || facts.observed_end.is_none();
     json!({
         "name": name,
-        "value": value,
-        "unit": metric_unit_for_column(name),
+        "value": si_value,
+        "unit": unit_label,
+        "quantity": quantity,
         "window": {
             "start": if unknown { Value::Null } else { json!(facts.observed_start) },
             "end": if unknown { Value::Null } else { json!(facts.observed_end) },
@@ -5462,8 +5494,9 @@ rules:
         assert_eq!(partial["window"]["start"], json!("2026-06-01T00:00:00Z"));
         let metric = row_for(&partial, "AVG-ZONE-TEMP", "AHU_A");
         let value = metric["metric"]["value"].as_f64().expect("metric value");
-        assert!((value - 72.0).abs() < 1e-6, "{metric}");
-        assert_eq!(metric["metric"]["unit"], json!("degF"));
+        assert!((value - 22.22222222222222).abs() < 1e-6, "{metric}");
+        assert_eq!(metric["metric"]["unit"], json!("degC"));
+        assert_eq!(metric["metric"]["quantity"], json!("absolute_temperature"));
         assert_eq!(metric["status"], json!("METRIC"));
         assert_ne!(metric["status"], json!("PASS"));
         assert!(metric.get("fault_hours").is_none());
@@ -5563,8 +5596,8 @@ rules:
             .expect("rest metric");
         assert_eq!(metric_rest["status"], json!("METRIC"));
         assert!(metric_rest["fault_hours"].is_null());
-        assert!((metric_rest["metric"]["value"].as_f64().unwrap() - 72.0).abs() < 1e-6);
-        assert_eq!(metric_rest["metric"]["unit"], json!("degF"));
+        assert!((metric_rest["metric"]["value"].as_f64().unwrap() - 22.22222222222222).abs() < 1e-6);
+        assert_eq!(metric_rest["metric"]["unit"], json!("degC"));
         assert!(metric_rest["metric"]["window"]["watermark"]
             .as_str()
             .unwrap_or("")

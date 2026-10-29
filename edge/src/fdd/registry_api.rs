@@ -15,6 +15,7 @@ pub fn rule_params_with_quantity(rule_id: &str) -> serde_json::Value {
     let mut body = imp::rule_params_response(rule_id);
     let registry = imp::load_registry_rules_map();
     fdd_rules::annotate_rule_param_quantities(&mut body, registry.get(rule_id));
+    fdd_rules::annotate_rule_param_effects(&mut body);
     body
 }
 
