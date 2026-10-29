@@ -34,6 +34,9 @@ TEMPERATURE_DIFFERENCE_KEYS = frozenset(
 )
 
 STRIP_PARAM_KEYS = frozenset({"kind", "effect"})
+STRIP_REGISTRY_COMPARE_KEYS = STRIP_PARAM_KEYS | frozenset(
+    {"required_roles", "optional_roles"}
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -226,7 +229,7 @@ def strip_registry_metadata(doc: Any) -> Any:
     if isinstance(doc, dict):
         out = {}
         for k, v in doc.items():
-            if k in STRIP_PARAM_KEYS:
+            if k in STRIP_REGISTRY_COMPARE_KEYS:
                 continue
             out[k] = strip_registry_metadata(v)
         return out
@@ -293,7 +296,8 @@ def assert_metadata_only_registry_diff() -> None:
     branch_doc = strip_registry_metadata(yaml.safe_load(branch_text))
     if master_doc != branch_doc:
         raise AssertionError(
-            "registry.yaml differs from origin/master beyond kind/effect metadata"
+            "registry.yaml differs from origin/master beyond kind/effect metadata "
+            "and required_roles/optional_roles"
         )
 
 
