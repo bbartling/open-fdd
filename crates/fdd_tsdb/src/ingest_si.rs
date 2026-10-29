@@ -133,13 +133,12 @@ pub fn prepare_numeric_sample(
                 quality: None,
             }
         }
-        Err(MetricContractError::UnknownAlias(_)) | Err(MetricContractError::QuantityMismatch { .. }) => {
-            PreparedIngestValue {
-                val: Some(raw_val),
-                unit: None,
-                quality: Some(QUALITY_UNIT_UNDECLARED.into()),
-            }
-        }
+        Err(MetricContractError::UnknownAlias(_))
+        | Err(MetricContractError::QuantityMismatch { .. }) => PreparedIngestValue {
+            val: Some(raw_val),
+            unit: None,
+            quality: Some(QUALITY_UNIT_UNDECLARED.into()),
+        },
         Err(MetricContractError::UnsupportedQuantity(_)) => PreparedIngestValue {
             val: Some(raw_val),
             unit: None,
