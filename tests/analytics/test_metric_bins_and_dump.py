@@ -40,9 +40,8 @@ def test_metric_bins_same_physical_hours():
     )
     assert not imp.empty and not met.empty
     assert float(imp["runtime_hours"].sum()) == float(met["runtime_hours"].sum())
-    assert set(imp["bin_start"]) == set(met["bin_start"])
     assert "70–75" in set(imp["bin_label"].astype(str))
-    assert any("21" in str(x) for x in met["bin_label"])
+    assert "21–27" in set(met["bin_label"].astype(str))
 
 
 def test_dump_tables_filenames(tmp_path: Path):

@@ -138,7 +138,10 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
         "qualified row keeps measured MAT"
     );
     let delta = row["delta_or_f"].as_f64().expect("delta");
-    assert!(delta.abs() >= dt_min_c - 1e-9, "qualified |OAT−RAT|={delta}");
+    assert!(
+        delta.abs() >= dt_min_c - 1e-9,
+        "qualified |OAT−RAT|={delta}"
+    );
     let resid = row["mat_resid_f"].as_f64().expect("residual");
     assert!(
         (resid - (-3.2_f64 * 5.0 / 9.0)).abs() < 1e-5,
@@ -223,7 +226,8 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     let t0_pairs: Vec<_> = bas_rows
         .iter()
         .filter(|row| {
-            row.get("bas_oa_t") == Some(&json!(10.0)) && row.get("web_oa_t") == Some(&json!(8.88888888888889))
+            row.get("bas_oa_t") == Some(&json!(10.0))
+                && row.get("web_oa_t") == Some(&json!(8.88888888888889))
         })
         .collect();
     assert_eq!(t0_pairs.len(), 1, "expected one assessable t0 pair: {bas}");
