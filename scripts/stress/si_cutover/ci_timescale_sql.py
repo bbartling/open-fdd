@@ -132,6 +132,8 @@ def history_columns_for_rules(frame, rules: list[dict[str, Any]]) -> set[str]:
             continue
         text = path.read_text(encoding="utf-8")
         for col in _registry_history_column_names():
+            if col in ("equipment_id", "timestamp_utc"):
+                continue
             if re.search(rf"(?<![a-z0-9_]){re.escape(col)}(?![a-z0-9_])", text):
                 cols.add(col)
     return cols
@@ -285,7 +287,7 @@ def seed_frame(
 
 
 def fill_history(cur, site_id: str, sql_columns: set[str]) -> None:
-    sql_columns = {c for c in sql_columns if c != "equipment_id"}
+    sql_columns = {c for c in sql_columns if c not in ("equipment_id", "timestamp_utc")}
     if not sql_columns:
         sql_columns = {"fan_status"}
     ordered = sorted(sql_columns)
