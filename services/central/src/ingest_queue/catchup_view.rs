@@ -35,10 +35,6 @@ pub async fn site_catchup_json(
     let window_secs = crate::providers::hourly::HourlyPolicy::from_env().window_secs;
     let step = window_secs.clamp(60, 3600);
     let target_end = floor_to_window(now - delay, step);
-    let registry = state.ingest_queue.catchup_registry();
-    let registry_guard = registry
-        .read()
-        .map_err(|_| "catchup registry poisoned".to_string())?;
     let mut providers = Vec::new();
     for site_cfg in configs {
         let tenant_id = site_cfg.tenant_id.as_str();
@@ -62,9 +58,23 @@ pub async fn site_catchup_json(
         for group in plan.groups.iter().filter(|group| {
             provider_ids_equivalent(&group.provider_instance_id, &site_cfg.provider_instance_id)
         }) {
+            let key = DeviceBindingKey {
+                tenant_id: site_cfg.tenant_id.clone(),
+                canonical_site: site_cfg.building_id.clone(),
+                provider_instance_id: group.provider_instance_id.clone(),
+                device_id: group.equipment_id.clone(),
+                model_revision: plan.revision_id.clone(),
+            };
+            let rows_per_minute = state
+                .ingest_queue
+                .catchup_registry()
+                .read()
+                .ok()
+                .and_then(|guard| guard.snapshot(&key))
+                .map(|snap| snap.rows_per_minute)
+                .unwrap_or(0.0);
             let row = device_row(
                 pool,
-                &registry_guard,
                 state,
                 &plan,
                 site_cfg,
@@ -75,6 +85,7 @@ pub async fn site_catchup_json(
                 delay,
                 step,
                 config,
+                rows_per_minute,
             )
             .await?;
             devices.push(row);
@@ -89,7 +100,6 @@ pub async fn site_catchup_json(
 
 async fn device_row(
     pool: &PgPool,
-    registry: &CatchupRegistry,
     state: &Arc<AppState>,
     plan: &IngestPlan,
     site_cfg: &SiteConfig,
@@ -100,6 +110,7 @@ async fn device_row(
     delay: Duration,
     step: i64,
     config: AsapConfig,
+    rows_per_minute: f64,
 ) -> Result<Value, String> {
     let point_keys = point_keys_for_plan_device(plan, provider_instance_id, device_id)
         .ok_or_else(|| "device not in plan".to_string())?;
@@ -157,8 +168,6 @@ async fn device_row(
         step,
         config.threshold_windows,
     );
-    let runtime = registry.snapshot(&key);
-    let rows_per_minute = runtime.as_ref().map(|r| r.rows_per_minute).unwrap_or(0.0);
     let eta = eta_seconds(decision.missing_windows, step, rows_per_minute);
     let throttle = state
         .ingest_queue
