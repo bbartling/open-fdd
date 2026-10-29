@@ -149,7 +149,10 @@ pub fn eta_seconds(
 fn env_u32_bounded(key: &str, default: u32, min: u32, max: u32) -> Result<u32, String> {
     match std::env::var(key) {
         Err(_) | Ok(ref raw) if raw.trim().is_empty() => {
-            info!(env = key, default, min, max, "using default ASAP ingest config (unset)");
+            info!(
+                env = key,
+                default, min, max, "using default ASAP ingest config (unset)"
+            );
             Ok(default)
         }
         Ok(raw) => {
@@ -169,7 +172,10 @@ fn env_u32_bounded(key: &str, default: u32, min: u32, max: u32) -> Result<u32, S
 fn env_u64_bounded(key: &str, default: u64, min: u64, max: u64) -> Result<u64, String> {
     match std::env::var(key) {
         Err(_) | Ok(ref raw) if raw.trim().is_empty() => {
-            info!(env = key, default, min, max, "using default ASAP ingest config (unset)");
+            info!(
+                env = key,
+                default, min, max, "using default ASAP ingest config (unset)"
+            );
             Ok(default)
         }
         Ok(raw) => {
@@ -212,8 +218,8 @@ mod tests {
             max_span: MAX_HISTORY_WINDOW,
         })
         .expect("plan");
-        let decision = decide_mode(&plan, Some(h(1)), h(12), Duration::seconds(300), 3600, 3)
-            .expect("decide");
+        let decision =
+            decide_mode(&plan, Some(h(1)), h(12), Duration::seconds(300), 3600, 3).expect("decide");
         assert_eq!(decision.mode, CatchupMode::Asap);
         assert!(decision.missing_windows > 3);
     }
@@ -239,8 +245,8 @@ mod tests {
             max_span: MAX_HISTORY_WINDOW,
         })
         .expect("plan");
-        let decision = decide_mode(&plan, Some(last), now, Duration::seconds(300), 3600, 1)
-            .expect("decide");
+        let decision =
+            decide_mode(&plan, Some(last), now, Duration::seconds(300), 3600, 1).expect("decide");
         assert_eq!(decision.mode, CatchupMode::Normal);
     }
 }

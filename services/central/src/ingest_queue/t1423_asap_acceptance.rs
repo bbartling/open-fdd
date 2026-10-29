@@ -27,8 +27,8 @@ fn t1423_5_asap_mode_enters_on_backlog_and_exits_near_now() {
         max_span: MAX_HISTORY_WINDOW,
     })
     .expect("plan");
-    let enter = decide_mode(&plan, Some(h(1)), h(12), Duration::seconds(300), 3600, 3)
-        .expect("decide");
+    let enter =
+        decide_mode(&plan, Some(h(1)), h(12), Duration::seconds(300), 3600, 3).expect("decide");
     assert_eq!(enter.mode, CatchupMode::Asap);
 
     let now = h(10) + Duration::minutes(10);
@@ -44,7 +44,7 @@ fn t1423_5_asap_mode_enters_on_backlog_and_exits_near_now() {
         max_span: MAX_HISTORY_WINDOW,
     })
     .expect("plan");
-    let exit = decide_mode(&caught_up, Some(last), now, Duration::seconds(300), 3600, 1)
-        .expect("decide");
+    let exit =
+        decide_mode(&caught_up, Some(last), now, Duration::seconds(300), 3600, 1).expect("decide");
     assert_eq!(exit.mode, CatchupMode::Normal);
 }
