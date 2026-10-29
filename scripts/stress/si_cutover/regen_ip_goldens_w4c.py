@@ -14,15 +14,11 @@ if str(REPO) not in sys.path:
 
 from scripts.ci import unit_contract_lib as uc  # noqa: E402
 from scripts.stress.si_cutover import ci_fixtures_lib as cfl  # noqa: E402
+from scripts.stress.si_cutover import ci_timescale_sql as cts  # noqa: E402
 from scripts.stress.si_cutover.ci_timescale_sql import W4C_ZONE_RULES  # noqa: E402
 
 GOLDENS = REPO / "tests" / "fixtures" / "si_cutover" / "ip_goldens"
-TARGET_DATASETS = (
-    "COOKBOOK_VAV1",
-    "COOKBOOK_VAV6",
-    "COOKBOOK_VAV7",
-    "SYNTH_VAV_CASE_VAV_1",
-)
+TARGET_DATASETS = cts.W4C_TARGET_DATASETS
 
 
 def _merge_daily_for_rules(
@@ -82,15 +78,16 @@ def refresh_pandas_side(golden: dict, metric: dict, rules_by_id: dict) -> None:
                 continue
             si_row = si_by_key.get(cfl.si_fault_key(row))
             p2_updates.append(
-                {
-                    "rule_id": rule_id,
-                    "equipment_id": equipment_id,
-                    "utc_day": str(row.get("utc_day")),
-                    "pandas_si_fault_seconds": float(
+                cts.p2_pair_for_si_row(
+                    rule_id=rule_id,
+                    equipment_id=equipment_id,
+                    utc_day=str(row.get("utc_day")),
+                    pandas_si_fault_seconds=float(
                         si_row.get("fault_seconds", 0.0) if si_row else 0.0
                     ),
-                    "pandas_si_missing": si_row is None,
-                }
+                    pandas_si_missing=si_row is None,
+                    sql_si_fault_seconds=None,
+                )
             )
 
     golden["pandas_fdd_daily"] = _merge_daily_for_rules(

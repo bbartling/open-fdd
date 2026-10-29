@@ -671,12 +671,135 @@ def run_p1_ip_vs_si(
     return StageResult("P1", comparisons, tuple(errors), tuple(), tuple(structured))
 
 
+def hydrate_w4c_p2_sql_si_from_timescale(
+    goldens: list[dict[str, Any]],
+    *,
+    scope: set[str] | None,
+) -> list[str]:
+    """When Timescale is available, fill sql_si_fault_seconds for W4c-scoped P2 rows."""
+    import os
+
+    from scripts.ci import unit_contract_lib as uc
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+    from scripts.stress.si_cutover import ci_timescale_sql as cts
+
+    url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
+    if not url or scope is None:
+        return []
+    if not scope.intersection(cts.W4C_ZONE_RULES):
+        return []
+    metric = uc.load_json(uc.METRIC_UNITS)
+    rules_by_id = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
+    try:
+        conn = cts._load_parity_module().connect_with_retry(url)
+    except Exception as exc:
+        return [f"hydrate_w4c_p2: connect failed: {exc}"]
+    notes: list[str] = []
+    try:
+        for golden in goldens:
+            building_id = str(golden.get("building_id") or "")
+            if building_id not in cts.W4C_TARGET_DATASETS:
+                continue
+            try:
+                spec = next(s for s in cfl.iter_dataset_specs() if s.building_id == building_id)
+            except StopIteration:
+                continue
+            try:
+                frame_raw, equipment_id = cfl.reload_dataset_frame(golden)
+            except Exception as exc:
+                notes.append(f"{building_id}: reload frame: {exc}")
+                continue
+            ip_frame = cfl.prepare_ip_frame(
+                frame_raw,
+                building_id=building_id,
+                equipment_id=equipment_id,
+                equipment_type=spec.equipment_type,
+            )
+            si_frame = cfl.frame_to_si(ip_frame, metric)
+            poll = float(golden.get("poll_seconds") or cts.infer_poll_seconds(si_frame.index))
+            eligible = [
+                rules_by_id[rid]
+                for rid in sorted(scope & cts.W4C_ZONE_RULES)
+                if rid in rules_by_id
+            ]
+            params_si_by_rule = {
+                str(r["rule_id"]): cfl.convert_params_to_si(
+                    r, cfl.rule_params_from_registry(r), metric
+                )
+                for r in eligible
+            }
+            try:
+                sql_rows, sql_err = cts.run_sql_si_for_dataset(
+                    conn,
+                    spec=spec,
+                    frame=si_frame,
+                    equipment_id=equipment_id,
+                    rules=eligible,
+                    poll_seconds=poll,
+                    params_by_rule=params_si_by_rule,
+                )
+            except Exception as exc:
+                notes.append(f"{building_id}: run_sql_si_for_dataset: {exc}")
+                continue
+            if sql_err:
+                notes.append(f"{building_id}: sql_si errors: {'; '.join(sql_err[:3])}")
+                continue
+            sql_by_key = {
+                (
+                    str(r.get("rule_id")),
+                    str(r.get("utc_day")),
+                    str(r.get("equipment_id")),
+                ): float(r.get("fault_seconds", 0.0))
+                for r in sql_rows
+                if r.get("pair_status") == "computed" and r.get("utc_day")
+            }
+            updated: list[dict[str, Any]] = []
+            for row in golden.get("p2_si_pairs") or []:
+                rid = str(row.get("rule_id") or "")
+                if rid not in scope:
+                    updated.append(row)
+                    continue
+                key = (
+                    rid,
+                    str(row.get("utc_day")),
+                    str(row.get("equipment_id")),
+                )
+                if key in sql_by_key:
+                    updated.append(
+                        cts.p2_pair_for_si_row(
+                            rule_id=rid,
+                            equipment_id=str(row.get("equipment_id")),
+                            utc_day=str(row.get("utc_day")),
+                            pandas_si_fault_seconds=float(
+                                row.get("pandas_si_fault_seconds") or 0.0
+                            ),
+                            pandas_si_missing=bool(row.get("pandas_si_missing")),
+                            sql_si_fault_seconds=sql_by_key[key],
+                        )
+                    )
+                else:
+                    updated.append(row)
+            golden["p2_si_pairs"] = sorted(
+                updated,
+                key=lambda r: (
+                    str(r.get("rule_id")),
+                    str(r.get("utc_day")),
+                    str(r.get("equipment_id")),
+                ),
+            )
+    finally:
+        conn.close()
+    return notes
+
+
 def run_p2_all_goldens(
     goldens: list[dict[str, Any]],
     *,
     scope: set[str] | None = None,
 ) -> StageResult:
     from scripts.stress.si_cutover.ci_timescale_sql import PENDING_W4
+
+    hydrate_w4c_p2_sql_si_from_timescale(goldens, scope=scope)
 
     errors: list[str] = []
     pending_notes: list[str] = []

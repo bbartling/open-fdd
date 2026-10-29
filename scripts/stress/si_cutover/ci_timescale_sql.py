@@ -26,6 +26,15 @@ from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_
 PENDING_W4 = "pending_W4"
 SI_SQL_PACK_AVAILABLE = False
 
+W4C_TARGET_DATASETS = frozenset(
+    {
+        "COOKBOOK_VAV1",
+        "COOKBOOK_VAV6",
+        "COOKBOOK_VAV7",
+        "SYNTH_VAV_CASE_VAV_1",
+    }
+)
+
 W4C_ZONE_RULES = frozenset(
     {
         "VAV-1",
