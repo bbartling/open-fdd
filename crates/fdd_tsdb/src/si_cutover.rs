@@ -66,11 +66,14 @@ pub enum SiCutoverError {
 }
 
 pub fn chunk_rows_limit() -> i64 {
-    std::env::var("OPENFDD_SI_CUTOVER_CHUNK_ROWS")
+    match std::env::var("OPENFDD_SI_CUTOVER_CHUNK_ROWS")
         .ok()
-        .and_then(|v| v.trim().parse().ok())
+        .and_then(|v| v.trim().parse::<i64>().ok())
         .filter(|&n| n > 0)
-        .unwrap_or(DEFAULT_CHUNK_ROWS)
+    {
+        Some(n) => n,
+        None => DEFAULT_CHUNK_ROWS,
+    }
 }
 
 pub fn contract() -> Result<MetricUnitsContract, MetricContractError> {
@@ -112,11 +115,11 @@ fn series_checksum(
     hasher.update(to_unit.as_bytes());
     hasher.update(b"\n");
     hasher.update(row_count.to_le_bytes());
-    if let Some(ts) = min_ts {
-        hasher.update(ts.timestamp_nanos_opt().unwrap_or(0).to_le_bytes());
+    if let Some(nanos) = min_ts.and_then(|ts| ts.timestamp_nanos_opt()) {
+        hasher.update(nanos.to_le_bytes());
     }
-    if let Some(ts) = max_ts {
-        hasher.update(ts.timestamp_nanos_opt().unwrap_or(0).to_le_bytes());
+    if let Some(nanos) = max_ts.and_then(|ts| ts.timestamp_nanos_opt()) {
+        hasher.update(nanos.to_le_bytes());
     }
     hex::encode(hasher.finalize())
 }
@@ -223,10 +226,11 @@ async fn load_series_rows(
     let mut out = Vec::new();
     for row in point_rows {
         let key: String = row.try_get("openfdd_key")?;
-        let (row_count, sample_unit, has_undeclared, min_ts, max_ts) = sample_by_key
-            .get(&key)
-            .cloned()
-            .unwrap_or((0, None, false, None, None));
+        let (row_count, sample_unit, has_undeclared, min_ts, max_ts) = match sample_by_key.get(&key)
+        {
+            Some(stats) => stats.clone(),
+            None => (0, None, false, None, None),
+        };
         out.push(SeriesRow {
             openfdd_key: key,
             role: row.try_get("role")?,
@@ -387,7 +391,24 @@ fn plan_series(
         });
     }
 
-    let from_unit = resolve_source_unit(row).unwrap_or_default();
+    let from_unit = match resolve_source_unit(row) {
+        Some(unit) => unit,
+        None => {
+            return Ok(SeriesConversionPlan {
+                openfdd_key: row.openfdd_key.clone(),
+                quantity,
+                from_unit: String::new(),
+                to_unit: canonical,
+                row_count: row.row_count,
+                checksum: String::new(),
+                excluded: false,
+                unresolved: true,
+                already_converted: false,
+                min_ts: row.min_ts,
+                max_ts: row.max_ts,
+            });
+        }
+    };
     let checksum = series_checksum(
         site_id,
         &row.openfdd_key,
@@ -571,7 +592,9 @@ async fn bump_data_revision(
             .bind(site_id)
             .fetch_one(&mut **tx)
             .await?;
-    let next = current.saturating_add(1);
+    let next = current
+        .checked_add(1)
+        .ok_or_else(|| sqlx::Error::Protocol("data revision overflow".into()))?;
     sqlx::query("UPDATE data_revision SET revision = $2, updated_at = now() WHERE site_id = $1")
         .bind(site_id)
         .bind(next)
@@ -595,23 +618,19 @@ async fn bump_data_revision(
     Ok(())
 }
 
-pub async fn invalidate_derived_results(
+/// Marks derived analytics cache rows stale. Does not delete historian or FDD rows.
+pub async fn mark_analytics_cache_stale(
     tx: &mut Transaction<'_, Postgres>,
     site_id: &str,
-) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM fdd_run WHERE site_id = $1")
-        .bind(site_id)
-        .execute(&mut **tx)
-        .await?;
-    sqlx::query("DELETE FROM fdd_interval_result WHERE site_id = $1")
-        .bind(site_id)
-        .execute(&mut **tx)
-        .await?;
-    sqlx::query("DELETE FROM analytics_result WHERE building_id = $1")
-        .bind(site_id)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
+) -> Result<u64, sqlx::Error> {
+    let out = sqlx::query(
+        "UPDATE analytics_result SET stale = true, updated_at = now()
+         WHERE building_id = $1 AND stale IS NOT TRUE",
+    )
+    .bind(site_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(out.rows_affected())
 }
 
 pub async fn apply_sample_cutover_tx(

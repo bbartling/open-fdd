@@ -9,7 +9,7 @@ use axum::Json;
 use fdd_core::MetricUnitsContract;
 use fdd_rules::registry::RuleParameterDef;
 use fdd_tsdb::{
-    apply_sample_cutover_tx, dry_run_site, ensure_si_cutover_schema, invalidate_derived_results,
+    apply_sample_cutover_tx, dry_run_site, ensure_si_cutover_schema, mark_analytics_cache_stale,
     SiCutoverError,
 };
 use open_fdd_edge_prototype::fdd::session_config::{
@@ -246,9 +246,9 @@ async fn next_rule_revision(
     site_id: &str,
     rule_id: &str,
 ) -> Result<i64, sqlx::Error> {
-    let current: Option<i64> = sqlx::query_scalar(
+    let current: i64 = sqlx::query_scalar(
         r#"
-        SELECT max(revision) FROM fdd.rule_config_revision
+        SELECT COALESCE(max(revision), 0) FROM fdd.rule_config_revision
         WHERE tenant_id = $1 AND site_id = $2 AND rule_id = $3 AND scope_key = 'site'
         "#,
     )
@@ -257,7 +257,7 @@ async fn next_rule_revision(
     .bind(rule_id)
     .fetch_one(&mut **tx)
     .await?;
-    Ok(current.unwrap_or(0) + 1)
+    Ok(current + 1)
 }
 
 pub async fn write_si_rule_config_revisions(
@@ -424,7 +424,15 @@ pub async fn si_cutover_dry_run_handler(
     };
     let mut site_reports = Vec::new();
     for site_id in sites {
-        let saved = count_session_params_to_convert(&site_id).unwrap_or(0);
+        let saved = match count_session_params_to_convert(&site_id) {
+            Ok(n) => n,
+            Err(err) => {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"ok": false, "error": err})),
+                ));
+            }
+        };
         let report = dry_run_site(&pool, &site_id, saved)
             .await
             .map_err(map_si_err)?;
@@ -498,7 +506,12 @@ pub async fn si_cutover_post_handler(
         })?;
     let mut results = Vec::new();
     for site_id in &sites {
-        let saved = count_session_params_to_convert(site_id).unwrap_or(0);
+        let saved = count_session_params_to_convert(site_id).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": err})),
+            )
+        })?;
         let dry = dry_run_site(&pool, site_id, saved)
             .await
             .map_err(map_si_err)?;
@@ -520,7 +533,7 @@ pub async fn si_cutover_post_handler(
                         Json(json!({"ok": false, "error": e.to_string()})),
                     )
                 })?;
-        invalidate_derived_results(&mut tx, site_id)
+        mark_analytics_cache_stale(&mut tx, site_id)
             .await
             .map_err(|e| {
                 (
@@ -599,7 +612,8 @@ mod tests {
             frontend_control: "slider".into(),
             sql_placeholder: "DELTA_F".into(),
         };
-        let (key, val) = convert_param_value(&contract, "delta_f", Some(&def), 9.0).expect("convert");
+        let (key, val) =
+            convert_param_value(&contract, "delta_f", Some(&def), 9.0).expect("convert");
         assert_eq!(key, "delta");
         assert!((val - 5.0).abs() < 1e-6, "got {val}");
     }

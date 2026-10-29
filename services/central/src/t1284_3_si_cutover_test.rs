@@ -2,10 +2,11 @@
 
 use chrono::{TimeZone, Utc};
 use fdd_tsdb::{
-    apply_sample_cutover_tx, dry_run_site, ensure_si_cutover_schema, invalidate_derived_results,
+    apply_sample_cutover_tx, dry_run_site, ensure_si_cutover_schema, mark_analytics_cache_stale,
     SampleRow, Tsdb, UpsertBatch, QUALITY_UNIT_UNDECLARED,
 };
 use sqlx::postgres::PgPoolOptions;
+use tokio::sync::OnceCell;
 
 async fn pool() -> Option<sqlx::PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
@@ -29,6 +30,31 @@ async fn schema(pool: &sqlx::PgPool) {
     fdd_tsdb::ensure_si_cutover_schema(pool)
         .await
         .expect("si cutover schema");
+    for sql in include_str!("../../../sql/schema/09_data_revision.sql").split(';') {
+        let stmt = sql.trim();
+        if !stmt.is_empty() {
+            crate::test_ddl::execute_idempotent_ddl(pool, stmt).await;
+        }
+    }
+}
+
+async fn schema_with_fdd_tables(pool: &sqlx::PgPool) {
+    schema(pool).await;
+    static FDD: OnceCell<()> = OnceCell::const_new();
+    FDD.get_or_init(|| async {
+        for blob in [
+            include_str!("../../../sql/schema/01_bps_core.sql"),
+            include_str!("../../../sql/schema/10_incremental_fdd.sql"),
+        ] {
+            for sql in blob.split(';') {
+                let stmt = sql.trim();
+                if !stmt.is_empty() {
+                    crate::test_ddl::execute_idempotent_ddl(pool, stmt).await;
+                }
+            }
+        }
+    })
+    .await;
 }
 
 fn sample(
@@ -47,17 +73,32 @@ fn sample(
     row
 }
 
-#[tokio::test]
-async fn t1284_3_dry_run_rows_match_conversion_and_rerun_zero() {
-    let Some(pool) = pool().await else {
-        return;
-    };
-    schema(&pool).await;
-    let site = format!("T1284_3_{}", uuid::Uuid::new_v4().simple());
+async fn derived_row_counts(pool: &sqlx::PgPool, site: &str) -> (i64, i64, i64) {
+    let runs: i64 = sqlx::query_scalar("SELECT count(*) FROM fdd_run WHERE site_id = $1")
+        .bind(site)
+        .fetch_one(pool)
+        .await
+        .expect("fdd_run count");
+    let intervals: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM fdd_interval_result WHERE site_id = $1")
+            .bind(site)
+            .fetch_one(pool)
+            .await
+            .expect("fdd_interval_result count");
+    let cache: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM analytics_result WHERE building_id = $1")
+            .bind(site)
+            .fetch_one(pool)
+            .await
+            .expect("analytics_result count");
+    (runs, intervals, cache)
+}
+
+async fn seed_convertible_site(pool: &sqlx::PgPool, site: &str) {
     let ts = Utc.with_ymd_and_hms(2026, 7, 1, 0, 0, 0).unwrap();
     sqlx::query("INSERT INTO site (site_id, dis) VALUES ($1, $1) ON CONFLICT DO NOTHING")
-        .bind(&site)
-        .execute(&pool)
+        .bind(site)
+        .execute(pool)
         .await
         .expect("site");
     sqlx::query(
@@ -66,15 +107,15 @@ async fn t1284_3_dry_run_rows_match_conversion_and_rerun_zero() {
         VALUES ($1, $2, 'h1', 'oa_t', 'degF', 'absolute_temperature')
         "#,
     )
-    .bind(&site)
+    .bind(site)
     .bind(format!("{site}.AHU.oa_t"))
-    .execute(&pool)
+    .execute(pool)
     .await
     .expect("point_map");
     let tsdb = Tsdb::from_pool(pool.clone());
     let mut batch = UpsertBatch::default();
     batch.push(sample(
-        &site,
+        site,
         &format!("{site}.AHU.oa_t"),
         "AHU",
         "oa_t",
@@ -83,6 +124,23 @@ async fn t1284_3_dry_run_rows_match_conversion_and_rerun_zero() {
         "degF",
     ));
     tsdb.upsert_samples(&batch).await.expect("upsert");
+}
+
+async fn clear_cutover_token(pool: &sqlx::PgPool) {
+    sqlx::query("DELETE FROM seed_meta WHERE key = 'si_cutover_token'")
+        .execute(pool)
+        .await
+        .expect("clear token");
+}
+
+#[tokio::test]
+async fn t1284_3_dry_run_rows_match_conversion_and_rerun_zero() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    schema(&pool).await;
+    let site = format!("T1284_3_{}", uuid::Uuid::new_v4().simple());
+    seed_convertible_site(&pool, &site).await;
 
     let dry = dry_run_site(&pool, &site, 0).await.expect("dry-run");
     assert_eq!(dry.rows_to_convert, 1, "{dry:?}");
@@ -91,9 +149,9 @@ async fn t1284_3_dry_run_rows_match_conversion_and_rerun_zero() {
     let first = apply_sample_cutover_tx(&mut tx, &dry)
         .await
         .expect("cutover");
-    invalidate_derived_results(&mut tx, &site)
+    mark_analytics_cache_stale(&mut tx, &site)
         .await
-        .expect("invalidate");
+        .expect("stale");
     tx.commit().await.expect("commit");
     assert_eq!(first.rows_converted, 1);
 
@@ -112,6 +170,83 @@ async fn t1284_3_dry_run_rows_match_conversion_and_rerun_zero() {
         .expect("cutover2");
     tx2.commit().await.expect("commit2");
     assert_eq!(second.rows_converted, 0);
+}
+
+#[tokio::test]
+async fn t1284_3_cutover_does_not_delete_derived_rows_marks_cache_stale() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    schema_with_fdd_tables(&pool).await;
+    let site = format!("T1284_3D_{}", uuid::Uuid::new_v4().simple());
+    seed_convertible_site(&pool, &site).await;
+    let ts = Utc.with_ymd_and_hms(2026, 7, 1, 0, 0, 0).unwrap();
+    sqlx::query(
+        "INSERT INTO fdd_run (site_id, equipment_id, rule_id, window_start, window_end, status)
+         VALUES ($1, 'AHU', 'FC1', $2, $2 + interval '1 hour', 'ok')",
+    )
+    .bind(&site)
+    .bind(ts)
+    .execute(&pool)
+    .await
+    .expect("fdd_run");
+    sqlx::query(
+        "INSERT INTO fdd_interval_result
+           (site_id, rule_id, equipment_id, scope_digest, bucket_start, bucket_end,
+            fault_seconds, covered_seconds, sample_count, data_revision, fence)
+         VALUES ($1, 'FC1', 'AHU', md5('scope'), $2, $2 + interval '15 minutes',
+                 0, 900, 1, 1, 1)",
+    )
+    .bind(&site)
+    .bind(ts)
+    .execute(&pool)
+    .await
+    .expect("fdd_interval_result");
+    sqlx::query(
+        "INSERT INTO analytics_result
+            (building_id, query_id, query_version, window_key, config_hash, stale, payload)
+         VALUES ($1, 'equipment-inspect', 'equipment-inspect-v1', 'all', 'fixture', false, '{}'::jsonb)",
+    )
+    .bind(&site)
+    .execute(&pool)
+    .await
+    .expect("analytics_result");
+
+    let before = derived_row_counts(&pool, &site).await;
+    assert_eq!(before, (1, 1, 1));
+
+    let dry = dry_run_site(&pool, &site, 0).await.expect("dry-run");
+    let mut tx = pool.begin().await.expect("tx");
+    apply_sample_cutover_tx(&mut tx, &dry)
+        .await
+        .expect("cutover");
+    mark_analytics_cache_stale(&mut tx, &site)
+        .await
+        .expect("stale");
+    tx.commit().await.expect("commit");
+
+    let after = derived_row_counts(&pool, &site).await;
+    assert_eq!(
+        after, before,
+        "fdd_run / interval / analytics rows must remain"
+    );
+
+    let stale_rows: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM analytics_result
+         WHERE building_id = $1 AND stale IS TRUE",
+    )
+    .bind(&site)
+    .fetch_one(&pool)
+    .await
+    .expect("stale count");
+    assert_eq!(stale_rows, 1);
+
+    let revision: i64 = sqlx::query_scalar("SELECT revision FROM data_revision WHERE site_id = $1")
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("data_revision");
+    assert!(revision >= 1, "sample cutover must bump data_revision");
 }
 
 #[tokio::test]
@@ -202,4 +337,124 @@ async fn t1284_3_viewer_gets_403_on_dry_run_route() {
         .expect("request");
     let resp = app.oneshot(req).await.expect("response");
     assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize OPENFDD_DATABASE_URL with other Timescale admin tests"
+)]
+async fn t1284_3_post_token_single_use_confirm_and_authz() {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::Router;
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    let Some(pool) = pool().await else {
+        return;
+    };
+    let _env_lock = crate::test_env_lock::lock_env();
+    let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("db url");
+    std::env::set_var("OPENFDD_DATABASE_URL", &url);
+    std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+    const TOKEN: &str = "t1284-3-cutover-token-fixture";
+    std::env::set_var("OPENFDD_SI_CUTOVER_TOKEN", TOKEN);
+    fdd_tsdb::clear_shared_pool();
+
+    schema(&pool).await;
+    let site = format!("T1284_3P_{}", uuid::Uuid::new_v4().simple());
+    seed_convertible_site(&pool, &site).await;
+    clear_cutover_token(&pool).await;
+
+    let workspace = tempfile::tempdir().expect("tempdir");
+    let _workspace = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+    let mut state = crate::state::AppState::new();
+    state.auth = crate::auth::AuthConfig {
+        secret: Some("t1284-3-si-cutover-post-auth".into()),
+        admin_password: None,
+        agent_password: None,
+        viewer_password: None,
+        viewer_tenant_ids: Vec::new(),
+    };
+    let state = std::sync::Arc::new(state);
+    let app = crate::routes::router(std::sync::Arc::clone(&state));
+    let hub = state
+        .auth
+        .issue_token_with_tenants("hub-cutover", crate::auth::Role::Admin, 600, &[])
+        .expect("hub");
+    let viewer = state
+        .auth
+        .issue_token_with_tenants("viewer-cutover-post", crate::auth::Role::Viewer, 600, &[])
+        .expect("viewer");
+
+    async fn post_json(
+        app: &Router,
+        token: &str,
+        body: serde_json::Value,
+    ) -> (StatusCode, serde_json::Value) {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/admin/si-cutover")
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .expect("request");
+        let resp = app.clone().oneshot(req).await.expect("response");
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes)
+            .unwrap_or(json!({ "raw": String::from_utf8_lossy(&bytes) }));
+        (status, parsed)
+    }
+
+    let (status, body) = post_json(
+        &app,
+        &viewer,
+        json!({"confirm": true, "token": TOKEN, "site_ids": [site.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+
+    let (status, body) = post_json(
+        &app,
+        &hub,
+        json!({"confirm": false, "token": TOKEN, "site_ids": [site.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let (status, body) = post_json(
+        &app,
+        &hub,
+        json!({"confirm": true, "token": "wrong-token", "site_ids": [site.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+
+    let (status, body) = post_json(
+        &app,
+        &hub,
+        json!({"confirm": true, "token": TOKEN, "site_ids": [site.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["ok"], true);
+    assert_eq!(body["sites"][0]["rows_converted"], 1);
+
+    let (status, body) = post_json(
+        &app,
+        &hub,
+        json!({"confirm": true, "token": TOKEN, "site_ids": [site.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["ok"], false);
+
+    let dry2 = dry_run_site(&pool, &site, 0)
+        .await
+        .expect("dry-run after post");
+    assert_eq!(dry2.rows_to_convert, 0);
 }

@@ -46,6 +46,6 @@ pub use runner::{
 pub use sample::{SampleRow, UpsertBatch};
 pub use si_cutover::{
     apply_sample_cutover_tx, contract as si_cutover_contract, dry_run_site,
-    ensure_si_cutover_schema, invalidate_derived_results, SiCutoverError, SiteCutoverResult,
+    ensure_si_cutover_schema, mark_analytics_cache_stale, SiCutoverError, SiteCutoverResult,
     SiteDryRunReport,
 };
