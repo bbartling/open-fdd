@@ -269,7 +269,9 @@ pub fn historian_error_drops_connection(err: &anyhow::Error) -> bool {
 fn tsdb_error_is_connection_loss(err: &fdd_tsdb::TsdbError) -> bool {
     match err {
         fdd_tsdb::TsdbError::MissingDatabaseUrl => true,
-        fdd_tsdb::TsdbError::InvalidBuildingId | fdd_tsdb::TsdbError::CadenceOutOfRange(_) => false,
+        fdd_tsdb::TsdbError::InvalidBuildingId
+        | fdd_tsdb::TsdbError::CadenceOutOfRange(_)
+        | fdd_tsdb::TsdbError::Contract(_) => false,
         fdd_tsdb::TsdbError::Sqlx(inner) => sqlx_is_connection_loss(inner),
     }
 }
@@ -359,6 +361,8 @@ pub(crate) fn point_to_sample(
     row.equipment_id = Some(equipment_id);
     row.role = Some(role);
     row.unit = point.unit.clone();
+    row.source_unit = tag_str(point, "source_unit");
+    row.quantity = tag_str(point, "quantity");
     row.haystack_id = Some(point.id.clone());
     if let (Some(instance), Some(source_id)) = (
         tag_str(point, "provider_instance_id").filter(|s| !s.trim().is_empty()),
