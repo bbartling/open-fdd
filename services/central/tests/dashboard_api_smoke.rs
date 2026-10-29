@@ -159,18 +159,16 @@ fn openapi_json_and_swagger_ui_respond() {
         body.chars().take(200).collect::<String>()
     );
 
-    for path in ["/docs", "/docs/"] {
-        let (status, body) = http("GET", server.port, path, None);
-        assert!(
-            (200..400).contains(&status),
-            "{path} unexpected status {status}: {}",
-            body.chars().take(120).collect::<String>()
-        );
-        assert!(
-            body.contains("swagger-ui")
-                || body.contains("SwaggerUI")
-                || body.contains("openapi.json"),
-            "{path} should serve Swagger UI HTML"
-        );
-    }
+    let (redirect_status, _) = http("GET", server.port, "/docs", None);
+    assert!(
+        redirect_status == 200 || (300..400).contains(&redirect_status),
+        "/docs should respond (redirect to trailing slash or serve UI), got {redirect_status}"
+    );
+
+    let (status, body) = http("GET", server.port, "/docs/", None);
+    assert_eq!(status, 200, "/docs/ status {status}: {}", body.chars().take(120).collect::<String>());
+    assert!(
+        body.contains("swagger-ui") || body.contains("Swagger UI"),
+        "/docs/ should serve Swagger UI HTML"
+    );
 }
