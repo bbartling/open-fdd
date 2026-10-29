@@ -110,7 +110,7 @@ class CaptureRequirements(unittest.TestCase):
                 with mock.patch.object(capture, "load_dotenv_file"):
                     with mock.patch.object(capture, "load_sites_config", return_value=[{"building_id": "SITE_A"}]):
                         with mock.patch.object(capture, "load_rule_registry", return_value=[{"rule_id": "FC1"}]):
-                            with mock.patch.object(capture, "client") as client_cm:
+                            with mock.patch.object(capture, "HttpClient") as client_cm:
                                 http = mock.MagicMock()
                                 client_cm.return_value.__enter__ = mock.Mock(return_value=http)
                                 client_cm.return_value.__exit__ = mock.Mock(return_value=False)
@@ -141,7 +141,7 @@ class CaptureRequirements(unittest.TestCase):
                 with mock.patch.object(capture, "load_dotenv_file"):
                     with mock.patch.object(capture, "load_sites_config", return_value=[{"building_id": "SITE_A"}]):
                         with mock.patch.object(capture, "load_rule_registry", return_value=[{"rule_id": "FC1"}]):
-                            with mock.patch.object(capture, "client") as client_cm:
+                            with mock.patch.object(capture, "HttpClient") as client_cm:
                                 http = mock.MagicMock()
                                 client_cm.return_value.__enter__ = mock.Mock(return_value=http)
                                 client_cm.return_value.__exit__ = mock.Mock(return_value=False)
@@ -275,16 +275,21 @@ class CaptureFixtureStack(unittest.TestCase):
             with mock.patch.object(capture, "fetch_sql_daily_rows", return_value=[sql_row]):
                 with mock.patch.object(capture, "fetch_run_status_rows", return_value={}):
                     with mock.patch.object(capture, "analytics_rows_for_site", return_value=[]):
-                        summary = capture.capture_site(
-                            FakeHttp(),
-                            {},
-                            fake_conn,
-                            site={"building_id": building_id},
-                            out_dir=out_dir,
-                            rules=[{"rule_id": "FC1", "pandas_function": "fc1"}],
-                            skip_pandas=True,
-                            pandas_max_rules=None,
-                        )
+                        with mock.patch.object(
+                            capture,
+                            "post_fdd_run_with_busy_retry",
+                            return_value=(run_resp, {"http_attempts": [{"attempt": 1, "http_status": 200}]}),
+                        ):
+                            summary = capture.capture_site(
+                                FakeHttp(),
+                                {},
+                                fake_conn,
+                                site={"building_id": building_id},
+                                out_dir=out_dir,
+                                rules=[{"rule_id": "FC1", "pandas_function": "fc1"}],
+                                skip_pandas=True,
+                                pandas_max_rules=None,
+                            )
             self.assertEqual(summary["building_id"], building_id)
             site_dir = out_dir / building_id
             for name in (
@@ -339,7 +344,7 @@ class EquipmentFrameMetadataTest(unittest.TestCase):
                 "load_samples_in_window",
                 return_value=[(ts, 1.0) for ts in idx],
             ):
-                frame = capture.equipment_frame_from_db(
+                frame, skips = capture.equipment_frame_from_db(
                     mock.MagicMock(),
                     mock.MagicMock(),
                     {},
@@ -351,6 +356,7 @@ class EquipmentFrameMetadataTest(unittest.TestCase):
                 )
         self.assertEqual(frame.attrs.get("equipment_type"), "ahu")
         self.assertEqual(frame.attrs.get("equipType"), "ahu")
+        self.assertEqual(skips.get("skipped_other_equipment", 0), 0)
 
 
 class CollectPandasFddRowsIntegration(unittest.TestCase):
@@ -399,7 +405,7 @@ class CollectPandasFddRowsIntegration(unittest.TestCase):
             with mock.patch.object(
                 capture, "load_samples_in_window", side_effect=fake_load_samples
             ):
-                rows, coverage, errors = capture.collect_pandas_fdd_rows(
+                rows, coverage, errors, _skips = capture.collect_pandas_fdd_rows(
                     http,
                     {},
                     conn,
@@ -418,6 +424,154 @@ class CollectPandasFddRowsIntegration(unittest.TestCase):
             any(r.get("utc_day") == "2026-06-01" for r in computed),
             computed,
         )
+
+
+class EquipmentFrameBuilderTest(unittest.TestCase):
+    """Frame builder skips overlay noise and maps role ids to Haystack columns."""
+
+    def _frame_from_points(
+        self,
+        equipment_id: str,
+        points: list[dict],
+        *,
+        load_keys: set[str] | None = None,
+    ):
+        import pandas as pd
+
+        idx = pd.date_range("2026-06-01", periods=2, freq="5min", tz="UTC")
+        keys = load_keys or {capture.resolve_openfdd_key(equipment_id, str(p.get("column") or ""), p.get("openfdd_key")) for p in points if p.get("column")}
+
+        def fake_load(_conn, *, openfdd_key, **_kwargs):
+            if openfdd_key not in keys:
+                return []
+            return [(ts, 1.0) for ts in idx]
+
+        with mock.patch.object(capture, "post_sparql", return_value=points):
+            with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
+                return capture.equipment_frame_from_db(
+                    mock.MagicMock(),
+                    mock.MagicMock(),
+                    {},
+                    building_id="SITE_GEN",
+                    equipment_id=equipment_id,
+                    window_start="2026-06-01T00:00:00Z",
+                    window_end="2026-06-01T01:00:00Z",
+                    equipment_type="ahu",
+                )
+
+    def test_skips_overlay_other_equipment_and_unbound_rows(self) -> None:
+        points = [
+            {"equipmentId": "RTU_B", "column": "oa_t", "fddSelection": "oa_t"},
+            {"equipmentId": "RTU_A", "column": "", "fddSelection": "fan_cmd"},
+            {"equipmentId": "RTU_A", "column": "fc", "fddSelection": "fan_cmd", "openfdd_key": "RTU_A.fc"},
+        ]
+        frame, skips = self._frame_from_points("RTU_A", points)
+        self.assertEqual(skips["skipped_other_equipment"], 1)
+        self.assertEqual(skips["skipped_unbound_no_column"], 1)
+        self.assertIn("fan-cmd", frame.columns)
+
+    def test_prefixed_column_does_not_double_equipment_id(self) -> None:
+        points = [
+            {
+                "equipmentId": "RTU_A",
+                "column": "RTU_A.fc",
+                "fddSelection": "fan_cmd",
+            },
+        ]
+        seen: list[str] = []
+
+        def fake_load(_conn, *, openfdd_key, **_kwargs):
+            seen.append(openfdd_key)
+            import pandas as pd
+
+            idx = pd.date_range("2026-06-01", periods=2, freq="5min", tz="UTC")
+            return [(ts, 1.0) for ts in idx]
+
+        with mock.patch.object(capture, "post_sparql", return_value=points):
+            with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
+                frame, _skips = capture.equipment_frame_from_db(
+                    mock.MagicMock(),
+                    mock.MagicMock(),
+                    {},
+                    building_id="SITE_GEN",
+                    equipment_id="RTU_A",
+                    window_start="2026-06-01T00:00:00Z",
+                    window_end="2026-06-01T01:00:00Z",
+                )
+        self.assertEqual(seen, ["RTU_A.fc"])
+        self.assertIn("fan-cmd", frame.columns)
+
+    def test_unmapped_role_raises_for_pair_status(self) -> None:
+        points = [
+            {
+                "equipmentId": "RTU_A",
+                "column": "mystery",
+                "fddSelection": "not_in_golden_xyz",
+            },
+        ]
+        with self.assertRaises(capture.UnmappedRoleError) as ctx:
+            self._frame_from_points(
+                "RTU_A",
+                points,
+                load_keys={capture.resolve_openfdd_key("RTU_A", "mystery", None)},
+            )
+        self.assertEqual(ctx.exception.skip_counts["skipped_unmapped_role"], 1)
+
+    def test_fc1_computes_on_role_id_columns(self) -> None:
+        fc1_rules = [r for r in capture.load_rule_registry() if r.get("rule_id") == "FC1"]
+        self.assertEqual(len(fc1_rules), 1)
+        idx = __import__("pandas").date_range("2026-06-01", periods=24, freq="5min", tz="UTC")
+        points = [
+            {"equipmentId": "RTU_A", "column": "dsp", "fddSelection": "duct_static"},
+            {"equipmentId": "RTU_A", "column": "dsps", "fddSelection": "duct_static_sp"},
+            {"equipmentId": "RTU_A", "column": "fc", "fddSelection": "fan_cmd"},
+            {"equipmentId": "RTU_A", "column": "fs", "fddSelection": "fan_status"},
+        ]
+
+        def fake_load(_conn, *, openfdd_key, **_kwargs):
+            val = 1.5 if openfdd_key.endswith(".dsps") else 1.0
+            return [(ts, val) for ts in idx]
+
+        http = mock.MagicMock()
+        http.get_json.return_value = {
+            "equipment": [{"equipment_id": "RTU_A", "equip_type": "ahu"}],
+        }
+        with mock.patch.object(capture, "post_sparql", return_value=points):
+            with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
+                rows, coverage, errors, skips = capture.collect_pandas_fdd_rows(
+                    http,
+                    {},
+                    mock.MagicMock(),
+                    building_id="SITE_GEN",
+                    rules=fc1_rules,
+                    window_start="2026-06-01T00:00:00Z",
+                    window_end="2026-06-01T06:00:00Z",
+                    pandas_max_rules=None,
+                )
+        self.assertEqual(errors, [])
+        self.assertGreater(coverage.get("computed", 0), 0)
+        computed = [r for r in rows if r.get("pair_status") == "computed"]
+        self.assertTrue(computed)
+
+
+class FddRunBusyRetryTest(unittest.TestCase):
+    def test_post_fdd_run_retries_409_then_succeeds(self) -> None:
+        http = mock.MagicMock()
+        ok_body = json.dumps({"ok": True, "run_id": "r1"}).encode("utf-8")
+        http.request.side_effect = [
+            (409, {}, b"busy"),
+            (200, {}, ok_body),
+        ]
+        body, meta = capture.post_fdd_run_with_busy_retry(
+            http,
+            {},
+            {"building_id": "B"},
+            request_timeout_s=30.0,
+        )
+        self.assertTrue(body.get("ok"))
+        self.assertEqual(len(meta["http_attempts"]), 2)
+        self.assertEqual(meta["http_attempts"][0]["http_status"], 409)
+        self.assertEqual(meta["http_attempts"][1]["http_status"], 200)
 
 
 if __name__ == "__main__":
