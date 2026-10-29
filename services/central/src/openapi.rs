@@ -316,6 +316,13 @@ mod live_routes {
     pub fn ingest_gaps() {}
 
     #[utoipa::path(
+        get, path = "/api/ingest/catchup", tag = "ingest",
+        params(("site_id" = String, Query, description = "Canonical site id")),
+        responses((status = 200, description = "ASAP catch-up progress", body = serde_json::Value))
+    )]
+    pub fn ingest_catchup() {}
+
+    #[utoipa::path(
         get, path = "/api/ingest/queue", tag = "ingest",
         responses((status = 200, description = "Queue pressure. Live autoscaler is off.", body = serde_json::Value))
     )]
@@ -356,6 +363,7 @@ mod live_routes {
         live_routes::ingest_jobs,
         live_routes::ingest_receipts,
         live_routes::ingest_gaps,
+        live_routes::ingest_catchup,
         live_routes::ingest_queue_metrics,
         live_routes::ingest_backfill,
         live_routes::ingest_backfill_site,

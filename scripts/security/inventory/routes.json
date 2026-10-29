@@ -7364,6 +7364,46 @@
     },
     {
       "method": "GET",
+      "path": "/api/ingest/catchup",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_ingest_catchup",
+        "y.authz.get_api_ingest_catchup"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_ingest_catchup"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_ingest_catchup",
+        "y.authz.get_api_ingest_catchup"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "ASAP catch-up mode, backlog, throughput, and portal throttle per device."
+    },
+    {
+      "method": "GET",
       "path": "/api/ingest/queue",
       "section": "protected",
       "auth": "jwt_required",
