@@ -37,6 +37,10 @@ STRIP_PARAM_KEYS = frozenset({"kind", "effect"})
 SI_CONTRACT_VALUE_KEYS = ("default", "min", "max", "step")
 SI_CONTRACT_DIFF_KEYS = frozenset({"unit", "label", *SI_CONTRACT_VALUE_KEYS})
 _FLOAT_TOL = 1e-5
+# SV-RANGE SQL limits are authored against °F literals; metric historian uses execution scale.
+_SV_RANGE_SI_SQL_EXECUTION: dict[str, float] = {
+    "range_scale_temperature": 5.0 / 9.0,
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -367,6 +371,16 @@ def _validate_param_spec_kind_aware(
                 metric, master_spec, field, quantity_override=qty_b
             )
             if _canonical_values_match(mc_branch_qty, bc):
+                continue
+        if (
+            rule_id == "SV-RANGE"
+            and field in ("default", "step")
+            and param_key in _SV_RANGE_SI_SQL_EXECUTION
+        ):
+            scale = _SV_RANGE_SI_SQL_EXECUTION[param_key]
+            master_val = float(master_spec.get(field, 0.0))
+            branch_val = float(branch_spec.get(field, 0.0))
+            if abs(master_val * scale - branch_val) <= _FLOAT_TOL:
                 continue
         raise AssertionError(
             f"{rule_id}.{param_key}.{field}: SI contract mismatch "

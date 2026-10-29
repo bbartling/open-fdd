@@ -93,6 +93,15 @@ fn load_fixture(rule: &str) -> Fixture {
     }
 }
 
+fn oracle_fixture_declared_unit(role: &str) -> Option<&'static str> {
+    match fdd_core::quantity_for_sql_role(role)? {
+        "absolute_temperature" => Some("degF"),
+        "air_pressure" => Some("inH2O"),
+        "relative_humidity" | "percent" => Some("%"),
+        _ => None,
+    }
+}
+
 fn batch(site: &str, fx: &Fixture) -> UpsertBatch {
     let mut batch = UpsertBatch::default();
     for (ts, values) in &fx.rows {
@@ -102,6 +111,10 @@ fn batch(site: &str, fx: &Fixture) -> UpsertBatch {
                 SampleRow::new(*ts, site, format!("{}.{col}", fx.equipment_id), Some(*val));
             row.equipment_id = Some(fx.equipment_id.clone());
             row.role = Some(col.clone());
+            if let Some(unit) = oracle_fixture_declared_unit(col) {
+                row.unit = Some(unit.to_string());
+                row.source_unit = Some(unit.to_string());
+            }
             batch.push(row);
         }
     }

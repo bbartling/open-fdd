@@ -6,10 +6,6 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
-use fdd_core::units::{
-    celsius_to_fahrenheit, delta_c_to_delta_f, pa_to_in_wc, unit_is_celsius, unit_is_pa,
-};
-
 use crate::registry::RuleSpec;
 
 type RuleParamMap = HashMap<String, f64>;
@@ -111,8 +107,7 @@ pub fn effective_param_strings(
     for (key, def) in &rule.parameters {
         let raw = values.get(key).copied().unwrap_or(def.default);
         let clamped = raw.clamp(def.min, def.max);
-        let sql_val = registry_value_for_sql_substitute(&def.unit, clamped);
-        out.insert(def.sql_placeholder.clone(), format_number(sql_val));
+        out.insert(def.sql_placeholder.clone(), format_number(clamped));
     }
     Ok(out)
 }
@@ -184,30 +179,6 @@ fn format_number(v: f64) -> String {
     }
 }
 
-/// Registry may declare metric-c-v2 defaults while rule SQL still compares against
-/// historian pivot values on the imperial-f-v1 execution path (pre-W7 storage cutover).
-fn registry_value_for_sql_substitute(unit: &str, value: f64) -> f64 {
-    let token: String = unit
-        .trim()
-        .to_ascii_lowercase()
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric())
-        .collect();
-    if unit_is_pa(unit) {
-        return pa_to_in_wc(value);
-    }
-    if unit_is_celsius(unit) {
-        return celsius_to_fahrenheit(value);
-    }
-    if matches!(
-        token.as_str(),
-        "degcdelta" | "deltac" | "degcperh" | "degc_per_h"
-    ) {
-        return delta_c_to_delta_f(value);
-    }
-    value
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,12 +212,6 @@ mod tests {
                 },
             )]),
         }
-    }
-
-    #[test]
-    fn registry_pa_defaults_convert_to_inwc_for_sql() {
-        let got = registry_value_for_sql_substitute("Pa", 62.21);
-        assert!((got - 0.25).abs() < 0.01, "got {got}");
     }
 
     #[test]

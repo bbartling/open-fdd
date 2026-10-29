@@ -1833,10 +1833,10 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       range_scale_temperature:
         label: Temp range scale
-        default: 1.0
+        default: 0.555556
         min: 0.5
         max: 2.0
-        step: 0.1
+        step: 0.055556
         unit: x
         kind: dimensionless
         frontend_control: slider

@@ -116,14 +116,17 @@ def _convert_ip_bounds_to_si(
     return bounds
 
 
+ROLE_BOUNDS_SI: dict[str, tuple[float | None, float | None]] = {
+    family: _convert_ip_bounds_to_si(family, bounds)
+    for family, bounds in ROLE_BOUNDS.items()
+}
+
+
 def role_bounds_for_frame(role: str, df: pd.DataFrame) -> tuple[float | None, float | None] | None:
     family = _role_family(role)
-    ip = ROLE_BOUNDS.get(family)
-    if ip is None:
-        return None
     if not _storage_si(df):
-        return ip
-    return _convert_ip_bounds_to_si(family, ip)
+        return ROLE_BOUNDS.get(family)
+    return ROLE_BOUNDS_SI.get(family)
 
 
 STATUS_ROLES = {

@@ -4736,15 +4736,19 @@ mod elapsed_time_contract {
         fan: f64,
     ) {
         let ts = origin() + ChronoDuration::minutes(minutes);
-        for (role, val) in [
-            ("duct_static", 2.0),
-            ("duct_static_sp", 1.0),
-            ("fan_status", fan),
-            ("fan_cmd", fan),
+        for (role, val, unit) in [
+            ("duct_static", 2.0, "inH2O"),
+            ("duct_static_sp", 1.0, "inH2O"),
+            ("fan_status", fan, "bool"),
+            ("fan_cmd", fan, "bool"),
         ] {
             let mut row = SampleRow::new(ts, site, format!("{equipment_id}.{role}"), Some(val));
             row.equipment_id = Some(equipment_id.to_string());
             row.role = Some(role.to_string());
+            if unit != "bool" {
+                row.unit = Some(unit.to_string());
+                row.source_unit = Some(unit.to_string());
+            }
             batch.push(row);
         }
     }

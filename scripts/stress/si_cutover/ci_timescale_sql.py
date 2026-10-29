@@ -29,19 +29,6 @@ from scripts.stress.si_cutover.product_sql_params import (  # noqa: E402
 PENDING_W4 = "pending_W4"
 SI_SQL_PACK_AVAILABLE = True  # W4b+ metric registry + canonical Timescale samples for P2.
 
-# SV-* SQL hard limits are authored in °F / inWC; metric historian samples are °C / Pa.
-_SI_SV_RANGE_SCALE_OVERRIDES: dict[str, float] = {
-    "range_scale_temperature": 5.0 / 9.0,
-    "range_scale_humidity": 1.0,
-}
-
-
-def si_sweep_range_scale_overrides(rule_id: str) -> dict[str, float]:
-    rid = str(rule_id or "")
-    if rid != "SV-RANGE":
-        return {}
-    return dict(_SI_SV_RANGE_SCALE_OVERRIDES)
-
 
 def _load_parity_module():
     path = REPO / "scripts" / "timescale" / "test_synthetic_pandas_sql_parity.py"
@@ -544,7 +531,6 @@ def run_sql_si_for_dataset(
             except ValueError as exc:
                 errors.append(f"{rule_id}: {exc}")
                 continue
-            render_overrides.update(si_sweep_range_scale_overrides(rule_id))
             cur.execute("SAVEPOINT si_cutover_rule")
             daily, err = execute_sql_rule_daily(
                 cur,
