@@ -13,8 +13,8 @@ use sqlx::postgres::PgPoolOptions;
 
 use super::*;
 
-const LOW_F: f64 = 70.0;
-const HIGH_F: f64 = 75.0;
+const LOW_C: f64 = 21.111111;
+const HIGH_C: f64 = 23.888889;
 const PRESET: &str = "zone_comfort_rank";
 
 struct EnvGuard {
@@ -166,7 +166,7 @@ fn object_keys(value: &Value) -> Vec<&str> {
 
 #[tokio::test]
 async fn invalid_band_is_a_typed_error() {
-    for (low, high) in [(HIGH_F, LOW_F), (f64::NAN, HIGH_F), (LOW_F, f64::INFINITY)] {
+    for (low, high) in [(HIGH_C, LOW_C), (f64::NAN, HIGH_C), (LOW_C, f64::INFINITY)] {
         let err = rcx_zone_comfort_rank("any-site", &["ZONE_FAMILY"], low, high, &scope())
             .await
             .expect_err("invalid band must not run");
@@ -204,9 +204,9 @@ async fn zone_comfort_rank_decodes_postgres_aggregate() {
     // The unfixed expression is numeric, and sqlx refuses it as f64.
     let numeric = sqlx::query(
         "SELECT 'probe'::text AS equipment_id,
-                100.0 * AVG(CASE WHEN v BETWEEN 70 AND 75 THEN 1.0 ELSE 0.0 END) AS comfort_pct,
+                100.0 * AVG(CASE WHEN v BETWEEN 21.111111 AND 23.888889 THEN 1.0 ELSE 0.0 END) AS comfort_pct,
                 COUNT(*)::bigint AS n
-         FROM (VALUES (72.0::float8), (80.0::float8)) t(v)",
+         FROM (VALUES (22.222222::float8), (26.666667::float8)) t(v)",
     )
     .fetch_one(&pool)
     .await
@@ -254,21 +254,21 @@ async fn zone_comfort_rank_decodes_postgres_aggregate() {
         &pool,
         &site,
         "vav_low",
-        &[Some(72.0), Some(80.0), Some(65.0)],
+        &[Some(22.222222), Some(26.666667), Some(18.333333)],
     )
     .await;
     seed_vav(
         &pool,
         &site,
         "vav_mid",
-        &[Some(70.0), Some(76.0), Some(75.0), Some(69.9), None],
+        &[Some(21.111111), Some(24.444444), Some(23.888889), Some(21.055556), None],
     )
     .await;
     seed_vav(
         &pool,
         &site,
         "vav_high",
-        &[Some(70.0), Some(72.5), Some(75.0), Some(74.0)],
+        &[Some(21.111111), Some(22.5), Some(23.888889), Some(23.333333)],
     )
     .await;
     seed_vav(&pool, &site, "vav_quiet", &[]).await;
@@ -308,7 +308,7 @@ async fn zone_comfort_rank_decodes_postgres_aggregate() {
     // No samples: an equipment with a bound key but no rows is absent, and a
     // building or window with no samples has no ranking.
     assert!(
-        rcx_zone_comfort_rank(&empty_site, &["ZONE_FAMILY"], LOW_F, HIGH_F, &scope())
+        rcx_zone_comfort_rank(&empty_site, &["ZONE_FAMILY"], LOW_C, HIGH_C, &scope())
             .await
             .expect("empty building")
             .is_none()
@@ -323,7 +323,7 @@ async fn zone_comfort_rank_decodes_postgres_aggregate() {
         equipment_ids: Vec::new(),
     };
     assert!(
-        rcx_zone_comfort_rank(&site, &["ZONE_FAMILY"], LOW_F, HIGH_F, &late)
+        rcx_zone_comfort_rank(&site, &["ZONE_FAMILY"], LOW_C, HIGH_C, &late)
             .await
             .expect("empty window")
             .is_none()

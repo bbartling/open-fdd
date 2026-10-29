@@ -2,6 +2,32 @@
   "schema": "openfdd-si-parity-w4-families-v1",
   "issue": "1284",
   "families": {
+    "W4c_si_zone": {
+      "wave": "W4c",
+      "description": "VAV/zone/FCU SI pandas/SQL parity (blocking)",
+      "rules": [
+        "VAV-1",
+        "VAV-2",
+        "VAV-3",
+        "VAV-4",
+        "VAV-5",
+        "VAV-6",
+        "VAV-7",
+        "VAV-REHEAT",
+        "VAV-AHU-LEAVE",
+        "AVG-ZONE-TEMP",
+        "ZONE-COMFORT-PCT",
+        "FCU-SENSOR-NULL",
+        "FCU-HTG-COIL",
+        "FCU-CLG-COIL",
+        "FCU-VALVE-PASS-HTG",
+        "FCU-VALVE-PASS-CLG",
+        "FCU-DAMPER-POS",
+        "FCU-CO2-DAMPER",
+        "FCU-DEADBAND",
+        "FCU-MODE-CYCLE"
+      ]
+    },
     "W4b_fc1_duct_static": {
       "wave": "W4b",
       "description": "FC1 duct static (GL36 A) — T1284-4 blocking scope",

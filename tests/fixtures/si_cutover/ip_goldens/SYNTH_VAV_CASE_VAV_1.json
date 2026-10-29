@@ -322,69 +322,6 @@
       "sql_si_fault_seconds": null,
       "sql_si_status": "pending_W4",
       "utc_day": "2026-01-11"
-    },
-    {
-      "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24900.0,
-      "pandas_si_status": "computed",
-      "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-05"
-    },
-    {
-      "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24900.0,
-      "pandas_si_status": "computed",
-      "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-06"
-    },
-    {
-      "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24900.0,
-      "pandas_si_status": "computed",
-      "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-07"
-    },
-    {
-      "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24900.0,
-      "pandas_si_status": "computed",
-      "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-08"
-    },
-    {
-      "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 24900.0,
-      "pandas_si_status": "computed",
-      "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-09"
-    },
-    {
-      "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
-      "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-10"
-    },
-    {
-      "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
-      "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-11"
     }
   ],
   "pandas_error_count": 0,
@@ -1396,7 +1333,7 @@
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:occ_mode",
+      "reason": "missing_roles",
       "rule_id": "VAV-2",
       "status": "",
       "utc_day": ""
@@ -1407,140 +1344,8 @@
       "equipment_id": "VAV_CASE_VAV_1",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:oa_t",
-      "rule_id": "VAV-3",
-      "status": "",
-      "utc_day": ""
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 0.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "not_applicable",
-      "reason": "missing_role:damper_pct",
-      "rule_id": "VAV-4",
-      "status": "",
-      "utc_day": ""
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 0.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "not_applicable",
-      "reason": "missing_role:damper_pct",
-      "rule_id": "VAV-5",
-      "status": "",
-      "utc_day": ""
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 0.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "not_applicable",
-      "reason": "missing_role:oa_t",
+      "reason": "missing_roles",
       "rule_id": "VAV-6",
-      "status": "",
-      "utc_day": ""
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-05"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-06"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-07"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-08"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-09"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-10"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-11"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 0.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "not_applicable",
-      "reason": "missing_role:vav_discharge_t",
-      "rule_id": "VAV-AHU-LEAVE",
-      "status": "",
-      "utc_day": ""
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 0.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "not_applicable",
-      "reason": "missing_role:reheat_valve_pct",
-      "rule_id": "VAV-REHEAT",
       "status": "",
       "utc_day": ""
     },
@@ -2024,83 +1829,6 @@
       "reason": "",
       "rule_id": "SV-STALE",
       "status": "PASS",
-      "utc_day": "2026-01-11"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-05"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-06"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-07"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-08"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 24900.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-09"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
-      "utc_day": "2026-01-10"
-    },
-    {
-      "building_id": "SYNTH_VAV_CASE_VAV_1",
-      "covered_seconds": 86100.0,
-      "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "FAULT",
       "utc_day": "2026-01-11"
     }
   ],

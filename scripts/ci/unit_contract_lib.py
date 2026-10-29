@@ -30,6 +30,7 @@ TEMPERATURE_DIFFERENCE_KEYS = frozenset(
         "excess_beyond_approach_f",
         "approach_max_f",
         "deadband_c",
+        "deadband",
     }
 )
 
@@ -96,6 +97,28 @@ def convert_to_canonical(
     return float(value) * float(row["scale"]) + float(row["offset"])
 
 
+def convert_from_canonical(
+    metric: dict[str, Any], quantity_id: str, canonical_value: float, target_unit: str
+) -> float:
+    """Map a canonical (metric storage) value into ``target_unit`` for IP oracle frames."""
+    if quantity_id == "occupancy_mode":
+        raise ValueError("occupancy_mode unsupported")
+    by_token = build_conversion_index(metric)
+    tok = normalize_alias(target_unit)
+    row = by_token.get(tok)
+    if row is None:
+        raise ValueError(f"unknown alias {target_unit!r}")
+    if row["quantity"] != quantity_id:
+        raise ValueError(
+            f"{target_unit!r} maps to {row['quantity']}, expected {quantity_id}"
+        )
+    scale = float(row["scale"])
+    offset = float(row["offset"])
+    if abs(scale) < 1e-15:
+        raise ValueError(f"non-invertible scale for {target_unit!r}")
+    return (float(canonical_value) - offset) / scale
+
+
 def infer_kind(param_key: str, unit: str) -> str:
     u = (unit or "").strip().strip("'\"")
     key = param_key.strip().lower()
@@ -104,7 +127,11 @@ def infer_kind(param_key: str, unit: str) -> str:
     if u in {"degF", "°F"}:
         return "absolute_temperature"
     if u == "degC":
-        return "temperature_difference" if key == "deadband_c" else "absolute_temperature"
+        return (
+            "temperature_difference"
+            if key in ("deadband_c", "deadband")
+            else "absolute_temperature"
+        )
     if u == "degF_per_h":
         return "temperature_rate"
     if u in {"in_wc", "inwc"}:

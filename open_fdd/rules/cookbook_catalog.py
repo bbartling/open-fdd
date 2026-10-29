@@ -1017,20 +1017,9 @@ def vav1_occupied_mask(d: pd.DataFrame, p: dict | None = None) -> tuple[pd.Serie
 
 
 def _zone_comfort_band(p: dict | None, role_units: dict | None = None) -> tuple[float, float]:
-    lo = _f(p, "zone_lo", 70.0)
-    hi = _f(p, "zone_hi", 75.0)
-    unit = ""
-    if role_units:
-        unit = str(
-            role_units.get("zone-air-temp")
-            or role_units.get("zone_t")
-            or role_units.get("zone-air-temp".replace("-", "_"))
-            or ""
-        )
-    token = unit.strip().lower().replace(" ", "")
-    if token in {"c", "degc", "celsius", "°c"}:
-        lo = (lo - 32.0) * 5.0 / 9.0
-        hi = (hi - 32.0) * 5.0 / 9.0
+    _ = role_units
+    lo = _f(p, "zone_lo", 21.111111)
+    hi = _f(p, "zone_hi", 23.888889)
     return lo, hi
 
 
@@ -1044,15 +1033,15 @@ def vav1(d, p, poll):
 
 def vav2(d, p, poll):
     """Unoccupied zone stays warmer than heating setback (night setback miss)."""
-    hi = _f(p, "setback_hi", 68.0)
+    hi = _f(p, "setback_hi", 20.0)
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     return zt.notna() & _unoccupied_mask(d) & (zt > hi)
 
 
 def vav3(d, p, poll):
-    oat_hi = _f(p, "reheat_oat", 78.0)
+    oat_hi = _f(p, "reheat_oat", 25.555556)
     reheat_thr = _f(p, "reheat_pct", 0.52)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798689)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     return _vav_air_on(d, flow_min) & d["outside-air-temp"].notna() & (d["outside-air-temp"] > oat_hi) & (reheat > reheat_thr)
 
@@ -1060,7 +1049,7 @@ def vav3(d, p, poll):
 def vav4(d, p, poll):
     full_open = _f(p, "full_open_pct", 0.975)
     hours = _f(p, "sustain_hours", 1.5)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798689)
     roll = max(2, int(round(hours * 3600 / max(poll, 1))))
     dmp = norm_cmd(d["damper"]).fillna(0)
     return (
@@ -1071,12 +1060,12 @@ def vav4(d, p, poll):
 
 def vav5(d, p, poll):
     dmp = norm_cmd(d["damper"]).fillna(0)
-    return d["zone-airflow"].notna() & (d["zone-airflow"] > 50.0) & (dmp < 0.10)
+    return d["zone-airflow"].notna() & (d["zone-airflow"] > 23.597372) & (dmp < 0.10)
 
 
 def vav6(d, p, poll):
     """Reheat open while OA is cool enough for free cooling."""
-    oat_hi = _f(p, "free_cool_oat", 65.0)
+    oat_hi = _f(p, "free_cool_oat", 18.333333)
     reheat_thr = _f(p, "reheat_pct", 0.25)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
@@ -1096,17 +1085,17 @@ def vav7(d, p, poll):
     flow = pd.to_numeric(d["zone-airflow"], errors="coerce") if "zone-airflow" in d.columns else None
     if flow is None:
         return under
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798689)
     air_on = _vav_air_on(d, flow_min)
     window = max(6, int(round(3600.0 / max(float(poll), 1.0))))
     roll_std = flow.rolling(window, min_periods=max(3, window // 2)).std()
     roll_mean = flow.rolling(window, min_periods=max(3, window // 2)).mean()
-    max_std = _f(p, "fixed_flow_max_std", 15.0)
-    min_mean = _f(p, "fixed_flow_min_mean", 200.0)
+    max_std = _f(p, "fixed_flow_max_std", 7.079211)
+    min_mean = _f(p, "fixed_flow_min_mean", 94.389489)
     fixed_high = air_on & flow.notna() & (roll_std < max_std) & (roll_mean > min_mean)
     high_min = _false(d.index)
     if "min-flow-sp" in d.columns:
-        high_min_thr = _f(p, "high_min_flow_sp", 250.0)
+        high_min_thr = _f(p, "high_min_flow_sp", 117.986861)
         high_min = (
             air_on
             & d["min-flow-sp"].notna()
@@ -1124,8 +1113,8 @@ def vav_reheat_stuck(d, p, poll):
     failed reheat valve or coil. Fully computed from VAV-local sensors.
     """
     cmd_thr = _f(p, "reheat_cmd", 0.30)
-    min_rise = _f(p, "min_rise", 3.0)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    min_rise = _f(p, "min_rise", 1.666667)
+    flow_min = _f(p, "flow_on_min", 11.798689)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     rise = d["vav-discharge-air-temp"] - d["vav-inlet-air-temp"]
     return (
@@ -1141,8 +1130,8 @@ def vav_vs_ahu_leave(d, p, poll):
     Requires topology enrich: ``ahu_sat`` copied from parent AHU onto the VAV frame.
     Without ``ahu_sat``, the rule is SKIPPED_MISSING_ROLES by the engine.
     """
-    band = _f(p, "delta_f", 8.0)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    band = _f(p, "delta", 4.444444)
+    flow_min = _f(p, "flow_on_min", 11.798689)
     leave = pd.to_numeric(d["vav-discharge-air-temp"], errors="coerce")
     ahu = pd.to_numeric(d["ahu-discharge-air-temp"], errors="coerce")
     return (
@@ -1186,7 +1175,7 @@ def fcu_htg_coil(d, p, poll):
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta_f", 5.4))
+    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta", 3.0))
 
 
 def fcu_clg_coil(d, p, poll):
@@ -1204,7 +1193,7 @@ def fcu_valve_pass_htg(d, p, poll):
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta_f", 5.4))
+    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta", 3.0))
 
 
 def fcu_valve_pass_clg(d, p, poll):
@@ -1213,7 +1202,7 @@ def fcu_valve_pass_clg(d, p, poll):
     drop = pd.to_numeric(d["zone-air-temp"], errors="coerce") - pd.to_numeric(
         d["discharge-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta_f", 5.4))
+    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta", 3.0))
 
 
 def fcu_damper_pos(d, p, poll):
@@ -1231,7 +1220,7 @@ def fcu_co2_damper(d, p, poll):
 def fcu_deadband(d, p, poll):
     cool = pd.to_numeric(d["cooling-sp"], errors="coerce")
     heat = pd.to_numeric(d["heating-sp"], errors="coerce")
-    return cool.notna() & heat.notna() & ((cool - heat) < _f(p, "deadband_c", 1.0))
+    return cool.notna() & heat.notna() & ((cool - heat) < _f(p, "deadband", 1.0))
 
 
 def fcu_mode_cycle(d, p, poll):
@@ -1940,7 +1929,7 @@ RULES: list[CookbookRule] = [
         "Fan on and heating valve ≥80%, but discharge air is less than 5.4°F above zone temperature.",
         fcu_htg_coil, params=[
             CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
-            CookbookParam("coil_delta_f", "Minimum heating rise", "°F", 1.0, 20.0, 0.5, 5.4),
+            CookbookParam("coil_delta", "Minimum heating rise", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
@@ -1952,13 +1941,13 @@ RULES: list[CookbookRule] = [
         ["discharge-air-temp", "zone-air-temp", "heating-valve", "cooling-valve"],
         "Fan on and both valves shut, but discharge air exceeds zone temperature by more than 5.4°F.",
         fcu_valve_pass_htg, params=[
-            CookbookParam("pass_delta_f", "Passing temperature rise", "°F", 1.0, 20.0, 0.5, 5.4),
+            CookbookParam("pass_delta", "Passing temperature rise", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-VALVE-PASS-CLG", "FCU cooling valve passing", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "heating-valve", "cooling-valve"],
         "Fan on and both valves shut, but zone temperature exceeds discharge air by more than 5.4°F.",
         fcu_valve_pass_clg, params=[
-            CookbookParam("pass_delta_f", "Passing temperature drop", "°F", 1.0, 20.0, 0.5, 5.4),
+            CookbookParam("pass_delta", "Passing temperature drop", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-DAMPER-POS", "FCU damper command/position mismatch", "fcu", ["zone_other", "general", "ahu"],
         ["damper-cmd", "damper"],
@@ -1978,7 +1967,7 @@ RULES: list[CookbookRule] = [
         ["cooling-sp", "heating-sp"],
         "Pass-through cooling setpoint minus heating setpoint is less than 1°C.",
         fcu_deadband, params=[
-            CookbookParam("deadband_c", "Minimum deadband", "°C", 0.0, 5.0, 0.1, 1.0),
+            CookbookParam("deadband", "Minimum deadband", "°C", 0.0, 5.0, 0.1, 1.0),
             CONFIRM_PARAM()], confirm_seconds=0),
     CookbookRule("FCU-MODE-CYCLE", "FCU heating/cooling mode cycling", "fcu", ["zone_other", "general", "ahu"],
         ["heating-valve", "cooling-valve"],
@@ -1991,55 +1980,55 @@ RULES: list[CookbookRule] = [
     # --- VAV zones ---
     CookbookRule("VAV-1", "Zone comfort band", "vav", ["vav", "zone_other", "heatpump", "baseboard"],
         ["zone-air-temp"],
-        "Zone temp outside zone_lo–zone_hi (default 70–75°F) during occupied hours when an "
+        "Zone temp outside zone_lo–zone_hi (default 21.1–23.9 °C) during occupied hours when an "
         "occupancy column or Overview calendar is set (require_occupied, default on). "
         "Unoccupied setback stays on VAV-2.",
         vav1, params=[
-            CookbookParam("zone_lo", "Zone low", "°F", 55.0, 72.0, 0.5, 70.0),
-            CookbookParam("zone_hi", "Zone high", "°F", 72.0, 85.0, 0.5, 75.0),
+            CookbookParam("zone_lo", "Zone low", "°C", 12.777778, 22.222222, 0.5, 21.111111),
+            CookbookParam("zone_hi", "Zone high", "°C", 22.222222, 29.444444, 0.5, 23.888889),
             CookbookParam("require_occupied", "Require occupied", "bool", 0.0, 1.0, 1.0, 1.0),
             CONFIRM_PARAM()],
         optional_roles=["occupied", "occ-mode"], confirm_seconds=900),
     CookbookRule("VAV-2", "Night setback miss", "vav", ["vav", "zone_other", "heatpump", "baseboard"],
         ["zone-air-temp", "occupied"],
-        "Unoccupied AND zone temp > setback_hi (default 68°F) — heating setback not taken.",
+        "Unoccupied AND zone temp > setback_hi (default 20 °C) — heating setback not taken.",
         vav2, params=[
-            CookbookParam("setback_hi", "Setback high", "°F", 55.0, 72.0, 0.5, 68.0),
+            CookbookParam("setback_hi", "Setback high", "°C", 12.777778, 22.222222, 0.5, 20.0),
             CONFIRM_PARAM()],
         optional_roles=["occ-mode"], confirm_seconds=900),
     CookbookRule("VAV-3", "Excessive reheat during warm weather", "vav", ["vav"],
-        ["outside-air-temp", "reheat-valve"], "Air flowing AND OAT > 78°F AND reheat valve > 52%.",
+        ["outside-air-temp", "reheat-valve"], "Air flowing AND OAT > 25.6 °C AND reheat valve > 52%.",
         vav3, params=[
-            CookbookParam("reheat_oat", "Warm OAT", "°F", 65.0, 90.0, 1.0, 78.0),
+            CookbookParam("reheat_oat", "Warm OAT", "°C", 18.333333, 32.222222, 0.555556, 25.555556),
             CookbookParam("reheat_pct", "Reheat frac", "frac", 0.1, 1.0, 0.02, 0.52),
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
             CONFIRM_PARAM()], confirm_seconds=300),
     CookbookRule("VAV-4", "Damper stuck at full open", "vav", ["vav"],
         ["damper"], "Air flowing AND damper > 97.5% sustained across the window.",
         vav4, params=[
             CookbookParam("full_open_pct", "Full open frac", "frac", 0.8, 1.0, 0.005, 0.975),
             CookbookParam("sustain_hours", "Sustain window", "h", 0.5, 6.0, 0.5, 1.5),
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
             CONFIRM_PARAM()], confirm_seconds=900),
     CookbookRule("VAV-5", "Airflow sensor bias", "vav", ["vav"],
-        ["zone-airflow", "damper"], "Airflow > 50 cfm while damper < 10% (implausible flow).",
+        ["zone-airflow", "damper"], "Airflow > ~24 L/s while damper < 10% (implausible flow).",
         vav5, params=[CONFIRM_PARAM()], confirm_seconds=900),
     CookbookRule("VAV-6", "Reheat when cooling available", "vav", ["vav"],
         ["outside-air-temp", "reheat-valve"],
-        "OAT < 65°F AND reheat valve > 25% (optional cooling-available must be true when mapped).",
+        "OAT < 18.3 °C AND reheat valve > 25% (optional cooling-available must be true when mapped).",
         vav6, params=[
-            CookbookParam("free_cool_oat", "Free-cool OAT", "°F", 45.0, 75.0, 1.0, 65.0),
+            CookbookParam("free_cool_oat", "Free-cool OAT", "°C", 7.222222, 23.888889, 0.555556, 18.333333),
             CookbookParam("reheat_pct", "Reheat frac", "frac", 0.05, 1.0, 0.05, 0.25),
             CONFIRM_PARAM()],
         optional_roles=["cooling-available"], confirm_seconds=900),
     CookbookRule("VAV-REHEAT", "Reheat valve stuck / no temp rise", "vav", ["vav"],
         ["reheat-valve", "vav-discharge-air-temp", "vav-inlet-air-temp"],
-        "Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet "
+        "Air flowing AND reheat valve > 30% AND box discharge temp rises < 1.7 °C above duct inlet "
         "(air from AHU) — stuck or failed reheat valve/coil.",
         vav_reheat_stuck, params=[
             CookbookParam("reheat_cmd", "Reheat open frac", "frac", 0.1, 1.0, 0.05, 0.30),
-            CookbookParam("min_rise", "Min temp rise", "°F", 0.5, 15.0, 0.5, 3.0),
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
+            CookbookParam("min_rise", "Min temp rise", "°C", 0.277778, 8.333333, 0.277778, 1.666667),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
             CONFIRM_PARAM()], confirm_seconds=900),
     CookbookRule(
         "VAV-AHU-LEAVE",
@@ -2052,8 +2041,8 @@ RULES: list[CookbookRule] = [
         "otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.",
         vav_vs_ahu_leave,
         params=[
-            CookbookParam("delta_f", "Leave Δ vs AHU SAT", "°F", 2.0, 25.0, 0.5, 8.0),
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
+            CookbookParam("delta", "Leave Δ vs AHU SAT", "°C", 1.111111, 13.888889, 0.277778, 4.444444),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
             CONFIRM_PARAM(),
         ],
         confirm_seconds=900,
@@ -2063,10 +2052,10 @@ RULES: list[CookbookRule] = [
         "Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on "
         "(mins too high / box never modulates), OR min_flow_sp itself is excessively high.",
         vav7, params=[
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
-            CookbookParam("fixed_flow_max_std", "Fixed-flow max std", "cfm", 1.0, 80.0, 1.0, 15.0, direction="stricter"),
-            CookbookParam("fixed_flow_min_mean", "Fixed-flow min mean", "cfm", 50.0, 2000.0, 10.0, 200.0, direction="fewer"),
-            CookbookParam("high_min_flow_sp", "High min-flow SP", "cfm", 50.0, 2000.0, 10.0, 250.0, direction="fewer"),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
+            CookbookParam("fixed_flow_max_std", "Fixed-flow max std", "L/s", 0.471947, 37.755795, 0.471947, 7.079211),
+            CookbookParam("fixed_flow_min_mean", "Fixed-flow min mean", "L/s", 23.597372, 943.894885, 4.719474, 94.389489, direction="fewer"),
+            CookbookParam("high_min_flow_sp", "High min-flow SP", "L/s", 23.597372, 943.894885, 4.719474, 117.986861, direction="fewer"),
             CONFIRM_PARAM()], confirm_seconds=900),
 
     # --- Central plants ---
