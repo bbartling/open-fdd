@@ -94,12 +94,21 @@ jobs:
           cargo test -p openfdd_contracts -p fdd_resources -p fdd_tsdb -p openfdd-central -p openfdd_nf_grpc -- --skip fixture_acceptance
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
+          cargo test -p openfdd-central t1405_3_trim_rules_without_reset_request_binding_not_sql_error -- --test-threads=1
 
       - name: Architecture / MQTT cutover gates
         run: bash scripts/gates/run_all_gates.sh --quick
 
       - name: Cookbook + README docs integrity (59-rule floor, cookbook link)
         run: python3 scripts/cookbook_parity_check.py --docs-only
+
+      - name: Rule column contract (T1405-3)
+        run: |
+          python3 scripts/ci/check_rule_columns.py --self-test
+          python3 scripts/ci/check_rule_columns.py
+
+      - name: fdd_core crate tests (T1405-1, T1405-2)
+        run: CARGO_TARGET_DIR=/tmp/ofdd-target-w1c cargo test -p fdd_core
 
       - name: Unit contract (T1284-1)
         run: |

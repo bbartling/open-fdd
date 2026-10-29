@@ -34,10 +34,9 @@ TEMPERATURE_DIFFERENCE_KEYS = frozenset(
 )
 
 STRIP_PARAM_KEYS = frozenset({"kind", "effect"})
-# W4 SI family PRs may change defaults/units; metadata diff ignores value fields.
-STRIP_REGISTRY_DIFF_PARAM_KEYS = frozenset(
-    {"kind", "effect", "default", "min", "max", "unit", "step", "label"}
-)
+SI_CONTRACT_VALUE_KEYS = ("default", "min", "max", "step")
+SI_CONTRACT_DIFF_KEYS = frozenset({"unit", "label", *SI_CONTRACT_VALUE_KEYS})
+_FLOAT_TOL = 1e-5
 
 
 def sha256_file(path: Path) -> str:
@@ -261,17 +260,170 @@ def strip_registry_metadata(doc: Any) -> Any:
     return doc
 
 
-def strip_registry_si_contract_diff(doc: Any) -> Any:
-    if isinstance(doc, dict):
-        out = {}
-        for k, v in doc.items():
-            if k in STRIP_REGISTRY_DIFF_PARAM_KEYS:
+def _quantity_for_param_spec(spec: dict[str, Any]) -> str | None:
+    kind = str(spec.get("kind") or "")
+    unit = str(spec.get("unit") or "")
+    if kind == "absolute_temperature":
+        return "absolute_temperature"
+    if kind == "temperature_difference":
+        return "temperature_difference"
+    if kind == "temperature_rate":
+        return "temperature_rate"
+    if kind == "air_pressure":
+        return "air_pressure"
+    if kind == "hydronic_pressure":
+        return "hydronic_pressure"
+    if kind in ("duration_minutes", "duration_seconds"):
+        return "duration_seconds" if kind == "duration_seconds" else "duration_minutes"
+    if kind in ("percent", "fraction", "boolean", "count", "dimensionless"):
+        return None
+    if unit in ("degF", "degC", "°F", "°C"):
+        return "absolute_temperature"
+    if unit in ("degF_delta", "degC_delta", "deltaC"):
+        return "temperature_difference"
+    if unit in ("Pa", "inWC", "inH2O", "in_wc", "inwc", "psi", "kPa"):
+        return "air_pressure"
+    if unit in ("degF_per_h", "degC_per_h"):
+        return "temperature_rate"
+    return None
+
+
+def _source_unit_for_convert(unit: str, quantity: str) -> str:
+    if quantity == "temperature_difference" and unit == "degF":
+        return "degF_delta"
+    if quantity == "temperature_difference" and unit in ("degC", "°C"):
+        return "degC_delta"
+    if unit == "pct":
+        return "percent"
+    if unit.lower() in ("inwc", "in_wc"):
+        return "inWC"
+    return unit
+
+
+def _param_to_canonical(
+    metric: dict[str, Any],
+    spec: dict[str, Any],
+    field: str,
+    *,
+    quantity_override: str | None = None,
+) -> float | None:
+    if field not in spec:
+        return None
+    raw = spec[field]
+    if raw is None:
+        return None
+    quantity = quantity_override or _quantity_for_param_spec(spec)
+    if quantity == "absolute_temperature" and field == "step":
+        quantity = "temperature_difference"
+    if quantity is None:
+        return float(raw)
+    unit = str(spec.get("unit") or "")
+    src = _source_unit_for_convert(unit, quantity)
+    return convert_to_canonical(metric, quantity, float(raw), src)
+
+
+def _canonical_values_match(a: float | None, b: float | None) -> bool:
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    return abs(float(a) - float(b)) <= _FLOAT_TOL
+
+
+def _validate_param_spec_kind_aware(
+    metric: dict[str, Any],
+    rule_id: str,
+    param_key: str,
+    master_spec: dict[str, Any],
+    branch_spec: dict[str, Any],
+) -> None:
+    skip = SI_CONTRACT_DIFF_KEYS | STRIP_PARAM_KEYS
+    keys = set(master_spec) | set(branch_spec)
+    for key in sorted(keys):
+        if key in skip:
+            continue
+        if master_spec.get(key) != branch_spec.get(key):
+            raise AssertionError(
+                f"{rule_id}.{param_key}: field {key!r} changed "
+                f"(master={master_spec.get(key)!r} branch={branch_spec.get(key)!r})"
+            )
+
+    qty_m = _quantity_for_param_spec(master_spec)
+    qty_b = _quantity_for_param_spec(branch_spec)
+
+    for field in SI_CONTRACT_VALUE_KEYS:
+        if field not in master_spec and field not in branch_spec:
+            continue
+        if master_spec.get(field) == branch_spec.get(field) and master_spec.get(
+            "unit"
+        ) == branch_spec.get("unit"):
+            continue
+        mc = _param_to_canonical(metric, master_spec, field)
+        bc = _param_to_canonical(metric, branch_spec, field)
+        if _canonical_values_match(mc, bc):
+            continue
+        if qty_b and qty_m != qty_b:
+            mc_branch_qty = _param_to_canonical(
+                metric, master_spec, field, quantity_override=qty_b
+            )
+            if _canonical_values_match(mc_branch_qty, bc):
                 continue
-            out[k] = strip_registry_si_contract_diff(v)
-        return out
-    if isinstance(doc, list):
-        return [strip_registry_si_contract_diff(x) for x in doc]
-    return doc
+        raise AssertionError(
+            f"{rule_id}.{param_key}.{field}: SI contract mismatch "
+            f"(master canonical={mc!r} branch canonical={bc!r}; "
+            f"master={master_spec.get(field)!r} {master_spec.get('unit')!r} "
+            f"branch={branch_spec.get(field)!r} {branch_spec.get('unit')!r})"
+        )
+
+
+def validate_kind_aware_si_rules_diff(
+    metric: dict[str, Any],
+    master_doc: Any,
+    branch_doc: Any,
+    *,
+    doc_label: str,
+) -> None:
+    """Allow registry/tuning parameter SI rewrites when values match metric contract conversion."""
+    master_rules = _rules_by_id(master_doc)
+    branch_rules = _rules_by_id(branch_doc)
+    if set(master_rules) != set(branch_rules):
+        raise AssertionError(f"{doc_label}: rule_id set differs from origin/master")
+
+    for rule_id, master_rule in master_rules.items():
+        branch_rule = branch_rules[rule_id]
+        skip = {"required_roles", "optional_roles", "parameters"}
+        rule_keys = set(master_rule) | set(branch_rule)
+        for key in sorted(rule_keys):
+            if key in skip:
+                continue
+            if master_rule.get(key) != branch_rule.get(key):
+                raise AssertionError(
+                    f"{doc_label} {rule_id}: non-parameter field {key!r} changed"
+                )
+
+        master_params = master_rule.get("parameters") or {}
+        branch_params = branch_rule.get("parameters") or {}
+        if set(master_params) != set(branch_params):
+            raise AssertionError(
+                f"{doc_label} {rule_id}: parameter keys differ "
+                f"(master={sorted(master_params)!r} branch={sorted(branch_params)!r})"
+            )
+        for param_key, master_spec in master_params.items():
+            if not isinstance(master_spec, dict) or not isinstance(
+                branch_params[param_key], dict
+            ):
+                if master_spec != branch_params[param_key]:
+                    raise AssertionError(
+                        f"{doc_label} {rule_id}.{param_key}: non-dict parameter changed"
+                    )
+                continue
+            _validate_param_spec_kind_aware(
+                metric,
+                rule_id,
+                param_key,
+                master_spec,
+                branch_params[param_key],
+            )
 
 
 def ensure_origin_master_ref() -> str:
@@ -321,6 +473,85 @@ def git_show_master(relpath: str) -> str:
     return proc.stdout
 
 
+def _rules_by_id(doc: Any) -> dict[str, dict[str, Any]]:
+    rules = doc.get("rules") if isinstance(doc, dict) else None
+    if not isinstance(rules, list):
+        raise AssertionError("registry.yaml rules must be a list")
+    out: dict[str, dict[str, Any]] = {}
+    for rule in rules:
+        if not isinstance(rule, dict):
+            raise AssertionError("registry rule entries must be mappings")
+        rid = rule.get("rule_id")
+        if not rid:
+            raise AssertionError("registry rule missing rule_id")
+        out[str(rid)] = rule
+    return out
+
+
+def registry_without_role_lists(doc: Any) -> Any:
+    import copy
+
+    stripped = copy.deepcopy(doc)
+    stripped = strip_registry_metadata(stripped)
+    for rule in stripped.get("rules", []):
+        if isinstance(rule, dict):
+            rule.pop("required_roles", None)
+            rule.pop("optional_roles", None)
+    return stripped
+
+
+def validate_registry_role_lists_diff(master_doc: Any, branch_doc: Any) -> None:
+    """Allow only optional_roles additions justified by rule SQL history reads."""
+    from check_rule_columns import sql_history_roles_for_rule
+
+    master_rules = _rules_by_id(master_doc)
+    branch_rules = _rules_by_id(branch_doc)
+    if set(master_rules) != set(branch_rules):
+        raise AssertionError(
+            "registry.yaml rule_id set differs from origin/master "
+            "(add/remove rule entries not allowed in metadata-only PRs)"
+        )
+
+    for rule_id, branch_rule in branch_rules.items():
+        master_rule = master_rules[rule_id]
+        master_req = list(master_rule.get("required_roles") or [])
+        branch_req = list(branch_rule.get("required_roles") or [])
+        if master_req != branch_req:
+            raise AssertionError(
+                f"registry.yaml {rule_id}: required_roles changed "
+                f"(master={master_req!r} branch={branch_req!r})"
+            )
+
+        master_opt = {str(r).lower() for r in master_rule.get("optional_roles") or []}
+        branch_opt = {str(r).lower() for r in branch_rule.get("optional_roles") or []}
+        if not branch_opt.issuperset(master_opt):
+            removed = sorted(master_opt - branch_opt)
+            raise AssertionError(
+                f"registry.yaml {rule_id}: optional_roles removal not allowed "
+                f"(removed {removed!r})"
+            )
+        added = branch_opt - master_opt
+        if not added:
+            continue
+        sql_roles = {r.lower() for r in sql_history_roles_for_rule(branch_rule)}
+        for role in sorted(added):
+            if role not in sql_roles:
+                raise AssertionError(
+                    f"registry.yaml {rule_id}: optional_roles addition `{role}` "
+                    "is not referenced in the rule SQL FROM history SELECT"
+                )
+
+
+def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -> None:
+    """Role-list guard used by unit tests and non-SI metadata-only PRs."""
+    validate_registry_role_lists_diff(master_doc, branch_doc)
+    if registry_without_role_lists(master_doc) != registry_without_role_lists(branch_doc):
+        raise AssertionError(
+            "registry.yaml differs from origin/master beyond kind/effect metadata "
+            "and SQL-justified optional_roles additions"
+        )
+
+
 def assert_metadata_only_registry_diff() -> None:
     try:
         import yaml
@@ -328,21 +559,28 @@ def assert_metadata_only_registry_diff() -> None:
         raise RuntimeError("PyYAML required") from exc
     master_text = git_show_master("sql/fdd/registry.yaml")
     branch_text = REGISTRY.read_text(encoding="utf-8")
-    master_doc = strip_registry_si_contract_diff(yaml.safe_load(master_text))
-    branch_doc = strip_registry_si_contract_diff(yaml.safe_load(branch_text))
-    if master_doc != branch_doc:
-        raise AssertionError(
-            "registry.yaml differs from origin/master beyond kind/effect metadata"
-        )
+    master_doc = yaml.safe_load(master_text)
+    branch_doc = yaml.safe_load(branch_text)
+    validate_registry_role_lists_diff(master_doc, branch_doc)
+    metric = load_json(METRIC_UNITS)
+    if registry_without_role_lists(master_doc) == registry_without_role_lists(branch_doc):
+        return
+    validate_kind_aware_si_rules_diff(
+        metric, master_doc, branch_doc, doc_label="registry.yaml"
+    )
 
 
 def assert_metadata_only_tuning_diff() -> None:
-    master = strip_registry_si_contract_diff(json.loads(git_show_master("sql/fdd/tuning_catalog.json")))
-    branch = strip_registry_si_contract_diff(load_json(TUNING))
-    if master != branch:
-        raise AssertionError(
-            "tuning_catalog.json differs from origin/master beyond kind/effect metadata"
-        )
+    master_raw = json.loads(git_show_master("sql/fdd/tuning_catalog.json"))
+    branch_raw = load_json(TUNING)
+    master = strip_registry_metadata(master_raw)
+    branch = strip_registry_metadata(branch_raw)
+    if master == branch:
+        return
+    metric = load_json(METRIC_UNITS)
+    validate_kind_aware_si_rules_diff(
+        metric, master_raw, branch_raw, doc_label="tuning_catalog.json"
+    )
 
 
 def apply_tuning_catalog(data: dict[str, Any]) -> dict[str, Any]:
