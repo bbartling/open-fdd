@@ -144,6 +144,14 @@ where
     Ok(found.is_some())
 }
 
+type SampleAggregateStats = (
+    i64,
+    Option<String>,
+    bool,
+    Option<DateTime<Utc>>,
+    Option<DateTime<Utc>>,
+);
+
 #[derive(Debug, Clone)]
 struct SeriesRow {
     openfdd_key: String,
@@ -199,16 +207,7 @@ async fn load_series_rows(
     .fetch_all(pool)
     .await?;
 
-    let mut sample_by_key: HashMap<
-        String,
-        (
-            i64,
-            Option<String>,
-            bool,
-            Option<DateTime<Utc>>,
-            Option<DateTime<Utc>>,
-        ),
-    > = HashMap::new();
+    let mut sample_by_key: HashMap<String, SampleAggregateStats> = HashMap::new();
     for row in sample_rows {
         let key: String = row.try_get("openfdd_key")?;
         sample_by_key.insert(
