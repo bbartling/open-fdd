@@ -8,6 +8,21 @@ info:
 security:
   - bearerAuth: []
 paths:
+  /api/fdd/equipment:
+    get:
+      summary: FDD equipment inventory (Timescale or registry)
+      parameters:
+        - in: query
+          name: building_id
+          schema:
+            type: string
+          description: When omitted, the response does not include `semantic_model_present`.
+      responses:
+        "200":
+          description: |
+            Equipment list. When `building_id` is set, includes `semantic_model_present`
+            (boolean — committed native `semantic_meta.json` for that building).
+            When `building_id` is omitted, `semantic_model_present` is not present on the JSON object.
   /api/health:
     get:
       security: []
@@ -270,6 +285,8 @@ paths:
           description: Invalid request, unknown equipment in semantic_meta scope, or inventory incomplete (`incomplete` true)
         "404":
           description: No committed native semantic model for the building (`present` false on error JSON)
+        "500":
+          description: Overlay Turtle read/parse/scope failure (`overlay_error` true on error JSON)
   /api/model/assignments:
     get:
       summary: Driver and FDD bindings

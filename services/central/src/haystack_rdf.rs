@@ -114,7 +114,7 @@ impl HaystackRdfCache {
     ) -> Result<Value, Value> {
         let (snap, inventory) =
             self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
-        let overlay = Self::load_overlay_ttl(building_id, equipment_id);
+        let overlay = Self::load_overlay_ttl(building_id, equipment_id)?;
         let set = haystack_sparql_bindings::execute_template_on_snapshot_with_overlay(
             &snap,
             Some(&inventory),
@@ -147,7 +147,7 @@ impl HaystackRdfCache {
     ) -> Result<Value, Value> {
         let (snap, inventory) =
             self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
-        let overlay = Self::load_overlay_ttl(building_id, equipment_id);
+        let overlay = Self::load_overlay_ttl(building_id, equipment_id)?;
         let set = haystack_sparql_bindings::execute_template_on_snapshot_with_overlay(
             &snap,
             Some(&inventory),
@@ -188,7 +188,7 @@ impl HaystackRdfCache {
                 "soft_open_neq_fq": true,
             })
         })?;
-        let overlay = Self::load_overlay_ttl(building_id, equipment_id);
+        let overlay = Self::load_overlay_ttl(building_id, equipment_id)?;
         let snap = match self.get_or_materialize_with_inventory(
             building_id,
             equipment_id,
@@ -229,8 +229,10 @@ impl HaystackRdfCache {
         self.by_key.retain(|k, _| !k.starts_with(&prefix));
     }
 
-    /// Soft-OPEN: load writable overlay TTL for SPARQL pack ∪ overlay (empty if absent).
-    fn load_overlay_ttl(building_id: &str, equipment_id: Option<&str>) -> String {
+    /// Soft-OPEN: load writable overlay TTL for SPARQL pack ∪ overlay.
+    ///
+    /// Missing overlay file → `Ok("")` (no overlay union). Read/parse/scope failures → `Err`.
+    fn load_overlay_ttl(building_id: &str, equipment_id: Option<&str>) -> Result<String, Value> {
         let root = open_fdd_edge_prototype::historian::store::workspace_dir()
             .join("data")
             .join("csv_buildings")
@@ -239,7 +241,14 @@ impl HaystackRdfCache {
             &root,
             equipment_id,
         )
-        .unwrap_or_default()
+        .map_err(|e| {
+            json!({
+                "ok": false,
+                "error": e,
+                "overlay_error": true,
+                "schema": haystack_central_dataset::DATASET_SCHEMA,
+            })
+        })
     }
 }
 
@@ -247,6 +256,8 @@ impl HaystackRdfCache {
 pub fn sparql_route_status(err: &Value) -> axum::http::StatusCode {
     if err.get("present") == Some(&json!(false)) {
         axum::http::StatusCode::NOT_FOUND
+    } else if err.get("overlay_error") == Some(&json!(true)) {
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR
     } else {
         axum::http::StatusCode::BAD_REQUEST
     }
@@ -361,6 +372,11 @@ mod tests {
             sparql_route_status(&scoped),
             axum::http::StatusCode::BAD_REQUEST
         );
+        let overlay = json!({"overlay_error": true, "error": "load overlay turtle: bad"});
+        assert_eq!(
+            sparql_route_status(&overlay),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]
@@ -389,6 +405,31 @@ mod tests {
         assert_eq!(
             sparql_route_status(&unknown),
             axum::http::StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn execute_sparql_template_errors_on_corrupt_overlay_ttl() {
+        let _guard = lock_env();
+        let dir = tempdir().expect("tempdir");
+        let _ws = WorkspaceEnv::set(dir.path());
+        let bid = "T1441_CORRUPT_OVERLAY";
+        let root = dir.path().join("data").join("csv_buildings").join(bid);
+        std::fs::create_dir_all(&root).expect("mkdir");
+        persist_atomic(&root, synth_meta(bid), None).expect("persist");
+        std::fs::write(
+            root.join(open_fdd_edge_prototype::csv_ingest::model_overlay::OVERLAY_TTL_FILE),
+            "@prefix x: . x:not valid turtle {{{",
+        )
+        .expect("write corrupt overlay");
+        let cache = HaystackRdfCache::new();
+        let err = cache
+            .execute_sparql_template(bid, Some("EQ_A"), None, "fdd_role_candidates")
+            .unwrap_err();
+        assert_eq!(err.get("overlay_error"), Some(&json!(true)));
+        assert_eq!(
+            sparql_route_status(&err),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
         );
     }
 }

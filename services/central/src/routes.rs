@@ -4424,13 +4424,13 @@ fn csv_building_root(building_id: &str) -> std::path::PathBuf {
 }
 
 fn attach_semantic_model_present(mut body: Value, building_id: Option<&str>) -> Value {
-    let present = building_id
-        .map(|bid| {
-            open_fdd_edge_prototype::csv_ingest::semantic_meta::semantic_model_present(
-                &csv_building_root(bid),
-            )
-        })
-        .unwrap_or(false);
+    let Some(bid) = building_id else {
+        return body;
+    };
+    let present =
+        open_fdd_edge_prototype::csv_ingest::semantic_meta::semantic_model_present(
+            &csv_building_root(bid),
+        );
     if let Some(obj) = body.as_object_mut() {
         obj.insert("semantic_model_present".into(), json!(present));
     }
