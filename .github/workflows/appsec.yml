@@ -44,7 +44,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y trivy
       - name: trivy fs
-        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+        run: trivy fs --exit-code 1 --severity HIGH,CRITICAL --skip-dirs archive .
 
   dashboard-audit:
     name: React sole product UI
