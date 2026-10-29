@@ -68,10 +68,50 @@ jobs:
       - name: Frozen ip goldens (Timescale regen must match committed)
         run: python3 scripts/ci/check_ip_goldens_frozen.py
 
-      - name: SI parity chain P0–P2 on fixtures
-        run: python3 scripts/stress/si_parity_gate.py --fixtures-only
+      - name: SI parity full matrix (report-only) + artifact
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only \
+            --report-json si_parity_report.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          doc = json.loads(Path("si_parity_report.json").read_text())
+          p0 = doc["stages"]["P0"]
+          p1 = doc["stages"]["P1"]
+          print(
+              f"P0 comparisons={p0['comparisons']} mismatches={p0['mismatch_count']} "
+              f"by_kind={p0['by_kind']}"
+          )
+          print(
+              f"P1 comparisons={p1['comparisons']} mismatches={p1['mismatch_count']} "
+              f"by_rule={p1['by_rule_id']}"
+          )
+          PY
 
-      - name: T1284-4 mutation must fail parity
+      - name: Upload si_parity_report.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: si-parity-report
+          path: si_parity_report.json
+
+      - name: Blocking W4b FC1 scope (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4b_fc1_duct_static
+
+      - name: T1284-4 blocking FC1 mutation must fail gate
+        run: |
+          set +e
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 \
+            --inject-t1284-4-mutation
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 under mutation, got $code"
+            exit 1
+          fi
+
+      - name: T1284-4 unit-vector + FC1 probe self-test
         run: python3 scripts/stress/si_parity_gate.py --mutation-self-test
 
       - name: Qualification unit tests

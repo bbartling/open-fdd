@@ -49,8 +49,88 @@ class StageResult:
     comparisons: int
     errors: tuple[str, ...]
     mismatch_table: tuple[str, ...] = ()
+    structured: tuple[dict[str, Any], ...] = ()
 
 
+def rule_in_scope(rule_id: str, scope: set[str] | None) -> bool:
+    if scope is None:
+        return True
+    return str(rule_id) in scope
+
+
+def _parse_p0_error(msg: str) -> tuple[str, str] | None:
+    """Return (kind, rule_id) for structured P0 errors."""
+    if msg.startswith("P0 sql_row_missing "):
+        return "sql_row_missing", _rule_id_from_p0_key(msg.removeprefix("P0 sql_row_missing "))
+    if msg.startswith("P0 value_mismatch "):
+        return "value_mismatch", _rule_id_from_p0_key(msg.removeprefix("P0 value_mismatch "))
+    return None
+
+
+def _rule_id_from_p0_key(rest: str) -> str:
+    if rest.startswith("("):
+        parts = rest.strip("()").split(",")
+        if len(parts) >= 2:
+            return parts[1].strip().strip("'\"")
+    return "?"
+
+
+def _p1_rule_id(msg: str) -> str:
+    if msg.startswith("P1 ") and ":" in msg:
+        head = msg.split(":", 1)[0]
+        if head.startswith("P1 ("):
+            parts = head.strip("()").split(",")
+            if len(parts) >= 2:
+                return parts[1].strip().strip("'\"")
+    return "?"
+
+
+def build_si_parity_report(
+    results: list[StageResult],
+    *,
+    scope: set[str] | None,
+    scope_label: str,
+    blocking: bool,
+) -> dict[str, Any]:
+    stage_map = {r.stage: r for r in results}
+    p0 = stage_map.get("P0")
+    p1 = stage_map.get("P1")
+    p2 = stage_map.get("P2")
+    p0_struct = list(p0.structured) if p0 else []
+    p1_struct = list(p1.structured) if p1 else []
+    p0_counts = {"sql_row_missing": 0, "value_mismatch": 0, "other": 0}
+    for cell in p0_struct:
+        kind = str(cell.get("kind") or "other")
+        p0_counts[kind] = p0_counts.get(kind, 0) + 1
+    p1_by_rule: dict[str, int] = {}
+    for cell in p1_struct:
+        rid = str(cell.get("rule_id") or "?")
+        p1_by_rule[rid] = p1_by_rule.get(rid, 0) + 1
+    return {
+        "schema": "openfdd-si-parity-report-v1",
+        "scope": scope_label,
+        "scope_rules": sorted(scope) if scope else ["*"],
+        "blocking": blocking,
+        "stages": {
+            "P0": {
+                "comparisons": p0.comparisons if p0 else 0,
+                "mismatch_count": len(p0.errors) if p0 else 0,
+                "by_kind": p0_counts,
+                "cells": p0_struct,
+            },
+            "P1": {
+                "comparisons": p1.comparisons if p1 else 0,
+                "mismatch_count": len(p1.errors) if p1 else 0,
+                "by_rule_id": p1_by_rule,
+                "cells": p1_struct,
+            },
+            "P2": {
+                "comparisons": p2.comparisons if p2 else 0,
+                "blocking_errors": list(p2.errors) if p2 else [],
+                "notes": list(p2.mismatch_table) if p2 else [],
+            },
+        },
+    }
 def _metric_doc() -> dict[str, Any]:
     return uc.load_json(uc.METRIC_UNITS)
 
@@ -326,9 +406,13 @@ def verify_pandas_errors(golden: dict[str, Any]) -> StageResult:
     return StageResult("pandas-errors", len(errors_list), tuple(errors))
 
 
-def compare_p0_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
+def compare_p0_all_goldens(
+    goldens: list[dict[str, Any]],
+    *,
+    scope: set[str] | None = None,
+) -> StageResult:
     errors: list[str] = []
-    mismatches: list[str] = []
+    structured: list[dict[str, Any]] = []
     comparisons = 0
     min_required = 0
     sql_rules = _rules_with_sql_file()
@@ -336,31 +420,53 @@ def compare_p0_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
         min_required += min_p0_cells(golden)
         sql_by_key = {fdd_daily_key(r): r for r in _sql_computed_daily(golden)}
         for prow in _p0_pandas_rows(golden, sql_rules):
+            rule_id = str(prow.get("rule_id") or "")
+            if not rule_in_scope(rule_id, scope):
+                continue
             key = fdd_daily_key(prow)
             comparisons += 1
             srow = sql_by_key.get(key)
             if srow is None:
-                msg = f"P0 missing SQL {key}"
-                mismatches.append(msg)
+                msg = f"P0 sql_row_missing {key}"
                 errors.append(msg)
+                structured.append(
+                    {
+                        "kind": "sql_row_missing",
+                        "building_id": key[0],
+                        "rule_id": key[1],
+                        "equipment_id": key[2],
+                        "utc_day": key[3],
+                    }
+                )
                 continue
             if not fault_seconds_equal(
                 prow.get("fault_seconds", 0), srow.get("fault_seconds", 0)
             ):
                 msg = (
-                    f"P0 {key}: pandas_ip={prow.get('fault_seconds')} "
+                    f"P0 value_mismatch {key}: pandas_ip={prow.get('fault_seconds')} "
                     f"sql_ip={srow.get('fault_seconds')}"
                 )
-                mismatches.append(msg)
                 errors.append(msg)
+                structured.append(
+                    {
+                        "kind": "value_mismatch",
+                        "building_id": key[0],
+                        "rule_id": key[1],
+                        "equipment_id": key[2],
+                        "utc_day": key[3],
+                        "pandas_ip_seconds": float(prow.get("fault_seconds", 0)),
+                        "sql_ip_seconds": float(srow.get("fault_seconds", 0)),
+                    }
+                )
         sub_a = compare_p0_analytics_golden(golden)
-        comparisons += sub_a.comparisons
-        errors.extend(sub_a.errors)
-    if comparisons < min_required:
+        if scope is None:
+            comparisons += sub_a.comparisons
+            errors.extend(sub_a.errors)
+    if scope is None and comparisons < min_required:
         errors.append(
             f"P0: comparisons {comparisons} < required pandas/sql cells {min_required}"
         )
-    return StageResult("P0", comparisons, tuple(errors), tuple(mismatches))
+    return StageResult("P0", comparisons, tuple(errors), tuple(), tuple(structured))
 
 
 def verify_golden_rule_attempted(golden: dict[str, Any], expected_rules: set[str]) -> StageResult:
@@ -421,6 +527,8 @@ def run_p1_ip_vs_si(
     *,
     param_hook: Callable[[str, str, float], float] | None = None,
     value_hook: Callable[[str, str, float], float] | None = None,
+    si_param_post_hook: Callable[[str, dict[str, float]], dict[str, float]] | None = None,
+    scope: set[str] | None = None,
 ) -> StageResult:
     from scripts.stress.si_cutover import ci_fixtures_lib as cfl
 
@@ -429,13 +537,14 @@ def run_p1_ip_vs_si(
     rules_by_id = {str(r["rule_id"]): r for r in rules}
     expected = cfl.expected_pandas_rule_ids(rules)
     errors: list[str] = []
+    structured: list[dict[str, Any]] = []
     comparisons = 0
     min_required = 0
-    recompute = param_hook is not None or value_hook is not None
+    recompute = param_hook is not None or value_hook is not None or si_param_post_hook is not None
     for golden in goldens:
         min_required += min_p1_cells(golden)
         cov = verify_golden_rule_attempted(golden, expected)
-        if cov.errors:
+        if cov.errors and scope is None:
             errors.extend(cov.errors)
         if recompute:
             si_map = cfl.recompute_si_daily_for_golden(
@@ -444,6 +553,7 @@ def run_p1_ip_vs_si(
                 metric,
                 param_hook=param_hook,
                 value_hook=value_hook,
+                si_param_post_hook=si_param_post_hook,
             )
         else:
             si_map = {
@@ -451,23 +561,50 @@ def run_p1_ip_vs_si(
                 for row in golden.get("pandas_si_daily") or []
             }
         for row in _parity_ip_rows(golden):
+            rule_id = str(row.get("rule_id") or "")
+            if not rule_in_scope(rule_id, scope):
+                continue
             key = fdd_daily_key(row)
             comparisons += 1
             ip_fs = float(row.get("fault_seconds", 0))
             si_fs = si_map.get(key)
             if si_fs is None:
                 errors.append(f"P1 missing SI side for {key}")
+                structured.append(
+                    {
+                        "rule_id": key[1],
+                        "building_id": key[0],
+                        "equipment_id": key[2],
+                        "utc_day": key[3],
+                        "ip_seconds": ip_fs,
+                        "si_seconds": None,
+                    }
+                )
                 continue
             if not fault_seconds_equal(ip_fs, si_fs):
                 errors.append(f"P1 {key}: ip={ip_fs} si={si_fs}")
-    if comparisons < min_required:
+                structured.append(
+                    {
+                        "rule_id": key[1],
+                        "building_id": key[0],
+                        "equipment_id": key[2],
+                        "utc_day": key[3],
+                        "ip_seconds": ip_fs,
+                        "si_seconds": si_fs,
+                    }
+                )
+    if scope is None and comparisons < min_required:
         errors.append(
             f"P1: comparisons {comparisons} < required ip/si cells {min_required}"
         )
-    return StageResult("P1", comparisons, tuple(errors))
+    return StageResult("P1", comparisons, tuple(errors), tuple(), tuple(structured))
 
 
-def run_p2_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
+def run_p2_all_goldens(
+    goldens: list[dict[str, Any]],
+    *,
+    scope: set[str] | None = None,
+) -> StageResult:
     from scripts.stress.si_cutover.ci_timescale_sql import PENDING_W4
 
     errors: list[str] = []
@@ -479,6 +616,9 @@ def run_p2_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
         min_required += min_p2_cells(golden)
         for row in golden.get("p2_si_pairs") or []:
             if not row.get("utc_day"):
+                continue
+            rule_id = str(row.get("rule_id") or "")
+            if not rule_in_scope(rule_id, scope):
                 continue
             comparisons += 1
             status = str(row.get("sql_si_status") or "")
@@ -510,7 +650,7 @@ def run_p2_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
         pending_notes.append(
             f"P2: {pending_cells} cell(s) pending_W4 (SI SQL pack not shipped; not compared)"
         )
-    if comparisons < min_required:
+    if scope is None and comparisons < min_required:
         errors.append(
             f"P2: comparisons {comparisons} < required si pairs {min_required}"
         )
@@ -657,31 +797,44 @@ def rule_mismatch_table(stage_errors: Iterable[str], *, stage: str) -> dict[str,
     import re
 
     counts: dict[str, int] = {}
-    pat = re.compile(
-        rf"^{re.escape(stage)}\s+\('(?:[^']*)',\s*'([^']*)',"
+    pat_tuple = re.compile(
+        rf"^{re.escape(stage)}\s+(?:sql_row_missing|value_mismatch)\s+\('(?:[^']*)',\s*'([^']*)',"
     )
     for msg in stage_errors:
-        m = pat.match(msg)
+        m = pat_tuple.match(msg)
         if m:
             rid = m.group(1)
             counts[rid] = counts.get(rid, 0) + 1
             continue
-        if msg.startswith(f"{stage} ") and "/" in msg:
-            rid = msg.split("/", 1)[0].split()[-1]
-            counts[rid] = counts.get(rid, 0) + 1
+        if msg.startswith(f"{stage} ") and ":" in msg:
+            rid = _p1_rule_id(msg) if stage == "P1" else msg.split("/", 1)[0].split()[-1]
+            if rid and rid != "?":
+                counts[rid] = counts.get(rid, 0) + 1
     return counts
 
 
-def run_fixture_stages() -> list[StageResult]:
+def run_fixture_stages(
+    *,
+    scope: set[str] | None = None,
+    param_hook: Callable[[str, str, float], float] | None = None,
+    value_hook: Callable[[str, str, float], float] | None = None,
+    si_param_post_hook: Callable[[str, dict[str, float]], dict[str, float]] | None = None,
+) -> list[StageResult]:
     goldens = load_all_ip_goldens()
     return [
         verify_unit_vector_goldens(),
         verify_unit_scenarios(),
         verify_pandas_errors_all(goldens),
-        compare_p0_all_goldens(goldens),
+        compare_p0_all_goldens(goldens, scope=scope),
         verify_p0_carryover_all(goldens),
-        run_p1_ip_vs_si(goldens),
-        run_p2_all_goldens(goldens),
+        run_p1_ip_vs_si(
+            goldens,
+            param_hook=param_hook,
+            value_hook=value_hook,
+            si_param_post_hook=si_param_post_hook,
+            scope=scope,
+        ),
+        run_p2_all_goldens(goldens, scope=scope),
     ]
 
 

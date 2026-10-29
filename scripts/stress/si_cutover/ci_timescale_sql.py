@@ -17,6 +17,10 @@ from open_fdd.role_candidates import _HAYSTACK_SLUG_TO_ROLE  # noqa: E402
 from scripts.stress.si_cutover.capture_ip_baseline import (  # noqa: E402
     daily_fault_and_covered_seconds,
 )
+from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
+    frame_column_to_sql_role,
+    registry_role_column,
+)
 
 PENDING_W4 = "pending_W4"
 SI_SQL_PACK_AVAILABLE = False  # W4 ships metric SQL pack; until then P2 sql_si is pending.
@@ -63,17 +67,72 @@ def frame_sql_columns(frame) -> set[str]:
     cols: set[str] = set()
     for col in frame.columns:
         if col == "occ_mode":
+            cols.add("occ_mode")
             continue
-        cols.add(haystack_col_to_sql(str(col)))
+        cols.add(frame_column_to_sql_role(str(col)))
     return cols
 
 
-def render_rule_sql(rule: dict[str, Any], poll_seconds: float) -> str:
+def render_rule_sql(
+    rule: dict[str, Any],
+    poll_seconds: float,
+    *,
+    overrides: dict[str, float] | None = None,
+) -> str:
     sys.path.insert(0, str(REPO / "sql" / "fdd"))
     from render_rule import render  # type: ignore
 
     rule_id = str(rule["rule_id"])
-    return render(rule_id, poll_seconds=poll_seconds, overrides=None, dialect="postgres")
+    return render(rule_id, poll_seconds=poll_seconds, overrides=overrides, dialect="postgres")
+
+
+def _catalog_param_keys(rule_id: str) -> set[str]:
+    import json
+
+    rules = json.loads((REPO / "sql" / "fdd" / "tuning_catalog.json").read_text(encoding="utf-8"))[
+        "rules"
+    ]
+    row = next(r for r in rules if str(r.get("rule_id")) == rule_id)
+    return set((row.get("parameters") or {}).keys())
+
+
+def catalog_overrides_from_registry(
+    rule: dict[str, Any], params: dict[str, float]
+) -> dict[str, float]:
+    """Map registry.yaml parameter defaults to tuning_catalog override keys."""
+    keys = _catalog_param_keys(str(rule["rule_id"]))
+    out: dict[str, float] = {}
+    for name, val in params.items():
+        if name in keys:
+            out[name] = float(val)
+        elif name == "confirm_seconds" and "confirm_min" in keys:
+            out["confirm_min"] = float(val) / 60.0
+    return out
+
+
+def pandas_aligned_sql_overrides(
+    rule: dict[str, Any],
+    ip_frame,
+    params: dict[str, float],
+    *,
+    poll_seconds: float,
+) -> dict[str, float]:
+    """Align SQL MODE_DELAY with pandas operational gate (startup delay)."""
+    from open_fdd.rules import run_rule
+
+    rule_id = str(rule["rule_id"])
+    probe = run_rule(
+        rule_id,
+        ip_frame,
+        params=params,
+        poll_seconds=float(poll_seconds),
+        require_operational_gates=True,
+    )
+    startup = float((probe.metrics or {}).get("startup_delay_seconds") or 0.0)
+    overrides = catalog_overrides_from_registry(rule, params)
+    if "mode_delay_min" in _catalog_param_keys(rule_id):
+        overrides["mode_delay_min"] = startup / 60.0
+    return overrides
 
 
 def rewrite_fault_series(sql: str, equipment_id: str) -> str | None:
@@ -88,6 +147,29 @@ def purge_site(cur, site_id: str) -> None:
     cur.execute("DELETE FROM equipment WHERE building_id = %s", (site_id,))
     cur.execute("DELETE FROM building WHERE building_id = %s", (site_id,))
     cur.execute("DELETE FROM site WHERE site_id = %s", (site_id,))
+
+
+def default_role_unit(sql_role: str) -> str | None:
+    temps = {
+        "oa_t",
+        "mat",
+        "rat",
+        "sat",
+        "zone_t",
+        "chw_supply_t",
+        "chw_return_t",
+        "hw_supply_t",
+        "hw_return_t",
+    }
+    if sql_role in temps:
+        return "degF"
+    if sql_role in ("oa_h", "ra_h", "zone_rh", "ma_h", "sa_h"):
+        return "percent"
+    if sql_role == "duct_static":
+        return "inWC"
+    if sql_role in ("fan_status", "fan_cmd", "pump_status", "chiller_status"):
+        return "bool"
+    return None
 
 
 def seed_frame(cur, parity, *, site_id: str, equipment_id: str, equip_type: str, frame) -> None:
@@ -108,12 +190,35 @@ def seed_frame(cur, parity, *, site_id: str, equipment_id: str, equip_type: str,
         for col in frame.columns:
             val = row[col]
             if col == "occ_mode":
+                token = str(val).strip().lower()
+                fval = (
+                    0.0
+                    if token
+                    in (
+                        "unoccupied",
+                        "0",
+                        "0.0",
+                        "false",
+                        "off",
+                    )
+                    else 1.0
+                )
+                sql_role = "occ_mode"
+                openfdd_key = f"{equipment_id}.{sql_role}"
+                cur.execute(
+                    """
+                    INSERT INTO sample (ts, site_id, openfdd_key, haystack_id, val)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (stamp, site_id, openfdd_key, openfdd_key, fval),
+                )
+                parity.bind_current(cur, site_id, equipment_id, sql_role, openfdd_key)
                 continue
             try:
                 fval = float(val)
             except (TypeError, ValueError):
                 continue
-            sql_role = haystack_col_to_sql(str(col))
+            sql_role = frame_column_to_sql_role(str(col))
             openfdd_key = f"{equipment_id}.{sql_role}"
             cur.execute(
                 """
@@ -123,6 +228,15 @@ def seed_frame(cur, parity, *, site_id: str, equipment_id: str, equip_type: str,
                 (stamp, site_id, openfdd_key, openfdd_key, fval),
             )
             parity.bind_current(cur, site_id, equipment_id, sql_role, openfdd_key)
+            unit = default_role_unit(sql_role)
+            if unit:
+                cur.execute(
+                    """
+                    UPDATE role_map SET unit = %s
+                    WHERE building_id = %s AND equipment_id = %s AND openfdd_key = %s AND role = %s
+                    """,
+                    (unit, site_id, equipment_id, openfdd_key, sql_role),
+                )
 
 
 def fill_history(cur, site_id: str, sql_columns: set[str]) -> None:
@@ -200,6 +314,7 @@ def execute_sql_rule_daily(
     equipment_id: str,
     poll_seconds: float,
     index,
+    render_overrides: dict[str, float] | None = None,
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Run one postgres rule; return daily rows or (empty, error reason)."""
     import pandas as pd
@@ -209,7 +324,7 @@ def execute_sql_rule_daily(
     if not sql_file:
         return [], "no_sql_file"
     try:
-        sql = render_rule_sql(rule, poll_seconds)
+        sql = render_rule_sql(rule, poll_seconds, overrides=render_overrides)
     except Exception as exc:
         return [], f"render: {exc}"
 
@@ -279,6 +394,13 @@ def execute_sql_rule_daily(
     ], None
 
 
+def apply_fdd_postgres_helpers(conn) -> None:
+    path = REPO / "sql" / "fdd" / "postgres" / "postgres_helpers.sql"
+    with conn.cursor() as cur:
+        cur.execute(path.read_text(encoding="utf-8"))
+    conn.commit()
+
+
 def run_sql_ip_for_dataset(
     conn,
     *,
@@ -287,11 +409,20 @@ def run_sql_ip_for_dataset(
     equipment_id: str,
     rules: list[dict[str, Any]],
     poll_seconds: float,
+    params_by_rule: dict[str, dict[str, float]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     parity = _load_parity_module()
     parity.apply_schema(conn)
+    apply_fdd_postgres_helpers(conn)
     site_id = spec.building_id
     sql_cols = frame_sql_columns(frame)
+    for rule in rules:
+        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
+            col = registry_role_column(str(role))
+            if col == "occ_mode":
+                sql_cols.add("occ_mode")
+                continue
+            sql_cols.add(frame_column_to_sql_role(col))
     errors: list[str] = []
     out: list[dict[str, Any]] = []
     with conn.cursor() as cur:
@@ -309,6 +440,10 @@ def run_sql_ip_for_dataset(
             rule_id = str(rule.get("rule_id") or "")
             if not rule.get("sql_file"):
                 continue
+            params = (params_by_rule or {}).get(rule_id) or {}
+            render_overrides = pandas_aligned_sql_overrides(
+                rule, frame, params, poll_seconds=poll_seconds
+            )
             cur.execute("SAVEPOINT si_cutover_rule")
             daily, err = execute_sql_rule_daily(
                 cur,
@@ -317,6 +452,7 @@ def run_sql_ip_for_dataset(
                 equipment_id=equipment_id,
                 poll_seconds=poll_seconds,
                 index=frame.index,
+                render_overrides=render_overrides,
             )
             if err:
                 cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")

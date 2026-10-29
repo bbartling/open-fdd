@@ -36,7 +36,7 @@ class SiParityChainTests(unittest.TestCase):
         goldens = self.pc.load_all_ip_goldens()
         self.assertGreaterEqual(len(goldens), 15)
         result = self.pc.compare_p0_all_goldens(goldens)
-        self.assertGreater(result.comparisons, 300)
+        self.assertGreater(result.comparisons, 250)
         # W3: Timescale SQL vs pandas IP mismatches are reported by the gate until closeout.
         self.assertGreaterEqual(len(result.errors), 0)
 

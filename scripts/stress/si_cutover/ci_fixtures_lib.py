@@ -28,7 +28,6 @@ GOLDEN_SCHEMA_VERSION = 1
 COOKBOOK_FIXTURES = REPO / "docs" / "rules" / "cookbook" / "fixtures"
 SYNTH_ROOT = REPO / "tests" / "fixtures" / "synthetic_slice" / "OPENFDD_SYNTHETIC_SLICE_V1"
 
-# Cookbook jsonl shorthand → Haystack/cookbook role columns expected by run_rule.
 COOKBOOK_COLUMN_RENAMES: dict[str, str] = {
     "duct_static": "duct-static-pressure",
     "duct_static_sp": "duct-static-pressure-sp",
@@ -49,6 +48,97 @@ COOKBOOK_COLUMN_RENAMES: dict[str, str] = {
     "min_flow_sp": "min-flow-sp",
     "reset_enable": "reset-enable",
 }
+
+REGISTRY_ROLE_TO_COLUMN: dict[str, str] = {
+    "duct_static": "duct-static-pressure",
+    "duct_static_sp": "duct-static-pressure-sp",
+    "fan_cmd": "fan-cmd",
+    "fan_status": "fan-status",
+    "mat": "mixed-air-temp",
+    "rat": "return-air-temp",
+    "oat": "outside-air-temp",
+    "oa_t": "outside-air-temp",
+    "oa_damper": "outside-air-damper",
+    "sat": "discharge-air-temp",
+    "sat_sp": "discharge-air-temp-sp",
+    "zone_t": "zone-air-temp",
+    "zone_flow": "zone-airflow",
+    "damper_pct": "damper",
+}
+
+
+def registry_role_column(role: str) -> str:
+    token = str(role or "").strip()
+    if token in REGISTRY_ROLE_TO_COLUMN:
+        return REGISTRY_ROLE_TO_COLUMN[token]
+    if token in COOKBOOK_COLUMN_RENAMES:
+        return COOKBOOK_COLUMN_RENAMES[token]
+    return token.replace("_", "-")
+
+
+def frame_column_to_sql_role(col: str) -> str:
+    """Map wide history column (haystack slug or cookbook) to SQL role name."""
+    from open_fdd.role_candidates import _HAYSTACK_SLUG_TO_ROLE
+
+    slug = str(col)
+    if slug in _HAYSTACK_SLUG_TO_ROLE:
+        return _HAYSTACK_SLUG_TO_ROLE[slug]
+    for role, mapped in REGISTRY_ROLE_TO_COLUMN.items():
+        if mapped == slug:
+            return role
+    for raw, mapped in COOKBOOK_COLUMN_RENAMES.items():
+        if mapped == slug:
+            return raw
+    return slug.replace("-", "_")
+
+
+SV_SENSOR_OPTIONAL_ROLES = (
+    "oa_t",
+    "mat",
+    "zone_t",
+    "rat",
+    "sat",
+    "chw_supply_t",
+    "chw_return_t",
+    "hw_supply_t",
+    "hw_return_t",
+    "oa_h",
+    "ra_h",
+    "zone_rh",
+    "ma_h",
+    "sa_h",
+)
+
+
+def rule_pair_eligible(
+    rule: dict[str, Any], frame, *, equipment_type: str
+) -> tuple[bool, str]:
+    """Both pandas and SQL must skip ineligible rule×dataset pairs."""
+    rule_id = str(rule.get("rule_id") or "")
+    kinds = rule.get("equipment_kinds") or []
+    if kinds and equipment_type and equipment_type not in kinds:
+        return False, "equipment_type"
+    required = list(rule.get("required_roles") or [])
+    for role in required:
+        col = registry_role_column(str(role))
+        if col not in frame.columns:
+            return False, f"missing_role:{role}"
+    if rule.get("sql_file") and not required:
+        optional = list(rule.get("optional_roles") or [])
+        if optional:
+            if not any(registry_role_column(str(r)) in frame.columns for r in optional):
+                return False, "missing_roles"
+    if rule_id.startswith("SV-"):
+        if not any(
+            registry_role_column(str(r)) in frame.columns for r in SV_SENSOR_OPTIONAL_ROLES
+        ):
+            return False, "missing_sensor_roles"
+    if rule_id == "OAT-METEO":
+        return False, "missing_weather_sidecar"
+    if rule_id == "VAV-1" and "occ_mode" not in frame.columns:
+        return False, "missing_occupancy_roles"
+    return True, ""
+
 
 COOKBOOK_DATASETS: tuple[dict[str, str], ...] = (
     {"fixture": "fc1_obvious_fault.jsonl", "building_id": "COOKBOOK_FC1", "equipment_type": "ahu"},
@@ -412,22 +502,52 @@ def build_golden_for_dataset(
             return value_hook(spec.building_id, col, val)
         return val
 
-    sql_rows, _sql_exec_notes = cts.run_sql_ip_for_dataset(
+    params_by_rule: dict[str, dict[str, float]] = {}
+    eligible_rules: list[dict[str, Any]] = []
+    pandas_rows: list[dict[str, Any]] = []
+    sql_rows: list[dict[str, Any]] = []
+    for rule in rules:
+        rule_id = str(rule.get("rule_id") or "")
+        ok, reason = rule_pair_eligible(rule, ip_frame, equipment_type=spec.equipment_type)
+        if not ok:
+            na = {
+                "building_id": spec.building_id,
+                "rule_id": rule_id,
+                "equipment_id": spec.equipment_id,
+                "utc_day": "",
+                "fault_seconds": 0.0,
+                "covered_seconds": 0.0,
+                "status": "",
+                "pair_status": "not_applicable",
+                "reason": reason,
+            }
+            pandas_rows.append(dict(na))
+            sql_rows.append(dict(na))
+            continue
+        eligible_rules.append(rule)
+        params_by_rule[rule_id] = rule_params_from_registry(rule)
+
+    sql_computed, sql_exec_notes = cts.run_sql_ip_for_dataset(
         conn,
         spec=spec,
         frame=ip_frame,
         equipment_id=spec.equipment_id,
-        rules=rules,
+        rules=eligible_rules,
         poll_seconds=poll_seconds,
+        params_by_rule=params_by_rule,
     )
+    sql_rows.extend(sql_computed)
+    if sql_exec_notes:
+        raise RuntimeError(
+            f"{spec.building_id}: Timescale SQL errors: {'; '.join(sql_exec_notes[:5])}"
+        )
 
-    pandas_rows: list[dict[str, Any]] = []
     si_rows_for_p1: list[dict[str, Any]] = []
     p2_pairs: list[dict[str, Any]] = []
 
-    for rule in rules:
+    for rule in eligible_rules:
         rule_id = str(rule.get("rule_id") or "")
-        params_ip = rule_params_from_registry(rule)
+        params_ip = params_by_rule[rule_id]
 
         def ph(name: str, val: float) -> float:
             return _param_hook(rule_id, name, val)
@@ -479,7 +599,7 @@ def build_golden_for_dataset(
             )
 
     error_rows = [r for r in pandas_rows if r.get("pair_status") == "error"]
-    attempted_rules = sorted({str(r.get("rule_id")) for r in pandas_rows if r.get("rule_id")})
+    attempted_rules = sorted({str(r.get("rule_id") or "") for r in rules if r.get("rule_id")})
     golden: dict[str, Any] = {
         "schema": SCHEMA,
         "schema_version": GOLDEN_SCHEMA_VERSION,
@@ -581,6 +701,7 @@ def recompute_si_daily_for_golden(
     *,
     param_hook: Callable[[str, str, float], float] | None = None,
     value_hook: Callable[[str, str, float], float] | None = None,
+    si_param_post_hook: Callable[[str, dict[str, float]], dict[str, float]] | None = None,
 ) -> dict[tuple[str, str, str, str], float]:
     frame_raw, equipment_id = reload_dataset_frame(golden)
     building_id = str(golden.get("building_id"))
@@ -608,6 +729,8 @@ def recompute_si_daily_for_golden(
             value_hook=lambda c, v: value_hook(building_id, c, v) if value_hook else v,
         )
         params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
+        if si_param_post_hook:
+            params_si = si_param_post_hook(rule_id, params_si)
         si_daily = run_rule_daily_rows(
             rule,
             si_frame,
