@@ -451,6 +451,11 @@ async fn apply_historian_schema(pool: &PgPool) {
         "CREATE UNIQUE INDEX IF NOT EXISTS point_map_site_portal_point_uidx
             ON point_map (site_id, portal_point_id)
             WHERE portal_point_id IS NOT NULL",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_unit text",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS source_history_mode text",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS quantity text",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS cadence_secs bigint",
+        "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS history_mode text",
     ] {
         crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
     }

@@ -803,6 +803,8 @@ pub struct EngineerPointOverlayEntry {
     pub unit: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quantity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cadence_secs: Option<u64>,
     #[serde(default)]
     pub primary_reference: bool,
 }
@@ -911,7 +913,20 @@ pub fn validate_engineer_unit_quantity(unit: &str, quantity: &str) -> Result<(),
     ))
 }
 
-fn validate_engineer_patch(unit: Option<&str>, quantity: Option<&str>) -> Result<(), String> {
+fn validate_engineer_cadence(cadence_secs: Option<u64>) -> Result<(), String> {
+    if let Some(secs) = cadence_secs {
+        if secs == 0 || secs > 86_400 {
+            return Err("cadence_secs out of range".into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_engineer_patch(
+    unit: Option<&str>,
+    quantity: Option<&str>,
+    cadence_secs: Option<u64>,
+) -> Result<(), String> {
     let has_unit = unit.map(str::trim).is_some_and(|u| !u.is_empty());
     let has_quantity = quantity.map(str::trim).is_some_and(|q| !q.is_empty());
     if has_unit || has_quantity {
@@ -922,6 +937,7 @@ fn validate_engineer_patch(unit: Option<&str>, quantity: Option<&str>) -> Result
             .unwrap_or("");
         validate_engineer_unit_quantity(u, q)?;
     }
+    validate_engineer_cadence(cadence_secs)?;
     Ok(())
 }
 
@@ -972,6 +988,7 @@ fn merge_engineer_patch(
     existing: Option<&EngineerPointOverlayEntry>,
     unit: Option<&str>,
     quantity: Option<&str>,
+    cadence_secs: Option<u64>,
     primary_reference: Option<bool>,
 ) -> EngineerPointOverlayEntry {
     let mut entry = existing.cloned().unwrap_or_default();
@@ -991,36 +1008,56 @@ fn merge_engineer_patch(
             Some(trimmed.to_string())
         };
     }
+    if let Some(secs) = cadence_secs {
+        entry.cadence_secs = Some(secs);
+    }
     if let Some(flag) = primary_reference {
         entry.primary_reference = flag;
     }
     entry
 }
 
+/// Optional engineer overlay fields for one portal point (W1a binding metadata).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EngineerPointOverlayPatch<'a> {
+    pub unit: Option<&'a str>,
+    pub quantity: Option<&'a str>,
+    pub cadence_secs: Option<u64>,
+    pub primary_reference: Option<bool>,
+}
+
 pub fn upsert_engineer_point_overlay(
     building_root: &Path,
     building_id: &str,
     point_id: &str,
-    unit: Option<&str>,
-    quantity: Option<&str>,
-    primary_reference: Option<bool>,
+    patch: EngineerPointOverlayPatch<'_>,
     dry_run: bool,
 ) -> Result<(), String> {
     let pid = point_id.trim();
     if pid.is_empty() {
         return Err("point_id required".into());
     }
-    if unit.is_none() && quantity.is_none() && primary_reference.is_none() {
+    if patch.unit.is_none()
+        && patch.quantity.is_none()
+        && patch.cadence_secs.is_none()
+        && patch.primary_reference.is_none()
+    {
         return Ok(());
     }
-    validate_engineer_patch(unit, quantity)?;
+    validate_engineer_patch(patch.unit, patch.quantity, patch.cadence_secs)?;
     let mut store = load_engineer_point_overlay(building_root)?;
     if store.building_id.is_empty() {
         store.building_id = building_id.to_string();
     } else if store.building_id != building_id {
         return Err("engineer overlay building_id mismatch".into());
     }
-    let merged = merge_engineer_patch(store.points.get(pid), unit, quantity, primary_reference);
+    let merged = merge_engineer_patch(
+        store.points.get(pid),
+        patch.unit,
+        patch.quantity,
+        patch.cadence_secs,
+        patch.primary_reference,
+    );
     store.points.insert(pid.to_string(), merged);
     save_engineer_point_overlay(building_root, building_id, &store, dry_run)
 }
@@ -1247,9 +1284,12 @@ pub fn upsert_point(
             building_root,
             building_id,
             pid,
-            engineer_unit,
-            engineer_quantity,
-            engineer_primary,
+            EngineerPointOverlayPatch {
+                unit: engineer_unit,
+                quantity: engineer_quantity,
+                cadence_secs: None,
+                primary_reference: engineer_primary,
+            },
             opts.dry_run,
         ) {
             Ok(()) => {}
@@ -2637,9 +2677,12 @@ SELECT ?sym WHERE {
             root,
             bid,
             pid,
-            Some("degF"),
-            Some("absolute_temperature"),
-            Some(true),
+            EngineerPointOverlayPatch {
+                unit: Some("degF"),
+                quantity: Some("absolute_temperature"),
+                cadence_secs: None,
+                primary_reference: Some(true),
+            },
             false,
         )
         .expect("engineer");

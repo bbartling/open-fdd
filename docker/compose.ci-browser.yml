@@ -59,6 +59,7 @@ services:
       - ../sql/schema/04_provider_hourly_jobs.sql:/docker-entrypoint-initdb.d/04_provider_hourly_jobs.sql:ro
       - ../sql/schema/04_ingest_queue.sql:/docker-entrypoint-initdb.d/05_ingest_queue.sql:ro
       - ../sql/schema/05_portal_inventory.sql:/docker-entrypoint-initdb.d/06_portal_inventory.sql:ro
+      - ../sql/schema/11_point_map_binding_metadata.sql:/docker-entrypoint-initdb.d/07_point_map_binding_metadata.sql:ro
 
 volumes:
   ci-browser-workspace:

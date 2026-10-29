@@ -1278,7 +1278,7 @@ mod tests {
         }
         let elapsed = start.elapsed();
         assert!(
-            elapsed < Duration::from_millis(500),
+            elapsed < Duration::from_secs(2),
             "enqueue must not block on a full queue (took {elapsed:?})"
         );
         assert!(

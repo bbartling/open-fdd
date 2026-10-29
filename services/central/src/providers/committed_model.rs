@@ -14,11 +14,12 @@ use sha2::{Digest, Sha256};
 
 use open_fdd_edge_prototype::csv_ingest::model_overlay::{
     effective_point_quantity, effective_point_unit, effective_primary_reference,
-    load_engineer_point_overlay,
+    load_engineer_point_overlay, EngineerPointOverlayEntry,
 };
 use open_fdd_edge_prototype::csv_ingest::portal_ingest_sparql::{
     validate_binding_rows, validate_slug, validate_unit, IngestBindingRow,
 };
+use sqlx::Row;
 
 pub const SCHEMA: &str = "ofdd_portal_committed_model_v1";
 pub const PLAN_SCHEMA: &str = "ofdd_portal_ingest_plan_v1";
@@ -116,6 +117,124 @@ pub struct CommittedPoint {
     /// Engineer-declared primary reference for this role (for example local OAT).
     #[serde(default)]
     pub primary_reference: bool,
+}
+
+/// Resolved binding metadata written to `point_map` (overlay > NF tag > empty).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PointMapBinding {
+    pub source_unit: Option<String>,
+    pub source_history_mode: Option<String>,
+    pub unit: Option<String>,
+    pub quantity: Option<String>,
+    pub history_mode: Option<String>,
+    pub cadence_secs: Option<u64>,
+}
+
+/// Precedence: engineer overlay, then NF portal tag, then empty.
+pub fn resolve_point_map_binding(
+    portal_unit: Option<&str>,
+    portal_his_mode: Option<&str>,
+    overlay: Option<&EngineerPointOverlayEntry>,
+) -> Result<PointMapBinding, String> {
+    let source_unit = portal_unit
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let source_history_mode = portal_his_mode
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let unit = effective_point_unit(source_unit.as_deref(), overlay);
+    let quantity = effective_point_quantity(overlay);
+    let (history_mode, cadence_secs) =
+        effective_point_cadence(source_history_mode.as_deref(), overlay)?;
+    Ok(PointMapBinding {
+        source_unit,
+        source_history_mode,
+        unit,
+        quantity,
+        history_mode,
+        cadence_secs,
+    })
+}
+
+fn effective_point_cadence(
+    portal_his_mode: Option<&str>,
+    overlay: Option<&EngineerPointOverlayEntry>,
+) -> Result<(Option<String>, Option<u64>), String> {
+    if let Some(secs) = overlay.and_then(|e| e.cadence_secs) {
+        if !(1..=86_400).contains(&secs) {
+            return Err(format!(
+                "engineer overlay cadence_secs must be between 1 and 86400, got {secs}"
+            ));
+        }
+        return Ok((Some("interval".into()), Some(secs)));
+    }
+    match portal_his_mode.map(str::trim).filter(|s| !s.is_empty()) {
+        Some("cov") => Ok((Some("cov".into()), None)),
+        Some("interval") => Ok((Some("interval".into()), None)),
+        _ => Ok((None, None)),
+    }
+}
+
+/// Re-resolve engineer overlay onto `point_map` after an overlay write.
+pub async fn refresh_point_map_overlay(
+    tsdb: &fdd_tsdb::Tsdb,
+    building_root: &Path,
+    site_id: &str,
+    portal_point_ids: &[String],
+) -> Result<(), String> {
+    if portal_point_ids.is_empty() {
+        return Ok(());
+    }
+    let store = load_engineer_point_overlay(building_root).map_err(|e| {
+        format!(
+            "engineer overlay unreadable under {}: {e}",
+            building_root.display()
+        )
+    })?;
+    let mut patches = Vec::with_capacity(portal_point_ids.len());
+    for pid in portal_point_ids {
+        let row = sqlx::query(
+            "SELECT source_unit, source_history_mode FROM point_map \
+             WHERE site_id = $1 AND portal_point_id = $2",
+        )
+        .bind(site_id)
+        .bind(pid)
+        .fetch_optional(tsdb.pool())
+        .await
+        .map_err(|e| format!("point_map read: {e}"))?;
+        let Some(row) = row else {
+            continue;
+        };
+        let source_unit: Option<String> = row.try_get("source_unit").map_err(|e| e.to_string())?;
+        let source_history_mode: Option<String> = row
+            .try_get("source_history_mode")
+            .map_err(|e| e.to_string())?;
+        let entry = store.points.get(pid.as_str());
+        let binding = resolve_point_map_binding(
+            source_unit.as_deref(),
+            source_history_mode.as_deref(),
+            entry,
+        )?;
+        if let Some(unit) = binding.unit.as_deref() {
+            validate_unit(unit)?;
+        }
+        if let Some(q) = binding.quantity.as_deref() {
+            validate_slug("quantity", q, 64)?;
+        }
+        patches.push(fdd_tsdb::PointMapBindingPatch {
+            portal_point_id: pid.clone(),
+            source_unit: binding.source_unit,
+            unit: binding.unit,
+            quantity: binding.quantity,
+            cadence_secs: binding.cadence_secs,
+            history_mode: binding.history_mode,
+        });
+    }
+    tsdb.patch_point_map_bindings(site_id, &patches)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -238,6 +357,13 @@ pub fn apply_engineer_point_overlays(
             point.unit = effective_point_unit(portal_unit.as_deref(), entry);
             if let Some(q) = effective_point_quantity(entry) {
                 point.quantity = Some(q);
+            }
+            let (history_mode, cadence_secs) = effective_point_cadence(None, entry)?;
+            if history_mode.is_some() {
+                point.history_mode = history_mode;
+            }
+            if cadence_secs.is_some() {
+                point.cadence_secs = cadence_secs;
             }
             point.primary_reference = effective_primary_reference(entry);
             if let Some(unit) = point.unit.as_deref() {
@@ -771,6 +897,7 @@ fn reject_forbidden_keys(value: &Value, path: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use open_fdd_edge_prototype::csv_ingest::model_overlay::EngineerPointOverlayPatch;
     use open_fdd_edge_prototype::csv_ingest::portal_ingest_sparql::{
         compile_bindings_from_snapshot, IngestSparqlScope,
     };
@@ -846,9 +973,12 @@ mod tests {
             root,
             bid,
             pid,
-            Some("degF"),
-            Some("absolute_temperature"),
-            None,
+            EngineerPointOverlayPatch {
+                unit: Some("degF"),
+                quantity: Some("absolute_temperature"),
+                cadence_secs: None,
+                primary_reference: None,
+            },
             false,
         )
         .expect("overlay");
