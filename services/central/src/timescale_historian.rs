@@ -359,6 +359,8 @@ pub(crate) fn point_to_sample(
     row.equipment_id = Some(equipment_id);
     row.role = Some(role);
     row.unit = point.unit.clone();
+    row.source_unit = tag_str(point, "source_unit");
+    row.quantity = tag_str(point, "quantity");
     row.haystack_id = Some(point.id.clone());
     if let (Some(instance), Some(source_id)) = (
         tag_str(point, "provider_instance_id").filter(|s| !s.trim().is_empty()),

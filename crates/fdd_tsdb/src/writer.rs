@@ -57,7 +57,7 @@ pub const WRITE_ROWS_SQL: &str = concat!(
 /// Staged CSV package promote. Same contract as [`WRITE_ROWS_SQL`].
 pub const PROMOTE_STAGE_SQL: &str = concat!(
     sample_insert_columns!(),
-    "SELECT ts, site_id, openfdd_key, haystack_id, val, NULL::text, NULL::text \
+    "SELECT ts, site_id, openfdd_key, haystack_id, val, unit, quality \
      FROM sample_import_stage WHERE import_id = $1 AND site_id = $2",
     sample_on_conflict!(),
     "RETURNING site_id, openfdd_key, ts"

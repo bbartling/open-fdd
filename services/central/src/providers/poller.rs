@@ -280,26 +280,16 @@ pub fn apply_nf_unit_policy(sample: &mut super::types::NormalizedSample) -> Resu
         }
     };
     if matches!(admitted.class, UnitClass::Celsius | UnitClass::Fahrenheit) {
-        let canonical = match admitted.class {
-            UnitClass::Celsius => fdd_core::celsius_to_fahrenheit(sample.val),
-            _ => sample.val,
-        };
         let (low, high) = temperature_bounds(&sample.role);
-        if !canonical.is_finite() || canonical < low || canonical > high {
+        if !sample.val.is_finite() || sample.val < low || sample.val > high {
             return Err(UnitFlag::Range {
-                canonical,
+                canonical: sample.val,
                 low,
                 high,
             });
         }
-        sample.val = canonical;
-        sample.unit = Some(CANONICAL_TEMPERATURE_UNIT.to_string());
+        sample.unit = Some(admitted.source.clone());
         put_attr(&mut sample.attrs, "source_unit", &admitted.source);
-        put_attr(
-            &mut sample.attrs,
-            "canonical_unit",
-            CANONICAL_TEMPERATURE_UNIT,
-        );
         put_attr(&mut sample.attrs, "unit_from", admitted.from);
     } else {
         put_attr(&mut sample.attrs, "source_unit", &admitted.source);
@@ -1318,7 +1308,7 @@ mod tests {
     }
 
     #[test]
-    fn celsius_portal_unit_is_stored_as_fahrenheit() {
+    fn celsius_portal_unit_keeps_declared_value_for_si_ingest() {
         let accepted = zoned(
             "11111111-1111-4111-8111-111111111111",
             "zone-air-temp",
@@ -1329,8 +1319,8 @@ mod tests {
         assert!(accepted.unit_flags.is_empty());
         assert_eq!(accepted.samples.len(), 1);
         let sample = &accepted.samples[0];
-        assert!((sample.val - 69.8).abs() < 1e-9);
-        assert_eq!(sample.unit.as_deref(), Some("degF"));
+        assert!((sample.val - 21.0).abs() < 1e-9);
+        assert_eq!(sample.unit.as_deref(), Some("DEGREES_CELSIUS"));
         assert_eq!(
             sample.attrs.get("source_unit").and_then(|v| v.as_str()),
             Some("DEGREES_CELSIUS")
@@ -1354,8 +1344,8 @@ mod tests {
         );
         assert!(accepted.unit_flags.is_empty());
         let sample = &accepted.samples[0];
-        assert!((sample.val - 32.0).abs() < 1e-9);
-        assert_eq!(sample.unit.as_deref(), Some("degF"));
+        assert!((sample.val - 0.0).abs() < 1e-9);
+        assert_eq!(sample.unit.as_deref(), Some("degC"));
         assert_eq!(
             sample.attrs.get("source_unit").and_then(|v| v.as_str()),
             Some("degC")
