@@ -230,10 +230,10 @@ struct AdmittedUnit {
     from: &'static str,
 }
 
-/// Convert one portal sample into canonical units before the Timescale write.
+/// Validate NF/site-file units and stamp declared source metadata before ingest.
 ///
-/// The site-file `units` value is used only when NF omitted the unit or reported
-/// it as unknown. A disagreement is returned and the sample is left unchanged.
+/// Range checks use °F band limits; °C portal values are converted only for that
+/// comparison. Sample values and declared units are not rewritten for SI here.
 pub fn apply_nf_unit_policy(sample: &mut super::types::NormalizedSample) -> Result<(), UnitFlag> {
     if attr_owned(&sample.attrs, "nf_unit_policy").as_deref() == Some("applied") {
         return Ok(());
@@ -278,9 +278,14 @@ pub fn apply_nf_unit_policy(sample: &mut super::types::NormalizedSample) -> Resu
     };
     if matches!(admitted.class, UnitClass::Celsius | UnitClass::Fahrenheit) {
         let (low, high) = temperature_bounds(&sample.role);
-        if !sample.val.is_finite() || sample.val < low || sample.val > high {
+        let check_val = match admitted.class {
+            UnitClass::Celsius => fdd_core::celsius_to_fahrenheit(sample.val),
+            UnitClass::Fahrenheit => sample.val,
+            UnitClass::Percent | UnitClass::Other(_) => sample.val,
+        };
+        if !check_val.is_finite() || check_val < low || check_val > high {
             return Err(UnitFlag::Range {
-                canonical: sample.val,
+                canonical: check_val,
                 low,
                 high,
             });
@@ -1416,7 +1421,8 @@ mod tests {
             None,
         );
         assert!(plant.unit_flags.is_empty());
-        assert!((plant.samples[0].val - 194.0).abs() < 1e-9);
+        assert!((plant.samples[0].val - 90.0).abs() < 1e-9);
+        assert_eq!(plant.samples[0].unit.as_deref(), Some("DEGREES_CELSIUS"));
     }
 
     #[test]
