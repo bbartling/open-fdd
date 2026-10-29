@@ -290,7 +290,7 @@ async fn t1406_2_patch_binding_clears_role_map_unit() {
         pid,
         model_overlay::EngineerPointOverlayPatch {
             unit: Some("degF"),
-            quantity: None,
+            quantity: Some("absolute_temperature"),
             cadence_secs: None,
             primary_reference: None,
         },
