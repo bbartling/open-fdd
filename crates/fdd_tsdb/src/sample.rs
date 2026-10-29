@@ -12,6 +12,13 @@ pub struct SampleRow {
     pub quality: Option<String>,
     pub equipment_id: Option<String>,
     pub role: Option<String>,
+    /// Declared source unit on the wire (NF tag or CSV column), when known.
+    #[serde(default)]
+    pub source_unit: Option<String>,
+    #[serde(default)]
+    pub quantity: Option<String>,
+    #[serde(default)]
+    pub unit_system: Option<String>,
     /// Stable source point id from a portal inventory. When set, the series key
     /// comes from `point_map (site_id, portal_point_id)` and `openfdd_key` is
     /// only the key minted for a point seen for the first time.

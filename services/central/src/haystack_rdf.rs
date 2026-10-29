@@ -114,7 +114,7 @@ impl HaystackRdfCache {
     ) -> Result<Value, Value> {
         let (snap, inventory) =
             self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
-        let overlay = Self::load_overlay_ttl(building_id);
+        let overlay = Self::load_overlay_ttl(building_id, equipment_id)?;
         let set = haystack_sparql_bindings::execute_template_on_snapshot_with_overlay(
             &snap,
             Some(&inventory),
@@ -147,7 +147,7 @@ impl HaystackRdfCache {
     ) -> Result<Value, Value> {
         let (snap, inventory) =
             self.get_or_materialize_with_inventory(building_id, equipment_id, preferred_tenant)?;
-        let overlay = Self::load_overlay_ttl(building_id);
+        let overlay = Self::load_overlay_ttl(building_id, equipment_id)?;
         let set = haystack_sparql_bindings::execute_template_on_snapshot_with_overlay(
             &snap,
             Some(&inventory),
@@ -188,7 +188,7 @@ impl HaystackRdfCache {
                 "soft_open_neq_fq": true,
             })
         })?;
-        let overlay = Self::load_overlay_ttl(building_id);
+        let overlay = Self::load_overlay_ttl(building_id, equipment_id)?;
         let snap = match self.get_or_materialize_with_inventory(
             building_id,
             equipment_id,
@@ -229,13 +229,37 @@ impl HaystackRdfCache {
         self.by_key.retain(|k, _| !k.starts_with(&prefix));
     }
 
-    /// Soft-OPEN: load writable overlay TTL for SPARQL pack ∪ overlay (empty if absent).
-    fn load_overlay_ttl(building_id: &str) -> String {
+    /// Soft-OPEN: load writable overlay TTL for SPARQL pack ∪ overlay.
+    ///
+    /// Missing overlay file → `Ok("")` (no overlay union). Read/parse/scope failures → `Err`.
+    fn load_overlay_ttl(building_id: &str, equipment_id: Option<&str>) -> Result<String, Value> {
         let root = open_fdd_edge_prototype::historian::store::workspace_dir()
             .join("data")
             .join("csv_buildings")
             .join(building_id);
-        open_fdd_edge_prototype::csv_ingest::model_overlay::load_ttl(&root).unwrap_or_default()
+        open_fdd_edge_prototype::csv_ingest::model_overlay::overlay_turtle_for_sparql(
+            &root,
+            equipment_id,
+        )
+        .map_err(|e| {
+            json!({
+                "ok": false,
+                "error": e,
+                "overlay_error": true,
+                "schema": haystack_central_dataset::DATASET_SCHEMA,
+            })
+        })
+    }
+}
+
+/// HTTP status for package SPARQL errors (`404` = no native model, `400` = scoped failure).
+pub fn sparql_route_status(err: &Value) -> axum::http::StatusCode {
+    if err.get("present") == Some(&json!(false)) {
+        axum::http::StatusCode::NOT_FOUND
+    } else if err.get("overlay_error") == Some(&json!(true)) {
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR
+    } else {
+        axum::http::StatusCode::BAD_REQUEST
     }
 }
 
@@ -293,6 +317,31 @@ pub fn sparql_freeform_rejected() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use open_fdd_edge_prototype::csv_ingest::semantic_meta::{persist_atomic, SemanticMetaV1};
+    use tempfile::tempdir;
+
+    use crate::test_env_lock::{lock_env, WorkspaceEnv};
+
+    fn synth_meta(building_id: &str) -> SemanticMetaV1 {
+        let raw = serde_json::json!({
+            "schema": semantic_meta::SCHEMA,
+            "building_id": building_id,
+            "points": [{
+                "equipment_id": "EQ_A",
+                "column": "SAT",
+                "haystack_tags": ["sensor", "point", "air", "temp"],
+                "unit": "°F",
+            }],
+            "equipment": [{
+                "equipment_id": "EQ_A",
+                "haystack_tags": ["ahu", "equip"],
+            }, {
+                "equipment_id": "EQ_B",
+                "haystack_tags": ["vav", "equip"],
+            }]
+        });
+        semantic_meta::parse_semantic_meta(&raw).expect("meta")
+    }
 
     #[test]
     fn catalog_is_available_not_option_b() {
@@ -309,5 +358,82 @@ mod tests {
         let c = inventory_cache_token(&json!({"ambiguous_roles": ["y"]}), Some("t1"));
         assert_ne!(a, b);
         assert_ne!(a, c);
+    }
+
+    #[test]
+    fn sparql_route_status_maps_missing_meta_to_404() {
+        let missing = json!({"present": false, "error": "no meta"});
+        assert_eq!(
+            sparql_route_status(&missing),
+            axum::http::StatusCode::NOT_FOUND
+        );
+        let scoped = json!({"incomplete": true, "error": "equipment missing"});
+        assert_eq!(
+            sparql_route_status(&scoped),
+            axum::http::StatusCode::BAD_REQUEST
+        );
+        let overlay = json!({"overlay_error": true, "error": "load overlay turtle: bad"});
+        assert_eq!(
+            sparql_route_status(&overlay),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn execute_sparql_template_errors_for_missing_meta_and_unknown_equipment() {
+        let _guard = lock_env();
+        let dir = tempdir().expect("tempdir");
+        let _ws = WorkspaceEnv::set(dir.path());
+        let bid = "T1441_SPARQL_SCOPE";
+        let root = dir.path().join("data").join("csv_buildings").join(bid);
+        std::fs::create_dir_all(&root).expect("mkdir");
+        let cache = HaystackRdfCache::new();
+        let missing = cache
+            .execute_sparql_template(bid, None, None, "fdd_role_candidates")
+            .unwrap_err();
+        assert_eq!(missing.get("present"), Some(&json!(false)));
+        assert_eq!(
+            sparql_route_status(&missing),
+            axum::http::StatusCode::NOT_FOUND
+        );
+
+        persist_atomic(&root, synth_meta(bid), None).expect("persist");
+        let unknown = cache
+            .execute_sparql_template(bid, Some("EQ_MISSING"), None, "fdd_role_candidates")
+            .unwrap_err();
+        assert_eq!(unknown.get("incomplete"), Some(&json!(true)));
+        assert_eq!(
+            sparql_route_status(&unknown),
+            axum::http::StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[test]
+    fn corrupt_overlay_ttl_maps_to_overlay_error_and_500_status() {
+        let _guard = lock_env();
+        let dir = tempdir().expect("tempdir");
+        let _ws = WorkspaceEnv::set(dir.path());
+        let bid = "T1441_CORRUPT_OVERLAY";
+        let root = dir.path().join("data").join("csv_buildings").join(bid);
+        std::fs::create_dir_all(&root).expect("mkdir");
+        std::fs::write(
+            root.join(open_fdd_edge_prototype::csv_ingest::model_overlay::OVERLAY_TTL_FILE),
+            "@prefix x: . x:not valid turtle {{{",
+        )
+        .expect("write corrupt overlay");
+        let parse = open_fdd_edge_prototype::csv_ingest::model_overlay::overlay_turtle_for_sparql(
+            &root,
+            Some("EQ_A"),
+        );
+        let msg = parse.expect_err("scoped overlay must fail turtle parse");
+        let body = json!({
+            "ok": false,
+            "error": msg,
+            "overlay_error": true,
+        });
+        assert_eq!(
+            sparql_route_status(&body),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 }
