@@ -8,6 +8,8 @@ Port of BPS ``09_analytics_sql_vs_pandas.py`` to Open-FDD:
 
 Fail-closed on truncation and on numeric divergence beyond tolerances. Fewer than
 the declared ``--min-*`` comparisons (default 1 each) exits 2 (BLOCKED), never 0.
+Analytics numeric fields use relative tolerance ``1e-6`` when ``--si-parity-chain``
+is set (see ``si_cutover/parity_chain.ANALYTICS_REL_TOL``). Fault seconds stay exact.
 Soft-OPEN ≠ FQ. Synthetic ``--building-id`` only.
 
   python scripts/stress/09_analytics_sql_vs_pandas.py --building-id SYNTH_01
@@ -51,6 +53,7 @@ PCT_TOL = 1e-4
 TEMP_TOL = 1e-3
 RESID_TOL = 5e-4
 SPOT_CHECK_LIMIT = 25
+SI_PARITY_ANALYTICS_REL_TOL = 1e-6
 
 
 def _unwrap(body: dict) -> dict:
@@ -266,6 +269,11 @@ def main(argv: list[str] | None = None) -> int:
         default=1,
         help="equipment whose comfort_pct must be compared for PASS (>= 1)",
     )
+    ap.add_argument(
+        "--si-parity-chain",
+        action="store_true",
+        help="Run offline P0 analytics golden check (relative tol 1e-6)",
+    )
     args = ap.parse_args(argv)
     if args.min_economizer_points < 1 or args.min_comfort_equipment < 1:
         ap.error("comparison minimums must be >= 1 (zero comparisons is never a pass)")
@@ -294,7 +302,23 @@ def main(argv: list[str] | None = None) -> int:
             _check_comfort(http, headers, building_id, minimum=args.min_comfort_equipment),
         ]
 
-    return combine(codes)
+    code = combine(codes)
+    if code != EXIT_PASS:
+        return code
+    if args.si_parity_chain:
+        from si_cutover import parity_chain as pc  # noqa: E402
+
+        golden = pc.load_ip_golden(pc.IP_GOLDENS_DIR / "SYNTH_SELFTEST.json")
+        p0a = pc.compare_p0_analytics_golden(golden)
+        if p0a.errors:
+            safe_print(f"FAIL si-parity P0 analytics: {'; '.join(p0a.errors)}")
+            return EXIT_FAIL
+        if p0a.comparisons < 1:
+            safe_print("BLOCKED si-parity P0 analytics: zero comparisons")
+            return EXIT_BLOCKED
+        record_check("si_parity.P0.analytics", True, comparisons=p0a.comparisons)
+        safe_print(f"  si-parity P0 analytics: {p0a.comparisons} row(s)")
+    return code
 
 
 def combine(codes: list[int]) -> int:

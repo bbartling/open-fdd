@@ -1,8 +1,0 @@
-{
-  "schema": "si-cutover-ip-golden-v1",
-  "building_id": "SYNTH_SELFTEST",
-  "note": "Placeholder golden; W0c live capture replaces with real IP baseline rows.",
-  "sql_fdd_daily": [],
-  "analytics_rows": [],
-  "pandas_fdd_daily": []
-}

@@ -1,0 +1,118 @@
+name: si-parity
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "scripts/ci/check_ip_goldens_frozen.py"
+      - "scripts/stress/si_cutover/**"
+      - "scripts/qualification/**"
+      - "tests/fixtures/si_cutover/**"
+      - "tests/qualification/test_si_parity_chain.py"
+      - "sql/contract/goldens/**"
+      - "docs/rules/cookbook/fixtures/**"
+      - ".github/workflows/si-parity.yml"
+  pull_request:
+    branches: [master, main]
+    paths:
+      - "scripts/ci/check_ip_goldens_frozen.py"
+      - "scripts/stress/si_cutover/**"
+      - "scripts/qualification/**"
+      - "tests/fixtures/si_cutover/**"
+      - "tests/qualification/test_si_parity_chain.py"
+      - "sql/contract/goldens/**"
+      - "docs/rules/cookbook/fixtures/**"
+      - ".github/workflows/si-parity.yml"
+
+concurrency:
+  group: si-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  si-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      timescale:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: openfdd
+          POSTGRES_PASSWORD: openfdd
+          POSTGRES_DB: openfdd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openfdd -d openfdd"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install harness deps
+        run: |
+          python -m pip install -U pip
+          pip install 'psycopg[binary]>=3.1'
+          pip install pyyaml
+          pip install -e ".[oracle]"
+
+      - name: Unit contract (T1284-1 baseline)
+        run: python3 scripts/ci/check_unit_contract.py
+
+      - name: Frozen ip goldens (Timescale regen must match committed)
+        run: python3 scripts/ci/check_ip_goldens_frozen.py
+
+      - name: SI parity full matrix (report-only) + artifact
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only \
+            --report-json si_parity_report.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          doc = json.loads(Path("si_parity_report.json").read_text())
+          p0 = doc["stages"]["P0"]
+          p1 = doc["stages"]["P1"]
+          print(
+              f"P0 comparisons={p0['comparisons']} mismatches={p0['mismatch_count']} "
+              f"by_kind={p0['by_kind']}"
+          )
+          print(
+              f"P1 comparisons={p1['comparisons']} mismatches={p1['mismatch_count']} "
+              f"by_rule={p1['by_rule_id']}"
+          )
+          PY
+
+      - name: Upload si_parity_report.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: si-parity-report
+          path: si_parity_report.json
+
+      - name: Blocking W4b FC1 scope (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4b_fc1_duct_static
+
+      - name: T1284-4 blocking FC1 mutation must fail gate
+        run: |
+          set +e
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 \
+            --inject-t1284-4-mutation
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 under mutation, got $code"
+            exit 1
+          fi
+
+      - name: T1284-4 unit-vector + FC1 probe self-test
+        run: python3 scripts/stress/si_parity_gate.py --mutation-self-test
+
+      - name: Qualification unit tests
+        run: python3 -B -m unittest discover -s tests/qualification -p 'test_si_parity*.py' -v
