@@ -134,11 +134,17 @@ def infer_kind(param_key: str, unit: str) -> str:
         )
     if u == "degF_per_h":
         return "temperature_rate"
+    if u == "delta_degC":
+        return "temperature_difference"
     if u in {"in_wc", "inwc"}:
+        return "air_pressure"
+    if u == "Pa":
         return "air_pressure"
     if u == "psi":
         return "hydronic_pressure"
     if u in {"cfm", "gpm"}:
+        return "volumetric_flow"
+    if u == "L_per_s":
         return "volumetric_flow"
     if u == "kWh":
         return "interval_energy"

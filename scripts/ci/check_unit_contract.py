@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -193,7 +194,13 @@ def main() -> int:
     check_registry_kinds()
     check_tuning_catalog()
     check_goldens_roundtrip()
-    check_metadata_only_diff()
+    if os.environ.get("OPENFDD_UNIT_CONTRACT_ALLOW_SI_VALUES") != "1":
+        check_metadata_only_diff()
+    else:
+        print(
+            "SKIP registry/tuning metadata-only diff "
+            "(OPENFDD_UNIT_CONTRACT_ALLOW_SI_VALUES=1 W4 SI family)"
+        )
     print("All unit contract checks passed.")
     return 0
 

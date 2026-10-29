@@ -52,6 +52,7 @@ jobs:
           --health-retries 20
     env:
       OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+      OPENFDD_UNIT_CONTRACT_ALLOW_SI_VALUES: "1"
     steps:
       - uses: actions/checkout@v4
 
