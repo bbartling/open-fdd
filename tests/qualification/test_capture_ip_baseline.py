@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import gzip
 import importlib.util
 import json
@@ -16,6 +17,8 @@ from unittest import mock
 REPO = Path(__file__).resolve().parents[2]
 STRESS = REPO / "scripts" / "stress"
 SI_CUTOVER = STRESS / "si_cutover"
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
 if str(STRESS) not in sys.path:
     sys.path.insert(0, str(STRESS))
 
@@ -69,7 +72,24 @@ class CaptureRequirements(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(SystemExit) as ctx:
                 capture.require_database_url()
-            self.assertIn("OPENFDD_DATABASE_URL", str(ctx.exception))
+            msg = str(ctx.exception)
+            self.assertIn("OPENFDD_DATABASE_URL", msg)
+            self.assertIn("--database-url", msg)
+
+    def test_require_database_url_from_env(self) -> None:
+        with mock.patch.dict(os.environ, {"OPENFDD_DATABASE_URL": "postgresql://x"}, clear=True):
+            self.assertEqual(capture.require_database_url(), "postgresql://x")
+
+    def test_resolve_capture_password_reads_jwt_env_keys(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"OPENFDD_AGENT_PASSWORD": "from-env"},
+            clear=True,
+        ):
+            args = argparse.Namespace(password=None)
+            self.assertEqual(capture.resolve_capture_password(args), "from-env")
+        args_explicit = argparse.Namespace(password="cli")
+        self.assertEqual(capture.resolve_capture_password(args_explicit), "cli")
 
     def test_main_exits_nonzero_on_pandas_pair_errors(self) -> None:
         jwt = tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False)
@@ -279,6 +299,125 @@ class CaptureFixtureStack(unittest.TestCase):
             with gzip.open(site_dir / "persisted_runs.jsonl.gz", "rt", encoding="utf-8") as fh:
                 persisted = json.loads(fh.read().strip())
             self.assertEqual(persisted["run_id"], "run-ci-1")
+
+
+class DailyFaultSecondsTest(unittest.TestCase):
+    def test_forward_hold_at_utc_midnight_boundary(self) -> None:
+        import pandas as pd
+
+        idx = pd.DatetimeIndex(
+            ["2026-06-01T23:55:00+00:00", "2026-06-02T00:00:00+00:00"],
+            tz="UTC",
+        )
+        confirmed = pd.Series([True, False], index=idx)
+        fault_days, covered_days = capture.daily_fault_and_covered_seconds(
+            confirmed, idx, poll_seconds=300.0
+        )
+        self.assertAlmostEqual(fault_days["2026-06-01"], 300.0)
+        self.assertAlmostEqual(covered_days["2026-06-01"], 300.0)
+        self.assertEqual(fault_days.get("2026-06-02", 0.0), 0.0)
+
+
+class EquipmentFrameMetadataTest(unittest.TestCase):
+    def test_equipment_frame_from_db_stamps_equipment_type(self) -> None:
+        import pandas as pd
+
+        idx = pd.date_range("2026-06-01", periods=3, freq="5min", tz="UTC")
+        with mock.patch.object(
+            capture,
+            "post_sparql",
+            return_value=[
+                {
+                    "column": "dsp",
+                    "fddSelection": "duct-static-pressure",
+                    "openfdd_key": "AHU_1.dsp",
+                },
+            ],
+        ):
+            with mock.patch.object(
+                capture,
+                "load_samples_in_window",
+                return_value=[(ts, 1.0) for ts in idx],
+            ):
+                frame = capture.equipment_frame_from_db(
+                    mock.MagicMock(),
+                    mock.MagicMock(),
+                    {},
+                    building_id="SITE_X",
+                    equipment_id="AHU_1",
+                    window_start="2026-06-01T00:00:00Z",
+                    window_end="2026-06-01T01:00:00Z",
+                    equipment_type="ahu",
+                )
+        self.assertEqual(frame.attrs.get("equipment_type"), "ahu")
+        self.assertEqual(frame.attrs.get("equipType"), "ahu")
+
+
+class CollectPandasFddRowsIntegration(unittest.TestCase):
+    """Exercise collect_pandas_fdd_rows end-to-end (oracle import + run_rule)."""
+
+    def test_collect_pandas_fdd_rows_imperial_fixture(self) -> None:
+        import pandas as pd
+
+        fc1_rules = [r for r in capture.load_rule_registry() if r.get("rule_id") == "FC1"]
+        self.assertEqual(len(fc1_rules), 1)
+
+        building_id = "SYNTH_PANDAS_CAPTURE"
+        window_start = "2026-06-01T00:00:00Z"
+        window_end = "2026-06-01T06:00:00Z"
+        idx = pd.date_range("2026-06-01", periods=24, freq="5min", tz="UTC")
+
+        sparql_points = [
+            {
+                "column": "dsp",
+                "fddSelection": "duct-static-pressure",
+                "openfdd_key": "AHU_1.dsp",
+            },
+            {
+                "column": "dsps",
+                "fddSelection": "duct-static-pressure-sp",
+                "openfdd_key": "AHU_1.dsps",
+            },
+            {"column": "fc", "fddSelection": "fan-cmd", "openfdd_key": "AHU_1.fc"},
+            {"column": "fs", "fddSelection": "fan-status", "openfdd_key": "AHU_1.fs"},
+        ]
+
+        def fake_load_samples(_conn, *, openfdd_key, **_kwargs):
+            if openfdd_key.endswith(".dsps"):
+                val = 1.5
+            else:
+                val = 1.0 if "fan" in openfdd_key else 1.25
+            return [(ts, val) for ts in idx]
+
+        http = mock.MagicMock()
+        http.get_json.return_value = {
+            "equipment": [{"equipment_id": "AHU_1", "equip_type": "ahu"}],
+        }
+        conn = mock.MagicMock()
+
+        with mock.patch.object(capture, "post_sparql", return_value=sparql_points):
+            with mock.patch.object(
+                capture, "load_samples_in_window", side_effect=fake_load_samples
+            ):
+                rows, coverage, errors = capture.collect_pandas_fdd_rows(
+                    http,
+                    {},
+                    conn,
+                    building_id=building_id,
+                    rules=fc1_rules,
+                    window_start=window_start,
+                    window_end=window_end,
+                    pandas_max_rules=None,
+                )
+
+        self.assertEqual(errors, [])
+        self.assertGreater(coverage.get("computed", 0), 0)
+        computed = [r for r in rows if r.get("pair_status") == "computed"]
+        self.assertTrue(computed, rows)
+        self.assertTrue(
+            any(r.get("utc_day") == "2026-06-01" for r in computed),
+            computed,
+        )
 
 
 if __name__ == "__main__":

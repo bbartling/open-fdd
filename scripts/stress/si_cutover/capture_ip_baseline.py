@@ -20,9 +20,21 @@ For each configured site (JWT env file + sites JSON — no site names in code):
     default)
   * Sample row counts + sha256 manifest under ``~/openfdd-si-cutover/baseline-<sha>-<date>/``
 
-``OPENFDD_DATABASE_URL`` is mandatory for capture mode. ``open_fdd`` + ``pandas``
-are mandatory unless ``--skip-pandas``. Exit non-zero on any ``error`` pair unless
-``--allow-errors`` (recorded in the manifest).
+``OPENFDD_DATABASE_URL`` or ``--database-url`` is mandatory for capture mode.
+Compose ``.env`` often points at the Timescale **container** hostname; on the
+host running this script use the published port, for example
+``postgresql://openfdd:PASSWORD@127.0.0.1:5432/openfdd`` (match user/db from
+``.env`` / ``OPENFDD_TIMESCALE_PASSWORD``).
+
+Login: ``--jwt-env PATH`` loads ``OPENFDD_API_BASE``, ``OPENFDD_AGENT_PASSWORD``,
+and related keys into the process (values are never printed). ``--password`` wins
+when passed explicitly; otherwise ``login`` uses ``OPENFDD_AGENT_PASSWORD`` from
+that file or the environment.
+
+``open_fdd`` + ``pandas`` are mandatory unless ``--skip-pandas``. Host-side DB
+access needs ``psycopg[binary]`` (see ``scripts/qualification/requirements.txt``).
+Exit non-zero on any ``error`` pair unless ``--allow-errors`` (recorded in the
+manifest).
 
 CI: ``--self-test`` (offline shapes); ``--emit-ip-goldens DIR`` for W0c fixtures.
 """
@@ -143,13 +155,53 @@ def require_database_url() -> str:
     url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
     if not url:
         raise SystemExit(
-            "OPENFDD_DATABASE_URL is required for capture mode (Timescale SQL baseline)"
+            "Timescale URL required for capture mode: set OPENFDD_DATABASE_URL or "
+            "pass --database-url (host example: "
+            "postgresql://openfdd:PASSWORD@127.0.0.1:5432/openfdd)"
         )
     return url
 
 
+def resolve_capture_password(args: argparse.Namespace) -> str | None:
+    """Login password after ``--jwt-env`` is loaded; never log or print."""
+    if args.password is not None:
+        return str(args.password)
+    return (
+        os.environ.get("OPENFDD_AGENT_PASSWORD")
+        or os.environ.get("OPENFDD_STRESS_PASS")
+        or os.environ.get("OPENFDD_ADMIN_PASSWORD")
+    )
+
+
+def _pandas_pair_status_from_result(result: Any) -> tuple[str, str] | None:
+    """Map non-computed run_rule outcomes to capture pair_status.
+
+    Returns ``None`` when ``confirmed_fault`` is present and daily seconds should
+    be rolled up.
+    """
+    status = str(getattr(result, "status", "OK"))
+    if getattr(result, "confirmed_fault", None) is not None:
+        return None
+    if status == "ERROR":
+        return ("error", status)
+    applicable = getattr(result, "applicable", True)
+    if not applicable or status.startswith("SKIPPED") or status.startswith("NOT_APPLICABLE"):
+        reason = "missing_roles" if "MISSING_ROLES" in status else status.lower()
+        return ("not_applicable", reason)
+    if status.startswith("NOT_ASSESSED"):
+        return ("not_applicable", status.lower())
+    return ("error", "missing confirmed_fault on result")
+
+
 def db_connect():
-    import psycopg
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise SystemExit(
+            "psycopg is required for capture mode (Timescale SQL reads). Install with: "
+            "python3 -m pip install 'psycopg[binary]' "
+            "(listed in scripts/qualification/requirements.txt for stress tooling)"
+        ) from exc
 
     return psycopg.connect(require_database_url())
 
@@ -411,22 +463,34 @@ def daily_fault_and_covered_seconds(
     seconds and roll up to UTC calendar days for P0 comparison.
     """
     import pandas as pd
-    from open_fdd.rules.base import hours_true
+    from open_fdd.rules.base import _eligible_hold_seconds
 
     confirmed = confirmed_mask.reindex(sample_index).fillna(False).astype(bool)
     all_true = pd.Series(True, index=sample_index)
     fault_days: dict[str, float] = {}
     covered_days: dict[str, float] = {}
     if not isinstance(sample_index, pd.DatetimeIndex):
+        from open_fdd.rules.base import hours_true
+
+        fault_days[""] = hours_true(confirmed, poll_seconds) * 3600.0
+        covered_days[""] = hours_true(all_true, poll_seconds) * 3600.0
+        return fault_days, covered_days
+    held = _eligible_hold_seconds(sample_index)
+    if held is None:
+        from open_fdd.rules.base import hours_true
+
         fault_days[""] = hours_true(confirmed, poll_seconds) * 3600.0
         covered_days[""] = hours_true(all_true, poll_seconds) * 3600.0
         return fault_days, covered_days
     utc_index = sample_index.tz_convert("UTC")
-    for day in sorted({ts.date() for ts in utc_index}):
-        day_key = day.isoformat()
-        mask = utc_index.date == day
-        fault_days[day_key] = hours_true(confirmed.loc[mask], poll_seconds) * 3600.0
-        covered_days[day_key] = hours_true(all_true.loc[mask], poll_seconds) * 3600.0
+    for i, ts in enumerate(utc_index):
+        seconds = float(held.iloc[i])
+        if seconds <= 0.0:
+            continue
+        day_key = ts.date().isoformat()
+        covered_days[day_key] = covered_days.get(day_key, 0.0) + seconds
+        if bool(confirmed.iloc[i]):
+            fault_days[day_key] = fault_days.get(day_key, 0.0) + seconds
     return fault_days, covered_days
 
 
@@ -439,6 +503,7 @@ def equipment_frame_from_db(
     equipment_id: str,
     window_start: str,
     window_end: str,
+    equipment_type: str = "",
 ) -> Any:
     import pandas as pd
 
@@ -481,6 +546,10 @@ def equipment_frame_from_db(
         building_id=building_id,
         unit_system="imperial",
     )
+    etype = str(equipment_type or "").strip()
+    if etype:
+        df.attrs["equipment_type"] = etype
+        df.attrs["equipType"] = etype
     return df
 
 
@@ -509,7 +578,7 @@ def collect_pandas_fdd_rows(
     window_end: str,
     pandas_max_rules: int | None,
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
-    from open_fdd.analytics.units import apply_unit_metadata
+    from open_fdd.analytics.units import stamp_display_units
     from open_fdd.rules import RULES_BY_ID, run_rule
 
     import pandas as pd
@@ -579,6 +648,7 @@ def collect_pandas_fdd_rows(
                     equipment_id=eid,
                     window_start=window_start,
                     window_end=window_end,
+                    equipment_type=etype,
                 )
             except Exception as exc:
                 msg = f"{rule_id}/{eid}: {exc}"
@@ -586,7 +656,7 @@ def collect_pandas_fdd_rows(
                 out.append({**base, "pair_status": "error", "reason": str(exc)})
                 coverage["error"] += 1
                 continue
-            apply_unit_metadata(frame, {"unit_system": "imperial"})
+            stamp_display_units(frame, {"unit_system": "imperial"})
             start = pd.Timestamp(window_start, tz="UTC")
             end = pd.Timestamp(window_end, tz="UTC")
             frame = frame.loc[(frame.index >= start) & (frame.index < end)]
@@ -614,18 +684,22 @@ def collect_pandas_fdd_rows(
                 out.append({**base, "pair_status": "error", "reason": str(exc)})
                 coverage["error"] += 1
                 continue
-            confirmed = getattr(result, "confirmed_fault", None)
-            if confirmed is None:
+            mapped = _pandas_pair_status_from_result(result)
+            if mapped is not None:
+                pair_status, reason = mapped
                 out.append(
                     {
                         **base,
-                        "pair_status": "error",
-                        "reason": "missing confirmed_fault on result",
+                        "pair_status": pair_status,
+                        "reason": reason,
+                        "status": str(getattr(result, "status", "")),
                     }
                 )
-                coverage["error"] += 1
-                error_messages.append(f"{rule_id}/{eid}: missing confirmed_fault")
+                coverage[pair_status] += 1
+                if pair_status == "error":
+                    error_messages.append(f"{rule_id}/{eid}: {reason}")
                 continue
+            confirmed = result.confirmed_fault
             status = str(getattr(result, "status", "OK"))
             fault_by_day, covered_by_day = daily_fault_and_covered_seconds(
                 confirmed, frame.index, poll_seconds=POLL_SECONDS
@@ -880,7 +954,20 @@ def run_self_test() -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     add_connection_args(ap)
-    ap.add_argument("--jwt-env", type=Path, help="dotenv file with API base URL and credentials")
+    for action in ap._actions:
+        if action.dest == "password":
+            action.default = None
+            break
+    ap.add_argument(
+        "--database-url",
+        default=None,
+        help="Timescale URL for host-side capture (overrides OPENFDD_DATABASE_URL)",
+    )
+    ap.add_argument(
+        "--jwt-env",
+        type=Path,
+        help="dotenv file with OPENFDD_API_BASE, OPENFDD_AGENT_PASSWORD, etc.",
+    )
     ap.add_argument("--sites-config", type=Path, help="JSON list of sites (building_id, window)")
     ap.add_argument("--output-dir", type=Path, help="Override ~/openfdd-si-cutover/baseline-…")
     ap.add_argument("--skip-pandas", action="store_true", help="Skip pandas IP recompute")
@@ -911,6 +998,8 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--jwt-env and --sites-config are required unless --self-test")
 
     load_dotenv_file(args.jwt_env.expanduser())
+    if args.database_url:
+        os.environ["OPENFDD_DATABASE_URL"] = str(args.database_url).strip()
     require_database_url()
     if not args.skip_pandas:
         require_pandas_oracle()
@@ -926,7 +1015,7 @@ def main(argv: list[str] | None = None) -> int:
     all_errors: list[str] = []
     with client(base) as http:
         wait_until_ready(http)
-        headers = login(http, user=args.user, password=args.password)
+        headers = login(http, user=args.user, password=resolve_capture_password(args))
         shortsha = health_shortsha(http, headers)
         out_dir = args.output_dir or default_output_dir(shortsha)
         out_dir.mkdir(parents=True, exist_ok=True)
