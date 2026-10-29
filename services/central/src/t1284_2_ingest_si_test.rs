@@ -163,16 +163,21 @@ async fn t1284_2_same_physical_series_four_ingest_paths_match_si() {
     bad.push(sample_row(&bad_site, "AHU_Z", "oa_t", ts, 14.7, "psi"));
     tsdb.upsert_samples(&bad).await.expect("bad upsert");
 
-    let bad_rows: Vec<(f64, Option<String>)> =
-        sqlx::query_as("SELECT val, quality FROM sample WHERE site_id = $1 ORDER BY openfdd_key")
-            .bind(&bad_site)
-            .fetch_all(&pool)
-            .await
-            .expect("bad rows");
+    let bad_rows: Vec<(String, f64, Option<String>)> = sqlx::query_as(
+        "SELECT openfdd_key, val, quality FROM sample WHERE site_id = $1 ORDER BY openfdd_key",
+    )
+    .bind(&bad_site)
+    .fetch_all(&pool)
+    .await
+    .expect("bad rows");
     assert_eq!(bad_rows.len(), 3);
-    for (val, quality) in bad_rows {
-        assert_eq!(val, 70.0);
+    for (key, val, quality) in &bad_rows {
         assert_eq!(quality.as_deref(), Some(QUALITY_UNIT_UNDECLARED));
+        match key.as_str() {
+            "AHU_X.oa_t" | "AHU_Y.oa_t" => assert!((*val - 70.0).abs() < 1e-9, "{key} val {val}"),
+            "AHU_Z.oa_t" => assert!((*val - 14.7).abs() < 1e-9, "{key} val {val}"),
+            other => panic!("unexpected key {other}"),
+        }
     }
 
     for s in [nf_site, csv_site, mixed_site, dated_site, bad_site] {
