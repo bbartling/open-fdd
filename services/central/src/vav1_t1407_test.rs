@@ -385,7 +385,7 @@ async fn t1407_2_declared_unit_same_comfort_pct() {
                         "zone_t",
                         &format!("{equip}.zt"),
                         0,
-                        22.0,
+                        if unit == "degF" { 71.6 } else { 22.0 },
                         Some(unit),
                     ),
                     sample(
@@ -394,7 +394,7 @@ async fn t1407_2_declared_unit_same_comfort_pct() {
                         "zone_t",
                         &format!("{equip}.zt"),
                         5,
-                        28.0,
+                        if unit == "degF" { 82.4 } else { 28.0 },
                         Some(unit),
                     ),
                 ],
