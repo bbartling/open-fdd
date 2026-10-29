@@ -5595,7 +5595,9 @@ rules:
             .expect("rest metric");
         assert_eq!(metric_rest["status"], json!("METRIC"));
         assert!(metric_rest["fault_hours"].is_null());
-        assert!((metric_rest["metric"]["value"].as_f64().unwrap() - 22.22222222222222).abs() < 1e-6);
+        assert!(
+            (metric_rest["metric"]["value"].as_f64().unwrap() - 22.22222222222222).abs() < 1e-6
+        );
         assert_eq!(metric_rest["metric"]["unit"], json!("degC"));
         assert!(metric_rest["metric"]["window"]["watermark"]
             .as_str()

@@ -10,7 +10,11 @@ pub struct SiScalar {
 }
 
 /// Convert one numeric from a declared source unit into canonical SI storage units.
-pub fn value_to_si(quantity: &str, source_unit: &str, value: f64) -> Result<SiScalar, ContractError> {
+pub fn value_to_si(
+    quantity: &str,
+    source_unit: &str,
+    value: f64,
+) -> Result<SiScalar, ContractError> {
     let contract = MetricUnitsContract::load_embedded()?;
     let converted = contract.convert_to_canonical(quantity, value, source_unit)?;
     let unit = contract.canonical_unit(quantity)?.to_string();

@@ -44,8 +44,8 @@ fn tuning_catalog_path() -> PathBuf {
 
 fn load_catalog_map() -> HashMap<String, HashMap<String, TuningParam>> {
     let path = tuning_catalog_path();
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let parsed: TuningCatalog =
         serde_json::from_str(&text).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
     parsed
@@ -130,7 +130,10 @@ mod tests {
             }
         });
         annotate_rule_param_effects(&mut body);
-        assert_eq!(body["params"]["sensor_span"]["effect"], json!("unsupported"));
+        assert_eq!(
+            body["params"]["sensor_span"]["effect"],
+            json!("unsupported")
+        );
         assert!(body["params"]["sensor_span"]["effect_reason"]
             .as_str()
             .unwrap_or("")

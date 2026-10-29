@@ -59,6 +59,7 @@ mod runtime_weekly_fixtures;
 #[cfg(test)]
 mod sat_pairing_fixtures;
 mod series_binding;
+mod si_api_response;
 mod sql_anomaly;
 #[cfg(test)]
 mod sql_anomaly_fixtures;
@@ -81,7 +82,6 @@ mod timescale_product;
 mod user_store;
 mod vibe21;
 mod wattlab_dump;
-mod si_api_response;
 mod zone_comfort_units;
 
 use std::net::SocketAddr;
