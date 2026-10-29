@@ -358,6 +358,105 @@ async fn coverage_status(
     .into_response()
 }
 
+/// ASAP catch-up progress for Operations (`GET /api/ingest/catchup?site_id=`).
+pub async fn list_catchup(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<AuthUser>,
+    headers: HeaderMap,
+    Query(query): Query<ListQuery>,
+) -> Response {
+    let request_id = contract::ensure_request_id(&headers);
+    let ctx = tenant_ctx(&state, &user).await;
+    let Some(site) = query.site_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+        return json_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "site_id is required",
+            &request_id,
+            false,
+        );
+    };
+    if !ctx.allow_building(site) {
+        return json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "site not found",
+            &request_id,
+            false,
+        );
+    }
+    let scoped_tenant = if ctx.multi_tenant && !ctx.hub_admin {
+        match ctx.tenant_id.clone() {
+            Some(tenant_id) => Some(tenant_id),
+            None => {
+                return json_error(
+                    StatusCode::NOT_FOUND,
+                    "not_found",
+                    "site not found",
+                    &request_id,
+                    false,
+                )
+            }
+        }
+    } else {
+        None
+    };
+    let configs: Vec<&SiteConfig> = state
+        .providers
+        .sites
+        .iter()
+        .filter(|row| {
+            row.building_id == site
+                && scoped_tenant
+                    .as_deref()
+                    .is_none_or(|tenant_id| row.tenant_id == tenant_id)
+        })
+        .collect();
+    if configs.is_empty() {
+        return json_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "site not found",
+            &request_id,
+            false,
+        );
+    }
+    let now = Utc::now();
+    let Some(pool) = match state.ingest_queue.postgres_pool().await {
+        Ok(pool) => pool,
+        Err(err) => return queue_err(&err, &request_id),
+    } else {
+        return Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "site_id": site,
+            "generated_at": now,
+            "providers": [],
+            "note": "catchup requires postgres ingest queue",
+        }))
+        .into_response();
+    };
+    match super::catchup_view::site_catchup_json(&state, &pool, site, &configs, now).await {
+        Ok(providers) => Json(json!({
+            "ok": true,
+            "request_id": request_id,
+            "scope": scope_json(&ctx),
+            "site_id": site,
+            "generated_at": now,
+            "providers": providers,
+        }))
+        .into_response(),
+        Err(err) => json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "catchup_unavailable",
+            &err,
+            &request_id,
+            false,
+        ),
+    }
+}
+
 pub async fn queue_metrics(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
@@ -1205,6 +1304,7 @@ pub fn discovery_tools(ot_enabled: bool) -> Vec<(&'static str, &'static str, &'s
         ("ingest.jobs", "GET", "/api/ingest/jobs"),
         ("ingest.receipts", "GET", "/api/ingest/receipts"),
         ("ingest.gaps", "GET", "/api/ingest/gaps"),
+        ("ingest.catchup", "GET", "/api/ingest/catchup"),
         ("ingest.queue", "GET", "/api/ingest/queue"),
         ("ingest.stats", "GET", "/api/ingest/stats"),
         ("fdd.run", "POST", "/api/fdd/run"),

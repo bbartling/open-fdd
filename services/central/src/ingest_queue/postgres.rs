@@ -46,6 +46,8 @@ AND NOT EXISTS (
       )
 )
 ORDER BY (
+    CASE WHEN j.shard = 'asap' THEN 1 ELSE 0 END
+), (
     SELECT COUNT(*) FROM ingest_job l2
     WHERE l2.provider_instance_id = j.provider_instance_id
       AND l2.state = 'leased'
@@ -214,6 +216,38 @@ pub async fn renew_scheduler(
     .await
     .map_err(db_err)?;
     Ok(updated.rows_affected() > 0)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PortalBudgetStatus {
+    pub paused_until: Option<DateTime<Utc>>,
+    pub tokens_remaining: Option<i32>,
+}
+
+pub async fn portal_budget_status(
+    pool: &PgPool,
+    provider_instance_id: &str,
+    now: DateTime<Utc>,
+) -> Result<PortalBudgetStatus, QueueError> {
+    let row = sqlx::query_as::<_, (Option<DateTime<Utc>>, Option<i32>)>(
+        "SELECT paused_until, tokens_remaining
+         FROM ingest_portal_budget
+         WHERE provider_instance_id = $1",
+    )
+    .bind(provider_instance_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_err)?;
+    Ok(match row {
+        Some((paused, tokens)) => PortalBudgetStatus {
+            paused_until: paused,
+            tokens_remaining: tokens,
+        },
+        None => PortalBudgetStatus {
+            paused_until: None,
+            tokens_remaining: None,
+        },
+    })
 }
 
 pub async fn note_throttle(

@@ -163,3 +163,10 @@ export function ingestCoverageStatusPath(siteId: string): string {
   q.set("view", "status");
   return `/api/ingest/gaps?${q.toString()}`;
 }
+
+/** ASAP catch-up mode, backlog, throughput, and portal throttle state. */
+export function ingestCatchupPath(siteId: string): string {
+  const q = new URLSearchParams();
+  q.set("site_id", siteId);
+  return `/api/ingest/catchup?${q.toString()}`;
+}

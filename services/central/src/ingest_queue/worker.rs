@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
@@ -21,8 +22,8 @@ use super::coverage::{
     ReconcileInput, INCOMPLETE,
 };
 use super::model::{
-    points_digest, revision_still_owns, AppliedSample, FinishOutcome, FinishRequest, JobCounts,
-    JobView, QueueError,
+    points_digest, revision_still_owns, AppliedSample, EnqueueOutcome, FinishOutcome, FinishRequest,
+    JobCounts, JobView, QueueError, JOB_SHARD_ASAP,
 };
 use super::schedule::{self, IngestSchedule, ScheduleDevice};
 
@@ -130,6 +131,12 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
             return Ok(());
         }
         enqueue_due_windows(state, now).await?;
+        if should_run_asap_tick(now) {
+            LAST_ASAP_TICK.store(now.timestamp(), Ordering::Relaxed);
+            if let Err(err) = run_asap_cycle(state, now).await {
+                warn!(error = %err, "ASAP catch-up cycle failed");
+            }
+        }
         prune_applied_ledger(state, now).await;
     }
     let budget = state.ingest_queue.budget_defaults();
@@ -167,6 +174,15 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
             finish.applied_samples = decision.applied_samples;
             if let Err(err) = state.ingest_queue.finish(&finish).await {
                 warn!(job_id = %job.job_id, error = %err, "ingest finish rejected");
+            } else if !decision.applied_samples.is_empty() {
+                let key = super::binding_state::DeviceBindingKey::from_job(&job);
+                if let Ok(mut guard) = state.ingest_queue.catchup_registry().write() {
+                    guard.record_finish(
+                        &key,
+                        finished_at,
+                        u64::try_from(decision.applied_samples.len()).unwrap_or(0),
+                    );
+                }
             }
             let key = super::cursor::CursorKey {
                 tenant_id: job.tenant_id.clone(),
@@ -1064,6 +1080,204 @@ pub(crate) async fn enqueue_due_windows(
             .map_err(|err| err.to_string())?;
     }
     Ok(count)
+}
+
+static LAST_ASAP_TICK: AtomicI64 = AtomicI64::new(0);
+
+fn should_run_asap_tick(now: chrono::DateTime<Utc>) -> bool {
+    let cfg = super::asap_mode::AsapConfig::from_env();
+    let last = LAST_ASAP_TICK.load(Ordering::Relaxed);
+    if last == 0 {
+        return true;
+    }
+    now.timestamp().saturating_sub(last) >= i64::try_from(cfg.tick_secs).unwrap_or(15)
+}
+
+async fn run_asap_cycle(state: &Arc<AppState>, now: chrono::DateTime<Utc>) -> Result<(), String> {
+    let config = super::asap_mode::AsapConfig::from_env();
+    let (devices, _) = devices_from_state(state);
+    let delay = chrono::Duration::seconds(publication_delay_secs() as i64);
+    let window_secs = crate::providers::hourly::HourlyPolicy::from_env().window_secs;
+    let step = window_secs.clamp(60, 3600);
+    let target_end = crate::providers::hourly::floor_to_window(now - delay, step);
+    let Some(pool) = state
+        .ingest_queue
+        .postgres_pool()
+        .await
+        .map_err(|err| err.to_string())?
+    else {
+        return Ok(());
+    };
+    let mut enqueued_total = 0_u32;
+    for (_, device) in devices {
+        if enqueued_total >= config.max_jobs_per_tick {
+            break;
+        }
+        let budget_left = config
+            .max_jobs_per_tick
+            .saturating_sub(enqueued_total);
+        let n = process_asap_device(
+            state,
+            &pool,
+            &device,
+            now,
+            target_end,
+            delay,
+            step,
+            config,
+            budget_left,
+        )
+        .await?;
+        enqueued_total = enqueued_total.saturating_add(n);
+    }
+    Ok(())
+}
+
+async fn process_asap_device(
+    state: &Arc<AppState>,
+    pool: &sqlx::PgPool,
+    device: &ScheduleDevice,
+    now: chrono::DateTime<Utc>,
+    target_end: chrono::DateTime<Utc>,
+    delay: chrono::Duration,
+    step: i64,
+    config: super::asap_mode::AsapConfig,
+    budget_left: u32,
+) -> Result<u32, String> {
+    let plan = {
+        let models = state
+            .providers
+            .models
+            .lock()
+            .map_err(|_| "models lock poisoned".to_string())?;
+        models
+            .active_plan(&device.tenant_id, &device.canonical_site)
+            .cloned()
+            .ok_or_else(|| "plan_not_committed".to_string())?
+    };
+    let point_keys = super::gap_backfill::point_keys_for_plan_device(
+        &plan,
+        &device.provider_instance_id,
+        &device.device_id,
+    )
+    .ok_or_else(|| "device not in committed plan".to_string())?;
+    let key = super::binding_state::DeviceBindingKey {
+        tenant_id: device.tenant_id.clone(),
+        canonical_site: device.canonical_site.clone(),
+        provider_instance_id: device.provider_instance_id.clone(),
+        device_id: device.device_id.clone(),
+        model_revision: device.model_revision.clone(),
+    };
+    let range_start = target_end
+        - chrono::Duration::hours(i64::from(super::model::MAX_CATCHUP_HOURS));
+    let binding = super::binding_state::ensure_binding_row(
+        pool,
+        super::binding_state::EnsureBindingInput {
+            key: &key,
+            planning_range_start: range_start,
+            now,
+        },
+    )
+    .await
+    .map_err(|err| err.to_string())?;
+    let stored = super::binding_state::stored_hour_starts_for_device(
+        pool,
+        &device.canonical_site,
+        &point_keys,
+        range_start,
+        target_end,
+    )
+    .await
+    .map_err(|err| err.to_string())?;
+    let last_stored = super::binding_state::last_stored_ts_for_device(
+        pool,
+        &device.canonical_site,
+        &point_keys,
+    )
+    .await
+    .map_err(|err| err.to_string())?;
+    let plan_range_start = super::gap_planner::expected_start(
+        range_start,
+        binding.provider_data_start,
+        binding.binding_created_at,
+    );
+    let gap_plan = super::asap_mode::plan_backlog(super::gap_planner::GapPlanInput {
+        requested_start: plan_range_start,
+        requested_end: target_end,
+        provider_data_start: binding.provider_data_start,
+        binding_created_at: binding.binding_created_at,
+        stored_hour_starts: &stored,
+        last_stored_ts: last_stored,
+        force: false,
+        max_span: super::gap_planner::default_max_span(),
+    })?;
+    let decision = super::asap_mode::decide_mode(
+        &gap_plan,
+        last_stored,
+        now,
+        delay,
+        step,
+        config.threshold_windows,
+    );
+    let throttle = state
+        .ingest_queue
+        .portal_budget_status(&device.provider_instance_id, now)
+        .await
+        .map_err(|err| err.to_string())?;
+    let rows_per_minute = state
+        .ingest_queue
+        .catchup_registry()
+        .read()
+        .ok()
+        .and_then(|guard| guard.snapshot(&key))
+        .map(|snap| snap.rows_per_minute)
+        .unwrap_or(0.0);
+    let eta = super::asap_mode::eta_seconds(decision.missing_windows, step, rows_per_minute);
+    if let Ok(mut guard) = state.ingest_queue.catchup_registry().write() {
+        guard.update_device(
+            &key,
+            decision.mode,
+            decision.missing_windows,
+            last_stored,
+            eta,
+            throttle.paused_until,
+            throttle.tokens_remaining,
+        );
+    }
+    if decision.mode != super::asap_mode::CatchupMode::Asap {
+        return Ok(0);
+    }
+    if throttle.paused_until.is_some_and(|until| until > now) {
+        return Ok(0);
+    }
+    let mut enqueued = 0_u32;
+    for span in gap_plan.planned {
+        if enqueued >= budget_left {
+            break;
+        }
+        let job = super::model::NewJob {
+            tenant_id: device.tenant_id.clone(),
+            canonical_site: device.canonical_site.clone(),
+            provider_instance_id: device.provider_instance_id.clone(),
+            device_id: device.device_id.clone(),
+            model_revision: device.model_revision.clone(),
+            logical_window_start: span.start,
+            logical_window_end: span.end,
+            shard: JOB_SHARD_ASAP.to_string(),
+            not_before: now,
+            estimated_cost: 1,
+            requested_points_digest: None,
+        };
+        let outcome = state
+            .ingest_queue
+            .enqueue(job, now)
+            .await
+            .map_err(|err| err.to_string())?;
+        if matches!(outcome, EnqueueOutcome::Created(_)) {
+            enqueued = enqueued.saturating_add(1);
+        }
+    }
+    Ok(enqueued)
 }
 
 /// Policy of the configured site that owns this job. Unknown sites stay periodic.

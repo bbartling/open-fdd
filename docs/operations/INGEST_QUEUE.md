@@ -68,6 +68,8 @@ A daily window with a recoverable gap or a retryable error waits for the next da
 
 A device is `verified` only when its cursor reaches `planned_through`. Otherwise its hole decides: no hole, `not_scheduled`, `queued`, or `leased` is `behind`; a committed window with code `not_assessed` is `not_assessed`; any other hole (partial, retry wait, permanent failure, committed but incomplete) is `gap`. A device with no cursor is `not_assessed`, and a provider with no committed plan is `not_configured`. The provider and site take the worst device state. The oldest gap is the first gap row for the active revision within the first 200 rows; `gap_scan_truncated` is set when none matched. The Operations page shows this as **Schedule and coverage** under the selected site.
 
+When stored history falls more than `OPENFDD_INGEST_ASAP_THRESHOLD_WINDOWS` (default 6) complete windows behind the publication horizon, the scheduler enters **ASAP catch-up** on a shorter tick (`OPENFDD_INGEST_ASAP_TICK_SECS`, default 15). It enqueues oldest-first gap ranges marked with shard `asap`, respects shared portal caps, and yields claims to live periodic windows. It exits when `last_stored_ts` is within one window of now. `GET /api/ingest/catchup?site_id=` reports mode, missing windows, rows per minute, ETA, and throttle state per device; Operations shows the same table as **Catch-up progress**.
+
 ## HTTP and MCP
 
 JWT scoped like other tenant routes. Empty membership returns no rows. Operators (`confirm` on MCP, plus `OPENFDD_MCP_ALLOW_WRITES=1`) may retry, cancel, or backfill with an idempotency key. Backfill accepts 1–48 exact UTC hours.
@@ -80,6 +82,7 @@ Gap-only backfill reads stored historian hours from Timescale (`ingest_device_bi
 | GET | `/api/ingest/receipts` |
 | GET | `/api/ingest/gaps` |
 | GET | `/api/ingest/gaps?view=status&site_id=` |
+| GET | `/api/ingest/catchup?site_id=` |
 | GET | `/api/ingest/queue` |
 | GET | `/api/ingest/queue/scale-preview` |
 | POST | `/api/ingest/jobs/{job_id}/retry` |
