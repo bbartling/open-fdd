@@ -12,7 +12,10 @@ pub use params::{poll_params, read_poll_from_cache, rule_params, substitute_sql}
 pub use quantity::{annotate_rule_param_quantities, param_quantity, ParamQuantity};
 pub use registry::{load_registry, RuleParameterDef, RuleRegistry, RuleSpec};
 pub use tuning::{effective_param_strings, load_tuning_profiles};
-pub use tuning_effects::{annotate_rule_param_effects, derive_tuner_effect, effect_reason};
+pub use tuning_effects::{
+    annotate_rule_param_effects, derive_tuner_effect, effect_reason, sql_fdd_pack_root,
+    tuning_catalog_path,
+};
 
 mod runner_stub {
     use std::collections::HashMap;
