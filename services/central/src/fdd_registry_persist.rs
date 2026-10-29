@@ -322,16 +322,17 @@ pub async fn persist_registry_run_timescale(
                             if let Some(rule) =
                                 reg.rules.iter().find(|spec| spec.rule_id == item.rule_id)
                             {
-                                if let Ok(map) = crate::timescale_product::load_live_confirmed_fault(
-                                    tsdb,
-                                    &reg,
-                                    rule,
-                                    site_id,
-                                    eq,
-                                    Some(&ws),
-                                    Some(&we),
-                                )
-                                .await
+                                if let Ok(map) =
+                                    crate::timescale_product::load_live_confirmed_fault(
+                                        tsdb,
+                                        &reg,
+                                        rule,
+                                        site_id,
+                                        eq,
+                                        Some(&ws),
+                                        Some(&we),
+                                    )
+                                    .await
                                 {
                                     if !map.is_empty() {
                                         grid = BucketGrid::LocalDay(UTC);
@@ -667,18 +668,19 @@ mod interval_daily_unit_tests {
         let end = Utc.with_ymd_and_hms(2026, 10, 15, 0, 0, 0).unwrap();
         let window = AnalysisWindow::half_open(start, end).expect("window");
         let grid = BucketGrid::UtcHour;
-        let buckets = distribute_interval_buckets(grid, window, 6.8, Some(6.8), 100)
-            .expect("buckets");
+        let buckets =
+            distribute_interval_buckets(grid, window, 6.8, Some(6.8), 100).expect("buckets");
         use chrono_tz::UTC;
         let day_grid = BucketGrid::LocalDay(UTC);
         let day_buckets = day_grid
             .buckets_overlapping(window.start(), window.end())
             .expect("days");
-        let summed: BTreeMap<NaiveDate, f64> = buckets.iter().fold(BTreeMap::new(), |mut acc, b| {
-            let day = b.bucket().start().date_naive();
-            *acc.entry(day).or_insert(0.0) += b.fault_seconds();
-            acc
-        });
+        let summed: BTreeMap<NaiveDate, f64> =
+            buckets.iter().fold(BTreeMap::new(), |mut acc, b| {
+                let day = b.bucket().start().date_naive();
+                *acc.entry(day).or_insert(0.0) += b.fault_seconds();
+                acc
+            });
         let values: Vec<f64> = day_buckets
             .iter()
             .map(|db| summed.get(&db.start().date_naive()).copied().unwrap_or(0.0))
