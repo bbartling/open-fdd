@@ -4991,6 +4991,10 @@ rules:
   - chw_dp
   - chw_dp_sp
   - chw_pump_cmd
+  optional_roles:
+  - pump_status
+  - chiller_status
+  - chw_flow
   output_columns:
   - equipment_id
   - fault_hours
@@ -5071,6 +5075,10 @@ rules:
   - chw_supply_t
   - chw_supply_sp
   - chw_pump_cmd
+  optional_roles:
+  - pump_status
+  - chiller_status
+  - chw_flow
   output_columns:
   - equipment_id
   - fault_hours
@@ -5140,6 +5148,9 @@ rules:
   required_roles:
   - chw_flow
   - chw_pump_cmd
+  optional_roles:
+  - pump_status
+  - chiller_status
   output_columns:
   - equipment_id
   - fault_hours
@@ -5690,6 +5701,7 @@ rules:
   - chiller_status
   - chw_flow
   - chw_pump_cmd
+  - hw_reset_request_sum
   output_columns:
   - equipment_id
   - fault_hours
@@ -5773,6 +5785,7 @@ rules:
   - chiller_status
   - chw_flow
   - chw_pump_cmd
+  - chw_reset_request_sum
   output_columns:
   - equipment_id
   - fault_hours
