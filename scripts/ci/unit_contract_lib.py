@@ -114,6 +114,28 @@ def convert_to_canonical(
     return float(value) * float(row["scale"]) + float(row["offset"])
 
 
+def convert_from_canonical(
+    metric: dict[str, Any], quantity_id: str, canonical: float, target_unit: str
+) -> float:
+    """Inverse of convert_to_canonical for parity IP paths after W4 SI registry defaults."""
+    if quantity_id == "occupancy_mode":
+        raise ValueError("occupancy_mode unsupported")
+    by_token = build_conversion_index(metric)
+    tok = normalize_alias(target_unit)
+    row = by_token.get(tok)
+    if row is None:
+        raise ValueError(f"unknown alias {target_unit!r}")
+    if row["quantity"] != quantity_id:
+        raise ValueError(
+            f"{target_unit!r} maps to {row['quantity']}, expected {quantity_id}"
+        )
+    scale = float(row["scale"])
+    offset = float(row["offset"])
+    if scale == 0.0:
+        raise ValueError(f"zero scale for alias {target_unit!r}")
+    return (float(canonical) - offset) / scale
+
+
 def infer_kind(param_key: str, unit: str) -> str:
     u = (unit or "").strip().strip("'\"")
     key = param_key.strip().lower()

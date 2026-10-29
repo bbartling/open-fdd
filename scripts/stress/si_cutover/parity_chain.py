@@ -706,9 +706,8 @@ def _live_plant_p2_fault_seconds(
     if not ok:
         return None, None
     poll = float(golden.get("poll_seconds") or cts.infer_poll_seconds(ip_frame.index))
-    params_ip = cfl.rule_params_from_registry(rule)
+    _params_ip, params_si = cfl.resolve_rule_params_ip_si(rule, metric)
     si_frame = cfl.frame_to_si(ip_frame, metric)
-    params_si = cfl.convert_params_to_si(rule, params_ip, metric)
     si_daily = cfl.run_rule_daily_rows(
         rule,
         si_frame,

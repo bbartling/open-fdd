@@ -16,6 +16,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from scripts.ci import unit_contract_lib as uc  # noqa: E402
+from scripts.ci.unit_contract_lib import W4D_SI_PLANT_RULES  # noqa: E402
 from scripts.stress.si_cutover.capture_ip_baseline import (  # noqa: E402
     daily_fault_and_covered_seconds,
     rule_params_from_registry,
@@ -260,18 +261,62 @@ def iter_dataset_specs() -> list[DatasetSpec]:
 def _quantity_for_param(spec: dict[str, Any]) -> str | None:
     kind = str(spec.get("kind") or "")
     unit = str(spec.get("unit") or "")
+    if kind in {
+        "absolute_temperature",
+        "temperature_difference",
+        "air_pressure",
+        "hydronic_pressure",
+        "volumetric_flow",
+        "temperature_rate",
+    }:
+        return kind
     if kind == "absolute_temperature":
         return "absolute_temperature"
     if kind == "temperature_difference":
         return "temperature_difference"
-    if kind in ("duration_minutes", "duration_seconds"):
-        return "duration"
-    if kind == "percent":
-        return "dimensionless"
     if unit in ("degF", "degC", "°F", "°C"):
         return "absolute_temperature"
     if unit in ("degF_delta", "degC_delta"):
         return "temperature_difference"
+    if unit in ("in_wc", "inwc", "Pa"):
+        return "air_pressure"
+    if unit in ("psi", "kPa"):
+        return "hydronic_pressure"
+    if unit in ("cfm", "gpm", "L_per_s", "L/s"):
+        return "volumetric_flow"
+    if kind in ("duration_minutes", "duration_seconds"):
+        return "duration"
+    if kind == "percent":
+        return "dimensionless"
+    return None
+
+
+def _imperial_unit_for_quantity(quantity_id: str, *, param_key: str) -> str | None:
+    if quantity_id == "absolute_temperature":
+        return "degF"
+    if quantity_id == "temperature_difference":
+        return "degF_delta"
+    if quantity_id == "air_pressure":
+        return "in_wc"
+    if quantity_id == "hydronic_pressure":
+        return "psi"
+    if quantity_id == "volumetric_flow":
+        return "gpm"
+    if quantity_id == "temperature_rate":
+        return "degF_per_h"
+    return None
+
+
+def _si_source_unit(spec: dict[str, Any], quantity_id: str) -> str | None:
+    unit = str(spec.get("unit") or "")
+    if unit == "pct":
+        unit = "percent"
+    if quantity_id == "temperature_difference" and unit in ("degC", "°C"):
+        return "degC_delta"
+    if quantity_id == "absolute_temperature" and unit in ("degC", "°C"):
+        return "degC"
+    if unit in ("Pa", "kPa", "L_per_s", "L/s", "gpm", "psi", "in_wc", "degF", "degC"):
+        return unit
     return None
 
 
@@ -299,18 +344,75 @@ def convert_params_to_si(
             continue
         if unit in ("percent", "pct", "bool", "min"):
             continue
-        if not unit:
+        if not unit and not q:
             continue
         src_unit = unit
         if q == "temperature_difference" and unit == "degF":
             src_unit = "degF_delta"
         elif q == "temperature_difference" and unit in ("degC", "°C"):
             src_unit = "degC_delta"
+        elif not unit:
+            src_unit = _si_source_unit(spec, q) or unit
         val = float(out[name])
         if param_hook:
             val = param_hook(name, val)
         out[name] = uc.convert_to_canonical(metric, q, val, src_unit)
     return out
+
+
+def convert_params_from_si(
+    rule: dict[str, Any],
+    params: dict[str, float],
+    metric: dict[str, Any],
+    *,
+    param_hook: Callable[[str, float], float] | None = None,
+) -> dict[str, float]:
+    """Registry defaults stored in SI (W4d+) → imperial for IP SQL/pandas."""
+    out = dict(params)
+    for name, spec in (rule.get("parameters") or {}).items():
+        if name not in out:
+            continue
+        if not isinstance(spec, dict):
+            continue
+        kind = str(spec.get("kind") or "")
+        if kind in ("duration_minutes", "duration_seconds", "boolean", "percent"):
+            continue
+        unit = str(spec.get("unit") or "")
+        if unit in ("percent", "pct", "bool", "min", "count"):
+            continue
+        q = _quantity_for_param(spec)
+        if not q:
+            continue
+        target = _imperial_unit_for_quantity(q, param_key=name)
+        if not target:
+            continue
+        val = float(out[name])
+        if param_hook:
+            val = param_hook(name, val)
+        out[name] = uc.convert_from_canonical(metric, q, val, target)
+    return out
+
+
+def resolve_rule_params_ip_si(
+    rule: dict[str, Any],
+    metric: dict[str, Any],
+    *,
+    param_hook: Callable[[str, float], float] | None = None,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Return (ip_params, si_params) for registry defaults (IP or W4d SI)."""
+    raw = rule_params_from_registry(rule)
+    rid = str(rule.get("rule_id") or "")
+    if rid in W4D_SI_PLANT_RULES:
+        params_si = dict(raw)
+        if param_hook:
+            params_si = {k: param_hook(k, float(v)) for k, v in params_si.items()}
+        params_ip = convert_params_from_si(rule, params_si, metric)
+        return params_ip, params_si
+    params_ip = dict(raw)
+    if param_hook:
+        params_ip = {k: param_hook(k, float(v)) for k, v in params_ip.items()}
+    params_si = convert_params_to_si(rule, params_ip, metric)
+    return params_ip, params_si
 
 
 def _role_unit(role: str) -> str | None:
@@ -507,6 +609,7 @@ def build_golden_for_dataset(
         return val
 
     params_by_rule: dict[str, dict[str, float]] = {}
+    params_si_by_rule: dict[str, dict[str, float]] = {}
     eligible_rules: list[dict[str, Any]] = []
     pandas_rows: list[dict[str, Any]] = []
     sql_rows: list[dict[str, Any]] = []
@@ -529,7 +632,13 @@ def build_golden_for_dataset(
             sql_rows.append(dict(na))
             continue
         eligible_rules.append(rule)
-        params_by_rule[rule_id] = rule_params_from_registry(rule)
+        params_ip, params_si = resolve_rule_params_ip_si(
+            rule,
+            metric,
+            param_hook=lambda n, v: _param_hook(rule_id, n, v),
+        )
+        params_by_rule[rule_id] = params_ip
+        params_si_by_rule[rule_id] = params_si
 
     sql_computed, sql_exec_notes = cts.run_sql_ip_for_dataset(
         conn,
@@ -551,14 +660,7 @@ def build_golden_for_dataset(
     si_params_by_rule: dict[str, dict[str, float]] = {}
     for rule in plant_eligible:
         rid = str(rule.get("rule_id") or "")
-        params_ip = params_by_rule[rid]
-
-        def _ph(rule_id: str, name: str, val: float) -> float:
-            return _param_hook(rule_id, name, val)
-
-        si_params_by_rule[rid] = convert_params_to_si(
-            rule, params_ip, metric, param_hook=lambda n, v: _ph(rid, n, v)
-        )
+        si_params_by_rule[rid] = params_si_by_rule[rid]
     si_sql_by_key: dict[tuple[str, str], float] = {}
     if plant_eligible:
         si_sql_rows, si_sql_errs = cts.run_sql_si_for_dataset(
@@ -603,7 +705,7 @@ def build_golden_for_dataset(
             pandas_rows.append(dict(row))
 
         si_frame = si_frame_global
-        params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
+        params_si = params_si_by_rule[rule_id]
         si_daily = run_rule_daily_rows(
             rule,
             si_frame,
@@ -782,7 +884,6 @@ def recompute_si_daily_for_golden(
     for rule_id, rule in rules_by_id.items():
         if not rule.get("pandas_function"):
             continue
-        params_ip = rule_params_from_registry(rule)
 
         def ph(name: str, val: float) -> float:
             if param_hook:
@@ -794,7 +895,9 @@ def recompute_si_daily_for_golden(
             metric,
             value_hook=lambda c, v: value_hook(building_id, c, v) if value_hook else v,
         )
-        params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
+        _params_ip, params_si = resolve_rule_params_ip_si(
+            rule, metric, param_hook=lambda n, v: ph(n, v)
+        )
         if si_param_post_hook:
             params_si = si_param_post_hook(rule_id, params_si)
         si_daily = run_rule_daily_rows(
