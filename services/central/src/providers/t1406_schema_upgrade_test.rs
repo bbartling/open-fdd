@@ -6,6 +6,7 @@ use sqlx::Row;
 const OLD_VIEW: &str = include_str!("../../../../sql/schema/fixtures/authorized_series_v4_0_6.sql");
 const BINDING_DDL: &str = include_str!("../../../../sql/schema/11_point_map_binding_metadata.sql");
 const NEW_VIEW: &str = include_str!("../../../../sql/schema/07_opaque_series_binding.sql");
+const UPGRADE_TEST_LOCK: i64 = 4_060_407_1406;
 
 async fn pool() -> Option<sqlx::PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
@@ -19,7 +20,11 @@ async fn pool() -> Option<sqlx::PgPool> {
 }
 
 async fn baseline_tables(pool: &sqlx::PgPool) {
-    crate::test_ddl::execute_idempotent_ddl(pool, "DROP VIEW IF EXISTS authorized_series").await;
+    crate::test_ddl::execute_idempotent_ddl(
+        pool,
+        "DROP VIEW IF EXISTS authorized_series CASCADE",
+    )
+    .await;
     for statement in [
         "CREATE TABLE IF NOT EXISTS site (
             site_id text PRIMARY KEY,
@@ -62,6 +67,11 @@ async fn t1406_authorized_series_view_upgrades_from_v406_column_order() {
         return;
     };
     let site = "T1406_SCHEMA_UPGRADE";
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(UPGRADE_TEST_LOCK)
+        .execute(&pool)
+        .await
+        .expect("upgrade test lock");
     baseline_tables(&pool).await;
 
     sqlx::query("INSERT INTO site (site_id) VALUES ($1) ON CONFLICT DO NOTHING")
@@ -159,4 +169,9 @@ async fn t1406_authorized_series_view_upgrades_from_v406_column_order() {
     ] {
         sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
     }
+    sqlx::query("SELECT pg_advisory_unlock($1)")
+        .bind(UPGRADE_TEST_LOCK)
+        .execute(&pool)
+        .await
+        .expect("upgrade test unlock");
 }

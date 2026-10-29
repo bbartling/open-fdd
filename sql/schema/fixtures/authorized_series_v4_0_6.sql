@@ -1,6 +1,7 @@
 -- Pre-W1a authorized_series definition (4.0.6 column order). Test fixture only.
+-- Use after DROP VIEW; production DBs still have this shape before W1a forward DDL.
 
-CREATE OR REPLACE VIEW authorized_series AS
+CREATE VIEW authorized_series AS
 SELECT
   pm.site_id,
   pm.openfdd_key,
