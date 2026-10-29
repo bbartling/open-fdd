@@ -50,7 +50,7 @@ pub fn substitute_sql(sql: &str, params: &HashMap<String, String>) -> String {
         ("EPS_SAT", "1.15"),
         ("MIX_TOL", "1.15"),
         ("SUPPLY_TOL", "1.15"),
-        ("MODE_DELAY_MIN", "10"),
+        ("MODE_DELAY_MIN", "0"),
         ("STARTUP_DELAY_MIN", "0"),
         ("REQUIRE_OPERATIONAL_GATE", "1"),
         ("REQUIRE_OCCUPIED", "1"),

@@ -94,6 +94,11 @@ jobs:
           name: si-parity-report
           path: si_parity_report.json
 
+      - name: Blocking W4a FC AHU scope (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4a_si_ahu_fc
+
       - name: Blocking W4b FC1 scope (clean)
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \

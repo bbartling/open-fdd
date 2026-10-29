@@ -418,7 +418,7 @@ CONFIRM_PARAM = lambda default_min=5.0, mx=60.0: CookbookParam(  # noqa: E731
 )
 
 MODE_DELAY_PARAM = lambda: CookbookParam(  # noqa: E731
-    "mode_delay_min", "Mode-change suspension (GL36 default 30)", "min", 0.0, 60.0, 1.0, 0.0, direction="fewer"
+    "mode_delay_min", "Mode-change suspension (GL36 default 30)", "min", 0.0, 60.0, 1.0, 10.0, direction="fewer"
 )
 FAN_ON_PARAM = lambda: CookbookParam(  # noqa: E731
     "fan_on_min", "Fan-on command threshold", "frac", 0.0, 0.25, 0.01, FAN_ON_MIN
@@ -588,10 +588,10 @@ def _pid_hunt_1(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 # Air handling unit rules (FC1–FC15 + additional patterns)
 # ---------------------------------------------------------------------------
 
-MIX_TOL = 1.15
-SUPPLY_TOL = 1.15
+MIX_TOL = 0.6388888889
+SUPPLY_TOL = 0.6388888889
 AHU_MIN_OA_DPR = 0.05
-DELTA_SUPPLY_FAN = 0.55
+DELTA_SUPPLY_FAN = 0.3055555556
 FAN_ON_MIN = 0.01
 
 
@@ -606,7 +606,7 @@ def _gl36_value(p: dict, key: str, legacy_key: str | None, default: float) -> fl
 
 def _gl36_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     """False during GL36 ModeDelay after an AHU operating-state change."""
-    delay_min = _f(p, "mode_delay_min", 0.0)
+    delay_min = max(_f(p, "mode_delay_min", 10.0), _f(p, "startup_delay_min", 0.0))
     if delay_min <= 0 or d.empty:
         return pd.Series(True, index=d.index)
     htg = norm_cmd(d["heating-valve"]).fillna(0) if "heating-valve" in d else pd.Series(0.0, index=d.index)

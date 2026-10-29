@@ -12,6 +12,8 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
+from open_fdd.analytics.units import is_metric_unit_system
+
 DEFAULT_SENTINELS = (999.0, 888.0, -999.0, 9999.0, -9999.0)
 
 REASON_SENTINEL = "SENTINEL"
@@ -57,6 +59,49 @@ ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "fan-speed-feedback": (0.0, 100.0),
     "pump-speed-feedback": (0.0, 100.0),
 }
+
+# SI processing bounds (metric-c-v2); used when frame.attrs unit_system is metric/si.
+ROLE_BOUNDS_SI: dict[str, tuple[float | None, float | None]] = {
+    "zone-air-temp": (4.4, 37.8),
+    "zone-temp": (4.4, 37.8),
+    "discharge-air-temp": (1.7, 60.0),
+    "supply-air-temp": (1.7, 60.0),
+    "mixed-air-temp": (-6.7, 54.4),
+    "return-air-temp": (4.4, 43.3),
+    "outside-air-temp": (-40.0, 54.4),
+    "chilled-water-supply-temp": (0.0, 26.7),
+    "chilled-water-return-temp": (0.0, 32.2),
+    "hot-water-supply-temp": (15.6, 104.4),
+    "hot-water-return-temp": (10.0, 98.9),
+    "zone-airflow": (0.0, 9439.0),
+    "supply-airflow": (0.0, 47195.0),
+    "airflow": (0.0, 47195.0),
+    "duct-static-pressure": (-498.0, 1494.0),
+    "chw-diff-pressure": (0.0, 50.0),
+    "chw-flow": (0.0, 20000.0),
+    "water-flow": (0.0, 20000.0),
+    "cooling-valve": (0.0, 100.0),
+    "heating-valve": (0.0, 100.0),
+    "economizer-damper": (0.0, 100.0),
+    "oa-damper": (0.0, 100.0),
+    "damper": (0.0, 100.0),
+    "valve": (0.0, 100.0),
+    "fan-power": (0.0, 500.0),
+    "chiller-power": (0.0, 5000.0),
+    "pump-power": (0.0, 500.0),
+    "elec-power": (0.0, 50000.0),
+    "fan-current": (0.0, 500.0),
+    "chiller-current": (0.0, 2000.0),
+    "pump-current": (0.0, 500.0),
+    "fan-speed-feedback": (0.0, 100.0),
+    "pump-speed-feedback": (0.0, 100.0),
+}
+
+
+def _bounds_table(unit_system: str | None) -> dict[str, tuple[float | None, float | None]]:
+    if is_metric_unit_system(unit_system):
+        return ROLE_BOUNDS_SI
+    return ROLE_BOUNDS
 
 STATUS_ROLES = {
     "fan-status",
@@ -174,6 +219,7 @@ def normalize_role_series(
     *,
     sentinels: Iterable[float] = DEFAULT_SENTINELS,
     bounds: tuple[float | None, float | None] | None = None,
+    unit_system: str | None = None,
 ) -> RoleQuality:
     raw = series.copy()
     family = _role_family(role)
@@ -245,7 +291,7 @@ def normalize_role_series(
     reason = reason.mask(sent, REASON_SENTINEL)
     valid = valid & ~sent
 
-    lo_hi = bounds if bounds is not None else ROLE_BOUNDS.get(family)
+    lo_hi = bounds if bounds is not None else _bounds_table(unit_system).get(family)
     if lo_hi is not None:
         lo, hi = lo_hi
         scaled = _scale_position(num)
@@ -313,6 +359,7 @@ def assess_frame(
 ) -> FrameQuality:
     cols = list(roles) if roles is not None else [c for c in df.columns if c != "timestamp_utc"]
     sentinels = tuple(sentinels)
+    unit_system = str(df.attrs.get("unit_system") or "")
     fq = FrameQuality()
     any_valid = pd.Series(False, index=df.index)
     totals = {"valid": 0, "invalid": 0}
@@ -320,7 +367,7 @@ def assess_frame(
     for role in cols:
         if role not in df.columns:
             continue
-        rq = normalize_role_series(df[role], role, sentinels=sentinels)
+        rq = normalize_role_series(df[role], role, sentinels=sentinels, unit_system=unit_system)
         fq.roles[role] = rq
         any_valid = any_valid | rq.valid
         totals["valid"] += rq.valid_sample_count

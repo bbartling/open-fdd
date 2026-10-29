@@ -44,10 +44,9 @@ def catalog_overrides_from_registry(
 
 
 def product_effective_mode_delay_min(params: dict[str, float]) -> float:
-    """Mirror render_rule.py + params.rs: max(runtime MODE_DELAY_MIN, STARTUP_DELAY_MIN)."""
-    defaults = runtime_defaults()
-    mode = float(defaults.get("MODE_DELAY_MIN", 10.0))
-    startup = float(params.get("startup_delay_min", defaults.get("STARTUP_DELAY_MIN", 0.0)))
+    """Mirror render_rule.py + params.rs: max(mode_delay_min, startup_delay_min)."""
+    mode = float(params.get("mode_delay_min", 10.0))
+    startup = float(params.get("startup_delay_min", runtime_defaults().get("STARTUP_DELAY_MIN", 0.0)))
     return max(mode, startup)
 
 
@@ -55,9 +54,10 @@ def p0_value_mismatch_reason(rule_id: str, params: dict[str, float]) -> str | No
     """Classify pandas IP vs SQL IP mismatch root cause (no site-specific allowlist)."""
     if "mode_delay_min" not in catalog_param_keys(rule_id):
         return None
-    startup = float(params.get("startup_delay_min", 0.0))
     effective = product_effective_mode_delay_min(params)
-    if effective > startup + 1e-9:
+    mode = float(params.get("mode_delay_min", 10.0))
+    startup = float(params.get("startup_delay_min", 0.0))
+    if abs(effective - max(mode, startup)) > 1e-9:
         return MODE_DELAY_DEFAULT_VS_STARTUP
     return None
 
