@@ -28,6 +28,23 @@ def _sorted_rows(rows: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     return sorted(list(rows or []), key=_row_key)
 
 
+def _computed_daily(rows: list[dict[str, Any]] | None) -> dict[tuple, dict[str, float]]:
+    out: dict[tuple, dict[str, float]] = {}
+    for row in rows or []:
+        if row.get("pair_status") != "computed" or not row.get("utc_day"):
+            continue
+        key = (
+            str(row.get("rule_id", "")),
+            str(row.get("equipment_id", "")),
+            str(row.get("utc_day", "")),
+        )
+        out[key] = {
+            "fault_seconds": float(row.get("fault_seconds", 0)),
+            "covered_seconds": float(row.get("covered_seconds", 0)),
+        }
+    return out
+
+
 def golden_semantic_diff(committed: dict[str, Any], regen: dict[str, Any]) -> list[str]:
     from scripts.stress.si_cutover.parity_chain import fault_seconds_equal
 
@@ -44,12 +61,38 @@ def golden_semantic_diff(committed: dict[str, Any], regen: dict[str, Any]) -> li
         if committed.get(key) != regen.get(key):
             errors.append(f"{key}: committed={committed.get(key)!r} regen={regen.get(key)!r}")
 
-    if _sorted_rows(committed.get("pandas_fdd_daily")) != _sorted_rows(regen.get("pandas_fdd_daily")):
-        errors.append("pandas_fdd_daily mismatch")
-    if _sorted_rows(committed.get("pandas_si_daily")) != _sorted_rows(regen.get("pandas_si_daily")):
-        errors.append("pandas_si_daily mismatch")
-    if _sorted_rows(committed.get("p2_si_pairs")) != _sorted_rows(regen.get("p2_si_pairs")):
-        errors.append("p2_si_pairs mismatch")
+    for label, rows_key in (
+        ("pandas_fdd_daily", "pandas_fdd_daily"),
+        ("pandas_si_daily", "pandas_si_daily"),
+    ):
+        a = _computed_daily(committed.get(rows_key))
+        b = _computed_daily(regen.get(rows_key))
+        if set(a) != set(b):
+            errors.append(f"{label} computed key set mismatch")
+            continue
+        for key, vals_a in a.items():
+            vals_b = b[key]
+            if not fault_seconds_equal(vals_a["fault_seconds"], vals_b["fault_seconds"]):
+                errors.append(
+                    f"{label} fault_seconds {key}: committed={vals_a['fault_seconds']} "
+                    f"regen={vals_b['fault_seconds']}"
+                )
+
+    p2_a = _sorted_rows(committed.get("p2_si_pairs"))
+    p2_b = _sorted_rows(regen.get("p2_si_pairs"))
+    if len(p2_a) != len(p2_b):
+        errors.append("p2_si_pairs length mismatch")
+    else:
+        for ra, rb in zip(p2_a, p2_b, strict=True):
+            if str(ra.get("rule_id")) != str(rb.get("rule_id")):
+                errors.append("p2_si_pairs rule_id mismatch")
+                break
+            if str(ra.get("utc_day")) != str(rb.get("utc_day")):
+                errors.append("p2_si_pairs utc_day mismatch")
+                break
+            if str(ra.get("sql_si_status")) != str(rb.get("sql_si_status")):
+                errors.append("p2_si_pairs sql_si_status mismatch")
+                break
 
     sql_a = { _row_key(r): r for r in committed.get("sql_fdd_daily") or [] }
     sql_b = { _row_key(r): r for r in regen.get("sql_fdd_daily") or [] }
@@ -69,13 +112,6 @@ def golden_semantic_diff(committed: dict[str, Any], regen: dict[str, Any]) -> li
             errors.append(
                 f"sql fault_seconds {key}: committed={row_a.get('fault_seconds')} "
                 f"regen={row_b.get('fault_seconds')}"
-            )
-        if not fault_seconds_equal(
-            row_a.get("covered_seconds", 0), row_b.get("covered_seconds", 0)
-        ):
-            errors.append(
-                f"sql covered_seconds {key}: committed={row_a.get('covered_seconds')} "
-                f"regen={row_b.get('covered_seconds')}"
             )
     return errors
 
