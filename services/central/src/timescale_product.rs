@@ -2810,23 +2810,21 @@ async fn roles_with_unique_binding(
     equipment_id: &str,
     roles: &[String],
 ) -> Result<std::collections::BTreeSet<String>> {
-    let mut bound = std::collections::BTreeSet::new();
-    for role in roles {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*)::bigint FROM authorized_series a
-             WHERE a.site_id = $1 AND a.equipment_id = $2 AND a.role = $3",
-        )
-        .bind(building_id)
-        .bind(equipment_id)
-        .bind(role)
-        .fetch_one(&mut *conn)
-        .await
-        .context("count authorized_series bindings for pivot role")?;
-        if count == 1 {
-            bound.insert(role.clone());
-        }
+    if roles.is_empty() {
+        return Ok(std::collections::BTreeSet::new());
     }
-    Ok(bound)
+    let rows: Vec<String> = sqlx::query_scalar(
+        "SELECT role FROM authorized_series a
+         WHERE a.site_id = $1 AND a.equipment_id = $2 AND a.role = ANY($3)
+         GROUP BY role HAVING COUNT(*) = 1",
+    )
+    .bind(building_id)
+    .bind(equipment_id)
+    .bind(roles)
+    .fetch_all(&mut *conn)
+    .await
+    .context("unique authorized_series bindings for pivot roles")?;
+    Ok(rows.into_iter().collect())
 }
 
 async fn fill_history_for_equipment(

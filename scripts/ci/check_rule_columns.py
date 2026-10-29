@@ -93,6 +93,16 @@ def declared_roles(rule: dict) -> set[str]:
     return out
 
 
+def sql_history_roles_for_rule(rule: dict) -> set[str]:
+    sql_file = rule.get("sql_file")
+    if not sql_file:
+        return set()
+    path = RULES_DIR / str(sql_file)
+    if not path.is_file():
+        return set()
+    return history_role_reads(path.read_text(encoding="utf-8"))
+
+
 def check_registry() -> None:
     if not REGISTRY.is_file():
         fail(f"missing {REGISTRY.relative_to(ROOT)}")
@@ -136,6 +146,43 @@ def self_test() -> None:
     want = {"equipment_id", "timestamp_utc", "hw_supply_t", "hw_reset_request_sum"}
     if got != want:
         fail(f"self-test history_role_reads: got {sorted(got)} want {sorted(want)}")
+
+    from unit_contract_lib import validate_registry_role_declarations_diff
+
+    trim3 = {
+        "rule_id": "TRIM-3",
+        "sql_file": "trim3_hwst.sql",
+        "required_roles": ["hw_supply_t"],
+        "optional_roles": ["pump_status", "chiller_status", "chw_flow", "chw_pump_cmd"],
+    }
+    master = {"rules": [trim3]}
+    bad_optional = {
+        "rules": [
+            {
+                **trim3,
+                "optional_roles": trim3["optional_roles"] + ["totally_fake_role"],
+            }
+        ]
+    }
+    try:
+        validate_registry_role_declarations_diff(master, bad_optional)
+    except AssertionError as exc:
+        if "totally_fake_role" not in str(exc):
+            fail(f"self-test expected unjustified optional_roles failure, got: {exc}")
+    else:
+        fail("self-test: unjustified optional_roles addition must fail registry diff guard")
+
+    bad_required = {
+        "rules": [{**trim3, "required_roles": ["hw_supply_t", "chw_flow"]}]
+    }
+    try:
+        validate_registry_role_declarations_diff(master, bad_required)
+    except AssertionError as exc:
+        if "required_roles changed" not in str(exc):
+            fail(f"self-test expected required_roles failure, got: {exc}")
+    else:
+        fail("self-test: required_roles change must fail registry diff guard")
+
     print("PASS check_rule_columns self-test")
 
 
