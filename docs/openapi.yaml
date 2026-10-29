@@ -254,13 +254,22 @@ paths:
           application/json:
             schema:
               type: object
-              required: [query]
               properties:
                 query:
+                  type: string
+                query_id:
+                  type: string
+                building_id:
+                  type: string
+                equipment_id:
                   type: string
       responses:
         "200":
           description: Bindings and row count
+        "400":
+          description: Invalid request, unknown equipment in semantic_meta scope, or inventory incomplete (`incomplete` true)
+        "404":
+          description: No committed native semantic model for the building (`present` false on error JSON)
   /api/model/assignments:
     get:
       summary: Driver and FDD bindings

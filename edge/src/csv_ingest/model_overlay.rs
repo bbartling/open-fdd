@@ -170,6 +170,75 @@ pub fn load_ttl(building_root: &Path) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| format!("read overlay ttl: {e}"))
 }
 
+/// Overlay Turtle for SPARQL pack ∪ overlay. When `equipment_id` is set, only
+/// overlay triples for that equipment (plus overlay tombstone markers) are
+/// included so scoped template queries do not inherit other equip overlay points.
+pub fn overlay_turtle_for_sparql(
+    building_root: &Path,
+    equipment_id: Option<&str>,
+) -> Result<String, String> {
+    let Some(eid) = equipment_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return load_ttl(building_root);
+    };
+    let store = load_overlay_store(building_root)?;
+    let scoped = filter_overlay_store_for_equipment(&store, eid)?;
+    serialize_store_ttl(&scoped)
+}
+
+fn filter_overlay_store_for_equipment(store: &Store, equipment_id: &str) -> Result<Store, String> {
+    let mut keep: BTreeSet<String> = BTreeSet::new();
+
+    let rdf_type = nn(RDF_TYPE)?;
+    let tomb_class = nn(&ofdd("Tombstone"))?;
+    let tomb_term = Term::from(tomb_class);
+    for q in store.quads_for_pattern(
+        None,
+        Some((&rdf_type).into()),
+        Some((&tomb_term).into()),
+        None,
+    ) {
+        let q = q.map_err(|e| format!("quads: {e}"))?;
+        if let NamedOrBlankNode::NamedNode(n) = q.subject {
+            keep.insert(n.as_str().to_string());
+        }
+    }
+
+    let equip_nodes = subjects_with_id_literal(store, "equipmentId", equipment_id)?;
+    for n in &equip_nodes {
+        keep.insert(n.as_str().to_string());
+    }
+
+    let equip_ref_iri = pinned("equipRef")?;
+    let equip_ref = nn(&equip_ref_iri)?;
+    for eq in &equip_nodes {
+        let eq_term = Term::from(eq.clone());
+        for q in store.quads_for_pattern(
+            None,
+            Some((&equip_ref).into()),
+            Some((&eq_term).into()),
+            None,
+        ) {
+            let q = q.map_err(|e| format!("quads: {e}"))?;
+            if let NamedOrBlankNode::NamedNode(n) = q.subject {
+                keep.insert(n.as_str().to_string());
+            }
+        }
+    }
+
+    let out = Store::new().map_err(|e| format!("oxigraph store: {e}"))?;
+    for quad in store.quads_for_pattern(None, None, None, Some(GraphNameRef::DefaultGraph)) {
+        let quad = quad.map_err(|e| format!("quads: {e}"))?;
+        let subject_key = match &quad.subject {
+            NamedOrBlankNode::NamedNode(n) => n.as_str(),
+            NamedOrBlankNode::BlankNode(n) => n.as_str(),
+        };
+        if keep.contains(subject_key) {
+            out.insert(&quad).map_err(|e| format!("insert quad: {e}"))?;
+        }
+    }
+    Ok(out)
+}
+
 pub fn load_meta(building_root: &Path) -> Result<Option<OverlayMeta>, String> {
     let path = meta_path(building_root);
     if !path.is_file() {
@@ -2763,5 +2832,111 @@ SELECT ?sym WHERE {
         let out = execute_readonly_on_overlay("SYNTH_TAG_RESOLVER", query, ttl)
             .unwrap_or_else(|e| panic!("ask: {e}\n{query}"));
         out["boolean"].as_bool().expect("ask boolean")
+    }
+
+    #[test]
+    fn overlay_turtle_for_sparql_scopes_overlay_points_to_equipment() {
+        use crate::csv_ingest::haystack_central_dataset;
+        use crate::csv_ingest::haystack_projection::fixtures::{sample_inventory, sample_meta};
+        use crate::csv_ingest::haystack_sparql_bindings::execute_template_on_snapshot_with_overlay;
+
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let bid = "SITE_OVERLAY_SCOPE";
+        let opts = OverlayCasOpts {
+            expected_revision: None,
+            dry_run: false,
+        };
+        upsert_equipment(
+            root,
+            bid,
+            "EQ_A",
+            EquipUpsertFields {
+                dis: Some("A"),
+                kind: Some("ahu"),
+                markers: &[],
+            },
+            opts,
+        )
+        .expect("equip a");
+        upsert_point(
+            root,
+            bid,
+            "EQ_A",
+            "6a1f0c2a-0001-4000-8000-00000000a001",
+            PointUpsertFields {
+                dis: None,
+                openfdd_key: None,
+                role: None,
+                markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
+            },
+            opts,
+        )
+        .expect("point a");
+        upsert_equipment(
+            root,
+            bid,
+            "EQ_B",
+            EquipUpsertFields {
+                dis: Some("B"),
+                kind: Some("vav"),
+                markers: &[],
+            },
+            opts,
+        )
+        .expect("equip b");
+        upsert_point(
+            root,
+            bid,
+            "EQ_B",
+            "6a1f0c2a-0002-4000-8000-00000000b002",
+            PointUpsertFields {
+                dis: None,
+                openfdd_key: None,
+                role: None,
+                markers: &[],
+                unit: None,
+                quantity: None,
+                primary_reference: None,
+            },
+            opts,
+        )
+        .expect("point b");
+
+        let mut meta = sample_meta();
+        meta.building_id = bid.to_string();
+        let snap =
+            haystack_central_dataset::materialize(&meta, Some(&sample_inventory()), Some("EQ_A"))
+                .expect("materialize");
+        let scoped_overlay = overlay_turtle_for_sparql(root, Some("EQ_A")).expect("scope");
+        let out = execute_template_on_snapshot_with_overlay(
+            &snap,
+            Some(&sample_inventory()),
+            "fdd_role_candidates",
+            &scoped_overlay,
+        )
+        .expect("sparql");
+        let overlay_point_ids: Vec<String> = out
+            .equipment
+            .iter()
+            .flat_map(|e| e.points.iter())
+            .filter(|p| p.point_id.starts_with("6a1f0c2a"))
+            .map(|p| p.point_id.clone())
+            .collect();
+        assert!(
+            overlay_point_ids
+                .iter()
+                .any(|id| id == "6a1f0c2a-0001-4000-8000-00000000a001"),
+            "scoped overlay missing EQ_A point: {overlay_point_ids:?}"
+        );
+        assert!(
+            !overlay_point_ids
+                .iter()
+                .any(|id| id == "6a1f0c2a-0002-4000-8000-00000000b002"),
+            "EQ_B overlay point leaked into EQ_A scope: {overlay_point_ids:?}"
+        );
     }
 }
