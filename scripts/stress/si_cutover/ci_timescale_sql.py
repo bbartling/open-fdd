@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from datetime import timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +96,44 @@ def frame_sql_columns(frame) -> set[str]:
             cols.add("occ_mode")
             continue
         cols.add(frame_column_to_sql_role(str(col)))
+    return cols
+
+
+@lru_cache(maxsize=1)
+def _registry_history_column_names() -> frozenset[str]:
+    from scripts.stress.si_cutover.ci_fixtures_lib import load_rule_registry
+
+    cols: set[str] = {"equipment_id", "timestamp_utc", "occ_mode"}
+    for rule in load_rule_registry():
+        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
+            col = registry_role_column(str(role))
+            if col == "occ_mode":
+                cols.add("occ_mode")
+            else:
+                cols.add(frame_column_to_sql_role(col))
+    return frozenset(cols)
+
+
+def history_columns_for_rules(frame, rules: list[dict[str, Any]]) -> set[str]:
+    """Union frame columns, registry roles, and postgres SQL-referenced history columns."""
+    cols = frame_sql_columns(frame)
+    for rule in rules:
+        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
+            col = registry_role_column(str(role))
+            if col == "occ_mode":
+                cols.add("occ_mode")
+            else:
+                cols.add(frame_column_to_sql_role(col))
+        sql_file = rule.get("sql_file")
+        if not sql_file:
+            continue
+        path = REPO / "sql" / "fdd" / "postgres" / "rules" / str(sql_file)
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for col in _registry_history_column_names():
+            if re.search(rf"(?<![a-z0-9_]){re.escape(col)}(?![a-z0-9_])", text):
+                cols.add(col)
     return cols
 
 
@@ -421,14 +461,7 @@ def run_sql_ip_for_dataset(
     parity.apply_schema(conn)
     apply_fdd_postgres_helpers(conn)
     site_id = spec.building_id
-    sql_cols = frame_sql_columns(frame)
-    for rule in rules:
-        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
-            col = registry_role_column(str(role))
-            if col == "occ_mode":
-                sql_cols.add("occ_mode")
-                continue
-            sql_cols.add(frame_column_to_sql_role(col))
+    sql_cols = history_columns_for_rules(frame, rules)
     errors: list[str] = []
     out: list[dict[str, Any]] = []
     with conn.cursor() as cur:
@@ -484,14 +517,7 @@ def run_sql_si_for_dataset(
     parity.apply_schema(conn)
     apply_fdd_postgres_helpers(conn)
     site_id = f"{spec.building_id}__si"
-    sql_cols = frame_sql_columns(frame)
-    for rule in rules:
-        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
-            col = registry_role_column(str(role))
-            if col == "occ_mode":
-                sql_cols.add("occ_mode")
-                continue
-            sql_cols.add(frame_column_to_sql_role(col))
+    sql_cols = history_columns_for_rules(frame, rules)
     errors: list[str] = []
     out: list[dict[str, Any]] = []
     with conn.cursor() as cur:
