@@ -98,11 +98,8 @@ async fn t1406_authorized_series_view_upgrades_from_v406_column_order() {
     for statement in crate::db_lifecycle::statements(BINDING_DDL) {
         crate::test_ddl::execute_idempotent_ddl(&pool, &statement).await;
     }
-    crate::test_ddl::execute_idempotent_ddl(
-        &pool,
-        "DROP VIEW IF EXISTS authorized_series CASCADE",
-    )
-    .await;
+    crate::test_ddl::execute_idempotent_ddl(&pool, "DROP VIEW IF EXISTS authorized_series CASCADE")
+        .await;
     for statement in crate::db_lifecycle::statements(NEW_VIEW) {
         crate::test_ddl::execute_idempotent_ddl(&pool, &statement).await;
     }
