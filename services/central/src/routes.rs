@@ -4427,10 +4427,9 @@ fn attach_semantic_model_present(mut body: Value, building_id: Option<&str>) -> 
     let Some(bid) = building_id else {
         return body;
     };
-    let present =
-        open_fdd_edge_prototype::csv_ingest::semantic_meta::semantic_model_present(
-            &csv_building_root(bid),
-        );
+    let present = open_fdd_edge_prototype::csv_ingest::semantic_meta::semantic_model_present(
+        &csv_building_root(bid),
+    );
     if let Some(obj) = body.as_object_mut() {
         obj.insert("semantic_model_present".into(), json!(present));
     }
