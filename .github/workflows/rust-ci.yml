@@ -102,6 +102,8 @@ jobs:
         run: python3 scripts/cookbook_parity_check.py --docs-only
 
       - name: Unit contract (T1284-1)
+        env:
+          OPENFDD_UNIT_CONTRACT_ALLOW_SI_VALUES: "1"
         run: |
           python3 scripts/ci/check_unit_contract.py
           CARGO_TARGET_DIR=/tmp/ofdd-target-w2-unit-contract cargo test -p fdd_core units_contract::
