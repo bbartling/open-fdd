@@ -2,14 +2,14 @@
 
 use open_fdd_edge_prototype::csv_ingest::model_overlay::EngineerPointOverlayEntry;
 
-use super::committed_model::resolve_point_map_binding;
+use crate::providers::committed_model::resolve_point_map_binding;
 
 fn overlay(cadence_secs: Option<u64>) -> EngineerPointOverlayEntry {
     EngineerPointOverlayEntry {
         unit: None,
         quantity: None,
         cadence_secs,
-        primary_reference: None,
+        primary_reference: false,
     }
 }
 
