@@ -149,7 +149,7 @@ def render_sql(rule: dict) -> str:
         "POLL_SECONDS": str(POLL),
         "CONFIRM_SECONDS": "300",
         "CONFIRM_ROWS": "1",
-        "MODE_DELAY_MIN": "0",
+        "MODE_DELAY_MIN": "10",
         "MODE_DELAY_ROWS": "0",
         "MODE_DELAY_ROWS_PRECEDING": "0",
         "MAX_GAP_HOURS": "1",

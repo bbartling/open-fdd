@@ -29,6 +29,24 @@ P2_SI_SQL_RULES = frozenset(
     tuple(f"FC{i}" for i in range(1, 16)) + ("FC13-SAT-HIGH",)
 )
 
+# T1284-4 mutation: FC1 golden days are fault-saturated; +1 Pa on eps_dsp does not move
+# confirmed hours. Scale registry Pa default (~30) by 1000 so tolerance clears faults.
+T1284_EPS_DSP_BREAK_FACTOR = 1000.0
+T1284_EPS_DSP_BREAK_FLOOR_PA = 5000.0
+
+
+def registry_param_or_fail(params: dict[str, float], param_key: str, *, rule_id: str) -> float:
+    if param_key not in params:
+        raise KeyError(f"rule {rule_id}: registry parameters missing {param_key!r}")
+    return float(params[param_key])
+
+
+def t1284_break_eps_dsp_si(params_si: dict[str, float], *, rule_id: str = "FC1") -> dict[str, float]:
+    base_pa = registry_param_or_fail(params_si, "eps_dsp", rule_id=rule_id)
+    out = dict(params_si)
+    out["eps_dsp"] = max(base_pa * T1284_EPS_DSP_BREAK_FACTOR, T1284_EPS_DSP_BREAK_FLOOR_PA)
+    return out
+
 COOKBOOK_FIXTURES = REPO / "docs" / "rules" / "cookbook" / "fixtures"
 SYNTH_ROOT = REPO / "tests" / "fixtures" / "synthetic_slice" / "OPENFDD_SYNTHETIC_SLICE_V1"
 

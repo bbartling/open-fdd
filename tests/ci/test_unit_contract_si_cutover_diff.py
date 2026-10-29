@@ -71,6 +71,19 @@ class UnitContractSiCutoverDiffTests(unittest.TestCase):
             branch=branch,
         )
 
+    def test_resolve_convert_kind_uses_non_convertible_master_kind(self) -> None:
+        from unit_contract_lib import _resolve_convert_kind
+
+        kind = _resolve_convert_kind("FC1", "confirm_min", "min", "duration_minutes")
+        self.assertEqual(kind, "duration_minutes")
+
+    def test_resolve_convert_kind_raises_on_unknown_unit(self) -> None:
+        from unit_contract_lib import _resolve_convert_kind
+
+        with self.assertRaises(AssertionError) as ctx:
+            _resolve_convert_kind("FC1", "mystery", "unknown_unit", "dimensionless")
+        self.assertIn("cannot infer kind", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
