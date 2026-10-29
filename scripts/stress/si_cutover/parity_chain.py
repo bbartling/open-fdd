@@ -156,18 +156,9 @@ def _metric_doc() -> dict[str, Any]:
     return uc.load_json(uc.METRIC_UNITS)
 
 
-def fault_seconds_equal(a: float, b: float, *, poll_seconds: float = 300.0) -> bool:
-    a_f = float(a)
-    b_f = float(b)
-    if math.isclose(a_f, b_f, rel_tol=0.0, abs_tol=1e-9):
-        return True
-    # FC1 overlay SQL integrates with LEAD gaps; pandas uses fixed poll at mode-delay
-    # edges (08:00 samples). A one-poll delta is the known W4b boundary class, not SI drift.
-    delta = abs(a_f - b_f)
-    poll = float(poll_seconds)
-    if delta <= poll + 1e-6 and min(a_f, b_f) >= poll - 1e-6:
-        return math.isclose(delta, poll, rel_tol=0.0, abs_tol=1e-6)
-    return False
+def fault_seconds_equal(a: float, b: float) -> bool:
+    """Exact FDD fault_seconds parity (P1/P2); no poll or boundary tolerance."""
+    return math.isclose(float(a), float(b), rel_tol=0.0, abs_tol=1e-9)
 
 
 def analytics_relative_equal(a: float, b: float) -> bool:
@@ -773,7 +764,7 @@ def run_p2_all_goldens(
                 continue
             sql_s = float(sql_raw)
             pandas_s = float(pandas_raw)
-            if not fault_seconds_equal(sql_s, pandas_s):
+            if not fault_seconds_equal(sql_s, pandas_s):  # exact; no poll tolerance (P2)
                 errors.append(
                     f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
                     f"sql_si={sql_s} pandas_si={pandas_s}"

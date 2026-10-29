@@ -89,6 +89,9 @@ POSITION_ROLES = {
     "pump-speed-feedback",
 }
 
+# SI cutover (#1447): until W4a #1450 lands ROLE_BOUNDS_SI, scale imperial ROLE_BOUNDS
+# when frame.attrs unit_system == "metric". After #1450 merges, delete _INWC_TO_PA through
+# _bounds_for_unit_system (~lines 92–128) and use ROLE_BOUNDS_SI + _bounds_table() instead.
 _INWC_TO_PA = 248.84
 _CFM_TO_LPS = 0.471947
 

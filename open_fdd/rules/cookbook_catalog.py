@@ -604,6 +604,37 @@ def _gl36_value(p: dict, key: str, legacy_key: str | None, default: float) -> fl
     return float(default)
 
 
+def _runtime_defaults() -> dict[str, float]:
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "sql" / "fdd" / "runtime_defaults.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {str(k): float(v) for k, v in raw.items()}
+
+
+def _product_effective_mode_delay_min(p: dict) -> float:
+    """Same max(MODE_DELAY_MIN, STARTUP_DELAY_MIN) as sql/fdd/render_rule.py."""
+    defaults = _runtime_defaults()
+    mode = float(defaults.get("MODE_DELAY_MIN", 10.0))
+    startup = float(p.get("startup_delay_min", defaults.get("STARTUP_DELAY_MIN", 0.0)))
+    return max(mode, startup)
+
+
+def _fc1_fan_on_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Mirror fc1_duct_static_low.sql mode_stable (fan_on + MODE_DELAY_ROWS window)."""
+    delay_min = _product_effective_mode_delay_min(p)
+    if delay_min <= 0 or d.empty:
+        return pd.Series(True, index=d.index)
+    fan = _fan(d)
+    fan_on_thr = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
+    on = (fan > fan_on_thr).fillna(False)
+    off = ~on
+    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
+    off_in_window = off.astype(int).rolling(samples, min_periods=1).max().astype(bool)
+    return on & ~off_in_window
+
+
 def _gl36_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     """False during GL36 ModeDelay after an AHU operating-state change."""
     delay_min = _f(p, "mode_delay_min", 0.0)
@@ -653,7 +684,7 @@ def fc1(d, p, poll):
         & (d["duct-static-pressure"] < d["duct-static-pressure-sp"] - err)
         & (fan >= fan_hi)
     )
-    return _gl36_fault(raw, d, p, poll)
+    return raw.fillna(False) & _fc1_fan_on_mode_stable(d, p, poll)
 
 
 def fc2(d, p, poll):
