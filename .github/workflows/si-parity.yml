@@ -31,7 +31,23 @@ concurrency:
 jobs:
   si-parity:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    services:
+      timescale:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: openfdd
+          POSTGRES_PASSWORD: openfdd
+          POSTGRES_DB: openfdd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openfdd -d openfdd"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
     steps:
       - uses: actions/checkout@v4
 
@@ -42,13 +58,14 @@ jobs:
       - name: Install harness deps
         run: |
           python -m pip install -U pip
+          pip install 'psycopg[binary]>=3.1'
           pip install pyyaml
           pip install -e ".[oracle]"
 
       - name: Unit contract (T1284-1 baseline)
         run: python3 scripts/ci/check_unit_contract.py
 
-      - name: Frozen ip goldens (W0c regen must match)
+      - name: Frozen ip goldens (Timescale regen must match committed)
         run: python3 scripts/ci/check_ip_goldens_frozen.py
 
       - name: SI parity chain P0–P2 on fixtures

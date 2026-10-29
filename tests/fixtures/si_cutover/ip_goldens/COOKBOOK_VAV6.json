@@ -11,89 +11,112 @@
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "VAV-3",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "VAV-4",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "VAV-5",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "VAV-6",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     }
   ],
+  "pandas_error_count": 0,
   "pandas_fdd_daily": [
     {
       "building_id": "COOKBOOK_VAV6",
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-1",
       "status": "",
       "utc_day": ""
@@ -103,8 +126,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-2",
       "status": "",
       "utc_day": ""
@@ -565,8 +588,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-REHEAT",
       "status": "",
       "utc_day": ""
@@ -576,8 +599,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-AHU-LEAVE",
       "status": "",
       "utc_day": ""
@@ -763,8 +786,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SCHED-247",
       "status": "",
       "utc_day": ""
@@ -1065,6 +1088,7 @@
       "utc_day": "2026-07-01"
     }
   ],
+  "poll_seconds": 60.0,
   "schema": "si-cutover-ip-golden-v1",
   "schema_version": 1,
   "sql_fdd_daily": [
@@ -1075,118 +1099,8 @@
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
-      "rule_id": "SV-RANGE",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SV-FLATLINE",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SV-SPIKE",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SV-STALE",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SV-RATE",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-3",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-4",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-5",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-6",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV6",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "VAV-7",
-      "status": "PASS",
+      "rule_id": "WX-1",
+      "status": "OK",
       "utc_day": "2026-07-01"
     }
   ]

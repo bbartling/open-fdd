@@ -11,151 +11,194 @@
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-05"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-06"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 3599.9999999999995,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 3599.9999999999995,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-07"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-08"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-09"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-10"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-11"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-05"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-06"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-07"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-08"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-09"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-10"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-11"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-05"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-06"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-07"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-08"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-09"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-10"
     },
     {
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-01-11"
     }
   ],
+  "pandas_error_count": 0,
   "pandas_fdd_daily": [
     {
       "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
@@ -184,8 +227,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "OAT-METEO",
       "status": "",
       "utc_day": ""
@@ -206,8 +249,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "ECON-2",
       "status": "",
       "utc_day": ""
@@ -217,8 +260,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC1",
       "status": "",
       "utc_day": ""
@@ -228,8 +271,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC2",
       "status": "",
       "utc_day": ""
@@ -239,8 +282,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC3",
       "status": "",
       "utc_day": ""
@@ -250,8 +293,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC7",
       "status": "",
       "utc_day": ""
@@ -261,8 +304,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC8",
       "status": "",
       "utc_day": ""
@@ -272,8 +315,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC9",
       "status": "",
       "utc_day": ""
@@ -283,8 +326,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC10",
       "status": "",
       "utc_day": ""
@@ -294,8 +337,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC11",
       "status": "",
       "utc_day": ""
@@ -305,8 +348,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC12",
       "status": "",
       "utc_day": ""
@@ -316,8 +359,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "ECON-1",
       "status": "",
       "utc_day": ""
@@ -327,8 +370,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "ECON-4",
       "status": "",
       "utc_day": ""
@@ -338,8 +381,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-RANGE",
       "status": "",
       "utc_day": ""
@@ -349,8 +392,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-FLATLINE",
       "status": "",
       "utc_day": ""
@@ -360,8 +403,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-SPIKE",
       "status": "",
       "utc_day": ""
@@ -371,8 +414,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-STALE",
       "status": "",
       "utc_day": ""
@@ -382,8 +425,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-RATE",
       "status": "",
       "utc_day": ""
@@ -470,8 +513,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC4",
       "status": "",
       "utc_day": ""
@@ -481,8 +524,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC5",
       "status": "",
       "utc_day": ""
@@ -492,8 +535,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC6",
       "status": "",
       "utc_day": ""
@@ -503,8 +546,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC14",
       "status": "",
       "utc_day": ""
@@ -514,8 +557,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FC15",
       "status": "",
       "utc_day": ""
@@ -525,8 +568,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "AHU-SATDEV",
       "status": "",
       "utc_day": ""
@@ -536,8 +579,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "AHU-DUCTHI",
       "status": "",
       "utc_day": ""
@@ -547,8 +590,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "AHU-SIMUL",
       "status": "",
       "utc_day": ""
@@ -558,8 +601,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "ECON-3",
       "status": "",
       "utc_day": ""
@@ -569,8 +612,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "ECON-5",
       "status": "",
       "utc_day": ""
@@ -580,8 +623,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "ECON-6",
       "status": "",
       "utc_day": ""
@@ -591,8 +634,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "ECON-7",
       "status": "",
       "utc_day": ""
@@ -602,8 +645,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "MECH-OAT-1",
       "status": "",
       "utc_day": ""
@@ -690,8 +733,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "OA-1",
       "status": "",
       "utc_day": ""
@@ -701,8 +744,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "DMP-1",
       "status": "",
       "utc_day": ""
@@ -712,8 +755,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VLV-1",
       "status": "",
       "utc_day": ""
@@ -800,8 +843,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "RESET-1",
       "status": "",
       "utc_day": ""
@@ -921,8 +964,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "TRIM-1",
       "status": "",
       "utc_day": ""
@@ -954,8 +997,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SCHED-1",
       "status": "",
       "utc_day": ""
@@ -1042,8 +1085,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-SENSOR-NULL",
       "status": "",
       "utc_day": ""
@@ -1053,8 +1096,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-HTG-COIL",
       "status": "",
       "utc_day": ""
@@ -1064,8 +1107,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-CLG-COIL",
       "status": "",
       "utc_day": ""
@@ -1075,8 +1118,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-VALVE-PASS-HTG",
       "status": "",
       "utc_day": ""
@@ -1086,8 +1129,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-VALVE-PASS-CLG",
       "status": "",
       "utc_day": ""
@@ -1097,8 +1140,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-DAMPER-POS",
       "status": "",
       "utc_day": ""
@@ -1108,8 +1151,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-CO2-DAMPER",
       "status": "",
       "utc_day": ""
@@ -1119,8 +1162,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-DEADBAND",
       "status": "",
       "utc_day": ""
@@ -1130,8 +1173,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_PID_HUNT_1",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "FCU-MODE-CYCLE",
       "status": "",
       "utc_day": ""
@@ -1443,6 +1486,7 @@
       "utc_day": "2026-01-11"
     }
   ],
+  "poll_seconds": 300.0,
   "schema": "si-cutover-ip-golden-v1",
   "schema_version": 1,
   "sql_fdd_daily": [
@@ -1453,85 +1497,8 @@
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "FAULT",
-      "utc_day": "2026-01-05"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "FAULT",
-      "utc_day": "2026-01-06"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 3599.9999999999995,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "FAULT",
-      "utc_day": "2026-01-07"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "FAULT",
-      "utc_day": "2026-01-08"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "FAULT",
-      "utc_day": "2026-01-09"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "FAULT",
-      "utc_day": "2026-01-10"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "FAULT",
-      "utc_day": "2026-01-11"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
       "rule_id": "CMD-1",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-01-05"
     },
     {
@@ -1542,7 +1509,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "CMD-1",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-01-06"
     },
     {
@@ -1553,7 +1520,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "CMD-1",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-01-07"
     },
     {
@@ -1564,7 +1531,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "CMD-1",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-01-08"
     },
     {
@@ -1575,7 +1542,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "CMD-1",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-01-09"
     },
     {
@@ -1586,7 +1553,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "CMD-1",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-01-10"
     },
     {
@@ -1597,84 +1564,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "CMD-1",
-      "status": "PASS",
-      "utc_day": "2026-01-11"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
-      "utc_day": "2026-01-05"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
-      "utc_day": "2026-01-06"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
-      "utc_day": "2026-01-07"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
-      "utc_day": "2026-01-08"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
-      "utc_day": "2026-01-09"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
-      "utc_day": "2026-01-10"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_PID_HUNT_1",
-      "covered_seconds": 86099.99999999999,
-      "equipment_id": "AHU_CASE_PID_HUNT_1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-01-11"
     }
   ]

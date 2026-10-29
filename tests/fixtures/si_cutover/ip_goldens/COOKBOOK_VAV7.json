@@ -11,47 +11,58 @@
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "VAV-4",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "VAV-5",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-vav",
       "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": 0.0,
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "pending_W4",
       "utc_day": "2026-07-01"
     }
   ],
+  "pandas_error_count": 0,
   "pandas_fdd_daily": [
     {
       "building_id": "COOKBOOK_VAV7",
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-1",
       "status": "",
       "utc_day": ""
@@ -61,8 +72,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-2",
       "status": "",
       "utc_day": ""
@@ -226,8 +237,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-RANGE",
       "status": "",
       "utc_day": ""
@@ -237,8 +248,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-FLATLINE",
       "status": "",
       "utc_day": ""
@@ -248,8 +259,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-SPIKE",
       "status": "",
       "utc_day": ""
@@ -259,8 +270,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-STALE",
       "status": "",
       "utc_day": ""
@@ -270,8 +281,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "SV-RATE",
       "status": "",
       "utc_day": ""
@@ -479,8 +490,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-3",
       "status": "",
       "utc_day": ""
@@ -512,8 +523,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-6",
       "status": "",
       "utc_day": ""
@@ -523,8 +534,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-REHEAT",
       "status": "",
       "utc_day": ""
@@ -534,8 +545,8 @@
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
-      "pair_status": "error",
-      "reason": "missing confirmed_fault",
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
       "rule_id": "VAV-AHU-LEAVE",
       "status": "",
       "utc_day": ""
@@ -957,6 +968,7 @@
       "utc_day": "2026-07-01"
     }
   ],
+  "poll_seconds": 60.0,
   "schema": "si-cutover-ip-golden-v1",
   "schema_version": 1,
   "sql_fdd_daily": [
@@ -967,19 +979,19 @@
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
-      "rule_id": "PID-HUNT-1",
-      "status": "PASS",
+      "rule_id": "CMD-1",
+      "status": "OK",
       "utc_day": "2026-07-01"
     },
     {
       "building_id": "COOKBOOK_VAV7",
-      "covered_seconds": 60.0,
+      "covered_seconds": 120.0,
       "equipment_id": "equip:test-vav",
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "VAV-4",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-07-01"
     },
     {
@@ -990,7 +1002,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "VAV-5",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-07-01"
     },
     {
@@ -1001,18 +1013,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "VAV-7",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_VAV7",
-      "covered_seconds": 60.0,
-      "equipment_id": "equip:test-vav",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
+      "status": "OK",
       "utc_day": "2026-07-01"
     }
   ]

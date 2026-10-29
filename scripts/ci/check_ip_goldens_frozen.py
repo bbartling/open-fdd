@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import filecmp
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -15,11 +16,15 @@ GOLDENS = ROOT / "tests" / "fixtures" / "si_cutover" / "ip_goldens"
 def main() -> int:
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
+    url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
+    if not url:
+        print("FAIL ip_goldens: OPENFDD_DATABASE_URL required for regeneration check", file=sys.stderr)
+        return 1
     from scripts.stress.si_cutover.ci_fixtures_lib import emit_all_goldens
 
     with tempfile.TemporaryDirectory(prefix="ip-goldens-regen-") as tmp:
         tmp_dir = Path(tmp)
-        emit_all_goldens(tmp_dir)
+        emit_all_goldens(tmp_dir, database_url=url)
         committed = sorted(GOLDENS.glob("*.json"))
         generated = sorted(tmp_dir.glob("*.json"))
         if [p.name for p in committed] != [p.name for p in generated]:

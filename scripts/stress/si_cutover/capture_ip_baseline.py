@@ -578,7 +578,7 @@ def collect_pandas_fdd_rows(
     window_end: str,
     pandas_max_rules: int | None,
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
-    from open_fdd.analytics.units import stamp_display_units
+    from open_fdd.analytics.units import apply_unit_metadata
     from open_fdd.rules import RULES_BY_ID, run_rule
 
     import pandas as pd
@@ -656,7 +656,7 @@ def collect_pandas_fdd_rows(
                 out.append({**base, "pair_status": "error", "reason": str(exc)})
                 coverage["error"] += 1
                 continue
-            stamp_display_units(frame, {"unit_system": "imperial"})
+            apply_unit_metadata(frame, {"unit_system": "imperial"})
             start = pd.Timestamp(window_start, tz="UTC")
             end = pd.Timestamp(window_end, tz="UTC")
             frame = frame.loc[(frame.index >= start) & (frame.index < end)]
@@ -1005,7 +1005,10 @@ def main(argv: list[str] | None = None) -> int:
             sys.path.insert(0, str(REPO))
         from si_cutover.ci_fixtures_lib import emit_all_goldens
 
-        paths = emit_all_goldens(args.ci_fixtures_emit_goldens)
+        url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
+        if not url:
+            raise SystemExit("--ci-fixtures-emit-goldens requires OPENFDD_DATABASE_URL")
+        paths = emit_all_goldens(args.ci_fixtures_emit_goldens, database_url=url)
         safe_print(f"PASS ci-fixtures emit — {len(paths)} golden(s) → {args.ci_fixtures_emit_goldens}")
         return 0
 

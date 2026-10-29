@@ -76,7 +76,7 @@ SYNTH_EQUIPMENT_TYPES: dict[str, str] = {
     "AHU_CASE_SCHED_1": "ahu",
     "AHU_CASE_PID_HUNT_1": "ahu",
     "AHU_CASE_SV_FLATLINE": "ahu",
-    "CHILLER_CASE_MECH_OAT_1": "chiller",
+    "CHILLER_CASE_MECH_OAT_1": "chwPlant",
     "VAV_CASE_VAV_1": "vav",
 }
 
@@ -238,10 +238,19 @@ def _role_unit(role: str) -> str | None:
     return str(u)
 
 
+def _apply_unit_metadata(frame, unit_system: str) -> None:
+    try:
+        from open_fdd.analytics.units import apply_unit_metadata
+
+        apply_unit_metadata(frame, {"unit_system": unit_system})
+    except ImportError:
+        from open_fdd.analytics.units import stamp_display_units
+
+        stamp_display_units(frame, {"unit_system": unit_system})
+
+
 def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, float], float] | None = None):
     import pandas as pd
-
-    from open_fdd.analytics.units import stamp_display_units
 
     out = frame.copy()
     role_units: dict[str, str] = {}
@@ -275,21 +284,21 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
         role_units[str(col)] = "°C" if q == "absolute_temperature" else unit
     out.attrs["unit_system"] = "metric"
     out.attrs["role_units"] = role_units
-    stamp_display_units(out, {"unit_system": "metric"})
+    _apply_unit_metadata(out, "metric")
     return out
 
 
 def prepare_ip_frame(frame, *, building_id: str, equipment_id: str, equipment_type: str):
-    from open_fdd.analytics.units import stamp_display_units
-
     out = frame.copy()
+    if "fan-cmd" in out.columns and "fan-status" not in out.columns:
+        out["fan-status"] = out["fan-cmd"]
     out.attrs.update(
         equipment_id=equipment_id,
         building_id=building_id,
         equipment_type=equipment_type,
         unit_system="imperial",
     )
-    stamp_display_units(out, {"unit_system": "imperial"})
+    _apply_unit_metadata(out, "imperial")
     return out
 
 
@@ -300,9 +309,9 @@ def run_rule_daily_rows(
     building_id: str,
     equipment_id: str,
     params: dict[str, float],
-    unit_system: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
-    """Returns (ip_or_si daily rows, p2 pairs for SI path, pair_status summary)."""
+    poll_seconds: float,
+) -> list[dict[str, Any]]:
+    """Pandas oracle daily rows (IP or SI frame)."""
     from open_fdd.rules import RULES_BY_ID, run_rule
 
     rule_id = str(rule.get("rule_id") or "")
@@ -320,38 +329,42 @@ def run_rule_daily_rows(
     kinds = rule.get("equipment_kinds") or []
     etype = str(frame.attrs.get("equipment_type") or "")
     if kinds and etype and etype not in kinds:
-        row = {**base, "pair_status": "not_applicable", "reason": "equipment_type"}
-        return [row], [], "not_applicable"
+        return [{**base, "pair_status": "not_applicable", "reason": "equipment_type"}]
     if rule_id not in RULES_BY_ID:
-        return [{**base, "pair_status": "not_applicable", "reason": "unknown_rule"}], [], "na"
+        return [{**base, "pair_status": "not_applicable", "reason": "unknown_rule"}]
+    if not rule.get("pandas_function") and rule_id not in RULES_BY_ID:
+        return [{**base, "pair_status": "no_pandas_function", "reason": ""}]
     if frame.empty:
-        return [{**base, "pair_status": "not_applicable", "reason": "empty_window"}], [], "empty"
+        return [{**base, "pair_status": "not_applicable", "reason": "empty_window"}]
 
-    poll = float(rule.get("confirm_seconds") or 0) or POLL_SECONDS
     try:
         result = run_rule(
             rule_id,
             frame,
             params=params,
-            poll_seconds=poll,
+            poll_seconds=float(poll_seconds),
             require_operational_gates=True,
         )
+    except KeyError as exc:
+        return [{**base, "pair_status": "not_applicable", "reason": f"missing_role:{exc}"}]
     except Exception as exc:
-        return [{**base, "pair_status": "error", "reason": str(exc)[:200]}], [], "error"
+        return [{**base, "pair_status": "error", "reason": str(exc)[:200]}]
 
     confirmed = getattr(result, "confirmed_fault", None)
     if confirmed is None:
-        return [
-            {**base, "pair_status": "error", "reason": "missing confirmed_fault"}
-        ], [], "error"
+        status = str(getattr(result, "status", ""))
+        if status == "NOT_ASSESSED_NO_OCCUPANCY":
+            return [{**base, "pair_status": "not_applicable", "reason": "missing_occupancy_roles"}]
+        if status == "SKIPPED_MISSING_ROLES":
+            return [{**base, "pair_status": "not_applicable", "reason": "missing_roles"}]
+        return [{**base, "pair_status": "error", "reason": "missing confirmed_fault on result"}]
 
     status = str(getattr(result, "status", "OK"))
     fault_by_day, covered_by_day = daily_fault_and_covered_seconds(
-        confirmed, frame.index, poll_seconds=poll
+        confirmed, frame.index, poll_seconds=float(poll_seconds)
     )
     days = sorted(set(fault_by_day) | set(covered_by_day)) or [""]
     rows: list[dict[str, Any]] = []
-    p2_pairs: list[dict[str, Any]] = []
     for day in days:
         fs = fault_by_day.get(day, 0.0) if day else 0.0
         cs = covered_by_day.get(day, 0.0) if day else 0.0
@@ -364,87 +377,24 @@ def run_rule_daily_rows(
                 "pair_status": "computed",
                 "reason": "",
                 "status": status,
-                "unit_system": unit_system,
             }
         )
-        if unit_system == "si" and day:
-            p2_pairs.append(
-                {
-                    "rule_id": rule_id,
-                    "equipment_id": equipment_id,
-                    "utc_day": day,
-                    "sql_si_fault_seconds": fs,
-                    "pandas_si_fault_seconds": fs,
-                }
-            )
-    return rows, p2_pairs, "computed"
-
-
-def _inject_vav1_band_rows(
-    spec: DatasetSpec,
-    metric: dict[str, Any],
-    sql_rows: list[dict[str, Any]],
-    pandas_rows: list[dict[str, Any]],
-    si_rows: list[dict[str, Any]],
-    p2_pairs: list[dict[str, Any]],
-) -> None:
-    """Cookbook VAV-1 jsonl lacks occupancy roles; inject aligned IP/SI band seconds."""
-    if any(r.get("rule_id") == "VAV-1" for r in sql_rows):
-        return
-    frame = spec.source["frame"]
-    utc_day = str(frame.index[0].date())
-    lo_f = 70.0
-    hi_f = 75.0
-    lo_c = uc.convert_to_canonical(metric, "absolute_temperature", lo_f, "degF")
-    hi_c = uc.convert_to_canonical(metric, "absolute_temperature", hi_f, "degF")
-    ip_out = 0
-    si_out = 0
-    for ts, row in frame.iterrows():
-        zt = float(row.get("zone_t", row.get("zone-air-temp", float("nan"))))
-        if zt < lo_f or zt > hi_f:
-            ip_out += 1
-        zc = uc.convert_to_canonical(metric, "absolute_temperature", zt, "degF")
-        if zc < lo_c or zc > hi_c:
-            si_out += 1
-    poll = 300.0
-    ip_sec = float(ip_out) * poll
-    si_sec = float(si_out) * poll
-    if abs(ip_sec - si_sec) > 1e-9:
-        return
-    base = {
-        "building_id": spec.building_id,
-        "rule_id": "VAV-1",
-        "equipment_id": spec.equipment_id,
-        "utc_day": utc_day,
-        "fault_seconds": ip_sec,
-        "covered_seconds": float(len(frame)) * poll,
-        "status": "FAULT" if ip_sec > 0 else "OK",
-        "pair_status": "computed",
-        "reason": "",
-    }
-    sql_rows.append(dict(base))
-    pandas_rows.append(dict(base))
-    si_rows.append(dict(base))
-    p2_pairs.append(
-        {
-            "rule_id": "VAV-1",
-            "equipment_id": spec.equipment_id,
-            "utc_day": utc_day,
-            "sql_si_fault_seconds": si_sec,
-            "pandas_si_fault_seconds": si_sec,
-        }
-    )
+    return rows
 
 
 def build_golden_for_dataset(
     spec: DatasetSpec,
     rules: list[dict[str, Any]],
     metric: dict[str, Any],
+    conn,
     *,
     param_hook: Callable[[str, str, float], float] | None = None,
     value_hook: Callable[[str, str, float], float] | None = None,
 ) -> dict[str, Any]:
+    from scripts.stress.si_cutover import ci_timescale_sql as cts
+
     frame_raw = spec.source["frame"]
+    poll_seconds = cts.infer_poll_seconds(frame_raw.index)
     ip_frame = prepare_ip_frame(
         frame_raw,
         building_id=spec.building_id,
@@ -462,10 +412,18 @@ def build_golden_for_dataset(
             return value_hook(spec.building_id, col, val)
         return val
 
-    sql_rows: list[dict[str, Any]] = []
+    sql_rows, _sql_exec_notes = cts.run_sql_ip_for_dataset(
+        conn,
+        spec=spec,
+        frame=ip_frame,
+        equipment_id=spec.equipment_id,
+        rules=rules,
+        poll_seconds=poll_seconds,
+    )
+
     pandas_rows: list[dict[str, Any]] = []
-    p2_pairs: list[dict[str, Any]] = []
     si_rows_for_p1: list[dict[str, Any]] = []
+    p2_pairs: list[dict[str, Any]] = []
 
     for rule in rules:
         rule_id = str(rule.get("rule_id") or "")
@@ -474,53 +432,53 @@ def build_golden_for_dataset(
         def ph(name: str, val: float) -> float:
             return _param_hook(rule_id, name, val)
 
-        ip_daily, _, _ = run_rule_daily_rows(
+        ip_daily = run_rule_daily_rows(
             rule,
             ip_frame,
             building_id=spec.building_id,
             equipment_id=spec.equipment_id,
             params=params_ip,
-            unit_system="ip",
+            poll_seconds=poll_seconds,
         )
+        for row in ip_daily:
+            pandas_rows.append(dict(row))
+
         si_frame = frame_to_si(ip_frame, metric, value_hook=lambda c, v: _value_hook(c, v))
         params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
-        si_daily, si_p2, _ = run_rule_daily_rows(
+        si_daily = run_rule_daily_rows(
             rule,
             si_frame,
             building_id=spec.building_id,
             equipment_id=spec.equipment_id,
             params=params_si,
-            unit_system="si",
+            poll_seconds=poll_seconds,
         )
         si_by_key = {
             si_fault_key(r): r
             for r in si_daily
             if r.get("pair_status") == "computed" and r.get("utc_day")
         }
+        for si_row in si_daily:
+            if si_row.get("pair_status") == "computed" and si_row.get("utc_day"):
+                si_rows_for_p1.append(dict(si_row))
         for row in ip_daily:
-            clean = {k: v for k, v in row.items() if k != "unit_system"}
-            pandas_rows.append(dict(clean))
             if row.get("pair_status") != "computed" or not row.get("utc_day"):
                 continue
             key = si_fault_key(row)
             si_row = si_by_key.get(key)
-            if si_row is None:
-                continue
-            if abs(float(row.get("fault_seconds", 0)) - float(si_row.get("fault_seconds", 0))) > 1e-9:
-                continue
-            sql_rows.append(dict(clean))
-            si_rows_for_p1.append({k: v for k, v in si_row.items() if k != "unit_system"})
-        p2_pairs.extend(si_p2)
+            p2_pairs.append(
+                cts.p2_pair_for_si_row(
+                    rule_id=rule_id,
+                    equipment_id=spec.equipment_id,
+                    utc_day=str(row.get("utc_day")),
+                    pandas_si_fault_seconds=float(
+                        si_row.get("fault_seconds", 0.0) if si_row else 0.0
+                    ),
+                    pandas_si_missing=si_row is None,
+                )
+            )
 
-    if spec.building_id == "COOKBOOK_VAV1":
-        _inject_vav1_band_rows(
-            spec,
-            metric,
-            sql_rows,
-            pandas_rows,
-            si_rows_for_p1,
-            p2_pairs,
-        )
+    error_rows = [r for r in pandas_rows if r.get("pair_status") == "error"]
     attempted_rules = sorted({str(r.get("rule_id")) for r in pandas_rows if r.get("rule_id")})
     golden: dict[str, Any] = {
         "schema": SCHEMA,
@@ -529,14 +487,14 @@ def build_golden_for_dataset(
         "dataset": {k: v for k, v in spec.source.items() if k != "frame"},
         "equipment_id": spec.equipment_id,
         "equipment_type": spec.equipment_type,
+        "poll_seconds": poll_seconds,
         "pandas_rules_attempted": attempted_rules,
         "sql_fdd_daily": sql_rows,
         "pandas_fdd_daily": pandas_rows,
         "p2_si_pairs": p2_pairs,
-        "pandas_si_daily": [
-            {k: v for k, v in r.items() if k != "unit_system"} for r in si_rows_for_p1
-        ],
+        "pandas_si_daily": si_rows_for_p1,
         "analytics_rows": [],
+        "pandas_error_count": len(error_rows),
     }
     if spec.building_id == "SYNTH_AHU_CASE_SV_FLATLINE":
         golden["analytics_rows"] = [
@@ -565,87 +523,39 @@ def assert_rule_coverage(golden: dict[str, Any], expected_rules: set[str]) -> li
     return []
 
 
-def build_carryover_anchor_golden(metric: dict[str, Any]) -> dict[str, Any]:
-    """Minimal golden rows so P0 carry-over rules appear in the union."""
-    building_id = "CI_CARRYOVER_ANCHOR"
-    equipment_id = "equip:carryover-vav"
-    utc_day = "2026-07-01"
-    fault_seconds = 900.0
-    rows = []
-    for rule_id in ("VAV-1", "SV-FLATLINE", "SV-RANGE", "SV-STALE"):
-        base = {
-            "building_id": building_id,
-            "rule_id": rule_id,
-            "equipment_id": equipment_id,
-            "utc_day": utc_day,
-            "fault_seconds": fault_seconds,
-            "covered_seconds": 3600.0,
-            "status": "FAULT",
-            "pair_status": "computed",
-            "reason": "",
-        }
-        rows.append(base)
-    analytics = [
-        {
-            "building_id": building_id,
-            "endpoint": "/api/analytics/oat_meteo",
-            "row": {"mean_abs_diff_f": 0.25, "pandas_mean_abs_diff_f": 0.25},
-        }
-    ]
-    p2 = [
-        {
-            "rule_id": r["rule_id"],
-            "equipment_id": equipment_id,
-            "utc_day": utc_day,
-            "sql_si_fault_seconds": fault_seconds,
-            "pandas_si_fault_seconds": fault_seconds,
-        }
-        for r in rows
-    ]
-    return {
-        "schema": SCHEMA,
-        "schema_version": GOLDEN_SCHEMA_VERSION,
-        "building_id": building_id,
-        "dataset": {"kind": "carryover_anchor"},
-        "equipment_id": equipment_id,
-        "equipment_type": "vav",
-        "pandas_rules_attempted": [],
-        "sql_fdd_daily": [dict(r) for r in rows],
-        "pandas_fdd_daily": [dict(r) for r in rows],
-        "pandas_si_daily": [dict(r) for r in rows],
-        "p2_si_pairs": p2,
-        "analytics_rows": analytics,
-    }
+def emit_all_goldens(out_dir: Path, *, database_url: str) -> list[Path]:
+    from scripts.stress.si_cutover.ci_timescale_sql import _load_parity_module
 
-
-def emit_all_goldens(out_dir: Path) -> list[Path]:
     metric = uc.load_json(uc.METRIC_UNITS)
     rules = load_rule_registry()
     prules = pandas_rules(rules)
     expected = expected_pandas_rule_ids(rules)
     out_dir.mkdir(parents=True, exist_ok=True)
+    parity = _load_parity_module()
+    conn = parity.connect_with_retry(database_url)
     written: list[Path] = []
-    for spec in iter_dataset_specs():
-        golden = build_golden_for_dataset(spec, prules, metric)
-        errs = assert_rule_coverage(golden, expected)
-        if errs:
-            raise RuntimeError("; ".join(errs))
-        path = out_dir / f"{spec.building_id}.json"
-        path.write_text(json.dumps(golden, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        written.append(path)
-    anchor = build_carryover_anchor_golden(metric)
-    anchor["pandas_rules_attempted"] = sorted(expected)
-    anchor_path = out_dir / f"{anchor['building_id']}.json"
-    anchor_path.write_text(json.dumps(anchor, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    written.append(anchor_path)
+    try:
+        for spec in iter_dataset_specs():
+            golden = build_golden_for_dataset(spec, prules, metric, conn)
+            errs = assert_rule_coverage(golden, expected)
+            if errs:
+                raise RuntimeError("; ".join(errs))
+            if int(golden.get("pandas_error_count") or 0) > 0:
+                raise RuntimeError(
+                    f"{spec.building_id}: {golden['pandas_error_count']} pandas error rows "
+                    "(fix fixture/rules before emitting goldens)"
+                )
+            path = out_dir / f"{spec.building_id}.json"
+            path.write_text(json.dumps(golden, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            written.append(path)
+    finally:
+        conn.close()
     return written
 
 
 def reload_dataset_frame(golden: dict[str, Any]):
     ds = golden.get("dataset") or {}
     kind = ds.get("kind")
-    if kind == "carryover_anchor":
-        raise ValueError("carryover_anchor has no historian frame")
     if kind == "cookbook":
         frame, equipment_id = _load_cookbook_frame(str(ds["fixture"]))
     elif kind == "synth":
@@ -698,13 +608,13 @@ def recompute_si_daily_for_golden(
             value_hook=lambda c, v: value_hook(building_id, c, v) if value_hook else v,
         )
         params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
-        si_daily, _, _ = run_rule_daily_rows(
+        si_daily = run_rule_daily_rows(
             rule,
             si_frame,
             building_id=building_id,
             equipment_id=equipment_id,
             params=params_si,
-            unit_system="si",
+            poll_seconds=float(golden.get("poll_seconds") or 300.0),
         )
         for row in si_daily:
             if row.get("pair_status") != "computed" or not row.get("utc_day"):

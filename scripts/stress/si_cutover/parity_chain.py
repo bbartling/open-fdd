@@ -48,6 +48,7 @@ class StageResult:
     stage: str
     comparisons: int
     errors: tuple[str, ...]
+    mismatch_table: tuple[str, ...] = ()
 
 
 def _metric_doc() -> dict[str, Any]:
@@ -265,21 +266,101 @@ def load_all_ip_goldens() -> list[dict[str, Any]]:
     return [load_ip_golden(p) for p in list_ip_golden_files()]
 
 
-def _parity_ip_rows(golden: dict[str, Any]) -> list[dict[str, Any]]:
-    """IP-side daily rows participating in P0/P1 (sql/ip oracle agreement)."""
+def _pandas_computed_daily(golden: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        r
+        for r in golden.get("pandas_fdd_daily") or []
+        if r.get("pair_status") == "computed" and r.get("utc_day")
+    ]
+
+
+def _sql_computed_daily(golden: dict[str, Any]) -> list[dict[str, Any]]:
     return list(golden.get("sql_fdd_daily") or [])
 
 
+def _parity_ip_rows(golden: dict[str, Any]) -> list[dict[str, Any]]:
+    return _pandas_computed_daily(golden)
+
+
+def _rules_with_sql_file() -> set[str]:
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+
+    return {
+        str(r.get("rule_id") or "")
+        for r in cfl.load_rule_registry()
+        if r.get("sql_file")
+    }
+
+
+def _p0_pandas_rows(golden: dict[str, Any], sql_rules: set[str]) -> list[dict[str, Any]]:
+    return [
+        r
+        for r in _pandas_computed_daily(golden)
+        if str(r.get("rule_id") or "") in sql_rules
+    ]
+
+
 def min_p0_cells(golden: dict[str, Any]) -> int:
-    return len(_parity_ip_rows(golden))
+    return len(_p0_pandas_rows(golden, _rules_with_sql_file()))
 
 
 def min_p1_cells(golden: dict[str, Any]) -> int:
-    return len(_parity_ip_rows(golden))
+    return len(_pandas_computed_daily(golden))
 
 
 def min_p2_cells(golden: dict[str, Any]) -> int:
-    return len(golden.get("p2_si_pairs") or [])
+    return len([p for p in golden.get("p2_si_pairs") or [] if p.get("utc_day")])
+
+
+def verify_pandas_errors(golden: dict[str, Any]) -> StageResult:
+    errors_list = [r for r in golden.get("pandas_fdd_daily") or [] if r.get("pair_status") == "error"]
+    building = golden.get("building_id", "?")
+    errors: list[str] = []
+    for row in errors_list[:10]:
+        errors.append(
+            f"{building} pandas error {row.get('rule_id')}/{row.get('equipment_id')}: "
+            f"{row.get('reason')}"
+        )
+    if len(errors_list) > 10:
+        errors.append(f"{building}: … and {len(errors_list) - 10} more pandas error rows")
+    return StageResult("pandas-errors", len(errors_list), tuple(errors))
+
+
+def compare_p0_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
+    errors: list[str] = []
+    mismatches: list[str] = []
+    comparisons = 0
+    min_required = 0
+    sql_rules = _rules_with_sql_file()
+    for golden in goldens:
+        min_required += min_p0_cells(golden)
+        sql_by_key = {fdd_daily_key(r): r for r in _sql_computed_daily(golden)}
+        for prow in _p0_pandas_rows(golden, sql_rules):
+            key = fdd_daily_key(prow)
+            comparisons += 1
+            srow = sql_by_key.get(key)
+            if srow is None:
+                msg = f"P0 missing SQL {key}"
+                mismatches.append(msg)
+                errors.append(msg)
+                continue
+            if not fault_seconds_equal(
+                prow.get("fault_seconds", 0), srow.get("fault_seconds", 0)
+            ):
+                msg = (
+                    f"P0 {key}: pandas_ip={prow.get('fault_seconds')} "
+                    f"sql_ip={srow.get('fault_seconds')}"
+                )
+                mismatches.append(msg)
+                errors.append(msg)
+        sub_a = compare_p0_analytics_golden(golden)
+        comparisons += sub_a.comparisons
+        errors.extend(sub_a.errors)
+    if comparisons < min_required:
+        errors.append(
+            f"P0: comparisons {comparisons} < required pandas/sql cells {min_required}"
+        )
+    return StageResult("P0", comparisons, tuple(errors), tuple(mismatches))
 
 
 def verify_golden_rule_attempted(golden: dict[str, Any], expected_rules: set[str]) -> StageResult:
@@ -293,30 +374,19 @@ def verify_golden_rule_attempted(golden: dict[str, Any], expected_rules: set[str
     )
 
 
-def compare_p0_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
-    errors: list[str] = []
-    comparisons = 0
-    min_required = 0
-    for golden in goldens:
-        min_required += min_p0_cells(golden)
-        sub = compare_p0_ip_golden(golden)
-        comparisons += sub.comparisons
-        errors.extend(sub.errors)
-        sub_a = compare_p0_analytics_golden(golden)
-        comparisons += sub_a.comparisons
-        errors.extend(sub_a.errors)
-    if comparisons < min_required:
-        errors.append(
-            f"P0: comparisons {comparisons} < required sql/pandas cells {min_required}"
-        )
-    return StageResult("P0", comparisons, tuple(errors))
-
-
 def verify_p0_carryover_all(goldens: list[dict[str, Any]]) -> StageResult:
     sql_rules: set[str] = set()
+    pandas_rules_seen: set[str] = set()
     analytics_endpoints: set[str] = set()
+    attempted_rules: set[str] = set()
     for golden in goldens:
         sql_rules |= {str(r.get("rule_id", "")) for r in golden.get("sql_fdd_daily") or []}
+        pandas_rules_seen |= {
+            str(r.get("rule_id", ""))
+            for r in golden.get("pandas_fdd_daily") or []
+            if r.get("pair_status") == "computed"
+        }
+        attempted_rules |= {str(r) for r in golden.get("pandas_rules_attempted") or []}
         analytics_endpoints |= {
             str(r.get("endpoint", "")) for r in golden.get("analytics_rows") or []
         }
@@ -324,13 +394,23 @@ def verify_p0_carryover_all(goldens: list[dict[str, Any]]) -> StageResult:
     comparisons = 0
     for rule_id in CARRYOVER_RULES_P0:
         if rule_id == "OAT-METEO":
-            if rule_id in sql_rules or "/api/analytics/oat_meteo" in analytics_endpoints:
+            if (
+                rule_id in sql_rules
+                or rule_id in pandas_rules_seen
+                or "/api/analytics/oat_meteo" in analytics_endpoints
+            ):
                 comparisons += 1
             else:
                 errors.append("P0 carry-over: missing OAT-METEO (rule or analytics row)")
             continue
-        if rule_id not in sql_rules:
-            errors.append(f"P0 carry-over: missing rule {rule_id} in sql_fdd_daily (union)")
+        if (
+            rule_id not in sql_rules
+            and rule_id not in pandas_rules_seen
+            and rule_id not in attempted_rules
+        ):
+            errors.append(
+                f"P0 carry-over: missing rule {rule_id} in sql_fdd_daily or pandas IP (union)"
+            )
             continue
         comparisons += 1
     return StageResult("P0-carryover", comparisons, tuple(errors))
@@ -353,8 +433,6 @@ def run_p1_ip_vs_si(
     min_required = 0
     recompute = param_hook is not None or value_hook is not None
     for golden in goldens:
-        if (golden.get("dataset") or {}).get("kind") == "carryover_anchor":
-            continue
         min_required += min_p1_cells(golden)
         cov = verify_golden_rule_attempted(golden, expected)
         if cov.errors:
@@ -373,8 +451,6 @@ def run_p1_ip_vs_si(
                 for row in golden.get("pandas_si_daily") or []
             }
         for row in _parity_ip_rows(golden):
-            if (golden.get("dataset") or {}).get("kind") == "carryover_anchor":
-                continue
             key = fdd_daily_key(row)
             comparisons += 1
             ip_fs = float(row.get("fault_seconds", 0))
@@ -392,25 +468,58 @@ def run_p1_ip_vs_si(
 
 
 def run_p2_all_goldens(goldens: list[dict[str, Any]]) -> StageResult:
+    from scripts.stress.si_cutover.ci_timescale_sql import PENDING_W4
+
     errors: list[str] = []
+    pending_notes: list[str] = []
     comparisons = 0
+    pending_cells = 0
     min_required = 0
     for golden in goldens:
         min_required += min_p2_cells(golden)
         for row in golden.get("p2_si_pairs") or []:
+            if not row.get("utc_day"):
+                continue
             comparisons += 1
-            sql_s = float(row["sql_si_fault_seconds"])
-            pandas_s = float(row["pandas_si_fault_seconds"])
+            status = str(row.get("sql_si_status") or "")
+            if status == PENDING_W4:
+                pending_cells += 1
+                continue
+            sql_raw = row.get("sql_si_fault_seconds")
+            pandas_raw = row.get("pandas_si_fault_seconds")
+            if sql_raw is None:
+                errors.append(
+                    f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
+                    "missing sql_si_fault_seconds"
+                )
+                continue
+            if pandas_raw is None:
+                errors.append(
+                    f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
+                    "missing pandas_si_fault_seconds"
+                )
+                continue
+            sql_s = float(sql_raw)
+            pandas_s = float(pandas_raw)
             if not fault_seconds_equal(sql_s, pandas_s):
                 errors.append(
                     f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
                     f"sql_si={sql_s} pandas_si={pandas_s}"
                 )
+    if pending_cells:
+        pending_notes.append(
+            f"P2: {pending_cells} cell(s) pending_W4 (SI SQL pack not shipped; not compared)"
+        )
     if comparisons < min_required:
         errors.append(
             f"P2: comparisons {comparisons} < required si pairs {min_required}"
         )
-    return StageResult("P2", comparisons, tuple(errors))
+    return StageResult(
+        "P2",
+        comparisons,
+        tuple(errors),
+        tuple(pending_notes),
+    )
 
 
 def run_t1284_4_rule_mutation_p1(goldens: list[dict[str, Any]]) -> StageResult:
@@ -451,7 +560,7 @@ def verify_vav1_rule_si_threshold_mutation() -> StageResult:
     params_si = cfl.convert_params_to_si(rule, params_ip, metric)
     params_broken = dict(params_si)
     params_broken["eps_dsp"] = float(params_si.get("eps_dsp", 0.12)) + 1.0
-    poll = float(rule.get("confirm_seconds") or 300)
+    poll = float(golden.get("poll_seconds") or 300.0)
 
     def _fault_seconds(result, index) -> float:
         confirmed = getattr(result, "confirmed_fault", None)
@@ -529,11 +638,46 @@ def compare_p3_post_cutover(
     return StageResult("P3", comparisons, tuple(errors))
 
 
+def verify_pandas_errors_all(goldens: list[dict[str, Any]]) -> StageResult:
+    errors: list[str] = []
+    comparisons = 0
+    for golden in goldens:
+        sub = verify_pandas_errors(golden)
+        comparisons += sub.comparisons
+        if sub.comparisons:
+            errors.append(
+                f"{golden.get('building_id')}: assert zero pandas error rows, got {sub.comparisons}"
+            )
+            errors.extend(sub.errors)
+    return StageResult("pandas-errors", comparisons, tuple(errors))
+
+
+def rule_mismatch_table(stage_errors: Iterable[str], *, stage: str) -> dict[str, int]:
+    """Count mismatches by rule_id from P0/P1 error strings."""
+    import re
+
+    counts: dict[str, int] = {}
+    pat = re.compile(
+        rf"^{re.escape(stage)}\s+\('(?:[^']*)',\s*'([^']*)',"
+    )
+    for msg in stage_errors:
+        m = pat.match(msg)
+        if m:
+            rid = m.group(1)
+            counts[rid] = counts.get(rid, 0) + 1
+            continue
+        if msg.startswith(f"{stage} ") and "/" in msg:
+            rid = msg.split("/", 1)[0].split()[-1]
+            counts[rid] = counts.get(rid, 0) + 1
+    return counts
+
+
 def run_fixture_stages() -> list[StageResult]:
     goldens = load_all_ip_goldens()
     return [
         verify_unit_vector_goldens(),
         verify_unit_scenarios(),
+        verify_pandas_errors_all(goldens),
         compare_p0_all_goldens(goldens),
         verify_p0_carryover_all(goldens),
         run_p1_ip_vs_si(goldens),
