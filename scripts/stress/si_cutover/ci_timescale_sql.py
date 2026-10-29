@@ -21,7 +21,10 @@ from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
     frame_column_to_sql_role,
     registry_role_column,
 )
-from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_registry  # noqa: E402
+from scripts.stress.si_cutover.product_sql_params import (  # noqa: E402
+    catalog_overrides_from_registry,
+    ip_parameter_controls,
+)
 
 PENDING_W4 = "pending_W4"
 W4D_PLANT_RULES = frozenset(
@@ -99,12 +102,22 @@ def render_rule_sql(
     poll_seconds: float,
     *,
     overrides: dict[str, float] | None = None,
+    storage: str = "si",
 ) -> str:
     sys.path.insert(0, str(REPO / "sql" / "fdd"))
     from render_rule import render  # type: ignore
 
     rule_id = str(rule["rule_id"])
-    return render(rule_id, poll_seconds=poll_seconds, overrides=overrides, dialect="postgres")
+    controls = None
+    if storage == "ip":
+        controls = ip_parameter_controls(rule_id)
+    return render(
+        rule_id,
+        poll_seconds=poll_seconds,
+        overrides=overrides,
+        dialect="postgres",
+        parameter_controls=controls,
+    )
 
 
 def rewrite_fault_series(sql: str, equipment_id: str) -> str | None:
@@ -307,6 +320,7 @@ def execute_sql_rule_daily(
     poll_seconds: float,
     index,
     render_overrides: dict[str, float] | None = None,
+    storage: str = "si",
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Run one postgres rule; return daily rows or (empty, error reason)."""
     import pandas as pd
@@ -316,7 +330,7 @@ def execute_sql_rule_daily(
     if not sql_file:
         return [], "no_sql_file"
     try:
-        sql = render_rule_sql(rule, poll_seconds, overrides=render_overrides)
+        sql = render_rule_sql(rule, poll_seconds, overrides=render_overrides, storage=storage)
     except Exception as exc:
         return [], f"render: {exc}"
 
@@ -443,6 +457,7 @@ def run_sql_ip_for_dataset(
                 poll_seconds=poll_seconds,
                 index=frame.index,
                 render_overrides=render_overrides,
+                storage="ip",
             )
             if err:
                 cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")
@@ -506,6 +521,7 @@ def run_sql_si_for_dataset(
                 poll_seconds=poll_seconds,
                 index=frame.index,
                 render_overrides=render_overrides,
+                storage="si",
             )
             if err:
                 cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")

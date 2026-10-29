@@ -7,6 +7,8 @@ Uses ``sql/fdd/render_rule.render`` (same max(MODE_DELAY_MIN, STARTUP_DELAY_MIN)
 from __future__ import annotations
 
 import json
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,7 @@ REPO = Path(__file__).resolve().parents[3]
 
 RUNTIME_DEFAULTS_PATH = REPO / "sql" / "fdd" / "runtime_defaults.json"
 TUNING_CATALOG_PATH = REPO / "sql" / "fdd" / "tuning_catalog.json"
+RENAME_MAP_PATH = REPO / "sql" / "contract" / "parameter_si_rename_map.json"
 
 MODE_DELAY_DEFAULT_VS_STARTUP = "mode_delay_default_vs_startup_delay"
 
@@ -29,15 +32,51 @@ def catalog_param_keys(rule_id: str) -> set[str]:
     return set((row.get("parameters") or {}).keys())
 
 
+@lru_cache(maxsize=1)
+def _si_rename_to_legacy() -> dict[str, str]:
+    doc = json.loads(RENAME_MAP_PATH.read_text(encoding="utf-8"))
+    return {str(new): str(old) for old, new in (doc.get("renames") or {}).items()}
+
+
+@lru_cache(maxsize=1)
+def _master_w4d_tuning_parameters() -> dict[str, dict[str, Any]]:
+    from scripts.ci.unit_contract_lib import W4D_SI_PLANT_RULES, ensure_origin_master_ref
+
+    ref = ensure_origin_master_ref()
+    proc = subprocess.run(
+        ["git", "show", f"{ref}:sql/fdd/tuning_catalog.json"],
+        cwd=REPO,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return {}
+    rules = json.loads(proc.stdout).get("rules") or []
+    return {
+        str(r["rule_id"]): dict(r.get("parameters") or {})
+        for r in rules
+        if str(r.get("rule_id")) in W4D_SI_PLANT_RULES
+    }
+
+
+def ip_parameter_controls(rule_id: str) -> dict[str, Any] | None:
+    """Imperial tuning_catalog controls for W4d rules on IP SQL / P0 paths."""
+    return _master_w4d_tuning_parameters().get(rule_id)
+
+
 def catalog_overrides_from_registry(
     rule: dict[str, Any], params: dict[str, float]
 ) -> dict[str, float]:
     """Map registry.yaml defaults to tuning_catalog override keys (render_rule input)."""
-    keys = catalog_param_keys(str(rule["rule_id"]))
+    rule_id = str(rule["rule_id"])
+    keys = catalog_param_keys(rule_id)
+    legacy = _si_rename_to_legacy()
     out: dict[str, float] = {}
     for name, val in params.items():
-        if name in keys:
-            out[name] = float(val)
+        key = name if name in keys else legacy.get(name)
+        if key and key in keys:
+            out[key] = float(val)
         elif name == "confirm_seconds" and "confirm_min" in keys:
             out["confirm_min"] = float(val) / 60.0
     return out

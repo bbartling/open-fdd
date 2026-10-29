@@ -7744,21 +7744,6 @@
           "effect_in_sql": true,
           "kind": "duration_minutes",
           "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 1800.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
-          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -7876,21 +7861,6 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true,
           "kind": "duration_minutes",
-          "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 900.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
           "effect": "branch_sensitive"
         }
       },
@@ -8017,21 +7987,6 @@
           "effect_in_sql": true,
           "kind": "duration_minutes",
           "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 300.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
-          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8142,21 +8097,6 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true,
           "kind": "duration_minutes",
-          "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 300.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
           "effect": "branch_sensitive"
         }
       },
@@ -8281,21 +8221,6 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true,
           "kind": "duration_minutes",
-          "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 300.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
           "effect": "branch_sensitive"
         }
       },
@@ -8429,21 +8354,6 @@
           "effect_in_sql": true,
           "kind": "duration_minutes",
           "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 900.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
-          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -8561,21 +8471,6 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true,
           "kind": "duration_minutes",
-          "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 900.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
           "effect": "branch_sensitive"
         },
         "approach_max": {
@@ -8726,21 +8621,6 @@
           "kind": "duration_minutes",
           "effect": "branch_sensitive"
         },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 900.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
-          "effect": "branch_sensitive"
-        },
         "excess_beyond_approach": {
           "key": "excess_beyond_approach",
           "control": "slider",
@@ -8885,21 +8765,6 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true,
           "kind": "duration_minutes",
-          "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 600.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
           "effect": "branch_sensitive"
         }
       },
@@ -9090,21 +8955,6 @@
           "effect_in_sql": true,
           "kind": "duration_minutes",
           "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 1800.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
-          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -9235,21 +9085,6 @@
           "effect_in_sql": true,
           "kind": "duration_minutes",
           "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 1800.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
-          "effect": "branch_sensitive"
         }
       },
       "placeholders": [
@@ -9379,21 +9214,6 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true,
           "kind": "duration_minutes",
-          "effect": "branch_sensitive"
-        },
-        "confirm_seconds": {
-          "key": "confirm_seconds",
-          "control": "slider",
-          "label": "Confirm time",
-          "default": 1800.0,
-          "min": 0.0,
-          "max": 3600.0,
-          "step": 300.0,
-          "unit": "sec",
-          "kind": "duration_seconds",
-          "frontend_control": "slider",
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "effect_in_sql": true,
           "effect": "branch_sensitive"
         }
       },
