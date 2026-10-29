@@ -45,10 +45,10 @@ pub fn resolve_declared_source_unit(
         .or_else(|| ctx.role.and_then(quantity_for_sql_role));
     if let Some(unit) = [
         non_empty(map.unit),
-        non_empty(map.source_unit),
         non_empty(ctx.sample_source_unit),
-        non_empty(ctx.csv_column_unit),
         non_empty(ctx.sample_unit),
+        non_empty(ctx.csv_column_unit),
+        non_empty(map.source_unit),
     ]
     .into_iter()
     .flatten()
@@ -216,6 +216,22 @@ mod tests {
             },
             SampleDeclaredContext {
                 role: Some("sat"),
+                ..Default::default()
+            },
+        );
+        assert_eq!(unit.as_deref(), Some("degC"));
+    }
+
+    #[test]
+    fn sample_unit_beats_stale_point_map_source_unit() {
+        let unit = resolve_declared_source_unit(
+            PointMapBinding {
+                source_unit: Some("degF"),
+                ..Default::default()
+            },
+            SampleDeclaredContext {
+                role: Some("oa_t"),
+                sample_unit: Some("degC"),
                 ..Default::default()
             },
         );

@@ -279,12 +279,12 @@ impl Tsdb {
                 .await?;
                 sqlx::query(
                     r#"
-                    INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, unit, equipment_id)
+                    INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, source_unit, equipment_id)
                     VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (site_id, openfdd_key) DO UPDATE
                       SET haystack_id = EXCLUDED.haystack_id,
                           role = EXCLUDED.role,
-                          unit = COALESCE(EXCLUDED.unit, point_map.unit),
+                          source_unit = COALESCE(EXCLUDED.source_unit, point_map.source_unit),
                           equipment_id = EXCLUDED.equipment_id
                     "#,
                 )
@@ -292,7 +292,11 @@ impl Tsdb {
                 .bind(&row.openfdd_key)
                 .bind(row.haystack_id.as_deref().unwrap_or(&row.openfdd_key))
                 .bind(role)
-                .bind(&row.unit)
+                .bind(
+                    row.source_unit
+                        .as_deref()
+                        .or(row.unit.as_deref()),
+                )
                 .bind(equip)
                 .execute(&mut **tx)
                 .await?;
