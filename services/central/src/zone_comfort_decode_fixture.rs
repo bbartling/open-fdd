@@ -261,14 +261,25 @@ async fn zone_comfort_rank_decodes_postgres_aggregate() {
         &pool,
         &site,
         "vav_mid",
-        &[Some(21.111111), Some(24.444444), Some(23.888889), Some(21.055556), None],
+        &[
+            Some(21.111111),
+            Some(24.444444),
+            Some(23.888889),
+            Some(21.055556),
+            None,
+        ],
     )
     .await;
     seed_vav(
         &pool,
         &site,
         "vav_high",
-        &[Some(21.111111), Some(22.5), Some(23.888889), Some(23.333333)],
+        &[
+            Some(21.111111),
+            Some(22.5),
+            Some(23.888889),
+            Some(23.333333),
+        ],
     )
     .await;
     seed_vav(&pool, &site, "vav_quiet", &[]).await;

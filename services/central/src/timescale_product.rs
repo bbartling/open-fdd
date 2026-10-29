@@ -1223,10 +1223,7 @@ pub async fn rcx_zone_comfort_rank(
     comfort_high_c: f64,
     scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    if !comfort_low_c.is_finite()
-        || !comfort_high_c.is_finite()
-        || comfort_low_c > comfort_high_c
-    {
+    if !comfort_low_c.is_finite() || !comfort_high_c.is_finite() || comfort_low_c > comfort_high_c {
         return Err(ComfortRankError::InvalidBand {
             low_f: comfort_low_c,
             high_f: comfort_high_c,

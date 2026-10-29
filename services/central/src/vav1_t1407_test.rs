@@ -366,13 +366,37 @@ async fn t1407_2_declared_unit_same_comfort_pct() {
 
     for (equip, unit) in [("VAV_F", "degF"), ("VAV_C", "degC")] {
         seed_vav_site(&pool, &site, equip).await;
-        bind_role(&pool, &site, equip, "zone_t", &format!("{equip}.zt"), &format!("pt-{equip}")).await;
+        bind_role(
+            &pool,
+            &site,
+            equip,
+            "zone_t",
+            &format!("{equip}.zt"),
+            &format!("pt-{equip}"),
+        )
+        .await;
         upsert_samples(
             &pool,
             UpsertBatch {
                 rows: vec![
-                    sample(&site, equip, "zone_t", &format!("{equip}.zt"), 0, 22.0, Some(unit)),
-                    sample(&site, equip, "zone_t", &format!("{equip}.zt"), 5, 28.0, Some(unit)),
+                    sample(
+                        &site,
+                        equip,
+                        "zone_t",
+                        &format!("{equip}.zt"),
+                        0,
+                        22.0,
+                        Some(unit),
+                    ),
+                    sample(
+                        &site,
+                        equip,
+                        "zone_t",
+                        &format!("{equip}.zt"),
+                        5,
+                        28.0,
+                        Some(unit),
+                    ),
                 ],
             },
         )
