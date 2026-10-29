@@ -2,6 +2,11 @@
   "schema": "openfdd-si-parity-w4-families-v1",
   "issue": "1284",
   "families": {
+    "W4f_analytics_si_p2": {
+      "wave": "W4f",
+      "description": "Analytics postgres bodies — pandas SI vs SQL SI on CI seeds (#1284)",
+      "rules": []
+    },
     "W4b_fc1_duct_static": {
       "wave": "W4b",
       "description": "FC1 duct static (GL36 A) — T1284-4 blocking scope",

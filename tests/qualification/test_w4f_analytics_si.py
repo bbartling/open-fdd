@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
@@ -13,6 +15,8 @@ from open_fdd.analytics.si_thresholds import (
     SENSOR_TEMP_RANGE_MAX_C,
     SENSOR_TEMP_RANGE_MIN_C,
 )
+
+REPO = Path(__file__).resolve().parents[2]
 
 
 class W4fAnalyticsSiTests(unittest.TestCase):
@@ -84,6 +88,41 @@ class W4fAnalyticsSiTests(unittest.TestCase):
             float(met["runtime_hours"].sum()),
             places=6,
         )
+
+
+class W4fAnalyticsP2Tests(unittest.TestCase):
+    def test_nineteen_analytics_sql_bodies_shipped(self) -> None:
+        from scripts.stress.si_cutover import ci_analytics_p2 as cap2
+
+        stems = cap2.all_analytics_sql_stems()
+        self.assertEqual(len(stems), 19)
+        paths = {f"sql/analytics/postgres/queries/{s}.sql" for s in stems}
+        missing = paths - cap2.registry_sql_paths()
+        self.assertFalse(
+            missing,
+            f"registry missing shipped analytics SQL: {sorted(missing)}",
+        )
+
+    @unittest.skipUnless(
+        os.environ.get("OPENFDD_DATABASE_URL", "").strip(),
+        "OPENFDD_DATABASE_URL required for analytics P2 Timescale parity",
+    )
+    def test_analytics_p2_all_queries_on_si_ci_seeds(self) -> None:
+        from scripts.ci import unit_contract_lib as uc
+        from scripts.stress.si_cutover import ci_analytics_p2 as cap2
+        from scripts.stress.si_cutover import ci_timescale_sql as cts
+        from scripts.stress.si_cutover.parity_chain import load_all_ip_goldens
+
+        parity = cts._load_parity_module()
+        conn = parity.connect_with_retry(os.environ["OPENFDD_DATABASE_URL"])
+        try:
+            goldens = load_all_ip_goldens()
+            metric = uc.load_json(uc.METRIC_UNITS)
+            results = cap2.run_p2_all_analytics(conn, goldens, metric)
+            _total, errors = cap2.summarize(results)
+        finally:
+            conn.close()
+        self.assertEqual(errors, [], "\n".join(errors[:20]))
 
 
 if __name__ == "__main__":

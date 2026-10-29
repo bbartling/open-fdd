@@ -676,6 +676,9 @@ def run_p2_all_goldens(
     *,
     scope: set[str] | None = None,
 ) -> StageResult:
+    import os
+
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
     from scripts.stress.si_cutover.ci_timescale_sql import PENDING_W4
 
     errors: list[str] = []
@@ -683,8 +686,39 @@ def run_p2_all_goldens(
     comparisons = 0
     pending_cells = 0
     min_required = 0
+    db_url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
+    sql_si_by_golden: dict[str, dict[tuple[str, str, str, str], float]] = {}
+    if db_url:
+        from scripts.stress.si_cutover import ci_timescale_sql as cts
+
+        metric = _metric_doc()
+        rules_by_id = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
+        parity = cts._load_parity_module()
+        conn = parity.connect_with_retry(db_url)
+        try:
+            for golden in goldens:
+                bid = str(golden.get("building_id") or "")
+                try:
+                    sql_si_by_golden[bid] = cfl.recompute_p2_sql_si_fault_map(
+                        golden, conn, rules_by_id, metric
+                    )
+                except RuntimeError as exc:
+                    errors.append(str(exc))
+        finally:
+            conn.close()
+    pandas_si_by_golden: dict[str, dict[tuple[str, str, str, str], float]] = {}
+    metric = _metric_doc()
+    rules_by_id = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
+    for golden in goldens:
+        bid = str(golden.get("building_id") or "")
+        pandas_si_by_golden[bid] = cfl.recompute_si_daily_for_golden(
+            golden, rules_by_id, metric
+        )
     for golden in goldens:
         min_required += min_p2_cells(golden)
+        bid = str(golden.get("building_id") or "")
+        sql_map = sql_si_by_golden.get(bid, {})
+        pandas_map = pandas_si_by_golden.get(bid, {})
         for row in golden.get("p2_si_pairs") or []:
             if not row.get("utc_day"):
                 continue
@@ -693,11 +727,21 @@ def run_p2_all_goldens(
                 continue
             comparisons += 1
             status = str(row.get("sql_si_status") or "")
-            if status == PENDING_W4:
+            if status == PENDING_W4 and not db_url:
                 pending_cells += 1
                 continue
-            sql_raw = row.get("sql_si_fault_seconds")
-            pandas_raw = row.get("pandas_si_fault_seconds")
+            key = (
+                bid,
+                rule_id,
+                str(row.get("equipment_id") or ""),
+                str(row.get("utc_day") or ""),
+            )
+            sql_raw = sql_map.get(key)
+            if sql_raw is None:
+                sql_raw = row.get("sql_si_fault_seconds")
+            pandas_raw = pandas_map.get(key)
+            if pandas_raw is None:
+                pandas_raw = row.get("pandas_si_fault_seconds")
             if sql_raw is None:
                 errors.append(
                     f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "

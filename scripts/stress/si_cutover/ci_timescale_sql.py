@@ -24,7 +24,7 @@ from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
 from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_registry  # noqa: E402
 
 PENDING_W4 = "pending_W4"
-SI_SQL_PACK_AVAILABLE = False  # W4 ships metric SQL pack; until then P2 sql_si is pending.
+SI_SQL_PACK_AVAILABLE = True  # W4f: analytics + FDD postgres bodies assume metric-c-v2 sample.val
 
 
 def _load_parity_module():
@@ -101,7 +101,9 @@ def purge_site(cur, site_id: str) -> None:
     cur.execute("DELETE FROM site WHERE site_id = %s", (site_id,))
 
 
-def default_role_unit(sql_role: str) -> str | None:
+def default_role_unit(sql_role: str, *, si_storage: bool = False) -> str | None:
+    if sql_role == "web_oa_t":
+        return "degC" if si_storage else "degF"
     temps = {
         "oa_t",
         "mat",
@@ -114,7 +116,7 @@ def default_role_unit(sql_role: str) -> str | None:
         "hw_return_t",
     }
     if sql_role in temps:
-        return "degF"
+        return "degC" if si_storage else "degF"
     if sql_role in ("oa_h", "ra_h", "zone_rh", "ma_h", "sa_h"):
         return "percent"
     if sql_role == "duct_static":
@@ -124,7 +126,16 @@ def default_role_unit(sql_role: str) -> str | None:
     return None
 
 
-def seed_frame(cur, parity, *, site_id: str, equipment_id: str, equip_type: str, frame) -> None:
+def seed_frame(
+    cur,
+    parity,
+    *,
+    site_id: str,
+    equipment_id: str,
+    equip_type: str,
+    frame,
+    si_storage: bool = False,
+) -> None:
     cur.execute(
         "INSERT INTO site(site_id, dis, timezone, enabled) VALUES (%s, %s, 'UTC', true)",
         (site_id, site_id),
@@ -180,7 +191,7 @@ def seed_frame(cur, parity, *, site_id: str, equipment_id: str, equip_type: str,
                 (stamp, site_id, openfdd_key, openfdd_key, fval),
             )
             parity.bind_current(cur, site_id, equipment_id, sql_role, openfdd_key)
-            unit = default_role_unit(sql_role)
+            unit = default_role_unit(sql_role, si_storage=si_storage)
             if unit:
                 cur.execute(
                     """
@@ -362,6 +373,7 @@ def run_sql_ip_for_dataset(
     rules: list[dict[str, Any]],
     poll_seconds: float,
     params_by_rule: dict[str, dict[str, float]] | None = None,
+    si_storage: bool = False,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     parity = _load_parity_module()
     parity.apply_schema(conn)
@@ -386,6 +398,7 @@ def run_sql_ip_for_dataset(
             equipment_id=equipment_id,
             equip_type=spec.equipment_type,
             frame=frame,
+            si_storage=si_storage,
         )
         fill_history(cur, site_id, sql_cols)
         for rule in rules:
@@ -420,23 +433,25 @@ def p2_pair_for_si_row(
     equipment_id: str,
     utc_day: str,
     pandas_si_fault_seconds: float,
+    sql_si_fault_seconds: float | None = None,
     pandas_si_missing: bool = False,
 ) -> dict[str, Any]:
-    if SI_SQL_PACK_AVAILABLE:
+    if not SI_SQL_PACK_AVAILABLE:
         return {
             "rule_id": rule_id,
             "equipment_id": equipment_id,
             "utc_day": utc_day,
-            "sql_si_fault_seconds": pandas_si_fault_seconds,
-            "pandas_si_fault_seconds": pandas_si_fault_seconds,
-            "sql_si_status": "computed",
+            "sql_si_fault_seconds": None,
+            "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
+            "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
+            "sql_si_status": PENDING_W4,
         }
     return {
         "rule_id": rule_id,
         "equipment_id": equipment_id,
         "utc_day": utc_day,
-        "sql_si_fault_seconds": None,
+        "sql_si_fault_seconds": sql_si_fault_seconds,
         "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
         "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
-        "sql_si_status": PENDING_W4,
+        "sql_si_status": "computed" if sql_si_fault_seconds is not None else "missing_sql_si",
     }

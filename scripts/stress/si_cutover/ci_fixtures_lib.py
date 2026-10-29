@@ -595,6 +595,7 @@ def build_golden_for_dataset(
                         si_row.get("fault_seconds", 0.0) if si_row else 0.0
                     ),
                     pandas_si_missing=si_row is None,
+                    sql_si_fault_seconds=None,
                 )
             )
 
@@ -715,6 +716,62 @@ def _normalize_daily_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             str(r.get("pair_status", "")),
         ),
     )
+
+
+def recompute_p2_sql_si_fault_map(
+    golden: dict[str, Any],
+    conn,
+    rules_by_id: dict[str, dict[str, Any]],
+    metric: dict[str, Any],
+) -> dict[tuple[str, str, str, str], float]:
+    from scripts.stress.si_cutover import ci_timescale_sql as cts
+
+    frame_raw, equipment_id = reload_dataset_frame(golden)
+    building_id = str(golden["building_id"])
+    etype = str(golden.get("equipment_type") or "")
+    ip_frame = prepare_ip_frame(
+        frame_raw,
+        building_id=building_id,
+        equipment_id=equipment_id,
+        equipment_type=etype,
+    )
+    si_frame = frame_to_si(ip_frame, metric)
+    poll = float(golden.get("poll_seconds") or cts.infer_poll_seconds(si_frame.index))
+    ds = golden.get("dataset") or {}
+    spec = DatasetSpec(
+        building_id=building_id,
+        equipment_id=str(golden.get("equipment_id") or equipment_id),
+        equipment_type=etype,
+        source=ds,
+    )
+    eligible: list[dict[str, Any]] = []
+    params_by_rule: dict[str, dict[str, float]] = {}
+    for rule_id, rule in rules_by_id.items():
+        ok, _reason = rule_pair_eligible(rule, ip_frame, equipment_type=etype)
+        if not ok or not rule.get("sql_file"):
+            continue
+        eligible.append(rule)
+        params_by_rule[rule_id] = rule_params_from_registry(rule)
+    sql_rows, errors = cts.run_sql_ip_for_dataset(
+        conn,
+        spec=spec,
+        frame=si_frame,
+        equipment_id=spec.equipment_id,
+        rules=eligible,
+        poll_seconds=poll,
+        params_by_rule=params_by_rule,
+        si_storage=True,
+    )
+    if errors:
+        raise RuntimeError(
+            f"P2 SQL SI {building_id}: {'; '.join(errors[:5])}"
+        )
+    out: dict[tuple[str, str, str, str], float] = {}
+    for row in sql_rows:
+        if not row.get("utc_day"):
+            continue
+        out[si_fault_key(row)] = float(row.get("fault_seconds", 0.0))
+    return out
 
 
 def recompute_si_daily_for_golden(

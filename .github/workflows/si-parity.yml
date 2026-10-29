@@ -112,6 +112,11 @@ jobs:
       - name: W4f analytics SI (pandas thresholds vs SQL)
         run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si -v
 
+      - name: W4f analytics P2 (19 SQL bodies, SI CI seeds)
+        env:
+          OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+        run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si.W4fAnalyticsP2Tests -v
+
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |
           set +e
