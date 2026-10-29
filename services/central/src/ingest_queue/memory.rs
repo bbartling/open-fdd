@@ -281,6 +281,29 @@ impl MemoryStore {
         budget.cap_override = Some((current / 2).max(1));
     }
 
+    pub fn portal_budget_status(
+        &self,
+        provider_instance_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<super::postgres::PortalBudgetStatus, QueueError> {
+        let inner = self.lock();
+        let Some(budget) = inner.budgets.get(provider_instance_id) else {
+            return Ok(super::postgres::PortalBudgetStatus {
+                paused_until: None,
+                tokens_remaining: None,
+            });
+        };
+        let tokens_remaining = i32::try_from(budget.tokens).map_err(|_| {
+            QueueError::Invalid(format!(
+                "portal budget token count overflow for provider {provider_instance_id}"
+            ))
+        })?;
+        Ok(super::postgres::PortalBudgetStatus {
+            paused_until: budget.paused_until.filter(|until| *until > now),
+            tokens_remaining: Some(tokens_remaining),
+        })
+    }
+
     pub fn retry_job(
         &self,
         job_id: Uuid,
@@ -1008,6 +1031,7 @@ fn fence_holds(job: &JobView, owner: &str, token: u64, now: DateTime<Utc>) -> bo
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct ClaimRank {
+    asap_tier: u8,
     in_flight: u32,
     not_before: DateTime<Utc>,
     window_start: DateTime<Utc>,
@@ -1025,6 +1049,11 @@ fn pick_candidate(inner: &Inner, now: DateTime<Utc>) -> Option<usize> {
             continue;
         }
         let rank = ClaimRank {
+            asap_tier: if job.view.shard == super::model::JOB_SHARD_ASAP {
+                1
+            } else {
+                0
+            },
             in_flight: in_flight_count(inner, &job.view.provider_instance_id, now),
             not_before: job.view.not_before,
             window_start: job.view.logical_window_start,
@@ -1552,5 +1581,41 @@ mod tests {
             EnqueueOutcome::Existing(_) => panic!("scheduler job"),
         };
         assert!(bare.server_request_id.is_none());
+    }
+
+    #[test]
+    fn t1423_5_live_poll_claims_before_asap_backfill() {
+        let store = MemoryStore::new(BudgetDefaults {
+            max_in_flight: 4,
+            max_per_minute: 100,
+        });
+        let at = now();
+        let mut live = sample("site-a", "portal-a", "dev-1", "2026-10-19T12:00:00Z");
+        live.not_before = at;
+        live.shard = super::super::model::JOB_SHARD_LIVE.to_string();
+        let mut asap = sample("site-a", "portal-a", "dev-1", "2026-10-19T08:00:00Z");
+        asap.not_before = at;
+        asap.shard = super::super::model::JOB_SHARD_ASAP.to_string();
+        store.enqueue(asap, at).unwrap();
+        store.enqueue(live, at).unwrap();
+        let claimed = store.claim(&claim_req("worker", 1, at));
+        assert_eq!(claimed.len(), 1);
+        assert_eq!(claimed[0].shard, super::super::model::JOB_SHARD_LIVE);
+    }
+
+    #[test]
+    fn t1423_5_portal_throttle_blocks_claim_until_pause_elapses() {
+        let store = MemoryStore::new(BudgetDefaults {
+            max_in_flight: 4,
+            max_per_minute: 100,
+        });
+        let at = now();
+        let mut job = sample("site-a", "portal-a", "dev-1", "2026-10-19T12:00:00Z");
+        job.not_before = at;
+        store.enqueue(job, at).unwrap();
+        store.note_throttle("portal-a", at, chrono::Duration::seconds(120));
+        assert!(store.claim(&claim_req("worker", 1, at)).is_empty());
+        let later = at + chrono::Duration::seconds(121);
+        assert_eq!(store.claim(&claim_req("worker", 1, later)).len(), 1);
     }
 }
