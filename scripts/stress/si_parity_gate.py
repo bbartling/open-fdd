@@ -84,7 +84,7 @@ def _fc1_t1284_si_param_post_hook(rule_id: str, params: dict[str, float]) -> dic
     if rule_id != "FC1":
         return params
     out = dict(params)
-    out["eps_dsp"] = float(out.get("eps_dsp", 0.12)) + 1.0
+    out["eps_dsp"] = max(float(out.get("eps_dsp", 30.0)) * 1000.0, 5000.0)
     return out
 
 

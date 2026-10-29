@@ -770,7 +770,8 @@ def verify_vav1_rule_si_threshold_mutation() -> StageResult:
     params_ip = cfl.rule_params_from_registry(rule)
     params_si = cfl.convert_params_to_si(rule, params_ip, metric)
     params_broken = dict(params_si)
-    params_broken["eps_dsp"] = float(params_si.get("eps_dsp", 0.12)) + 1.0
+    # Saturated fault days ignore small eps_dsp tweaks; a huge tolerance clears faults.
+    params_broken["eps_dsp"] = max(float(params_si.get("eps_dsp", 30.0)) * 1000.0, 5000.0)
     poll = float(golden.get("poll_seconds") or 300.0)
 
     def _fault_seconds(result, index) -> float:

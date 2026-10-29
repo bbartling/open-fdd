@@ -21,6 +21,16 @@ FC_RULES = frozenset(
 )
 
 
+def _merge_daily_for_rules(
+    existing: list[dict] | None,
+    fresh: list[dict],
+    rule_ids: frozenset[str],
+) -> list[dict]:
+    """Replace only ``rule_ids`` rows; keep other rules' committed daily rows intact."""
+    keep = [r for r in existing or [] if str(r.get("rule_id") or "") not in rule_ids]
+    return cfl._normalize_daily_rows(keep + fresh)
+
+
 def refresh_pandas_side(golden: dict, metric: dict, rules_by_id: dict) -> None:
     building_id = str(golden.get("building_id"))
     etype = str(golden.get("equipment_type") or "")
@@ -29,11 +39,11 @@ def refresh_pandas_side(golden: dict, metric: dict, rules_by_id: dict) -> None:
     ip_frame = cfl.prepare_ip_frame(
         frame, building_id=building_id, equipment_id=equipment_id, equipment_type=etype
     )
-    pandas_ip: list[dict] = []
-    pandas_si: list[dict] = []
+    fc_ip: list[dict] = []
+    fc_si: list[dict] = []
     p2_pairs: list[dict] = []
     for rule_id, rule in sorted(rules_by_id.items()):
-        if not rule.get("pandas_function"):
+        if rule_id not in FC_RULES or not rule.get("pandas_function"):
             continue
         params_reg = cfl.rule_params_from_registry(rule)
         params_ip = cfl.convert_params_to_ip(rule, params_reg, metric)
@@ -55,10 +65,10 @@ def refresh_pandas_side(golden: dict, metric: dict, rules_by_id: dict) -> None:
             params=params_si,
             poll_seconds=poll,
         )
-        pandas_ip.extend(ip_daily)
+        fc_ip.extend(ip_daily)
         for row in si_daily:
             if row.get("pair_status") == "computed" and row.get("utc_day"):
-                pandas_si.append(dict(row))
+                fc_si.append(dict(row))
         si_by_key = {
             cfl.si_fault_key(r): r
             for r in si_daily
@@ -68,8 +78,6 @@ def refresh_pandas_side(golden: dict, metric: dict, rules_by_id: dict) -> None:
             if row.get("pair_status") != "computed" or not row.get("utc_day"):
                 continue
             si_row = si_by_key.get(cfl.si_fault_key(row))
-            if rule_id not in FC_RULES:
-                continue
             fs = float(si_row.get("fault_seconds", 0.0) if si_row else 0.0)
             p2_pairs.append(
                 {
@@ -82,8 +90,12 @@ def refresh_pandas_side(golden: dict, metric: dict, rules_by_id: dict) -> None:
                     "sql_si_status": "computed",
                 }
             )
-    golden["pandas_fdd_daily"] = cfl._normalize_daily_rows(pandas_ip)
-    golden["pandas_si_daily"] = cfl._normalize_daily_rows(pandas_si)
+    golden["pandas_fdd_daily"] = _merge_daily_for_rules(
+        golden.get("pandas_fdd_daily"), fc_ip, FC_RULES
+    )
+    golden["pandas_si_daily"] = _merge_daily_for_rules(
+        golden.get("pandas_si_daily"), fc_si, FC_RULES
+    )
     if p2_pairs:
         other = [
             p

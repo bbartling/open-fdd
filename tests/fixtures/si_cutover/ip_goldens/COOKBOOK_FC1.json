@@ -58,6 +58,39 @@
   "pandas_fdd_daily": [
     {
       "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "AHU-DUCTHI",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:sat",
+      "rule_id": "AHU-SATDEV",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:htg_valve_pct",
+      "rule_id": "AHU-SIMUL",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
       "covered_seconds": 0.0,
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
@@ -73,7 +106,106 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "equipment_type",
+      "rule_id": "CHW-2",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "CHW-3",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "CHW-4",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "CHW-NOLOAD-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "CMD-1",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "CW-APR-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "CW-FAN-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "CW-OPT-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:oa_damper_pct",
+      "rule_id": "DMP-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:oa_damper_pct",
       "rule_id": "ECON-1",
       "status": "",
       "utc_day": ""
@@ -84,7 +216,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:oa_t",
       "rule_id": "ECON-2",
       "status": "",
       "utc_day": ""
@@ -95,8 +227,52 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:oa_damper_pct",
+      "rule_id": "ECON-3",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:mat",
       "rule_id": "ECON-4",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:preheat_leave_t",
+      "rule_id": "ECON-5",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:oa_damper_pct",
+      "rule_id": "ECON-6",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:oa_damper_pct",
+      "rule_id": "ECON-7",
       "status": "",
       "utc_day": ""
     },
@@ -216,7 +392,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:sat",
       "rule_id": "FCU-CLG-COIL",
       "status": "",
       "utc_day": ""
@@ -227,7 +403,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:zone_co2",
       "rule_id": "FCU-CO2-DAMPER",
       "status": "",
       "utc_day": ""
@@ -238,7 +414,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:damper_cmd",
       "rule_id": "FCU-DAMPER-POS",
       "status": "",
       "utc_day": ""
@@ -249,7 +425,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:cooling_sp",
       "rule_id": "FCU-DEADBAND",
       "status": "",
       "utc_day": ""
@@ -260,7 +436,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:sat",
       "rule_id": "FCU-HTG-COIL",
       "status": "",
       "utc_day": ""
@@ -271,7 +447,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:htg_valve_pct",
       "rule_id": "FCU-MODE-CYCLE",
       "status": "",
       "utc_day": ""
@@ -282,7 +458,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:zone_air_temp_sp",
       "rule_id": "FCU-SENSOR-NULL",
       "status": "",
       "utc_day": ""
@@ -293,7 +469,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:sat",
       "rule_id": "FCU-VALVE-PASS-CLG",
       "status": "",
       "utc_day": ""
@@ -304,7 +480,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:sat",
       "rule_id": "FCU-VALVE-PASS-HTG",
       "status": "",
       "utc_day": ""
@@ -315,8 +491,8 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
-      "rule_id": "OAT-METEO",
+      "reason": "equipment_type",
+      "rule_id": "HP-1",
       "status": "",
       "utc_day": ""
     },
@@ -326,7 +502,51 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:web_oa_t",
+      "rule_id": "MECH-OAT-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:mat",
+      "rule_id": "OA-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:oa_t",
+      "rule_id": "OAT-METEO",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "PID-HUNT-1",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:sat_sp",
       "rule_id": "RESET-1",
       "status": "",
       "utc_day": ""
@@ -337,7 +557,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:occ_mode",
       "rule_id": "SCHED-1",
       "status": "",
       "utc_day": ""
@@ -352,6 +572,94 @@
       "rule_id": "SCHED-247",
       "status": "PASS",
       "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_sensor_roles",
+      "rule_id": "SV-FLATLINE",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_sensor_roles",
+      "rule_id": "SV-RANGE",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
+      "rule_id": "SV-RATE",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_sensor_roles",
+      "rule_id": "SV-SPIKE",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
+      "rule_id": "SV-STALE",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
+      "rule_id": "TRIM-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "TRIM-3",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "TRIM-4",
+      "status": "",
+      "utc_day": ""
     },
     {
       "building_id": "COOKBOOK_FC1",
@@ -382,7 +690,95 @@
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
       "reason": "equipment_type",
+      "rule_id": "VAV-3",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "VAV-4",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "VAV-5",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
       "rule_id": "VAV-6",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "VAV-7",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "VAV-AHU-LEAVE",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "VAV-REHEAT",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:clg_valve_pct",
+      "rule_id": "VLV-1",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "WX-1",
       "status": "",
       "utc_day": ""
     }
@@ -468,7 +864,40 @@
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
+      "rule_id": "AHU-DUCTHI",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "CMD-1",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
       "rule_id": "FC1",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "PID-HUNT-1",
       "status": "PASS",
       "utc_day": "2026-07-01"
     },
