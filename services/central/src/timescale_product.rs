@@ -2858,10 +2858,7 @@ async fn fill_history_for_equipment(
         let admitted = admit.admitted_on_sample(role);
         let alias = crate::series_binding::quote_ident(role);
         let role_lit = role.replace('\'', "''");
-        if !bound_roles.contains(role)
-            && !is_chw_plant_role(role)
-            && !is_weather_role(role)
-        {
+        if !bound_roles.contains(role) && !is_chw_plant_role(role) && !is_weather_role(role) {
             max_cols.push_str(&format!(", NULL::double precision AS {alias}"));
             continue;
         }
@@ -6405,6 +6402,7 @@ mod oat_meteo_bound_contract_test;
 #[path = "oat_meteo_t1404_test.rs"]
 mod oat_meteo_t1404_test;
 
+#[cfg(test)]
 #[path = "t1405_trim_column_contract_test.rs"]
 mod t1405_trim_column_contract_test;
 #[cfg(test)]

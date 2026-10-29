@@ -77,13 +77,7 @@ async fn seed_site(pool: &sqlx::PgPool, site: &str, equip_type: &str, equipment_
     .expect("equip");
 }
 
-async fn bind_point(
-    pool: &sqlx::PgPool,
-    site: &str,
-    equipment_id: &str,
-    role: &str,
-    key: &str,
-) {
+async fn bind_point(pool: &sqlx::PgPool, site: &str, equipment_id: &str, role: &str, key: &str) {
     sqlx::query(
         "INSERT INTO point_map (site_id, openfdd_key, haystack_id, role, equipment_id, referenced)
          VALUES ($1, $2, $2, $3, $4, true)
@@ -111,7 +105,14 @@ async fn bind_point(
     .expect("role_map");
 }
 
-fn sample(site: &str, equipment_id: &str, role: &str, key: &str, minutes: i64, val: f64) -> SampleRow {
+fn sample(
+    site: &str,
+    equipment_id: &str,
+    role: &str,
+    key: &str,
+    minutes: i64,
+    val: f64,
+) -> SampleRow {
     let ts = Utc.with_ymd_and_hms(2026, 6, 1, 12, 0, 0).unwrap() + Duration::minutes(minutes);
     let mut row = SampleRow::new(ts, site, key.to_string(), Some(val));
     row.equipment_id = Some(equipment_id.to_string());
@@ -132,11 +133,17 @@ fn result_row<'a>(meta: &'a Value, rule_id: &str, equipment_id: &str) -> &'a Val
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize OPENFDD_DATABASE_URL with other Timescale registry tests"
+)]
 async fn t1405_3_trim_rules_without_reset_request_binding_not_sql_error() {
+    let _lock = crate::test_env_lock::lock_env();
     let Some(pool) = pool().await else {
         eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
         return;
     };
+    let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("db url");
     let site = format!("t1405{}", uuid::Uuid::new_v4().simple());
     apply_schema(&pool).await;
     purge(&pool, &site).await;
@@ -151,8 +158,22 @@ async fn t1405_3_trim_rules_without_reset_request_binding_not_sql_error() {
 
     let mut batch = UpsertBatch::default();
     for minute in (0..12).step_by(3) {
-        batch.push(sample(&site, "BLR_1", "hw_supply_t", "BLR_1.hw_supply_t", minute, 165.0));
-        batch.push(sample(&site, "BLR_1", "chw_flow", "BLR_1.chw_flow", minute, 50.0));
+        batch.push(sample(
+            &site,
+            "BLR_1",
+            "hw_supply_t",
+            "BLR_1.hw_supply_t",
+            minute,
+            165.0,
+        ));
+        batch.push(sample(
+            &site,
+            "BLR_1",
+            "chw_flow",
+            "BLR_1.chw_flow",
+            minute,
+            50.0,
+        ));
         batch.push(sample(
             &site,
             "CHW_1",
@@ -161,7 +182,14 @@ async fn t1405_3_trim_rules_without_reset_request_binding_not_sql_error() {
             minute,
             44.0,
         ));
-        batch.push(sample(&site, "CHW_1", "chw_flow", "CHW_1.chw_flow", minute, 50.0));
+        batch.push(sample(
+            &site,
+            "CHW_1",
+            "chw_flow",
+            "CHW_1.chw_flow",
+            minute,
+            50.0,
+        ));
     }
     let tsdb = Tsdb::from_pool(pool.clone());
     tsdb.upsert_samples_stats(&batch).await.expect("upsert");
@@ -191,7 +219,10 @@ async fn t1405_3_trim_rules_without_reset_request_binding_not_sql_error() {
     .fetch_one(&mut *tx)
     .await
     .expect("null count");
-    assert_eq!(nulls, n, "unbound optional role projects NULL, not missing column");
+    assert_eq!(
+        nulls, n,
+        "unbound optional role projects NULL, not missing column"
+    );
     let _ = tx.rollback().await;
 
     let results_dir = tempfile::tempdir().expect("results dir");
@@ -218,15 +249,15 @@ async fn t1405_3_trim_rules_without_reset_request_binding_not_sql_error() {
             }
         }
     }
-    let _lock = crate::test_env_lock::lock_env();
     let _env = EnvRestore::capture(&[
         "OPENFDD_DATABASE_URL",
         "OPENFDD_HISTORIAN",
         "OPENFDD_RULE_RESULTS_DIR",
     ]);
-    std::env::set_var("OPENFDD_DATABASE_URL", pool.as_ref().as_str());
+    std::env::set_var("OPENFDD_DATABASE_URL", &url);
     std::env::set_var("OPENFDD_HISTORIAN", "timescale");
     std::env::set_var("OPENFDD_RULE_RESULTS_DIR", results_dir.path());
+    fdd_tsdb::clear_shared_pool();
 
     let payload = json!({
         "building_id": site,
