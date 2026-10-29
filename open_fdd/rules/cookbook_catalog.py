@@ -166,6 +166,45 @@ def _f(p: dict, key: str, default: float) -> float:
         return float(default)
 
 
+def _role_series_unit(d: pd.DataFrame, role: str) -> str:
+    from open_fdd.analytics.units import DEFAULT_ROLE_UNITS
+
+    units = d.attrs.get("role_units") or d.attrs.get("units_map") or {}
+    if isinstance(units, dict):
+        u = units.get(role)
+        if u:
+            return str(u)
+    return str(DEFAULT_ROLE_UNITS.get(role, "°F"))
+
+
+def _param_si_abs_temp_to_series(d: pd.DataFrame, role: str, value_c: float) -> float:
+    """Map an SI (°C) rule threshold onto the series unit for ``role``."""
+    from open_fdd.units.convert import celsius_to_fahrenheit, normalize_unit_token
+
+    tok = normalize_unit_token(_role_series_unit(d, role))
+    if tok in {"c", "degc", "celsius"}:
+        return value_c
+    return celsius_to_fahrenheit(value_c)
+
+
+def _param_si_delta_temp_to_series(d: pd.DataFrame, role: str, delta_c: float) -> float:
+    from open_fdd.units.convert import delta_c_to_delta_f, normalize_unit_token
+
+    tok = normalize_unit_token(_role_series_unit(d, role))
+    if tok in {"c", "degc", "celsius"}:
+        return delta_c
+    return delta_c_to_delta_f(delta_c)
+
+
+def _param_si_flow_to_series(d: pd.DataFrame, value_lps: float) -> float:
+    from open_fdd.units.convert import LPS_PER_CFM, normalize_unit_token
+
+    tok = normalize_unit_token(_role_series_unit(d, "zone-airflow"))
+    if tok in {"lps", "ls"}:
+        return value_lps
+    return value_lps / LPS_PER_CFM
+
+
 def _false(index) -> pd.Series:
     return pd.Series(False, index=index)
 
@@ -976,7 +1015,8 @@ def _vav_air_on(d: pd.DataFrame, flow_min: float) -> pd.Series:
     means the fan is on. When no airflow point is modeled we can't gate, so return True.
     """
     if "zone-airflow" in d.columns:
-        return pd.to_numeric(d["zone-airflow"], errors="coerce").fillna(0) > flow_min
+        thr = _param_si_flow_to_series(d, flow_min)
+        return pd.to_numeric(d["zone-airflow"], errors="coerce").fillna(0) > thr
     return pd.Series(True, index=d.index)
 
 
@@ -1025,7 +1065,8 @@ def _zone_comfort_band(p: dict | None, role_units: dict | None = None) -> tuple[
 
 def vav1(d, p, poll):
     """Comfort band during occupied hours when a schedule or occ column is set."""
-    lo, hi = _zone_comfort_band(p, d.attrs.get("role_units") or d.attrs.get("units_map"))
+    lo = _param_si_abs_temp_to_series(d, "zone-air-temp", _f(p, "zone_lo", 21.111111))
+    hi = _param_si_abs_temp_to_series(d, "zone-air-temp", _f(p, "zone_hi", 23.888889))
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     occupied, _src = vav1_occupied_mask(d, p)
     return zt.notna() & ((zt < lo) | (zt > hi)) & occupied
@@ -1033,13 +1074,13 @@ def vav1(d, p, poll):
 
 def vav2(d, p, poll):
     """Unoccupied zone stays warmer than heating setback (night setback miss)."""
-    hi = _f(p, "setback_hi", 20.0)
+    hi = _param_si_abs_temp_to_series(d, "zone-air-temp", _f(p, "setback_hi", 20.0))
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     return zt.notna() & _unoccupied_mask(d) & (zt > hi)
 
 
 def vav3(d, p, poll):
-    oat_hi = _f(p, "reheat_oat", 25.555556)
+    oat_hi = _param_si_abs_temp_to_series(d, "outside-air-temp", _f(p, "reheat_oat", 25.555556))
     reheat_thr = _f(p, "reheat_pct", 0.52)
     flow_min = _f(p, "flow_on_min", 11.798689)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
@@ -1060,12 +1101,13 @@ def vav4(d, p, poll):
 
 def vav5(d, p, poll):
     dmp = norm_cmd(d["damper"]).fillna(0)
-    return d["zone-airflow"].notna() & (d["zone-airflow"] > 23.597372) & (dmp < 0.10)
+    flow_thr = _param_si_flow_to_series(d, 23.597372)
+    return d["zone-airflow"].notna() & (d["zone-airflow"] > flow_thr) & (dmp < 0.10)
 
 
 def vav6(d, p, poll):
     """Reheat open while OA is cool enough for free cooling."""
-    oat_hi = _f(p, "free_cool_oat", 18.333333)
+    oat_hi = _param_si_abs_temp_to_series(d, "outside-air-temp", _f(p, "free_cool_oat", 18.333333))
     reheat_thr = _f(p, "reheat_pct", 0.25)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
@@ -1090,12 +1132,12 @@ def vav7(d, p, poll):
     window = max(6, int(round(3600.0 / max(float(poll), 1.0))))
     roll_std = flow.rolling(window, min_periods=max(3, window // 2)).std()
     roll_mean = flow.rolling(window, min_periods=max(3, window // 2)).mean()
-    max_std = _f(p, "fixed_flow_max_std", 7.079211)
-    min_mean = _f(p, "fixed_flow_min_mean", 94.389489)
+    max_std = _param_si_flow_to_series(d, _f(p, "fixed_flow_max_std", 7.079211))
+    min_mean = _param_si_flow_to_series(d, _f(p, "fixed_flow_min_mean", 94.389489))
     fixed_high = air_on & flow.notna() & (roll_std < max_std) & (roll_mean > min_mean)
     high_min = _false(d.index)
     if "min-flow-sp" in d.columns:
-        high_min_thr = _f(p, "high_min_flow_sp", 117.986861)
+        high_min_thr = _param_si_flow_to_series(d, _f(p, "high_min_flow_sp", 117.986861))
         high_min = (
             air_on
             & d["min-flow-sp"].notna()
@@ -1113,7 +1155,9 @@ def vav_reheat_stuck(d, p, poll):
     failed reheat valve or coil. Fully computed from VAV-local sensors.
     """
     cmd_thr = _f(p, "reheat_cmd", 0.30)
-    min_rise = _f(p, "min_rise", 1.666667)
+    min_rise = _param_si_delta_temp_to_series(
+        d, "vav-discharge-air-temp", _f(p, "min_rise", 1.666667)
+    )
     flow_min = _f(p, "flow_on_min", 11.798689)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     rise = d["vav-discharge-air-temp"] - d["vav-inlet-air-temp"]
@@ -1130,7 +1174,7 @@ def vav_vs_ahu_leave(d, p, poll):
     Requires topology enrich: ``ahu_sat`` copied from parent AHU onto the VAV frame.
     Without ``ahu_sat``, the rule is SKIPPED_MISSING_ROLES by the engine.
     """
-    band = _f(p, "delta", 4.444444)
+    band = _param_si_delta_temp_to_series(d, "vav-discharge-air-temp", _f(p, "delta", 4.444444))
     flow_min = _f(p, "flow_on_min", 11.798689)
     leave = pd.to_numeric(d["vav-discharge-air-temp"], errors="coerce")
     ahu = pd.to_numeric(d["ahu-discharge-air-temp"], errors="coerce")
@@ -1175,7 +1219,10 @@ def fcu_htg_coil(d, p, poll):
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta", 3.0))
+    coil_delta = _param_si_delta_temp_to_series(
+        d, "discharge-air-temp", _f(p, "coil_delta", 3.0)
+    )
+    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < coil_delta)
 
 
 def fcu_clg_coil(d, p, poll):
@@ -1193,7 +1240,10 @@ def fcu_valve_pass_htg(d, p, poll):
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta", 3.0))
+    pass_delta = _param_si_delta_temp_to_series(
+        d, "discharge-air-temp", _f(p, "pass_delta", 3.0)
+    )
+    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (rise > pass_delta)
 
 
 def fcu_valve_pass_clg(d, p, poll):
@@ -1202,7 +1252,10 @@ def fcu_valve_pass_clg(d, p, poll):
     drop = pd.to_numeric(d["zone-air-temp"], errors="coerce") - pd.to_numeric(
         d["discharge-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta", 3.0))
+    pass_delta = _param_si_delta_temp_to_series(
+        d, "discharge-air-temp", _f(p, "pass_delta", 3.0)
+    )
+    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (drop > pass_delta)
 
 
 def fcu_damper_pos(d, p, poll):
@@ -1220,7 +1273,8 @@ def fcu_co2_damper(d, p, poll):
 def fcu_deadband(d, p, poll):
     cool = pd.to_numeric(d["cooling-sp"], errors="coerce")
     heat = pd.to_numeric(d["heating-sp"], errors="coerce")
-    return cool.notna() & heat.notna() & ((cool - heat) < _f(p, "deadband", 1.0))
+    band = _param_si_delta_temp_to_series(d, "zone-air-temp", _f(p, "deadband", 1.0))
+    return cool.notna() & heat.notna() & ((cool - heat) < band)
 
 
 def fcu_mode_cycle(d, p, poll):

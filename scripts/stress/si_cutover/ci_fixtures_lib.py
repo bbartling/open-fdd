@@ -298,6 +298,10 @@ def convert_params_to_si(
         if not unit:
             continue
         src_unit = unit
+        if unit in ("°F",):
+            src_unit = "degF"
+        elif unit in ("°C",):
+            src_unit = "degC"
         if q == "temperature_difference" and unit == "degF":
             src_unit = "degF_delta"
         elif q == "temperature_difference" and unit in ("degC", "°C"):
@@ -336,7 +340,7 @@ def convert_params_to_ip(
             continue
         if not unit:
             continue
-        if unit in ("degF", "inwc", "in_wc", "cfm", "degF_delta"):
+        if unit in ("degF", "inwc", "in_wc", "cfm", "degF_delta", "°F"):
             continue
         target_unit = unit
         if q == "absolute_temperature":
