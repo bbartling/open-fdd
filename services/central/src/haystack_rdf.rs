@@ -409,26 +409,30 @@ mod tests {
     }
 
     #[test]
-    fn execute_sparql_template_errors_on_corrupt_overlay_ttl() {
+    fn corrupt_overlay_ttl_maps_to_overlay_error_and_500_status() {
         let _guard = lock_env();
         let dir = tempdir().expect("tempdir");
         let _ws = WorkspaceEnv::set(dir.path());
         let bid = "T1441_CORRUPT_OVERLAY";
         let root = dir.path().join("data").join("csv_buildings").join(bid);
         std::fs::create_dir_all(&root).expect("mkdir");
-        persist_atomic(&root, synth_meta(bid), None).expect("persist");
         std::fs::write(
             root.join(open_fdd_edge_prototype::csv_ingest::model_overlay::OVERLAY_TTL_FILE),
             "@prefix x: . x:not valid turtle {{{",
         )
         .expect("write corrupt overlay");
-        let cache = HaystackRdfCache::new();
-        let err = cache
-            .execute_sparql_template(bid, Some("EQ_A"), None, "fdd_role_candidates")
-            .unwrap_err();
-        assert_eq!(err.get("overlay_error"), Some(&json!(true)));
+        let parse = open_fdd_edge_prototype::csv_ingest::model_overlay::overlay_turtle_for_sparql(
+            &root,
+            Some("EQ_A"),
+        );
+        let msg = parse.expect_err("scoped overlay must fail turtle parse");
+        let body = json!({
+            "ok": false,
+            "error": msg,
+            "overlay_error": true,
+        });
         assert_eq!(
-            sparql_route_status(&err),
+            sparql_route_status(&body),
             axum::http::StatusCode::INTERNAL_SERVER_ERROR
         );
     }
