@@ -156,7 +156,7 @@ fn openapi_json_and_swagger_ui_respond() {
     assert!(
         body.contains("\"openapi\"") && body.contains("\"/api/health\""),
         "expected OpenAPI JSON with health path, got: {}",
-        &body.chars().take(200).collect::<String>()
+        body.chars().take(200).collect::<String>()
     );
 
     for path in ["/docs", "/docs/"] {
@@ -164,7 +164,7 @@ fn openapi_json_and_swagger_ui_respond() {
         assert!(
             (200..400).contains(&status),
             "{path} unexpected status {status}: {}",
-            &body.chars().take(120).collect::<String>()
+            body.chars().take(120).collect::<String>()
         );
         assert!(
             body.contains("swagger") || body.contains("Swagger"),
