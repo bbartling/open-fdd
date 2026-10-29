@@ -63,6 +63,9 @@ REGISTRY_ROLE_TO_COLUMN: dict[str, str] = {
     "sat_sp": "discharge-air-temp-sp",
     "zone_t": "zone-air-temp",
     "zone_flow": "zone-airflow",
+    "chw_supply_t": "chilled-water-supply-temp",
+    "chw_return_t": "chilled-water-return-temp",
+    "chiller_status": "chiller-status",
     "damper_pct": "damper",
 }
 
@@ -150,6 +153,7 @@ COOKBOOK_DATASETS: tuple[dict[str, str], ...] = (
     {"fixture": "vav1_obvious_fault.jsonl", "building_id": "COOKBOOK_VAV1", "equipment_type": "vav"},
     {"fixture": "vav6_obvious_fault.jsonl", "building_id": "COOKBOOK_VAV6", "equipment_type": "vav"},
     {"fixture": "vav7_obvious_fault.jsonl", "building_id": "COOKBOOK_VAV7", "equipment_type": "vav"},
+    {"fixture": "chw1_obvious_fault.jsonl", "building_id": "COOKBOOK_CHW1", "equipment_type": "chwPlant"},
 )
 
 SYNTH_CASE_DIRS: tuple[str, ...] = (
@@ -542,6 +546,41 @@ def build_golden_for_dataset(
             f"{spec.building_id}: Timescale SQL errors: {'; '.join(sql_exec_notes[:5])}"
         )
 
+    si_frame_global = frame_to_si(ip_frame, metric, value_hook=lambda c, v: _value_hook(c, v))
+    plant_eligible = [r for r in eligible_rules if cts.rule_si_sql_shipped(str(r.get("rule_id") or ""))]
+    si_params_by_rule: dict[str, dict[str, float]] = {}
+    for rule in plant_eligible:
+        rid = str(rule.get("rule_id") or "")
+        params_ip = params_by_rule[rid]
+
+        def _ph(rule_id: str, name: str, val: float) -> float:
+            return _param_hook(rule_id, name, val)
+
+        si_params_by_rule[rid] = convert_params_to_si(
+            rule, params_ip, metric, param_hook=lambda n, v: _ph(rid, n, v)
+        )
+    si_sql_by_key: dict[tuple[str, str], float] = {}
+    if plant_eligible:
+        si_sql_rows, si_sql_errs = cts.run_sql_si_for_dataset(
+            conn,
+            spec=spec,
+            frame=si_frame_global,
+            equipment_id=spec.equipment_id,
+            rules=plant_eligible,
+            poll_seconds=poll_seconds,
+            params_by_rule=si_params_by_rule,
+        )
+        if si_sql_errs:
+            raise RuntimeError(
+                f"{spec.building_id}: Timescale SQL SI errors: {'; '.join(si_sql_errs[:5])}"
+            )
+        for row in si_sql_rows:
+            if row.get("pair_status") != "computed" or not row.get("utc_day"):
+                continue
+            si_sql_by_key[(str(row.get("rule_id")), str(row.get("utc_day")))] = float(
+                row.get("fault_seconds", 0.0)
+            )
+
     si_rows_for_p1: list[dict[str, Any]] = []
     p2_pairs: list[dict[str, Any]] = []
 
@@ -563,7 +602,7 @@ def build_golden_for_dataset(
         for row in ip_daily:
             pandas_rows.append(dict(row))
 
-        si_frame = frame_to_si(ip_frame, metric, value_hook=lambda c, v: _value_hook(c, v))
+        si_frame = si_frame_global
         params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
         si_daily = run_rule_daily_rows(
             rule,
@@ -586,6 +625,9 @@ def build_golden_for_dataset(
                 continue
             key = si_fault_key(row)
             si_row = si_by_key.get(key)
+            sql_si_fs = None
+            if cts.rule_si_sql_shipped(rule_id):
+                sql_si_fs = si_sql_by_key.get((rule_id, str(row.get("utc_day"))))
             p2_pairs.append(
                 cts.p2_pair_for_si_row(
                     rule_id=rule_id,
@@ -595,6 +637,7 @@ def build_golden_for_dataset(
                         si_row.get("fault_seconds", 0.0) if si_row else 0.0
                     ),
                     pandas_si_missing=si_row is None,
+                    sql_si_fault_seconds=sql_si_fs,
                 )
             )
 
