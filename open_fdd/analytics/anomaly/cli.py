@@ -114,6 +114,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     report.add_argument(
+        "--units",
+        choices=("imperial", "si"),
+        default="imperial",
+        help="Display preference for plot axes and Typst captions (storage stays SI when declared)",
+    )
+    report.add_argument(
         "--compile",
         action="store_true",
         help="Write report.pdf in --out. This CLI flag is the only PDF path; typst must be on PATH",
@@ -172,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile=args.profile,
                 title=args.title,
                 location=args.location,
+                units=args.units,
                 top_n=int(args.top_n),
                 max_days=int(args.max_days),
                 methods=methods,

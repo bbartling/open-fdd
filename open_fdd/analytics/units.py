@@ -139,3 +139,9 @@ def stamp_display_units(frame: Any, column_map: dict | None = None) -> dict[str,
     frame.attrs["unit_system"] = str(system)
     frame.attrs["units_map"] = units
     return units
+
+
+def apply_unit_metadata(frame: Any, metadata: dict | None = None) -> dict[str, str]:
+    from open_fdd.analytics.report_storage import apply_unit_metadata as _apply
+
+    return _apply(frame, metadata)
