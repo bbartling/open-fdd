@@ -10,9 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "ci"))
 
 from unit_contract_lib import (  # noqa: E402
+    _convert_kind_for_param,
     _validate_registry_param_si_change,
     load_json,
     METRIC_UNITS,
+    infer_kind,
 )
 
 
@@ -70,6 +72,12 @@ class UnitContractSiCutoverDiffTests(unittest.TestCase):
             master=master,
             branch=branch,
         )
+
+    def test_convert_kind_falls_back_to_declared_kind_when_infer_raises(self) -> None:
+        kind = _convert_kind_for_param("custom_knob", "not_a_real_unit", "dimensionless")
+        self.assertEqual(kind, "dimensionless")
+        with self.assertRaises(ValueError):
+            infer_kind("custom_knob", "not_a_real_unit")
 
 
 if __name__ == "__main__":

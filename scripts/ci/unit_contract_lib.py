@@ -315,12 +315,31 @@ def git_show_master(relpath: str) -> str:
         raise RuntimeError(f"git show {ref}:{relpath} failed: {proc.stderr}")
     return proc.stdout
 
-
 def _float_close(a: float, b: float, *, rel: float = 1e-6, abs_tol: float = 1e-6) -> bool:
     return abs(float(a) - float(b)) <= max(abs_tol, rel * max(abs(float(a)), abs(float(b)), 1.0))
 
 
 _VALUE_FIELDS = ("default", "min", "max", "step")
+_CONVERTIBLE_KINDS = frozenset(
+    {
+        "absolute_temperature",
+        "temperature_difference",
+        "air_pressure",
+        "volumetric_flow",
+        "temperature_rate",
+    }
+)
+
+
+def _convert_kind_for_param(branch_key: str, master_unit: str, master_kind: str) -> str:
+    """Prefer infer_kind for known units; fall back to declared registry kind when unknown."""
+    try:
+        inferred = infer_kind(branch_key, master_unit)
+    except ValueError:
+        return master_kind
+    if inferred in _CONVERTIBLE_KINDS:
+        return inferred
+    return master_kind
 
 
 def _conversion_quantity(kind: str, unit: str, param_key: str) -> str | None:
@@ -338,13 +357,7 @@ def _conversion_quantity(kind: str, unit: str, param_key: str) -> str | None:
         return "temperature_rate"
     if unit in ("degF", "°F", "degC", "°C", "inwc", "in_wc", "Pa", "cfm", "L_per_s"):
         q = infer_kind(param_key, unit)
-        if q in (
-            "absolute_temperature",
-            "temperature_difference",
-            "air_pressure",
-            "volumetric_flow",
-            "temperature_rate",
-        ):
+        if q in _CONVERTIBLE_KINDS:
             return q
     return None
 
@@ -431,19 +444,7 @@ def _validate_registry_param_si_change(
             f"({master_kind} -> {branch_kind})"
         )
 
-    convert_kind = master_kind
-    try:
-        inferred = infer_kind(branch_key, master_unit)
-        if inferred in (
-            "absolute_temperature",
-            "temperature_difference",
-            "air_pressure",
-            "volumetric_flow",
-            "temperature_rate",
-        ):
-            convert_kind = inferred
-    except ValueError:
-        pass
+    convert_kind = _convert_kind_for_param(branch_key, master_unit, master_kind)
     quantity = _conversion_quantity(convert_kind, master_unit, branch_key)
     if value_changed or unit_changed:
         if quantity is None:
@@ -496,6 +497,91 @@ def assert_registry_si_cutover_diff(metric: dict[str, Any]) -> None:
             )
 
 
+def _rules_by_id(doc: Any) -> dict[str, dict[str, Any]]:
+    rules = doc.get("rules") if isinstance(doc, dict) else None
+    if not isinstance(rules, list):
+        raise AssertionError("registry.yaml rules must be a list")
+    out: dict[str, dict[str, Any]] = {}
+    for rule in rules:
+        if not isinstance(rule, dict):
+            raise AssertionError("registry rule entries must be mappings")
+        rid = rule.get("rule_id")
+        if not rid:
+            raise AssertionError("registry rule missing rule_id")
+        out[str(rid)] = rule
+    return out
+
+
+def registry_without_role_lists(doc: Any) -> Any:
+    import copy
+
+    stripped = copy.deepcopy(doc)
+    stripped = strip_registry_metadata(stripped)
+    for rule in stripped.get("rules", []):
+        if isinstance(rule, dict):
+            rule.pop("required_roles", None)
+            rule.pop("optional_roles", None)
+    return stripped
+
+
+def registry_without_roles_and_parameters(doc: Any) -> Any:
+    stripped = registry_without_role_lists(doc)
+    for rule in stripped.get("rules", []):
+        if isinstance(rule, dict):
+            rule.pop("parameters", None)
+    return stripped
+
+
+def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -> None:
+    """Allow only optional_roles additions justified by rule SQL history reads."""
+    from check_rule_columns import sql_history_roles_for_rule
+
+    master_rules = _rules_by_id(master_doc)
+    branch_rules = _rules_by_id(branch_doc)
+    if set(master_rules) != set(branch_rules):
+        raise AssertionError(
+            "registry.yaml rule_id set differs from origin/master "
+            "(add/remove rule entries not allowed in metadata-only PRs)"
+        )
+
+    for rule_id, branch_rule in branch_rules.items():
+        master_rule = master_rules[rule_id]
+        master_req = list(master_rule.get("required_roles") or [])
+        branch_req = list(branch_rule.get("required_roles") or [])
+        if master_req != branch_req:
+            raise AssertionError(
+                f"registry.yaml {rule_id}: required_roles changed "
+                f"(master={master_req!r} branch={branch_req!r})"
+            )
+
+        master_opt = {str(r).lower() for r in master_rule.get("optional_roles") or []}
+        branch_opt = {str(r).lower() for r in branch_rule.get("optional_roles") or []}
+        if not branch_opt.issuperset(master_opt):
+            removed = sorted(master_opt - branch_opt)
+            raise AssertionError(
+                f"registry.yaml {rule_id}: optional_roles removal not allowed "
+                f"(removed {removed!r})"
+            )
+        added = branch_opt - master_opt
+        if not added:
+            continue
+        sql_roles = {r.lower() for r in sql_history_roles_for_rule(branch_rule)}
+        for role in sorted(added):
+            if role not in sql_roles:
+                raise AssertionError(
+                    f"registry.yaml {rule_id}: optional_roles addition `{role}` "
+                    "is not referenced in the rule SQL FROM history SELECT"
+                )
+
+    if registry_without_roles_and_parameters(master_doc) != registry_without_roles_and_parameters(
+        branch_doc
+    ):
+        raise AssertionError(
+            "registry.yaml differs from origin/master beyond kind/effect metadata, "
+            "SI parameter cutover, and SQL-justified optional_roles additions"
+        )
+
+
 def _tuning_params_by_rule(doc: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
     out: dict[str, dict[str, dict[str, Any]]] = {}
     for rule in doc.get("rules") or []:
@@ -536,7 +622,16 @@ def assert_tuning_si_cutover_diff(metric: dict[str, Any]) -> None:
 
 
 def assert_metadata_only_registry_diff() -> None:
+    try:
+        import yaml
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("PyYAML required") from exc
     metric = load_json(METRIC_UNITS)
+    master_text = git_show_master("sql/fdd/registry.yaml")
+    branch_text = REGISTRY.read_text(encoding="utf-8")
+    master_doc = yaml.safe_load(master_text)
+    branch_doc = yaml.safe_load(branch_text)
+    validate_registry_role_declarations_diff(master_doc, branch_doc)
     assert_registry_si_cutover_diff(metric)
 
 
@@ -555,3 +650,4 @@ def apply_tuning_catalog(data: dict[str, Any]) -> dict[str, Any]:
             effect = derive_tuner_effect(rid, param.get("effect_in_sql"))
             param["effect"] = effect
     return data
+

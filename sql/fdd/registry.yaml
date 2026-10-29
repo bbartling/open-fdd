@@ -4532,6 +4532,7 @@ rules:
     pandas_function: null
     description: DP below SP at max pump speed
     required_roles: [chw_dp, chw_dp_sp, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4606,6 +4607,7 @@ rules:
     pandas_function: null
     description: Plant supply temp outside deadband
     required_roles: [chw_supply_t, chw_supply_sp, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4670,6 +4672,7 @@ rules:
     pandas_function: null
     description: Flow high at max pump
     required_roles: [chw_flow, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -5163,7 +5166,7 @@ rules:
     pandas_function: null
     description: HWST trim advisory
     required_roles: [hw_supply_t]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, hw_reset_request_sum]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -5238,7 +5241,7 @@ rules:
     pandas_function: null
     description: CHW plant reset advisory
     required_roles: [chw_supply_t]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, chw_reset_request_sum]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

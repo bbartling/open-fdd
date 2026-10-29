@@ -2796,6 +2796,29 @@ async fn ensure_history_table(conn: &mut PgConnection, roles: &[String]) -> Resu
     Ok(())
 }
 
+async fn roles_with_unique_binding(
+    conn: &mut PgConnection,
+    building_id: &str,
+    equipment_id: &str,
+    roles: &[String],
+) -> Result<std::collections::BTreeSet<String>> {
+    if roles.is_empty() {
+        return Ok(std::collections::BTreeSet::new());
+    }
+    let rows: Vec<String> = sqlx::query_scalar(
+        "SELECT role FROM authorized_series a
+         WHERE a.site_id = $1 AND a.equipment_id = $2 AND a.role = ANY($3)
+         GROUP BY role HAVING COUNT(*) = 1",
+    )
+    .bind(building_id)
+    .bind(equipment_id)
+    .bind(roles)
+    .fetch_all(&mut *conn)
+    .await
+    .context("unique authorized_series bindings for pivot roles")?;
+    Ok(rows.into_iter().collect())
+}
+
 async fn fill_history_for_equipment(
     conn: &mut PgConnection,
     building_id: &str,
@@ -2810,11 +2833,13 @@ async fn fill_history_for_equipment(
     }
     // Stored samples are metric-c-v2; pivot reads `s.val` without query-time admit.
     // Columns come from the current unique binding. A second key for the same
-    // role is left out. Weather and CHW fall back to one stamped equipment,
-    // the lexicographically first unique binding, when the target has none.
+    // role is left out. Declared optional roles with no unique binding still get a
+    // NULL column in the pivot (#1405). Weather and CHW fall back to one stamped
+    // equipment, the lexicographically first unique binding, when the target has none.
     // $1..$3 are building, equipment, and roles. Admission binds follow those.
     let mut admit = crate::admitted_sample::AdmitBuilder::after_occupied(3);
     let mut max_cols = String::new();
+    let bound_roles = roles_with_unique_binding(conn, building_id, equipment_id, roles).await?;
     let site_oa_key = fill
         .and_then(|opts| opts.site_oa_t.as_ref())
         .map(|r| r.openfdd_key.replace('\'', "''"));
@@ -2822,6 +2847,10 @@ async fn fill_history_for_equipment(
         let admitted = admit.admitted_on_sample(role);
         let alias = crate::series_binding::quote_ident(role);
         let role_lit = role.replace('\'', "''");
+        if !bound_roles.contains(role) && !is_chw_plant_role(role) && !is_weather_role(role) {
+            max_cols.push_str(&format!(", NULL::double precision AS {alias}"));
+            continue;
+        }
         let local = if role == "oa_t" {
             if let Some(key_lit) = site_oa_key.as_deref() {
                 format!(
@@ -6361,6 +6390,10 @@ mod oat_meteo_bound_contract_test;
 #[cfg(test)]
 #[path = "oat_meteo_t1404_test.rs"]
 mod oat_meteo_t1404_test;
+
+#[cfg(test)]
+#[path = "t1405_trim_column_contract_test.rs"]
+mod t1405_trim_column_contract_test;
 #[cfg(test)]
 #[path = "vav1_t1407_test.rs"]
 mod vav1_t1407_test;

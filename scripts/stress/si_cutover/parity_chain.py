@@ -739,7 +739,8 @@ def hydrate_w4c_p2_sql_si_from_timescale(
     errors: list[str] = []
     notes: list[str] = []
 
-    def record(msg: str) -> None:
+    def hydrate_fail(msg: str) -> None:
+        """Under strict W4c, infrastructure/SQL failures are P2 errors (not notes)."""
         if strict:
             errors.append(msg)
         else:
@@ -747,7 +748,7 @@ def hydrate_w4c_p2_sql_si_from_timescale(
 
     url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
     if not url:
-        record("P2 hydrate_w4c: OPENFDD_DATABASE_URL is not set")
+        hydrate_fail("P2 hydrate_w4c: OPENFDD_DATABASE_URL is not set")
         return errors, notes
 
     metric = uc.load_json(uc.METRIC_UNITS)
@@ -755,7 +756,7 @@ def hydrate_w4c_p2_sql_si_from_timescale(
     try:
         conn = cts._load_parity_module().connect_with_retry(url)
     except Exception as exc:
-        record(f"P2 hydrate_w4c: connect failed: {exc}")
+        hydrate_fail(f"P2 hydrate_w4c: connect failed: {exc}")
         return errors, notes
     try:
         for golden in goldens:
@@ -765,12 +766,12 @@ def hydrate_w4c_p2_sql_si_from_timescale(
             try:
                 spec = next(s for s in cfl.iter_dataset_specs() if s.building_id == building_id)
             except StopIteration:
-                record(f"P2 hydrate_w4c {building_id}: no dataset spec")
+                hydrate_fail(f"P2 hydrate_w4c {building_id}: no dataset spec")
                 continue
             try:
                 frame_raw, equipment_id = cfl.reload_dataset_frame(golden)
             except Exception as exc:
-                record(f"P2 hydrate_w4c {building_id}: reload frame: {exc}")
+                hydrate_fail(f"P2 hydrate_w4c {building_id}: reload frame: {exc}")
                 continue
             ip_frame = cfl.prepare_ip_frame(
                 frame_raw,
@@ -808,10 +809,10 @@ def hydrate_w4c_p2_sql_si_from_timescale(
                     params_by_rule=params_si_by_rule,
                 )
             except Exception as exc:
-                record(f"P2 hydrate_w4c {building_id}: run_sql_si_for_dataset: {exc}")
+                hydrate_fail(f"P2 hydrate_w4c {building_id}: run_sql_si_for_dataset: {exc}")
                 continue
             if sql_err:
-                record(
+                hydrate_fail(
                     f"P2 hydrate_w4c {building_id}: sql_si errors: {'; '.join(sql_err[:3])}"
                 )
                 continue
@@ -836,21 +837,25 @@ def hydrate_w4c_p2_sql_si_from_timescale(
                     str(row.get("equipment_id")),
                 )
                 if key in sql_by_key:
+                    if row.get("pandas_si_missing") or row.get("pandas_si_fault_seconds") is None:
+                        pandas_missing = True
+                        pandas_si_fs = 0.0
+                    else:
+                        pandas_missing = False
+                        pandas_si_fs = float(row["pandas_si_fault_seconds"])
                     updated.append(
                         cts.p2_pair_for_si_row(
                             rule_id=rid,
                             equipment_id=str(row.get("equipment_id")),
                             utc_day=str(row.get("utc_day")),
-                            pandas_si_fault_seconds=float(
-                                row.get("pandas_si_fault_seconds") or 0.0
-                            ),
-                            pandas_si_missing=bool(row.get("pandas_si_missing")),
+                            pandas_si_fault_seconds=pandas_si_fs,
+                            pandas_si_missing=pandas_missing,
                             sql_si_fault_seconds=sql_by_key[key],
                         )
                     )
                 else:
                     if strict:
-                        record(
+                        hydrate_fail(
                             f"P2 hydrate_w4c {rid}/{row.get('equipment_id')}/"
                             f"{row.get('utc_day')}: missing sql_si row after Timescale run"
                         )
