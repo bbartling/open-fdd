@@ -24,21 +24,6 @@ from unit_contract_lib import (  # noqa: E402
 
 FC_RULES = frozenset(tuple(f"FC{i}" for i in range(1, 16)) + ("FC13-SAT-HIGH",))
 
-# GL36 sensor tolerances are °F deltas in the cookbook/SQL math; registry kind stays absolute_temperature.
-_CONVERT_AS_TEMP_DELTA = frozenset(
-    {
-        "eps_cclt",
-        "eps_ccet",
-        "eps_hcet",
-        "eps_hclt",
-        "eps_sat",
-        "eps_mat",
-        "eps_oat",
-        "eps_rat",
-        "delta_supply_fan",
-    }
-)
-
 IMPERIAL_UNITS = frozenset({"degF", "inwc", "in_wc", "cfm", "degF_delta", "°F"})
 
 
@@ -87,10 +72,7 @@ def convert_param_spec(name: str, spec: dict[str, Any], metric: dict) -> dict[st
     if unit not in IMPERIAL_UNITS:
         return patches
     kind = str(spec.get("kind") or infer_kind(name, unit))
-    convert_kind = kind
-    if unit in ("degF", "degF_delta", "°F") and name in _CONVERT_AS_TEMP_DELTA:
-        convert_kind = "temperature_difference"
-    q = _quantity(convert_kind, unit)
+    q = _quantity(kind, unit)
     if not q:
         return patches
     src = _src_unit(q, unit)

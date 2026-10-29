@@ -389,7 +389,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_SAT
       econ_min_pos:
@@ -684,7 +684,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_RAT
       eps_oat:
@@ -694,7 +694,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
@@ -704,7 +704,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_MAT
       mix_tol:
@@ -789,7 +789,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_RAT
       eps_oat:
@@ -799,7 +799,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
@@ -809,7 +809,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_MAT
       mix_tol:
@@ -915,7 +915,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_SAT
       htg_full_min:
@@ -1020,7 +1020,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
@@ -1030,7 +1030,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_MAT
       mix_tol:
@@ -1050,7 +1050,7 @@ rules:
         max: 2.777777778
         step: 0.027777778
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       econ_min_pos:
@@ -1155,7 +1155,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_oat:
@@ -1165,7 +1165,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_OAT
       mix_tol:
@@ -1185,7 +1185,7 @@ rules:
         max: 2.777777778
         step: 0.027777778
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       econ_min_pos:
@@ -1290,7 +1290,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
@@ -1300,7 +1300,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_MAT
       econ_full_open:
@@ -1415,7 +1415,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_oat:
@@ -1425,7 +1425,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_OAT
       econ_full_open:
@@ -1455,7 +1455,7 @@ rules:
         max: 2.777777778
         step: 0.027777778
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       clg_on_min:
@@ -1560,7 +1560,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
@@ -1570,7 +1570,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_MAT
       econ_full_open:
@@ -1600,7 +1600,7 @@ rules:
         max: 2.777777778
         step: 0.027777778
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       clg_on_min:
@@ -2428,7 +2428,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
@@ -2438,7 +2438,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_MAT
       confirm_seconds:
@@ -2478,7 +2478,7 @@ rules:
         max: 2.777777778
         step: 0.027777778
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
 
@@ -2678,7 +2678,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_CCLT
       eps_ccet:
@@ -2688,7 +2688,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_CCET
       econ_min_pos:
@@ -2708,7 +2708,7 @@ rules:
         max: 2.777777778
         step: 0.027777778
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       clg_inactive_max:
@@ -2823,7 +2823,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_HCLT
       eps_hcet:
@@ -2833,7 +2833,7 @@ rules:
         max: 5.555555556
         step: 0.138888889
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: EPS_HCET
       econ_min_pos:
@@ -2863,7 +2863,7 @@ rules:
         max: 2.777777778
         step: 0.027777778
         unit: degC
-        kind: absolute_temperature
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: DELTA_SUPPLY_FAN
       clg_on_min:

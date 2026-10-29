@@ -123,6 +123,12 @@ def infer_kind(param_key: str, unit: str) -> str:
     key = param_key.strip().lower()
     if key in TEMPERATURE_DIFFERENCE_KEYS or "delta" in key and key.endswith("_f"):
         return "temperature_difference"
+    if key == "delta_supply_fan" or (
+        key.startswith("eps_")
+        and key not in {"eps_dsp", "eps_vfd_spd"}
+        and u.lower() in {"degf", "°f", "degc"}
+    ):
+        return "temperature_difference"
     if u in {"degF", "°F"}:
         return "absolute_temperature"
     if u == "degC":
