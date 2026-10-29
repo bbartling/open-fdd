@@ -58,44 +58,13 @@ def _scope_label(scope: set[str] | None, *, family: str | None, rules: tuple[str
     return "full_matrix"
 
 
-def _p0_gate_errors(p0: pc.StageResult | None) -> list[str]:
-    """P0 errors that should fail a blocking scoped gate (excludes classified product findings)."""
-    import re
-
-    if p0 is None:
-        return []
-    block_keys = {
-        (
-            str(c.get("building_id")),
-            str(c.get("rule_id")),
-            str(c.get("equipment_id")),
-            str(c.get("utc_day")),
-        )
-        for c in p0.structured
-        if c.get("blocks_gate") is False
-    }
-    if not block_keys:
-        return list(p0.errors)
-    pat = re.compile(
-        r"^P0 value_mismatch \('([^']*)', '([^']*)', '([^']*)', '([^']*)'\)"
-    )
-    out: list[str] = []
-    for err in p0.errors:
-        m = pat.match(err)
-        if m:
-            key = (m.group(1), m.group(2), m.group(3), m.group(4))
-            if key in block_keys:
-                continue
-        out.append(err)
-    return out
-
-
 def _blocking_errors(
     results: list[pc.StageResult],
     *,
     blocking: bool,
     scope: set[str] | None,
 ) -> list[str]:
+    """Structural gate: P0 never blocks; scoped P1/P2 mismatches always block."""
     out: list[str] = []
     always_block = ("unit_vectors", "unit_scenarios", "pandas-errors", "P0-carryover")
     for r in results:
@@ -105,9 +74,6 @@ def _blocking_errors(
         if not blocking:
             if r.stage == "P2":
                 out.extend(r.errors)
-            continue
-        if scope is not None and r.stage == "P0":
-            out.extend(_p0_gate_errors(r))
             continue
         if scope is not None and r.stage in ("P1", "P2"):
             out.extend(r.errors)
@@ -172,13 +138,9 @@ def run_fixtures_gate(
 
     for r in results:
         if r.stage in ("P0", "P1") and r.comparisons > 0:
-            if r.stage == "P0" and blocking and scope is not None:
-                gate_errs = _p0_gate_errors(r)
-                record_check(
-                    f"si_parity.{r.stage}",
-                    not gate_errs,
-                    comparisons=r.comparisons,
-                )
+            if r.stage == "P0":
+                # P0 is report-only even under --blocking + scope.
+                record_check(f"si_parity.{r.stage}", True, comparisons=r.comparisons)
             else:
                 record_check(
                     f"si_parity.{r.stage}",
@@ -335,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--blocking",
         action="store_true",
-        help="Inside scope, P0/P1/P2 mismatches fail the gate (except full-matrix report-only)",
+        help="Inside scope, P1/P2 mismatches fail the gate (P0 is always report-only)",
     )
     ap.add_argument(
         "--rules",

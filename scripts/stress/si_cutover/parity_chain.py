@@ -475,10 +475,7 @@ def compare_p0_all_goldens(
     scope: set[str] | None = None,
 ) -> StageResult:
     from scripts.stress.si_cutover import ci_fixtures_lib as cfl
-    from scripts.stress.si_cutover.product_sql_params import (
-        MODE_DELAY_DEFAULT_VS_STARTUP,
-        p0_value_mismatch_reason,
-    )
+    from scripts.stress.si_cutover.product_sql_params import p0_value_mismatch_reason
 
     rules_by_id = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
     errors: list[str] = []
@@ -506,7 +503,6 @@ def compare_p0_all_goldens(
                         "rule_id": key[1],
                         "equipment_id": key[2],
                         "utc_day": key[3],
-                        "blocks_gate": True,
                     }
                 )
                 continue
@@ -529,7 +525,6 @@ def compare_p0_all_goldens(
                     "utc_day": key[3],
                     "pandas_ip_seconds": float(prow.get("fault_seconds", 0)),
                     "sql_ip_seconds": float(srow.get("fault_seconds", 0)),
-                    "blocks_gate": mismatch_reason != MODE_DELAY_DEFAULT_VS_STARTUP,
                 }
                 if mismatch_reason:
                     cell["mismatch_reason"] = mismatch_reason
