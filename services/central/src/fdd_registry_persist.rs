@@ -1,10 +1,10 @@
 //! Persist FDD registry runs to Timescale (`fdd_run`, `fdd_interval_result`,
 //! `fdd_incremental_checkpoint`) — single writer, one transaction per run.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use fdd_tsdb::{
     ensure_incremental_schema, replace_scope_results_in_tx, AnalysisWindow, BucketGrid,
     BucketResult, FddResultIdentity, IncrementalError, QualityPolicy, ResultScope, RuleHorizon,
@@ -46,6 +46,85 @@ fn row_f64(row: &Value, key: &str) -> Option<f64> {
     row.get(key)
         .and_then(Value::as_f64)
         .filter(|v| v.is_finite())
+}
+
+const ELAPSED_MAX_GAP_SECONDS: i64 = 3600;
+
+/// Per-UTC-day fault/covered seconds from a confirmed_fault series (pandas hold semantics).
+fn daily_utc_fault_covered_from_confirmed_points(
+    points: &[(DateTime<Utc>, bool)],
+) -> BTreeMap<NaiveDate, (f64, f64)> {
+    let mut sorted = points.to_vec();
+    sorted.sort_by_key(|(ts, _)| *ts);
+    let mut out: BTreeMap<NaiveDate, (f64, f64)> = BTreeMap::new();
+    for i in 0..sorted.len() {
+        let (ts, confirmed) = sorted[i];
+        let hold = if i + 1 < sorted.len() {
+            let delta = (sorted[i + 1].0 - ts).num_seconds();
+            if delta > 0 && delta <= ELAPSED_MAX_GAP_SECONDS {
+                delta as f64
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        if hold <= 0.0 {
+            continue;
+        }
+        let day = ts.date_naive();
+        let slot = out.entry(day).or_insert((0.0, 0.0));
+        slot.1 += hold;
+        if confirmed {
+            slot.0 += hold;
+        }
+    }
+    out
+}
+
+fn interval_buckets_from_daily_utc(
+    window: AnalysisWindow,
+    daily: BTreeMap<NaiveDate, (f64, f64)>,
+    sample_rows: i32,
+) -> Result<Vec<BucketResult>, IncrementalError> {
+    use chrono_tz::UTC;
+    let grid = BucketGrid::LocalDay(UTC);
+    let buckets = grid.buckets_overlapping(window.start(), window.end())?;
+    if buckets.is_empty() {
+        return Ok(Vec::new());
+    }
+    let per_bucket_samples = (sample_rows / buckets.len().max(1) as i32).max(0);
+    let mut out = Vec::with_capacity(buckets.len());
+    for bucket in buckets {
+        let day = bucket.start().date_naive();
+        let (fault, covered) = daily.get(&day).copied().unwrap_or((0.0, 0.0));
+        out.push(BucketResult::new(
+            bucket,
+            fault,
+            covered,
+            per_bucket_samples as u64,
+        )?);
+    }
+    Ok(out)
+}
+
+fn interval_buckets_from_confirmed_fault_map(
+    window: AnalysisWindow,
+    map: &HashMap<String, bool>,
+    sample_rows: i32,
+) -> Result<Vec<BucketResult>, IncrementalError> {
+    let mut points: Vec<(DateTime<Utc>, bool)> = Vec::with_capacity(map.len());
+    for (ts, flag) in map {
+        let Ok(parsed) = DateTime::parse_from_rfc3339(ts) else {
+            continue;
+        };
+        points.push((parsed.with_timezone(&Utc), *flag));
+    }
+    if points.is_empty() {
+        return Ok(Vec::new());
+    }
+    let daily = daily_utc_fault_covered_from_confirmed_points(&points);
+    interval_buckets_from_daily_utc(window, daily, sample_rows)
 }
 
 fn distribute_interval_buckets(
@@ -225,21 +304,57 @@ pub async fn persist_registry_run_timescale(
                         && row.get("output_kind").and_then(Value::as_str) != Some("metric")
                         && fault_hours.is_some()
                     {
-                        let grid = BucketGrid::UtcHour;
+                        use chrono_tz::UTC;
                         let horizon = RuleHorizon::new(
                             chrono::Duration::zero(),
                             chrono::Duration::seconds(confirm.round().max(0.0) as i64),
                         )?;
+                        let covered = row_f64(row, "covered_hours");
+                        let ws = window
+                            .start()
+                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                        let we = window
+                            .end()
+                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+                        let mut grid = BucketGrid::UtcHour;
+                        let mut buckets: Vec<BucketResult> = Vec::new();
+                        if let Ok(reg) = crate::timescale_product::load_reg() {
+                            if let Some(rule) =
+                                reg.rules.iter().find(|spec| spec.rule_id == item.rule_id)
+                            {
+                                if let Ok(map) = crate::timescale_product::load_live_confirmed_fault(
+                                    tsdb,
+                                    &reg,
+                                    rule,
+                                    site_id,
+                                    eq,
+                                    Some(&ws),
+                                    Some(&we),
+                                )
+                                .await
+                                {
+                                    if !map.is_empty() {
+                                        grid = BucketGrid::LocalDay(UTC);
+                                        buckets = interval_buckets_from_confirmed_fault_map(
+                                            window,
+                                            &map,
+                                            sample_rows,
+                                        )?;
+                                    }
+                                }
+                            }
+                        }
+                        if buckets.is_empty() {
+                            buckets = distribute_interval_buckets(
+                                grid,
+                                window,
+                                fault_hours.unwrap_or(0.0),
+                                covered,
+                                sample_rows,
+                            )?;
+                        }
                         let scope =
                             ResultScope::new(site_id, &item.rule_id, eq, &identity, grid, horizon)?;
-                        let covered = row_f64(row, "covered_hours");
-                        let buckets = distribute_interval_buckets(
-                            grid,
-                            window,
-                            fault_hours.unwrap_or(0.0),
-                            covered,
-                            sample_rows,
-                        )?;
                         if !buckets.is_empty() {
                             replace_scope_results_in_tx(
                                 &mut tx,
@@ -514,6 +629,67 @@ pub async fn readiness_from_timescale(tsdb: &Tsdb, building_id: Option<&str>) ->
 
 fn loose_legacy_count(building_id: &str) -> usize {
     open_fdd_edge_prototype::fdd::registry_api::loose_rule_file_count_for_building(building_id)
+}
+
+#[cfg(test)]
+mod interval_daily_unit_tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+
+    #[test]
+    fn daily_series_fault_only_on_one_day_not_equal_across_five() {
+        let start = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
+        let mut points: Vec<(DateTime<Utc>, bool)> = Vec::new();
+        for day in 0..5 {
+            let base = start + chrono::Duration::days(day);
+            for step in 0..12 {
+                let ts = base + chrono::Duration::seconds(step * 300);
+                let confirmed = day == 0 && step >= 2;
+                points.push((ts, confirmed));
+            }
+        }
+        let daily = daily_utc_fault_covered_from_confirmed_points(&points);
+        let fault_day0 = daily
+            .get(&NaiveDate::from_ymd_opt(2026, 10, 10).unwrap())
+            .map(|(f, _)| *f)
+            .unwrap_or(0.0);
+        let fault_day1 = daily
+            .get(&NaiveDate::from_ymd_opt(2026, 10, 11).unwrap())
+            .map(|(f, _)| *f)
+            .unwrap_or(0.0);
+        assert!(fault_day0 > 0.0, "day 0 should have fault seconds");
+        assert_eq!(fault_day1, 0.0, "day 1 should have no fault seconds");
+    }
+
+    #[test]
+    fn distribute_interval_buckets_spreads_evenly_across_days() {
+        let start = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2026, 10, 15, 0, 0, 0).unwrap();
+        let window = AnalysisWindow::half_open(start, end).expect("window");
+        let grid = BucketGrid::UtcHour;
+        let buckets = distribute_interval_buckets(grid, window, 6.8, Some(6.8), 100)
+            .expect("buckets");
+        use chrono_tz::UTC;
+        let day_grid = BucketGrid::LocalDay(UTC);
+        let day_buckets = day_grid
+            .buckets_overlapping(window.start(), window.end())
+            .expect("days");
+        let summed: BTreeMap<NaiveDate, f64> = buckets.iter().fold(BTreeMap::new(), |mut acc, b| {
+            let day = b.bucket().start().date_naive();
+            *acc.entry(day).or_insert(0.0) += b.fault_seconds();
+            acc
+        });
+        let values: Vec<f64> = day_buckets
+            .iter()
+            .map(|db| summed.get(&db.start().date_naive()).copied().unwrap_or(0.0))
+            .collect();
+        if values.len() >= 2 {
+            assert!(
+                (values[0] - values[1]).abs() < 1.0,
+                "legacy distribute spreads evenly: {values:?}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]
