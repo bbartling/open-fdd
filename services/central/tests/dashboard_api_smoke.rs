@@ -166,7 +166,12 @@ fn openapi_json_and_swagger_ui_respond() {
     );
 
     let (status, body) = http("GET", server.port, "/docs/", None);
-    assert_eq!(status, 200, "/docs/ status {status}: {}", body.chars().take(120).collect::<String>());
+    assert_eq!(
+        status,
+        200,
+        "/docs/ status {status}: {}",
+        body.chars().take(120).collect::<String>()
+    );
     assert!(
         body.contains("swagger-ui") || body.contains("Swagger UI"),
         "/docs/ should serve Swagger UI HTML"
