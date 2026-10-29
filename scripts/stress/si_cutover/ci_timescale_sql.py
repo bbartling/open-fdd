@@ -117,21 +117,11 @@ def pandas_aligned_sql_overrides(
     *,
     poll_seconds: float,
 ) -> dict[str, float]:
-    """Align SQL MODE_DELAY with pandas operational gate (startup delay)."""
-    from open_fdd.rules import run_rule
-
+    """Align SQL MODE_DELAY with pandas registry startup_delay_min (minutes)."""
     rule_id = str(rule["rule_id"])
-    probe = run_rule(
-        rule_id,
-        ip_frame,
-        params=params,
-        poll_seconds=float(poll_seconds),
-        require_operational_gates=True,
-    )
-    startup = float((probe.metrics or {}).get("startup_delay_seconds") or 0.0)
     overrides = catalog_overrides_from_registry(rule, params)
     if "mode_delay_min" in _catalog_param_keys(rule_id):
-        overrides["mode_delay_min"] = startup / 60.0
+        overrides["mode_delay_min"] = float(params.get("startup_delay_min", 0.0))
     return overrides
 
 

@@ -609,10 +609,13 @@ def build_golden_for_dataset(
         "equipment_type": spec.equipment_type,
         "poll_seconds": poll_seconds,
         "pandas_rules_attempted": attempted_rules,
-        "sql_fdd_daily": sql_rows,
-        "pandas_fdd_daily": pandas_rows,
-        "p2_si_pairs": p2_pairs,
-        "pandas_si_daily": si_rows_for_p1,
+        "sql_fdd_daily": _normalize_daily_rows(sql_rows),
+        "pandas_fdd_daily": _normalize_daily_rows(pandas_rows),
+        "p2_si_pairs": sorted(
+            p2_pairs,
+            key=lambda r: (str(r.get("rule_id")), str(r.get("utc_day")), str(r.get("equipment_id"))),
+        ),
+        "pandas_si_daily": _normalize_daily_rows(si_rows_for_p1),
         "analytics_rows": [],
         "pandas_error_count": len(error_rows),
     }
@@ -691,6 +694,26 @@ def si_fault_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
         str(row.get("rule_id", "")),
         str(row.get("equipment_id", "")),
         str(row.get("utc_day", "")),
+    )
+
+
+def _normalize_daily_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        norm = dict(row)
+        if "fault_seconds" in norm and norm.get("fault_seconds") is not None:
+            norm["fault_seconds"] = round(float(norm["fault_seconds"]), 9)
+        if "covered_seconds" in norm and norm.get("covered_seconds") is not None:
+            norm["covered_seconds"] = round(float(norm["covered_seconds"]), 9)
+        out.append(norm)
+    return sorted(
+        out,
+        key=lambda r: (
+            str(r.get("rule_id", "")),
+            str(r.get("utc_day", "")),
+            str(r.get("equipment_id", "")),
+            str(r.get("pair_status", "")),
+        ),
     )
 
 
