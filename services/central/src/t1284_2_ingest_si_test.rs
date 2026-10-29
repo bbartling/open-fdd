@@ -146,7 +146,7 @@ async fn t1284_2_same_physical_series_four_ingest_paths_match_si() {
         .expect("bad site");
     let mut bad = UpsertBatch::default();
     bad.push({
-        let key = format!("AHU_X.oa_t");
+        let key = "AHU_X.oa_t".to_string();
         let mut row = SampleRow::new(ts, &bad_site, key, Some(70.0));
         row.equipment_id = Some("AHU_X".into());
         row.role = Some("oa_t".into());

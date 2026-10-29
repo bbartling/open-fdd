@@ -138,9 +138,6 @@ impl std::fmt::Display for UnitFlag {
     }
 }
 
-/// Historian temperature unit. SQL FDD stores °F (`imperial-f-v1`).
-const CANONICAL_TEMPERATURE_UNIT: &str = "degF";
-
 #[derive(Clone, PartialEq, Eq)]
 enum UnitClass {
     Celsius,
