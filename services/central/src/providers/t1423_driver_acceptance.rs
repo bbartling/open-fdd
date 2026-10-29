@@ -76,9 +76,14 @@ fn history_json_for(point_id: &str, samples: &[RawProviderPoint]) -> String {
     .to_string()
 }
 
-fn parse_history_from_seconds(req: &str) -> Option<i64> {
+fn history_query(req: &str) -> Option<&str> {
     let line = req.lines().next()?;
-    let query = line.split('?').nth(1)?;
+    let after_q = line.split('?').nth(1)?;
+    after_q.split_whitespace().next()
+}
+
+fn parse_history_from_seconds(req: &str) -> Option<i64> {
+    let query = history_query(req)?;
     for part in query.split('&') {
         if let Some(raw) = part.strip_prefix("from.seconds=") {
             return raw.parse().ok();
@@ -88,8 +93,7 @@ fn parse_history_from_seconds(req: &str) -> Option<i64> {
 }
 
 fn parse_history_to_seconds(req: &str) -> Option<i64> {
-    let line = req.lines().next()?;
-    let query = line.split('?').nth(1)?;
+    let query = history_query(req)?;
     for part in query.split('&') {
         if let Some(raw) = part.strip_prefix("to.seconds=") {
             return raw.parse().ok();
@@ -99,8 +103,9 @@ fn parse_history_to_seconds(req: &str) -> Option<i64> {
 }
 
 fn history_uuids(req: &str) -> Vec<String> {
-    let line = req.lines().next().unwrap_or("");
-    let query = line.split('?').nth(1).unwrap_or("");
+    let Some(query) = history_query(req) else {
+        return Vec::new();
+    };
     query
         .split('&')
         .filter_map(|part| part.strip_prefix("uuids=").map(str::to_string))
@@ -136,10 +141,11 @@ async fn t1423_1_nf_fixture_pages_at_sample_cap_without_loss_or_duplicates() {
             if req.starts_with("GET /api/v1/point/data") {
                 let mut calls = calls_task.lock().await;
                 *calls += 1;
-                let from =
-                    DateTime::from_timestamp(parse_history_from_seconds(&req).unwrap_or(0), 0)
-                        .unwrap_or(window_start);
-                let to = DateTime::from_timestamp(parse_history_to_seconds(&req).unwrap_or(0), 0)
+                let from = parse_history_from_seconds(&req)
+                    .and_then(|secs| DateTime::from_timestamp(secs, 0))
+                    .unwrap_or(window_start);
+                let to = parse_history_to_seconds(&req)
+                    .and_then(|secs| DateTime::from_timestamp(secs, 0))
                     .unwrap_or(window_end);
                 let point_id = history_uuids(&req)
                     .into_iter()
@@ -231,9 +237,11 @@ async fn t1423_1_two_points_cap_truncates_without_cross_point_loss() {
             if !req.starts_with("GET /api/v1/point/data") {
                 continue;
             }
-            let from = DateTime::from_timestamp(parse_history_from_seconds(&req).unwrap_or(0), 0)
+            let from = parse_history_from_seconds(&req)
+                .and_then(|secs| DateTime::from_timestamp(secs, 0))
                 .unwrap_or(window_start);
-            let to = DateTime::from_timestamp(parse_history_to_seconds(&req).unwrap_or(0), 0)
+            let to = parse_history_to_seconds(&req)
+                .and_then(|secs| DateTime::from_timestamp(secs, 0))
                 .unwrap_or(window_end);
             let point_id = history_uuids(&req)
                 .into_iter()
@@ -316,9 +324,11 @@ async fn t1423_1_max_pages_reports_incomplete_without_error() {
             if !req.starts_with("GET /api/v1/point/data") {
                 continue;
             }
-            let from = DateTime::from_timestamp(parse_history_from_seconds(&req).unwrap_or(0), 0)
+            let from = parse_history_from_seconds(&req)
+                .and_then(|secs| DateTime::from_timestamp(secs, 0))
                 .unwrap_or(window_start);
-            let to = DateTime::from_timestamp(parse_history_to_seconds(&req).unwrap_or(0), 0)
+            let to = parse_history_to_seconds(&req)
+                .and_then(|secs| DateTime::from_timestamp(secs, 0))
                 .unwrap_or(window_end);
             let mut page: Vec<_> = all_server
                 .iter()
