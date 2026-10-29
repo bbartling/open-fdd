@@ -98,9 +98,7 @@ impl QueueClient {
         if let Some(pool) = self.pool_if_configured().await? {
             return postgres::portal_budget_status(&pool, provider_instance_id, now).await;
         }
-        Ok(self
-            .memory
-            .portal_budget_status(provider_instance_id, now))
+        Ok(self.memory.portal_budget_status(provider_instance_id, now))
     }
 
     pub async fn note_throttle(

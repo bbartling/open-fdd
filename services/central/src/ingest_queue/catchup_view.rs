@@ -14,12 +14,12 @@ use crate::state::AppState;
 
 use super::asap_mode::{decide_mode, eta_seconds, AsapConfig};
 use super::binding_state::{
-    ensure_binding_row, last_stored_ts_for_device, stored_hour_starts_for_device,
-    DeviceBindingKey, EnsureBindingInput,
+    ensure_binding_row, last_stored_ts_for_device, stored_hour_starts_for_device, DeviceBindingKey,
+    EnsureBindingInput,
 };
 use super::catchup_registry::CatchupRegistry;
 use super::gap_backfill::point_keys_for_plan_device;
-use super::gap_planner::{default_max_span, expected_start, GapPlanInput, plan_gap_windows};
+use super::gap_planner::{default_max_span, expected_start, plan_gap_windows, GapPlanInput};
 use super::model::MAX_CATCHUP_HOURS;
 use super::worker::publication_delay_secs;
 
@@ -130,10 +130,9 @@ async fn device_row(
     )
     .await
     .map_err(|err| err.to_string())?;
-    let last_stored =
-        last_stored_ts_for_device(pool, &site_cfg.building_id, &point_keys)
-            .await
-            .map_err(|err| err.to_string())?;
+    let last_stored = last_stored_ts_for_device(pool, &site_cfg.building_id, &point_keys)
+        .await
+        .map_err(|err| err.to_string())?;
     let plan_start = expected_start(
         range_start,
         binding.provider_data_start,
@@ -166,10 +165,7 @@ async fn device_row(
         .portal_budget_status(provider_instance_id, now)
         .await
         .map_err(|err| err.to_string())?;
-    let throttle_state = if throttle
-        .paused_until
-        .is_some_and(|until| until > now)
-    {
+    let throttle_state = if throttle.paused_until.is_some_and(|until| until > now) {
         "paused"
     } else if throttle.tokens_remaining.is_some_and(|t| t <= 0) {
         "rate_limited"

@@ -22,8 +22,8 @@ use super::coverage::{
     ReconcileInput, INCOMPLETE,
 };
 use super::model::{
-    points_digest, revision_still_owns, AppliedSample, EnqueueOutcome, FinishOutcome, FinishRequest,
-    JobCounts, JobView, QueueError, JOB_SHARD_ASAP,
+    points_digest, revision_still_owns, AppliedSample, EnqueueOutcome, FinishOutcome,
+    FinishRequest, JobCounts, JobView, QueueError, JOB_SHARD_ASAP,
 };
 use super::schedule::{self, IngestSchedule, ScheduleDevice};
 
@@ -1113,9 +1113,7 @@ async fn run_asap_cycle(state: &Arc<AppState>, now: chrono::DateTime<Utc>) -> Re
         if enqueued_total >= config.max_jobs_per_tick {
             break;
         }
-        let budget_left = config
-            .max_jobs_per_tick
-            .saturating_sub(enqueued_total);
+        let budget_left = config.max_jobs_per_tick.saturating_sub(enqueued_total);
         let n = process_asap_device(
             state,
             &pool,
@@ -1168,8 +1166,8 @@ async fn process_asap_device(
         device_id: device.device_id.clone(),
         model_revision: device.model_revision.clone(),
     };
-    let range_start = target_end
-        - chrono::Duration::hours(i64::from(super::model::MAX_CATCHUP_HOURS));
+    let range_start =
+        target_end - chrono::Duration::hours(i64::from(super::model::MAX_CATCHUP_HOURS));
     let binding = super::binding_state::ensure_binding_row(
         pool,
         super::binding_state::EnsureBindingInput {
@@ -1189,13 +1187,10 @@ async fn process_asap_device(
     )
     .await
     .map_err(|err| err.to_string())?;
-    let last_stored = super::binding_state::last_stored_ts_for_device(
-        pool,
-        &device.canonical_site,
-        &point_keys,
-    )
-    .await
-    .map_err(|err| err.to_string())?;
+    let last_stored =
+        super::binding_state::last_stored_ts_for_device(pool, &device.canonical_site, &point_keys)
+            .await
+            .map_err(|err| err.to_string())?;
     let plan_range_start = super::gap_planner::expected_start(
         range_start,
         binding.provider_data_start,

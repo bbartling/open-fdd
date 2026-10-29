@@ -59,9 +59,7 @@ impl CatchupRegistry {
         let entry = self.devices.entry(key.clone()).or_default();
         entry.sample_times.push((finished_at, rows_written));
         let cutoff = finished_at - Duration::minutes(5);
-        entry
-            .sample_times
-            .retain(|(ts, _)| *ts >= cutoff);
+        entry.sample_times.retain(|(ts, _)| *ts >= cutoff);
         let total: u64 = entry.sample_times.iter().map(|(_, n)| n).sum();
         let minutes = 5_f64;
         entry.rows_per_minute = (total as f64) / minutes;

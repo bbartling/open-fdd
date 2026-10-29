@@ -112,8 +112,8 @@ pub fn plan_gap_windows(input: GapPlanInput<'_>) -> Result<GapPlanResult, String
         cursor = next;
     }
 
-    let missing_hour_count = u32::try_from(missing_hours.len())
-        .map_err(|_| "missing hour count overflow")?;
+    let missing_hour_count =
+        u32::try_from(missing_hours.len()).map_err(|_| "missing hour count overflow")?;
     let planned = merge_missing_hours(missing_hours, span_cap)?;
     let counts = GapPlanCounts {
         planned: u32::try_from(planned.len()).map_err(|_| "planned window count overflow")?,

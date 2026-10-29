@@ -367,7 +367,12 @@ pub async fn list_catchup(
 ) -> Response {
     let request_id = contract::ensure_request_id(&headers);
     let ctx = tenant_ctx(&state, &user).await;
-    let Some(site) = query.site_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+    let Some(site) = query
+        .site_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
         return json_error(
             StatusCode::BAD_REQUEST,
             "invalid_request",
@@ -422,20 +427,21 @@ pub async fn list_catchup(
         );
     }
     let now = Utc::now();
-    let Some(pool) = match state.ingest_queue.postgres_pool().await {
-        Ok(pool) => pool,
+    let pool = match state.ingest_queue.postgres_pool().await {
+        Ok(Some(pool)) => pool,
+        Ok(None) => {
+            return Json(json!({
+                "ok": true,
+                "request_id": request_id,
+                "scope": scope_json(&ctx),
+                "site_id": site,
+                "generated_at": now,
+                "providers": [],
+                "note": "catchup requires postgres ingest queue",
+            }))
+            .into_response();
+        }
         Err(err) => return queue_err(&err, &request_id),
-    } else {
-        return Json(json!({
-            "ok": true,
-            "request_id": request_id,
-            "scope": scope_json(&ctx),
-            "site_id": site,
-            "generated_at": now,
-            "providers": [],
-            "note": "catchup requires postgres ingest queue",
-        }))
-        .into_response();
     };
     match super::catchup_view::site_catchup_json(&state, &pool, site, &configs, now).await {
         Ok(providers) => Json(json!({

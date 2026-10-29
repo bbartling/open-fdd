@@ -4,7 +4,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::providers::hourly::floor_to_window;
 
-use super::gap_planner::{GapPlanInput, GapPlanResult, plan_gap_windows};
+use super::gap_planner::{plan_gap_windows, GapPlanInput, GapPlanResult};
 use super::model::JOB_SHARD_ASAP;
 
 pub const MODE_NORMAL: &str = "normal";
@@ -163,14 +163,7 @@ mod tests {
             max_span: MAX_HISTORY_WINDOW,
         })
         .expect("plan");
-        let decision = decide_mode(
-            &plan,
-            Some(h(1)),
-            h(12),
-            Duration::seconds(300),
-            3600,
-            3,
-        );
+        let decision = decide_mode(&plan, Some(h(1)), h(12), Duration::seconds(300), 3600, 3);
         assert_eq!(decision.mode, CatchupMode::Asap);
         assert!(decision.missing_windows > 3);
     }
@@ -196,14 +189,7 @@ mod tests {
             max_span: MAX_HISTORY_WINDOW,
         })
         .expect("plan");
-        let decision = decide_mode(
-            &plan,
-            Some(last),
-            now,
-            Duration::seconds(300),
-            3600,
-            1,
-        );
+        let decision = decide_mode(&plan, Some(last), now, Duration::seconds(300), 3600, 1);
         assert_eq!(decision.mode, CatchupMode::Normal);
     }
 }
