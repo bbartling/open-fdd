@@ -167,7 +167,9 @@ fn openapi_json_and_swagger_ui_respond() {
             body.chars().take(120).collect::<String>()
         );
         assert!(
-            body.contains("swagger") || body.contains("Swagger"),
+            body.contains("swagger-ui")
+                || body.contains("SwaggerUI")
+                || body.contains("openapi.json"),
             "{path} should serve Swagger UI HTML"
         );
     }
