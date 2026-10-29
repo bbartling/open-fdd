@@ -384,10 +384,10 @@ rules:
         sql_placeholder: MODE_DELAY_MIN
       eps_sat:
         label: SAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -587,7 +587,7 @@ rules:
         default: 29.8608
         min: 0.0
         max: 124.42
-        step: 0.01
+        step: 2.4884
         unit: Pa
         kind: air_pressure
         frontend_control: slider
@@ -679,30 +679,30 @@ rules:
         sql_placeholder: FAN_ON_MIN
       eps_rat:
         label: RAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_RAT
       eps_oat:
         label: OAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
         label: MAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -712,7 +712,7 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -784,30 +784,30 @@ rules:
         sql_placeholder: MODE_DELAY_MIN
       eps_rat:
         label: RAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_RAT
       eps_oat:
         label: OAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
         label: MAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -817,7 +817,7 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -910,10 +910,10 @@ rules:
         sql_placeholder: FAN_ON_MIN
       eps_sat:
         label: SAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1008,27 +1008,27 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SUPPLY_TOL
       eps_sat:
         label: SAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
         label: MAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1038,17 +1038,17 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
         label: Supply-fan delta (GL36 0.55 °F)
-        default: -17.472222222
-        min: -17.777777778
-        max: -15.0
-        step: 0.05
+        default: 0.305555556
+        min: 0.0
+        max: 2.777777778
+        step: 0.027777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1150,20 +1150,20 @@ rules:
         sql_placeholder: MODE_DELAY_MIN
       eps_sat:
         label: SAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_oat:
         label: OAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1173,17 +1173,17 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
         label: Supply-fan delta (GL36 0.55 °F)
-        default: -17.472222222
-        min: -17.777777778
-        max: -15.0
-        step: 0.05
+        default: 0.305555556
+        min: 0.0
+        max: 2.777777778
+        step: 0.027777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1285,20 +1285,20 @@ rules:
         sql_placeholder: MODE_DELAY_MIN
       eps_oat:
         label: OAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_OAT
       eps_mat:
         label: MAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1318,7 +1318,7 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1410,20 +1410,20 @@ rules:
         sql_placeholder: MODE_DELAY_MIN
       eps_sat:
         label: SAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_oat:
         label: OAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1443,17 +1443,17 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
         label: Supply-fan delta (GL36 0.55 °F)
-        default: -17.472222222
-        min: -17.777777778
-        max: -15.0
-        step: 0.05
+        default: 0.305555556
+        min: 0.0
+        max: 2.777777778
+        step: 0.027777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1548,27 +1548,27 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: SUPPLY_TOL
       eps_sat:
         label: SAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
         label: MAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -1588,17 +1588,17 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
         label: Supply-fan delta (GL36 0.55 °F)
-        default: -17.472222222
-        min: -17.777777778
-        max: -15.0
-        step: 0.05
+        default: 0.305555556
+        min: 0.0
+        max: 2.777777778
+        step: 0.027777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2423,20 +2423,20 @@ rules:
         sql_placeholder: FAN_ON_MIN
       eps_sat:
         label: SAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_SAT
       eps_mat:
         label: MAT sensor eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2456,7 +2456,7 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2473,10 +2473,10 @@ rules:
         sql_placeholder: HTG_ON_MIN
       delta_supply_fan:
         label: Supply-fan delta (GL36 0.55 °F)
-        default: -17.472222222
-        min: -17.777777778
-        max: -15.0
-        step: 0.05
+        default: 0.305555556
+        min: 0.0
+        max: 2.777777778
+        step: 0.027777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2531,7 +2531,7 @@ rules:
         default: -15.0
         min: -17.777777778
         max: -1.111111111
-        step: 0.5
+        step: -17.5
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2581,7 +2581,7 @@ rules:
         default: 2359.735
         min: 0.0
         max: 94389.4
-        step: 100.0
+        step: 47.1947
         unit: L_per_s
         kind: volumetric_flow
         frontend_control: slider
@@ -2673,20 +2673,20 @@ rules:
         sql_placeholder: HTG_ON_MIN
       eps_cclt:
         label: CHW coil leaving eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_CCLT
       eps_ccet:
         label: CHW coil entering eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2703,10 +2703,10 @@ rules:
         sql_placeholder: ECON_MIN_POS
       delta_supply_fan:
         label: Supply-fan delta
-        default: -17.472222222
-        min: -17.777777778
-        max: -15.0
-        step: 0.05
+        default: 0.305555556
+        min: 0.0
+        max: 2.777777778
+        step: 0.027777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2736,7 +2736,7 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2818,20 +2818,20 @@ rules:
         sql_placeholder: MODE_DELAY_MIN
       eps_hclt:
         label: HW coil leaving eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: EPS_HCLT
       eps_hcet:
         label: HW coil entering eps
-        default: -17.138888889
-        min: -17.777777778
-        max: -12.222222222
-        step: 0.25
+        default: 0.638888889
+        min: 0.0
+        max: 5.555555556
+        step: 0.138888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2858,10 +2858,10 @@ rules:
         sql_placeholder: ECON_FULL_OPEN
       delta_supply_fan:
         label: Supply-fan delta
-        default: -17.472222222
-        min: -17.777777778
-        max: -15.0
-        step: 0.05
+        default: 0.305555556
+        min: 0.0
+        max: 2.777777778
+        step: 0.027777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -2901,7 +2901,7 @@ rules:
         default: -17.138888889
         min: -17.777777778
         max: -12.222222222
-        step: 0.25
+        step: -17.638888889
         unit: degC
         kind: absolute_temperature
         frontend_control: slider

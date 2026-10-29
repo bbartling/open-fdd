@@ -24,6 +24,21 @@ from unit_contract_lib import (  # noqa: E402
 
 FC_RULES = frozenset(tuple(f"FC{i}" for i in range(1, 16)) + ("FC13-SAT-HIGH",))
 
+# GL36 sensor tolerances are °F deltas in the cookbook/SQL math; registry kind stays absolute_temperature.
+_CONVERT_AS_TEMP_DELTA = frozenset(
+    {
+        "eps_cclt",
+        "eps_ccet",
+        "eps_hcet",
+        "eps_hclt",
+        "eps_sat",
+        "eps_mat",
+        "eps_oat",
+        "eps_rat",
+        "delta_supply_fan",
+    }
+)
+
 IMPERIAL_UNITS = frozenset({"degF", "inwc", "in_wc", "cfm", "degF_delta", "°F"})
 
 
@@ -72,11 +87,14 @@ def convert_param_spec(name: str, spec: dict[str, Any], metric: dict) -> dict[st
     if unit not in IMPERIAL_UNITS:
         return patches
     kind = str(spec.get("kind") or infer_kind(name, unit))
-    q = _quantity(kind, unit)
+    convert_kind = kind
+    if unit in ("degF", "degF_delta", "°F") and name in _CONVERT_AS_TEMP_DELTA:
+        convert_kind = "temperature_difference"
+    q = _quantity(convert_kind, unit)
     if not q:
         return patches
     src = _src_unit(q, unit)
-    for field in ("default", "min", "max"):
+    for field in ("default", "min", "max", "step"):
         if field not in spec:
             continue
         old = float(spec[field])
@@ -123,12 +141,12 @@ def apply_registry_patches(text: str, patches: dict[tuple[str, str, str], tuple[
             continue
         replaced = False
         if current_rule and param_key:
-            m_def = re.match(r"^        (default|min|max|unit):\s+(\S+)\s*$", line)
+            m_def = re.match(r"^        (default|min|max|step|unit):\s+(\S+)\s*$", line)
             if m_def:
                 field = m_def.group(1)
                 key = (current_rule, param_key, field)
                 if key in patches:
-                    old, new = patches[key]
+                    _old, new = patches[key]
                     if field == "unit":
                         out.append(f"        unit: {new}")
                     else:
