@@ -352,15 +352,19 @@ struct StagedSample {
     quality: Option<String>,
 }
 
+struct CsvStageMaps<'a> {
+    col_to_role: &'a HashMap<String, String>,
+    col_to_unit: &'a HashMap<String, String>,
+    unit_system: Option<&'a str>,
+}
+
 async fn stage_one_csv(
     tsdb: &Tsdb,
     import_id: uuid::Uuid,
     building_id: &str,
     equipment_id: &str,
     csv_path: &Path,
-    col_to_role: &HashMap<String, String>,
-    col_to_unit: &HashMap<String, String>,
-    unit_system: Option<&str>,
+    maps: CsvStageMaps<'_>,
 ) -> Result<(u64, HashSet<String>)> {
     let contract = MetricUnitsContract::load_embedded().context("metric units contract")?;
     let file = File::open(csv_path).with_context(|| format!("open {}", csv_path.display()))?;
@@ -418,7 +422,7 @@ async fn stage_one_csv(
             continue;
         };
         let ts_s = ts.to_rfc3339();
-        for (csv_col, sql_role) in col_to_role {
+        for (csv_col, sql_role) in maps.col_to_role {
             let Some(raw) = map.get(csv_col.as_str()).copied() else {
                 continue;
             };
@@ -430,7 +434,7 @@ async fn stage_one_csv(
             };
             let openfdd_key = format!("{equipment_id}.{sql_role}");
             roles_seen.insert(sql_role.clone());
-            let csv_unit = col_to_unit.get(csv_col).map(String::as_str);
+            let csv_unit = maps.col_to_unit.get(csv_col).map(String::as_str);
             let prepared = prepare_numeric_sample(
                 &contract,
                 val,
@@ -438,7 +442,7 @@ async fn stage_one_csv(
                 SampleDeclaredContext {
                     role: Some(sql_role.as_str()),
                     csv_column_unit: csv_unit,
-                    unit_system,
+                    unit_system: maps.unit_system,
                     ..Default::default()
                 },
             );
@@ -660,9 +664,11 @@ pub async fn seed_package_dir(
             building_id,
             &plan.equipment_id,
             &plan.csv_path,
-            &plan.col_to_role,
-            &plan.col_to_unit,
-            plan.unit_system.as_deref(),
+            CsvStageMaps {
+                col_to_role: &plan.col_to_role,
+                col_to_unit: &plan.col_to_unit,
+                unit_system: plan.unit_system.as_deref(),
+            },
         )
         .await;
         let (n, roles) = match staged_one {

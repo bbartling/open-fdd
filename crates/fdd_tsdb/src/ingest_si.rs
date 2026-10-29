@@ -43,16 +43,17 @@ pub fn resolve_declared_source_unit(
     let quantity = non_empty(map.quantity)
         .or(non_empty(ctx.sample_quantity))
         .or_else(|| ctx.role.and_then(quantity_for_sql_role));
-    for candidate in [
+    for unit in [
         non_empty(map.unit),
         non_empty(map.source_unit),
         non_empty(ctx.sample_source_unit),
         non_empty(ctx.csv_column_unit),
         non_empty(ctx.sample_unit),
-    ] {
-        if let Some(unit) = candidate {
-            return Some(unit.to_string());
-        }
+    ]
+    .into_iter()
+    .flatten()
+    {
+        return Some(unit.to_string());
     }
     if let (Some(qty), Some(sys)) = (quantity, non_empty(ctx.unit_system)) {
         return unit_system_default_declared_unit(qty, sys).map(str::to_string);
