@@ -5,6 +5,7 @@ use fdd_core::{
 };
 
 pub const QUALITY_UNIT_UNDECLARED: &str = "unit_undeclared";
+pub const QUALITY_UNIT_CONTRACT_MISSING: &str = "unit_contract_missing";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PreparedIngestValue {
@@ -124,17 +125,18 @@ pub fn prepare_numeric_sample(
         };
     };
     match contract.convert_to_canonical(quantity, raw_val, &declared) {
-        Ok(metric) => {
-            let canonical = contract
-                .canonical_unit(quantity)
-                .unwrap_or("degC")
-                .to_string();
-            PreparedIngestValue {
+        Ok(metric) => match contract.canonical_unit(quantity) {
+            Ok(canonical) if !canonical.trim().is_empty() => PreparedIngestValue {
                 val: Some(metric),
-                unit: Some(canonical),
+                unit: Some(canonical.to_string()),
                 quality: None,
-            }
-        }
+            },
+            Ok(_) | Err(_) => PreparedIngestValue {
+                val: Some(raw_val),
+                unit: None,
+                quality: Some(QUALITY_UNIT_CONTRACT_MISSING.into()),
+            },
+        },
         Err(MetricContractError::UnknownAlias(_))
         | Err(MetricContractError::QuantityMismatch { .. }) => PreparedIngestValue {
             val: Some(raw_val),
@@ -152,6 +154,28 @@ pub fn prepare_numeric_sample(
             quality: Some(QUALITY_UNIT_UNDECLARED.into()),
         },
     }
+}
+
+/// Package CSV staging: never treat raw CSV numbers as canonical SI when prepare omitted a value.
+pub fn finalize_staged_numeric(
+    raw_val: f64,
+    prepared: PreparedIngestValue,
+) -> Option<PreparedIngestValue> {
+    if let Some(v) = prepared.val {
+        return Some(PreparedIngestValue {
+            val: Some(v),
+            unit: prepared.unit,
+            quality: prepared.quality,
+        });
+    }
+    if prepared.quality.is_some() {
+        return Some(PreparedIngestValue {
+            val: Some(raw_val),
+            unit: None,
+            quality: prepared.quality,
+        });
+    }
+    None
 }
 
 #[cfg(test)]
@@ -236,5 +260,56 @@ mod tests {
             },
         );
         assert_eq!(unit.as_deref(), Some("degC"));
+    }
+
+    #[test]
+    fn missing_canonical_unit_stamps_unit_contract_missing() {
+        let json = r#"{
+            "quantities": [
+                {"id": "absolute_temperature", "canonical_unit": "", "aliases": ["degF"]}
+            ],
+            "source_unit_conversions": [
+                {"quantity": "absolute_temperature", "alias": "degF", "scale": 0.5555555555555556, "offset": -17.77777777777778}
+            ]
+        }"#;
+        let contract = MetricUnitsContract::from_json(json).expect("contract");
+        let out = prepare_numeric_sample(
+            &contract,
+            32.0,
+            PointMapBinding::default(),
+            SampleDeclaredContext {
+                role: Some("oa_t"),
+                sample_unit: Some("degF"),
+                ..Default::default()
+            },
+        );
+        assert_eq!(out.val, Some(32.0));
+        assert!(out.unit.is_none());
+        assert_eq!(out.quality.as_deref(), Some(QUALITY_UNIT_CONTRACT_MISSING));
+    }
+
+    #[test]
+    fn finalize_staged_never_si_fallback_when_val_none_and_unit_set() {
+        let raw = 55.0;
+        let prepared = PreparedIngestValue {
+            val: None,
+            unit: Some("degC".into()),
+            quality: None,
+        };
+        assert!(finalize_staged_numeric(raw, prepared).is_none());
+    }
+
+    #[test]
+    fn finalize_staged_keeps_raw_with_quality_stamp() {
+        let raw = 70.0;
+        let prepared = PreparedIngestValue {
+            val: None,
+            unit: None,
+            quality: Some(QUALITY_UNIT_UNDECLARED.into()),
+        };
+        let out = finalize_staged_numeric(raw, prepared).expect("stamped row");
+        assert_eq!(out.val, Some(raw));
+        assert!(out.unit.is_none());
+        assert_eq!(out.quality.as_deref(), Some(QUALITY_UNIT_UNDECLARED));
     }
 }

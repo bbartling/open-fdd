@@ -84,7 +84,9 @@ impl QualityPolicy {
 /// `true` when this policy keeps the sample as an FDD input.
 pub fn quality_keeps_sample(policy: QualityPolicy, quality: Option<&str>) -> bool {
     let stamp = quality.map(str::trim).unwrap_or("");
-    if stamp.eq_ignore_ascii_case(crate::ingest_si::QUALITY_UNIT_UNDECLARED) {
+    if stamp.eq_ignore_ascii_case(crate::ingest_si::QUALITY_UNIT_UNDECLARED)
+        || stamp.eq_ignore_ascii_case(crate::ingest_si::QUALITY_UNIT_CONTRACT_MISSING)
+    {
         return false;
     }
     match policy {
@@ -667,7 +669,7 @@ mod tests {
 
     #[test]
     fn schedule_and_quality_policies_match_the_stated_rules() {
-        use crate::ingest_si::QUALITY_UNIT_UNDECLARED;
+        use crate::ingest_si::{QUALITY_UNIT_CONTRACT_MISSING, QUALITY_UNIT_UNDECLARED};
         assert!(!quality_keeps_sample(
             QualityPolicy::DropBad,
             Some(QUALITY_UNIT_UNDECLARED)
@@ -675,6 +677,10 @@ mod tests {
         assert!(!quality_keeps_sample(
             QualityPolicy::KeepAll,
             Some(QUALITY_UNIT_UNDECLARED)
+        ));
+        assert!(!quality_keeps_sample(
+            QualityPolicy::DropBad,
+            Some(QUALITY_UNIT_CONTRACT_MISSING)
         ));
         for token in [
             "unoccupied",

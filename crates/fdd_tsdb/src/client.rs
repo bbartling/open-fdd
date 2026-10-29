@@ -552,10 +552,10 @@ async fn load_point_map_bindings(
         out.insert(
             key,
             StoredPointBinding {
-                unit: row.try_get("unit").ok(),
-                source_unit: row.try_get("source_unit").ok(),
-                quantity: row.try_get("quantity").ok(),
-                role: row.try_get("role").ok(),
+                unit: row.try_get::<Option<String>, _>("unit")?,
+                source_unit: row.try_get::<Option<String>, _>("source_unit")?,
+                quantity: row.try_get::<Option<String>, _>("quantity")?,
+                role: row.try_get::<Option<String>, _>("role")?,
             },
         );
     }

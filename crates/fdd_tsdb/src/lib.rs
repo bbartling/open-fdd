@@ -25,8 +25,9 @@ pub use incremental_store::{
     run_incremental, Claim, RunReport,
 };
 pub use ingest_si::{
-    prepare_numeric_sample, resolve_declared_source_unit, PointMapBinding, PreparedIngestValue,
-    SampleDeclaredContext, QUALITY_UNIT_UNDECLARED,
+    finalize_staged_numeric, prepare_numeric_sample, resolve_declared_source_unit, PointMapBinding,
+    PreparedIngestValue, SampleDeclaredContext, QUALITY_UNIT_CONTRACT_MISSING,
+    QUALITY_UNIT_UNDECLARED,
 };
 pub use package_seed::{append_package_equipment, remap_equipment_roles, seed_package_dir};
 pub use portal::{
