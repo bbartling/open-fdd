@@ -19,7 +19,7 @@
     },
     {
       "equipment_id": "equip:test-vav",
-      "pandas_si_fault_seconds": 900.0,
+      "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": 0.0,
@@ -927,11 +927,11 @@
       "building_id": "COOKBOOK_VAV1",
       "covered_seconds": 900.0,
       "equipment_id": "equip:test-vav",
-      "fault_seconds": 900.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-07-01"
     },
     {

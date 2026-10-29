@@ -73,7 +73,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28800.0,
+      "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": 0.0,
@@ -82,7 +82,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28800.0,
+      "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": 0.0,
@@ -91,7 +91,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28800.0,
+      "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": 0.0,
@@ -100,7 +100,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28800.0,
+      "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": 0.0,
@@ -109,7 +109,7 @@
     },
     {
       "equipment_id": "VAV_CASE_VAV_1",
-      "pandas_si_fault_seconds": 28800.0,
+      "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": 0.0,
@@ -1722,55 +1722,55 @@
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-05"
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-06"
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-07"
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-08"
     },
     {
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-09"
     },
     {
@@ -1781,7 +1781,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-10"
     },
     {
@@ -1792,7 +1792,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-11"
     },
     {

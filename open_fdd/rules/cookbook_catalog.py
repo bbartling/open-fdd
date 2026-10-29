@@ -463,6 +463,8 @@ def _units_map(d: pd.DataFrame) -> dict[str, str]:
 
 
 def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    from open_fdd.quality import _storage_si, role_bounds_for_frame
+
     idx = d.index
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
@@ -474,10 +476,19 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         lim = SENSOR_LIMITS[role]
+        if _storage_si(d):
+            bounds = role_bounds_for_frame(role, d)
+            if bounds is None:
+                continue
+            base_lo, base_hi = bounds
+            if base_lo is None or base_hi is None:
+                continue
+        else:
+            base_lo, base_hi = lim["lo"], lim["hi"]
         type_scale = _role_type_scale(p, role, kind="range")
         # Widen limits when scale > 1 (more forgiving); shrink when scale < 1.
-        mid = (lim["lo"] + lim["hi"]) / 2.0
-        half = (lim["hi"] - lim["lo"]) / 2.0 * max(type_scale, 1e-6)
+        mid = (base_lo + base_hi) / 2.0
+        half = (base_hi - base_lo) / 2.0 * max(type_scale, 1e-6)
         lo, hi = mid - half, mid + half
         # BACnet sensor failures commonly arrive as IEEE +/-Inf. Treat any
         # present non-finite number as a hard range fault before JSON/Parquet
