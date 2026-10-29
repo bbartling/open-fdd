@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::PgPool;
 
 use crate::providers::committed_model::IngestPlan;

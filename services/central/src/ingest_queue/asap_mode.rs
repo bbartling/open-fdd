@@ -148,7 +148,14 @@ pub fn eta_seconds(
 
 fn env_u32_bounded(key: &str, default: u32, min: u32, max: u32) -> Result<u32, String> {
     match std::env::var(key) {
-        Err(_) | Ok(ref raw) if raw.trim().is_empty() => {
+        Err(_) => {
+            info!(
+                env = key,
+                default, min, max, "using default ASAP ingest config (unset)"
+            );
+            Ok(default)
+        }
+        Ok(raw) if raw.trim().is_empty() => {
             info!(
                 env = key,
                 default, min, max, "using default ASAP ingest config (unset)"
@@ -171,7 +178,14 @@ fn env_u32_bounded(key: &str, default: u32, min: u32, max: u32) -> Result<u32, S
 
 fn env_u64_bounded(key: &str, default: u64, min: u64, max: u64) -> Result<u64, String> {
     match std::env::var(key) {
-        Err(_) | Ok(ref raw) if raw.trim().is_empty() => {
+        Err(_) => {
+            info!(
+                env = key,
+                default, min, max, "using default ASAP ingest config (unset)"
+            );
+            Ok(default)
+        }
+        Ok(raw) if raw.trim().is_empty() => {
             info!(
                 env = key,
                 default, min, max, "using default ASAP ingest config (unset)"
