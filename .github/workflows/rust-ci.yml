@@ -84,6 +84,9 @@ jobs:
           fi
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
+      - name: Ingest driver #1423 acceptance (T1423-1, T1423-2)
+        run: cargo test -p openfdd-central t1423 -- --test-threads=1
+
       - name: Central / fieldbus / MQTT contract tests
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
@@ -97,6 +100,11 @@ jobs:
 
       - name: Cookbook + README docs integrity (59-rule floor, cookbook link)
         run: python3 scripts/cookbook_parity_check.py --docs-only
+
+      - name: Unit contract (T1284-1)
+        run: |
+          python3 scripts/ci/check_unit_contract.py
+          CARGO_TARGET_DIR=/tmp/ofdd-target-w2-unit-contract cargo test -p fdd_core units_contract::
 
       - name: Anti-hardcoding audit
         run: bash -n scripts/audit_no_private_bench_hardcoding.sh && ./scripts/audit_no_private_bench_hardcoding.sh

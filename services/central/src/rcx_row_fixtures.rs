@@ -217,9 +217,31 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
         "BAS stays row-only: {bas}"
     );
     let bas_rows = bas["rows"].as_array().expect("bas rows");
-    assert_eq!(bas_rows.len(), 1, "{bas}");
-    assert_eq!(bas_rows[0]["bas_oa_t"], 50.0);
-    assert_eq!(bas_rows[0]["web_oa_t"], 48.0);
+    assert!(!bas_rows.is_empty(), "{bas}");
+    let t0_pairs: Vec<_> = bas_rows
+        .iter()
+        .filter(|row| {
+            row.get("bas_oa_t") == Some(&json!(50.0)) && row.get("web_oa_t") == Some(&json!(48.0))
+        })
+        .collect();
+    assert_eq!(t0_pairs.len(), 1, "expected one assessable t0 pair: {bas}");
+    assert_eq!(
+        bas.get("oa_t_reference")
+            .or_else(|| bas.get("coverage").and_then(|c| c.get("oa_t_reference")))
+            .and_then(|v| v.get("selection"))
+            .and_then(|v| v.as_str()),
+        Some("default_lowest_binding")
+    );
+    assert!(
+        bas.get("oa_t_reference").is_some(),
+        "HTTP envelope must expose oa_t_reference at top level: {bas}"
+    );
+    assert!(
+        bas.get("web_asof_bound_seconds")
+            .and_then(|v| v.as_f64())
+            .is_some(),
+        "HTTP envelope must expose web_asof_bound_seconds: {bas}"
+    );
 
     let empty_runtime = post_analytics(&app, "/api/analytics/runtime", EMPTY, None).await;
     assert!(empty_runtime["rows"].as_array().expect("rows").is_empty());
@@ -234,7 +256,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     );
     let empty_bas = post_analytics(&app, "/api/analytics/bas-vs-web-oat", EMPTY, None).await;
     assert!(
-        warning_text(&empty_bas).contains("BAS and web"),
+        warning_text(&empty_bas).contains("BAS vs web"),
         "{empty_bas}"
     );
 

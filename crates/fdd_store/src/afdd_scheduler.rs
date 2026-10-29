@@ -159,7 +159,7 @@ pub fn plan_continuous_cycle(
     let start_utc = end_utc - Duration::seconds(lookback_seconds);
     // Cadence picks the next due instant. Lookback picks the analysis window.
     // A daily run (wall clock, or interval 1440) uses a 24h lookback when the
-    // operator sets that pair (`lookback_matches_cadence`). Downtime still
+    // operator sets that pair (`lookback_equals_schedule_cadence`). Downtime still
     // yields one lookback-sized window (`catch_up`), not one cycle per missed
     // day and not a full-historian replay.
     let cadence = Duration::seconds(i64::try_from(cadence_seconds(config)?)?);
@@ -223,7 +223,7 @@ pub fn cadence_seconds(config: &AfddConfig) -> Result<u64> {
 /// A shorter interval may still use a longer allowlisted lookback (1–3 days);
 /// that overlap is intentional and this returns false. Unbounded lookback is
 /// not representable here.
-pub fn lookback_matches_cadence(config: &AfddConfig) -> bool {
+pub fn lookback_equals_schedule_cadence(config: &AfddConfig) -> bool {
     let Ok(lookback) = config.lookback_seconds() else {
         return false;
     };
@@ -248,6 +248,34 @@ pub fn plan_bounded_backfill(
             "backfill would create {} chunks (max {}); raise chunk_hours or narrow the range",
             chunks.len(),
             crate::MAX_AFDD_BACKFILL_CHUNKS
+        );
+    }
+    Ok(chunks)
+}
+
+/// Max time slices for one continuous lookback (3-day operator cap at 1-hour chunks).
+pub const MAX_CONTINUOUS_LOOKBACK_CHUNKS: usize = 3 * 24;
+
+/// Tile a continuous-cycle lookback window for registry runs.
+///
+/// Unlike [`plan_bounded_backfill`], this is not capped at
+/// [`crate::MAX_AFDD_BACKFILL_CHUNKS`] (64). It is capped at
+/// [`MAX_CONTINUOUS_LOOKBACK_CHUNKS`] so a 3-day lookback at 1-hour chunks
+/// tiles without falling back to a single full-window pass.
+pub fn plan_continuous_lookback_chunks(
+    start_utc: DateTime<Utc>,
+    end_utc: DateTime<Utc>,
+    chunk_hours: u64,
+) -> Result<Vec<AfddBackfillChunk>> {
+    let chunks = plan_backfill_chunks(start_utc, end_utc, chunk_hours)?;
+    if chunks.is_empty() {
+        bail!("AFDD lookback window produced no time chunks");
+    }
+    if chunks.len() > MAX_CONTINUOUS_LOOKBACK_CHUNKS {
+        bail!(
+            "continuous AFDD lookback requires {} time chunks (max {} at 1-hour slices); increase OPENFDD_AFDD_CHUNK_HOURS or reduce lookback",
+            chunks.len(),
+            MAX_CONTINUOUS_LOOKBACK_CHUNKS
         );
     }
     Ok(chunks)
@@ -350,6 +378,19 @@ mod tests {
             plan_continuous_cycle(Some(&checkpoint), ts(9), Some(ts(8)), &config()).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn continuous_lookback_tiles_three_day_window_at_one_hour() {
+        let start = utc(2026, 6, 1, 0, 0);
+        let end = start + Duration::hours(72);
+        let chunks = plan_continuous_lookback_chunks(start, end, 1).unwrap();
+        assert_eq!(chunks.len(), 72);
+        assert_eq!(chunks[0].start_utc, start);
+        assert_eq!(chunks[71].end_utc, end);
+        for pair in chunks.windows(2) {
+            assert_eq!(pair[0].end_utc, pair[1].start_utc);
+        }
     }
 
     #[test]
@@ -490,8 +531,8 @@ mod tests {
     }
 
     #[test]
-    fn daily_lookback_matches_cadence_and_overlap_does_not() {
-        assert!(lookback_matches_cadence(&wall_config()));
+    fn daily_lookback_equals_schedule_cadence_and_overlap_does_not() {
+        assert!(lookback_equals_schedule_cadence(&wall_config()));
         let daily_interval = AfddConfig {
             mode: AfddMode::Continuous,
             interval_minutes: 1440,
@@ -499,8 +540,7 @@ mod tests {
             lookback_unit: AfddLookbackUnit::Hours,
             ..AfddConfig::default()
         };
-        assert!(lookback_matches_cadence(&daily_interval));
-        assert_eq!(cadence_seconds(&daily_interval).unwrap(), 86_400);
+        assert!(lookback_equals_schedule_cadence(&daily_interval));
         let overlap = AfddConfig {
             mode: AfddMode::Continuous,
             interval_minutes: 180,
@@ -508,7 +548,8 @@ mod tests {
             lookback_unit: AfddLookbackUnit::Days,
             ..AfddConfig::default()
         };
-        assert!(!lookback_matches_cadence(&overlap));
+        assert!(!lookback_equals_schedule_cadence(&overlap));
+        assert_eq!(cadence_seconds(&daily_interval).unwrap(), 86_400);
         assert_eq!(cadence_seconds(&wall_config()).unwrap(), 86_400);
     }
 

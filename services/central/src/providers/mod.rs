@@ -5,6 +5,7 @@ pub mod committed_model;
 pub mod config;
 #[cfg(test)]
 pub mod conformance;
+pub mod driver_limits;
 pub mod error;
 pub mod hourly;
 pub mod hourly_exec;
@@ -24,6 +25,8 @@ pub mod writer;
 
 #[cfg(test)]
 mod fixture_acceptance;
+#[cfg(test)]
+mod t1423_driver_acceptance;
 
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -82,6 +85,13 @@ pub trait DataProvider: Send + Sync {
         &mut self,
     ) -> impl std::future::Future<Output = Result<Vec<map::RawProviderPoint>, String>> + Send;
     /// Bounded history read. NF implements this as `GET /api/v1/point/data` only.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "DataProvider adapter contract; production ingest uses read_history_page"
+        )
+    )]
     fn fetch_history(
         &mut self,
         point_ids: &[String],
@@ -125,8 +135,8 @@ impl DataProvider for nf::NfPortalDriver {
         from: chrono::DateTime<chrono::Utc>,
         to: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<map::HistorySeries>, error::ProviderError> {
-        let points = nf::NfPortalDriver::fetch_history(self, point_ids, from, to).await?;
-        Ok(nf::group_history(points))
+        let paged = nf::NfPortalDriver::fetch_history(self, point_ids, from, to).await?;
+        Ok(nf::group_history(paged.points))
     }
 }
 
@@ -449,6 +459,8 @@ impl Runtime {
                     hourly_coverage: None,
                     capabilities: Vec::new(),
                     coverage_ledger: None,
+                    portal_throttled_since: None,
+                    portal_throttle_count: 0,
                 }],
                 config_error: None,
                 registry: Vec::new(),
@@ -621,6 +633,8 @@ fn health_row(
         hourly_coverage: None,
         capabilities: registry::capabilities_for(site.kind),
         coverage_ledger: None,
+        portal_throttled_since: None,
+        portal_throttle_count: 0,
     }
 }
 
@@ -649,6 +663,8 @@ fn failure_row(failure: &SiteConfigFailure) -> SiteProviderHealth {
         hourly_coverage: None,
         capabilities: registry::capabilities_for(ProviderKind::Nf),
         coverage_ledger: None,
+        portal_throttled_since: None,
+        portal_throttle_count: 0,
     }
 }
 
@@ -830,6 +846,8 @@ mod tests {
             hourly_coverage: None,
             capabilities: Vec::new(),
             coverage_ledger: None,
+            portal_throttled_since: None,
+            portal_throttle_count: 0,
         }
     }
 

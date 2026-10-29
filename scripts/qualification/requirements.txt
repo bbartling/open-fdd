@@ -2,3 +2,5 @@
 -r semantic/requirements.txt
 PyYAML>=6.0.1,<7
 pandas>=2.2,<4
+numpy>=1.26,<3
+psycopg[binary]>=3.1,<4

@@ -19,9 +19,12 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None  # type: ignore
 
+import json
+
 ROOT = Path(__file__).resolve().parents[1]
 COOKBOOK = ROOT / "docs" / "rules" / "cookbook"
 REGISTRY = ROOT / "sql_rules" / "registry.yaml"
+TUNING = ROOT / "sql/fdd/tuning_catalog.json"
 
 MIN_RULE_HEADINGS = 62
 MIN_REGISTRY_RULES = 66
@@ -164,6 +167,70 @@ def check_multi_building_fixture_inventory() -> None:
         )
 
 
+def check_tuner_effects() -> None:
+    """T1284-1 D: every tuner declares branch_sensitive | no_op | unsupported."""
+    if not TUNING.is_file():
+        _fail(f"missing {TUNING.relative_to(ROOT)}")
+    sys.path.insert(0, str(ROOT / "scripts" / "ci"))
+    from unit_contract_lib import apply_tuning_catalog, load_json
+
+    data = load_json(TUNING)
+    expected = apply_tuning_catalog(json.loads(json.dumps(data)))
+    for rule_a, rule_b in zip(data["rules"], expected["rules"], strict=True):
+        rid = rule_a["rule_id"]
+        for key, param in (rule_a.get("parameters") or {}).items():
+            effect = param.get("effect")
+            if effect not in {"branch_sensitive", "no_op", "unsupported"}:
+                _fail(f"{rid}.{key} missing or invalid effect: {effect!r}")
+            if effect != rule_b["parameters"][key]["effect"]:
+                _fail(f"{rid}.{key} effect drift vs effect_in_sql policy")
+    print("PASS tuning_catalog tuner effect honesty")
+
+
+def check_tuner_effect_sql_mutations() -> None:
+    """branch_sensitive must change rendered SQL; no_op must not."""
+    sys.path.insert(0, str(ROOT / "sql" / "fdd"))
+    from render_rule import render  # noqa: E402
+
+    from unit_contract_lib import load_json
+
+    data = load_json(TUNING)
+    branch_hits = 0
+    noop_hits = 0
+    for rule in data["rules"]:
+        rid = rule["rule_id"]
+        params = rule.get("parameters") or {}
+        try:
+            base = render(rid)
+        except (ValueError, OSError):
+            continue
+        for key, param in params.items():
+            effect = param.get("effect")
+            if effect == "unsupported":
+                continue
+            lo, hi, default = param["min"], param["max"], param["default"]
+            alt = hi if hi != default else lo
+            if alt == default:
+                continue
+            try:
+                mutated = render(rid, overrides={key: alt})
+            except ValueError:
+                continue
+            if effect == "branch_sensitive":
+                if mutated == base:
+                    _fail(f"{rid}.{key} branch_sensitive but rendered SQL unchanged")
+                branch_hits += 1
+            elif effect == "no_op" and mutated != base:
+                _fail(f"{rid}.{key} no_op but rendered SQL changed")
+            elif effect == "no_op":
+                noop_hits += 1
+    if branch_hits < 5:
+        _fail(f"branch_sensitive mutation coverage too thin ({branch_hits})")
+    if noop_hits < 5:
+        _fail(f"no_op mutation coverage too thin ({noop_hits})")
+    print(f"PASS tuner effect SQL mutations (branch_sensitive={branch_hits}, no_op={noop_hits})")
+
+
 def main() -> int:
     print("== rule_parity_mutation_check (Milestone D2) ==")
     check_registry_count()
@@ -172,6 +239,8 @@ def main() -> int:
     check_mutation_paths()
     check_logical_keyword_mutation()
     check_multi_building_fixture_inventory()
+    check_tuner_effects()
+    check_tuner_effect_sql_mutations()
     print("All rule parity mutation checks passed.")
     return 0
 

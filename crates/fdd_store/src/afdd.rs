@@ -229,7 +229,8 @@ impl AfddConfig {
     /// Scheduled building ids for continuous AFDD.
     ///
     /// When `scope_building_ids` is non-empty it wins over `scope_building_id`.
-    /// When both are unset, every id in `known_buildings` is scheduled (sorted).
+    /// When both are unset, every NF provider site in `known_buildings` is scheduled (sorted).
+    /// `known_buildings` must be provider portal sites only (not CSV package buildings).
     /// Each explicit id must appear in `known_buildings` or startup fails closed.
     pub fn resolve_scheduled_buildings(&self, known_buildings: &[String]) -> Result<Vec<String>> {
         let known: BTreeSet<&str> = known_buildings
@@ -246,7 +247,7 @@ impl AfddConfig {
                 }
                 if !known.contains(trimmed) {
                     bail!(
-                        "OPENFDD_AFDD_BUILDING_IDS contains unknown building_id '{trimmed}'; known sites: {}",
+                        "OPENFDD_AFDD_BUILDING_IDS contains '{trimmed}' which is not an NF provider site; continuous AFDD schedules provider sites only (CSV package buildings use bulk FDD). Known provider sites: {}",
                         format_known_buildings(&known)
                     );
                 }
@@ -268,7 +269,7 @@ impl AfddConfig {
         {
             if !known.contains(single) {
                 bail!(
-                    "OPENFDD_AFDD_BUILDING_ID '{single}' is not a known site; known sites: {}",
+                    "OPENFDD_AFDD_BUILDING_ID '{single}' is not an NF provider site; continuous AFDD schedules provider sites only (CSV package buildings use bulk FDD). Known provider sites: {}",
                     format_known_buildings(&known)
                 );
             }
@@ -632,7 +633,7 @@ mod tests {
             .resolve_scheduled_buildings(&["site-a".into()])
             .unwrap_err()
             .to_string()
-            .contains("unknown building_id"));
+            .contains("not an NF provider site"));
     }
 
     #[test]

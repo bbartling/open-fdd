@@ -8,10 +8,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Utc};
 
-use crate::analytics::AnalyticsEnvelope;
+use crate::analytics::{AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest};
 
 pub const SENSOR_HEALTH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 pub const RUNTIME_DEFAULT_LOOKBACK_DAYS: i64 = 7;
@@ -22,6 +22,21 @@ pub const ANALYTICS_MAX_LOOKBACK_DAYS: i64 = 90;
 pub const BAS_VS_WEB_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 pub const RUNTIME_RETAIN_FALLBACK_DAYS: i64 = 365;
 pub const BAS_VS_WEB_RETAIN_FALLBACK_DAYS: i64 = RUNTIME_RETAIN_FALLBACK_DAYS;
+pub const BAS_VS_WEB_ROW_LIMIT_MAX: i64 = 2000;
+
+/// Row cap for bas-vs-web-oat SQL (`LIMIT $7`). Rejects out-of-range values; when
+/// omitted the HTTP handler uses [`BAS_VS_WEB_ROW_LIMIT_MAX`] explicitly.
+pub fn validated_bas_vs_web_max_points(max_points: Option<usize>) -> Result<i64, String> {
+    match max_points {
+        None => Ok(BAS_VS_WEB_ROW_LIMIT_MAX),
+        Some(0) => Err("max_points must be at least 1 for bas-vs-web-oat".into()),
+        Some(n) if n > BAS_VS_WEB_ROW_LIMIT_MAX as usize => Err(format!(
+            "max_points exceeds bas-vs-web-oat limit of {BAS_VS_WEB_ROW_LIMIT_MAX}"
+        )),
+        Some(n) => i64::try_from(n).map_err(|_| "max_points out of range".into()),
+    }
+}
+
 pub const RUNTIME_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 pub const MECH_DEFAULT_LOOKBACK_DAYS: i64 = 14;
 pub const MECH_RETAIN_FALLBACK_DAYS: i64 = 365;
@@ -219,15 +234,45 @@ pub async fn bas_vs_web_from_history(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    let _ = (
-        equipment_filter,
-        max_points,
-        building_id,
-        preferred_tenant,
+    let _ = preferred_tenant;
+    if !crate::timescale_historian::historian_is_timescale() {
+        return retired();
+    }
+    let Some(bid) = building_id.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    let tsdb = fdd_tsdb::Tsdb::connect_from_env()
+        .await
+        .context("timescale connect for bas-vs-web-oat")?;
+    let mut equipment_ids = equipment_filter
+        .map(|ids| ids.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+        .unwrap_or_default();
+    equipment_ids.retain(|id| !id.trim().is_empty());
+    equipment_ids.sort();
+    equipment_ids.dedup();
+    let scope = crate::timescale_analytics::AnalyticsSqlScope {
         start,
         end,
-    );
-    retired()
+        equipment_ids,
+    };
+    let limit = validated_bas_vs_web_max_points(Some(max_points))
+        .map_err(|msg| anyhow::anyhow!("bas-vs-web-oat max_points: {msg}"))?;
+    let value = crate::timescale_analytics::bas_vs_web_oat(&tsdb, bid, &scope, limit)
+        .await
+        .context("bas_vs_web_oat timescale")?;
+    let req = AnalyticsRequest {
+        query: AnalyticsQuery {
+            building_id: Some(bid.to_string()),
+            start,
+            end,
+            equipment_ids: equipment_filter.map(|ids| ids.to_vec()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    Ok(Some(
+        crate::timescale_analytics::envelope_from_dispatch_value("bas-vs-web-oat-v4", &req, value),
+    ))
 }
 
 pub async fn inspect_from_history(

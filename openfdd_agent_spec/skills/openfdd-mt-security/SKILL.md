@@ -8,6 +8,17 @@ description: >-
 
 # Multi-tenant security (Wave O2c / Wave P2c)
 
+## Ownership (4.0.7+)
+
+**Grok cloud agents** own [`scripts/security/`](../../../scripts/security/),
+[`tests/security/`](../../../tests/security/) (including
+`python3 -B -m unittest discover -s tests/security` and the AppSec job in
+[`.github/workflows/appsec.yml`](../../../.github/workflows/appsec.yml)), plus the
+shared harness paths in [`ownership.yaml`](../../ownership.yaml) →
+`portal_stress_qualification_security`. **Codex** may review but is not on the
+critical path. Product or guidance-only PRs must not edit these paths outside a
+Grok-owned row. Protocol: [`PR_PROTOCOL.md`](../../PR_PROTOCOL.md).
+
 
 ## Current portal qualification (4.0)
 
@@ -99,8 +110,9 @@ does not ActiveScan OT). Policy:
 
 | Role | Owns |
 | --- | --- |
-| **Cursor / Codex / Mint** | Implement policy docs, profile schemas, Nessus/ZAP importers, offline fixtures, `pytest tests/security`, dry-run paths. Local compile/test before PR. Take over abandoned security PRs (e.g. #1102) when asked. |
-| **Grok bot** | **Primary consumer** of the security qualification policy + pen-test Python scripts after tip/GHCR. Runs live gates **25** / **25b** / **26**, authorized `OPENFDD_SECURITY_EXECUTE=1` windows, optional licensed Nessus, and closes Soft-OPEN evidence comments. |
+| **Grok cloud agents** | **`scripts/security/`**, **`tests/security/`**, policy schemas, Nessus/ZAP importers, offline fixtures, and local **`unittest`/`pytest`** before push — in dedicated PR rows ([`ownership.yaml`](../../ownership.yaml) → `portal_stress_qualification_security`). **Live** consumer after tip/GHCR: gates **25** / **25b** / **26**, authorized `OPENFDD_SECURITY_EXECUTE=1`, optional licensed Nessus, Soft-OPEN evidence comments. |
+| **Codex** | Optional reviewer only — not on the 4.0.7 SI patch-cycle critical path. |
+| **Cursor / Mint** | May implement when executing a Grok-owned row or taking over an abandoned security PR (e.g. #1102) when asked. |
 | **Kali** | Staging ActiveScan / OT pentest when scheduled — Mint does not ActiveScan OT. |
 
 Brief: `.cursor/agents/openfdd-security-python-harness.md`;

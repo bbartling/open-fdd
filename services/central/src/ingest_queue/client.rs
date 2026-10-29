@@ -211,6 +211,10 @@ impl QueueClient {
         Ok(self.memory.list_gaps(filter))
     }
 
+    pub fn budget_defaults(&self) -> BudgetDefaults {
+        self.budget
+    }
+
     pub async fn metrics(
         &self,
         now: DateTime<Utc>,

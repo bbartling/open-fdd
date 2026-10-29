@@ -344,6 +344,19 @@ impl FetchError {
             _ => None,
         }
     }
+
+    /// Stable ingest-queue error label (`throttled:<secs>` when Retry-After is known).
+    pub fn ingest_queue_label(&self) -> String {
+        match self {
+            Self::Throttled {
+                retry_after_secs: Some(secs),
+            } => format!("throttled:{secs}"),
+            Self::Throttled {
+                retry_after_secs: None,
+            } => "throttled".to_string(),
+            _ => self.code().to_string(),
+        }
+    }
 }
 
 pub fn classify_history_status(status: u16, retry_after_secs: Option<u64>) -> FetchError {

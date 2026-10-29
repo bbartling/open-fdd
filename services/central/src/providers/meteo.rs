@@ -14,7 +14,7 @@ use super::http_policy::{
     acceptable_unit, build_provider_client, floor_timestamp_micros, read_body_bounded,
     retry_after_secs, status_error, HttpLimits, MAX_SAMPLES_PER_RESPONSE,
 };
-use super::map::{HistorySeries, RawProviderPoint};
+use super::map::{HistoryFetchPage, HistorySeries, RawProviderPoint};
 use super::types::{ProviderHealth, ProviderHealthStatus, ProviderKind};
 
 pub const MAX_METEO_SERIES: usize = 8;
@@ -156,7 +156,7 @@ impl OpenMeteoDriver {
         series: &[String],
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<HistorySeries>, FetchError> {
+    ) -> Result<HistoryFetchPage, FetchError> {
         let points = self
             .fetch_history(series, from, to)
             .await
@@ -169,13 +169,16 @@ impl OpenMeteoDriver {
                 .or_default()
                 .push(point);
         }
-        Ok(grouped
-            .into_iter()
-            .map(|(provider_point_id, samples)| HistorySeries {
-                provider_point_id,
-                samples,
-            })
-            .collect())
+        Ok(HistoryFetchPage {
+            series: grouped
+                .into_iter()
+                .map(|(provider_point_id, samples)| HistorySeries {
+                    provider_point_id,
+                    samples,
+                })
+                .collect(),
+            complete: true,
+        })
     }
 }
 
@@ -564,12 +567,13 @@ mod tests {
             .read_history_page(&series3(), utc(2026, 10, 18, 14), utc(2026, 10, 18, 16))
             .await
             .unwrap();
-        let points: usize = page.iter().map(|series| series.samples.len()).sum();
+        let series = &page.series;
+        let points: usize = series.iter().map(|s| s.samples.len()).sum();
         assert_eq!(points, 8);
-        assert_eq!(page.len(), 3);
-        assert!(page
+        assert_eq!(series.len(), 3);
+        assert!(series
             .iter()
-            .all(|series| series3().contains(&series.provider_point_id)));
+            .all(|s| series3().contains(&s.provider_point_id)));
         let req = seen.lock().await.clone();
         assert!(req.starts_with("GET /v1/forecast?"), "{req}");
         assert!(!req.starts_with("POST"));

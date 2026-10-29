@@ -97,7 +97,7 @@ pub const COMPUTING_ANALYTICS_POST_ROUTES: &[(&str, &str, &str)] = &[
     (
         "/api/analytics/bas-vs-web-oat",
         "bas-vs-web-oat",
-        "bas-vs-web-oat-v3",
+        "bas-vs-web-oat-v4",
     ),
     (
         "/api/analytics/inspect",

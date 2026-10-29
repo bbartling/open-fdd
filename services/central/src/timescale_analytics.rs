@@ -188,7 +188,10 @@ fn empty_row_reason(query_id: &str, dt_min_f: Option<f64>) -> String {
                 .into()
         }
         "bas-vs-web-oat" => {
-            "no coincident BAS and web outdoor-air samples for this site and window".into()
+            "no assessable BAS vs web outdoor-air pairs for this site and window \
+             (need mapped oa_t and web_oa_t, primary or default site OAT binding, \
+             and web within the OAT-METEO as-of bound)"
+                .into()
         }
         other => format!("no rows for {other}"),
     }
@@ -278,14 +281,35 @@ pub async fn bas_vs_web_oat(
     tsdb: &Tsdb,
     building_id: &str,
     scope: &AnalyticsSqlScope,
+    max_points: i64,
 ) -> Result<Value> {
-    // Soft-OPEN: bind requested window/equipment before aggregation (not building-only).
+    let pool = tsdb.pool();
+    let bound = crate::timescale_product::oat_meteo_web_asof_bound_seconds()
+        .context("OAT-METEO web as-of bound for bas-vs-web-oat")?;
+    let oa_ref = crate::timescale_product::resolve_site_oa_t_reference(pool, building_id)
+        .await
+        .context("resolve site oa_t for bas-vs-web-oat")?;
+    let Some(picked) = oa_ref else {
+        let body = finish_row_envelope(
+            "bas-vs-web-oat",
+            building_id,
+            Vec::new(),
+            scope,
+            "bas-vs-web-oat",
+            None,
+        );
+        return Ok(stamp_overview_dto(tsdb, building_id, scope, body).await);
+    };
+
     let rows = sqlx::query(BAS_VS_WEB_SQL)
         .bind(building_id)
         .bind(scope.start)
         .bind(scope.end)
         .bind(scope.equipment_bind())
-        .fetch_all(tsdb.pool())
+        .bind(&picked.openfdd_key)
+        .bind(bound)
+        .bind(max_points)
+        .fetch_all(pool)
         .await
         .context("bas_vs_web_oat")?;
 
@@ -299,7 +323,7 @@ pub async fn bas_vs_web_oat(
             "delta_f": r.try_get::<f64, _>("delta_f").ok(),
         }));
     }
-    let body = finish_row_envelope(
+    let mut body = finish_row_envelope(
         "bas-vs-web-oat",
         building_id,
         out,
@@ -307,6 +331,15 @@ pub async fn bas_vs_web_oat(
         "bas-vs-web-oat",
         None,
     );
+    if let Some(obj) = body.as_object_mut() {
+        let oa_meta = json!({
+            "openfdd_key": picked.openfdd_key,
+            "equipment_id": picked.equipment_id,
+            "selection": picked.selection,
+        });
+        obj.insert("oa_t_reference".to_string(), oa_meta);
+        obj.insert("web_asof_bound_seconds".to_string(), json!(bound));
+    }
     Ok(stamp_overview_dto(tsdb, building_id, scope, body).await)
 }
 
@@ -1694,6 +1727,8 @@ pub fn envelope_from_dispatch_value(
         .get("query_version")
         .and_then(|v| v.as_str())
         .unwrap_or(query_version);
+    let oa_t_reference = obj.get("oa_t_reference").cloned();
+    let web_asof_bound_seconds = obj.get("web_asof_bound_seconds").and_then(|v| v.as_f64());
     let mut env = AnalyticsEnvelope {
         schema_version,
         query_version: qv.to_string(),
@@ -1708,6 +1743,8 @@ pub fn envelope_from_dispatch_value(
         equipment,
         points,
         skipped,
+        oa_t_reference,
+        web_asof_bound_seconds,
     };
     let dispatch_meta_keys = [
         "query_id",
@@ -1717,6 +1754,8 @@ pub fn envelope_from_dispatch_value(
         "sample_count",
         "pack_version",
         "analytics_pack",
+        "oa_t_reference",
+        "web_asof_bound_seconds",
     ];
     let scope_meta_keys = ["window_start", "window_end", "equipment_ids"];
     let mut cov = env
@@ -1760,6 +1799,23 @@ fn building_from(
     }
 }
 
+fn bas_vs_web_row_limit(
+    req: &AnalyticsRequest,
+) -> Result<i64, (axum::http::StatusCode, axum::Json<Value>)> {
+    crate::analytics::historian::validated_bas_vs_web_max_points(req.query.max_points).map_err(
+        |msg| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                axum::Json(json!({
+                    "ok": false,
+                    "error": msg,
+                    "engine": "timescale-sql",
+                })),
+            )
+        },
+    )
+}
+
 /// Universal product dispatch — never calls DataFusion.
 pub async fn respond_query(
     query_id: &str,
@@ -1782,7 +1838,10 @@ pub async fn respond_query(
     let scope = AnalyticsSqlScope::from_request(req);
     let result = match query_id {
         "runtime" => motor_weekly_runtime(&tsdb, &building, &scope).await,
-        "bas-vs-web-oat" => bas_vs_web_oat(&tsdb, &building, &scope).await,
+        "bas-vs-web-oat" => {
+            let max_points = bas_vs_web_row_limit(req)?;
+            bas_vs_web_oat(&tsdb, &building, &scope, max_points).await
+        }
         "ahu-health" => Ok(crate::analytics::plant_health::handle_ahu(req)
             .await
             .to_json()),
@@ -1931,6 +1990,26 @@ mod pack_version_tests {
         assert!(
             ECONOMIZER_SQL.contains("mat_resid_f"),
             "MAT residual is the mixing-model difference"
+        );
+    }
+
+    #[test]
+    fn bas_vs_web_sql_uses_primary_key_and_asof_bound() {
+        assert!(
+            BAS_VS_WEB_SQL.contains("u.openfdd_key = $5"),
+            "bas-vs-web must bind the shared site oa_t key"
+        );
+        assert!(
+            BAS_VS_WEB_SQL.contains("<= $6"),
+            "bas-vs-web must enforce the OAT-METEO web as-of bound as $6"
+        );
+        assert!(
+            BAS_VS_WEB_SQL.contains("make_interval(secs => ($6::double precision))"),
+            "bas-vs-web must prefetch web samples before window start by the as-of bound"
+        );
+        assert!(
+            BAS_VS_WEB_SQL.contains("LIMIT $7"),
+            "bas-vs-web must bind row limit as $7"
         );
     }
 
