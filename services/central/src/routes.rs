@@ -2632,24 +2632,28 @@ pub async fn fdd_equipment(
     }
     if crate::timescale_historian::historian_is_timescale() {
         return match crate::timescale_product::equipment_from_timescale(q.scoped()).await {
-            Ok(v) => Ok(Json(v)),
-            Err(e) => Ok(Json(json!({
-                "ok": false,
-                "error": e.to_string(),
-                "engine": "timescale-sql",
-                "equipment": [],
-                "count": 0,
-            }))),
+            Ok(v) => Ok(Json(attach_semantic_model_present(v, q.scoped()))),
+            Err(e) => Ok(Json(attach_semantic_model_present(
+                json!({
+                    "ok": false,
+                    "error": e.to_string(),
+                    "engine": "timescale-sql",
+                    "equipment": [],
+                    "count": 0,
+                }),
+                q.scoped(),
+            ))),
         };
     }
     let ctx = resolve_tenant_context(&state, &headers);
     let preferred = preferred_tenant_for_building_read(&ctx, q.scoped());
-    Ok(Json(
+    Ok(Json(attach_semantic_model_present(
         open_fdd_edge_prototype::fdd::registry_api::equipment_response_scoped(
             q.scoped(),
             preferred.as_deref(),
         ),
-    ))
+        q.scoped(),
+    )))
 }
 
 pub async fn fdd_results(
@@ -4420,6 +4424,19 @@ fn csv_building_root(building_id: &str) -> std::path::PathBuf {
         .join(building_id)
 }
 
+fn attach_semantic_model_present(mut body: Value, building_id: Option<&str>) -> Value {
+    let Some(bid) = building_id else {
+        return body;
+    };
+    let present = open_fdd_edge_prototype::csv_ingest::semantic_meta::semantic_model_present(
+        &csv_building_root(bid),
+    );
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("semantic_model_present".into(), json!(present));
+    }
+    body
+}
+
 fn overlay_mutate_result(
     result: Result<Value, Value>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
@@ -5159,14 +5176,7 @@ pub async fn central_package_sparql(
 
     match result {
         Ok(body) => Ok(Json(body)),
-        Err(err) => {
-            let status = if err.get("present") == Some(&json!(false)) {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::BAD_REQUEST
-            };
-            Err((status, Json(err)))
-        }
+        Err(err) => Err((crate::haystack_rdf::sparql_route_status(&err), Json(err))),
     }
 }
 
@@ -5239,7 +5249,7 @@ async fn run_central_readonly_sparql(
                 "meta": meta,
             })))
         }
-        Err(err) => Err((StatusCode::BAD_REQUEST, Json(err))),
+        Err(err) => Err((crate::haystack_rdf::sparql_route_status(&err), Json(err))),
     }
 }
 
@@ -5350,14 +5360,7 @@ pub async fn central_package_sparql_consumers(
 
     match result {
         Ok(body) => Ok(Json(body)),
-        Err(err) => {
-            let status = if err.get("present") == Some(&json!(false)) {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::BAD_REQUEST
-            };
-            Err((status, Json(err)))
-        }
+        Err(err) => Err((crate::haystack_rdf::sparql_route_status(&err), Json(err))),
     }
 }
 
