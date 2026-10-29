@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 110,
-  "pack_sha256": "15b12a2043007879014190bab0108f01a691579c52de775373bf1df67110e2aa",
+  "pack_sha256": "f451bbfe5377c21781da4382f56b934a2b286d03b6748b5127e28180c511daaa",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -437,8 +437,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/bas_vs_web_oat.sql",
-      "sha256": "c63ab167fe47dd7dbf333df79b2569cf683c4f8350a632b973da9b24a5dd2339",
-      "bytes": 1513
+      "sha256": "8b158c051611cca4a20ae999114dbba39d1c3b6d2a471bf23a341da22acbec86",
+      "bytes": 2298
     },
     {
       "path": "sql/analytics/postgres/queries/diurnal_hourly.sql",

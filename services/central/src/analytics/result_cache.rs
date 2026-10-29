@@ -230,16 +230,63 @@ pub async fn serve_with(
         ));
     };
 
+    let (tsdb, connect_err) = if matches!(watch, CacheWatch::Resolve) {
+        match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(db) => (Some(db), None),
+            Err(err) => {
+                tracing::warn!(error = %err, "analytics result cache timescale connect failed");
+                (None, Some(format!("timescale connect failed: {err}")))
+            }
+        }
+    } else {
+        (None, None)
+    };
+
     let identity = match watch {
-        CacheWatch::Resolve => resolve_cache_identity(building_id, req).await,
+        CacheWatch::Resolve => {
+            if let Some(ref db) = tsdb {
+                resolve_cache_identity_from(db, building_id, req).await
+            } else {
+                let reason = connect_err
+                    .as_deref()
+                    .unwrap_or("timescale connect failed for analytics cache identity");
+                resolve_cache_identity_unconnected(reason)
+            }
+        }
         #[cfg(test)]
         CacheWatch::Resolved(identity) => identity,
     };
-    let key = match cache_key(building_id, query_id, query_version, req, &identity) {
-        Ok(key) => key,
-        Err(reason) => {
+
+    let key = if query_id == "bas-vs-web-oat" {
+        let Some(db) = tsdb.as_ref() else {
             let envelope = compute_with_admission_fallible(compute).await?;
-            return Ok(skipped(envelope, started, &reason));
+            let reason = connect_err
+                .as_deref()
+                .unwrap_or("timescale connect failed for bas-vs-web-oat cache key");
+            return Ok(skipped(envelope, started, reason));
+        };
+        match bas_vs_web_cache_extension(db, building_id).await {
+            Ok(ext) => {
+                match cache_key(building_id, query_id, query_version, req, &identity, &ext) {
+                    Ok(key) => key,
+                    Err(reason) => {
+                        let envelope = compute_with_admission_fallible(compute).await?;
+                        return Ok(skipped(envelope, started, &reason));
+                    }
+                }
+            }
+            Err(reason) => {
+                let envelope = compute_with_admission_fallible(compute).await?;
+                return Ok(skipped(envelope, started, &reason));
+            }
+        }
+    } else {
+        match cache_key(building_id, query_id, query_version, req, &identity, "") {
+            Ok(key) => key,
+            Err(reason) => {
+                let envelope = compute_with_admission_fallible(compute).await?;
+                return Ok(skipped(envelope, started, &reason));
+            }
         }
     };
 
@@ -345,17 +392,23 @@ fn cache_key(
     query_version: &str,
     req: &AnalyticsRequest,
     identity: &CacheIdentity,
+    config_extension: &str,
 ) -> Result<AnalyticsCacheKey, String> {
     fdd_store::safe_partition_value(building_id, "building_id").map_err(|e| e.to_string())?;
     fdd_store::safe_partition_value(query_id, "query_id").map_err(|e| e.to_string())?;
     fdd_store::safe_partition_value(query_version, "query_version").map_err(|e| e.to_string())?;
+    let material = if config_extension.is_empty() {
+        config_material(req, identity)
+    } else {
+        format!("{}\n{config_extension}", config_material(req, identity))
+    };
     Ok(AnalyticsCacheKey {
         building_id: building_id.to_string(),
         query_id: query_id.to_string(),
         query_version: query_version.to_string(),
         window_start: window_token(req.query.start),
         window_end: window_token(req.query.end),
-        config_hash: config_hash(&config_material(req, identity)),
+        config_hash: config_hash(&material),
     })
 }
 
@@ -434,13 +487,28 @@ fn canonical_json(value: &Value) -> String {
 }
 
 fn table_from_envelope(env: &AnalyticsEnvelope) -> AnalyticsResultTable {
+    let mut coverage = env.coverage.clone();
+    if env.oa_t_reference.is_some() || env.web_asof_bound_seconds.is_some() {
+        let mut cov = coverage
+            .as_ref()
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        if let Some(ref meta) = env.oa_t_reference {
+            cov.insert("oa_t_reference".into(), meta.clone());
+        }
+        if let Some(bound) = env.web_asof_bound_seconds {
+            cov.insert("web_asof_bound_seconds".into(), json!(bound));
+        }
+        coverage = Some(Value::Object(cov));
+    }
     AnalyticsResultTable {
         rows: env.rows.clone(),
         equipment: env.equipment.clone(),
         points: env.points.clone(),
         skipped: env.skipped.clone(),
         warnings: env.warnings.clone(),
-        coverage: env.coverage.clone(),
+        coverage,
         engine: env.engine.clone(),
         result_query_version: env.query_version.clone(),
     }
@@ -459,6 +527,17 @@ fn envelope_from_table(
     } else {
         table.result_query_version.clone()
     };
+    let (oa_t_reference, web_asof_bound_seconds) = table
+        .coverage
+        .as_ref()
+        .and_then(|v| v.as_object())
+        .map(|cov| {
+            (
+                cov.get("oa_t_reference").cloned(),
+                cov.get("web_asof_bound_seconds").and_then(|v| v.as_f64()),
+            )
+        })
+        .unwrap_or((None, None));
     AnalyticsEnvelope {
         schema_version: SCHEMA_VERSION.into(),
         query_version,
@@ -477,6 +556,8 @@ fn envelope_from_table(
         equipment: table.equipment.clone(),
         points: table.points.clone(),
         skipped: table.skipped.clone(),
+        oa_t_reference,
+        web_asof_bound_seconds,
     }
 }
 
@@ -605,10 +686,27 @@ fn provenance_for(
     }
 }
 
-async fn resolve_cache_identity(building_id: &str, req: &AnalyticsRequest) -> CacheIdentity {
+async fn bas_vs_web_cache_extension(
+    tsdb: &fdd_tsdb::Tsdb,
+    building_id: &str,
+) -> Result<String, String> {
+    let picked = crate::timescale_product::resolve_site_oa_t_reference(tsdb.pool(), building_id)
+        .await
+        .map_err(|err| format!("oa_t reference for bas-vs-web cache: {err}"))?;
+    Ok(crate::timescale_product::bas_vs_web_oa_t_config_line(
+        picked.as_ref(),
+    ))
+}
+
+async fn resolve_cache_identity_from(
+    tsdb: &fdd_tsdb::Tsdb,
+    building_id: &str,
+    req: &AnalyticsRequest,
+) -> CacheIdentity {
     let sql_pack = crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default();
     let equipment = req.query.equipment_ids.clone().unwrap_or_default();
-    let input = crate::timescale_product::read_analytics_cache_input(
+    let input = crate::timescale_product::read_analytics_cache_input_from(
+        tsdb,
         building_id,
         req.query.start,
         req.query.end,
@@ -630,6 +728,17 @@ async fn resolve_cache_identity(building_id: &str, req: &AnalyticsRequest) -> Ca
         sql_pack,
         model_revision,
         watermark,
+    }
+}
+
+fn resolve_cache_identity_unconnected(connect_reason: &str) -> CacheIdentity {
+    CacheIdentity {
+        result_contract: ANALYTICS_RESULT_CONTRACT.into(),
+        sql_pack: String::new(),
+        model_revision: String::new(),
+        watermark: InputWatermark::Unavailable {
+            reason: connect_reason.to_string(),
+        },
     }
 }
 
@@ -1091,13 +1200,100 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn bas_vs_web_skips_cache_when_oa_t_key_resolution_unavailable() {
+        let _cg = CgroupTestEnv::low_pressure();
+        struct DbUrlOverride {
+            prev: Option<String>,
+        }
+        impl DbUrlOverride {
+            fn invalid_localhost() -> Self {
+                let prev = std::env::var("OPENFDD_DATABASE_URL").ok();
+                std::env::set_var(
+                    "OPENFDD_DATABASE_URL",
+                    "postgresql://invalid:invalid@127.0.0.1:9/nodb",
+                );
+                fdd_tsdb::clear_shared_pool();
+                Self { prev }
+            }
+        }
+        impl Drop for DbUrlOverride {
+            fn drop(&mut self) {
+                match self.prev.take() {
+                    Some(v) => std::env::set_var("OPENFDD_DATABASE_URL", v),
+                    None => std::env::remove_var("OPENFDD_DATABASE_URL"),
+                }
+                fdd_tsdb::clear_shared_pool();
+            }
+        }
+        let _db = DbUrlOverride::invalid_localhost();
+        let store = mem_store();
+        let sessions = Mutex::new(SessionBook::new(limits()));
+        let request = req("site-cache-skip");
+        let served = serve_with(
+            &store,
+            &sessions,
+            ("bas-vs-web-oat", "bas-vs-web-oat-v4"),
+            &request,
+            StaleAction::ServeStale,
+            CacheWatch::Resolve,
+            async || Ok(envelope("bas-vs-web-oat-v4", &request.query, Vec::new())),
+        )
+        .await
+        .expect("serve");
+        assert_eq!(served.cache["skipped"], true);
+        let reason = served
+            .cache
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(
+            reason.contains("timescale connect") || reason.contains("oa_t reference"),
+            "expected cache bypass reason, got: {reason}"
+        );
+        assert_eq!(served.cache["hit"], false);
+    }
+
+    #[test]
+    fn bas_vs_web_config_hash_includes_oa_t_reference_line() {
+        let request = req("site-a");
+        let identity = timescale_identity("model-a", 1, "samples=1;series=1");
+        let default_key = cache_key(
+            "site-a",
+            "bas-vs-web-oat",
+            "bas-vs-web-oat-v4",
+            &request,
+            &identity,
+            "oa_t_ref=WX.oa_t_a=default_lowest_binding",
+        )
+        .unwrap();
+        let primary_key = cache_key(
+            "site-a",
+            "bas-vs-web-oat",
+            "bas-vs-web-oat-v4",
+            &request,
+            &identity,
+            "oa_t_ref=WX.oa_t_b=primary_reference",
+        )
+        .unwrap();
+        assert_ne!(default_key.config_hash, primary_key.config_hash);
+    }
+
+    #[tokio::test]
     async fn incompatible_stamp_on_the_current_partition_recomputes() {
         let _cg = CgroupTestEnv::low_pressure();
         let store = mem_store();
         let sessions = Mutex::new(SessionBook::new(limits()));
         let request = req("site-a");
         let identity = timescale_identity("model-a", 1, "samples=1;series=1");
-        let key = cache_key("site-a", "rcx-preset", "rcx-preset-v1", &request, &identity).unwrap();
+        let key = cache_key(
+            "site-a",
+            "rcx-preset",
+            "rcx-preset-v1",
+            &request,
+            &identity,
+            "",
+        )
+        .unwrap();
         let table = AnalyticsResultTable {
             rows: Vec::new(),
             equipment: Vec::new(),
