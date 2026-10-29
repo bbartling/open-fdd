@@ -4,7 +4,6 @@ use chrono::{Duration, TimeZone, Utc};
 use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch};
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
-use sqlx::Row;
 
 use super::*;
 
