@@ -45,8 +45,10 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections import Counter
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -56,10 +58,10 @@ if str(STRESS) not in sys.path:
     sys.path.insert(0, str(STRESS))
 
 from helpers import (  # noqa: E402
+    HttpClient,
     add_connection_args,
     analytics_post,
     apply_base_url,
-    client,
     login,
     post_sparql,
     resolve_base_url,
@@ -75,6 +77,109 @@ from si_cutover.baseline_io import (  # noqa: E402
 )
 
 POLL_SECONDS = 300.0
+DEFAULT_REQUEST_TIMEOUT_S = 120.0
+FDD_RUN_409_MAX_ATTEMPTS = 8
+FDD_RUN_409_BACKOFF_S = 1.0
+FDD_RUN_409_BACKOFF_CAP_S = 32.0
+
+HAYSTACK_ROLE_GOLDEN = REPO / "crates" / "fdd_core" / "testdata" / "haystack_point_role_golden.json"
+
+
+class UnmappedRoleError(Exception):
+    """Role id from SPARQL has no entry in haystack_point_role_golden.json."""
+
+    def __init__(self, roles: list[str], *, skip_counts: dict[str, int]) -> None:
+        self.roles = roles
+        self.skip_counts = skip_counts
+        super().__init__(", ".join(roles))
+
+
+@lru_cache(maxsize=1)
+def load_role_id_to_haystack() -> dict[str, str]:
+    """Map canonical role ids (and Haystack names) to pandas cookbook column names."""
+    raw = json.loads(HAYSTACK_ROLE_GOLDEN.read_text(encoding="utf-8"))
+    out: dict[str, str] = {}
+    for pair in raw:
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            continue
+        haystack = str(pair[0]).strip()
+        role_id = str(pair[1]).strip()
+        if haystack and role_id:
+            out.setdefault(role_id, haystack)
+        if haystack:
+            out.setdefault(haystack, haystack)
+    return out
+
+
+def resolve_haystack_column(role: str, role_map: dict[str, str]) -> str | None:
+    key = str(role or "").strip()
+    if not key:
+        return None
+    mapped = role_map.get(key)
+    if mapped:
+        return mapped
+    normalized = key.replace("-", "_")
+    if normalized != key:
+        return role_map.get(normalized)
+    return None
+
+
+def resolve_openfdd_key(equipment_id: str, column: str, explicit: str | None) -> str:
+    if explicit and str(explicit).strip():
+        return str(explicit).strip()
+    col = str(column or "").strip()
+    prefix = f"{equipment_id}."
+    if col.startswith(prefix):
+        return col
+    return f"{equipment_id}.{col}"
+
+
+def _sparql_equipment_id(pt: dict[str, Any]) -> str:
+    return str(pt.get("equipmentId") or pt.get("equipment_id") or "").strip()
+
+
+def post_fdd_run_with_busy_retry(
+    http: HttpClient,
+    headers: dict[str, str],
+    run_body: dict[str, Any],
+    *,
+    request_timeout_s: float,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """POST /api/fdd/run; retry HTTP 409 with bounded exponential backoff."""
+    attempts: list[dict[str, Any]] = []
+    delay = FDD_RUN_409_BACKOFF_S
+    last_status = 0
+    last_raw = b""
+    for attempt in range(1, FDD_RUN_409_MAX_ATTEMPTS + 1):
+        status, _hdrs, raw = http.request(
+            "POST",
+            "/api/fdd/run",
+            headers=headers,
+            json_body=run_body,
+            timeout=request_timeout_s,
+        )
+        last_status = status
+        last_raw = raw
+        attempts.append({"attempt": attempt, "http_status": status})
+        if status == 409 and attempt < FDD_RUN_409_MAX_ATTEMPTS:
+            time.sleep(delay)
+            delay = min(delay * 2.0, FDD_RUN_409_BACKOFF_CAP_S)
+            continue
+        if not 200 <= status < 300:
+            snippet = raw[:240].decode("utf-8", errors="replace")
+            raise RuntimeError(f"POST /api/fdd/run -> HTTP {status}: {snippet}")
+        body = json.loads(raw.decode("utf-8") or "{}")
+        meta = {
+            "http_attempts": attempts,
+            "request_timeout_s": request_timeout_s,
+            "final_http_status": status,
+        }
+        return body, meta
+    snippet = last_raw[:240].decode("utf-8", errors="replace")
+    raise RuntimeError(
+        f"POST /api/fdd/run busy after {FDD_RUN_409_MAX_ATTEMPTS} attempts "
+        f"(last HTTP {last_status}): {snippet}"
+    )
 
 ANALYTICS_POST_ROUTES: tuple[tuple[str, dict[str, Any]], ...] = (
     ("/api/analytics/runtime", {}),
@@ -504,8 +609,19 @@ def equipment_frame_from_db(
     window_start: str,
     window_end: str,
     equipment_type: str = "",
-) -> Any:
+) -> tuple[Any, dict[str, int]]:
     import pandas as pd
+
+    role_map = load_role_id_to_haystack()
+    skip_counts = Counter(
+        {
+            "skipped_other_equipment": 0,
+            "skipped_unbound_no_column": 0,
+            "skipped_no_role": 0,
+            "skipped_unmapped_role": 0,
+        }
+    )
+    unmapped_roles: list[str] = []
 
     pts = post_sparql(
         http,
@@ -518,13 +634,28 @@ def equipment_frame_from_db(
     for pt in pts:
         if not isinstance(pt, dict):
             continue
-        col = str(pt.get("column") or pt.get("pointId") or "").strip()
-        role = str(pt.get("fddSelection") or pt.get("canonicalRole") or "").strip()
-        if not col:
+        row_eid = _sparql_equipment_id(pt)
+        if row_eid and row_eid != equipment_id:
+            skip_counts["skipped_other_equipment"] += 1
             continue
-        if not role:
-            raise ValueError(f"no_role for point column {col!r} on equipment {equipment_id}")
-        openfdd_key = str(pt.get("openfdd_key") or f"{equipment_id}.{col}").strip()
+        col = str(pt.get("column") or pt.get("pointId") or "").strip()
+        if not col:
+            skip_counts["skipped_unbound_no_column"] += 1
+            continue
+        role_raw = str(pt.get("fddSelection") or pt.get("canonicalRole") or "").strip()
+        if not role_raw:
+            skip_counts["skipped_no_role"] += 1
+            continue
+        haystack_col = resolve_haystack_column(role_raw, role_map)
+        if haystack_col is None:
+            skip_counts["skipped_unmapped_role"] += 1
+            unmapped_roles.append(role_raw)
+            continue
+        openfdd_key = resolve_openfdd_key(
+            equipment_id,
+            col,
+            str(pt.get("openfdd_key") or "").strip() or None,
+        )
         samples = load_samples_in_window(
             conn,
             site_id=building_id,
@@ -536,7 +667,9 @@ def equipment_frame_from_db(
             continue
         idx = pd.to_datetime([ts for ts, _ in samples], utc=True)
         vals = [val for _, val in samples]
-        series[role] = pd.Series(vals, index=idx, name=role)
+        series[haystack_col] = pd.Series(vals, index=idx, name=haystack_col)
+    if unmapped_roles:
+        raise UnmappedRoleError(unmapped_roles, skip_counts=dict(skip_counts))
     if not series:
         raise ValueError(f"no historian samples for equipment {equipment_id} in window")
     df = pd.DataFrame(series).sort_index()
@@ -550,7 +683,7 @@ def equipment_frame_from_db(
     if etype:
         df.attrs["equipment_type"] = etype
         df.attrs["equipType"] = etype
-    return df
+    return df, dict(skip_counts)
 
 
 def _pair_base(building_id: str, rule_id: str, equipment_id: str) -> dict[str, Any]:
@@ -600,6 +733,7 @@ def collect_pandas_fdd_rows(
     out: list[dict[str, Any]] = []
     coverage: Counter[str] = Counter()
     error_messages: list[str] = []
+    frame_skip_totals: Counter[str] = Counter()
 
     for rule in rules_iter:
         rule_id = str(rule.get("rule_id") or "").strip()
@@ -640,7 +774,7 @@ def collect_pandas_fdd_rows(
                 continue
             try:
                 params = rule_params_from_registry(rule)
-                frame = equipment_frame_from_db(
+                frame, skip_counts = equipment_frame_from_db(
                     conn,
                     http,
                     headers,
@@ -650,6 +784,19 @@ def collect_pandas_fdd_rows(
                     window_end=window_end,
                     equipment_type=etype,
                 )
+                frame_skip_totals.update(skip_counts)
+            except UnmappedRoleError as exc:
+                frame_skip_totals.update(exc.skip_counts)
+                roles = ", ".join(exc.roles)
+                out.append(
+                    {
+                        **base,
+                        "pair_status": "unmapped_role",
+                        "reason": roles,
+                    }
+                )
+                coverage["unmapped_role"] += 1
+                continue
             except Exception as exc:
                 msg = f"{rule_id}/{eid}: {exc}"
                 error_messages.append(msg)
@@ -728,7 +875,7 @@ def collect_pandas_fdd_rows(
                         }
                     )
             coverage["computed"] += 1
-    return out, dict(coverage), error_messages
+    return out, dict(coverage), error_messages, dict(frame_skip_totals)
 
 
 def capture_site(
@@ -741,6 +888,7 @@ def capture_site(
     rules: list[dict[str, Any]],
     skip_pandas: bool,
     pandas_max_rules: int | None,
+    request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
 ) -> dict[str, Any]:
     building_id = str(site["building_id"]).strip()
     window_start = str(site.get("window_start") or site.get("start") or "").strip() or None
@@ -757,7 +905,9 @@ def capture_site(
         run_body["window_start"] = window_start
     if window_end:
         run_body["window_end"] = window_end
-    run_resp = http.post_json("/api/fdd/run", headers=headers, json_body=run_body)
+    run_resp, fdd_run_http = post_fdd_run_with_busy_retry(
+        http, headers, run_body, request_timeout_s=request_timeout_s
+    )
     if not run_resp.get("ok", True) and run_resp.get("error"):
         raise RuntimeError(f"/api/fdd/run failed: {run_resp.get('error')}")
 
@@ -786,10 +936,11 @@ def capture_site(
     pandas_rows: list[dict[str, Any]] = []
     pandas_coverage: dict[str, int] = {}
     pandas_errors: list[str] = []
+    pandas_frame_skips: dict[str, int] = {}
     if skip_pandas:
         pandas_coverage = {"skipped": 1}
     else:
-        pandas_rows, pandas_coverage, pandas_errors = collect_pandas_fdd_rows(
+        pandas_rows, pandas_coverage, pandas_errors, pandas_frame_skips = collect_pandas_fdd_rows(
             http,
             headers,
             conn,
@@ -834,6 +985,7 @@ def capture_site(
             "run_id": run_id,
             "window_start": ws,
             "window_end": we,
+            "fdd_run_http": fdd_run_http,
         }
     ]
     with JsonlGzWriter(site_dir / "persisted_runs.jsonl.gz") as writer:
@@ -849,7 +1001,9 @@ def capture_site(
         "unit_rows": len(units),
         "unresolved_units": unresolved_units,
         "pandas_coverage": pandas_coverage,
+        "pandas_frame_skips": pandas_frame_skips,
         "pandas_errors": pandas_errors,
+        "fdd_run_http": fdd_run_http,
     }
 
 
@@ -982,6 +1136,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Do not exit non-zero when any rule×equipment pair_status is error",
     )
+    ap.add_argument(
+        "--request-timeout-s",
+        type=float,
+        default=DEFAULT_REQUEST_TIMEOUT_S,
+        help=f"HTTP request timeout for capture calls (default {DEFAULT_REQUEST_TIMEOUT_S:g})",
+    )
     ap.add_argument("--self-test", action="store_true", help="Offline JSON shape validation")
     ap.add_argument(
         "--emit-ip-goldens",
@@ -996,6 +1156,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Offline: emit ip goldens from cookbook + SYNTH CI fixtures (no stack)",
     )
     args = ap.parse_args(argv)
+
+    if args.request_timeout_s <= 0:
+        ap.error("--request-timeout-s must be positive")
 
     if args.self_test:
         return run_self_test()
@@ -1031,7 +1194,7 @@ def main(argv: list[str] | None = None) -> int:
 
     summaries: list[dict[str, Any]] = []
     all_errors: list[str] = []
-    with client(base) as http:
+    with HttpClient(base, timeout=args.request_timeout_s) as http:
         wait_until_ready(http)
         headers = login(http, user=args.user, password=resolve_capture_password(args))
         shortsha = health_shortsha(http, headers)
@@ -1050,6 +1213,7 @@ def main(argv: list[str] | None = None) -> int:
                     rules=rules,
                     skip_pandas=args.skip_pandas,
                     pandas_max_rules=pandas_cap,
+                    request_timeout_s=args.request_timeout_s,
                 )
                 summaries.append(summary)
                 all_errors.extend(summary.get("pandas_errors") or [])
@@ -1060,6 +1224,7 @@ def main(argv: list[str] | None = None) -> int:
             "skip_pandas": args.skip_pandas,
             "pandas_max_rules": pandas_cap,
             "allow_errors": args.allow_errors,
+            "request_timeout_s": args.request_timeout_s,
             "sites": summaries,
         }
         write_manifest(out_dir, meta=meta)
