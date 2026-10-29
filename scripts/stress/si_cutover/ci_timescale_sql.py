@@ -22,47 +22,18 @@ from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
     registry_role_column,
 )
 from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_registry  # noqa: E402
+from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
+    W4C_SI_ZONE_FAMILY,
+    family_dataset_ids,
+    sql_si_pack_enabled,
+)
 
 PENDING_W4 = "pending_W4"
 SI_SQL_PACK_AVAILABLE = False
 
-W4C_TARGET_DATASETS = frozenset(
-    {
-        "COOKBOOK_VAV1",
-        "COOKBOOK_VAV6",
-        "COOKBOOK_VAV7",
-        "SYNTH_VAV_CASE_VAV_1",
-    }
-)
 
-W4C_ZONE_RULES = frozenset(
-    {
-        "VAV-1",
-        "VAV-2",
-        "VAV-3",
-        "VAV-4",
-        "VAV-5",
-        "VAV-6",
-        "VAV-7",
-        "VAV-REHEAT",
-        "VAV-AHU-LEAVE",
-        "AVG-ZONE-TEMP",
-        "ZONE-COMFORT-PCT",
-        "FCU-SENSOR-NULL",
-        "FCU-HTG-COIL",
-        "FCU-CLG-COIL",
-        "FCU-VALVE-PASS-HTG",
-        "FCU-VALVE-PASS-CLG",
-        "FCU-DAMPER-POS",
-        "FCU-CO2-DAMPER",
-        "FCU-DEADBAND",
-        "FCU-MODE-CYCLE",
-    }
-)
-
-
-def sql_si_pack_enabled(rule_id: str) -> bool:
-    return rule_id in W4C_ZONE_RULES
+def w4c_target_datasets() -> frozenset[str]:
+    return family_dataset_ids(W4C_SI_ZONE_FAMILY)
 
 
 def _load_parity_module():

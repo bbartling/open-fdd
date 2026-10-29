@@ -393,6 +393,22 @@ def _rules_with_sql_file() -> set[str]:
     }
 
 
+def _p0_sql_rules_ip_compare() -> set[str]:
+    from scripts.stress.si_cutover.si_parity_families import sql_si_pack_enabled
+
+    return {r for r in _rules_with_sql_file() if not sql_si_pack_enabled(r)}
+
+
+def _p0_si_pack_pandas_rows(golden: dict[str, Any]) -> list[dict[str, Any]]:
+    from scripts.stress.si_cutover.si_parity_families import sql_si_pack_enabled
+
+    return [
+        r
+        for r in _pandas_computed_daily(golden)
+        if sql_si_pack_enabled(str(r.get("rule_id") or ""))
+    ]
+
+
 def _p0_pandas_rows(golden: dict[str, Any], sql_rules: set[str]) -> list[dict[str, Any]]:
     return [
         r
@@ -402,7 +418,8 @@ def _p0_pandas_rows(golden: dict[str, Any], sql_rules: set[str]) -> list[dict[st
 
 
 def min_p0_cells(golden: dict[str, Any]) -> int:
-    return len(_p0_pandas_rows(golden, _rules_with_sql_file()))
+    sql_rules = _p0_sql_rules_ip_compare()
+    return len(_p0_pandas_rows(golden, sql_rules)) + len(_p0_si_pack_pandas_rows(golden))
 
 
 def min_p1_cells(golden: dict[str, Any]) -> int:
@@ -482,7 +499,8 @@ def compare_p0_all_goldens(
     structured: list[dict[str, Any]] = []
     comparisons = 0
     min_required = 0
-    sql_rules = _rules_with_sql_file()
+    sql_rules = _p0_sql_rules_ip_compare()
+    notes: list[str] = []
     for golden in goldens:
         min_required += min_p0_cells(golden)
         sql_by_key = {fdd_daily_key(r): r for r in _sql_computed_daily(golden)}
@@ -529,6 +547,26 @@ def compare_p0_all_goldens(
                 if mismatch_reason:
                     cell["mismatch_reason"] = mismatch_reason
                 structured.append(cell)
+        for prow in _p0_si_pack_pandas_rows(golden):
+            rule_id = str(prow.get("rule_id") or "")
+            if not rule_in_scope(rule_id, scope):
+                continue
+            key = fdd_daily_key(prow)
+            comparisons += 1
+            msg = (
+                f"P0 ip_sql_skipped_si_pack {key}: golden emit skips IP Timescale SQL "
+                f"(W4c SI-pack path)"
+            )
+            notes.append(msg)
+            structured.append(
+                {
+                    "kind": "ip_sql_skipped_si_pack",
+                    "building_id": key[0],
+                    "rule_id": key[1],
+                    "equipment_id": key[2],
+                    "utc_day": key[3],
+                }
+            )
         sub_a = compare_p0_analytics_golden(golden)
         if scope is None:
             comparisons += sub_a.comparisons
@@ -537,7 +575,7 @@ def compare_p0_all_goldens(
         errors.append(
             f"P0: comparisons {comparisons} < required pandas/sql cells {min_required}"
         )
-    return StageResult("P0", comparisons, tuple(errors), tuple(), tuple(structured))
+    return StageResult("P0", comparisons, tuple(errors), tuple(notes), tuple(structured))
 
 
 def verify_golden_rule_attempted(golden: dict[str, Any], expected_rules: set[str]) -> StageResult:
@@ -675,39 +713,64 @@ def hydrate_w4c_p2_sql_si_from_timescale(
     goldens: list[dict[str, Any]],
     *,
     scope: set[str] | None,
-) -> list[str]:
-    """When Timescale is available, fill sql_si_fault_seconds for W4c-scoped P2 rows."""
+    strict: bool = False,
+) -> tuple[list[str], list[str]]:
+    """When Timescale is available, fill sql_si_fault_seconds for W4c-scoped P2 rows.
+
+    Returns (errors, notes). Under strict blocking W4c, infrastructure and missing SQL
+    rows are errors; otherwise non-fatal conditions are notes only.
+    """
     import os
 
     from scripts.ci import unit_contract_lib as uc
     from scripts.stress.si_cutover import ci_fixtures_lib as cfl
     from scripts.stress.si_cutover import ci_timescale_sql as cts
+    from scripts.stress.si_cutover.si_parity_families import (
+        W4C_SI_ZONE_FAMILY,
+        family_dataset_ids,
+        family_rule_ids,
+    )
+
+    w4c_rules = family_rule_ids(W4C_SI_ZONE_FAMILY)
+    w4c_datasets = family_dataset_ids(W4C_SI_ZONE_FAMILY)
+    if scope is None or not scope.intersection(w4c_rules):
+        return [], []
+
+    errors: list[str] = []
+    notes: list[str] = []
+
+    def record(msg: str) -> None:
+        if strict:
+            errors.append(msg)
+        else:
+            notes.append(msg)
 
     url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
-    if not url or scope is None:
-        return []
-    if not scope.intersection(cts.W4C_ZONE_RULES):
-        return []
+    if not url:
+        record("P2 hydrate_w4c: OPENFDD_DATABASE_URL is not set")
+        return errors, notes
+
     metric = uc.load_json(uc.METRIC_UNITS)
     rules_by_id = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
     try:
         conn = cts._load_parity_module().connect_with_retry(url)
     except Exception as exc:
-        return [f"hydrate_w4c_p2: connect failed: {exc}"]
-    notes: list[str] = []
+        record(f"P2 hydrate_w4c: connect failed: {exc}")
+        return errors, notes
     try:
         for golden in goldens:
             building_id = str(golden.get("building_id") or "")
-            if building_id not in cts.W4C_TARGET_DATASETS:
+            if building_id not in w4c_datasets:
                 continue
             try:
                 spec = next(s for s in cfl.iter_dataset_specs() if s.building_id == building_id)
             except StopIteration:
+                record(f"P2 hydrate_w4c {building_id}: no dataset spec")
                 continue
             try:
                 frame_raw, equipment_id = cfl.reload_dataset_frame(golden)
             except Exception as exc:
-                notes.append(f"{building_id}: reload frame: {exc}")
+                record(f"P2 hydrate_w4c {building_id}: reload frame: {exc}")
                 continue
             ip_frame = cfl.prepare_ip_frame(
                 frame_raw,
@@ -719,7 +782,7 @@ def hydrate_w4c_p2_sql_si_from_timescale(
             poll = float(golden.get("poll_seconds") or cts.infer_poll_seconds(si_frame.index))
             eligible = [
                 rules_by_id[rid]
-                for rid in sorted(scope & cts.W4C_ZONE_RULES)
+                for rid in sorted(scope & w4c_rules)
                 if rid in rules_by_id
             ]
             params_si_by_rule = {
@@ -739,10 +802,12 @@ def hydrate_w4c_p2_sql_si_from_timescale(
                     params_by_rule=params_si_by_rule,
                 )
             except Exception as exc:
-                notes.append(f"{building_id}: run_sql_si_for_dataset: {exc}")
+                record(f"P2 hydrate_w4c {building_id}: run_sql_si_for_dataset: {exc}")
                 continue
             if sql_err:
-                notes.append(f"{building_id}: sql_si errors: {'; '.join(sql_err[:3])}")
+                record(
+                    f"P2 hydrate_w4c {building_id}: sql_si errors: {'; '.join(sql_err[:3])}"
+                )
                 continue
             sql_by_key = {
                 (
@@ -778,6 +843,11 @@ def hydrate_w4c_p2_sql_si_from_timescale(
                         )
                     )
                 else:
+                    if strict:
+                        record(
+                            f"P2 hydrate_w4c {rid}/{row.get('equipment_id')}/"
+                            f"{row.get('utc_day')}: missing sql_si row after Timescale run"
+                        )
                     updated.append(row)
             golden["p2_si_pairs"] = sorted(
                 updated,
@@ -789,20 +859,23 @@ def hydrate_w4c_p2_sql_si_from_timescale(
             )
     finally:
         conn.close()
-    return notes
+    return errors, notes
 
 
 def run_p2_all_goldens(
     goldens: list[dict[str, Any]],
     *,
     scope: set[str] | None = None,
+    strict: bool = False,
 ) -> StageResult:
     from scripts.stress.si_cutover.ci_timescale_sql import PENDING_W4
 
-    hydrate_w4c_p2_sql_si_from_timescale(goldens, scope=scope)
+    hydrate_errors, hydrate_notes = hydrate_w4c_p2_sql_si_from_timescale(
+        goldens, scope=scope, strict=strict
+    )
 
-    errors: list[str] = []
-    pending_notes: list[str] = []
+    errors: list[str] = list(hydrate_errors)
+    pending_notes: list[str] = list(hydrate_notes)
     comparisons = 0
     pending_cells = 0
     min_required = 0
@@ -817,7 +890,13 @@ def run_p2_all_goldens(
             comparisons += 1
             status = str(row.get("sql_si_status") or "")
             if status == PENDING_W4:
-                pending_cells += 1
+                if strict:
+                    errors.append(
+                        f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/"
+                        f"{row.get('utc_day')}: pending_W4 after hydration"
+                    )
+                else:
+                    pending_cells += 1
                 continue
             sql_raw = row.get("sql_si_fault_seconds")
             pandas_raw = row.get("pandas_si_fault_seconds")
@@ -840,7 +919,7 @@ def run_p2_all_goldens(
                     f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
                     f"sql_si={sql_s} pandas_si={pandas_s}"
                 )
-    if pending_cells:
+    if pending_cells and not strict:
         pending_notes.append(
             f"P2: {pending_cells} cell(s) pending_W4 (SI SQL pack not shipped; not compared)"
         )
@@ -1010,6 +1089,7 @@ def rule_mismatch_table(stage_errors: Iterable[str], *, stage: str) -> dict[str,
 def run_fixture_stages(
     *,
     scope: set[str] | None = None,
+    strict_p2: bool = False,
     param_hook: Callable[[str, str, float], float] | None = None,
     value_hook: Callable[[str, str, float], float] | None = None,
     si_param_post_hook: Callable[[str, dict[str, float]], dict[str, float]] | None = None,
@@ -1028,7 +1108,7 @@ def run_fixture_stages(
             si_param_post_hook=si_param_post_hook,
             scope=scope,
         ),
-        run_p2_all_goldens(goldens, scope=scope),
+        run_p2_all_goldens(goldens, scope=scope, strict=strict_p2),
     ]
 
 

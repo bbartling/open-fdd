@@ -7136,7 +7136,7 @@
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "min_rise",
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "label": "Min temp rise",
           "max": 8.333333333,
           "min": 0.277777778,

@@ -15,10 +15,15 @@ if str(REPO) not in sys.path:
 from scripts.ci import unit_contract_lib as uc  # noqa: E402
 from scripts.stress.si_cutover import ci_fixtures_lib as cfl  # noqa: E402
 from scripts.stress.si_cutover import ci_timescale_sql as cts  # noqa: E402
-from scripts.stress.si_cutover.ci_timescale_sql import W4C_ZONE_RULES  # noqa: E402
+from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
+    W4C_SI_ZONE_FAMILY,
+    family_dataset_ids,
+    family_rule_ids,
+)
 
 GOLDENS = REPO / "tests" / "fixtures" / "si_cutover" / "ip_goldens"
-TARGET_DATASETS = cts.W4C_TARGET_DATASETS
+TARGET_DATASETS = family_dataset_ids(W4C_SI_ZONE_FAMILY)
+W4C_ZONE_RULES = family_rule_ids(W4C_SI_ZONE_FAMILY)
 
 
 def _merge_daily_for_rules(

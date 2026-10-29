@@ -5,6 +5,12 @@
     "W4c_si_zone": {
       "wave": "W4c",
       "description": "VAV/zone/FCU SI pandas/SQL parity (blocking)",
+      "datasets": [
+        "COOKBOOK_VAV1",
+        "COOKBOOK_VAV6",
+        "COOKBOOK_VAV7",
+        "SYNTH_VAV_CASE_VAV_1"
+      ],
       "rules": [
         "VAV-1",
         "VAV-2",
