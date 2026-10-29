@@ -25,6 +25,10 @@ POLL_SECONDS = 300.0
 SCHEMA = "si-cutover-ip-golden-v1"
 GOLDEN_SCHEMA_VERSION = 1
 
+P2_SI_SQL_RULES = frozenset(
+    tuple(f"FC{i}" for i in range(1, 16)) + ("FC13-SAT-HIGH",)
+)
+
 COOKBOOK_FIXTURES = REPO / "docs" / "rules" / "cookbook" / "fixtures"
 SYNTH_ROOT = REPO / "tests" / "fixtures" / "synthetic_slice" / "OPENFDD_SYNTHETIC_SLICE_V1"
 
@@ -604,18 +608,18 @@ def build_golden_for_dataset(
             f"{spec.building_id}: Timescale SQL errors: {'; '.join(sql_exec_notes[:5])}"
         )
 
+    si_sql_rules = [
+        r for r in eligible_rules if str(r.get("rule_id") or "") in P2_SI_SQL_RULES
+    ]
     params_si_by_rule: dict[str, dict[str, float]] = {
-        str(r.get("rule_id") or ""): convert_params_to_si(
-            r, rule_params_from_registry(r), metric
-        )
-        for r in eligible_rules
+        str(r.get("rule_id") or ""): rule_params_from_registry(r) for r in si_sql_rules
     }
     sql_si_computed, sql_si_notes = cts.run_sql_si_for_dataset(
         conn,
         spec=spec,
         frame=frame_to_si(ip_frame, metric, value_hook=lambda c, v: _value_hook(c, v)),
         equipment_id=spec.equipment_id,
-        rules=eligible_rules,
+        rules=si_sql_rules,
         poll_seconds=poll_seconds,
         params_by_rule=params_si_by_rule,
     )
