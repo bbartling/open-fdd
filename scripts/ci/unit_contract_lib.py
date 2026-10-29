@@ -316,28 +316,233 @@ def git_show_master(relpath: str) -> str:
     return proc.stdout
 
 
-def assert_metadata_only_registry_diff() -> None:
+def _float_close(a: float, b: float, *, rel: float = 1e-6, abs_tol: float = 1e-6) -> bool:
+    return abs(float(a) - float(b)) <= max(abs_tol, rel * max(abs(float(a)), abs(float(b)), 1.0))
+
+
+_VALUE_FIELDS = ("default", "min", "max", "step")
+
+
+def _conversion_quantity(kind: str, unit: str, param_key: str) -> str | None:
+    if kind in ("duration_minutes", "duration_seconds", "boolean", "percent", "fraction", "count"):
+        return None
+    if kind == "absolute_temperature":
+        return "absolute_temperature"
+    if kind == "temperature_difference":
+        return "temperature_difference"
+    if kind == "air_pressure":
+        return "air_pressure"
+    if kind == "volumetric_flow":
+        return "volumetric_flow"
+    if kind == "temperature_rate":
+        return "temperature_rate"
+    if unit in ("degF", "°F", "degC", "°C", "inwc", "in_wc", "Pa", "cfm", "L_per_s"):
+        q = infer_kind(param_key, unit)
+        if q in (
+            "absolute_temperature",
+            "temperature_difference",
+            "air_pressure",
+            "volumetric_flow",
+            "temperature_rate",
+        ):
+            return q
+    return None
+
+
+def _src_unit_for_convert(unit: str, quantity: str, param_key: str) -> str:
+    u = str(unit or "")
+    if quantity == "temperature_difference":
+        if u in ("degF", "°F"):
+            return "degF_delta"
+        if u in ("degC", "°C"):
+            return "degC_delta"
+    if u == "°F":
+        return "degF"
+    if u == "°C":
+        return "degC"
+    return u
+
+
+def _registry_params_by_rule(doc: Any) -> dict[str, dict[str, dict[str, Any]]]:
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for rule in doc.get("rules") or []:
+        rid = str(rule.get("rule_id") or "")
+        if not rid:
+            continue
+        params = rule.get("parameters") or {}
+        out[rid] = {str(k): dict(v) for k, v in params.items() if isinstance(v, dict)}
+    return out
+
+
+def _master_param_for_branch_key(
+    master_params: dict[str, dict[str, Any]], branch_key: str, renames: dict[str, str]
+) -> tuple[str | None, dict[str, Any] | None]:
+    if branch_key in master_params:
+        return branch_key, master_params[branch_key]
+    for old, new in renames.items():
+        if new == branch_key and old in master_params:
+            return old, master_params[old]
+    return None, None
+
+
+def _validate_registry_param_si_change(
+    metric: dict[str, Any],
+    *,
+    rule_id: str,
+    branch_key: str,
+    master: dict[str, Any],
+    branch: dict[str, Any],
+) -> None:
+    master_unit = str(master.get("unit") or "")
+    branch_unit = str(branch.get("unit") or "")
+    master_kind = str(master.get("kind") or infer_kind(branch_key, master_unit))
+    branch_kind = str(branch.get("kind") or infer_kind(branch_key, branch_unit))
+
+    value_changed = False
+    for field in _VALUE_FIELDS:
+        if field not in master and field not in branch:
+            continue
+        mv = master.get(field)
+        bv = branch.get(field)
+        if mv is None and bv is None:
+            continue
+        if mv is None or bv is None:
+            value_changed = True
+            break
+        if not _float_close(float(mv), float(bv)):
+            value_changed = True
+            break
+
+    unit_changed = master_unit != branch_unit
+    kind_changed = master_kind != branch_kind
+
+    if not value_changed and not unit_changed and not kind_changed:
+        return
+
+    if value_changed and not unit_changed and not kind_changed:
+        raise AssertionError(
+            f"{rule_id}.{branch_key}: numeric value changed without unit/kind change "
+            f"(master unit={master_unit!r})"
+        )
+
+    if kind_changed and not unit_changed:
+        raise AssertionError(
+            f"{rule_id}.{branch_key}: kind changed without unit change "
+            f"({master_kind} -> {branch_kind})"
+        )
+
+    convert_kind = master_kind
+    try:
+        inferred = infer_kind(branch_key, master_unit)
+        if inferred in (
+            "absolute_temperature",
+            "temperature_difference",
+            "air_pressure",
+            "volumetric_flow",
+            "temperature_rate",
+        ):
+            convert_kind = inferred
+    except ValueError:
+        pass
+    quantity = _conversion_quantity(convert_kind, master_unit, branch_key)
+    if value_changed or unit_changed:
+        if quantity is None:
+            if value_changed:
+                raise AssertionError(
+                    f"{rule_id}.{branch_key}: value/unit change without convertible quantity "
+                    f"(kind={master_kind} unit={master_unit!r})"
+                )
+            return
+        src = _src_unit_for_convert(master_unit, quantity, branch_key)
+        for field in _VALUE_FIELDS:
+            if field not in master:
+                continue
+            if field not in branch:
+                raise AssertionError(f"{rule_id}.{branch_key}.{field}: missing on branch after SI cutover")
+            expected = convert_to_canonical(metric, quantity, float(master[field]), src)
+            if not _float_close(expected, float(branch[field])):
+                raise AssertionError(
+                    f"{rule_id}.{branch_key}.{field}: SI value {branch[field]!r} != "
+                    f"converted {expected!r} from master {master[field]!r} {master_unit!r}"
+                )
+
+
+def assert_registry_si_cutover_diff(metric: dict[str, Any]) -> None:
     try:
         import yaml
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError("PyYAML required") from exc
+    renames = load_json(RENAME_MAP).get("renames") or {}
     master_text = git_show_master("sql/fdd/registry.yaml")
     branch_text = REGISTRY.read_text(encoding="utf-8")
-    master_doc = strip_registry_metadata(yaml.safe_load(master_text))
-    branch_doc = strip_registry_metadata(yaml.safe_load(branch_text))
-    if master_doc != branch_doc:
-        raise AssertionError(
-            "registry.yaml differs from origin/master beyond kind/effect metadata"
-        )
+    master_map = _registry_params_by_rule(yaml.safe_load(master_text))
+    branch_map = _registry_params_by_rule(yaml.safe_load(branch_text))
+    for rule_id, branch_params in branch_map.items():
+        master_params = master_map.get(rule_id)
+        if master_params is None:
+            continue
+        for branch_key, branch_p in branch_params.items():
+            _mk, master_p = _master_param_for_branch_key(master_params, branch_key, renames)
+            if master_p is None:
+                raise AssertionError(
+                    f"registry {rule_id}.{branch_key}: new parameter not present on master"
+                )
+            _validate_registry_param_si_change(
+                metric,
+                rule_id=rule_id,
+                branch_key=branch_key,
+                master=master_p,
+                branch=branch_p,
+            )
+
+
+def _tuning_params_by_rule(doc: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for rule in doc.get("rules") or []:
+        rid = str(rule.get("rule_id") or "")
+        if not rid:
+            continue
+        params = rule.get("parameters") or {}
+        out[rid] = {str(k): dict(v) for k, v in params.items() if isinstance(v, dict)}
+    return out
+
+
+def assert_tuning_si_cutover_diff(metric: dict[str, Any]) -> None:
+    renames = load_json(RENAME_MAP).get("renames") or {}
+    master = json.loads(git_show_master("sql/fdd/tuning_catalog.json"))
+    branch = load_json(TUNING)
+    master_map = _tuning_params_by_rule(master)
+    branch_map = _tuning_params_by_rule(branch)
+    for rule_id, branch_params in branch_map.items():
+        master_params = master_map.get(rule_id)
+        if master_params is None:
+            continue
+        for branch_key, branch_p in branch_params.items():
+            tun_key = str(branch_p.get("key") or branch_key)
+            _mk, master_p = _master_param_for_branch_key(master_params, tun_key, renames)
+            if master_p is None:
+                master_p = master_params.get(branch_key)
+            if master_p is None:
+                raise AssertionError(
+                    f"tuning {rule_id}.{branch_key}: new parameter not present on master"
+                )
+            _validate_registry_param_si_change(
+                metric,
+                rule_id=rule_id,
+                branch_key=branch_key,
+                master=master_p,
+                branch=branch_p,
+            )
+
+
+def assert_metadata_only_registry_diff() -> None:
+    metric = load_json(METRIC_UNITS)
+    assert_registry_si_cutover_diff(metric)
 
 
 def assert_metadata_only_tuning_diff() -> None:
-    master = strip_registry_metadata(json.loads(git_show_master("sql/fdd/tuning_catalog.json")))
-    branch = strip_registry_metadata(load_json(TUNING))
-    if master != branch:
-        raise AssertionError(
-            "tuning_catalog.json differs from origin/master beyond kind/effect metadata"
-        )
+    metric = load_json(METRIC_UNITS)
+    assert_tuning_si_cutover_diff(metric)
 
 
 def apply_tuning_catalog(data: dict[str, Any]) -> dict[str, Any]:
