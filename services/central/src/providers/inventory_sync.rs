@@ -188,14 +188,14 @@ pub fn historian_rows(
             building_root.display()
         )
     })?;
-    Ok(snapshot
+    snapshot
         .points
         .iter()
         .map(|pt| {
             let entry = overlay.points.get(&pt.portal_point_id);
             let binding =
-                resolve_point_map_binding(pt.unit.as_deref(), pt.his_mode.as_deref(), entry);
-            PortalInventoryPoint {
+                resolve_point_map_binding(pt.unit.as_deref(), pt.his_mode.as_deref(), entry)?;
+            Ok(PortalInventoryPoint {
                 portal_point_id: pt.portal_point_id.clone(),
                 equipment_id: pt.equipment_id.clone(),
                 equip_type: pt.equip_type.clone(),
@@ -206,9 +206,9 @@ pub fn historian_rows(
                 quantity: binding.quantity,
                 cadence_secs: binding.cadence_secs,
                 history_mode: binding.history_mode,
-            }
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// Ingest bindings for the tagged points that carry an equipment type.
@@ -1029,3 +1029,7 @@ mod t1406_2_overlay_point_map_test;
 #[cfg(test)]
 #[path = "t1406_schema_upgrade_test.rs"]
 mod t1406_schema_upgrade_test;
+
+#[cfg(test)]
+#[path = "t1406_binding_resolution_test.rs"]
+mod t1406_binding_resolution_test;

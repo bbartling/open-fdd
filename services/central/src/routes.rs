@@ -4631,26 +4631,38 @@ pub async fn model_point_post(
     match result {
         Ok(body) if engineer_write && !dry_run => {
             if crate::timescale_historian::historian_is_timescale() {
-                if let Ok(tsdb) = fdd_tsdb::Tsdb::shared().await {
-                    let root = csv_building_root(&refresh_site);
-                    let point_ids = vec![refresh_point];
-                    let refresh = crate::providers::committed_model::refresh_point_map_overlay(
-                        &tsdb,
-                        &root,
-                        &refresh_site,
-                        &point_ids,
+                let tsdb = fdd_tsdb::Tsdb::shared().await.map_err(|e| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        Json(json!({
+                            "ok": false,
+                            "error": format!(
+                                "engineer overlay was written but point_map was not refreshed: {e}"
+                            ),
+                            "soft_open_neq_fq": true,
+                        })),
                     )
-                    .await;
-                    if let Err(err) = refresh {
-                        return Err((
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            Json(json!({
-                                "ok": false,
-                                "error": err,
-                                "soft_open_neq_fq": true,
-                            })),
-                        ));
-                    }
+                })?;
+                let root = csv_building_root(&refresh_site);
+                let point_ids = vec![refresh_point];
+                let refresh = crate::providers::committed_model::refresh_point_map_overlay(
+                    &tsdb,
+                    &root,
+                    &refresh_site,
+                    &point_ids,
+                )
+                .await;
+                if let Err(err) = refresh {
+                    return Err((
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "ok": false,
+                            "error": format!(
+                                "engineer overlay was written but point_map was not refreshed: {err}"
+                            ),
+                            "soft_open_neq_fq": true,
+                        })),
+                    ));
                 }
             }
             overlay_mutate_result(Ok(body))

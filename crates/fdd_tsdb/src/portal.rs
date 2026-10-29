@@ -388,15 +388,17 @@ impl Tsdb {
             let updated = sqlx::query(
                 r#"
                 UPDATE point_map
-                SET unit = $3,
-                    quantity = $4,
-                    cadence_secs = $5,
-                    history_mode = $6
+                SET source_unit = $3,
+                    unit = $4,
+                    quantity = $5,
+                    cadence_secs = $6,
+                    history_mode = $7
                 WHERE site_id = $1 AND portal_point_id = $2
                 "#,
             )
             .bind(site_id)
             .bind(&patch.portal_point_id)
+            .bind(patch.source_unit.as_deref())
             .bind(patch.unit.as_deref())
             .bind(patch.quantity.as_deref())
             .bind(cadence_i64)
@@ -407,24 +409,22 @@ impl Tsdb {
             if updated == 0 {
                 continue;
             }
-            if let Some(unit) = patch.unit.as_deref() {
-                sqlx::query(
-                    r#"
-                    UPDATE role_map
-                    SET unit = $3
-                    WHERE building_id = $1
-                      AND openfdd_key IN (
-                        SELECT openfdd_key FROM point_map
-                        WHERE site_id = $1 AND portal_point_id = $2
-                      )
-                    "#,
-                )
-                .bind(site_id)
-                .bind(&patch.portal_point_id)
-                .bind(unit)
-                .execute(&mut *tx)
-                .await?;
-            }
+            sqlx::query(
+                r#"
+                UPDATE role_map
+                SET unit = $3
+                WHERE building_id = $1
+                  AND openfdd_key IN (
+                    SELECT openfdd_key FROM point_map
+                    WHERE site_id = $1 AND portal_point_id = $2
+                  )
+                "#,
+            )
+            .bind(site_id)
+            .bind(&patch.portal_point_id)
+            .bind(patch.unit.as_deref())
+            .execute(&mut *tx)
+            .await?;
         }
         tx.commit().await?;
         Ok(())

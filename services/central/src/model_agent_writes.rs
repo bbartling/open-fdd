@@ -1435,4 +1435,61 @@ mod tests {
         use fdd_core::sensor_sweep::sweep_assessable_sql_role;
         assert!(sweep_assessable_sql_role("oa_t", entry.unit.as_deref()));
     }
+
+    #[tokio::test]
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_DATABASE_URL for model point overlay refresh"
+    )]
+    async fn t1406_model_point_refresh_fails_when_historian_unavailable() {
+        let _env = crate::test_env_lock::lock_env();
+        let workspace = tempfile::tempdir().expect("workspace");
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+        let _audit = EnvGuard::unset("OPENFDD_AUDIT_LOG_PATH");
+        let _historian = EnvGuard::set("OPENFDD_HISTORIAN", "timescale");
+        let _database = EnvGuard::unset("OPENFDD_DATABASE_URL");
+        fdd_tsdb::clear_shared_pool();
+
+        let state = app_state("t1406-point-hist-down-secret");
+        let app = crate::routes::router(Arc::clone(&state));
+        let bid = "T1406_HIST_DOWN";
+        let pid = "pt-hist-down";
+        let operator = token(&state, "op-hist-down", Role::Operator);
+
+        let (status, json) = call(
+            &app,
+            "POST",
+            "/api/model/point",
+            &operator,
+            Some(json!({
+                "confirm": true,
+                "building_id": bid,
+                "equipment_id": "AHU_1",
+                "point_id": pid,
+                "unit": "degF",
+                "quantity": "absolute_temperature"
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{json}");
+        assert_eq!(json.get("ok").and_then(|v| v.as_bool()), Some(false));
+        let err = json
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        assert!(
+            err.contains("overlay was written") && err.contains("point_map was not refreshed"),
+            "{err}"
+        );
+
+        let overlay_path = workspace
+            .path()
+            .join("data/csv_buildings")
+            .join(bid)
+            .join("model_point_engineer_overlay.json");
+        assert!(
+            overlay_path.is_file(),
+            "overlay write must succeed before historian refresh"
+        );
+    }
 }

@@ -253,3 +253,114 @@ async fn t1406_2_overlay_refresh_without_cadence_preserves_cov_history_mode() {
         sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
     }
 }
+
+#[tokio::test]
+async fn t1406_2_patch_binding_clears_role_map_unit() {
+    let Some(pool) = pool().await else {
+        return;
+    };
+    let site = "T1406_UNIT_CLEAR";
+    apply_schema(&pool).await;
+    for sql in [
+        "DELETE FROM sample WHERE site_id = $1",
+        "DELETE FROM role_map WHERE building_id = $1",
+        "DELETE FROM point_map WHERE site_id = $1",
+        "DELETE FROM equipment WHERE building_id = $1",
+    ] {
+        sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
+    }
+    let tsdb = Tsdb::from_pool(pool.clone());
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = dir.path().join(site);
+    let pid = "pt-unit-clear";
+
+    let sync = apply_to_stores(
+        Some(&tsdb),
+        &root,
+        site,
+        SOURCE,
+        &snapshot_with_id(pid, None, Some("cov")),
+    )
+    .await;
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+
+    model_overlay::upsert_engineer_point_overlay(
+        &root,
+        site,
+        pid,
+        model_overlay::EngineerPointOverlayPatch {
+            unit: Some("degF"),
+            quantity: None,
+            cadence_secs: None,
+            primary_reference: None,
+        },
+        false,
+    )
+    .expect("overlay set unit");
+
+    refresh_point_map_overlay(&tsdb, &root, site, &[pid.to_string()])
+        .await
+        .expect("overlay refresh set");
+
+    let role_unit: Option<String> = sqlx::query_scalar(
+        "SELECT unit FROM role_map WHERE building_id = $1 \
+         AND openfdd_key IN (SELECT openfdd_key FROM point_map WHERE site_id = $1 AND portal_point_id = $2)",
+    )
+    .bind(site)
+    .bind(pid)
+    .fetch_one(&pool)
+    .await
+    .expect("role_map unit before clear");
+    assert_eq!(role_unit.as_deref(), Some("degF"));
+
+    model_overlay::upsert_engineer_point_overlay(
+        &root,
+        site,
+        pid,
+        model_overlay::EngineerPointOverlayPatch {
+            unit: Some(""),
+            quantity: None,
+            cadence_secs: None,
+            primary_reference: None,
+        },
+        false,
+    )
+    .expect("overlay clear unit");
+
+    refresh_point_map_overlay(&tsdb, &root, site, &[pid.to_string()])
+        .await
+        .expect("overlay refresh");
+
+    let pm_unit: Option<String> = sqlx::query_scalar(
+        "SELECT unit FROM point_map WHERE site_id = $1 AND portal_point_id = $2",
+    )
+    .bind(site)
+    .bind(pid)
+    .fetch_one(&pool)
+    .await
+    .expect("point_map unit");
+    assert!(pm_unit.is_none(), "engineer cleared unit should be NULL");
+
+    let role_unit: Option<String> = sqlx::query_scalar(
+        "SELECT unit FROM role_map WHERE building_id = $1 \
+         AND openfdd_key IN (SELECT openfdd_key FROM point_map WHERE site_id = $1 AND portal_point_id = $2)",
+    )
+    .bind(site)
+    .bind(pid)
+    .fetch_one(&pool)
+    .await
+    .expect("role_map unit after clear");
+    assert!(
+        role_unit.is_none(),
+        "role_map.unit must follow cleared engineer unit"
+    );
+
+    for sql in [
+        "DELETE FROM sample WHERE site_id = $1",
+        "DELETE FROM role_map WHERE building_id = $1",
+        "DELETE FROM point_map WHERE site_id = $1",
+        "DELETE FROM equipment WHERE building_id = $1",
+    ] {
+        sqlx::query(sql).bind(site).execute(&pool).await.expect(sql);
+    }
+}

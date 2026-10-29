@@ -135,7 +135,7 @@ pub fn resolve_point_map_binding(
     portal_unit: Option<&str>,
     portal_his_mode: Option<&str>,
     overlay: Option<&EngineerPointOverlayEntry>,
-) -> PointMapBinding {
+) -> Result<PointMapBinding, String> {
     let source_unit = portal_unit
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -147,30 +147,33 @@ pub fn resolve_point_map_binding(
     let unit = effective_point_unit(source_unit.as_deref(), overlay);
     let quantity = effective_point_quantity(overlay);
     let (history_mode, cadence_secs) =
-        effective_point_cadence(source_history_mode.as_deref(), overlay);
-    PointMapBinding {
+        effective_point_cadence(source_history_mode.as_deref(), overlay)?;
+    Ok(PointMapBinding {
         source_unit,
         source_history_mode,
         unit,
         quantity,
         history_mode,
         cadence_secs,
-    }
+    })
 }
 
 fn effective_point_cadence(
     portal_his_mode: Option<&str>,
     overlay: Option<&EngineerPointOverlayEntry>,
-) -> (Option<String>, Option<u64>) {
+) -> Result<(Option<String>, Option<u64>), String> {
     if let Some(secs) = overlay.and_then(|e| e.cadence_secs) {
-        if secs > 0 && secs <= 86_400 {
-            return (Some("interval".into()), Some(secs));
+        if !(1..=86_400).contains(&secs) {
+            return Err(format!(
+                "engineer overlay cadence_secs must be between 1 and 86400, got {secs}"
+            ));
         }
+        return Ok((Some("interval".into()), Some(secs)));
     }
     match portal_his_mode.map(str::trim).filter(|s| !s.is_empty()) {
-        Some("cov") => (Some("cov".into()), None),
-        Some("interval") => (None, None),
-        _ => (None, None),
+        Some("cov") => Ok((Some("cov".into()), None)),
+        Some("interval") => Ok((Some("interval".into()), None)),
+        _ => Ok((None, None)),
     }
 }
 
@@ -213,7 +216,7 @@ pub async fn refresh_point_map_overlay(
             source_unit.as_deref(),
             source_history_mode.as_deref(),
             entry,
-        );
+        )?;
         if let Some(unit) = binding.unit.as_deref() {
             validate_unit(unit)?;
         }
@@ -355,7 +358,7 @@ pub fn apply_engineer_point_overlays(
             if let Some(q) = effective_point_quantity(entry) {
                 point.quantity = Some(q);
             }
-            let (history_mode, cadence_secs) = effective_point_cadence(None, entry);
+            let (history_mode, cadence_secs) = effective_point_cadence(None, entry)?;
             if history_mode.is_some() {
                 point.history_mode = history_mode;
             }
