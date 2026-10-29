@@ -91,6 +91,22 @@ class W4fAnalyticsSiTests(unittest.TestCase):
 
 
 class W4fAnalyticsP2Tests(unittest.TestCase):
+    def test_ip_goldens_no_pending_w4_cells(self) -> None:
+        import json
+
+        from scripts.stress.si_cutover.ci_timescale_sql import PENDING_W4, SI_SQL_PACK_AVAILABLE
+
+        if not SI_SQL_PACK_AVAILABLE:
+            self.skipTest("SI SQL pack not marked available")
+        goldens_dir = REPO / "tests" / "fixtures" / "si_cutover" / "ip_goldens"
+        stale: list[str] = []
+        for path in sorted(goldens_dir.glob("*.json")):
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            for row in doc.get("p2_si_pairs") or []:
+                if str(row.get("sql_si_status") or "") == PENDING_W4:
+                    stale.append(f"{path.name}:{row.get('rule_id')}/{row.get('utc_day')}")
+        self.assertFalse(stale, f"pending_W4 cells remain: {stale[:10]}")
+
     def test_nineteen_analytics_sql_bodies_shipped(self) -> None:
         from scripts.stress.si_cutover import ci_analytics_p2 as cap2
 

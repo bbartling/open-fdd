@@ -13,8 +13,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -22,8 +22,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -31,8 +31,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -40,8 +40,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -49,8 +49,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -58,8 +58,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -67,8 +67,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -76,8 +76,8 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -85,8 +85,8 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -94,8 +94,8 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -103,8 +103,8 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -112,8 +112,8 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -121,8 +121,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -130,8 +130,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -139,8 +139,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -148,8 +148,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -157,8 +157,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -166,8 +166,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -175,8 +175,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -184,8 +184,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -193,8 +193,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -202,8 +202,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -211,8 +211,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -220,8 +220,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -229,8 +229,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -238,8 +238,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -247,8 +247,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -256,8 +256,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -265,8 +265,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -274,8 +274,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -283,8 +283,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -292,8 +292,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -301,8 +301,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -310,8 +310,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -319,8 +319,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -328,8 +328,8 @@
       "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 24900.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -337,8 +337,8 @@
       "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 24900.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -346,8 +346,8 @@
       "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 24900.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -355,8 +355,8 @@
       "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 24900.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -364,8 +364,8 @@
       "pandas_si_fault_seconds": 24900.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 24900.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -373,8 +373,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -382,8 +382,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-7",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     }
   ],
@@ -2684,7 +2684,7 @@
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 14400.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -2695,7 +2695,7 @@
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 14400.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -2706,7 +2706,7 @@
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 13800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -2717,7 +2717,7 @@
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 14400.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -2728,7 +2728,7 @@
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 14400.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -2739,7 +2739,7 @@
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86400.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 14400.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -2750,7 +2750,7 @@
       "building_id": "SYNTH_VAV_CASE_VAV_1",
       "covered_seconds": 86100.0,
       "equipment_id": "VAV_CASE_VAV_1",
-      "fault_seconds": 14400.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",

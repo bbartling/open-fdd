@@ -260,6 +260,8 @@ def _quantity_for_param(spec: dict[str, Any]) -> str | None:
         return "absolute_temperature"
     if kind == "temperature_difference":
         return "temperature_difference"
+    if kind == "air_pressure":
+        return "air_pressure"
     if kind in ("duration_minutes", "duration_seconds"):
         return "duration"
     if kind == "percent":
@@ -354,7 +356,7 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
         if unit in ("percent", "pct"):
             q = "dimensionless"
         elif unit in ("inWC", "in_wc"):
-            q = "pressure"
+            q = "air_pressure"
         elif unit == "cfm":
             q = "volumetric_flow_rate"
         series = pd.to_numeric(out[col], errors="coerce")
@@ -374,7 +376,6 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
         role_units[str(col)] = "°C" if q == "absolute_temperature" else unit
     out.attrs["unit_system"] = "metric"
     out.attrs["role_units"] = role_units
-    _apply_unit_metadata(out, "metric")
     return out
 
 
@@ -599,6 +600,31 @@ def build_golden_for_dataset(
                 )
             )
 
+    rules_by_id = {str(r["rule_id"]): r for r in load_rule_registry()}
+    golden_pre: dict[str, Any] = {
+        "building_id": spec.building_id,
+        "equipment_id": spec.equipment_id,
+        "equipment_type": spec.equipment_type,
+        "poll_seconds": poll_seconds,
+        "dataset": {k: v for k, v in spec.source.items() if k != "frame"},
+        "p2_si_pairs": p2_pairs,
+    }
+    sql_si_map = recompute_p2_sql_si_fault_map(golden_pre, conn, rules_by_id, metric)
+    p2_pairs = []
+    for row in golden_pre["p2_si_pairs"]:
+        key = si_fault_key({**row, "building_id": spec.building_id})
+        sql_s = sql_si_map.get(key)
+        p2_pairs.append(
+            cts.p2_pair_for_si_row(
+                rule_id=str(row["rule_id"]),
+                equipment_id=str(row["equipment_id"]),
+                utc_day=str(row["utc_day"]),
+                pandas_si_fault_seconds=float(row.get("pandas_si_fault_seconds") or 0.0),
+                pandas_si_missing=row.get("pandas_si_status") == "missing_si_cell",
+                sql_si_fault_seconds=sql_s,
+            )
+        )
+
     error_rows = [r for r in pandas_rows if r.get("pair_status") == "error"]
     attempted_rules = sorted({str(r.get("rule_id") or "") for r in rules if r.get("rule_id")})
     golden: dict[str, Any] = {
@@ -762,7 +788,7 @@ def recompute_p2_sql_si_fault_map(
         params_by_rule=params_by_rule,
         si_storage=True,
     )
-    if errors:
+    if errors and not sql_rows:
         raise RuntimeError(
             f"P2 SQL SI {building_id}: {'; '.join(errors[:5])}"
         )

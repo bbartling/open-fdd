@@ -679,7 +679,7 @@ def run_p2_all_goldens(
     import os
 
     from scripts.stress.si_cutover import ci_fixtures_lib as cfl
-    from scripts.stress.si_cutover.ci_timescale_sql import PENDING_W4
+    from scripts.stress.si_cutover.ci_timescale_sql import PENDING_W4, SI_SQL_PACK_AVAILABLE
 
     errors: list[str] = []
     pending_notes: list[str] = []
@@ -727,9 +727,16 @@ def run_p2_all_goldens(
                 continue
             comparisons += 1
             status = str(row.get("sql_si_status") or "")
-            if status == PENDING_W4 and not db_url:
-                pending_cells += 1
-                continue
+            if status == PENDING_W4:
+                if SI_SQL_PACK_AVAILABLE:
+                    errors.append(
+                        f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
+                        "stale pending_W4 golden (regen ip_goldens)"
+                    )
+                    continue
+                if not db_url:
+                    pending_cells += 1
+                    continue
             key = (
                 bid,
                 rule_id,

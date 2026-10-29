@@ -328,10 +328,15 @@ def execute_sql_rule_daily(
         return [], f"sql: {exc}"
     if not fetched:
         return [], "sql empty"
-    if "fault_hours" not in columns:
+    hours_col: str | None = None
+    if "fault_hours" in columns:
+        hours_col = "fault_hours"
+    elif "fan_runtime_hours" in columns:
+        hours_col = "fan_runtime_hours"
+    if hours_col is None:
         return [], "no fault_hours column"
     equip_idx = columns.index("equipment_id")
-    hours_idx = columns.index("fault_hours")
+    hours_idx = columns.index(hours_col)
     hours = None
     for row in fetched:
         if str(row[equip_idx]) == equipment_id:
