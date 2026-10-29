@@ -260,8 +260,11 @@ mod tests {
         })
         .expect("plan");
         assert_eq!(plan.counts.skipped_stored, 0);
-        assert_eq!(plan.counts.planned, 1);
+        assert_eq!(plan.counts.planned, 2);
         assert_eq!(plan.planned[0].start, h(1));
+        assert_eq!(plan.planned[0].end, h(2));
+        assert_eq!(plan.planned[1].start, h(2));
+        assert_eq!(plan.planned[1].end, h(3));
     }
 
     #[test]

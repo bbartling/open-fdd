@@ -42,6 +42,7 @@ pub async fn plan_device_gap_backfill(
         &group.provider_instance_id,
         &group.equipment_id,
         model_revision,
+        range_start,
         now,
     )
     .await?;
@@ -106,6 +107,7 @@ pub async fn plan_explicit_windows(
         provider_id,
         device_id,
         model_revision,
+        range_start,
         now,
     )
     .await?;

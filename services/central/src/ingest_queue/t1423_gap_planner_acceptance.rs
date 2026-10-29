@@ -229,7 +229,7 @@ async fn cancel_harness(pool: PgPool) -> (Arc<AppState>, Router) {
                     fdd_ready: true,
                     unit: Some("degF".into()),
                     canonical_unit: None,
-                    kind: None,
+                    kind: Some("Number".into()),
                     quantity: None,
                     provisional: false,
                     display_name: None,

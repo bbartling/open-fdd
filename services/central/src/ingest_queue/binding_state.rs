@@ -18,6 +18,10 @@ pub struct DeviceBindingState {
     pub provider_data_start: Option<DateTime<Utc>>,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "binding row keys match ingest_device_binding primary key columns"
+)]
 pub async fn ensure_binding_row(
     pool: &PgPool,
     tenant_id: &str,
@@ -25,8 +29,14 @@ pub async fn ensure_binding_row(
     provider_id: &str,
     device_id: &str,
     model_revision: &str,
+    planning_range_start: DateTime<Utc>,
     now: DateTime<Utc>,
 ) -> Result<DeviceBindingState, QueueError> {
+    let binding_created_at = if planning_range_start < now {
+        planning_range_start
+    } else {
+        now
+    };
     let row = sqlx::query_as::<_, (DateTime<Utc>, Option<DateTime<Utc>>)>(
         "INSERT INTO ingest_device_binding (
             tenant_id, canonical_site, provider_instance_id, device_id, model_revision,
@@ -41,7 +51,7 @@ pub async fn ensure_binding_row(
     .bind(provider_id)
     .bind(device_id)
     .bind(model_revision)
-    .bind(now)
+    .bind(binding_created_at)
     .fetch_one(pool)
     .await
     .map_err(|err| QueueError::Db(super::model::redact_db_text(&err.to_string())))?;
