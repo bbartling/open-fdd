@@ -13,8 +13,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     }
   ],
@@ -876,17 +876,6 @@
     "WX-1"
   ],
   "pandas_si_daily": [
-    {
-      "building_id": "COOKBOOK_SCHED247",
-      "covered_seconds": 1800.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SCHED-247",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
     {
       "building_id": "COOKBOOK_SCHED247",
       "covered_seconds": 1800.0,

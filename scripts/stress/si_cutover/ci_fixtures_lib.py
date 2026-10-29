@@ -260,6 +260,12 @@ def _quantity_for_param(spec: dict[str, Any]) -> str | None:
         return "absolute_temperature"
     if kind == "temperature_difference":
         return "temperature_difference"
+    if kind == "air_pressure":
+        return "air_pressure"
+    if kind == "hydronic_pressure":
+        return "hydronic_pressure"
+    if kind == "fraction":
+        return "fraction"
     if kind in ("duration_minutes", "duration_seconds"):
         return "duration"
     if kind == "percent":
@@ -302,6 +308,8 @@ def convert_params_to_si(
             src_unit = "degF_delta"
         elif q == "temperature_difference" and unit in ("degC", "°C"):
             src_unit = "degC_delta"
+        elif q == "air_pressure" and unit.lower() in ("inwc", "in_wc", "in.w.c."):
+            src_unit = "inWC"
         val = float(out[name])
         if param_hook:
             val = param_hook(name, val)
@@ -354,7 +362,7 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
         if unit in ("percent", "pct"):
             q = "dimensionless"
         elif unit in ("inWC", "in_wc"):
-            q = "pressure"
+            q = "air_pressure"
         elif unit == "cfm":
             q = "volumetric_flow_rate"
         series = pd.to_numeric(out[col], errors="coerce")
@@ -539,8 +547,43 @@ def build_golden_for_dataset(
     sql_rows.extend(sql_computed)
     if sql_exec_notes:
         raise RuntimeError(
-            f"{spec.building_id}: Timescale SQL errors: {'; '.join(sql_exec_notes[:5])}"
+            f"{spec.building_id}: Timescale SQL IP errors: {'; '.join(sql_exec_notes[:5])}"
         )
+
+    si_frame = frame_to_si(ip_frame, metric, value_hook=lambda c, v: _value_hook(c, v))
+    params_si_by_rule: dict[str, dict[str, float]] = {}
+    for rule in eligible_rules:
+        rule_id = str(rule.get("rule_id") or "")
+
+        def ph(rid: str, name: str, val: float) -> float:
+            return _param_hook(rid, name, val)
+
+        params_si_by_rule[rule_id] = convert_params_to_si(
+            rule,
+            params_by_rule[rule_id],
+            metric,
+            param_hook=lambda n, v, rid=rule_id: ph(rid, n, v),
+        )
+
+    sql_si_computed, sql_si_notes = cts.run_sql_si_for_dataset(
+        conn,
+        spec=spec,
+        frame=si_frame,
+        equipment_id=spec.equipment_id,
+        rules=eligible_rules,
+        poll_seconds=poll_seconds,
+        params_by_rule=params_si_by_rule,
+        metric=metric,
+    )
+    if sql_si_notes:
+        raise RuntimeError(
+            f"{spec.building_id}: Timescale SQL SI errors: {'; '.join(sql_si_notes[:8])}"
+        )
+    sql_si_by_key = {
+        si_fault_key(r): r
+        for r in sql_si_computed
+        if r.get("pair_status") == "computed" and r.get("utc_day")
+    }
 
     si_rows_for_p1: list[dict[str, Any]] = []
     p2_pairs: list[dict[str, Any]] = []
@@ -548,9 +591,7 @@ def build_golden_for_dataset(
     for rule in eligible_rules:
         rule_id = str(rule.get("rule_id") or "")
         params_ip = params_by_rule[rule_id]
-
-        def ph(name: str, val: float) -> float:
-            return _param_hook(rule_id, name, val)
+        params_si = params_si_by_rule[rule_id]
 
         ip_daily = run_rule_daily_rows(
             rule,
@@ -563,8 +604,6 @@ def build_golden_for_dataset(
         for row in ip_daily:
             pandas_rows.append(dict(row))
 
-        si_frame = frame_to_si(ip_frame, metric, value_hook=lambda c, v: _value_hook(c, v))
-        params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
         si_daily = run_rule_daily_rows(
             rule,
             si_frame,
@@ -586,15 +625,20 @@ def build_golden_for_dataset(
                 continue
             key = si_fault_key(row)
             si_row = si_by_key.get(key)
+            sql_row = sql_si_by_key.get(key)
             p2_pairs.append(
                 cts.p2_pair_for_si_row(
                     rule_id=rule_id,
                     equipment_id=spec.equipment_id,
                     utc_day=str(row.get("utc_day")),
-                    pandas_si_fault_seconds=float(
-                        si_row.get("fault_seconds", 0.0) if si_row else 0.0
+                    pandas_si_fault_seconds=(
+                        float(si_row.get("fault_seconds", 0.0)) if si_row else None
+                    ),
+                    sql_si_fault_seconds=(
+                        float(sql_row.get("fault_seconds", 0.0)) if sql_row else None
                     ),
                     pandas_si_missing=si_row is None,
+                    sql_si_missing=sql_row is None,
                 )
             )
 

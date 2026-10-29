@@ -634,6 +634,19 @@ def _gl36_fault(raw: pd.Series, d: pd.DataFrame, p: dict, poll: float) -> pd.Ser
     return raw.fillna(False) & _gl36_mode_stable(d, p, poll)
 
 
+def _fc1_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Fan-gap mode delay only — matches postgres fc1_duct_static_low.sql mode_stable."""
+    delay_min = _f(p, "mode_delay_min", 0.0)
+    if delay_min <= 0 or d.empty:
+        return pd.Series(True, index=d.index)
+    fan_on_min = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
+    fan = _fan(d)
+    on = fan > fan_on_min
+    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
+    off_in_window = (~on).astype(int).rolling(samples, min_periods=1).max().astype(bool)
+    return (on & ~off_in_window).fillna(False)
+
+
 def _fan(d: pd.DataFrame) -> pd.Series:
     # Match production SQL (fan_status then fan_cmd) — Wave J / #875.
     if "fan-status" in d.columns:
@@ -653,7 +666,7 @@ def fc1(d, p, poll):
         & (d["duct-static-pressure"] < d["duct-static-pressure-sp"] - err)
         & (fan >= fan_hi)
     )
-    return _gl36_fault(raw, d, p, poll)
+    return raw.fillna(False) & _fc1_mode_stable(d, p, poll)
 
 
 def fc2(d, p, poll):
