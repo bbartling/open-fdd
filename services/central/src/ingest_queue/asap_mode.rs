@@ -104,7 +104,7 @@ pub fn eta_seconds(missing_windows: u32, window_secs: i64, rows_per_minute: f64)
         return None;
     }
     let step = window_secs.clamp(60, 3600);
-    let windows_per_minute = (rows_per_minute * 60.0 / f64::from(step)).max(0.01);
+    let windows_per_minute = (rows_per_minute * 60.0 / (step as f64)).max(0.01);
     let minutes = f64::from(missing_windows) / windows_per_minute;
     if !minutes.is_finite() {
         return None;

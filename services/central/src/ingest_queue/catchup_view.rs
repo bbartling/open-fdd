@@ -17,7 +17,7 @@ use super::binding_state::{
     ensure_binding_row, last_stored_ts_for_device, stored_hour_starts_for_device, DeviceBindingKey,
     EnsureBindingInput,
 };
-use super::catchup_registry::DeviceCatchupUpdate;
+
 use super::gap_backfill::point_keys_for_plan_device;
 use super::gap_planner::{default_max_span, expected_start, plan_gap_windows, GapPlanInput};
 use super::model::MAX_CATCHUP_HOURS;
