@@ -1679,15 +1679,9 @@ mod tests {
             }],
             withheld: Vec::new(),
         };
-        assert!(
-            gap_backfill::point_keys_for_plan_device(&plan, "portal-1", "AHU_1").is_some()
-        );
-        assert!(
-            gap_backfill::point_keys_for_plan_device(&plan, "nf:portal-1", "AHU_1").is_some()
-        );
-        assert!(
-            gap_backfill::point_keys_for_plan_device(&plan, "nf:other", "AHU_1").is_none()
-        );
+        assert!(gap_backfill::point_keys_for_plan_device(&plan, "portal-1", "AHU_1").is_some());
+        assert!(gap_backfill::point_keys_for_plan_device(&plan, "nf:portal-1", "AHU_1").is_some());
+        assert!(gap_backfill::point_keys_for_plan_device(&plan, "nf:other", "AHU_1").is_none());
     }
 
     #[test]

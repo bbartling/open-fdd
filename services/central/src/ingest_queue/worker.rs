@@ -268,7 +268,10 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
             active_points_digest: active_digest,
         };
     }
-    match provider_start_gate(job, state.ingest_queue.provider_data_start_for_job(job).await) {
+    match provider_start_gate(
+        job,
+        state.ingest_queue.provider_data_start_for_job(job).await,
+    ) {
         ProviderStartGate::Stop(decision) => return decision,
         ProviderStartGate::Continue => {}
     }
