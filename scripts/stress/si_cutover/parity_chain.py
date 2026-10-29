@@ -693,7 +693,7 @@ def _live_plant_p2_fault_seconds(
     rule = rules.get(rule_id)
     if rule is None:
         return None, None
-    frame = cfl.reload_dataset_frame(golden)
+    frame, _equip_from_golden = cfl.reload_dataset_frame(golden)
     ip_frame = cfl.prepare_ip_frame(
         frame,
         building_id=str(golden["building_id"]),
