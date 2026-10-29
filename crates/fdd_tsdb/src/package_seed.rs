@@ -220,7 +220,7 @@ fn resolve_col_to_role(
     column_map: &Value,
     hs_to_sql: &HashMap<String, String>,
 ) -> Result<(HashMap<String, String>, HashMap<String, String>)> {
-    let (mut col_to_role, mut col_to_unit) = csv_to_sql_roles_from_columns_csv(eq_dir)?;
+    let (mut col_to_role, col_to_unit) = csv_to_sql_roles_from_columns_csv(eq_dir)?;
     if col_to_role.is_empty() {
         col_to_role = csv_to_sql_roles_from_column_map(equipment_id, column_map, hs_to_sql);
     }

@@ -21,7 +21,7 @@ pub enum TsdbError {
     #[error("cadence_secs {0} exceeds PostgreSQL bigint range")]
     CadenceOutOfRange(u64),
     #[error("metric units contract: {0}")]
-    Contract(#[from] fdd_core::ContractError),
+    Contract(#[from] fdd_core::MetricContractError),
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 }
@@ -301,6 +301,10 @@ impl Tsdb {
         let contract = MetricUnitsContract::load_embedded()?;
         let bindings = load_point_map_bindings(tx, &batch.rows, &keys).await?;
         let mut writes: Vec<SampleWrite<'_>> = Vec::with_capacity(batch.rows.len());
+        let mut unit_storage: Vec<Option<String>> = Vec::with_capacity(batch.rows.len());
+        let mut quality_storage: Vec<Option<String>> = Vec::with_capacity(batch.rows.len());
+        let mut prepared_rows: Vec<crate::ingest_si::PreparedIngestValue> =
+            Vec::with_capacity(batch.rows.len());
         for (row, key) in batch.rows.iter().zip(&keys) {
             let bind = bindings.get(key.as_str());
             let map = PointMapBinding {
@@ -327,15 +331,19 @@ impl Tsdb {
                     quality: row.quality.clone(),
                 },
             };
-            let quality = prepared.quality.or_else(|| row.quality.clone());
+            unit_storage.push(prepared.unit.clone());
+            quality_storage.push(prepared.quality.clone().or_else(|| row.quality.clone()));
+            prepared_rows.push(prepared);
+        }
+        for (idx, (row, key)) in batch.rows.iter().zip(&keys).enumerate() {
             writes.push(SampleWrite {
                 ts: row.ts,
                 site_id: &row.site_id,
                 openfdd_key: key,
                 haystack_id: row.haystack_id.as_deref(),
-                val: prepared.val,
-                unit: prepared.unit.as_deref(),
-                quality: quality.as_deref(),
+                val: prepared_rows[idx].val,
+                unit: unit_storage[idx].as_deref(),
+                quality: quality_storage[idx].as_deref(),
             });
         }
         let stats = write_samples(tx, &writes).await?;

@@ -1,6 +1,8 @@
 //! Single-writer SI ingest: declared source units convert once to metric-c-v2 storage.
 
-use fdd_core::{is_metric_unit_system, quantity_for_sql_role, ContractError, MetricUnitsContract};
+use fdd_core::{
+    is_metric_unit_system, quantity_for_sql_role, MetricContractError, MetricUnitsContract,
+};
 
 pub const QUALITY_UNIT_UNDECLARED: &str = "unit_undeclared";
 
@@ -131,19 +133,19 @@ pub fn prepare_numeric_sample(
                 quality: None,
             }
         }
-        Err(ContractError::UnknownAlias(_)) | Err(ContractError::QuantityMismatch { .. }) => {
+        Err(MetricContractError::UnknownAlias(_)) | Err(MetricContractError::QuantityMismatch { .. }) => {
             PreparedIngestValue {
                 val: Some(raw_val),
                 unit: None,
                 quality: Some(QUALITY_UNIT_UNDECLARED.into()),
             }
         }
-        Err(ContractError::UnsupportedQuantity(_)) => PreparedIngestValue {
+        Err(MetricContractError::UnsupportedQuantity(_)) => PreparedIngestValue {
             val: Some(raw_val),
             unit: None,
             quality: Some(QUALITY_UNIT_UNDECLARED.into()),
         },
-        Err(ContractError::Invalid(_)) => PreparedIngestValue {
+        Err(MetricContractError::Invalid(_)) => PreparedIngestValue {
             val: Some(raw_val),
             unit: None,
             quality: Some(QUALITY_UNIT_UNDECLARED.into()),
@@ -158,7 +160,6 @@ mod tests {
     #[test]
     fn fifty_f_and_ten_c_both_store_ten_c() {
         let c = MetricUnitsContract::load_embedded().expect("contract");
-        let qty = "absolute_temperature";
         let ctx = SampleDeclaredContext {
             role: Some("oa_t"),
             ..Default::default()
