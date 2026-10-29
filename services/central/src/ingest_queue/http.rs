@@ -19,7 +19,9 @@ use crate::providers::http_policy::provider_ids_equivalent;
 use crate::state::AppState;
 use crate::tenant::TenantContext;
 
+use super::binding_state::DeviceBindingKey;
 use super::client::QueueClient;
+use super::gap_backfill::{DeviceGapBackfillRequest, ExplicitGapBackfillRequest};
 use super::model::*;
 use super::scale::{self, ScalePolicy, ScaleSample};
 
@@ -656,38 +658,47 @@ pub async fn backfill(
         }
         window_pairs.push((window.start, window.end));
     }
-    let point_keys = plan
-        .as_ref()
-        .and_then(|active| {
-            active
-                .groups
-                .iter()
-                .find(|group| {
-                    group.equipment_id == identity.device_id
-                        && group.provider_instance_id == identity.provider_instance_id
-                })
-                .map(super::gap_backfill::point_keys_for_group)
-        })
-        .unwrap_or_default();
-    let (gap_plan, jobs) = match state.ingest_queue.postgres_pool().await {
-        Ok(Some(pool)) => match super::gap_backfill::plan_explicit_windows(
-            &pool,
-            &identity.tenant_id,
-            &body.canonical_site,
+    let Some(point_keys) = plan.as_ref().and_then(|active| {
+        super::gap_backfill::point_keys_for_plan_device(
+            active,
             &identity.provider_instance_id,
             &identity.device_id,
-            &identity.model_revision,
-            &point_keys,
-            &window_pairs,
-            body.force,
-            now,
         )
-        .await
-        {
-            Ok((plan, jobs)) => (Some(plan), jobs),
-            Err(err) => return queue_err(&err, &request_id),
-        },
-        Ok(None) => {
+    }) else {
+        return json_error(
+            StatusCode::CONFLICT,
+            "no_committed_plan_for_device",
+            "no ingest group on the committed plan for this device and provider",
+            &request_id,
+            false,
+        );
+    };
+    let binding_key = DeviceBindingKey {
+        tenant_id: identity.tenant_id.clone(),
+        canonical_site: body.canonical_site.clone(),
+        provider_instance_id: identity.provider_instance_id.clone(),
+        device_id: identity.device_id.clone(),
+        model_revision: identity.model_revision.clone(),
+    };
+    let (gap_plan, jobs) = match state.ingest_queue.postgres_pool().await {
+        Ok(Some(pool)) => {
+            match super::gap_backfill::plan_explicit_windows(
+                &pool,
+                ExplicitGapBackfillRequest {
+                    key: binding_key,
+                    point_keys,
+                    windows: window_pairs,
+                    force: body.force,
+                    now,
+                },
+            )
+            .await
+            {
+                Ok((plan, jobs)) => (Some(gap_plan_json(&plan)), jobs),
+                Err(err) => return queue_err(&err, &request_id),
+            }
+        }
+        Ok(None) if body.force => {
             let mut jobs = Vec::new();
             for (start, end) in &window_pairs {
                 jobs.push(NewJob {
@@ -704,7 +715,16 @@ pub async fn backfill(
                     requested_points_digest: None,
                 });
             }
-            (None, jobs)
+            (Some(gap_plan_unavailable_json()), jobs)
+        }
+        Ok(None) => {
+            return json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "gap_planner_unavailable",
+                "gap backfill requires the shared ingest queue database unless force=true",
+                &request_id,
+                false,
+            );
         }
         Err(err) => return queue_err(&err, &request_id),
     };
@@ -726,7 +746,7 @@ pub async fn backfill(
                 "scope": scope_json(&ctx),
                 "idempotency_key": body.idempotency_key,
                 "jobs": [],
-                "gap_plan": gap_plan.as_ref().map(gap_plan_json),
+                "gap_plan": gap_plan,
             })),
         )
             .into_response();
@@ -749,7 +769,7 @@ pub async fn backfill(
                     "scope": scope_json(&ctx),
                     "idempotency_key": body.idempotency_key,
                     "jobs": created,
-                    "gap_plan": gap_plan.as_ref().map(gap_plan_json),
+                    "gap_plan": gap_plan,
                 })),
             )
                 .into_response()
@@ -927,53 +947,74 @@ pub async fn backfill_site(
     }
     let now = Utc::now();
     let mut jobs = Vec::new();
-    let mut gap_plans = Vec::new();
-    if let Ok(Some(pool)) = state.ingest_queue.postgres_pool().await {
-        for device in &devices {
-            let Some(group) = plan.groups.iter().find(|group| {
-                group.equipment_id == device.equipment_id
-                    && group.provider_instance_id == device.provider_instance_id
-            }) else {
-                continue;
-            };
-            match super::gap_backfill::plan_device_gap_backfill(
-                &pool,
-                &tenant_id,
-                &body.canonical_site,
-                group,
-                &device.revision_id,
-                body.start,
-                body.end,
-                body.force,
-                now,
-            )
-            .await
-            {
-                Ok((plan, device_jobs)) => {
-                    gap_plans.push(plan);
-                    jobs.extend(device_jobs);
-                }
-                Err(err) => return queue_err(&err, &request_id),
-            }
-        }
-    } else {
-        for device in &devices {
-            for (start, end) in &windows {
-                jobs.push(NewJob {
+    let mut gap_plans: Vec<Value> = Vec::new();
+    match state.ingest_queue.postgres_pool().await {
+        Ok(Some(pool)) => {
+            for device in &devices {
+                let Some(group) = plan.groups.iter().find(|group| {
+                    group.equipment_id == device.equipment_id
+                        && group.provider_instance_id == device.provider_instance_id
+                }) else {
+                    continue;
+                };
+                let key = DeviceBindingKey {
                     tenant_id: tenant_id.clone(),
                     canonical_site: body.canonical_site.clone(),
                     provider_instance_id: device.provider_instance_id.clone(),
                     device_id: device.equipment_id.clone(),
                     model_revision: device.revision_id.clone(),
-                    logical_window_start: *start,
-                    logical_window_end: *end,
-                    shard: String::new(),
-                    not_before: now,
-                    estimated_cost: device.estimated_cost,
-                    requested_points_digest: None,
-                });
+                };
+                match super::gap_backfill::plan_device_gap_backfill(
+                    &pool,
+                    DeviceGapBackfillRequest {
+                        key,
+                        group,
+                        range_start: body.start,
+                        range_end: body.end,
+                        force: body.force,
+                        now,
+                    },
+                )
+                .await
+                {
+                    Ok((plan, device_jobs)) => {
+                        gap_plans.push(gap_plan_json(&plan));
+                        jobs.extend(device_jobs);
+                    }
+                    Err(err) => return queue_err(&err, &request_id),
+                }
             }
         }
+        Ok(None) if body.force => {
+            gap_plans.push(gap_plan_unavailable_json());
+            for device in &devices {
+                for (start, end) in &windows {
+                    jobs.push(NewJob {
+                        tenant_id: tenant_id.clone(),
+                        canonical_site: body.canonical_site.clone(),
+                        provider_instance_id: device.provider_instance_id.clone(),
+                        device_id: device.equipment_id.clone(),
+                        model_revision: device.revision_id.clone(),
+                        logical_window_start: *start,
+                        logical_window_end: *end,
+                        shard: String::new(),
+                        not_before: now,
+                        estimated_cost: device.estimated_cost,
+                        requested_points_digest: None,
+                    });
+                }
+            }
+        }
+        Ok(None) => {
+            return json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "gap_planner_unavailable",
+                "site gap backfill requires the shared ingest queue database unless force=true",
+                &request_id,
+                false,
+            );
+        }
+        Err(err) => return queue_err(&err, &request_id),
     }
     if jobs.is_empty() {
         return (
@@ -986,7 +1027,7 @@ pub async fn backfill_site(
                 "groups": devices.len(),
                 "windows": windows.len(),
                 "jobs": [],
-                "gap_plans": gap_plans.iter().map(gap_plan_json).collect::<Vec<_>>(),
+                "gap_plans": gap_plans,
             })),
         )
             .into_response();
@@ -1025,7 +1066,7 @@ pub async fn backfill_site(
                     "groups": devices.len(),
                     "windows": windows.len(),
                     "jobs": created.len(),
-                    "gap_plans": gap_plans.iter().map(gap_plan_json).collect::<Vec<_>>(),
+                    "gap_plans": gap_plans,
                     "created_jobs": created,
                 })),
             )
@@ -1354,6 +1395,10 @@ fn cancel_tenant(ctx: &TenantContext, requested: Option<&str>) -> Result<String,
     ctx.tenant_id.clone().ok_or(IdentityError::TenantRequired)
 }
 
+fn gap_plan_unavailable_json() -> Value {
+    json!({ "status": "unavailable_no_postgres" })
+}
+
 fn gap_plan_json(plan: &super::gap_planner::GapPlanResult) -> Value {
     json!({
         "expected_start": plan.expected_start,
@@ -1604,6 +1649,45 @@ mod tests {
         assert!(viewer_cannot_mutate(Role::Viewer));
         assert!(!viewer_cannot_mutate(Role::Operator));
         assert!(!viewer_cannot_mutate(Role::Admin));
+    }
+
+    #[test]
+    fn no_committed_plan_for_device_when_bound_provider_does_not_match_plan_group() {
+        use crate::ingest_queue::gap_backfill;
+        use crate::providers::committed_model::{IngestDeviceGroup, IngestPlan, PlannedPoint};
+        let plan = IngestPlan {
+            schema: "ofdd_portal_ingest_plan_v1".into(),
+            revision_id: "rev".into(),
+            tenant_id: "tenant".into(),
+            site_id: "site".into(),
+            groups: vec![IngestDeviceGroup {
+                provider_instance_id: "portal-1".into(),
+                equipment_id: "AHU_1".into(),
+                equip_type: "ahu".into(),
+                points: vec![PlannedPoint {
+                    semantic_point_id: "urn:openfdd:point:site:AHU_1:sat".into(),
+                    source_point_id: "src".into(),
+                    canonical_role: "sat".into(),
+                    kind: None,
+                    source_unit: None,
+                    canonical_unit: None,
+                    quantity: None,
+                    history_mode: None,
+                    cadence_secs: None,
+                    heartbeat_secs: None,
+                }],
+            }],
+            withheld: Vec::new(),
+        };
+        assert!(
+            gap_backfill::point_keys_for_plan_device(&plan, "portal-1", "AHU_1").is_some()
+        );
+        assert!(
+            gap_backfill::point_keys_for_plan_device(&plan, "nf:portal-1", "AHU_1").is_some()
+        );
+        assert!(
+            gap_backfill::point_keys_for_plan_device(&plan, "nf:other", "AHU_1").is_none()
+        );
     }
 
     #[test]

@@ -7,7 +7,6 @@ use chrono::{DateTime, Utc};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::sync::Mutex;
-use tracing::warn;
 use uuid::Uuid;
 
 use super::cursor::{self, CoverageCursor, CursorKey};
@@ -309,16 +308,10 @@ impl QueueClient {
         job: &JobView,
     ) -> Result<Option<DateTime<Utc>>, QueueError> {
         if let Some(pool) = self.pool_if_configured().await? {
-            return Ok(super::binding_state::load_binding_state(
-                &pool,
-                &job.tenant_id,
-                &job.canonical_site,
-                &job.provider_instance_id,
-                &job.device_id,
-                &job.model_revision,
-            )
-            .await?
-            .and_then(|row| row.provider_data_start));
+            let key = super::binding_state::DeviceBindingKey::from_job(job);
+            return Ok(super::binding_state::load_binding_state(&pool, &key)
+                .await?
+                .and_then(|row| row.provider_data_start));
         }
         Ok(None)
     }
@@ -328,35 +321,32 @@ impl QueueClient {
         job: &JobView,
         samples: &[AppliedSample],
         now: DateTime<Utc>,
-    ) {
+    ) -> Result<(), QueueError> {
         if samples.is_empty() {
-            return;
+            return Ok(());
         }
-        let Some(first) = samples.first() else {
-            return;
-        };
-        let mut earliest = first.ts;
+        let mut earliest = samples[0].ts;
         for sample in samples.iter().skip(1) {
             if sample.ts < earliest {
                 earliest = sample.ts;
             }
         }
-        if let Ok(Some(pool)) = self.pool_if_configured().await {
-            if let Err(err) = super::binding_state::learn_provider_data_start(
-                &pool,
-                &job.tenant_id,
-                &job.canonical_site,
-                &job.provider_instance_id,
-                &job.device_id,
-                &job.model_revision,
-                earliest,
+        let Some(pool) = self.pool_if_configured().await? else {
+            return Err(QueueError::Db(
+                "shared ingest queue database is unavailable".into(),
+            ));
+        };
+        let key = super::binding_state::DeviceBindingKey::from_job(job);
+        super::binding_state::learn_provider_data_start(
+            &pool,
+            super::binding_state::LearnProviderDataStartInput {
+                key: &key,
+                candidate: earliest,
                 now,
-            )
-            .await
-            {
-                warn!(error = %err, job_id = %job.job_id, "provider data start not recorded");
-            }
-        }
+            },
+        )
+        .await?;
+        Ok(())
     }
 
     async fn pool_if_configured(&self) -> Result<Option<PgPool>, QueueError> {

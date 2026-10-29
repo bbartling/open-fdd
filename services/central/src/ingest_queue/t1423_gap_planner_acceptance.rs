@@ -12,7 +12,8 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use super::gap_backfill::plan_device_gap_backfill;
+use super::binding_state::DeviceBindingKey;
+use super::gap_backfill::{plan_device_gap_backfill, DeviceGapBackfillRequest};
 use super::model::{EnqueueOutcome, JobState, NewJob};
 use super::postgres;
 use crate::auth::{AuthConfig, Role};
@@ -162,14 +163,20 @@ async fn t1423_3_gap_planner_skips_stored_and_not_expected_hours() {
     seed_provider_start(&pool).await;
     let (plan, jobs) = plan_device_gap_backfill(
         &pool,
-        TENANT,
-        SITE,
-        &test_group(),
-        REV,
-        h(0),
-        h(9),
-        false,
-        Utc::now(),
+        DeviceGapBackfillRequest {
+            key: DeviceBindingKey {
+                tenant_id: TENANT.into(),
+                canonical_site: SITE.into(),
+                provider_instance_id: PROVIDER.into(),
+                device_id: DEVICE.into(),
+                model_revision: REV.into(),
+            },
+            group: &test_group(),
+            range_start: h(0),
+            range_end: h(9),
+            force: false,
+            now: Utc::now(),
+        },
     )
     .await
     .expect("plan");

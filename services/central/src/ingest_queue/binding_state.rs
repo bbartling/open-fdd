@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
-use super::model::QueueError;
+use super::model::{JobView, QueueError};
 
 fn sample_table_missing(err: &sqlx::Error) -> bool {
     matches!(
@@ -12,30 +12,55 @@ fn sample_table_missing(err: &sqlx::Error) -> bool {
     )
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceBindingKey {
+    pub tenant_id: String,
+    pub canonical_site: String,
+    pub provider_instance_id: String,
+    pub device_id: String,
+    pub model_revision: String,
+}
+
+impl DeviceBindingKey {
+    pub fn from_job(job: &JobView) -> Self {
+        Self {
+            tenant_id: job.tenant_id.clone(),
+            canonical_site: job.canonical_site.clone(),
+            provider_instance_id: job.provider_instance_id.clone(),
+            device_id: job.device_id.clone(),
+            model_revision: job.model_revision.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceBindingState {
     pub binding_created_at: DateTime<Utc>,
     pub provider_data_start: Option<DateTime<Utc>>,
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "binding row keys match ingest_device_binding primary key columns"
-)]
+#[derive(Debug, Clone, Copy)]
+pub struct EnsureBindingInput<'a> {
+    pub key: &'a DeviceBindingKey,
+    pub planning_range_start: DateTime<Utc>,
+    pub now: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct LearnProviderDataStartInput<'a> {
+    pub key: &'a DeviceBindingKey,
+    pub candidate: DateTime<Utc>,
+    pub now: DateTime<Utc>,
+}
+
 pub async fn ensure_binding_row(
     pool: &PgPool,
-    tenant_id: &str,
-    site_id: &str,
-    provider_id: &str,
-    device_id: &str,
-    model_revision: &str,
-    planning_range_start: DateTime<Utc>,
-    now: DateTime<Utc>,
+    input: EnsureBindingInput<'_>,
 ) -> Result<DeviceBindingState, QueueError> {
-    let binding_created_at = if planning_range_start < now {
-        planning_range_start
+    let binding_created_at = if input.planning_range_start < input.now {
+        input.planning_range_start
     } else {
-        now
+        input.now
     };
     let row = sqlx::query_as::<_, (DateTime<Utc>, Option<DateTime<Utc>>)>(
         "INSERT INTO ingest_device_binding (
@@ -46,11 +71,11 @@ pub async fn ensure_binding_row(
          DO UPDATE SET updated_at = ingest_device_binding.updated_at
          RETURNING binding_created_at, provider_data_start",
     )
-    .bind(tenant_id)
-    .bind(site_id)
-    .bind(provider_id)
-    .bind(device_id)
-    .bind(model_revision)
+    .bind(&input.key.tenant_id)
+    .bind(&input.key.canonical_site)
+    .bind(&input.key.provider_instance_id)
+    .bind(&input.key.device_id)
+    .bind(&input.key.model_revision)
     .bind(binding_created_at)
     .fetch_one(pool)
     .await
@@ -61,19 +86,9 @@ pub async fn ensure_binding_row(
     })
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "binding update keys match the ingest_device_binding primary key columns"
-)]
 pub async fn learn_provider_data_start(
     pool: &PgPool,
-    tenant_id: &str,
-    site_id: &str,
-    provider_id: &str,
-    device_id: &str,
-    model_revision: &str,
-    candidate: DateTime<Utc>,
-    now: DateTime<Utc>,
+    input: LearnProviderDataStartInput<'_>,
 ) -> Result<Option<DateTime<Utc>>, QueueError> {
     let row = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
         "UPDATE ingest_device_binding
@@ -86,13 +101,13 @@ pub async fn learn_provider_data_start(
            AND device_id = $4 AND model_revision = $5
          RETURNING provider_data_start",
     )
-    .bind(tenant_id)
-    .bind(site_id)
-    .bind(provider_id)
-    .bind(device_id)
-    .bind(model_revision)
-    .bind(candidate)
-    .bind(now)
+    .bind(&input.key.tenant_id)
+    .bind(&input.key.canonical_site)
+    .bind(&input.key.provider_instance_id)
+    .bind(&input.key.device_id)
+    .bind(&input.key.model_revision)
+    .bind(input.candidate)
+    .bind(input.now)
     .fetch_optional(pool)
     .await
     .map_err(|err| QueueError::Db(super::model::redact_db_text(&err.to_string())))?;
@@ -101,11 +116,7 @@ pub async fn learn_provider_data_start(
 
 pub async fn load_binding_state(
     pool: &PgPool,
-    tenant_id: &str,
-    site_id: &str,
-    provider_id: &str,
-    device_id: &str,
-    model_revision: &str,
+    key: &DeviceBindingKey,
 ) -> Result<Option<DeviceBindingState>, QueueError> {
     let row = sqlx::query_as::<_, (DateTime<Utc>, Option<DateTime<Utc>>)>(
         "SELECT binding_created_at, provider_data_start
@@ -113,11 +124,11 @@ pub async fn load_binding_state(
          WHERE tenant_id = $1 AND canonical_site = $2 AND provider_instance_id = $3
            AND device_id = $4 AND model_revision = $5",
     )
-    .bind(tenant_id)
-    .bind(site_id)
-    .bind(provider_id)
-    .bind(device_id)
-    .bind(model_revision)
+    .bind(&key.tenant_id)
+    .bind(&key.canonical_site)
+    .bind(&key.provider_instance_id)
+    .bind(&key.device_id)
+    .bind(&key.model_revision)
     .fetch_optional(pool)
     .await
     .map_err(|err| QueueError::Db(super::model::redact_db_text(&err.to_string())))?;
