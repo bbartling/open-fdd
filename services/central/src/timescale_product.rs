@@ -2808,8 +2808,7 @@ async fn fill_history_for_equipment(
     if roles.is_empty() {
         return Ok(0);
     }
-    // Admit known source units into imperial-f-v1 pack ABI (°F / in.w.c. / cfm)
-    // before MAX/pivot so mixed °C/°F points do not false-fault (#1284).
+    // Stored samples are metric-c-v2; pivot reads `s.val` without query-time admit.
     // Columns come from the current unique binding. A second key for the same
     // role is left out. Weather and CHW fall back to one stamped equipment,
     // the lexicographically first unique binding, when the target has none.

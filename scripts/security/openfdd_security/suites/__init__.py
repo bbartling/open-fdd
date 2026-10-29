@@ -284,6 +284,7 @@ def run_suite_x(ctx: SuiteContext) -> None:
         ("/api/ingest/jobs", "x.preauth.anon401.get_api_ingest_jobs"),
         ("/api/ingest/receipts", "x.preauth.anon401.get_api_ingest_receipts"),
         ("/api/ingest/gaps", "x.preauth.anon401.get_api_ingest_gaps"),
+        ("/api/ingest/catchup", "x.preauth.anon401.get_api_ingest_catchup"),
         ("/api/ingest/queue", "x.preauth.anon401.get_api_ingest_queue"),
     ):
         try:

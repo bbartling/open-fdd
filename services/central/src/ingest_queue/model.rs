@@ -19,6 +19,10 @@ pub const MAX_LIST: u32 = 200;
 /// Revision stamped on hourly jobs before plans were content-addressed.
 /// A backfill that still names it binds to the active plan.
 pub const MODEL_REVISION_BOOTSTRAP: &str = "bootstrap";
+/// Live periodic planner jobs (claim priority over [`JOB_SHARD_ASAP`]).
+pub const JOB_SHARD_LIVE: &str = "";
+/// Database-first ASAP catch-up jobs (#1423 part c).
+pub const JOB_SHARD_ASAP: &str = "asap";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobState {

@@ -6,9 +6,11 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Postgres, Row, Transaction};
 use thiserror::Error;
 
+use crate::ingest_si::{prepare_numeric_sample, PointMapBinding, SampleDeclaredContext};
 use crate::portal::{upsert_portal_point, PortalPointUpsert};
 use crate::sample::{SampleRow, UpsertBatch};
 use crate::writer::{write_samples, SampleWrite};
+use fdd_core::MetricUnitsContract;
 
 #[derive(Debug, Error)]
 pub enum TsdbError {
@@ -18,6 +20,8 @@ pub enum TsdbError {
     InvalidBuildingId,
     #[error("cadence_secs {0} exceeds PostgreSQL bigint range")]
     CadenceOutOfRange(u64),
+    #[error("metric units contract: {0}")]
+    Contract(#[from] fdd_core::MetricContractError),
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 }
@@ -275,12 +279,12 @@ impl Tsdb {
                 .await?;
                 sqlx::query(
                     r#"
-                    INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, unit, equipment_id)
+                    INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, source_unit, equipment_id)
                     VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (site_id, openfdd_key) DO UPDATE
                       SET haystack_id = EXCLUDED.haystack_id,
                           role = EXCLUDED.role,
-                          unit = COALESCE(EXCLUDED.unit, point_map.unit),
+                          source_unit = COALESCE(EXCLUDED.source_unit, point_map.source_unit),
                           equipment_id = EXCLUDED.equipment_id
                     "#,
                 )
@@ -288,26 +292,64 @@ impl Tsdb {
                 .bind(&row.openfdd_key)
                 .bind(row.haystack_id.as_deref().unwrap_or(&row.openfdd_key))
                 .bind(role)
-                .bind(&row.unit)
+                .bind(
+                    row.source_unit
+                        .as_deref()
+                        .or(row.unit.as_deref()),
+                )
                 .bind(equip)
                 .execute(&mut **tx)
                 .await?;
             }
         }
-        let writes: Vec<SampleWrite<'_>> = batch
-            .rows
-            .iter()
-            .zip(&keys)
-            .map(|(row, key)| SampleWrite {
+        let contract = MetricUnitsContract::load_embedded()?;
+        let bindings = load_point_map_bindings(tx, &batch.rows, &keys).await?;
+        let mut writes: Vec<SampleWrite<'_>> = Vec::with_capacity(batch.rows.len());
+        let mut unit_storage: Vec<Option<String>> = Vec::with_capacity(batch.rows.len());
+        let mut quality_storage: Vec<Option<String>> = Vec::with_capacity(batch.rows.len());
+        let mut prepared_rows: Vec<crate::ingest_si::PreparedIngestValue> =
+            Vec::with_capacity(batch.rows.len());
+        for (row, key) in batch.rows.iter().zip(&keys) {
+            let bind = bindings.get(key.as_str());
+            let map = PointMapBinding {
+                unit: bind.and_then(|b| b.unit.as_deref()),
+                source_unit: bind.and_then(|b| b.source_unit.as_deref()),
+                quantity: bind.and_then(|b| b.quantity.as_deref()),
+            };
+            let ctx = SampleDeclaredContext {
+                role: row
+                    .role
+                    .as_deref()
+                    .or_else(|| bind.and_then(|b| b.role.as_deref())),
+                sample_unit: row.unit.as_deref(),
+                sample_source_unit: row.source_unit.as_deref(),
+                sample_quantity: row.quantity.as_deref(),
+                csv_column_unit: None,
+                unit_system: row.unit_system.as_deref(),
+            };
+            let prepared = match row.val {
+                Some(raw) => prepare_numeric_sample(&contract, raw, map, ctx),
+                None => crate::ingest_si::PreparedIngestValue {
+                    val: None,
+                    unit: row.unit.clone(),
+                    quality: row.quality.clone(),
+                },
+            };
+            unit_storage.push(prepared.unit.clone());
+            quality_storage.push(prepared.quality.clone().or_else(|| row.quality.clone()));
+            prepared_rows.push(prepared);
+        }
+        for (idx, (row, key)) in batch.rows.iter().zip(&keys).enumerate() {
+            writes.push(SampleWrite {
                 ts: row.ts,
                 site_id: &row.site_id,
                 openfdd_key: key,
                 haystack_id: row.haystack_id.as_deref(),
-                val: row.val,
-                unit: row.unit.as_deref(),
-                quality: row.quality.as_deref(),
-            })
-            .collect();
+                val: prepared_rows[idx].val,
+                unit: unit_storage[idx].as_deref(),
+                quality: quality_storage[idx].as_deref(),
+            });
+        }
         let stats = write_samples(tx, &writes).await?;
         Ok(stats)
     }
@@ -466,8 +508,58 @@ impl SampleRow {
             role: None,
             portal_point_id: None,
             provider_instance_id: None,
+            source_unit: None,
+            quantity: None,
+            unit_system: None,
         }
     }
+}
+
+#[derive(Debug, Default, Clone)]
+struct StoredPointBinding {
+    unit: Option<String>,
+    source_unit: Option<String>,
+    quantity: Option<String>,
+    role: Option<String>,
+}
+
+async fn load_point_map_bindings(
+    tx: &mut Transaction<'_, Postgres>,
+    rows: &[SampleRow],
+    keys: &[String],
+) -> Result<HashMap<String, StoredPointBinding>, TsdbError> {
+    let mut out = HashMap::new();
+    if rows.is_empty() {
+        return Ok(out);
+    }
+    let site_id = rows[0].site_id.as_str();
+    let mut openfdd_keys: Vec<String> = keys.to_vec();
+    openfdd_keys.sort_unstable();
+    openfdd_keys.dedup();
+    if openfdd_keys.is_empty() {
+        return Ok(out);
+    }
+    let fetched = sqlx::query(
+        "SELECT openfdd_key, unit, source_unit, quantity, role \
+         FROM point_map WHERE site_id = $1 AND openfdd_key = ANY($2)",
+    )
+    .bind(site_id)
+    .bind(&openfdd_keys)
+    .fetch_all(&mut **tx)
+    .await?;
+    for row in fetched {
+        let key: String = row.try_get("openfdd_key")?;
+        out.insert(
+            key,
+            StoredPointBinding {
+                unit: row.try_get::<Option<String>, _>("unit")?,
+                source_unit: row.try_get::<Option<String>, _>("source_unit")?,
+                quantity: row.try_get::<Option<String>, _>("quantity")?,
+                role: row.try_get::<Option<String>, _>("role")?,
+            },
+        );
+    }
+    Ok(out)
 }
 
 fn ident_ok(name: &str) -> bool {

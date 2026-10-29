@@ -83,11 +83,15 @@ impl QualityPolicy {
 
 /// `true` when this policy keeps the sample as an FDD input.
 pub fn quality_keeps_sample(policy: QualityPolicy, quality: Option<&str>) -> bool {
+    let stamp = quality.map(str::trim).unwrap_or("");
+    if stamp.eq_ignore_ascii_case(crate::ingest_si::QUALITY_UNIT_UNDECLARED)
+        || stamp.eq_ignore_ascii_case(crate::ingest_si::QUALITY_UNIT_CONTRACT_MISSING)
+    {
+        return false;
+    }
     match policy {
         QualityPolicy::KeepAll => true,
-        QualityPolicy::DropBad => !quality
-            .map(str::trim)
-            .is_some_and(|stamp| stamp.eq_ignore_ascii_case("bad")),
+        QualityPolicy::DropBad => !stamp.eq_ignore_ascii_case("bad"),
     }
 }
 
@@ -665,6 +669,19 @@ mod tests {
 
     #[test]
     fn schedule_and_quality_policies_match_the_stated_rules() {
+        use crate::ingest_si::{QUALITY_UNIT_CONTRACT_MISSING, QUALITY_UNIT_UNDECLARED};
+        assert!(!quality_keeps_sample(
+            QualityPolicy::DropBad,
+            Some(QUALITY_UNIT_UNDECLARED)
+        ));
+        assert!(!quality_keeps_sample(
+            QualityPolicy::KeepAll,
+            Some(QUALITY_UNIT_UNDECLARED)
+        ));
+        assert!(!quality_keeps_sample(
+            QualityPolicy::DropBad,
+            Some(QUALITY_UNIT_CONTRACT_MISSING)
+        ));
         for token in [
             "unoccupied",
             " Unoccupied ",
@@ -735,6 +752,8 @@ mod tests {
                 val double precision,
                 PRIMARY KEY (import_id, site_id, openfdd_key, ts)
             )",
+            "ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS unit text",
+            "ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS quality text",
         ] {
             if let Err(err) = sqlx::query(ddl).execute(pool).await {
                 assert!(ignorable_catalog_race(&err), "{ddl}: {err}");

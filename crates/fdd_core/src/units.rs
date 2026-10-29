@@ -1,8 +1,7 @@
-//! Running stacks still evaluate SQL in imperial-f-v1 (°F / in.w.c. / cfm).
-//! The processing ABI contract is metric-c-v2 (°C / Pa / L/s) — see
-//! `sql/contract/metric_units.json` and `units_contract`. Admit known source units
-//! into the pack ABI before pivot/SQL until W2b removes this path. Display
-//! preference is independent of processing.
+//! Running stacks store historian samples in metric-c-v2 (°C / Pa / L/s).
+//! The processing ABI contract is metric-c-v2 — see `sql/contract/metric_units.json`
+//! and `units_contract`. Ingest converts declared source units once (W2b).
+//! Display preference is independent of processing.
 
 /// Temperature cookbook roles stored as °C when `unit_system` is metric|si.
 /// `dry_bulb_f` is already Fahrenheit even if the session is metric — never convert.
@@ -126,83 +125,6 @@ pub fn unit_is_lps(unit: &str) -> bool {
     matches!(normalize_unit_token(unit).as_str(), "lps" | "ls" | "lpers")
 }
 
-/// Admit one sample into imperial-f-v1 pack units for a cookbook role.
-pub fn admit_value_to_pack_v1(role: &str, value: f64, source_unit: &str) -> f64 {
-    if is_temperature_role(role) {
-        if unit_is_celsius(source_unit) {
-            return celsius_to_fahrenheit(value);
-        }
-        return value;
-    }
-    if is_pressure_role(role) && unit_is_pa(source_unit) {
-        return pa_to_in_wc(value);
-    }
-    if is_flow_role(role) && unit_is_lps(source_unit) {
-        return lps_to_cfm(value);
-    }
-    value
-}
-
-/// SQL expression: convert `val` using the sample `unit` column into pack °F/in.w.c./cfm.
-pub fn sql_admit_val_expr(role: &str) -> String {
-    if is_temperature_role(role) {
-        return "CASE WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g')) \
-             IN ('c', 'degc', 'celsius') THEN (val * 9.0 / 5.0) + 32.0 ELSE val END"
-            .to_string();
-    }
-    if is_pressure_role(role) {
-        return format!(
-            "CASE WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g')) \
-             IN ('pa', 'pascal') THEN val / {PA_PER_IN_WC} ELSE val END"
-        );
-    }
-    if is_flow_role(role) {
-        return format!(
-            "CASE WHEN lower(regexp_replace(coalesce(unit, ''), '[^a-zA-Z0-9]', '', 'g')) \
-             IN ('lps', 'ls', 'lpers') THEN val / {LPS_PER_CFM} ELSE val END"
-        );
-    }
-    "val".into()
-}
-
-/// SQL expression: convert a history column from stored °C to °F, or pass through.
-pub fn sql_temp_to_fahrenheit(column: &str, metric: bool) -> String {
-    let ident = column.replace('"', "");
-    if metric && is_temperature_role(&ident) {
-        format!("((\"{ident}\" * 9.0 / 5.0) + 32.0)")
-    } else {
-        format!("\"{ident}\"")
-    }
-}
-
-/// Wrap `FROM history` / `FROM weather` so metric CSVs run against °F SQL.
-/// Callers must register `history_si` / `weather_si` views (converted SELECT)
-/// on the DataFusion context; this helper only rewrites table names so nested
-/// `WITH` queries do not shadow those views with CTEs in the wrong order.
-pub fn sql_with_metric_to_imperial(
-    sql: &str,
-    _history_columns: &[String],
-    weather_columns: &[String],
-    unit_system: &str,
-) -> String {
-    if !is_metric_unit_system(unit_system) {
-        return sql.to_string();
-    }
-    let mut rewritten = sql
-        .replace(" FROM history", " FROM history_si")
-        .replace(" from history", " FROM history_si")
-        .replace("\nFROM history", "\nFROM history_si")
-        .replace("\nfrom history", "\nFROM history_si");
-    if !weather_columns.is_empty() {
-        rewritten = rewritten
-            .replace(" FROM weather", " FROM weather_si")
-            .replace(" from weather", " FROM weather_si")
-            .replace("\nFROM weather", "\nFROM weather_si")
-            .replace("\nfrom weather", "\nFROM weather_si");
-    }
-    rewritten
-}
-
 pub fn metric_select_list(columns: &[String]) -> String {
     if columns.is_empty() {
         return "*".into();
@@ -250,26 +172,6 @@ mod tests {
     }
 
     #[test]
-    fn metric_sql_wraps_history() {
-        let sql = "SELECT sat FROM history WHERE sat > 55";
-        let out = sql_with_metric_to_imperial(
-            sql,
-            &["timestamp".into(), "sat".into(), "fan_cmd".into()],
-            &[],
-            "metric",
-        );
-        assert!(out.contains("FROM history_si"));
-        assert!(
-            !sql_with_metric_to_imperial(sql, &["sat".into()], &[], "imperial")
-                .contains("history_si")
-        );
-        let sel = metric_select_list(&["timestamp".into(), "sat".into(), "duct_static".into()]);
-        assert!(sel.contains("* 9.0 / 5.0"));
-        assert!(sel.contains("AS \"sat\""));
-        assert!(sel.contains("/ 248.84"));
-    }
-
-    #[test]
     fn pressure_and_flow_round_trip() {
         assert!((pa_to_in_wc(248.84) - 1.0).abs() < 1e-9);
         assert!((lps_to_cfm(0.471947) - 1.0).abs() < 1e-6);
@@ -278,17 +180,15 @@ mod tests {
     }
 
     #[test]
-    fn admit_20c_equals_68f() {
-        assert!((admit_value_to_pack_v1("sat", 20.0, "°C") - 68.0).abs() < 1e-9);
-        assert!((admit_value_to_pack_v1("sat", 68.0, "°F") - 68.0).abs() < 1e-9);
+    fn delta_f_to_delta_c_round_trip() {
         assert!((delta_f_to_delta_c(5.0) - 2.777777777777778).abs() < 1e-12);
     }
 
     #[test]
-    fn sql_admit_temp_uses_unit_column() {
-        let expr = sql_admit_val_expr("sat");
-        assert!(expr.contains("celsius"));
-        assert!(expr.contains("9.0 / 5.0"));
-        assert_eq!(sql_admit_val_expr("fan_cmd"), "val");
+    fn metric_select_list_temperature_scales() {
+        let sel = metric_select_list(&["timestamp".into(), "sat".into(), "duct_static".into()]);
+        assert!(sel.contains("* 9.0 / 5.0"));
+        assert!(sel.contains("AS \"sat\""));
+        assert!(sel.contains("/ 248.84"));
     }
 }
