@@ -6,7 +6,7 @@ use sqlx::Row;
 const OLD_VIEW: &str = include_str!("../../../../sql/schema/fixtures/authorized_series_v4_0_6.sql");
 const BINDING_DDL: &str = include_str!("../../../../sql/schema/11_point_map_binding_metadata.sql");
 const NEW_VIEW: &str = include_str!("../../../../sql/schema/07_opaque_series_binding.sql");
-const UPGRADE_TEST_LOCK: i64 = 4_060_407_1406;
+const UPGRADE_TEST_LOCK: i64 = 14_061_406;
 
 async fn pool() -> Option<sqlx::PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
