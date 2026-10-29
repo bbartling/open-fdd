@@ -3,7 +3,9 @@ import argparse, json, math, re, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
-def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres'):
+_INWC_TO_PA = 248.84
+
+def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', canonical_units=False):
     rules = json.loads((ROOT / 'tuning_catalog.json').read_text())['rules']
     rule = next((r for r in rules if r['rule_id'] == rule_id or rule_id in r.get('aliases',[])), None)
     if rule is None:
@@ -19,7 +21,11 @@ def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres'):
         if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value):
             raise ValueError(f'{key} must be a finite number')
         d = controls[key]
-        if not d['min'] <= value <= d['max']:
+        lo, hi = d['min'], d['max']
+        if canonical_units and d.get('kind') == 'air_pressure':
+            lo = lo * _INWC_TO_PA
+            hi = hi * _INWC_TO_PA
+        if not lo <= value <= hi:
             raise ValueError(f'{key} outside [{d["min"]}, {d["max"]}]')
         chosen[key] = value
         if not d['effect_in_sql']:

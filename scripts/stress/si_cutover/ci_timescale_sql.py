@@ -18,6 +18,7 @@ from scripts.stress.si_cutover.capture_ip_baseline import (  # noqa: E402
     daily_fault_and_covered_seconds,
 )
 from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
+    convert_params_to_si,
     frame_column_to_sql_role,
     registry_role_column,
 )
@@ -79,12 +80,19 @@ def render_rule_sql(
     poll_seconds: float,
     *,
     overrides: dict[str, float] | None = None,
+    canonical_units: bool = False,
 ) -> str:
     sys.path.insert(0, str(REPO / "sql" / "fdd"))
     from render_rule import render  # type: ignore
 
     rule_id = str(rule["rule_id"])
-    return render(rule_id, poll_seconds=poll_seconds, overrides=overrides, dialect="postgres")
+    return render(
+        rule_id,
+        poll_seconds=poll_seconds,
+        overrides=overrides,
+        dialect="postgres",
+        canonical_units=canonical_units,
+    )
 
 
 def rewrite_fault_series(sql: str, equipment_id: str) -> str | None:
@@ -278,6 +286,7 @@ def execute_sql_rule_daily(
     poll_seconds: float,
     index,
     render_overrides: dict[str, float] | None = None,
+    canonical_units: bool = False,
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Run one postgres rule; return daily rows or (empty, error reason)."""
     import pandas as pd
@@ -287,7 +296,12 @@ def execute_sql_rule_daily(
     if not sql_file:
         return [], "no_sql_file"
     try:
-        sql = render_rule_sql(rule, poll_seconds, overrides=render_overrides)
+        sql = render_rule_sql(
+            rule,
+            poll_seconds,
+            overrides=render_overrides,
+            canonical_units=canonical_units,
+        )
     except Exception as exc:
         return [], f"render: {exc}"
 
@@ -410,7 +424,12 @@ def run_sql_ip_for_dataset(
             rule_id = str(rule.get("rule_id") or "")
             if not rule.get("sql_file"):
                 continue
-            params = (params_by_rule or {}).get(rule_id) or {}
+            params = dict((params_by_rule or {}).get(rule_id) or {})
+            if si_storage:
+                from scripts.ci import unit_contract_lib as uc
+
+                metric_doc = uc.load_json(uc.METRIC_UNITS)
+                params = convert_params_to_si(rule, params, metric_doc)
             render_overrides = catalog_overrides_from_registry(rule, params)
             cur.execute("SAVEPOINT si_cutover_rule")
             daily, err = execute_sql_rule_daily(
@@ -421,6 +440,7 @@ def run_sql_ip_for_dataset(
                 poll_seconds=poll_seconds,
                 index=frame.index,
                 render_overrides=render_overrides,
+                canonical_units=si_storage,
             )
             if err:
                 cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")

@@ -1,7 +1,7 @@
 """W4f analytics P2 — pandas SI vs Timescale SQL on CI SI seeds (#1284).
 
-Every file under ``sql/analytics/postgres/queries/`` is exercised (no allowlist).
-Threshold-bearing bodies get numeric parity; others must execute cleanly on SI seed.
+Every file under ``sql/analytics/postgres/queries/`` is compared to a pandas SI
+oracle (numeric columns within tolerance, row keys equal; keys-only when no numerics).
 """
 
 from __future__ import annotations
@@ -28,10 +28,15 @@ from scripts.stress.si_cutover import ci_fixtures_lib as cfl  # noqa: E402
 from scripts.stress.si_cutover import ci_timescale_sql as cts  # noqa: E402
 
 
+from scripts.stress.si_cutover import ci_analytics_oracles as cao  # noqa: E402
+
+
 @dataclass(frozen=True)
 class P2AnalyticsResult:
     query_stem: str
+    comparison_type: str
     comparisons: int
+    passed: bool
     errors: tuple[str, ...]
 
 
@@ -280,7 +285,7 @@ def _compare_mech_bins(
             equipment_ids=[equipment_id],
         )
     if not rows and (pd_bins is None or pd_bins.empty):
-        return P2AnalyticsResult(stem, 1, ())
+        return P2AnalyticsResult(stem, "numeric_parity", 1, True, ())
     sql_by_label = {str(r[2]): float(r[3]) for r in rows if len(r) >= 4}
     pd_by_label = {
         str(row["bin_label"]): float(row["runtime_hours"])
@@ -296,7 +301,9 @@ def _compare_mech_bins(
             continue
         if abs(sql_hours - pd_hours) > 1e-4:
             errors.append(f"{stem} {label}: sql={sql_hours} pandas_si={pd_hours}")
-    return P2AnalyticsResult(stem, comparisons, tuple(errors))
+    return P2AnalyticsResult(
+        stem, "numeric_parity", comparisons, not errors, tuple(errors)
+    )
 
 
 def _compare_economizer_dt_gate(conn, *, golden: dict[str, Any], metric: dict[str, Any]) -> P2AnalyticsResult:
@@ -337,7 +344,7 @@ def _compare_economizer_dt_gate(conn, *, golden: dict[str, Any], metric: dict[st
     errors: list[str] = []
     comparisons = 0
     if not rows and pd_pts.empty:
-        return P2AnalyticsResult(stem, 1, ())
+        return P2AnalyticsResult(stem, "numeric_parity", 1, True, ())
     pd_by_ts = {ts.isoformat(): row for ts, row in pd_pts.iterrows()}
     for sql_row in rows[:25]:
         if len(sql_row) < 9:
@@ -354,7 +361,13 @@ def _compare_economizer_dt_gate(conn, *, golden: dict[str, Any], metric: dict[st
             errors.append(f"{stem} {ts_key} delta_mr sql={sql_mr} pandas={prow['delta_mr_f']}")
     if comparisons == 0 and rows:
         errors.append(f"{stem}: zero economizer delta comparisons ({len(rows)} SQL rows)")
-    return P2AnalyticsResult(stem, max(comparisons, 1 if not errors else comparisons), tuple(errors))
+    return P2AnalyticsResult(
+        stem,
+        "numeric_parity",
+        max(comparisons, 1 if not errors else comparisons),
+        not errors,
+        tuple(errors),
+    )
 
 
 def _compare_sensor_faults_staleness(
@@ -427,11 +440,47 @@ def _compare_sensor_faults_staleness(
         if sql_flag != flag:
             errors.append(f"{stem} {role}: sql={sql_flag!r} pandas={flag!r}")
     if comparisons == 0 and not sql_by_role:
-        return P2AnalyticsResult(stem, 1, ())
-    return P2AnalyticsResult(stem, comparisons, tuple(errors))
+        return P2AnalyticsResult(stem, "keys_only", 1, True, ())
+    return P2AnalyticsResult(
+        stem, "numeric_parity", comparisons, not errors, tuple(errors)
+    )
 
 
-def _execute_only(
+def _oracle_extra_for_stem(
+    stem: str,
+    *,
+    building_id: str,
+    equipment_id: str,
+    cur,
+) -> dict[str, Any]:
+    extra: dict[str, Any] = {}
+    if stem == "role_timeseries":
+        extra["role"] = "fan_status"
+        extra["limit"] = 500
+    if stem == "sql_anomaly_zscore":
+        extra["window_rows"] = 20
+        extra["z_threshold"] = 3.0
+        extra["transition_events"] = False
+    if stem == "bas_vs_web_oat":
+        oa_key = f"{equipment_id}.oa_t"
+        cur.execute(
+            """
+            SELECT openfdd_key FROM authorized_series
+            WHERE site_id = %s AND equipment_id = %s AND role = 'oa_t'
+            ORDER BY openfdd_key LIMIT 1
+            """,
+            (building_id, equipment_id),
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            oa_key = str(row[0])
+        extra["oa_key"] = oa_key
+        extra["max_age_s"] = 7200.0
+        extra["limit"] = 500
+    return extra
+
+
+def _compare_oracle_stem(
     conn,
     *,
     stem: str,
@@ -456,8 +505,6 @@ def _execute_only(
         equip_type=etype,
         si_frame=si_frame,
     )
-    extra: tuple[Any, ...] = ()
-    del extra
     try:
         with conn.cursor() as cur:
             if stem == "bas_vs_web_oat":
@@ -466,8 +513,11 @@ def _execute_only(
                     (building_id,),
                 )
                 if int(cur.fetchone()[0] or 0) != 1:
-                    return P2AnalyticsResult(stem, 1, ())
-            _exec_analytics_sql(
+                    return P2AnalyticsResult(stem, "keys_only", 1, True, ())
+            extra = _oracle_extra_for_stem(
+                stem, building_id=building_id, equipment_id=equipment_id, cur=cur
+            )
+            sql_rows = _exec_analytics_sql(
                 cur,
                 stem,
                 site_id=building_id,
@@ -476,8 +526,48 @@ def _execute_only(
                 equipment_ids=[equipment_id],
             )
     except Exception as exc:
-        return P2AnalyticsResult(stem, 1, (f"{stem}: {exc}",))
-    return P2AnalyticsResult(stem, 1, ())
+        return P2AnalyticsResult(stem, "oracle_parity", 1, False, (f"{stem}: {exc}",))
+
+    oracle = cao.build_oracle_for_stem(
+        stem,
+        si_frame=si_frame,
+        equipment_id=equipment_id,
+        equip_type=etype,
+        ws=ws,
+        we=we,
+        extra=extra,
+    )
+    if oracle is None:
+        return P2AnalyticsResult(
+            stem, "oracle_parity", 1, False, (f"{stem}: no pandas SI oracle",)
+        )
+
+    if stem == "sql_anomaly_zscore" and sql_rows:
+        counts = sql_rows[0][:4]
+        pd_counts = oracle.rows[0][:4] if oracle.rows else (0, 0, 0, 0)
+        errors: list[str] = []
+        for i, label in enumerate(("n_scored", "n_flagged", "n_ok", "n_selected")):
+            if int(counts[i] or 0) != int(pd_counts[i] or 0):
+                errors.append(f"{stem}: {label} sql={counts[i]} pandas={pd_counts[i]}")
+        return P2AnalyticsResult(
+            stem,
+            oracle.comparison_type,
+            4,
+            not errors,
+            tuple(errors),
+        )
+
+    abs_tol = 0.06 if stem == "motor_weekly_runtime" else None
+    comparisons, errors = cao.compare_oracle_to_sql(
+        sql_rows, oracle, stem=stem, abs_tol=abs_tol
+    )
+    return P2AnalyticsResult(
+        stem,
+        oracle.comparison_type,
+        comparisons,
+        not errors,
+        tuple(errors),
+    )
 
 
 def _golden_for_stem(stem: str, goldens: list[dict[str, Any]]) -> dict[str, Any]:
@@ -512,7 +602,7 @@ def run_p2_all_analytics(conn, goldens: list[dict[str, Any]], metric: dict[str, 
             results.append(_compare_sensor_faults_staleness(conn, golden=g, metric=metric))
         else:
             g = _golden_for_stem(stem, goldens)
-            results.append(_execute_only(conn, stem=stem, golden=g, metric=metric))
+            results.append(_compare_oracle_stem(conn, stem=stem, golden=g, metric=metric))
     return results
 
 
@@ -522,3 +612,14 @@ def summarize(results: list[P2AnalyticsResult]) -> tuple[int, list[str]]:
     for r in results:
         errors.extend(r.errors)
     return total, errors
+
+
+def p2_results_markdown_table(results: list[P2AnalyticsResult]) -> str:
+    lines = [
+        "| SQL body | Comparison | Result |",
+        "| --- | --- | --- |",
+    ]
+    for r in sorted(results, key=lambda x: x.query_stem):
+        status = "pass" if r.passed else "fail"
+        lines.append(f"| `{r.query_stem}` | {r.comparison_type} | {status} |")
+    return "\n".join(lines)

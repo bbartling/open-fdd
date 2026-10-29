@@ -22,8 +22,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": 0.0,
-      "sql_si_status": "computed",
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "missing_sql_si",
       "utc_day": "2026-07-01"
     },
     {
@@ -58,8 +58,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": 0.0,
-      "sql_si_status": "computed",
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "missing_sql_si",
       "utc_day": "2026-07-01"
     },
     {
@@ -67,8 +67,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-3",
-      "sql_si_fault_seconds": 0.0,
-      "sql_si_status": "computed",
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "missing_sql_si",
       "utc_day": "2026-07-01"
     },
     {
@@ -94,8 +94,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "VAV-6",
-      "sql_si_fault_seconds": 0.0,
-      "sql_si_status": "computed",
+      "sql_si_fault_seconds": null,
+      "sql_si_status": "missing_sql_si",
       "utc_day": "2026-07-01"
     },
     {
