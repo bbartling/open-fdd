@@ -144,14 +144,39 @@ def infer_kind(param_key: str, unit: str) -> str:
     if u in {"degF", "°F"}:
         return "absolute_temperature"
     if u == "degC":
-        return "temperature_difference" if key == "deadband_c" else "absolute_temperature"
+        delta_keys = {
+            "min_dt",
+            "sp_band",
+            "coil_delta",
+            "pass_delta",
+            "delta",
+            "deadband",
+            "deadband_c",
+            "approach_max",
+            "excess_beyond_approach",
+            "cw_slack",
+            "cw_approach",
+            "reset_err",
+            "preheat_over",
+            "econ6_oat_max",
+            "mech_oat_max",
+        }
+        if key in delta_keys or "delta" in key:
+            return "temperature_difference"
+        return "absolute_temperature"
     if u == "degF_per_h":
         return "temperature_rate"
     if u in {"in_wc", "inwc"}:
         return "air_pressure"
+    if u == "Pa":
+        return "air_pressure"
     if u == "psi":
         return "hydronic_pressure"
+    if u == "kPa":
+        return "hydronic_pressure"
     if u in {"cfm", "gpm"}:
+        return "volumetric_flow"
+    if u in {"L_per_s", "L/s"}:
         return "volumetric_flow"
     if u == "kWh":
         return "interval_energy"
@@ -289,6 +314,20 @@ def registry_doc_for_metadata_diff(doc: Any) -> Any:
     return {"rules": kept}
 
 
+def tuning_doc_for_metadata_diff(doc: Any) -> Any:
+    """Tuning catalog snapshot for W2a guard; W4d plant rules may change SI defaults."""
+    stripped = strip_registry_metadata(doc)
+    if not isinstance(stripped, dict) or "rules" not in stripped:
+        return stripped
+    kept = [
+        r
+        for r in stripped["rules"]
+        if isinstance(r, dict) and r.get("rule_id") not in W4D_SI_PLANT_RULES
+    ]
+    kept.sort(key=lambda r: str(r.get("rule_id", "")))
+    return {"rules": kept}
+
+
 def ensure_origin_master_ref() -> str:
     """Resolve a ref for master/base file content (shallow CI checkouts may lack origin/master)."""
     override = os.environ.get("UNIT_CONTRACT_BASE_REF", "").strip()
@@ -353,11 +392,12 @@ def assert_metadata_only_registry_diff() -> None:
 
 
 def assert_metadata_only_tuning_diff() -> None:
-    master = strip_registry_metadata(json.loads(git_show_master("sql/fdd/tuning_catalog.json")))
-    branch = strip_registry_metadata(load_json(TUNING))
+    master = tuning_doc_for_metadata_diff(json.loads(git_show_master("sql/fdd/tuning_catalog.json")))
+    branch = tuning_doc_for_metadata_diff(load_json(TUNING))
     if master != branch:
         raise AssertionError(
-            "tuning_catalog.json differs from origin/master beyond kind/effect metadata"
+            "tuning_catalog.json differs from origin/master beyond kind/effect metadata "
+            "(excluding W4d SI plant rules)"
         )
 
 
