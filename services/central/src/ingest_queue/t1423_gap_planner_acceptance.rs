@@ -16,9 +16,6 @@ use super::gap_backfill::plan_device_gap_backfill;
 use super::model::{EnqueueOutcome, JobState, NewJob};
 use super::postgres;
 use crate::auth::{AuthConfig, Role};
-use crate::providers::committed_model::{
-    CommittedEquipment, CommittedModel, CommittedPoint, SCHEMA,
-};
 use crate::state::AppState;
 use crate::tenant::{ControlPlane, TenantRecord};
 
@@ -210,43 +207,6 @@ async fn cancel_harness(pool: PgPool) -> (Arc<AppState>, Router) {
                 building_ids: vec![SITE.into()],
             }],
         };
-    }
-    {
-        let model = CommittedModel {
-            schema: SCHEMA.into(),
-            tenant_id: TENANT.into(),
-            site_id: SITE.into(),
-            provider_instance_id: PROVIDER.into(),
-            truncated: false,
-            equipment: vec![CommittedEquipment {
-                equipment_id: DEVICE.into(),
-                equip_type: "ahu".into(),
-                points: vec![CommittedPoint {
-                    point_id: POINT.into(),
-                    provider_point_id: "src".into(),
-                    canonical_role: Some("sat".into()),
-                    selection_status: "approved".into(),
-                    fdd_ready: true,
-                    unit: Some("degF".into()),
-                    canonical_unit: None,
-                    kind: Some("Number".into()),
-                    quantity: None,
-                    provisional: false,
-                    display_name: None,
-                    history_mode: None,
-                    cadence_secs: None,
-                    heartbeat_secs: None,
-                    primary_reference: false,
-                }],
-            }],
-        };
-        state
-            .providers
-            .models
-            .lock()
-            .expect("models")
-            .try_activate(None, &model)
-            .expect("activate");
     }
     let _pool = pool;
     let app = crate::routes::router(Arc::clone(&state));
