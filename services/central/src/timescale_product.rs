@@ -3355,6 +3355,15 @@ pub async fn read_model_revision_string(tsdb: &Tsdb, building_id: &str) -> Resul
             ),
         );
     }
+    if let Ok(count) = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*)::bigint FROM unit_migration WHERE site_id = $1",
+    )
+    .bind(building_id)
+    .fetch_one(tsdb.pool())
+    .await
+    {
+        hash_line(&mut hasher, &format!("si_cutover_ledger\t{count}"));
+    }
     Ok(hex::encode(hasher.finalize()))
 }
 

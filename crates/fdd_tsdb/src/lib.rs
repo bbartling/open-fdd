@@ -13,6 +13,7 @@ mod portal;
 mod revision;
 mod runner;
 mod sample;
+pub mod si_cutover;
 pub mod writer;
 
 pub use client::{clear_shared_pool, database_url_from_env, SampleUpsertStats, Tsdb, TsdbError};
@@ -43,3 +44,8 @@ pub use runner::{
     default_sql_root, load_rule_sql, render_placeholders, RuleRunRequest, RuleRunResult,
 };
 pub use sample::{SampleRow, UpsertBatch};
+pub use si_cutover::{
+    apply_sample_cutover_tx, contract as si_cutover_contract, dry_run_site,
+    ensure_si_cutover_schema, invalidate_derived_results, SiCutoverError, SiteCutoverResult,
+    SiteDryRunReport,
+};

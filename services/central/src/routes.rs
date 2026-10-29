@@ -240,6 +240,14 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/admin/schema-contract",
             get(admin_schema_contract_softopen),
         )
+        .route(
+            "/api/admin/si-cutover/dry-run",
+            get(crate::si_cutover_admin::si_cutover_dry_run_handler),
+        )
+        .route(
+            "/api/admin/si-cutover",
+            post(crate::si_cutover_admin::si_cutover_post_handler),
+        )
         .route("/api/fdd/rules", get(fdd_registry_rules))
         .route("/api/fdd/rules/{rule_id}/params", get(fdd_rule_params))
         .route("/api/fdd/cache/status", get(fdd_cache_status))
@@ -961,7 +969,7 @@ fn preferred_tenant_for_building_read(
 
 /// Hub admin (admin role, no tenant membership). Records the caller and any
 /// denial on `audit`; the handler emits it once the result is known.
-fn require_hub_admin(
+pub(crate) fn require_hub_admin(
     state: &AppState,
     headers: &HeaderMap,
     audit: &mut AuditEvent,
