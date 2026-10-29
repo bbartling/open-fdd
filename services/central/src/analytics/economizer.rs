@@ -9,7 +9,7 @@ use super::{
     AnalyticsRequest, QV_ECONOMIZER,
 };
 
-pub const DEFAULT_DT_MIN_F: f64 = 10.0;
+pub const DEFAULT_DT_MIN_F: f64 = 10.0 * 5.0 / 9.0;
 
 /// One mixed-air diagnostic sample.
 #[derive(Debug, Clone, Deserialize, Serialize)]

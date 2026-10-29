@@ -42,7 +42,7 @@ SELECT
     WHEN last_ts < now() - interval '24 hours' THEN 'STALE'
     WHEN stddev_val IS NOT NULL AND stddev_val = 0 AND n >= 12 THEN 'FLATLINE'
     WHEN min_val IS NOT NULL AND max_val IS NOT NULL
-         AND (min_val < -40 OR max_val > 250)
+         AND (min_val < -40.0 OR max_val > 121.11111111111111)
          AND role LIKE '%_t' THEN 'RANGE'
     ELSE 'OK'
   END AS fault_flag
@@ -52,7 +52,7 @@ ORDER BY
     WHEN last_ts < now() - interval '24 hours' THEN 0
     WHEN stddev_val IS NOT NULL AND stddev_val = 0 AND n >= 12 THEN 1
     WHEN min_val IS NOT NULL AND max_val IS NOT NULL
-         AND (min_val < -40 OR max_val > 250)
+         AND (min_val < -40.0 OR max_val > 121.11111111111111)
          AND role LIKE '%_t' THEN 2
     ELSE 3
   END,

@@ -179,7 +179,7 @@ fn empty_row_reason(query_id: &str, dt_min_f: Option<f64>) -> String {
         "economizer" => {
             let dt = dt_min_f.unwrap_or(crate::analytics::economizer::DEFAULT_DT_MIN_F);
             format!(
-                "no qualified economizer samples: fan-on proof, |OAT−RAT| ≥ {dt:.0}°F, and a measured MAT are required; off-fan, low-delta, and missing-MAT rows are not qualified"
+                "no qualified economizer samples: fan-on proof, |OAT−RAT| ≥ {dt:.1}°C, and a measured MAT are required; off-fan, low-delta, and missing-MAT rows are not qualified"
             )
         }
         "runtime" => "no motor weekly runtime rows for this site and window".into(),

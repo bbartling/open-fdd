@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 110,
-  "pack_sha256": "f451bbfe5377c21781da4382f56b934a2b286d03b6748b5127e28180c511daaa",
+  "pack_sha256": "b89fce902c7a11fad3db6fa64aba595cf4a5302d5a9e81651a04c6d7016de7b2",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -447,8 +447,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/economizer_deltas.sql",
-      "sha256": "1acd53d6f32b33f34d62943197d4e92b7a4311389cd756e525dccd3d3e921f0f",
-      "bytes": 2241
+      "sha256": "16a1cfd15c40cbd2babb62d9dd216f14a30bdecf0bb88c18619a018b0e3c6c9c",
+      "bytes": 2277
     },
     {
       "path": "sql/analytics/postgres/queries/fuel_daily.sql",
@@ -457,8 +457,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/mechanical_cooling_oat_bins.sql",
-      "sha256": "9fc75652de5a21104227beac98aafa06958e75d6ee797111c4bf79af4ff3d55e",
-      "bytes": 2660
+      "sha256": "c6cff7e858e6f2be655c46d1554d17f2f6dc4ae11cfeff6adc6fc98597594d85",
+      "bytes": 2724
     },
     {
       "path": "sql/analytics/postgres/queries/metering_kwh.sql",
@@ -502,8 +502,8 @@
     },
     {
       "path": "sql/analytics/postgres/queries/sensor_faults_staleness.sql",
-      "sha256": "1e29682a4e6870e93f914c9fd69c64bc46aed8899adba90cfa98aea9a893b4e2",
-      "bytes": 1654
+      "sha256": "f54d1f0d841bf4cf7900409be3f39bc623dadc46439b3cf92fd206099b043cb5",
+      "bytes": 1688
     },
     {
       "path": "sql/analytics/postgres/queries/sensor_stats.sql",

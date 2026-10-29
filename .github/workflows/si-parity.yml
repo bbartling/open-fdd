@@ -9,8 +9,13 @@ on:
       - "scripts/qualification/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
+      - "tests/qualification/test_w4f_analytics_si.py"
       - "sql/contract/goldens/**"
       - "docs/rules/cookbook/fixtures/**"
+      - "sql/analytics/**"
+      - "open_fdd/analytics/**"
+      - "services/central/src/analytics/**"
+      - "services/central/src/timescale_analytics.rs"
       - ".github/workflows/si-parity.yml"
   pull_request:
     branches: [master, main]
@@ -20,8 +25,13 @@ on:
       - "scripts/qualification/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
+      - "tests/qualification/test_w4f_analytics_si.py"
       - "sql/contract/goldens/**"
       - "docs/rules/cookbook/fixtures/**"
+      - "sql/analytics/**"
+      - "open_fdd/analytics/**"
+      - "services/central/src/analytics/**"
+      - "services/central/src/timescale_analytics.rs"
       - ".github/workflows/si-parity.yml"
 
 concurrency:
@@ -98,6 +108,9 @@ jobs:
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
             --family W4b_fc1_duct_static
+
+      - name: W4f analytics SI (pandas thresholds vs SQL)
+        run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si -v
 
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |

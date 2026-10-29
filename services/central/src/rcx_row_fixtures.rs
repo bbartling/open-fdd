@@ -117,7 +117,8 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     let state = Arc::new(AppState::new());
     let app = crate::routes::router(state);
 
-    let qualified = post_analytics(&app, "/api/analytics/economizer", SITE, Some(10.0)).await;
+    let dt_min_c = 10.0_f64 * 5.0 / 9.0;
+    let qualified = post_analytics(&app, "/api/analytics/economizer", SITE, Some(dt_min_c)).await;
     let rows = qualified["rows"].as_array().expect("economizer rows");
     assert!(
         crate::analytics_response_fixtures::points_absent_or_empty(&qualified),
@@ -137,11 +138,11 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
         "qualified row keeps measured MAT"
     );
     let delta = row["delta_or_f"].as_f64().expect("delta");
-    assert!(delta.abs() >= 10.0, "qualified |OAT−RAT|={delta}");
+    assert!(delta.abs() >= dt_min_c - 1e-9, "qualified |OAT−RAT|={delta}");
     let resid = row["mat_resid_f"].as_f64().expect("residual");
     assert!(
-        (resid - (-3.2)).abs() < 1e-6,
-        "MAT residual {resid} is the damper mixing difference"
+        (resid - (-3.2_f64 * 5.0 / 9.0)).abs() < 1e-5,
+        "MAT residual {resid} is the damper mixing difference (SI °C)"
     );
     let body = qualified.to_string();
     assert!(body.contains("2026-06-01T12:00:00"), "{body}");
@@ -162,17 +163,18 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
         "missing fan-status row qualified: {body}"
     );
 
-    let tight = post_analytics(&app, "/api/analytics/economizer", SITE, Some(30.0)).await;
+    let tight_dt = 30.0_f64 * 5.0 / 9.0;
+    let tight = post_analytics(&app, "/api/analytics/economizer", SITE, Some(tight_dt)).await;
     assert!(
         tight["rows"].as_array().expect("rows").is_empty(),
-        "22°F delta is below a 30°F gate: {tight}"
+        "22°F-equivalent delta is below a 30°F gate: {tight}"
     );
     assert!(
         warning_text(&tight).contains("not qualified"),
         "tight gate explains the empty result: {tight}"
     );
 
-    let rejected = post_analytics(&app, "/api/analytics/economizer", REJECT, Some(10.0)).await;
+    let rejected = post_analytics(&app, "/api/analytics/economizer", REJECT, Some(dt_min_c)).await;
     assert!(
         rejected["rows"].as_array().expect("rows").is_empty(),
         "{rejected}"
@@ -208,7 +210,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     );
     let mech_rows = mech["rows"].as_array().expect("mech rows");
     assert_eq!(mech_rows.len(), 1, "{mech}");
-    assert_eq!(mech_rows[0]["oat_bin"], "60-70");
+    assert_eq!(mech_rows[0]["oat_bin"], "16-21");
     assert!((mech_rows[0]["run_hours"].as_f64().unwrap_or(0.0) - 1.0).abs() < 1e-6);
 
     let bas = post_analytics(&app, "/api/analytics/bas-vs-web-oat", SITE, None).await;
@@ -221,7 +223,7 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     let t0_pairs: Vec<_> = bas_rows
         .iter()
         .filter(|row| {
-            row.get("bas_oa_t") == Some(&json!(50.0)) && row.get("web_oa_t") == Some(&json!(48.0))
+            row.get("bas_oa_t") == Some(&json!(10.0)) && row.get("web_oa_t") == Some(&json!(8.88888888888889))
         })
         .collect();
     assert_eq!(t0_pairs.len(), 1, "expected one assessable t0 pair: {bas}");
@@ -429,6 +431,10 @@ async fn purge_site(pool: &PgPool, site: &str) {
         .await;
 }
 
+fn fahrenheit_to_celsius(f: f64) -> f64 {
+    (f - 32.0) * 5.0 / 9.0
+}
+
 async fn seed(pool: &PgPool) {
     for site in [SITE, REJECT, EMPTY] {
         sqlx::query("INSERT INTO site (site_id, dis) VALUES ($1, $1)")
@@ -475,9 +481,9 @@ async fn seed(pool: &PgPool) {
         t0,
         EconSample {
             fan: Some(1.0),
-            oa: 50.0,
-            rat: 72.0,
-            mat: Some(60.0),
+            oa: fahrenheit_to_celsius(50.0),
+            rat: fahrenheit_to_celsius(72.0),
+            mat: Some(fahrenheit_to_celsius(60.0)),
             damper: Some(40.0),
         },
     )
@@ -489,9 +495,9 @@ async fn seed(pool: &PgPool) {
         t0 + Duration::hours(1),
         EconSample {
             fan: Some(0.0),
-            oa: 50.0,
-            rat: 72.0,
-            mat: Some(60.0),
+            oa: fahrenheit_to_celsius(50.0),
+            rat: fahrenheit_to_celsius(72.0),
+            mat: Some(fahrenheit_to_celsius(60.0)),
             damper: Some(40.0),
         },
     )
@@ -503,9 +509,9 @@ async fn seed(pool: &PgPool) {
         t0 + Duration::hours(2),
         EconSample {
             fan: Some(1.0),
-            oa: 70.0,
-            rat: 72.0,
-            mat: Some(71.0),
+            oa: fahrenheit_to_celsius(70.0),
+            rat: fahrenheit_to_celsius(72.0),
+            mat: Some(fahrenheit_to_celsius(71.0)),
             damper: Some(40.0),
         },
     )
@@ -517,8 +523,8 @@ async fn seed(pool: &PgPool) {
         t0 + Duration::hours(3),
         EconSample {
             fan: Some(1.0),
-            oa: 50.0,
-            rat: 72.0,
+            oa: fahrenheit_to_celsius(50.0),
+            rat: fahrenheit_to_celsius(72.0),
             mat: None,
             damper: Some(40.0),
         },
@@ -531,9 +537,9 @@ async fn seed(pool: &PgPool) {
         t0 + Duration::hours(4),
         EconSample {
             fan: None,
-            oa: 50.0,
-            rat: 72.0,
-            mat: Some(60.0),
+            oa: fahrenheit_to_celsius(50.0),
+            rat: fahrenheit_to_celsius(72.0),
+            mat: Some(fahrenheit_to_celsius(60.0)),
             damper: Some(40.0),
         },
     )
@@ -560,11 +566,25 @@ async fn seed(pool: &PgPool) {
     insert_sample(pool, SITE, t0, &format!("{EXTRA}.duct_static"), 9.9).await;
     insert_sample(pool, SITE, t0, &format!("{EXTRA}.duct_static_sp"), 9.9).await;
 
-    insert_sample(pool, SITE, t0, &format!("{WEATHER}.web_oa_t"), 48.0).await;
+    insert_sample(
+        pool,
+        SITE,
+        t0,
+        &format!("{WEATHER}.web_oa_t"),
+        fahrenheit_to_celsius(48.0),
+    )
+    .await;
 
     let cool = t0 + Duration::hours(10);
     insert_sample(pool, SITE, cool, &format!("{CHILLER}.chiller_status"), 1.0).await;
-    insert_sample(pool, SITE, cool, &format!("{WEATHER}.web_oa_t"), 65.0).await;
+    insert_sample(
+        pool,
+        SITE,
+        cool,
+        &format!("{WEATHER}.web_oa_t"),
+        fahrenheit_to_celsius(65.0),
+    )
+    .await;
     insert_sample(
         pool,
         SITE,
@@ -578,7 +598,7 @@ async fn seed(pool: &PgPool) {
         SITE,
         cool + Duration::hours(1),
         &format!("{WEATHER}.web_oa_t"),
-        65.0,
+        fahrenheit_to_celsius(65.0),
     )
     .await;
 
@@ -589,9 +609,9 @@ async fn seed(pool: &PgPool) {
         t0,
         EconSample {
             fan: Some(0.0),
-            oa: 50.0,
-            rat: 72.0,
-            mat: Some(60.0),
+            oa: fahrenheit_to_celsius(50.0),
+            rat: fahrenheit_to_celsius(72.0),
+            mat: Some(fahrenheit_to_celsius(60.0)),
             damper: Some(40.0),
         },
     )
@@ -602,9 +622,9 @@ async fn seed(pool: &PgPool) {
         t0 + Duration::hours(1),
         EconSample {
             fan: Some(1.0),
-            oa: 71.0,
-            rat: 72.0,
-            mat: Some(71.5),
+            oa: fahrenheit_to_celsius(71.0),
+            rat: fahrenheit_to_celsius(72.0),
+            mat: Some(fahrenheit_to_celsius(71.5)),
             damper: Some(20.0),
         },
     )
@@ -615,8 +635,8 @@ async fn seed(pool: &PgPool) {
         t0 + Duration::hours(2),
         EconSample {
             fan: Some(1.0),
-            oa: 40.0,
-            rat: 72.0,
+            oa: fahrenheit_to_celsius(40.0),
+            rat: fahrenheit_to_celsius(72.0),
             mat: None,
             damper: Some(80.0),
         },
@@ -635,7 +655,14 @@ struct EconSample {
 async fn insert_econ(pool: &PgPool, site: &str, ts: chrono::DateTime<Utc>, sample: EconSample) {
     insert_sample(pool, site, ts, &format!("{AHU}.oa_t"), sample.oa).await;
     insert_sample(pool, site, ts, &format!("{AHU}.rat"), sample.rat).await;
-    insert_sample(pool, site, ts, &format!("{AHU}.sat"), 55.0).await;
+    insert_sample(
+        pool,
+        site,
+        ts,
+        &format!("{AHU}.sat"),
+        fahrenheit_to_celsius(55.0),
+    )
+    .await;
     if let Some(value) = sample.mat {
         insert_sample(pool, site, ts, &format!("{AHU}.mat"), value).await;
     }
