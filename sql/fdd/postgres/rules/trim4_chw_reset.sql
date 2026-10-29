@@ -24,13 +24,11 @@ base AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CASE WHEN chw_reset_request_sum IS NOT NULL THEN 1 ELSE 0 END AS request_present,
     CAST(CASE
       WHEN COALESCE(proof_on, 0) = 0 THEN 0
       WHEN chw_supply_t IS NULL THEN 0
-      WHEN chw_reset_request_sum IS NULL THEN 0
       WHEN chw_supply_t < {{CHW_LO}}
-       AND chw_reset_request_sum <= {{REQUEST_LO}} THEN 1
+       AND COALESCE(chw_reset_request_sum, 0) <= {{REQUEST_LO}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
@@ -93,7 +91,6 @@ final AS (
   SELECT
     equipment_id,
     held_seconds,
-    request_present,
     CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
@@ -101,11 +98,6 @@ SELECT
   equipment_id,
   SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
   SUM(held_seconds) / 3600.0 AS covered_hours,
-  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct,
-  CASE
-    WHEN MAX(request_present) = 0 THEN 'SKIPPED_MISSING_ROLES'
-    WHEN SUM(confirmed) > 0 THEN 'FAULT'
-    ELSE 'PASS'
-  END AS status
+  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM final
 GROUP BY equipment_id;

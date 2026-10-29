@@ -5690,7 +5690,6 @@ rules:
   - chiller_status
   - chw_flow
   - chw_pump_cmd
-  - hw_reset_request_sum
   output_columns:
   - equipment_id
   - fault_hours
@@ -5774,7 +5773,6 @@ rules:
   - chiller_status
   - chw_flow
   - chw_pump_cmd
-  - chw_reset_request_sum
   output_columns:
   - equipment_id
   - fault_hours
