@@ -295,7 +295,7 @@ impl MemoryStore {
         };
         super::postgres::PortalBudgetStatus {
             paused_until: budget.paused_until.filter(|until| *until > now),
-            tokens_remaining: Some(budget.tokens),
+            tokens_remaining: i32::try_from(budget.tokens).ok(),
         }
     }
 

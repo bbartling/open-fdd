@@ -36,6 +36,12 @@ pub enum CatchupMode {
     Asap,
 }
 
+impl Default for CatchupMode {
+    fn default() -> Self {
+        Self::Normal
+    }
+}
+
 impl CatchupMode {
     pub fn as_str(self) -> &'static str {
         match self {

@@ -171,17 +171,14 @@ async fn tick(state: &Arc<AppState>, owner: &str) -> Result<(), String> {
                 FinishRequest::new(owner, job.job_id, job.fencing_token, finished_at, outcome);
             finish.active_model_revision = decision.active_model_revision;
             finish.active_points_digest = decision.active_points_digest;
+            let sample_count = u64::try_from(decision.applied_samples.len()).unwrap_or(0);
             finish.applied_samples = decision.applied_samples;
             if let Err(err) = state.ingest_queue.finish(&finish).await {
                 warn!(job_id = %job.job_id, error = %err, "ingest finish rejected");
-            } else if !decision.applied_samples.is_empty() {
+            } else if sample_count > 0 {
                 let key = super::binding_state::DeviceBindingKey::from_job(&job);
                 if let Ok(mut guard) = state.ingest_queue.catchup_registry().write() {
-                    guard.record_finish(
-                        &key,
-                        finished_at,
-                        u64::try_from(decision.applied_samples.len()).unwrap_or(0),
-                    );
+                    guard.record_finish(&key, finished_at, sample_count);
                 }
             }
             let key = super::cursor::CursorKey {
