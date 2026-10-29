@@ -182,10 +182,7 @@ mod tests {
         std::env::remove_var("OPENFDD_SQL_RULES_DIR");
         let expected = tmp.join("tuning_catalog.json");
         let err = load_catalog_map().expect_err("expected missing catalog error");
-        assert!(
-            err.contains(&expected.display().to_string()),
-            "{err}"
-        );
+        assert!(err.contains(&expected.display().to_string()), "{err}");
         match prev_root {
             Some(v) => std::env::set_var("OPENFDD_SQL_ROOT", v),
             None => std::env::remove_var("OPENFDD_SQL_ROOT"),
