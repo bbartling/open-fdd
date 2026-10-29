@@ -2,8 +2,8 @@
 
 use chrono::{TimeZone, Utc};
 use fdd_tsdb::{
-    apply_sample_cutover_tx, dry_run_site, ensure_si_cutover_schema, mark_analytics_cache_stale,
-    SampleRow, Tsdb, UpsertBatch, QUALITY_UNIT_UNDECLARED,
+    apply_sample_cutover_tx, dry_run_site, mark_analytics_cache_stale, SampleRow, Tsdb, UpsertBatch,
+    QUALITY_UNIT_UNDECLARED,
 };
 use sqlx::postgres::PgPoolOptions;
 use tokio::sync::OnceCell;

@@ -20,7 +20,8 @@ use serde_json::{json, Map, Value};
 use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::audit::{AuditAction, AuditEvent, HandlerResult, ReasonCode, TargetType};
-use crate::routes::{require_hub_admin, AppState};
+use crate::routes::require_hub_admin;
+use crate::state::AppState;
 
 const SI_CUTOVER_TOKEN_KEY: &str = "si_cutover_token";
 const PARAM_RENAME_JSON: &str = include_str!("../../../sql/contract/parameter_si_rename_map.json");
@@ -454,7 +455,7 @@ pub async fn si_cutover_post_handler(
     audit.target(TargetType::Route, "/api/admin/si-cutover");
     let user = require_hub_admin(&state, &headers, &mut audit)?;
     if !body.confirm {
-        audit.reason(ReasonCode::ValidationFailed);
+        audit.reason(ReasonCode::InvalidRequest);
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({"ok": false, "error": "confirm:true required"})),
@@ -465,7 +466,7 @@ pub async fn si_cutover_post_handler(
         Json(json!({"ok": false, "error": "OPENFDD_SI_CUTOVER_TOKEN not configured"})),
     ))?;
     if body.token.trim() != expected {
-        audit.reason(ReasonCode::ValidationFailed);
+        audit.reason(ReasonCode::InvalidRequest);
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({"ok": false, "error": "invalid cutover token"})),
@@ -525,7 +526,7 @@ pub async fn si_cutover_post_handler(
             .await
             .map_err(map_si_err)?;
         sample_result.params_revisions_written =
-            write_si_rule_config_revisions(&mut tx, site_id, &user.username)
+            write_si_rule_config_revisions(&mut tx, site_id, &user.sub)
                 .await
                 .map_err(|e| {
                     (
