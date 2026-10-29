@@ -33,12 +33,12 @@ macro_rules! sample_on_conflict {
           unit = COALESCE(EXCLUDED.unit, sample.unit),
           quality = COALESCE(EXCLUDED.quality, sample.quality),
           haystack_id = COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
-        WHERE (sample.val, sample.unit, sample.quality, sample.haystack_id)
+        WHERE (val, unit, quality, haystack_id)
           IS DISTINCT FROM (
             EXCLUDED.val,
-            COALESCE(EXCLUDED.unit, sample.unit),
-            COALESCE(EXCLUDED.quality, sample.quality),
-            COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
+            COALESCE(EXCLUDED.unit, unit),
+            COALESCE(EXCLUDED.quality, quality),
+            COALESCE(EXCLUDED.haystack_id, haystack_id)
           )
         "#
     };
@@ -353,6 +353,8 @@ mod tests {
                 val double precision,
                 PRIMARY KEY (import_id, site_id, openfdd_key, ts)
             )",
+            "ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS unit text",
+            "ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS quality text",
         ] {
             // Concurrent fixtures may race on the catalog; the table exists either way.
             if let Err(err) = sqlx::query(ddl).execute(&pool).await {

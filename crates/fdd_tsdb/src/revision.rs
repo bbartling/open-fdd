@@ -746,6 +746,8 @@ mod tests {
                 val double precision,
                 PRIMARY KEY (import_id, site_id, openfdd_key, ts)
             )",
+            "ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS unit text",
+            "ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS quality text",
         ] {
             if let Err(err) = sqlx::query(ddl).execute(pool).await {
                 assert!(ignorable_catalog_race(&err), "{ddl}: {err}");
