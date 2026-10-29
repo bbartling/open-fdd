@@ -137,8 +137,14 @@ def registry_rules() -> dict[str, dict]:
 
 
 def render_sql(rule: dict) -> str:
+    from scripts.ci import unit_contract_lib as uc
+    from scripts.stress.si_cutover.ci_fixtures_lib import convert_params_to_ip, rule_params_from_registry
+
     path = ROOT / "sql" / "fdd" / "postgres" / "rules" / rule["sql_file"]
     raw = path.read_text(encoding="utf-8")
+    metric = uc.load_json(uc.METRIC_UNITS)
+    reg_params = rule_params_from_registry(rule)
+    ip_params = convert_params_to_ip(rule, reg_params, metric)
     params = {
         "POLL_SECONDS": str(POLL),
         "CONFIRM_SECONDS": "300",
@@ -148,9 +154,15 @@ def render_sql(rule: dict) -> str:
         "MODE_DELAY_ROWS_PRECEDING": "0",
         "MAX_GAP_HOURS": "1",
     }
-    for spec in (rule.get("parameters") or {}).values():
+    for name, spec in (rule.get("parameters") or {}).items():
         key = spec.get("sql_placeholder")
-        if key:
+        if not key:
+            continue
+        if name in ip_params:
+            params[str(key)] = str(ip_params[name])
+        elif name in reg_params:
+            params[str(key)] = str(reg_params[name])
+        elif spec.get("default") is not None:
             params[str(key)] = str(spec.get("default"))
     for key, value in params.items():
         raw = raw.replace("{{" + key + "}}", value)
