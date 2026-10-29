@@ -26,6 +26,7 @@ pub struct QueueClient {
     memory: Arc<MemoryStore>,
     postgres: Arc<Mutex<Option<PgPool>>>,
     budget: BudgetDefaults,
+    catchup: super::catchup_registry::SharedCatchupRegistry,
 }
 
 impl QueueClient {
@@ -35,7 +36,12 @@ impl QueueClient {
             memory: Arc::new(MemoryStore::new(budget)),
             postgres: Arc::new(Mutex::new(None)),
             budget,
+            catchup: super::catchup_registry::shared_registry(),
         }
+    }
+
+    pub fn catchup_registry(&self) -> super::catchup_registry::SharedCatchupRegistry {
+        Arc::clone(&self.catchup)
     }
 
     pub fn coordination() -> Coordination {
@@ -82,6 +88,17 @@ impl QueueClient {
             return postgres::renew_scheduler(&pool, owner, token, now, ttl).await;
         }
         Ok(self.memory.renew_scheduler(owner, token, now, ttl))
+    }
+
+    pub async fn portal_budget_status(
+        &self,
+        provider_instance_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<super::postgres::PortalBudgetStatus, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            return postgres::portal_budget_status(&pool, provider_instance_id, now).await;
+        }
+        self.memory.portal_budget_status(provider_instance_id, now)
     }
 
     pub async fn note_throttle(
@@ -299,7 +316,7 @@ impl QueueClient {
             .prune_applied_samples(tenant_id, canonical_site, now, retention))
     }
 
-    pub(crate) async fn postgres_pool(&self) -> Result<Option<PgPool>, QueueError> {
+    pub async fn postgres_pool(&self) -> Result<Option<PgPool>, QueueError> {
         self.pool_if_configured().await
     }
 

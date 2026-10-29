@@ -138,9 +138,6 @@ impl std::fmt::Display for UnitFlag {
     }
 }
 
-/// Historian temperature unit. SQL FDD stores °F (`imperial-f-v1`).
-const CANONICAL_TEMPERATURE_UNIT: &str = "degF";
-
 #[derive(Clone, PartialEq, Eq)]
 enum UnitClass {
     Celsius,
@@ -233,10 +230,10 @@ struct AdmittedUnit {
     from: &'static str,
 }
 
-/// Convert one portal sample into canonical units before the Timescale write.
+/// Validate NF/site-file units and stamp declared source metadata before ingest.
 ///
-/// The site-file `units` value is used only when NF omitted the unit or reported
-/// it as unknown. A disagreement is returned and the sample is left unchanged.
+/// Range checks use °F band limits; °C portal values are converted only for that
+/// comparison. Sample values and declared units are not rewritten for SI here.
 pub fn apply_nf_unit_policy(sample: &mut super::types::NormalizedSample) -> Result<(), UnitFlag> {
     if attr_owned(&sample.attrs, "nf_unit_policy").as_deref() == Some("applied") {
         return Ok(());
@@ -280,26 +277,21 @@ pub fn apply_nf_unit_policy(sample: &mut super::types::NormalizedSample) -> Resu
         }
     };
     if matches!(admitted.class, UnitClass::Celsius | UnitClass::Fahrenheit) {
-        let canonical = match admitted.class {
-            UnitClass::Celsius => fdd_core::celsius_to_fahrenheit(sample.val),
-            _ => sample.val,
-        };
         let (low, high) = temperature_bounds(&sample.role);
-        if !canonical.is_finite() || canonical < low || canonical > high {
+        let check_val = match admitted.class {
+            UnitClass::Celsius => fdd_core::celsius_to_fahrenheit(sample.val),
+            UnitClass::Fahrenheit => sample.val,
+            UnitClass::Percent | UnitClass::Other(_) => sample.val,
+        };
+        if !check_val.is_finite() || check_val < low || check_val > high {
             return Err(UnitFlag::Range {
-                canonical,
+                canonical: check_val,
                 low,
                 high,
             });
         }
-        sample.val = canonical;
-        sample.unit = Some(CANONICAL_TEMPERATURE_UNIT.to_string());
+        sample.unit = Some(admitted.source.clone());
         put_attr(&mut sample.attrs, "source_unit", &admitted.source);
-        put_attr(
-            &mut sample.attrs,
-            "canonical_unit",
-            CANONICAL_TEMPERATURE_UNIT,
-        );
         put_attr(&mut sample.attrs, "unit_from", admitted.from);
     } else {
         put_attr(&mut sample.attrs, "source_unit", &admitted.source);
@@ -1318,7 +1310,7 @@ mod tests {
     }
 
     #[test]
-    fn celsius_portal_unit_is_stored_as_fahrenheit() {
+    fn celsius_portal_unit_keeps_declared_value_for_si_ingest() {
         let accepted = zoned(
             "11111111-1111-4111-8111-111111111111",
             "zone-air-temp",
@@ -1329,8 +1321,8 @@ mod tests {
         assert!(accepted.unit_flags.is_empty());
         assert_eq!(accepted.samples.len(), 1);
         let sample = &accepted.samples[0];
-        assert!((sample.val - 69.8).abs() < 1e-9);
-        assert_eq!(sample.unit.as_deref(), Some("degF"));
+        assert!((sample.val - 21.0).abs() < 1e-9);
+        assert_eq!(sample.unit.as_deref(), Some("DEGREES_CELSIUS"));
         assert_eq!(
             sample.attrs.get("source_unit").and_then(|v| v.as_str()),
             Some("DEGREES_CELSIUS")
@@ -1354,8 +1346,8 @@ mod tests {
         );
         assert!(accepted.unit_flags.is_empty());
         let sample = &accepted.samples[0];
-        assert!((sample.val - 32.0).abs() < 1e-9);
-        assert_eq!(sample.unit.as_deref(), Some("degF"));
+        assert!((sample.val - 0.0).abs() < 1e-9);
+        assert_eq!(sample.unit.as_deref(), Some("degC"));
         assert_eq!(
             sample.attrs.get("source_unit").and_then(|v| v.as_str()),
             Some("degC")
@@ -1429,7 +1421,8 @@ mod tests {
             None,
         );
         assert!(plant.unit_flags.is_empty());
-        assert!((plant.samples[0].val - 194.0).abs() < 1e-9);
+        assert!((plant.samples[0].val - 90.0).abs() < 1e-9);
+        assert_eq!(plant.samples[0].unit.as_deref(), Some("DEGREES_CELSIUS"));
     }
 
     #[test]
