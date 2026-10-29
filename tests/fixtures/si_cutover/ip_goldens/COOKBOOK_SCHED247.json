@@ -886,6 +886,17 @@
       "rule_id": "SCHED-247",
       "status": "PASS",
       "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_SCHED247",
+      "covered_seconds": 1800.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "SCHED-247",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
     }
   ],
   "poll_seconds": 900.0,

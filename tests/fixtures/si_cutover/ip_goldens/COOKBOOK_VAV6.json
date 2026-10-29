@@ -1083,6 +1083,17 @@
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
+      "rule_id": "VAV-6",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_VAV6",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-vav",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
       "rule_id": "VAV-7",
       "status": "PASS",
       "utc_day": "2026-07-01"

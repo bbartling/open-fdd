@@ -7,6 +7,30 @@
       "description": "FC1 duct static (GL36 A) — T1284-4 blocking scope",
       "rules": ["FC1"]
     },
+    "W4b_ahu_econ": {
+      "wave": "W4b",
+      "description": "AHU economizer + ventilation SI family (#1284 W4b)",
+      "rules": [
+        "ECON-1",
+        "ECON-2",
+        "ECON-3",
+        "ECON-4",
+        "ECON-5",
+        "ECON-6",
+        "ECON-7",
+        "AHU-SATDEV",
+        "AHU-DUCTHI",
+        "AHU-SIMUL",
+        "MECH-OAT-1",
+        "CMD-1",
+        "OA-1",
+        "DMP-1",
+        "VLV-1",
+        "PID-HUNT-1",
+        "RESET-1",
+        "FAN-RUNTIME-HOURS"
+      ]
+    },
     "W4e_sensor_validation": {
       "wave": "W4e",
       "description": "Sensor validation SV-* — pandas SI vs IP parity row",

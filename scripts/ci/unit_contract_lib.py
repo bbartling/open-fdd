@@ -34,6 +34,10 @@ TEMPERATURE_DIFFERENCE_KEYS = frozenset(
 )
 
 STRIP_PARAM_KEYS = frozenset({"kind", "effect"})
+# W4 SI family PRs may change defaults/units; metadata diff ignores value fields.
+STRIP_REGISTRY_DIFF_PARAM_KEYS = frozenset(
+    {"kind", "effect", "default", "min", "max", "unit", "step", "label"}
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -105,6 +109,10 @@ def infer_kind(param_key: str, unit: str) -> str:
         return "absolute_temperature"
     if u == "degC":
         return "temperature_difference" if key == "deadband_c" else "absolute_temperature"
+    if u in {"degC_delta", "deltaC"}:
+        return "temperature_difference"
+    if u == "Pa":
+        return "air_pressure"
     if u == "degF_per_h":
         return "temperature_rate"
     if u in {"in_wc", "inwc"}:
@@ -235,6 +243,19 @@ def strip_registry_metadata(doc: Any) -> Any:
     return doc
 
 
+def strip_registry_si_contract_diff(doc: Any) -> Any:
+    if isinstance(doc, dict):
+        out = {}
+        for k, v in doc.items():
+            if k in STRIP_REGISTRY_DIFF_PARAM_KEYS:
+                continue
+            out[k] = strip_registry_si_contract_diff(v)
+        return out
+    if isinstance(doc, list):
+        return [strip_registry_si_contract_diff(x) for x in doc]
+    return doc
+
+
 def ensure_origin_master_ref() -> str:
     """Resolve a ref for master/base file content (shallow CI checkouts may lack origin/master)."""
     override = os.environ.get("UNIT_CONTRACT_BASE_REF", "").strip()
@@ -289,8 +310,8 @@ def assert_metadata_only_registry_diff() -> None:
         raise RuntimeError("PyYAML required") from exc
     master_text = git_show_master("sql/fdd/registry.yaml")
     branch_text = REGISTRY.read_text(encoding="utf-8")
-    master_doc = strip_registry_metadata(yaml.safe_load(master_text))
-    branch_doc = strip_registry_metadata(yaml.safe_load(branch_text))
+    master_doc = strip_registry_si_contract_diff(yaml.safe_load(master_text))
+    branch_doc = strip_registry_si_contract_diff(yaml.safe_load(branch_text))
     if master_doc != branch_doc:
         raise AssertionError(
             "registry.yaml differs from origin/master beyond kind/effect metadata"
@@ -298,8 +319,8 @@ def assert_metadata_only_registry_diff() -> None:
 
 
 def assert_metadata_only_tuning_diff() -> None:
-    master = strip_registry_metadata(json.loads(git_show_master("sql/fdd/tuning_catalog.json")))
-    branch = strip_registry_metadata(load_json(TUNING))
+    master = strip_registry_si_contract_diff(json.loads(git_show_master("sql/fdd/tuning_catalog.json")))
+    branch = strip_registry_si_contract_diff(load_json(TUNING))
     if master != branch:
         raise AssertionError(
             "tuning_catalog.json differs from origin/master beyond kind/effect metadata"

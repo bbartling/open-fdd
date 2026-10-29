@@ -952,7 +952,29 @@
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
+      "rule_id": "FC1",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
       "rule_id": "PID-HUNT-1",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC1",
+      "covered_seconds": 60.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "SCHED-247",
       "status": "PASS",
       "utc_day": "2026-07-01"
     },

@@ -21,6 +21,8 @@ on:
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "sql/contract/goldens/**"
+      - "sql/fdd/**"
+      - "open_fdd/**"
       - "docs/rules/cookbook/fixtures/**"
       - ".github/workflows/si-parity.yml"
 
@@ -98,6 +100,11 @@ jobs:
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
             --family W4b_fc1_duct_static
+
+      - name: Blocking W4b AHU econ SI family (P1/P2 scope)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4b_ahu_econ
 
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |

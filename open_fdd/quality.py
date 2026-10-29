@@ -58,6 +58,74 @@ ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "pump-speed-feedback": (0.0, 100.0),
 }
 
+# metric-c-v2 storage bounds (canonical SI units matching ROLE_BOUNDS semantics).
+_CFPM_TO_LPS = 0.471947
+_INWC_TO_PA = 248.84
+
+
+def _f_abs_to_c(v: float) -> float:
+    return (v - 32.0) * 5.0 / 9.0
+
+
+def _storage_si(df: pd.DataFrame) -> bool:
+    us = str(df.attrs.get("unit_system") or "").strip().lower()
+    if us in ("metric", "si"):
+        return True
+    for key in ("role_units", "units_map"):
+        block = df.attrs.get(key)
+        if not isinstance(block, dict):
+            continue
+        for unit in block.values():
+            tok = str(unit).strip().lower().replace(" ", "")
+            if tok in {"°c", "degc", "c", "celsius"}:
+                return True
+    return False
+
+
+def _convert_ip_bounds_to_si(
+    family: str, bounds: tuple[float | None, float | None]
+) -> tuple[float | None, float | None]:
+    lo, hi = bounds
+    if family in {
+        "zone-air-temp",
+        "zone-temp",
+        "discharge-air-temp",
+        "supply-air-temp",
+        "mixed-air-temp",
+        "return-air-temp",
+        "outside-air-temp",
+        "chilled-water-supply-temp",
+        "chilled-water-return-temp",
+        "hot-water-supply-temp",
+        "hot-water-return-temp",
+    }:
+        return (
+            _f_abs_to_c(lo) if lo is not None else None,
+            _f_abs_to_c(hi) if hi is not None else None,
+        )
+    if family == "duct-static-pressure":
+        return (
+            lo * _INWC_TO_PA if lo is not None else None,
+            hi * _INWC_TO_PA if hi is not None else None,
+        )
+    if family in {"zone-airflow", "supply-airflow", "airflow", "chw-flow", "water-flow"}:
+        return (
+            lo * _CFPM_TO_LPS if lo is not None else None,
+            hi * _CFPM_TO_LPS if hi is not None else None,
+        )
+    return bounds
+
+
+def role_bounds_for_frame(role: str, df: pd.DataFrame) -> tuple[float | None, float | None] | None:
+    family = _role_family(role)
+    ip = ROLE_BOUNDS.get(family)
+    if ip is None:
+        return None
+    if not _storage_si(df):
+        return ip
+    return _convert_ip_bounds_to_si(family, ip)
+
+
 STATUS_ROLES = {
     "fan-status",
     "pump-status",
@@ -320,7 +388,12 @@ def assess_frame(
     for role in cols:
         if role not in df.columns:
             continue
-        rq = normalize_role_series(df[role], role, sentinels=sentinels)
+        rq = normalize_role_series(
+            df[role],
+            role,
+            sentinels=sentinels,
+            bounds=role_bounds_for_frame(role, df),
+        )
         fq.roles[role] = rq
         any_valid = any_valid | rq.valid
         totals["valid"] += rq.valid_sample_count

@@ -63,6 +63,25 @@ class SiParityGateBlockingTests(unittest.TestCase):
         failures = self.gate._blocking_errors([p1], blocking=True, scope={"FC1"})
         self.assertEqual(len(failures), 1)
 
+    def test_scoped_blocking_passes_w4b_ahu_econ(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(STRESS / "si_parity_gate.py"),
+                "--fixtures-only",
+                "--blocking",
+                "--family",
+                "W4b_ahu_econ",
+            ],
+            cwd=str(REPO),
+            check=False,
+        )
+        self.assertEqual(
+            proc.returncode,
+            0,
+            "W4b AHU econ family: scoped P1/P2 gate should PASS",
+        )
+
     def test_scoped_blocking_passes_despite_p0_fc1_mismatches(self) -> None:
         proc = subprocess.run(
             [
