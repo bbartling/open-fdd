@@ -15,7 +15,9 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 use crate::client::Tsdb;
-use crate::ingest_si::{prepare_numeric_sample, PointMapBinding, SampleDeclaredContext};
+use crate::ingest_si::{
+    finalize_staged_numeric, prepare_numeric_sample, PointMapBinding, SampleDeclaredContext,
+};
 use crate::sample::{SampleRow, UpsertBatch};
 use fdd_core::MetricUnitsContract;
 
@@ -446,12 +448,18 @@ async fn stage_one_csv(
                     ..Default::default()
                 },
             );
+            let Some(staged) = finalize_staged_numeric(val, prepared) else {
+                continue;
+            };
+            let Some(stored_val) = staged.val else {
+                continue;
+            };
             pending.insert(
                 (ts_s.clone(), openfdd_key),
                 StagedSample {
-                    val: prepared.val.unwrap_or(val),
-                    unit: prepared.unit,
-                    quality: prepared.quality,
+                    val: stored_val,
+                    unit: staged.unit,
+                    quality: staged.quality,
                 },
             );
         }

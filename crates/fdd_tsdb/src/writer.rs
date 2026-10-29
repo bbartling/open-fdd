@@ -353,6 +353,8 @@ mod tests {
                 val double precision,
                 PRIMARY KEY (import_id, site_id, openfdd_key, ts)
             )",
+            "ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS unit text",
+            "ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS quality text",
         ] {
             // Concurrent fixtures may race on the catalog; the table exists either way.
             if let Err(err) = sqlx::query(ddl).execute(&pool).await {

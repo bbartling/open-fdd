@@ -60,7 +60,7 @@ fn fetch(scope: &Scope, offset: i64, val: f64) -> Fetched {
         equip_type: Some("ahu".into()),
         ts,
         val,
-        unit: Some("°F".into()),
+        unit: Some("degF".into()),
         source_quality: None,
         attrs: serde_json::Map::new(),
     };
@@ -212,7 +212,7 @@ async fn stale_owner_is_fenced(replica_a: &PgPool, replica_b: &PgPool, scope: &S
     );
     assert_eq!(
         canonical_values(replica_b, &scope.site, sample_ts(0)).await,
-        vec![2.0],
+        vec![fdd_core::fahrenheit_to_celsius(2.0)],
         "canonical history must keep the reclaiming owner's value"
     );
     assert!(
@@ -253,7 +253,7 @@ async fn live_owner_commits(replica_a: &PgPool, replica_b: &PgPool, scope: &Scop
         .expect("owner a receipt");
     assert_eq!(
         canonical_values(replica_b, &scope.site, sample_ts(1)).await,
-        vec![1.0]
+        vec![fdd_core::fahrenheit_to_celsius(1.0)]
     );
     assert_eq!(receipt_count(replica_b, job.job_id).await, 1);
     assert_eq!(job_state(replica_b, job.job_id).await, "committed");

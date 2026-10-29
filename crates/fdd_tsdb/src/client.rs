@@ -279,12 +279,12 @@ impl Tsdb {
                 .await?;
                 sqlx::query(
                     r#"
-                    INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, unit, equipment_id)
+                    INSERT INTO point_map(site_id, openfdd_key, haystack_id, role, source_unit, equipment_id)
                     VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (site_id, openfdd_key) DO UPDATE
                       SET haystack_id = EXCLUDED.haystack_id,
                           role = EXCLUDED.role,
-                          unit = COALESCE(EXCLUDED.unit, point_map.unit),
+                          source_unit = COALESCE(EXCLUDED.source_unit, point_map.source_unit),
                           equipment_id = EXCLUDED.equipment_id
                     "#,
                 )
@@ -292,7 +292,11 @@ impl Tsdb {
                 .bind(&row.openfdd_key)
                 .bind(row.haystack_id.as_deref().unwrap_or(&row.openfdd_key))
                 .bind(role)
-                .bind(&row.unit)
+                .bind(
+                    row.source_unit
+                        .as_deref()
+                        .or(row.unit.as_deref()),
+                )
                 .bind(equip)
                 .execute(&mut **tx)
                 .await?;
@@ -548,10 +552,10 @@ async fn load_point_map_bindings(
         out.insert(
             key,
             StoredPointBinding {
-                unit: row.try_get("unit").ok(),
-                source_unit: row.try_get("source_unit").ok(),
-                quantity: row.try_get("quantity").ok(),
-                role: row.try_get("role").ok(),
+                unit: row.try_get::<Option<String>, _>("unit")?,
+                source_unit: row.try_get::<Option<String>, _>("source_unit")?,
+                quantity: row.try_get::<Option<String>, _>("quantity")?,
+                role: row.try_get::<Option<String>, _>("role")?,
             },
         );
     }
