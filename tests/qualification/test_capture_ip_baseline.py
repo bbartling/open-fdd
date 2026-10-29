@@ -86,7 +86,7 @@ class CaptureRequirements(unittest.TestCase):
             {"OPENFDD_AGENT_PASSWORD": "from-env"},
             clear=True,
         ):
-            args = argparse.Namespace(password="")
+            args = argparse.Namespace(password=None)
             self.assertEqual(capture.resolve_capture_password(args), "from-env")
         args_explicit = argparse.Namespace(password="cli")
         self.assertEqual(capture.resolve_capture_password(args_explicit), "cli")
@@ -301,6 +301,58 @@ class CaptureFixtureStack(unittest.TestCase):
             self.assertEqual(persisted["run_id"], "run-ci-1")
 
 
+class DailyFaultSecondsTest(unittest.TestCase):
+    def test_forward_hold_at_utc_midnight_boundary(self) -> None:
+        import pandas as pd
+
+        idx = pd.DatetimeIndex(
+            ["2026-06-01T23:55:00+00:00", "2026-06-02T00:00:00+00:00"],
+            tz="UTC",
+        )
+        confirmed = pd.Series([True, False], index=idx)
+        fault_days, covered_days = capture.daily_fault_and_covered_seconds(
+            confirmed, idx, poll_seconds=300.0
+        )
+        self.assertAlmostEqual(fault_days["2026-06-01"], 300.0)
+        self.assertAlmostEqual(covered_days["2026-06-01"], 300.0)
+        self.assertEqual(fault_days.get("2026-06-02", 0.0), 0.0)
+
+
+class EquipmentFrameMetadataTest(unittest.TestCase):
+    def test_equipment_frame_from_db_stamps_equipment_type(self) -> None:
+        import pandas as pd
+
+        idx = pd.date_range("2026-06-01", periods=3, freq="5min", tz="UTC")
+        with mock.patch.object(
+            capture,
+            "post_sparql",
+            return_value=[
+                {
+                    "column": "dsp",
+                    "fddSelection": "duct-static-pressure",
+                    "openfdd_key": "AHU_1.dsp",
+                },
+            ],
+        ):
+            with mock.patch.object(
+                capture,
+                "load_samples_in_window",
+                return_value=[(ts, 1.0) for ts in idx],
+            ):
+                frame = capture.equipment_frame_from_db(
+                    mock.MagicMock(),
+                    mock.MagicMock(),
+                    {},
+                    building_id="SITE_X",
+                    equipment_id="AHU_1",
+                    window_start="2026-06-01T00:00:00Z",
+                    window_end="2026-06-01T01:00:00Z",
+                    equipment_type="ahu",
+                )
+        self.assertEqual(frame.attrs.get("equipment_type"), "ahu")
+        self.assertEqual(frame.attrs.get("equipType"), "ahu")
+
+
 class CollectPandasFddRowsIntegration(unittest.TestCase):
     """Exercise collect_pandas_fdd_rows end-to-end (oracle import + run_rule)."""
 
@@ -315,22 +367,27 @@ class CollectPandasFddRowsIntegration(unittest.TestCase):
         window_end = "2026-06-01T06:00:00Z"
         idx = pd.date_range("2026-06-01", periods=24, freq="5min", tz="UTC")
 
-        def fake_equipment_frame(*_args, **_kwargs):
-            frame = pd.DataFrame(
-                {
-                    "duct-static-pressure": [1.25] * len(idx),
-                    "duct-static-pressure-sp": [1.5] * len(idx),
-                    "fan-cmd": [1.0] * len(idx),
-                    "fan-status": [1.0] * len(idx),
-                },
-                index=idx,
-            )
-            frame.attrs.update(
-                equipment_id="AHU_1",
-                building_id=building_id,
-                equipment_type="ahu",
-            )
-            return frame
+        sparql_points = [
+            {
+                "column": "dsp",
+                "fddSelection": "duct-static-pressure",
+                "openfdd_key": "AHU_1.dsp",
+            },
+            {
+                "column": "dsps",
+                "fddSelection": "duct-static-pressure-sp",
+                "openfdd_key": "AHU_1.dsps",
+            },
+            {"column": "fc", "fddSelection": "fan-cmd", "openfdd_key": "AHU_1.fc"},
+            {"column": "fs", "fddSelection": "fan-status", "openfdd_key": "AHU_1.fs"},
+        ]
+
+        def fake_load_samples(_conn, *, openfdd_key, **_kwargs):
+            if openfdd_key.endswith(".dsps"):
+                val = 1.5
+            else:
+                val = 1.0 if "fan" in openfdd_key else 1.25
+            return [(ts, val) for ts in idx]
 
         http = mock.MagicMock()
         http.get_json.return_value = {
@@ -338,19 +395,22 @@ class CollectPandasFddRowsIntegration(unittest.TestCase):
         }
         conn = mock.MagicMock()
 
-        with mock.patch.object(capture, "equipment_frame_from_db", side_effect=fake_equipment_frame):
-            rows, coverage, errors = capture.collect_pandas_fdd_rows(
-                http,
-                {},
-                conn,
-                building_id=building_id,
-                rules=fc1_rules,
-                window_start=window_start,
-                window_end=window_end,
-                pandas_max_rules=None,
-            )
+        with mock.patch.object(capture, "post_sparql", return_value=sparql_points):
+            with mock.patch.object(
+                capture, "load_samples_in_window", side_effect=fake_load_samples
+            ):
+                rows, coverage, errors = capture.collect_pandas_fdd_rows(
+                    http,
+                    {},
+                    conn,
+                    building_id=building_id,
+                    rules=fc1_rules,
+                    window_start=window_start,
+                    window_end=window_end,
+                    pandas_max_rules=None,
+                )
 
-        self.assertEqual(errors, errors)
+        self.assertEqual(errors, [])
         self.assertGreater(coverage.get("computed", 0), 0)
         computed = [r for r in rows if r.get("pair_status") == "computed"]
         self.assertTrue(computed, rows)

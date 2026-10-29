@@ -164,13 +164,33 @@ def require_database_url() -> str:
 
 def resolve_capture_password(args: argparse.Namespace) -> str | None:
     """Login password after ``--jwt-env`` is loaded; never log or print."""
-    if args.password:
+    if args.password is not None:
         return str(args.password)
     return (
         os.environ.get("OPENFDD_AGENT_PASSWORD")
         or os.environ.get("OPENFDD_STRESS_PASS")
         or os.environ.get("OPENFDD_ADMIN_PASSWORD")
     )
+
+
+def _pandas_pair_status_from_result(result: Any) -> tuple[str, str] | None:
+    """Map non-computed run_rule outcomes to capture pair_status.
+
+    Returns ``None`` when ``confirmed_fault`` is present and daily seconds should
+    be rolled up.
+    """
+    status = str(getattr(result, "status", "OK"))
+    if getattr(result, "confirmed_fault", None) is not None:
+        return None
+    if status == "ERROR":
+        return ("error", status)
+    applicable = getattr(result, "applicable", True)
+    if not applicable or status.startswith("SKIPPED") or status.startswith("NOT_APPLICABLE"):
+        reason = "missing_roles" if "MISSING_ROLES" in status else status.lower()
+        return ("not_applicable", reason)
+    if status.startswith("NOT_ASSESSED"):
+        return ("not_applicable", status.lower())
+    return ("error", "missing confirmed_fault on result")
 
 
 def db_connect():
@@ -443,22 +463,34 @@ def daily_fault_and_covered_seconds(
     seconds and roll up to UTC calendar days for P0 comparison.
     """
     import pandas as pd
-    from open_fdd.rules.base import hours_true
+    from open_fdd.rules.base import _eligible_hold_seconds
 
     confirmed = confirmed_mask.reindex(sample_index).fillna(False).astype(bool)
     all_true = pd.Series(True, index=sample_index)
     fault_days: dict[str, float] = {}
     covered_days: dict[str, float] = {}
     if not isinstance(sample_index, pd.DatetimeIndex):
+        from open_fdd.rules.base import hours_true
+
+        fault_days[""] = hours_true(confirmed, poll_seconds) * 3600.0
+        covered_days[""] = hours_true(all_true, poll_seconds) * 3600.0
+        return fault_days, covered_days
+    held = _eligible_hold_seconds(sample_index)
+    if held is None:
+        from open_fdd.rules.base import hours_true
+
         fault_days[""] = hours_true(confirmed, poll_seconds) * 3600.0
         covered_days[""] = hours_true(all_true, poll_seconds) * 3600.0
         return fault_days, covered_days
     utc_index = sample_index.tz_convert("UTC")
-    for day in sorted({ts.date() for ts in utc_index}):
-        day_key = day.isoformat()
-        mask = utc_index.date == day
-        fault_days[day_key] = hours_true(confirmed.loc[mask], poll_seconds) * 3600.0
-        covered_days[day_key] = hours_true(all_true.loc[mask], poll_seconds) * 3600.0
+    for i, ts in enumerate(utc_index):
+        seconds = float(held.iloc[i])
+        if seconds <= 0.0:
+            continue
+        day_key = ts.date().isoformat()
+        covered_days[day_key] = covered_days.get(day_key, 0.0) + seconds
+        if bool(confirmed.iloc[i]):
+            fault_days[day_key] = fault_days.get(day_key, 0.0) + seconds
     return fault_days, covered_days
 
 
@@ -471,6 +503,7 @@ def equipment_frame_from_db(
     equipment_id: str,
     window_start: str,
     window_end: str,
+    equipment_type: str = "",
 ) -> Any:
     import pandas as pd
 
@@ -513,6 +546,10 @@ def equipment_frame_from_db(
         building_id=building_id,
         unit_system="imperial",
     )
+    etype = str(equipment_type or "").strip()
+    if etype:
+        df.attrs["equipment_type"] = etype
+        df.attrs["equipType"] = etype
     return df
 
 
@@ -611,6 +648,7 @@ def collect_pandas_fdd_rows(
                     equipment_id=eid,
                     window_start=window_start,
                     window_end=window_end,
+                    equipment_type=etype,
                 )
             except Exception as exc:
                 msg = f"{rule_id}/{eid}: {exc}"
@@ -646,18 +684,22 @@ def collect_pandas_fdd_rows(
                 out.append({**base, "pair_status": "error", "reason": str(exc)})
                 coverage["error"] += 1
                 continue
-            confirmed = getattr(result, "confirmed_fault", None)
-            if confirmed is None:
+            mapped = _pandas_pair_status_from_result(result)
+            if mapped is not None:
+                pair_status, reason = mapped
                 out.append(
                     {
                         **base,
-                        "pair_status": "error",
-                        "reason": "missing confirmed_fault on result",
+                        "pair_status": pair_status,
+                        "reason": reason,
+                        "status": str(getattr(result, "status", "")),
                     }
                 )
-                coverage["error"] += 1
-                error_messages.append(f"{rule_id}/{eid}: missing confirmed_fault")
+                coverage[pair_status] += 1
+                if pair_status == "error":
+                    error_messages.append(f"{rule_id}/{eid}: {reason}")
                 continue
+            confirmed = result.confirmed_fault
             status = str(getattr(result, "status", "OK"))
             fault_by_day, covered_by_day = daily_fault_and_covered_seconds(
                 confirmed, frame.index, poll_seconds=POLL_SECONDS
@@ -912,6 +954,10 @@ def run_self_test() -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     add_connection_args(ap)
+    for action in ap._actions:
+        if action.dest == "password":
+            action.default = None
+            break
     ap.add_argument(
         "--database-url",
         default=None,
