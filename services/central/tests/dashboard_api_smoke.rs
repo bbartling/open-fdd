@@ -147,3 +147,28 @@ fn dashboard_shell_routes_are_not_404() {
     );
     assert_ne!(status, 404, "POST /api/reports/draft returned 404: {body}");
 }
+
+#[test]
+fn openapi_json_and_swagger_ui_respond() {
+    let server = Server::start();
+    let (status, body) = http("GET", server.port, "/openapi.json", None);
+    assert_eq!(status, 200, "/openapi.json status {status}: {body}");
+    assert!(
+        body.contains("\"openapi\"") && body.contains("\"/api/health\""),
+        "expected OpenAPI JSON with health path, got: {}",
+        &body.chars().take(200).collect::<String>()
+    );
+
+    for path in ["/docs", "/docs/"] {
+        let (status, body) = http("GET", server.port, path, None);
+        assert!(
+            (200..400).contains(&status),
+            "{path} unexpected status {status}: {}",
+            &body.chars().take(120).collect::<String>()
+        );
+        assert!(
+            body.contains("swagger") || body.contains("Swagger"),
+            "{path} should serve Swagger UI HTML"
+        );
+    }
+}
