@@ -581,12 +581,17 @@ def build_golden_for_dataset(
         params_registry = rule_params_from_registry(rule)
         params_by_rule[rule_id] = convert_params_to_ip(rule, params_registry, metric)
 
+    sql_rules_ip = [
+        r
+        for r in eligible_rules
+        if not cts.sql_si_pack_enabled(str(r.get("rule_id") or ""))
+    ]
     sql_computed, sql_exec_notes = cts.run_sql_ip_for_dataset(
         conn,
         spec=spec,
         frame=ip_frame,
         equipment_id=spec.equipment_id,
-        rules=eligible_rules,
+        rules=sql_rules_ip,
         poll_seconds=poll_seconds,
         params_by_rule=params_by_rule,
     )
