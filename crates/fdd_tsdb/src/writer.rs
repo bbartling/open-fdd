@@ -33,12 +33,12 @@ macro_rules! sample_on_conflict {
           unit = COALESCE(EXCLUDED.unit, sample.unit),
           quality = COALESCE(EXCLUDED.quality, sample.quality),
           haystack_id = COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
-        WHERE (val, unit, quality, haystack_id)
+        WHERE (sample.val, sample.unit, sample.quality, sample.haystack_id)
           IS DISTINCT FROM (
             EXCLUDED.val,
-            COALESCE(EXCLUDED.unit, unit),
-            COALESCE(EXCLUDED.quality, quality),
-            COALESCE(EXCLUDED.haystack_id, haystack_id)
+            COALESCE(EXCLUDED.unit, sample.unit),
+            COALESCE(EXCLUDED.quality, sample.quality),
+            COALESCE(EXCLUDED.haystack_id, sample.haystack_id)
           )
         "#
     };
