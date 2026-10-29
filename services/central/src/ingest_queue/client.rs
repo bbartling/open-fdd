@@ -238,6 +238,18 @@ impl QueueClient {
         self.memory.retry_job(job_id, now, claim)
     }
 
+    pub async fn cancel_jobs(
+        &self,
+        filter: CancelFilter,
+        now: DateTime<Utc>,
+        claim: &IdempotencyClaim,
+    ) -> Result<CancelOutcome, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            return postgres::cancel_jobs(&pool, &filter, now, claim).await;
+        }
+        self.memory.cancel_jobs(&filter, now, claim)
+    }
+
     pub async fn backfill(
         &self,
         jobs: Vec<NewJob>,
@@ -285,6 +297,56 @@ impl QueueClient {
         Ok(self
             .memory
             .prune_applied_samples(tenant_id, canonical_site, now, retention))
+    }
+
+    pub(crate) async fn postgres_pool(&self) -> Result<Option<PgPool>, QueueError> {
+        self.pool_if_configured().await
+    }
+
+    pub async fn provider_data_start_for_job(
+        &self,
+        job: &JobView,
+    ) -> Result<Option<DateTime<Utc>>, QueueError> {
+        if let Some(pool) = self.pool_if_configured().await? {
+            let key = super::binding_state::DeviceBindingKey::from_job(job);
+            return Ok(super::binding_state::load_binding_state(&pool, &key)
+                .await?
+                .and_then(|row| row.provider_data_start));
+        }
+        Ok(None)
+    }
+
+    pub async fn learn_provider_data_start_from_samples(
+        &self,
+        job: &JobView,
+        samples: &[AppliedSample],
+        now: DateTime<Utc>,
+    ) -> Result<(), QueueError> {
+        if samples.is_empty() {
+            return Ok(());
+        }
+        let mut earliest = samples[0].ts;
+        for sample in samples.iter().skip(1) {
+            if sample.ts < earliest {
+                earliest = sample.ts;
+            }
+        }
+        let Some(pool) = self.pool_if_configured().await? else {
+            return Err(QueueError::Db(
+                "shared ingest queue database is unavailable".into(),
+            ));
+        };
+        let key = super::binding_state::DeviceBindingKey::from_job(job);
+        super::binding_state::learn_provider_data_start(
+            &pool,
+            super::binding_state::LearnProviderDataStartInput {
+                key: &key,
+                candidate: earliest,
+                now,
+            },
+        )
+        .await?;
+        Ok(())
     }
 
     async fn pool_if_configured(&self) -> Result<Option<PgPool>, QueueError> {

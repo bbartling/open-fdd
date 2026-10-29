@@ -134,6 +134,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(ingest_queue::http::retry_job),
         )
         .route(
+            "/api/ingest/jobs/cancel",
+            post(ingest_queue::http::cancel_jobs),
+        )
+        .route(
             "/api/ingest/receipts",
             get(ingest_queue::http::list_receipts),
         )

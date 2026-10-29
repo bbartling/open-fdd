@@ -7207,6 +7207,44 @@
       "notes": "Operator retry of an eligible ingest job. Requires confirm on MCP."
     },
     {
+      "method": "POST",
+      "path": "/api/ingest/jobs/cancel",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "authenticated",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_ingest_jobs_cancel",
+        "y.authz.post_api_ingest_jobs_cancel"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_ingest_jobs_cancel",
+        "y.authz.post_api_ingest_jobs_cancel"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "queue_cancel",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Operator cancel of queued and retry_wait ingest jobs. Idempotent. Requires confirm on MCP."
+    },
+    {
       "method": "GET",
       "path": "/api/ingest/receipts",
       "section": "protected",

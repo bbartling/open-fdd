@@ -44,6 +44,8 @@ mod tests {
     static ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn env_test_guard() -> MutexGuard<'static, ()> {
+        // Tests may poison this mutex when a case panics; recovering keeps the
+        // env lock usable for later cases in the same process.
         ENV_TEST_LOCK
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())

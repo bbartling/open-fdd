@@ -70,7 +70,9 @@ A device is `verified` only when its cursor reaches `planned_through`. Otherwise
 
 ## HTTP and MCP
 
-JWT scoped like other tenant routes. Empty membership returns no rows. Operators (`confirm` on MCP, plus `OPENFDD_MCP_ALLOW_WRITES=1`) may retry or backfill with an idempotency key. Backfill accepts 1–48 exact UTC hours.
+JWT scoped like other tenant routes. Empty membership returns no rows. Operators (`confirm` on MCP, plus `OPENFDD_MCP_ALLOW_WRITES=1`) may retry, cancel, or backfill with an idempotency key. Backfill accepts 1–48 exact UTC hours.
+
+Gap-only backfill reads stored historian hours from Timescale (`ingest_device_binding` plus `sample` rows for the planned point keys). It enqueues only missing windows merged up to the provider `max_history_span`, never hours before the binding's learned `provider_data_start` (those are `not_expected`). Stored hours are skipped unless the request sets `force=true`. Responses include `gap_plan` with `planned`, `skipped_stored`, `not_expected`, and counts.
 
 | Method | Path |
 | --- | --- |
@@ -81,8 +83,10 @@ JWT scoped like other tenant routes. Empty membership returns no rows. Operators
 | GET | `/api/ingest/queue` |
 | GET | `/api/ingest/queue/scale-preview` |
 | POST | `/api/ingest/jobs/{job_id}/retry` |
+| POST | `/api/ingest/jobs/cancel` |
 | POST | `/api/ingest/backfill` |
+| POST | `/api/ingest/backfill/site` |
 
-Normal 4.0 MCP `tools/list` includes `openfdd_ingest_jobs`, `openfdd_ingest_receipts`, `openfdd_ingest_gaps`, and `openfdd_ingest_queue`. BACnet, remote Haystack wire, and fieldbus driver tools are omitted and return `ot_transport_retired`. Semantic SPARQL stays. `OPENFDD_OT_TOOLS=1` is the archive lane only.
+Normal 4.0 MCP `tools/list` includes `openfdd_ingest_jobs`, `openfdd_ingest_receipts`, `openfdd_ingest_gaps`, `openfdd_ingest_queue`, and `openfdd_ingest_jobs_cancel`. BACnet, remote Haystack wire, and fieldbus driver tools are omitted and return `ot_transport_retired`. Semantic SPARQL stays. `OPENFDD_OT_TOOLS=1` is the archive lane only.
 
 History reads stay GET. This queue does not POST `/api/v1/point/data`.

@@ -206,13 +206,40 @@ impl WindowDecision {
     }
 }
 
+enum ProviderStartGate {
+    Continue,
+    Stop(WindowDecision),
+}
+
+fn provider_start_gate(
+    job: &JobView,
+    read: Result<Option<chrono::DateTime<Utc>>, super::model::QueueError>,
+) -> ProviderStartGate {
+    match read {
+        Ok(Some(provider_start)) if job.logical_window_end <= provider_start => {
+            ProviderStartGate::Stop(WindowDecision::bare(FinishOutcome::Permanent {
+                code: super::model::NOT_EXPECTED_CODE.into(),
+            }))
+        }
+        Ok(_) => ProviderStartGate::Continue,
+        Err(err) => {
+            warn!(job_id = %job.job_id, error = %err, "ingest binding state read failed");
+            ProviderStartGate::Stop(WindowDecision::bare(FinishOutcome::Retry {
+                code: "binding_state_unavailable".into(),
+                not_before: Utc::now() + chrono::Duration::seconds(30),
+            }))
+        }
+    }
+}
+
 async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
     let plan = {
-        let models = state
-            .providers
-            .models
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Ok(models) = state.providers.models.lock() else {
+            warn!("provider model mutex poisoned during ingest execute");
+            return WindowDecision::bare(FinishOutcome::Permanent {
+                code: "internal_lock_poisoned".into(),
+            });
+        };
         match models.active_plan(&job.tenant_id, &job.canonical_site) {
             Some(plan) if committed_tuple_matches(job, plan) => Some(plan.clone()),
             Some(_) | None => None,
@@ -240,6 +267,13 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
             active_model_revision: active_revision,
             active_points_digest: active_digest,
         };
+    }
+    match provider_start_gate(
+        job,
+        state.ingest_queue.provider_data_start_for_job(job).await,
+    ) {
+        ProviderStartGate::Stop(decision) => return decision,
+        ProviderStartGate::Continue => {}
     }
     let Some(site) = state.providers.sites.iter().find(|site| {
         site.building_id == job.canonical_site
@@ -275,11 +309,12 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
     let response_complete = fetched.complete;
     let page = fetched.series;
     let plan_after = {
-        let models = state
-            .providers
-            .models
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Ok(models) = state.providers.models.lock() else {
+            warn!("provider model mutex poisoned during ingest execute");
+            return WindowDecision::bare(FinishOutcome::Permanent {
+                code: "internal_lock_poisoned".into(),
+            });
+        };
         models
             .active_plan(&job.tenant_id, &job.canonical_site)
             .filter(|active| committed_tuple_matches(job, active))
@@ -359,11 +394,21 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
         outcome,
         FinishOutcome::Retry { .. } | FinishOutcome::Permanent { .. }
     ));
-    let detail = if coverage.allows_commit() {
+    let mut detail = if coverage.allows_commit() {
         coverage.summary.clone()
     } else {
         coverage.block_code()
     };
+    if !applied.is_empty() {
+        if let Err(err) = state
+            .ingest_queue
+            .learn_provider_data_start_from_samples(job, &applied, Utc::now())
+            .await
+        {
+            warn!(job_id = %job.job_id, error = %err, "provider_data_start learn failed");
+            detail = format!("{detail}; provider_data_start_learn_failed");
+        }
+    }
     let handed = u64::try_from(written.persisted_rows).unwrap_or(u64::MAX);
     record_window_health(
         state,
@@ -699,11 +744,13 @@ async fn finish_for_poll_error(state: &Arc<AppState>, job: &JobView, err: &str) 
     }
     let (throttled, retry_after) = parse_throttle_error(err);
     if throttled {
-        let retry_after = chrono::Duration::seconds(throttle_backoff_secs(
-            job.attempt,
-            retry_after,
-            &job.job_id.to_string(),
-        ));
+        let retry_after =
+            match throttle_backoff_secs(job.attempt, retry_after, &job.job_id.to_string()) {
+                Ok(secs) => chrono::Duration::seconds(secs),
+                Err(backoff_err) => {
+                    return finish_for_throttle_backoff_error(backoff_err, Utc::now());
+                }
+            };
         if let Err(note_err) = state
             .ingest_queue
             .note_throttle(&job.provider_instance_id, Utc::now(), retry_after)
@@ -724,11 +771,12 @@ async fn finish_for_poll_error(state: &Arc<AppState>, job: &JobView, err: &str) 
         );
     }
     if portal_throttled(err) {
-        let retry_after = chrono::Duration::seconds(throttle_backoff_secs(
-            job.attempt,
-            None,
-            &job.job_id.to_string(),
-        ));
+        let retry_after = match throttle_backoff_secs(job.attempt, None, &job.job_id.to_string()) {
+            Ok(secs) => chrono::Duration::seconds(secs),
+            Err(backoff_err) => {
+                return finish_for_throttle_backoff_error(backoff_err, Utc::now());
+            }
+        };
         if let Err(note_err) = state
             .ingest_queue
             .note_throttle(&job.provider_instance_id, Utc::now(), retry_after)
@@ -763,14 +811,74 @@ fn parse_throttle_error(err: &str) -> (bool, Option<u64>) {
     (false, None)
 }
 
-fn throttle_backoff_secs(attempt: u32, retry_after: Option<u64>, jitter_key: &str) -> i64 {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ThrottleBackoffError {
+    AttemptZero,
+    JitterConfigZero,
+    RetryAfterOverflow,
+    RetryAfterExceedsMax { max_backoff_secs: i64 },
+}
+
+fn max_retry_backoff_secs() -> i64 {
+    crate::providers::hourly::retry_delay_secs(i32::MAX)
+}
+
+fn finish_for_throttle_backoff_error(
+    err: ThrottleBackoffError,
+    now: chrono::DateTime<Utc>,
+) -> FinishOutcome {
+    match err {
+        ThrottleBackoffError::RetryAfterExceedsMax { max_backoff_secs } => FinishOutcome::Retry {
+            code: "throttle_retry_after_exceeds_policy".into(),
+            not_before: now + chrono::Duration::seconds(max_backoff_secs),
+        },
+        ThrottleBackoffError::RetryAfterOverflow => FinishOutcome::Retry {
+            code: "throttle_retry_after_overflow".into(),
+            not_before: now + chrono::Duration::seconds(max_retry_backoff_secs()),
+        },
+        ThrottleBackoffError::AttemptZero | ThrottleBackoffError::JitterConfigZero => {
+            FinishOutcome::Permanent {
+                code: "ingest_backoff_config_invalid".into(),
+            }
+        }
+    }
+}
+
+fn throttle_backoff_secs(
+    attempt: u32,
+    retry_after: Option<u64>,
+    jitter_key: &str,
+) -> Result<i64, ThrottleBackoffError> {
     let policy = crate::providers::hourly::HourlyPolicy::from_env();
-    let mut delay = i64::try_from(retry_after.unwrap_or(0)).unwrap_or(0);
-    delay = delay.max(crate::providers::hourly::retry_delay_secs(
-        i32::try_from(attempt.max(1)).unwrap_or(1),
-    ));
-    delay += crate::providers::hourly::stagger_secs(jitter_key, policy.retry_jitter_secs.max(1));
-    delay
+    if attempt == 0 {
+        return Err(ThrottleBackoffError::AttemptZero);
+    }
+    let attempt_index = i32::try_from(attempt).map_err(|_| ThrottleBackoffError::AttemptZero)?;
+    if attempt_index < 1 {
+        return Err(ThrottleBackoffError::AttemptZero);
+    }
+    let jitter_cap = i32::try_from(policy.retry_jitter_secs)
+        .map_err(|_| ThrottleBackoffError::JitterConfigZero)?;
+    if jitter_cap < 1 {
+        return Err(ThrottleBackoffError::JitterConfigZero);
+    }
+    let max_backoff = max_retry_backoff_secs();
+    let delay = match retry_after {
+        None => 0,
+        Some(secs) => {
+            let value =
+                i64::try_from(secs).map_err(|_| ThrottleBackoffError::RetryAfterOverflow)?;
+            if value > max_backoff {
+                return Err(ThrottleBackoffError::RetryAfterExceedsMax {
+                    max_backoff_secs: max_backoff,
+                });
+            }
+            value
+        }
+    };
+    let mut total = delay.max(crate::providers::hourly::retry_delay_secs(attempt_index));
+    total += crate::providers::hourly::stagger_secs(jitter_key, i64::from(jitter_cap));
+    Ok(total)
 }
 
 fn classify_poll_error(
@@ -800,7 +908,10 @@ fn classify_poll_error(
         let delay = if throttle_delay_secs > 0 {
             throttle_delay_secs
         } else {
-            throttle_backoff_secs(attempt, None, jitter_key)
+            match throttle_backoff_secs(attempt, None, jitter_key) {
+                Ok(secs) => secs,
+                Err(err) => return finish_for_throttle_backoff_error(err, now),
+            }
         };
         return FinishOutcome::Retry {
             code,
@@ -1311,6 +1422,88 @@ mod tests {
                 ),
                 "attempt {attempt} must stay retryable"
             );
+        }
+    }
+
+    #[test]
+    fn throttle_backoff_retry_after_overflow_is_explicit() {
+        assert_eq!(
+            throttle_backoff_secs(1, Some(u64::MAX), "job-overflow"),
+            Err(ThrottleBackoffError::RetryAfterOverflow)
+        );
+    }
+
+    #[test]
+    fn throttle_backoff_retry_after_above_policy_max_is_explicit() {
+        assert_eq!(
+            throttle_backoff_secs(1, Some(10_000), "job-high"),
+            Err(ThrottleBackoffError::RetryAfterExceedsMax {
+                max_backoff_secs: max_retry_backoff_secs(),
+            })
+        );
+    }
+
+    #[test]
+    fn throttle_backoff_zero_attempt_is_config_error() {
+        assert_eq!(
+            throttle_backoff_secs(0, None, "job-zero"),
+            Err(ThrottleBackoffError::AttemptZero)
+        );
+    }
+
+    #[test]
+    fn binding_state_read_error_is_retryable() {
+        let now = Utc::now();
+        let job = JobView {
+            job_id: Uuid::new_v4(),
+            tenant_id: "tenant".into(),
+            canonical_site: "site".into(),
+            provider_instance_id: "nf:conn".into(),
+            device_id: "dev".into(),
+            model_revision: "rev".into(),
+            logical_window_start: now,
+            logical_window_end: now + chrono::Duration::hours(1),
+            shard: String::new(),
+            state: "leased".into(),
+            attempt: 1,
+            not_before: now,
+            lease_owner: None,
+            lease_expiry: None,
+            fencing_token: 1,
+            estimated_cost: 1,
+            safe_error_code: None,
+            receipt_id: None,
+            coverage: String::new(),
+            point_coverage: Vec::new(),
+            counts: JobCounts::default(),
+            server_request_id: None,
+        };
+        match provider_start_gate(
+            &job,
+            Err(super::super::model::QueueError::Db("unavailable".into())),
+        ) {
+            ProviderStartGate::Stop(decision) => match decision.outcome {
+                FinishOutcome::Retry { code, .. } => assert_eq!(code, "binding_state_unavailable"),
+                other => panic!("expected retry, got {other:?}"),
+            },
+            ProviderStartGate::Continue => panic!("expected stop"),
+        }
+    }
+
+    #[test]
+    fn finish_for_throttle_backoff_error_maps_retry_after_exceeds_policy() {
+        let now = Utc::now();
+        match finish_for_throttle_backoff_error(
+            ThrottleBackoffError::RetryAfterExceedsMax {
+                max_backoff_secs: 900,
+            },
+            now,
+        ) {
+            FinishOutcome::Retry { code, not_before } => {
+                assert_eq!(code, "throttle_retry_after_exceeds_policy");
+                assert!(not_before >= now + chrono::Duration::seconds(900));
+            }
+            other => panic!("expected retry, got {other:?}"),
         }
     }
 

@@ -82,6 +82,16 @@ impl Server {
                 "job_id": {"type": "string"},
                 "idempotency_key": {"type": "string"}
             })),
+            tool("openfdd_ingest_jobs_cancel", "POST /api/ingest/jobs/cancel — cancel queued/retry_wait ingest jobs (confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
+                "confirm": {"type": "boolean"},
+                "idempotency_key": {"type": "string"},
+                "tenant_id": {"type": "string"},
+                "canonical_site": {"type": "string"},
+                "provider_instance_id": {"type": "string"},
+                "device_id": {"type": "string"},
+                "window_start": {"type": "string"},
+                "window_end": {"type": "string"}
+            })),
             tool("openfdd_ingest_backfill", "POST /api/ingest/backfill — at most 48 exact UTC hours (confirm + OPENFDD_MCP_ALLOW_WRITES=1)", json!({
                 "confirm": {"type": "boolean"},
                 "idempotency_key": {"type": "string"},
@@ -365,6 +375,14 @@ impl Server {
                     &format!("/api/ingest/jobs/{job_id}/retry"),
                     &json!({ "idempotency_key": key }),
                 )
+            }
+            "openfdd_ingest_jobs_cancel" => {
+                require_write_confirm(args, "openfdd_ingest_jobs_cancel")?;
+                let mut body = args.clone();
+                if let Some(obj) = body.as_object_mut() {
+                    obj.remove("confirm");
+                }
+                self.bridge.post("/api/ingest/jobs/cancel", &body)
             }
             "openfdd_ingest_backfill" => {
                 require_write_confirm(args, "openfdd_ingest_backfill")?;
