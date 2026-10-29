@@ -63,6 +63,17 @@ class SiParityGateBlockingTests(unittest.TestCase):
         failures = self.gate._blocking_errors([p1], blocking=True, scope={"FC1"})
         self.assertEqual(len(failures), 1)
 
+    def test_p2_errors_not_blocking_in_report_only_full_matrix(self) -> None:
+        p2 = self.pc.StageResult(
+            "P2",
+            10,
+            ("P2 ECON-4/equip:test/2026-07-01: missing sql_si_fault_seconds",),
+            (),
+            (),
+        )
+        failures = self.gate._blocking_errors([p2], blocking=False, scope=None)
+        self.assertEqual(failures, [])
+
     def test_scoped_blocking_passes_despite_p0_fc1_mismatches(self) -> None:
         proc = subprocess.run(
             [
