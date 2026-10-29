@@ -5,6 +5,13 @@ use sqlx::PgPool;
 
 use super::model::QueueError;
 
+fn sample_table_missing(err: &sqlx::Error) -> bool {
+    matches!(
+        err,
+        sqlx::Error::Database(db) if db.code().as_deref() == Some("42P01")
+    )
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceBindingState {
     pub binding_created_at: DateTime<Utc>,
@@ -120,7 +127,7 @@ pub async fn stored_hour_starts_for_device(
     if openfdd_keys.is_empty() {
         return Ok(Vec::new());
     }
-    let rows = sqlx::query_scalar::<_, DateTime<Utc>>(
+    let rows = match sqlx::query_scalar::<_, DateTime<Utc>>(
         "SELECT DISTINCT date_trunc('hour', ts) AS hour_start
          FROM sample
          WHERE site_id = $1 AND openfdd_key = ANY($2)
@@ -133,7 +140,15 @@ pub async fn stored_hour_starts_for_device(
     .bind(range_end)
     .fetch_all(pool)
     .await
-    .map_err(|err| QueueError::Db(super::model::redact_db_text(&err.to_string())))?;
+    {
+        Ok(rows) => rows,
+        Err(err) if sample_table_missing(&err) => Vec::new(),
+        Err(err) => {
+            return Err(QueueError::Db(super::model::redact_db_text(
+                &err.to_string(),
+            )));
+        }
+    };
     Ok(rows)
 }
 
@@ -145,13 +160,21 @@ pub async fn last_stored_ts_for_device(
     if openfdd_keys.is_empty() {
         return Ok(None);
     }
-    let row = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
+    let row = match sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
         "SELECT max(ts) FROM sample WHERE site_id = $1 AND openfdd_key = ANY($2)",
     )
     .bind(site_id)
     .bind(openfdd_keys)
     .fetch_one(pool)
     .await
-    .map_err(|err| QueueError::Db(super::model::redact_db_text(&err.to_string())))?;
+    {
+        Ok(row) => row,
+        Err(err) if sample_table_missing(&err) => None,
+        Err(err) => {
+            return Err(QueueError::Db(super::model::redact_db_text(
+                &err.to_string(),
+            )));
+        }
+    };
     Ok(row)
 }
