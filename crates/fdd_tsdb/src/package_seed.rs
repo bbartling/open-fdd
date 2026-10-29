@@ -15,7 +15,9 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 use crate::client::Tsdb;
+use crate::ingest_si::{prepare_numeric_sample, PointMapBinding, SampleDeclaredContext};
 use crate::sample::{SampleRow, UpsertBatch};
+use fdd_core::MetricUnitsContract;
 
 fn load_json(path: &Path) -> Result<Value> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
@@ -73,10 +75,12 @@ fn csv_to_sql_roles_from_column_map(
 }
 
 /// Product path: `columns.csv` already has SQL roles (sat/mat/…) after package materialize.
-fn csv_to_sql_roles_from_columns_csv(eq_dir: &Path) -> Result<HashMap<String, String>> {
+fn csv_to_sql_roles_from_columns_csv(
+    eq_dir: &Path,
+) -> Result<(HashMap<String, String>, HashMap<String, String>)> {
     let path = eq_dir.join("columns.csv");
     if !path.is_file() {
-        return Ok(HashMap::new());
+        return Ok((HashMap::new(), HashMap::new()));
     }
     let file = File::open(&path).with_context(|| format!("open {}", path.display()))?;
     let mut reader = csv::ReaderBuilder::new()
@@ -91,7 +95,9 @@ fn csv_to_sql_roles_from_columns_csv(eq_dir: &Path) -> Result<HashMap<String, St
         .iter()
         .position(|h| h.eq_ignore_ascii_case("role"))
         .unwrap_or(1);
-    let mut out = HashMap::new();
+    let unit_idx = headers.iter().position(|h| h.eq_ignore_ascii_case("unit"));
+    let mut roles = HashMap::new();
+    let mut units = HashMap::new();
     for rec in reader.records() {
         let rec = rec?;
         let col = rec.get(col_idx).unwrap_or("").trim();
@@ -105,9 +111,15 @@ fn csv_to_sql_roles_from_columns_csv(eq_dir: &Path) -> Result<HashMap<String, St
         ) {
             continue;
         }
-        out.insert(col.to_string(), role.to_string());
+        roles.insert(col.to_string(), role.to_string());
+        if let Some(uix) = unit_idx {
+            let unit = rec.get(uix).unwrap_or("").trim();
+            if !unit.is_empty() {
+                units.insert(col.to_string(), unit.to_string());
+            }
+        }
     }
-    Ok(out)
+    Ok((roles, units))
 }
 
 fn equip_types_registry(package_root: &Path) -> HashMap<String, String> {
@@ -177,6 +189,28 @@ struct SeedPlan {
     equip_type: Option<String>,
     csv_path: PathBuf,
     col_to_role: HashMap<String, String>,
+    col_to_unit: HashMap<String, String>,
+    unit_system: Option<String>,
+}
+
+fn package_unit_system(package_root: &Path) -> Option<String> {
+    for name in ["session_config.json", "manifest.json"] {
+        let path = package_root.join(name);
+        let Ok(v) = load_json(&path) else {
+            continue;
+        };
+        if let Some(sys) = v
+            .pointer("/session_config/unit_system")
+            .or_else(|| v.get("unit_system"))
+            .and_then(|u| u.as_str())
+        {
+            let trimmed = sys.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
 }
 
 fn resolve_col_to_role(
@@ -185,8 +219,8 @@ fn resolve_col_to_role(
     csv_path: &Path,
     column_map: &Value,
     hs_to_sql: &HashMap<String, String>,
-) -> Result<HashMap<String, String>> {
-    let mut col_to_role = csv_to_sql_roles_from_columns_csv(eq_dir)?;
+) -> Result<(HashMap<String, String>, HashMap<String, String>)> {
+    let (mut col_to_role, col_to_unit) = csv_to_sql_roles_from_columns_csv(eq_dir)?;
     if col_to_role.is_empty() {
         col_to_role = csv_to_sql_roles_from_column_map(equipment_id, column_map, hs_to_sql);
     }
@@ -207,7 +241,7 @@ fn resolve_col_to_role(
             }
         }
     }
-    Ok(col_to_role)
+    Ok((col_to_role, col_to_unit))
 }
 
 fn build_seed_plans(
@@ -225,6 +259,7 @@ fn build_seed_plans(
     let type_reg = equip_types_registry(package_root);
     let mut csvs = walkdir_history(package_root)?;
     csvs.sort();
+    let package_unit_system = package_unit_system(package_root);
     let mut plans = Vec::new();
     for csv_path in csvs {
         let rel = csv_path
@@ -240,7 +275,7 @@ fn build_seed_plans(
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| package_root.to_path_buf());
-        let col_to_role =
+        let (col_to_role, col_to_unit) =
             resolve_col_to_role(&equipment_id, &eq_dir, &csv_path, &column_map, &hs_to_sql)?;
         if col_to_role.is_empty() {
             bail!(
@@ -257,6 +292,8 @@ fn build_seed_plans(
             equip_type: et,
             csv_path,
             col_to_role,
+            col_to_unit,
+            unit_system: package_unit_system.clone(),
         });
     }
     Ok((column_map, type_reg, plans))
@@ -272,6 +309,8 @@ async fn ensure_stage_table(tsdb: &Tsdb) -> Result<()> {
           openfdd_key   text NOT NULL,
           haystack_id   text,
           val           double precision,
+          unit          text,
+          quality       text,
           PRIMARY KEY (import_id, site_id, openfdd_key, ts)
         )
         "#,
@@ -279,6 +318,14 @@ async fn ensure_stage_table(tsdb: &Tsdb) -> Result<()> {
     .execute(tsdb.pool())
     .await
     .context("create sample_import_stage")?;
+    sqlx::query("ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS unit text")
+        .execute(tsdb.pool())
+        .await
+        .context("stage unit column")?;
+    sqlx::query("ALTER TABLE sample_import_stage ADD COLUMN IF NOT EXISTS quality text")
+        .execute(tsdb.pool())
+        .await
+        .context("stage quality column")?;
     Ok(())
 }
 
@@ -289,7 +336,7 @@ async fn copy_stage_csv(tsdb: &Tsdb, body: &[u8]) -> Result<u64> {
     let mut conn = tsdb.pool().acquire().await.context("acquire pool")?;
     let mut copy = conn
         .copy_in_raw(
-            "COPY sample_import_stage (import_id, ts, site_id, openfdd_key, haystack_id, val) FROM STDIN WITH (FORMAT csv)",
+            "COPY sample_import_stage (import_id, ts, site_id, openfdd_key, haystack_id, val, unit, quality) FROM STDIN WITH (FORMAT csv)",
         )
         .await
         .context("copy_in_raw stage")?;
@@ -298,14 +345,28 @@ async fn copy_stage_csv(tsdb: &Tsdb, body: &[u8]) -> Result<u64> {
     Ok(n as u64)
 }
 
+#[derive(Clone)]
+struct StagedSample {
+    val: f64,
+    unit: Option<String>,
+    quality: Option<String>,
+}
+
+struct CsvStageMaps<'a> {
+    col_to_role: &'a HashMap<String, String>,
+    col_to_unit: &'a HashMap<String, String>,
+    unit_system: Option<&'a str>,
+}
+
 async fn stage_one_csv(
     tsdb: &Tsdb,
     import_id: uuid::Uuid,
     building_id: &str,
     equipment_id: &str,
     csv_path: &Path,
-    col_to_role: &HashMap<String, String>,
+    maps: CsvStageMaps<'_>,
 ) -> Result<(u64, HashSet<String>)> {
+    let contract = MetricUnitsContract::load_embedded().context("metric units contract")?;
     let file = File::open(csv_path).with_context(|| format!("open {}", csv_path.display()))?;
     let mut reader = csv::ReaderBuilder::new()
         .flexible(true)
@@ -322,8 +383,7 @@ async fn stage_one_csv(
         .ok_or_else(|| anyhow!("no timestamp column in {}", csv_path.display()))?
         .to_string();
 
-    // Dedupe across the whole equipment CSV (not only within a 50k flush).
-    let mut pending: HashMap<(String, String), f64> = HashMap::new();
+    let mut pending: HashMap<(String, String), StagedSample> = HashMap::new();
     let mut roles_seen: HashSet<String> = HashSet::new();
     let import_s = import_id.to_string();
 
@@ -332,16 +392,19 @@ async fn stage_one_csv(
         import_s: &str,
         building_id: &str,
         equipment_id: &str,
-        pending: &mut HashMap<(String, String), f64>,
+        pending: &mut HashMap<(String, String), StagedSample>,
     ) -> Result<u64> {
         if pending.is_empty() {
             return Ok(0);
         }
-        let mut buf: Vec<u8> = Vec::with_capacity(pending.len() * 80);
-        for ((ts_s, openfdd_key), val) in pending.drain() {
+        let mut buf: Vec<u8> = Vec::with_capacity(pending.len() * 96);
+        for ((ts_s, openfdd_key), staged) in pending.drain() {
+            let unit = staged.unit.as_deref().unwrap_or("");
+            let quality = staged.quality.as_deref().unwrap_or("");
             writeln!(
                 &mut buf,
-                "{import_s},{ts_s},{building_id},{openfdd_key},{equipment_id},{val}"
+                "{import_s},{ts_s},{building_id},{openfdd_key},{equipment_id},{},{unit},{quality}",
+                staged.val
             )
             .ok();
         }
@@ -359,7 +422,7 @@ async fn stage_one_csv(
             continue;
         };
         let ts_s = ts.to_rfc3339();
-        for (csv_col, sql_role) in col_to_role {
+        for (csv_col, sql_role) in maps.col_to_role {
             let Some(raw) = map.get(csv_col.as_str()).copied() else {
                 continue;
             };
@@ -371,7 +434,26 @@ async fn stage_one_csv(
             };
             let openfdd_key = format!("{equipment_id}.{sql_role}");
             roles_seen.insert(sql_role.clone());
-            pending.insert((ts_s.clone(), openfdd_key), val);
+            let csv_unit = maps.col_to_unit.get(csv_col).map(String::as_str);
+            let prepared = prepare_numeric_sample(
+                &contract,
+                val,
+                PointMapBinding::default(),
+                SampleDeclaredContext {
+                    role: Some(sql_role.as_str()),
+                    csv_column_unit: csv_unit,
+                    unit_system: maps.unit_system,
+                    ..Default::default()
+                },
+            );
+            pending.insert(
+                (ts_s.clone(), openfdd_key),
+                StagedSample {
+                    val: prepared.val.unwrap_or(val),
+                    unit: prepared.unit,
+                    quality: prepared.quality,
+                },
+            );
         }
         if pending.len() >= 50_000 {
             total += flush_stage(tsdb, &import_s, building_id, equipment_id, &mut pending).await?;
@@ -582,7 +664,11 @@ pub async fn seed_package_dir(
             building_id,
             &plan.equipment_id,
             &plan.csv_path,
-            &plan.col_to_role,
+            CsvStageMaps {
+                col_to_role: &plan.col_to_role,
+                col_to_unit: &plan.col_to_unit,
+                unit_system: plan.unit_system.as_deref(),
+            },
         )
         .await;
         let (n, roles) = match staged_one {
@@ -696,6 +782,8 @@ pub async fn append_package_equipment(
             &plan.equipment_id,
             &plan.csv_path,
             &plan.col_to_role,
+            &plan.col_to_unit,
+            plan.unit_system.as_deref(),
         )
         .await?;
         upsert_roles(tsdb, building_id, &plan.equipment_id, &roles).await?;
@@ -733,6 +821,8 @@ async fn upsert_one_csv(
     equipment_id: &str,
     csv_path: &Path,
     col_to_role: &HashMap<String, String>,
+    col_to_unit: &HashMap<String, String>,
+    unit_system: Option<&str>,
 ) -> Result<(u64, HashSet<String>)> {
     let file = File::open(csv_path).with_context(|| format!("open {}", csv_path.display()))?;
     let mut reader = csv::ReaderBuilder::new()
@@ -779,6 +869,10 @@ async fn upsert_one_csv(
             row.haystack_id = Some(equipment_id.to_string());
             row.equipment_id = Some(equipment_id.to_string());
             row.role = Some(sql_role.clone());
+            if let Some(unit) = col_to_unit.get(csv_col) {
+                row.unit = Some(unit.clone());
+            }
+            row.unit_system = unit_system.map(str::to_string);
             batch.rows.push(row);
         }
         if batch.rows.len() >= 5_000 {
