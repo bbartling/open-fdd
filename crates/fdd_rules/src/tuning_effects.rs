@@ -78,10 +78,12 @@ pub fn effect_reason(effect: &str) -> &'static str {
     }
 }
 
-fn resolved_effect(rule_id: &str, key: &str, tuning: Option<&TuningParam>) -> &'static str {
+fn resolved_effect(rule_id: &str, _key: &str, tuning: Option<&TuningParam>) -> &'static str {
     if let Some(raw) = tuning.and_then(|p| p.effect.as_deref()) {
         return match raw {
-            "branch_sensitive" | "no_op" | "unsupported" => raw,
+            "branch_sensitive" => "branch_sensitive",
+            "no_op" => "no_op",
+            "unsupported" => "unsupported",
             _ => derive_tuner_effect(rule_id, tuning.and_then(|p| p.effect_in_sql)),
         };
     }
