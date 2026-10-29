@@ -26,6 +26,7 @@
     "x.preauth.anon401.get_api_fdd_rules",
     "x.preauth.anon401.get_api_fdd_series",
     "x.preauth.anon401.get_api_fdd_session_config",
+    "x.preauth.anon401.get_api_ingest_catchup",
     "x.preauth.anon401.get_api_ingest_gaps",
     "x.preauth.anon401.get_api_ingest_jobs",
     "x.preauth.anon401.get_api_ingest_queue",

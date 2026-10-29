@@ -65,6 +65,8 @@ mod sql_anomaly_fixtures;
 mod sql_pack;
 mod starter_seed;
 mod state;
+#[cfg(test)]
+mod t1284_2_ingest_si_test;
 mod tenant;
 mod tenant_budget;
 #[cfg(test)]
