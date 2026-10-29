@@ -35,6 +35,24 @@ TEMPERATURE_DIFFERENCE_KEYS = frozenset(
 
 STRIP_PARAM_KEYS = frozenset({"kind", "effect"})
 
+# Wave 4d (#1284): registry defaults/units move to SI for these rules only.
+W4D_SI_PLANT_RULES = frozenset(
+    {
+        "CHW-NOLOAD-1",
+        "CHW-1",
+        "CHW-2",
+        "CHW-3",
+        "CHW-4",
+        "CW-OPT-1",
+        "CW-APR-1",
+        "CW-FAN-1",
+        "HP-1",
+        "TRIM-1",
+        "TRIM-3",
+        "TRIM-4",
+    }
+)
+
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -235,6 +253,20 @@ def strip_registry_metadata(doc: Any) -> Any:
     return doc
 
 
+def registry_doc_for_metadata_diff(doc: Any) -> Any:
+    """Registry snapshot for W2a metadata guard; W4d plant rules may change SI defaults."""
+    stripped = strip_registry_metadata(doc)
+    if not isinstance(stripped, dict) or "rules" not in stripped:
+        return stripped
+    kept = [
+        r
+        for r in stripped["rules"]
+        if isinstance(r, dict) and r.get("rule_id") not in W4D_SI_PLANT_RULES
+    ]
+    kept.sort(key=lambda r: str(r.get("rule_id", "")))
+    return {"rules": kept}
+
+
 def ensure_origin_master_ref() -> str:
     """Resolve a ref for master/base file content (shallow CI checkouts may lack origin/master)."""
     override = os.environ.get("UNIT_CONTRACT_BASE_REF", "").strip()
@@ -289,11 +321,12 @@ def assert_metadata_only_registry_diff() -> None:
         raise RuntimeError("PyYAML required") from exc
     master_text = git_show_master("sql/fdd/registry.yaml")
     branch_text = REGISTRY.read_text(encoding="utf-8")
-    master_doc = strip_registry_metadata(yaml.safe_load(master_text))
-    branch_doc = strip_registry_metadata(yaml.safe_load(branch_text))
+    master_doc = registry_doc_for_metadata_diff(yaml.safe_load(master_text))
+    branch_doc = registry_doc_for_metadata_diff(yaml.safe_load(branch_text))
     if master_doc != branch_doc:
         raise AssertionError(
-            "registry.yaml differs from origin/master beyond kind/effect metadata"
+            "registry.yaml differs from origin/master beyond kind/effect metadata "
+            "(excluding W4d SI plant rules)"
         )
 
 
