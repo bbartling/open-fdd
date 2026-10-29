@@ -1356,23 +1356,6 @@ mod tests {
             .expect("fresh connect")
     }
 
-    /// #1429 adds `point_map.quantity`; disposable pack DBs bootstrap it until master carries
-    /// `sql/schema/11_point_map_binding_metadata.sql`.
-    async fn ensure_point_map_binding_metadata(pool: &PgPool) {
-        crate::test_ddl::execute_idempotent_ddl(
-            pool,
-            "ALTER TABLE point_map ADD COLUMN IF NOT EXISTS quantity text",
-        )
-        .await;
-    }
-
-    async fn apply_pack_test_startup(pool: &PgPool) {
-        crate::db_lifecycle::apply_on_startup()
-            .await
-            .expect("db startup");
-        ensure_point_map_binding_metadata(pool).await;
-    }
-
     fn admin_url(database_url: &str) -> String {
         let mut url = url::Url::parse(database_url).expect("database url");
         url.set_path("/postgres");
@@ -1583,7 +1566,9 @@ mod tests {
         fresh_url.set_path(&format!("/{fresh_name}"));
         std::env::set_var("OPENFDD_DATABASE_URL", fresh_url.as_str());
         fdd_tsdb::clear_shared_pool();
-        apply_pack_test_startup(&fresh).await;
+        crate::db_lifecycle::apply_on_startup()
+            .await
+            .expect("ordinary fresh startup");
         let status = pack_status(&fresh).await.expect("fresh pack status");
         assert!(status.compatible, "{status:?}");
         assert!(status.helper_installed, "{status:?}");
@@ -2060,7 +2045,9 @@ mod tests {
         upgrade_url.set_path(&format!("/{upgrade_name}"));
         std::env::set_var("OPENFDD_DATABASE_URL", upgrade_url.as_str());
         fdd_tsdb::clear_shared_pool();
-        apply_pack_test_startup(&upgrade).await;
+        crate::db_lifecycle::apply_on_startup()
+            .await
+            .expect("upgrade startup");
         let after = counts(&upgrade, &kept).await;
         assert_eq!(after, before, "upgrade changed historian rows");
         let upgraded = pack_status(&upgrade).await.expect("upgraded pack");
@@ -2181,7 +2168,9 @@ mod tests {
         url.set_path(&format!("/{db_name}"));
         std::env::set_var("OPENFDD_DATABASE_URL", url.as_str());
         fdd_tsdb::clear_shared_pool();
-        apply_pack_test_startup(&pool).await;
+        crate::db_lifecycle::apply_on_startup()
+            .await
+            .expect("db startup");
 
         let site = format!("u{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
         seed_dimensions(&pool, &site, &[("eq_ahu", "ahu")]).await;
@@ -2298,7 +2287,9 @@ mod tests {
         url.set_path(&format!("/{db_name}"));
         std::env::set_var("OPENFDD_DATABASE_URL", url.as_str());
         fdd_tsdb::clear_shared_pool();
-        apply_pack_test_startup(&pool).await;
+        crate::db_lifecycle::apply_on_startup()
+            .await
+            .expect("db startup");
 
         let site = format!("s{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
         let foreign = format!("f{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
