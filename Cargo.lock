@@ -853,6 +853,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "csv",
+ "fdd_core",
  "serde",
  "serde_json",
  "sqlx",
