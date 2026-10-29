@@ -48,4 +48,4 @@ def test_vav1_overview_calendar_gates_when_occ_column_absent():
 def test_unoccupied_setback_stays_on_vav2():
     df = _frame([80.0, 80.0], ["occupied", "unoccupied"])
     assert list(vav1(df, {}, 300.0).fillna(False)) == [True, False]
-    assert list(vav2(df, {"setback_hi": 68.0}, 300.0).fillna(False)) == [False, True]
+    assert list(vav2(df, {"setback_hi": 20.0}, 300.0).fillna(False)) == [False, True]
