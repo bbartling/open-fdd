@@ -72,6 +72,26 @@ fn backfill_claim(tenant: &str, jobs: &[NewJob]) -> IdempotencyClaim {
     }
 }
 
+async fn backfill_after_horizon(
+    pool: &PgPool,
+    jobs: &[NewJob],
+    claim: &IdempotencyClaim,
+) -> Vec<JobView> {
+    for attempt in 0..5u32 {
+        match postgres::backfill(pool, jobs, now(), claim).await {
+            Ok(made) => return made,
+            Err(QueueError::Db(msg)) if attempt < 4 && msg.contains("deadlock") => {
+                tokio::time::sleep(std::time::Duration::from_millis(
+                    25 * (u64::from(attempt) + 1),
+                ))
+                .await;
+            }
+            Err(e) => panic!("backfill after the horizon: {e:?}"),
+        }
+    }
+    unreachable!("backfill retries exhausted")
+}
+
 fn created(outcome: EnqueueOutcome) -> JobView {
     match outcome {
         EnqueueOutcome::Created(view) => view,
@@ -373,9 +393,8 @@ async fn postgres_suite(pool: &PgPool, tenant: &str) {
         "refusal enqueues nothing"
     );
     let after = vec![new_job(tenant, "backfill", 51)];
-    let made = postgres::backfill(pool, &after, now(), &backfill_claim(tenant, &after))
-        .await
-        .expect("backfill after the horizon");
+    let claim = backfill_claim(tenant, &after);
+    let made = backfill_after_horizon(pool, &after, &claim).await;
     assert_eq!(made.len(), 1);
 
     // Once the live job and the retried job finish, the cut moves to the
