@@ -90,29 +90,6 @@ POSITION_ROLES = {
 }
 
 
-def _fahrenheit_bounds_to_celsius(
-    lo: float | None, hi: float | None
-) -> tuple[float | None, float | None]:
-    def _one(v: float | None) -> float | None:
-        if v is None:
-            return None
-        return (float(v) - 32.0) * 5.0 / 9.0
-
-    return _one(lo), _one(hi)
-
-
-def _role_bounds(role: str, *, unit_system: str) -> tuple[float | None, float | None] | None:
-    family = _role_family(role)
-    lo_hi = ROLE_BOUNDS.get(family)
-    if lo_hi is None:
-        return None
-    if unit_system != "metric":
-        return lo_hi
-    if not family.endswith("-temp"):
-        return lo_hi
-    return _fahrenheit_bounds_to_celsius(lo_hi[0], lo_hi[1])
-
-
 def _role_family(role: str) -> str:
     r = role.replace("_", "-").lower()
     if r in ROLE_BOUNDS:
@@ -197,7 +174,6 @@ def normalize_role_series(
     *,
     sentinels: Iterable[float] = DEFAULT_SENTINELS,
     bounds: tuple[float | None, float | None] | None = None,
-    unit_system: str = "imperial",
 ) -> RoleQuality:
     raw = series.copy()
     family = _role_family(role)
@@ -269,7 +245,7 @@ def normalize_role_series(
     reason = reason.mask(sent, REASON_SENTINEL)
     valid = valid & ~sent
 
-    lo_hi = bounds if bounds is not None else _role_bounds(role, unit_system=unit_system)
+    lo_hi = bounds if bounds is not None else ROLE_BOUNDS.get(family)
     if lo_hi is not None:
         lo, hi = lo_hi
         scaled = _scale_position(num)
@@ -337,7 +313,6 @@ def assess_frame(
 ) -> FrameQuality:
     cols = list(roles) if roles is not None else [c for c in df.columns if c != "timestamp_utc"]
     sentinels = tuple(sentinels)
-    unit_system = str(df.attrs.get("unit_system") or "imperial")
     fq = FrameQuality()
     any_valid = pd.Series(False, index=df.index)
     totals = {"valid": 0, "invalid": 0}
@@ -345,9 +320,7 @@ def assess_frame(
     for role in cols:
         if role not in df.columns:
             continue
-        rq = normalize_role_series(
-            df[role], role, sentinels=sentinels, unit_system=unit_system
-        )
+        rq = normalize_role_series(df[role], role, sentinels=sentinels)
         fq.roles[role] = rq
         any_valid = any_valid | rq.valid
         totals["valid"] += rq.valid_sample_count
