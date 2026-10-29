@@ -84,6 +84,9 @@ jobs:
           fi
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
+      - name: Ingest driver #1423 acceptance (T1423-1, T1423-2)
+        run: cargo test -p openfdd-central t1423 -- --test-threads=1
+
       - name: Central / fieldbus / MQTT contract tests
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd

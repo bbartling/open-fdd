@@ -20,12 +20,14 @@ pub enum ProviderErrorCode {
     Persistence,
     Config,
     NotImplemented,
-    #[expect(
-        dead_code,
-        reason = "hourly partial pages use FetchError; the code stays on the provider contract"
-    )]
     HistoryIncomplete,
 }
+
+/// Stable codes referenced from the NF paging path (release builds).
+pub(crate) const PAGING_BOUNDARY_CODES: [ProviderErrorCode; 2] = [
+    ProviderErrorCode::HistoryIncomplete,
+    ProviderErrorCode::NotImplemented,
+];
 
 impl ProviderErrorCode {
     pub fn as_str(self) -> &'static str {
