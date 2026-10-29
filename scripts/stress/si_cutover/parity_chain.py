@@ -780,11 +780,17 @@ def hydrate_w4c_p2_sql_si_from_timescale(
             )
             si_frame = cfl.frame_to_si(ip_frame, metric)
             poll = float(golden.get("poll_seconds") or cts.infer_poll_seconds(si_frame.index))
+            needed_rule_ids = {
+                str(row.get("rule_id") or "")
+                for row in golden.get("p2_si_pairs") or []
+                if row.get("utc_day") and str(row.get("rule_id") or "") in scope
+            }
+            run_rule_ids = sorted(needed_rule_ids & set(w4c_rules))
             eligible = [
-                rules_by_id[rid]
-                for rid in sorted(scope & w4c_rules)
-                if rid in rules_by_id
+                rules_by_id[rid] for rid in run_rule_ids if rid in rules_by_id
             ]
+            if not eligible:
+                continue
             params_si_by_rule = {
                 str(r["rule_id"]): cfl.convert_params_to_si(
                     r, cfl.rule_params_from_registry(r), metric
