@@ -562,6 +562,7 @@ def build_golden_for_dataset(
         return val
 
     params_by_rule: dict[str, dict[str, float]] = {}
+    params_sql_by_rule: dict[str, dict[str, float]] = {}
     eligible_rules: list[dict[str, Any]] = []
     pandas_rows: list[dict[str, Any]] = []
     sql_rows: list[dict[str, Any]] = []
@@ -586,6 +587,7 @@ def build_golden_for_dataset(
         eligible_rules.append(rule)
         params_registry = rule_params_from_registry(rule)
         params_by_rule[rule_id] = convert_params_to_ip(rule, params_registry, metric)
+        params_sql_by_rule[rule_id] = params_registry
 
     sql_computed, sql_exec_notes = cts.run_sql_ip_for_dataset(
         conn,
@@ -594,7 +596,7 @@ def build_golden_for_dataset(
         equipment_id=spec.equipment_id,
         rules=eligible_rules,
         poll_seconds=poll_seconds,
-        params_by_rule=params_by_rule,
+        params_by_rule=params_sql_by_rule,
     )
     sql_rows.extend(sql_computed)
     if sql_exec_notes:
