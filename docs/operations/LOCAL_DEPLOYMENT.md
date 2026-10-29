@@ -83,14 +83,34 @@ product code.
    `docker/compose.local.yml` loads that file into `central` optionally; legacy
    single-site `NF_CLIENT_ID` / `NF_CLIENT_SECRET` / `NFURL` may still be set in
    repo-root `.env` and are forwarded by name when present.
-3. Mount the sites directory read-only on central. The default local overlay
-   binds `../scripts/nf` at `/config/nf:ro`. Prefer a host path outside the
-   checkout, for example bind `~/.config/openfdd/sites` to `/config/nf/sites:ro`
-   in a personal compose override, and set
-   `OPENFDD_PROVIDER_SITES=/config/nf/sites` (directory) or a comma-separated
-   list of files under that mount.
-4. Restart central after config changes. `GET /api/providers/sites` lists each
+3. Mount the sites directory read-only on central. `docker/compose.local.yml`
+   binds `${OPENFDD_SITES_DIR:-${HOME}/.config/openfdd/sites}` on the host to
+   `/config/sites:ro` inside `central`. Docker Compose does **not** expand `~`;
+   leave `OPENFDD_SITES_DIR` unset only when `HOME` is set in the shell that
+   runs `docker compose`, or set `OPENFDD_SITES_DIR` explicitly in repo-root
+   `.env`. **Before the first stack start**, create that host directory as the
+   operator user (Docker creates a missing short-syntax bind source as
+   **root-owned**):
+
+   ```bash
+   mkdir -p "${OPENFDD_SITES_DIR:-$HOME/.config/openfdd/sites}"
+   ```
+
+   The overlay also binds `../scripts/nf` at `/config/nf:ro` (generic helpers
+   only). Set `OPENFDD_PROVIDER_SITES=/config/sites` (directory of `*.json`) or
+   a comma-separated list of files under that mount.
+4. Reload provider config after edits. **`GET /api/providers/sites`** lists each
    loaded site; a missing env ref fails only that site (`auth_not_configured`).
+
+   - **JSON only** under an unchanged mount (same `OPENFDD_SITES_DIR` and
+     `OPENFDD_PROVIDER_SITES`): restart `central` is enough (`docker compose …
+     restart central`).
+   - **`OPENFDD_SITES_DIR` or `OPENFDD_PROVIDER_SITES` changed** in repo-root
+     `.env`: recreate `central` so bind mounts and env reload — run the same
+     `docker compose … up -d` you use for stack bring-up (for example
+     `./scripts/openfdd_stack_up.sh portal --no-pull` or
+     `./scripts/openfdd_local_repin.sh`; both already use `up -d --no-build`, not
+     restart-only).
 5. After onboarding, run
    `python3 scripts/nf/check_portal_fresh.py --env <secrets.env> --sites <site.json> --points <probes.json>`
    per portal (see [`scripts/nf/README.md`](../../scripts/nf/README.md)).
@@ -170,7 +190,7 @@ Use `http://` (not `https://`) for local Compose. See [`mcp/README.md`](../../mc
 
 ## Stress
 
-Closeout runs on an owned local stack (Codex-owned qualification). The Railway public-URL closeout in [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) is historical.
+Closeout runs on an owned local stack (Grok-owned qualification harness — [`openfdd_agent_spec/ownership.yaml`](../../openfdd_agent_spec/ownership.yaml)). The Railway public-URL closeout in [`STRESS_CLOSEOUT.md`](STRESS_CLOSEOUT.md) is historical.
 
 ## Data-safe updates
 

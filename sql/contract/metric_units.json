@@ -1,84 +1,147 @@
 {
   "contract_id": "openfdd-metric-units-v1",
   "contract_version": "4.0.0",
-  "processing_abi_current": "imperial-f-v1",
-  "processing_abi_target": "metric-c-v2",
+  "processing_abi_current": "metric-c-v2",
   "notes": [
-    "Canonical TARGET processing is metric (°C, Δ°C, Pa, kPa, L/s, kW, kWh).",
-    "Current SQL FDD pack (77 rules) remains imperial-f-v1 until metric-v2 equations ship.",
-    "Admit path converts known source units into the active pack ABI before pivot/SQL.",
+    "Canonical processing and storage ABI is metric-c-v2 (°C, Δ°C, Pa, kPa, L/s, kW, kWh).",
+    "Rule SQL and historian values remain imperial-f-v1 on running stacks until W4 ingest/cutover land.",
+    "Declared source units convert once at ingest (W2b) or cutover (W2c); no query-time admit after W2b.",
     "Display preference is independent of processing and must not use ±32 on deltas/rates.",
     "Percent 0–100 vs fraction 0–1 is declared metadata — never inferred from magnitude.",
-    "FCU-DEADBAND uses DEADBAND_C (Celsius difference) even under imperial-f-v1 pack — see parameter kinds.",
-    "Pa per in.w.c. constant matches fdd_core::units::PA_PER_IN_WC (248.84)."
+    "Parameter SI renames are published in parameter_si_rename_map.json; registry keys stay until W4/W2c migration.",
+    "Every alias in source_unit_conversions must convert; missing entries fail CI."
   ],
   "quantities": [
     {
       "id": "absolute_temperature",
       "canonical_unit": "degC",
-      "pack_v1_unit": "degF",
       "aliases": ["C", "°C", "degC", "celsius", "F", "°F", "degF", "fahrenheit"]
     },
     {
       "id": "temperature_difference",
       "canonical_unit": "delta_degC",
-      "pack_v1_unit": "delta_degF",
       "conversion": "scale_only",
-      "aliases": ["deltaC", "Δ°C", "K_diff", "deltaF", "Δ°F"]
+      "aliases": ["deltaC", "Δ°C", "K_diff", "deltaF", "Δ°F", "degF_delta", "degC_delta"]
     },
     {
       "id": "temperature_rate",
       "canonical_unit": "delta_degC_per_h",
-      "pack_v1_unit": "delta_degF_per_h",
-      "conversion": "scale_only"
+      "conversion": "scale_only",
+      "aliases": [
+        "delta_degC_per_h",
+        "Δ°C/h",
+        "degC_per_h",
+        "delta_degF_per_h",
+        "degF_per_h",
+        "Δ°F/h"
+      ]
     },
     {
       "id": "air_pressure",
       "canonical_unit": "Pa",
-      "pack_v1_unit": "in_wc",
-      "aliases": ["Pa", "pascal", "inH2O", "in.w.c.", "in_wc"]
+      "aliases": ["Pa", "pascal", "inH2O", "in.w.c.", "in_wc", "inwc"]
     },
     {
       "id": "hydronic_pressure",
       "canonical_unit": "kPa",
-      "pack_v1_unit": "psi",
       "aliases": ["kPa", "psi"]
     },
     {
       "id": "volumetric_flow",
       "canonical_unit": "L_per_s",
-      "pack_v1_unit": "cfm",
-      "aliases": ["L/s", "lps", "cfm", "m3/s"]
+      "aliases": ["L/s", "lps", "L_per_s", "cfm", "gpm", "m3/s"]
     },
     {
       "id": "power",
       "canonical_unit": "kW",
-      "aliases": ["kW", "W"]
+      "aliases": ["kW", "W", "kw", "kBtu/h", "ton"]
     },
     {
       "id": "interval_energy",
       "canonical_unit": "kWh",
-      "aliases": ["kWh", "Wh"]
+      "aliases": ["kWh", "Wh", "kwh"]
     },
     {
       "id": "percent",
       "canonical_unit": "percent_0_100",
-      "fraction_unit": "fraction_0_1",
-      "notes": "Declared only; 1 means 1% when percent, 100% when fraction."
+      "aliases": ["pct", "percent", "%", "percent_0_100"]
+    },
+    {
+      "id": "fraction",
+      "canonical_unit": "fraction_0_1",
+      "aliases": ["frac", "fraction", "fraction_0_1"]
     },
     {
       "id": "relative_humidity",
       "canonical_unit": "percent_0_100",
-      "aliases": ["%RH", "%", "RH", "percent_relative_humidity"]
+      "aliases": ["%RH", "RH", "percent_relative_humidity"]
     },
     {
       "id": "status",
-      "canonical_unit": "boolean"
+      "canonical_unit": "boolean",
+      "aliases": ["bool", "boolean"]
     },
     {
       "id": "occupancy_mode",
       "canonical_unit": "enum_text"
     }
+  ],
+  "source_unit_conversions": [
+    {"quantity": "absolute_temperature", "alias": "C", "scale": 1.0, "offset": 0.0},
+    {"quantity": "absolute_temperature", "alias": "°C", "scale": 1.0, "offset": 0.0},
+    {"quantity": "absolute_temperature", "alias": "degC", "scale": 1.0, "offset": 0.0},
+    {"quantity": "absolute_temperature", "alias": "celsius", "scale": 1.0, "offset": 0.0},
+    {"quantity": "absolute_temperature", "alias": "F", "scale": 0.5555555555555556, "offset": -17.777777777777778},
+    {"quantity": "absolute_temperature", "alias": "°F", "scale": 0.5555555555555556, "offset": -17.777777777777778},
+    {"quantity": "absolute_temperature", "alias": "degF", "scale": 0.5555555555555556, "offset": -17.777777777777778},
+    {"quantity": "absolute_temperature", "alias": "fahrenheit", "scale": 0.5555555555555556, "offset": -17.777777777777778},
+    {"quantity": "temperature_difference", "alias": "deltaC", "scale": 1.0, "offset": 0.0},
+    {"quantity": "temperature_difference", "alias": "Δ°C", "scale": 1.0, "offset": 0.0},
+    {"quantity": "temperature_difference", "alias": "K_diff", "scale": 1.0, "offset": 0.0},
+    {"quantity": "temperature_difference", "alias": "degC_delta", "scale": 1.0, "offset": 0.0},
+    {"quantity": "temperature_difference", "alias": "deltaF", "scale": 0.5555555555555556, "offset": 0.0},
+    {"quantity": "temperature_difference", "alias": "Δ°F", "scale": 0.5555555555555556, "offset": 0.0},
+    {"quantity": "temperature_difference", "alias": "degF_delta", "scale": 0.5555555555555556, "offset": 0.0},
+    {"quantity": "temperature_rate", "alias": "delta_degC_per_h", "scale": 1.0, "offset": 0.0},
+    {"quantity": "temperature_rate", "alias": "Δ°C/h", "scale": 1.0, "offset": 0.0},
+    {"quantity": "temperature_rate", "alias": "degC_per_h", "scale": 1.0, "offset": 0.0},
+    {"quantity": "temperature_rate", "alias": "delta_degF_per_h", "scale": 0.5555555555555556, "offset": 0.0},
+    {"quantity": "temperature_rate", "alias": "degF_per_h", "scale": 0.5555555555555556, "offset": 0.0},
+    {"quantity": "temperature_rate", "alias": "Δ°F/h", "scale": 0.5555555555555556, "offset": 0.0},
+    {"quantity": "air_pressure", "alias": "Pa", "scale": 1.0, "offset": 0.0},
+    {"quantity": "air_pressure", "alias": "pascal", "scale": 1.0, "offset": 0.0},
+    {"quantity": "air_pressure", "alias": "inH2O", "scale": 248.84, "offset": 0.0},
+    {"quantity": "air_pressure", "alias": "in.w.c.", "scale": 248.84, "offset": 0.0},
+    {"quantity": "air_pressure", "alias": "in_wc", "scale": 248.84, "offset": 0.0},
+    {"quantity": "air_pressure", "alias": "inwc", "scale": 248.84, "offset": 0.0},
+    {"quantity": "hydronic_pressure", "alias": "kPa", "scale": 1.0, "offset": 0.0},
+    {"quantity": "hydronic_pressure", "alias": "psi", "scale": 6.894757, "offset": 0.0},
+    {"quantity": "volumetric_flow", "alias": "L/s", "scale": 1.0, "offset": 0.0},
+    {"quantity": "volumetric_flow", "alias": "lps", "scale": 1.0, "offset": 0.0},
+    {"quantity": "volumetric_flow", "alias": "L_per_s", "scale": 1.0, "offset": 0.0},
+    {"quantity": "volumetric_flow", "alias": "cfm", "scale": 0.471947, "offset": 0.0},
+    {"quantity": "volumetric_flow", "alias": "gpm", "scale": 0.0630902, "offset": 0.0},
+    {"quantity": "volumetric_flow", "alias": "m3/s", "scale": 1000.0, "offset": 0.0},
+    {"quantity": "power", "alias": "kW", "scale": 1.0, "offset": 0.0},
+    {"quantity": "power", "alias": "kw", "scale": 1.0, "offset": 0.0},
+    {"quantity": "power", "alias": "W", "scale": 0.001, "offset": 0.0},
+    {"quantity": "power", "alias": "kBtu/h", "scale": 0.29307107, "offset": 0.0},
+    {"quantity": "power", "alias": "ton", "scale": 3.5168525, "offset": 0.0},
+    {"quantity": "interval_energy", "alias": "kWh", "scale": 1.0, "offset": 0.0},
+    {"quantity": "interval_energy", "alias": "kwh", "scale": 1.0, "offset": 0.0},
+    {"quantity": "interval_energy", "alias": "Wh", "scale": 0.001, "offset": 0.0},
+    {"quantity": "percent", "alias": "pct", "scale": 1.0, "offset": 0.0},
+    {"quantity": "percent", "alias": "percent", "scale": 1.0, "offset": 0.0},
+    {"quantity": "percent", "alias": "%", "scale": 1.0, "offset": 0.0},
+    {"quantity": "percent", "alias": "percent_0_100", "scale": 1.0, "offset": 0.0},
+    {"quantity": "fraction", "alias": "frac", "scale": 1.0, "offset": 0.0},
+    {"quantity": "fraction", "alias": "fraction", "scale": 1.0, "offset": 0.0},
+    {"quantity": "fraction", "alias": "fraction_0_1", "scale": 1.0, "offset": 0.0},
+    {"quantity": "relative_humidity", "alias": "%RH", "scale": 1.0, "offset": 0.0},
+    {"quantity": "relative_humidity", "alias": "RH", "scale": 1.0, "offset": 0.0},
+    {"quantity": "relative_humidity", "alias": "percent_relative_humidity", "scale": 1.0, "offset": 0.0},
+    {"quantity": "status", "alias": "bool", "scale": 1.0, "offset": 0.0},
+    {"quantity": "status", "alias": "boolean", "scale": 1.0, "offset": 0.0}
   ],
   "parameter_kinds": [
     "absolute_temperature",
@@ -87,16 +150,32 @@
     "air_pressure",
     "hydronic_pressure",
     "volumetric_flow",
+    "power",
+    "interval_energy",
     "percent",
     "fraction",
+    "relative_humidity",
     "duration_seconds",
     "duration_minutes",
     "dimensionless",
+    "count",
     "boolean"
   ],
+  "unsupported_rules": [
+    {
+      "rule_id": "SV-RATE",
+      "status": "unsupported",
+      "reason": "time policy not versioned for metric-c-v2"
+    }
+  ],
+  "parameter_si_rename_map": "sql/contract/parameter_si_rename_map.json",
   "constants": {
     "PA_PER_IN_WC": 248.84,
     "LPS_PER_CFM": 0.471947,
-    "KPA_PER_PSI": 6.894757
+    "KPA_PER_PSI": 6.894757,
+    "GPM_TO_LPS": 0.0630902,
+    "M3S_TO_LPS": 1000.0,
+    "KBTU_H_TO_KW": 0.29307107,
+    "TON_REFRIG_TO_KW": 3.5168525
   }
 }

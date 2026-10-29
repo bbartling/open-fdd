@@ -4,7 +4,7 @@ Open-FDD uses **one** Timescale / PostgreSQL SQL registry (`sql/fdd`) for fault 
 
 | | Bulk / manual “run all” | Continuous AFDD |
 |--|-------------------------|-----------------|
-| Typical data | CSV / package import | NF portal hourly append (MQTT live append is historical) |
+| Typical data | CSV / package import (bulk RCx — full history, not the AFDD timer) | NF portal hourly append (MQTT live append is historical) |
 | Trigger | Operator, soak, or `POST /api/fdd/run` | Timer + optional `POST /api/afdd/scheduler/run-now` |
 | Default | `OPENFDD_AFDD_MODE=bulk` (no timer) | Opt-in `continuous` |
 | Isolation | Explicit `building_id` | Per-`building_id` mutex + checkpoint |
@@ -22,11 +22,13 @@ When `OPENFDD_AFDD_MODE=continuous`, central resolves which buildings the timer 
 
 | Env | Behavior |
 | --- | --- |
-| `OPENFDD_AFDD_BUILDING_ID` unset and `OPENFDD_AFDD_BUILDING_IDS` empty | **All sites:** one registry run per enabled building (provider sites plus Timescale inventory, de-duplicated). Each run carries an explicit `building_id`. |
-| `OPENFDD_AFDD_BUILDING_ID=<id>` | Single-building scope when the list env is empty. |
-| `OPENFDD_AFDD_BUILDING_IDS=a,b,c` | Explicit comma-separated subset (wins over single id). Unknown ids fail at startup with a clear error. |
+| `OPENFDD_AFDD_BUILDING_ID` unset and `OPENFDD_AFDD_BUILDING_IDS` empty | **All NF provider sites:** one registry run per configured portal site in `OPENFDD_PROVIDER_SITES` / `state.providers.sites`. CSV package buildings are **not** scheduled (use bulk `POST /api/fdd/run`). |
+| `OPENFDD_AFDD_BUILDING_ID=<id>` | Single provider site when the list env is empty. |
+| `OPENFDD_AFDD_BUILDING_IDS=a,b,c` | Explicit comma-separated subset of **provider** sites (wins over single id). CSV-only building ids fail at startup. Non-provider ids fail with a clear error. |
 
-Each scheduled site keeps its **own watermark and checkpoint**, so a slow site does not block others. Chunks stay bounded by lookback. `GET /api/afdd/status` (alias `/api/afdd/scheduler/status`) lists every scheduled site with last window and result summary.
+Each scheduled provider site keeps its **own watermark and checkpoint**, so a slow site does not block others. The timer evaluates the rolling lookback in **bounded time chunks** (`OPENFDD_AFDD_CHUNK_HOURS`, default 1 hour when unset). Invalid or zero values fail closed: status exposes `chunk_hours_config_error` and `chunk_seconds` is null until the env is fixed. The cycle record stores the full lookback window plus the **actual** `chunk_seconds` that ran; chunk `fdd_run` rows tile that window on `window_start` / `window_end` with no gaps. Per-site status `chunk_seconds` is null when the last cycle record has no chunk metadata (legacy or failed before tiling). `GET /api/afdd/status` (alias `/api/afdd/scheduler/status`) lists every scheduled provider site with `cycle_window_start`, `cycle_window_end`, `chunk_seconds`, checkpoint, and last result summary.
+
+**Scope vs Timescale inventory (#1403):** continuous AFDD schedules **`OPENFDD_PROVIDER_SITES` / `state.providers.sites` only**. Timescale `list_site_ids` is not unioned into the scheduled set because CSV package buildings live in the historian but must use bulk `POST /api/fdd/run`, not the AFDD timer. A portal site is scheduled from provider config even before its first sample row exists in Timescale.
 
 Compose forwards `OPENFDD_AFDD_*` and ingest tuning vars from repo-root `.env` through `docker/compose.local.yml` (see [`LOCAL_DEPLOYMENT.md`](LOCAL_DEPLOYMENT.md)).
 
@@ -54,7 +56,7 @@ The timezone is an operator IANA name. `America/Chicago` is the lab recipe so th
 
 Lookback bounds are passed as `start` and `end` on the registry run payload (UTC) and applied as SQL window filters on Timescale `history` (and `weather` when present). The result write upserts only that window. **`run_fdd_registry` persists runs to PostgreSQL** (`fdd_run`, `fdd_interval_result`, `fdd_incremental_checkpoint`); `/api/fdd/results` reads those tables. Legacy `{rule_id}.json` manifests under the workspace rule-results tree are not written on the Timescale path and may be removed manually after verification ([`LOCAL_HOSTING.md`](LOCAL_HOSTING.md)). Slices outside the AFDD window stay unchanged where windowed slice metadata exists (`rows_sha256` on `GET /api/afdd/scheduler/result-slices`). There is no scheduler "update all". If the existing result file is missing, the window is the first slice. If it cannot be read or parsed, the publish fails and the file is left unchanged.
 
-`lookback_matches_cadence` on scheduler status is true when that lookback equals the cadence: 24h for wall-clock, or `interval_minutes` for interval mode. A 3-hour interval with a 3-day lookback stays valid and reports false. Downtime does not stretch the window.
+`lookback_equals_schedule_cadence` on scheduler status is true when the configured lookback duration equals the schedule cadence in seconds: 24h for wall-clock, or `interval_minutes` for interval mode. A 3-hour interval with a 3-day lookback stays valid and reports false. Downtime does not stretch the window.
 
 Operator UI / `POST /api/afdd/scheduler/config` allowlist: schedule `interval` or `wall_clock`; interval **1 / 3 / 6 / 12 / 24 hours** (`60…1440` minutes); lookback **1 / 2 / 3 days**; wall clock requires `HH:MM` plus an IANA timezone. `update_all` / `lookback=all` is rejected. Mode stays env-owned. A persisted `state/afdd/scheduler-runtime-config.json` overlay overwrites interval/lookback/schedule on boot — clear it when pinning env lookback in **hours**.
 

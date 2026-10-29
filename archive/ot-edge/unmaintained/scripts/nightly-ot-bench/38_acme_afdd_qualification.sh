@@ -500,17 +500,17 @@ elif schedule_kind in ("interval", "", None):
 else:
     schedule_errors.append(f"unknown schedule_kind {schedule_kind!r}")
 cadence_hours = 24.0 if schedule_kind == "wall_clock" else interval / 60.0
-matches = status.get("lookback_matches_cadence")
+matches = status.get("lookback_equals_schedule_cadence")
 if matches is False and abs(lookback_hours - cadence_hours) < 0.01:
-    schedule_errors.append("lookback_matches_cadence is false for a cadence-sized lookback")
+    schedule_errors.append("lookback_equals_schedule_cadence is false for a cadence-sized lookback")
 if matches is True and abs(lookback_hours - cadence_hours) > 0.01:
-    schedule_errors.append("lookback_matches_cadence is true but lookback differs from cadence")
+    schedule_errors.append("lookback_equals_schedule_cadence is true but lookback differs from cadence")
 report["checks"]["schedule_semantics"] = {
     "ok": not schedule_errors,
     "schedule_kind": schedule_kind,
     "next_due_at_utc": status.get("next_due_at_utc"),
     "next_due_local": status.get("next_due_local"),
-    "lookback_matches_cadence": matches,
+    "lookback_equals_schedule_cadence": matches,
     "errors": schedule_errors,
 }
 if schedule_errors:
@@ -556,7 +556,7 @@ open(summary, "w").write(
 
 - building: `{building}`
 - config: continuous / {interval} min / {lookback_hours}h lookback / timer_scope={timer_scope}
-- schedule_kind: `{schedule_kind}` lookback_matches_cadence={matches}
+- schedule_kind: `{schedule_kind}` lookback_equals_schedule_cadence={matches}
 - cycle run_id: `{run_id}`
 - window_hours: {window_hours}
 - elapsed_secs: {elapsed:.1f}

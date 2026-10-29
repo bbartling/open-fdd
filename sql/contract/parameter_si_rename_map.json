@@ -1,0 +1,22 @@
+{
+  "schema": "openfdd-parameter-si-rename-v1",
+  "notes": [
+    "One-to-one map from current registry/tuning_catalog parameter keys to SI-first names.",
+    "SQL placeholders and saved rule_config keys stay on the legacy names until W2c migration.",
+    "W2a adds kind metadata only; W2c writes new revisions using the si_key values."
+  ],
+  "renames": {
+    "approach_max_f": "approach_max",
+    "coil_delta_f": "coil_delta",
+    "comfort_high_f": "comfort_high",
+    "comfort_low_f": "comfort_low",
+    "deadband_c": "deadband",
+    "delta_f": "delta",
+    "econ6_oat_max_f": "econ6_oat_max",
+    "excess_beyond_approach_f": "excess_beyond_approach",
+    "mech_oat_max_f": "mech_oat_max",
+    "pass_delta_f": "pass_delta",
+    "preheat_over_f": "preheat_over",
+    "reset_err_f": "reset_err"
+  }
+}

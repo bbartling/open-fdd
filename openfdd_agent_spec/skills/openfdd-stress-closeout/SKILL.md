@@ -7,6 +7,21 @@ description: >-
 
 # Stress closeout — portal stack
 
+## Ownership (4.0.7+)
+
+**Grok cloud agents** own this skill, [`scripts/stress/`](../../../scripts/stress/),
+[`scripts/qualification/`](../../../scripts/qualification/),
+[`scripts/security/`](../../../scripts/security/),
+[`tests/qualification/`](../../../tests/qualification/),
+[`tests/security/`](../../../tests/security/), and the **Security + qualification
+unit tests** job in [`.github/workflows/appsec.yml`](../../../.github/workflows/appsec.yml).
+Manifest: [`ownership.yaml`](../../ownership.yaml) → `portal_stress_qualification_security`.
+**Codex** may review but is not on the critical path.
+
+Guidance-only or product PRs must not edit these paths. Use a Grok-owned row
+(4.0.7 W0a / W0b / W3 / W8). Each agent watches its PR until required checks
+are green. Protocol: [`PR_PROTOCOL.md`](../../PR_PROTOCOL.md).
+
 Current product is Rust central, React web, Timescale and NF portal pull/CSV.
 MQTT/BACnet/Modbus/Haystack transport containers are archived and unqualified;
 Haystack semantic modeling remains active. Historical3.x OT closeout rows do not

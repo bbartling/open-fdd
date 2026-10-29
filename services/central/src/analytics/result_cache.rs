@@ -230,10 +230,16 @@ pub async fn serve_with(
         ));
     };
 
-    let tsdb = if matches!(watch, CacheWatch::Resolve) {
-        fdd_tsdb::Tsdb::connect_from_env().await.ok()
+    let (tsdb, connect_err) = if matches!(watch, CacheWatch::Resolve) {
+        match fdd_tsdb::Tsdb::connect_from_env().await {
+            Ok(db) => (Some(db), None),
+            Err(err) => {
+                tracing::warn!(error = %err, "analytics result cache timescale connect failed");
+                (None, Some(format!("timescale connect failed: {err}")))
+            }
+        }
     } else {
-        None
+        (None, None)
     };
 
     let identity = match watch {
@@ -241,7 +247,10 @@ pub async fn serve_with(
             if let Some(ref db) = tsdb {
                 resolve_cache_identity_from(db, building_id, req).await
             } else {
-                resolve_cache_identity_unconnected(building_id, req).await
+                let reason = connect_err
+                    .as_deref()
+                    .unwrap_or("timescale connect failed for analytics cache identity");
+                resolve_cache_identity_unconnected(reason)
             }
         }
         #[cfg(test)]
@@ -251,11 +260,10 @@ pub async fn serve_with(
     let key = if query_id == "bas-vs-web-oat" {
         let Some(db) = tsdb.as_ref() else {
             let envelope = compute_with_admission_fallible(compute).await?;
-            return Ok(skipped(
-                envelope,
-                started,
-                "timescale connect failed for bas-vs-web-oat cache key",
-            ));
+            let reason = connect_err
+                .as_deref()
+                .unwrap_or("timescale connect failed for bas-vs-web-oat cache key");
+            return Ok(skipped(envelope, started, reason));
         };
         match bas_vs_web_cache_extension(db, building_id).await {
             Ok(ext) => {
@@ -723,17 +731,14 @@ async fn resolve_cache_identity_from(
     }
 }
 
-async fn resolve_cache_identity_unconnected(
-    _building_id: &str,
-    _req: &AnalyticsRequest,
-) -> CacheIdentity {
-    let sql_pack = crate::timescale_product::analytics_cache_sql_pack().unwrap_or_default();
-    let reason = "timescale connect failed for analytics cache identity".to_string();
+fn resolve_cache_identity_unconnected(connect_reason: &str) -> CacheIdentity {
     CacheIdentity {
         result_contract: ANALYTICS_RESULT_CONTRACT.into(),
-        sql_pack,
+        sql_pack: String::new(),
         model_revision: String::new(),
-        watermark: InputWatermark::Unavailable { reason },
+        watermark: InputWatermark::Unavailable {
+            reason: connect_reason.to_string(),
+        },
     }
 }
 
