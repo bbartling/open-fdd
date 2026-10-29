@@ -81,7 +81,7 @@ class UnitContractSiCutoverDiffTests(unittest.TestCase):
         from unit_contract_lib import _resolve_convert_kind
 
         with self.assertRaises(AssertionError) as ctx:
-            _resolve_convert_kind("FC1", "mystery", "unknown_unit", "dimensionless")
+            _resolve_convert_kind("FC1", "mystery", "unknown_unit", "temperature")
         self.assertIn("cannot infer kind", str(ctx.exception))
 
 
