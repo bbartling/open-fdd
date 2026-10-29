@@ -17,7 +17,7 @@ use super::binding_state::{
     ensure_binding_row, last_stored_ts_for_device, stored_hour_starts_for_device, DeviceBindingKey,
     EnsureBindingInput,
 };
-use super::catchup_registry::CatchupRegistry;
+use super::catchup_registry::DeviceCatchupUpdate;
 use super::gap_backfill::point_keys_for_plan_device;
 use super::gap_planner::{default_max_span, expected_start, plan_gap_windows, GapPlanInput};
 use super::model::MAX_CATCHUP_HOURS;
@@ -70,23 +70,22 @@ pub async fn site_catchup_json(
                 .catchup_registry()
                 .read()
                 .ok()
-                .and_then(|guard| guard.snapshot(&key))
-                .map(|snap| snap.rows_per_minute)
+                .map(|guard| guard.rows_per_minute(&key))
                 .unwrap_or(0.0);
-            let row = device_row(
+            let row = device_row(DeviceCatchupRowInput {
                 pool,
                 state,
-                &plan,
+                plan: &plan,
                 site_cfg,
-                group.equipment_id.as_str(),
-                &group.provider_instance_id,
+                device_id: group.equipment_id.as_str(),
+                provider_instance_id: &group.provider_instance_id,
                 now,
                 target_end,
                 delay,
                 step,
                 config,
                 rows_per_minute,
-            )
+            })
             .await?;
             devices.push(row);
         }
@@ -98,20 +97,36 @@ pub async fn site_catchup_json(
     Ok(providers)
 }
 
-async fn device_row(
-    pool: &PgPool,
-    state: &Arc<AppState>,
-    plan: &IngestPlan,
-    site_cfg: &SiteConfig,
-    device_id: &str,
-    provider_instance_id: &str,
+struct DeviceCatchupRowInput<'a> {
+    pool: &'a PgPool,
+    state: &'a Arc<AppState>,
+    plan: &'a IngestPlan,
+    site_cfg: &'a SiteConfig,
+    device_id: &'a str,
+    provider_instance_id: &'a str,
     now: DateTime<Utc>,
     target_end: DateTime<Utc>,
     delay: Duration,
     step: i64,
     config: AsapConfig,
     rows_per_minute: f64,
-) -> Result<Value, String> {
+}
+
+async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
+    let DeviceCatchupRowInput {
+        pool,
+        state,
+        plan,
+        site_cfg,
+        device_id,
+        provider_instance_id,
+        now,
+        target_end,
+        delay,
+        step,
+        config,
+        rows_per_minute,
+    } = input;
     let point_keys = point_keys_for_plan_device(plan, provider_instance_id, device_id)
         .ok_or_else(|| "device not in plan".to_string())?;
     let key = DeviceBindingKey {
@@ -158,8 +173,7 @@ async fn device_row(
         last_stored_ts: last_stored,
         force: false,
         max_span: default_max_span(),
-    })
-    .map_err(|err| err.to_string())?;
+    })?;
     let decision = decide_mode(
         &gap_plan,
         last_stored,

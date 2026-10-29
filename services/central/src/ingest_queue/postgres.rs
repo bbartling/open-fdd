@@ -227,7 +227,7 @@ pub struct PortalBudgetStatus {
 pub async fn portal_budget_status(
     pool: &PgPool,
     provider_instance_id: &str,
-    now: DateTime<Utc>,
+    _now: DateTime<Utc>,
 ) -> Result<PortalBudgetStatus, QueueError> {
     let row = sqlx::query_as::<_, (Option<DateTime<Utc>>, Option<i32>)>(
         "SELECT paused_until, tokens_remaining

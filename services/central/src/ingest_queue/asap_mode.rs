@@ -5,7 +5,6 @@ use chrono::{DateTime, Duration, Utc};
 use crate::providers::hourly::floor_to_window;
 
 use super::gap_planner::{plan_gap_windows, GapPlanInput, GapPlanResult};
-use super::model::JOB_SHARD_ASAP;
 
 pub const MODE_NORMAL: &str = "normal";
 pub const MODE_ASAP: &str = "asap";
@@ -30,16 +29,11 @@ impl AsapConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum CatchupMode {
+    #[default]
     Normal,
     Asap,
-}
-
-impl Default for CatchupMode {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 impl CatchupMode {
@@ -47,14 +41,6 @@ impl CatchupMode {
         match self {
             Self::Normal => MODE_NORMAL,
             Self::Asap => MODE_ASAP,
-        }
-    }
-
-    pub fn parse(raw: &str) -> Option<Self> {
-        match raw {
-            MODE_NORMAL => Some(Self::Normal),
-            MODE_ASAP => Some(Self::Asap),
-            _ => None,
         }
     }
 }
@@ -110,10 +96,6 @@ pub fn plan_backlog(input: GapPlanInput<'_>) -> Result<GapPlanResult, String> {
     plan_gap_windows(input)
 }
 
-pub fn asap_shard() -> &'static str {
-    JOB_SHARD_ASAP
-}
-
 pub fn eta_seconds(missing_windows: u32, window_secs: i64, rows_per_minute: f64) -> Option<i64> {
     if missing_windows == 0 {
         return Some(0);
@@ -121,7 +103,8 @@ pub fn eta_seconds(missing_windows: u32, window_secs: i64, rows_per_minute: f64)
     if rows_per_minute <= 0.0 {
         return None;
     }
-    let windows_per_minute = (rows_per_minute / 60.0).max(0.01);
+    let step = window_secs.clamp(60, 3600);
+    let windows_per_minute = (rows_per_minute * 60.0 / f64::from(step)).max(0.01);
     let minutes = f64::from(missing_windows) / windows_per_minute;
     if !minutes.is_finite() {
         return None;

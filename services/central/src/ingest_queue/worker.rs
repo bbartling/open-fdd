@@ -1111,34 +1111,47 @@ async fn run_asap_cycle(state: &Arc<AppState>, now: chrono::DateTime<Utc>) -> Re
             break;
         }
         let budget_left = config.max_jobs_per_tick.saturating_sub(enqueued_total);
-        let n = process_asap_device(
+        let n = process_asap_device(AsapDeviceCycleInput {
             state,
-            &pool,
-            &device,
+            pool: &pool,
+            device: &device,
             now,
             target_end,
             delay,
             step,
             config,
             budget_left,
-        )
+        })
         .await?;
         enqueued_total = enqueued_total.saturating_add(n);
     }
     Ok(())
 }
 
-async fn process_asap_device(
-    state: &Arc<AppState>,
-    pool: &sqlx::PgPool,
-    device: &ScheduleDevice,
+struct AsapDeviceCycleInput<'a> {
+    state: &'a Arc<AppState>,
+    pool: &'a sqlx::PgPool,
+    device: &'a ScheduleDevice,
     now: chrono::DateTime<Utc>,
     target_end: chrono::DateTime<Utc>,
     delay: chrono::Duration,
     step: i64,
     config: super::asap_mode::AsapConfig,
     budget_left: u32,
-) -> Result<u32, String> {
+}
+
+async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, String> {
+    let AsapDeviceCycleInput {
+        state,
+        pool,
+        device,
+        now,
+        target_end,
+        delay,
+        step,
+        config,
+        budget_left,
+    } = input;
     let plan = {
         let models = state
             .providers
@@ -1221,19 +1234,20 @@ async fn process_asap_device(
         .catchup_registry()
         .read()
         .ok()
-        .and_then(|guard| guard.snapshot(&key))
-        .map(|snap| snap.rows_per_minute)
+        .map(|guard| guard.rows_per_minute(&key))
         .unwrap_or(0.0);
     let eta = super::asap_mode::eta_seconds(decision.missing_windows, step, rows_per_minute);
     if let Ok(mut guard) = state.ingest_queue.catchup_registry().write() {
         guard.update_device(
             &key,
-            decision.mode,
-            decision.missing_windows,
-            last_stored,
-            eta,
-            throttle.paused_until,
-            throttle.tokens_remaining,
+            super::catchup_registry::DeviceCatchupUpdate {
+                mode: decision.mode,
+                missing_windows: decision.missing_windows,
+                last_stored_ts: last_stored,
+                eta_seconds: eta,
+                throttle_paused_until: throttle.paused_until,
+                throttle_tokens_remaining: throttle.tokens_remaining,
+            },
         );
     }
     if decision.mode != super::asap_mode::CatchupMode::Asap {
