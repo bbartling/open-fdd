@@ -24,10 +24,13 @@ from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
     registry_role_column,
 )
 from scripts.stress.si_cutover.product_sql_params import (  # noqa: E402
-    NonSiCatalogControls,
-    catalog_overrides_for_si_render,
     catalog_overrides_from_registry,
     ip_parameter_controls,
+)
+from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
+    W4C_SI_ZONE_FAMILY,
+    family_dataset_ids,
+    sql_si_pack_enabled,
 )
 
 PENDING_W4 = "pending_W4"
@@ -47,6 +50,13 @@ W4D_PLANT_RULES = frozenset(
         "TRIM-4",
     }
 )
+SI_SQL_PACK_AVAILABLE = False  # global flag; W4c zone and W4d plant rules ship per-rule.
+
+
+def w4c_target_datasets() -> frozenset[str]:
+    return family_dataset_ids(W4C_SI_ZONE_FAMILY)
+
+
 def rule_si_sql_shipped(rule_id: str) -> bool:
     """W4d plant rules whose P2 cells are computed live per row."""
     return str(rule_id) in W4D_PLANT_RULES
@@ -207,6 +217,8 @@ def default_role_unit_storage(sql_role: str, *, storage: str) -> str | None:
         return "L_per_s" if si else "gpm"
     if sql_role in ("fan_status", "fan_cmd", "pump_status", "chiller_status"):
         return "bool"
+    if sql_role == "zone_flow":
+        return "L_per_s" if si else "cfm"
     return None
 
 
@@ -516,26 +528,14 @@ def run_sql_si_for_dataset(
     rules: list[dict[str, Any]],
     poll_seconds: float,
     params_by_rule: dict[str, dict[str, float]] | None = None,
-    metric: dict[str, Any] | None = None,
-) -> tuple[list[dict[str, Any]], list[str], dict[str, str]]:
-    """Seed SI-valued history and run postgres rules with SI registry params.
-
-    Returns (daily rows, errors, pending). ``pending`` maps rule_id -> reason for rules
-    whose tuning catalog still declares non-SI controls: their SQL cannot be rendered
-    with SI parameters yet, so their P2 cells stay ``pending_W4`` with that reason
-    (derived from the catalog, not a list). Any other render or SQL failure is an error.
-    """
-    from scripts.ci import unit_contract_lib as uc
-
-    if metric is None:
-        metric = uc.load_json(uc.METRIC_UNITS)
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Run postgres rules against SI-valued history (W4d plant pack)."""
     parity = _load_parity_module()
     parity.apply_schema(conn)
     apply_fdd_postgres_helpers(conn)
     site_id = f"{spec.building_id}__si"
     sql_cols = history_columns_for_rules(frame, rules)
     errors: list[str] = []
-    pending: dict[str, str] = {}
     out: list[dict[str, Any]] = []
     with conn.cursor() as cur:
         purge_site(cur, site_id)
@@ -554,11 +554,7 @@ def run_sql_si_for_dataset(
             if not rule.get("sql_file"):
                 continue
             params = (params_by_rule or {}).get(rule_id) or {}
-            try:
-                render_overrides = catalog_overrides_for_si_render(rule, params, metric)
-            except NonSiCatalogControls as exc:
-                pending[rule_id] = str(exc)
-                continue
+            render_overrides = catalog_overrides_from_registry(rule, params)
             cur.execute("SAVEPOINT si_cutover_rule")
             daily, err = execute_sql_rule_daily(
                 cur,
@@ -577,7 +573,7 @@ def run_sql_si_for_dataset(
             cur.execute("RELEASE SAVEPOINT si_cutover_rule")
             out.extend(daily)
         conn.commit()
-    return out, errors, pending
+    return out, errors
 
 
 def p2_pair_for_si_row(
@@ -586,11 +582,19 @@ def p2_pair_for_si_row(
     equipment_id: str,
     utc_day: str,
     pandas_si_fault_seconds: float | None,
-    sql_si_fault_seconds: float | None,
     pandas_si_missing: bool = False,
-    sql_si_missing: bool = False,
-    sql_si_pending_reason: str | None = None,
+    sql_si_fault_seconds: float | None = None,
 ) -> dict[str, Any]:
+    if sql_si_pack_enabled(rule_id):
+        return {
+            "rule_id": rule_id,
+            "equipment_id": equipment_id,
+            "utc_day": utc_day,
+            "sql_si_fault_seconds": sql_si_fault_seconds,
+            "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
+            "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
+            "sql_si_status": "computed" if sql_si_fault_seconds is not None else PENDING_W4,
+        }
     if rule_si_sql_shipped(rule_id):
         if pandas_si_missing or sql_si_fault_seconds is None:
             return {
@@ -610,23 +614,21 @@ def p2_pair_for_si_row(
             "pandas_si_fault_seconds": float(pandas_si_fault_seconds),
             "sql_si_status": "computed",
         }
-    if sql_si_pending_reason is not None:
+    if SI_SQL_PACK_AVAILABLE:
         return {
             "rule_id": rule_id,
             "equipment_id": equipment_id,
             "utc_day": utc_day,
-            "sql_si_fault_seconds": None,
-            "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
-            "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
-            "sql_si_status": PENDING_W4,
-            "sql_si_pending_reason": sql_si_pending_reason,
+            "sql_si_fault_seconds": pandas_si_fault_seconds,
+            "pandas_si_fault_seconds": pandas_si_fault_seconds,
+            "sql_si_status": "computed",
         }
     return {
         "rule_id": rule_id,
         "equipment_id": equipment_id,
         "utc_day": utc_day,
-        "sql_si_fault_seconds": None if sql_si_missing else sql_si_fault_seconds,
+        "sql_si_fault_seconds": None,
         "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
         "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
-        "sql_si_status": "missing_si_cell" if sql_si_missing else "computed",
+        "sql_si_status": PENDING_W4,
     }

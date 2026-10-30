@@ -535,7 +535,13 @@ def econ_scatter_caption(temp_unit: str = "°F") -> str:
 )
 
 
-def write_econ_scatter(role_df: pd.DataFrame, path: Path, *, temp_unit: str = "°F") -> bool:
+def write_econ_scatter(
+    role_df: pd.DataFrame,
+    path: Path,
+    *,
+    temp_unit: str = "°F",
+    dt_min: float | None = None,
+) -> bool:
     """Write ``economizer_delta_scatter`` clipped to the bottom-left mixing quadrant.
 
     x = OAT−RAT (``delta_or_f``), y = MAT−RAT (``delta_mr_f``). Axis limits
@@ -544,15 +550,17 @@ def write_econ_scatter(role_df: pd.DataFrame, path: Path, *, temp_unit: str = "�
     from open_fdd.analytics.charts import economizer_delta_scatter
     from open_fdd.analytics.core import ECON_DIAG_DT_MIN_F, build_economizer_delta_points
 
+    if dt_min is None:
+        dt_min = ECON_DIAG_DT_MIN_F
     equipment_id = str(role_df.attrs.get("equipment_id") or "equipment")
     points = build_economizer_delta_points(
         role_df,
         equipment_id=equipment_id,
-        dt_min_f=ECON_DIAG_DT_MIN_F,
+        dt_min_f=float(dt_min),
     )
     figure = economizer_delta_scatter(
         points,
-        dt_min_f=ECON_DIAG_DT_MIN_F,
+        dt_min_f=float(dt_min),
         viewport="bottom_left",
         temp_unit=temp_unit,
     )
@@ -1156,7 +1164,8 @@ def _device_typst(device: dict[str, Any]) -> str:
     else:
         parts.extend(
             [
-                "Scatter unavailable: need at least five fan-on samples in the bottom-left quadrant with |OAT-RAT| >= 10 F.",
+                "Scatter unavailable: need at least five fan-on samples in the bottom-left quadrant "
+                f"with |OAT−RAT| ≥ {device.get('scatter_delta_min', 10):g}{device.get('scatter_temp_unit', '°F')}.",
                 "",
             ]
         )
@@ -1242,46 +1251,61 @@ def _one_device(
     week: str | None = None,
     profile: str | None = None,
     ai_comments: dict[str, str] | None = None,
+    units: str = "imperial",
 ) -> dict[str, Any]:
     from open_fdd.reporting.report_template import DeviceFolderSource, load_ai_comments, resolve_profile
     from open_fdd.rules import run_all
 
-    from open_fdd.analytics.units import stamp_display_units
+    from open_fdd.analytics.report_storage import (
+        economizer_identifiable_delta_min,
+        ensure_storage_frame,
+        frame_for_display,
+        normalize_display_units,
+    )
     from open_fdd.reporting.narrative_polish import polish_anomaly_paragraph, polish_sensor_paragraph
 
+    display_units = normalize_display_units(units)
     history = DeviceFolderSource(folder).load()
     label = history.equipment_id
-    framed = history.frame
-    framed.attrs["equipment_id"] = label
     column_map_path = Path(folder) / "column_map.json"
     column_map = json.loads(column_map_path.read_text(encoding="utf-8")) if column_map_path.is_file() else {}
-    units_map = stamp_display_units(framed, column_map if isinstance(column_map, dict) else {})
+    storage = ensure_storage_frame(history.frame, column_map if isinstance(column_map, dict) else {})
+    storage.attrs["equipment_id"] = label
+    storage = filter_to_month(storage, month)
+    storage, web_source = attach_web_oat(storage, web_oat=web_oat, lat=lat, lon=lon)
+    storage.attrs["equipment_id"] = label
+    plot = frame_for_display(storage, display_units)
+    units_map = dict(plot.attrs.get("units_map") or {})
     temp_unit = str(units_map.get("outside-air-temp") or "°F")
-    framed = filter_to_month(framed, month)
-    framed, web_source = attach_web_oat(framed, web_oat=web_oat, lat=lat, lon=lon)
-    framed.attrs["equipment_id"] = label
+    dt_min = economizer_identifiable_delta_min(display_units)
     chosen = resolve_profile(profile, history.equipment_type)
     comments = load_ai_comments(folder, ai_comments)
 
     slug = point_slug(label)
-    health = data_health_rows(framed, history.points)
-    results = run_all(framed, poll_seconds=_poll_seconds(framed.index))
+    health = data_health_rows(storage, history.points)
+    results = run_all(storage, poll_seconds=_poll_seconds(storage.index))
     sensor_checks = sensor_validation_bullets(results, health)
-    anomaly = anomaly_plain_checklist(framed, history.points, month)
+    anomaly = anomaly_plain_checklist(storage, history.points, month)
     sensor_narrative = polish_sensor_paragraph(sensor_checks)
     anomaly_narrative = polish_anomaly_paragraph(anomaly)
-    faults = _fault_figures(framed, results, out_dir, slug, month, units_map)
-    week, week_label = representative_week(framed, week_start=week)
-    framed.attrs["units_map"] = units_map
-    week.attrs["units_map"] = units_map
-    motors, motor_note = _motor_weekly_figures(framed, label, out_dir, slug)
-    rcx = _rcx_week_figures(week, label, out_dir, slug, profile_id=chosen.id, units_map=units_map)
+    faults = _fault_figures(plot, results, out_dir, slug, month, units_map)
+    week_storage, week_label = representative_week(storage, week_start=week)
+    plot_week = frame_for_display(week_storage, display_units)
+    plot.attrs["units_map"] = units_map
+    plot_week.attrs["units_map"] = units_map
+    motors, motor_note = _motor_weekly_figures(plot, label, out_dir, slug)
+    rcx = _rcx_week_figures(plot_week, label, out_dir, slug, profile_id=chosen.id, units_map=units_map)
     scatter_name = f"figures/{slug}_econ_scatter.png"
-    scatter_ok = write_econ_scatter(framed, out_dir / scatter_name, temp_unit=temp_unit)
+    scatter_ok = write_econ_scatter(
+        plot,
+        out_dir / scatter_name,
+        temp_unit=temp_unit,
+        dt_min=dt_min,
+    )
     summary_text = _executive_summary(
         label=label,
         month=month,
-        frame=framed,
+        frame=storage,
         sensor_checks=sensor_checks,
         anomaly=anomaly,
         faults=faults,
@@ -1298,12 +1322,16 @@ def _one_device(
         "profile_implemented": chosen.implemented,
         "source_id": history.source_id,
         "ai_comments": comments,
-        "unit_system": str(framed.attrs.get("unit_system") or "imperial"),
+        "storage_abi": str(storage.attrs.get("storage_abi") or ""),
+        "display_units": display_units,
+        "unit_system": display_units,
         "executive_summary": summary_text,
         "sensor_narrative": sensor_narrative,
         "anomaly_narrative": anomaly_narrative,
-        "coverage": coverage_facts(framed, month),
+        "coverage": coverage_facts(storage, month),
         "scatter_caption": econ_scatter_caption(temp_unit),
+        "scatter_delta_min": dt_min,
+        "scatter_temp_unit": temp_unit,
         "sensor_checks": sensor_checks,
         "anomaly": anomaly,
         "health": health,
@@ -1360,6 +1388,7 @@ def build_single_system_report(
     methods: list[str] | None = None,
     command: str | None = None,
     compile_pdf: bool = False,
+    units: str = "imperial",
 ) -> SingleSystemReport:
     """Write ``report.typ``, ``report_summary.json``, and Plotly PNGs under ``out_dir``.
 
@@ -1393,6 +1422,7 @@ def build_single_system_report(
                 week=week,
                 profile=profile,
                 ai_comments=ai_comments,
+                units=units,
             )
         )
     if not devices:
