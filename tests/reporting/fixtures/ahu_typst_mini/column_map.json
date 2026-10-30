@@ -2,6 +2,7 @@
   "equipType": "ahu",
   "equip": "AHU_1",
   "storage_abi": "metric-c-v2",
+  "source_units": "imperial",
   "display_units": "imperial",
   "points": {
     "discharge-air-temp": "DAT",

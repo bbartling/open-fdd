@@ -62,6 +62,20 @@ def normalize_display_units(preference: str | None) -> str:
     raise ValueError("units must be imperial or si")
 
 
+def normalize_source_units(declared: str | None) -> str | None:
+    """Wide CSV magnitude system — independent of display preference."""
+    if declared is None:
+        return None
+    token = str(declared).strip().lower()
+    if not token:
+        return None
+    if token in {"imperial", "ip", "us", "f", "fahrenheit"}:
+        return "imperial"
+    if token in {"si", "metric", "c", "celsius", "metric-c-v2"}:
+        return "si"
+    raise ValueError("source_units must be imperial or si")
+
+
 def resolve_storage_abi(column_map: dict[str, Any] | None, frame: Any | None = None) -> str:
     column_map = column_map or {}
     declared = column_map.get("storage_abi") or column_map.get("processing_abi")
@@ -139,7 +153,11 @@ def oracle_seed_frame_from_imperial_wide(frame: pd.DataFrame) -> pd.DataFrame:
     out.attrs["storage_values_converted"] = True
     return ensure_storage_frame(
         out,
-        {"storage_abi": STORAGE_ABI_METRIC, "display_units": "imperial"},
+        {
+            "storage_abi": STORAGE_ABI_METRIC,
+            "source_units": "imperial",
+            "display_units": "imperial",
+        },
     )
 
 
@@ -153,20 +171,15 @@ def ensure_storage_frame(frame: pd.DataFrame, column_map: dict[str, Any] | None 
         raise ValueError(f"unsupported storage_abi {abi!r}")
     out.attrs["storage_abi"] = abi
     metadata = dict(column_map)
-    explicit_display = metadata.get("display_units")
-    if not explicit_display:
+    if not metadata.get("display_units"):
         metadata["display_units"] = "imperial"
-    display_pref = normalize_display_units(metadata.get("display_units"))
-    legacy_imperial_wide = (
-        isinstance(explicit_display, str)
-        and bool(str(explicit_display).strip())
-        and display_pref == "imperial"
-        and not out.attrs.get("storage_values_converted")
-    )
-    if legacy_imperial_wide:
+    source_pref = normalize_source_units(metadata.get("source_units"))
+    if source_pref == "imperial" and not out.attrs.get("storage_values_converted"):
         out = _convert_imperial_wide_columns_to_storage(out)
         _stamp_storage_role_units(out)
         out.attrs["storage_values_converted"] = True
+    elif source_pref == "si":
+        _stamp_storage_role_units(out)
     from open_fdd.analytics.units import stamp_display_units
 
     stamp_display_units(out, metadata)

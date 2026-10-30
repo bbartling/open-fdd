@@ -76,7 +76,7 @@ SCHED247_CMD_ON_FRAC = 0.05
 
 def _pressure_on_mask(d: pd.DataFrame, p: dict) -> pd.Series | None:
     """True when a pressure sensor shows live operating pressure (equipment likely on)."""
-    thr = _param_si_pressure_to_series(d, _f(p, "pressure_on_min", 0.20))
+    thr = _f(p, "pressure_on_min", _default_pressure_param(d, si_pa=49.768, imperial_in_wc=0.20))
     for role in ("duct-static-pressure", "chw-diff-pressure", "hw-diff-pressure"):
         if role not in d.columns or not d[role].notna().any():
             continue
@@ -198,15 +198,10 @@ def _param_si_flow_to_series(_d: pd.DataFrame, value_lps: float) -> float:
     return float(value_lps)
 
 
-def _param_si_pressure_to_series(d: pd.DataFrame, value_in_wc: float) -> float:
-    """Scale in. w.c. rule parameters when the frame is metric-c-v2 storage."""
+def _default_pressure_param(d: pd.DataFrame, *, si_pa: float, imperial_in_wc: float) -> float:
     from open_fdd.quality import _storage_si
-    from open_fdd.units.convert import PA_PER_IN_WC
 
-    v = float(value_in_wc)
-    if _storage_si(d):
-        return v * PA_PER_IN_WC
-    return v
+    return float(si_pa if _storage_si(d) else imperial_in_wc)
 
 
 def _false(index) -> pd.Series:
@@ -699,13 +694,13 @@ def _fan(d: pd.DataFrame) -> pd.Series:
 
 
 def fc1(d, p, poll):
-    from open_fdd.units.convert import PA_PER_IN_WC
-
-    err = float(p["eps_dsp"]) if "eps_dsp" in p else float(p["duct_static_err"])
-    from open_fdd.quality import _storage_si
-
-    if _storage_si(d):
-        err = err * PA_PER_IN_WC
+    default_err = _default_pressure_param(d, si_pa=29.8608, imperial_in_wc=0.12)
+    if "eps_dsp" in p:
+        err = float(p["eps_dsp"])
+    elif "duct_static_err" in p:
+        err = float(p["duct_static_err"])
+    else:
+        err = default_err
     speed_err = _gl36_value(p, "eps_vfd_spd", None, 0.13)
     fan_hi = _gl36_value(p, "fan_hi", None, 1.0 - speed_err)
     fan = _fan(d)
@@ -968,7 +963,8 @@ def ahu_sat_dev(d, p, poll):
 
 def ahu_duct_high(d, p, poll):
     """Duct static above SP + margin. Gate (not equation) decides fan-vs-pressure active window."""
-    margin = _param_si_pressure_to_series(d, _f(p, "duct_high_margin", 0.25))
+    default_margin = _default_pressure_param(d, si_pa=62.21, imperial_in_wc=0.25)
+    margin = _f(p, "duct_high_margin", default_margin)
     return (
         d["duct-static-pressure"].notna()
         & d["duct-static-pressure-sp"].notna()
@@ -989,20 +985,14 @@ def ahu_simul_heat_cool(d, p, poll):
 
 
 def econ1(d, p, poll):
-    from open_fdd.quality import _storage_si
-
-    raw_oat_min = _f(p, "econ1_oat_min", 12.777778)
-    oat_min = (raw_oat_min - 32.0) * (5.0 / 9.0) if _storage_si(d) and raw_oat_min >= 30.0 else raw_oat_min
+    oat_min = _f(p, "econ1_oat_min", 12.777778)
     fan = _fan(d)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return (fan > FAN_ON_MIN) & d["outside-air-damper"].notna() & d["outside-air-temp"].notna() & (econ < 0.05) & (d["outside-air-temp"] > oat_min)
 
 
 def econ2(d, p, poll):
-    from open_fdd.quality import _storage_si
-
-    raw_oat_hi = _f(p, "econ2_oat_hi", 63.0)
-    oat_hi = (raw_oat_hi - 32.0) * (5.0 / 9.0) if _storage_si(d) and raw_oat_hi >= 30.0 else raw_oat_hi
+    oat_hi = _f(p, "econ2_oat_hi", 17.222222)
     dmpr = _f(p, "econ2_damper", 0.42)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return d["outside-air-temp"].notna() & d["outside-air-damper"].notna() & (d["outside-air-temp"] > oat_hi) & (econ > dmpr)
@@ -1721,7 +1711,7 @@ RULES: list[CookbookRule] = [
         ["duct-static-pressure", "duct-static-pressure-sp", "fan-cmd"],
         "DSP < DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.",
         fc1, params=[
-            CookbookParam("eps_dsp", "Duct-static error εDSP (GL36 default 0.1 in.w.c.)", "in. w.c.", 0.0, 0.5, 0.01, 0.12),
+            CookbookParam("eps_dsp", "Duct-static error εDSP (GL36 default 0.1 in.w.c.)", "Pa", 0.0, 124.42, 2.4884, 29.8608),
             CookbookParam("eps_vfd_spd", "VFD speed error εVFDSPD (GL36 default 5%)", "frac", 0.0, 0.5, 0.01, 0.13),
             CookbookParam("duct_static_err", "Legacy duct-static error (sets εDSP)", "in. w.c.", 0.0, 0.5, 0.01, 0.12),
             CookbookParam("fan_hi", "Legacy fan-high threshold (sets εVFDSPD)", "frac", 0.5, 1.0, 0.01, 0.87),
@@ -1851,8 +1841,8 @@ RULES: list[CookbookRule] = [
         "itself exceeds pressure_on_min (catches high static with fan-status off).",
         ahu_duct_high,
         params=[
-            CookbookParam("duct_high_margin", "High margin", "in. w.c.", 0.05, 1.0, 0.05, 0.25, direction="fewer"),
-            CookbookParam("pressure_on_min", "Pressure-on evidence", "in. w.c.", 0.05, 1.0, 0.05, 0.20, direction="stricter"),
+            CookbookParam("duct_high_margin", "High margin", "Pa", 12.442, 248.84, 12.442, 62.21, direction="fewer"),
+            CookbookParam("pressure_on_min", "Pressure-on evidence", "Pa", 12.442, 248.84, 12.442, 49.768, direction="stricter"),
             CONFIRM_PARAM(),
         ],
         confirm_seconds=300),
@@ -1874,7 +1864,7 @@ RULES: list[CookbookRule] = [
     CookbookRule("ECON-2", "Economizing when outdoor unfavorable", "ahu", ["ahu"],
         ["outside-air-temp", "outside-air-damper"], "OAT > 63°F AND OA damper > 42% (should be at minimum).",
         econ2, params=[
-            CookbookParam("econ2_oat_hi", "OAT high cutoff", "°F", 55.0, 80.0, 1.0, 63.0),
+            CookbookParam("econ2_oat_hi", "OAT high cutoff", "°C", 12.777778, 26.666667, 0.555556, 17.222222),
             CookbookParam("econ2_damper", "Damper open frac", "frac", 0.2, 0.9, 0.02, 0.42),
             CONFIRM_PARAM()], confirm_seconds=300),
     CookbookRule(
