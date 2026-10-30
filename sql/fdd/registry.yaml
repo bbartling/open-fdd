@@ -169,6 +169,11 @@ rules:
     description: Average zone temperature per equipment
     required_roles: [zone_t]
     output_columns: [equipment_id, avg_zone_temp, min_zone_temp, max_zone_temp]
+    # SQL aggregates metric-c-v2 zone_t samples, so outputs are already SI.
+    output_units:
+      avg_zone_temp: {unit: degC, kind: absolute_temperature}
+      min_zone_temp: {unit: degC, kind: absolute_temperature}
+      max_zone_temp: {unit: degC, kind: absolute_temperature}
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
@@ -202,6 +207,8 @@ rules:
     description: Percent of samples in comfort band
     required_roles: [zone_t]
     output_columns: [equipment_id, comfort_pct]
+    output_units:
+      comfort_pct: {unit: percent_0_100, kind: percent}
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
@@ -489,11 +496,11 @@ rules:
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       econ2_oat_hi:
         label: OAT high cutoff
-        default: 63.0
-        min: 55.0
-        max: 80.0
-        step: 1.0
-        unit: degF
+        default: 17.222222
+        min: 12.777778
+        max: 26.666667
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON2_OAT_HI
@@ -1680,11 +1687,11 @@ rules:
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       econ1_oat_min:
         label: Favorable OAT
-        default: 55.0
-        min: 45.0
-        max: 70.0
-        step: 1.0
-        unit: degF
+        default: 12.777778
+        min: 7.222222
+        max: 21.111111
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON1_OAT_MIN
@@ -1755,12 +1762,12 @@ rules:
         sql_placeholder: OA_MIN_PCT
       oat_rat_delta_min:
         label: Min |RAT−OAT| for OA-fraction estimate (°F)
-        default: 2.2
-        min: 0.5
-        max: 10.0
-        step: 0.1
-        unit: degF
-        kind: absolute_temperature
+        default: 1.222222
+        min: 0.277778
+        max: 5.555556
+        step: 0.055556
+        unit: degC_delta
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: OAT_RAT_DELTA_MIN
       confirm_seconds:
@@ -2963,12 +2970,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       sat_dev_err:
         label: SAT deviation
-        default: 5.0
-        min: 1.0
-        max: 15.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
+        default: 2.777778
+        min: 0.555556
+        max: 8.333333
+        step: 0.277778
+        unit: degC_delta
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: SAT_DEV_ERR
 
@@ -3028,21 +3035,21 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       duct_high_margin:
         label: High margin
-        default: 0.25
-        min: 0.05
-        max: 1.0
-        step: 0.05
-        unit: in_wc
+        default: 62.21
+        min: 12.442
+        max: 248.84
+        step: 12.442
+        unit: Pa
         kind: air_pressure
         frontend_control: slider
         sql_placeholder: DUCT_HIGH_MARGIN
       pressure_on_min:
         label: Pressure-on evidence
-        default: 0.2
-        min: 0.05
-        max: 1.0
-        step: 0.05
-        unit: in_wc
+        default: 49.768
+        min: 12.442
+        max: 248.84
+        step: 12.442
+        unit: Pa
         kind: air_pressure
         frontend_control: slider
         sql_placeholder: PRESSURE_ON_MIN
@@ -3168,31 +3175,31 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       econ3_db_min:
         label: Free-cool OA dry-bulb min
-        default: 60.0
-        min: 50.0
-        max: 68.0
-        step: 1.0
-        unit: degF
+        default: 15.555556
+        min: 10.0
+        max: 20.0
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON3_DB_MIN
       econ3_db_max:
         label: Free-cool OA dry-bulb max
-        default: 72.0
-        min: 65.0
-        max: 80.0
-        step: 1.0
-        unit: degF
+        default: 22.222222
+        min: 18.333333
+        max: 26.666667
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON3_DB_MAX
       econ3_dp_max:
         label: Free-cool OA dew point max
-        default: 60.0
-        min: 45.0
-        max: 68.0
-        step: 1.0
-        unit: degF
+        default: 15.555556
+        min: 7.222222
+        max: 20.0
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON3_DP_MAX
@@ -3273,11 +3280,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       preheat_over_f:
         label: Preheat over ΔT
-        default: 2.2
-        min: 0.5
-        max: 8.0
-        step: 0.1
-        unit: degF
+        default: 1.222222
+        min: 0.277778
+        max: 4.444444
+        step: 0.055556
+        unit: degC_delta
         kind: temperature_difference
         frontend_control: slider
         sql_placeholder: PREHEAT_OVER_F
@@ -3348,11 +3355,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       econ6_oat_max_f:
         label: Winter OAT ceiling
-        default: 25.0
-        min: 15.0
-        max: 40.0
-        step: 1.0
-        unit: degF
+        default: -3.888889
+        min: -9.444444
+        max: 4.444444
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON6_OAT_MAX_F
@@ -3423,31 +3430,31 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       econ7_db_min:
         label: Econ-OK dry-bulb floor (freeze guard)
-        default: 35.0
-        min: 20.0
-        max: 50.0
-        step: 1.0
-        unit: degF
+        default: 1.666667
+        min: -6.666667
+        max: 10.0
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON7_DB_MIN
       econ7_db_max:
         label: Econ-OK dry-bulb max
-        default: 72.0
-        min: 65.0
-        max: 80.0
-        step: 1.0
-        unit: degF
+        default: 22.222222
+        min: 18.333333
+        max: 26.666667
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON7_DB_MAX
       econ7_dp_max:
         label: Econ-OK dew point max
-        default: 60.0
-        min: 45.0
-        max: 68.0
-        step: 1.0
-        unit: degF
+        default: 15.555556
+        min: 7.222222
+        max: 20.0
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ECON7_DP_MAX
@@ -3498,11 +3505,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       mech_oat_max_f:
         label: Mech-cool OAT ceiling
-        default: 60.0
-        min: 45.0
-        max: 65.0
-        step: 1.0
-        unit: degF
+        default: 15.555556
+        min: 7.222222
+        max: 18.333333
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MECH_OAT_MAX_F
@@ -3597,12 +3604,12 @@ rules:
         sql_placeholder: MIN_OA_FRAC
       oat_rat_guard:
         label: OAT/RAT guard
-        default: 2.2
-        min: 0.5
-        max: 6.0
-        step: 0.1
-        unit: degF
-        kind: absolute_temperature
+        default: 1.222222
+        min: 0.277778
+        max: 3.333333
+        step: 0.055556
+        unit: degC_delta
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: OAT_RAT_GUARD
 
@@ -3662,12 +3669,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       leak_delta:
         label: Leak ΔT
-        default: 2.0
-        min: 0.5
-        max: 6.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
+        default: 1.111111
+        min: 0.277778
+        max: 3.333333
+        step: 0.277778
+        unit: degC_delta
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: LEAK_DELTA
 
@@ -3727,22 +3734,22 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       sat_err:
         label: SAT vs SP leak ΔT
-        default: 2.0
-        min: 0.5
-        max: 8.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
+        default: 1.111111
+        min: 0.277778
+        max: 4.444444
+        step: 0.277778
+        unit: degC_delta
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: SAT_ERR
       mat_leak_delta:
         label: SAT vs MAT leak ΔT
-        default: 2.0
-        min: 0.5
-        max: 12.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
+        default: 1.111111
+        min: 0.277778
+        max: 6.666667
+        step: 0.277778
+        unit: degC_delta
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: MAT_LEAK_DELTA
 
@@ -4347,21 +4354,21 @@ rules:
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
       reset_err_f:
         label: Reset error
-        default: 3.0
-        min: 0.5
-        max: 10.0
-        step: 0.5
-        unit: degF
+        default: 1.666667
+        min: 0.277778
+        max: 5.555556
+        step: 0.277778
+        unit: degC_delta
         kind: temperature_difference
         frontend_control: slider
         sql_placeholder: RESET_ERR_F
       reset_sat_at_65:
         label: SAT SP at 65F OAT
-        default: 52.0
-        min: 45.0
-        max: 65.0
-        step: 0.5
-        unit: degF
+        default: 11.111111
+        min: 7.222222
+        max: 18.333333
+        step: 0.277778
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: RESET_SAT_AT_65
@@ -4377,11 +4384,11 @@ rules:
         sql_placeholder: RESET_SLOPE
       reset_oat_ref:
         label: Reset OAT ref
-        default: 65.0
-        min: 50.0
-        max: 80.0
-        step: 1.0
-        unit: degF
+        default: 18.333333
+        min: 10.0
+        max: 26.666667
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: RESET_OAT_REF

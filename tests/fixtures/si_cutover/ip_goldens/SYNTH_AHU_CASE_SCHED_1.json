@@ -11,127 +11,113 @@
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -139,8 +125,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -148,8 +134,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -157,8 +143,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -166,8 +152,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -175,8 +161,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -184,8 +170,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -193,8 +179,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -202,8 +188,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -211,8 +197,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -220,8 +206,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -229,8 +215,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -238,8 +224,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -247,8 +233,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -256,80 +242,80 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-11"
-    },
-    {
-      "equipment_id": "AHU_CASE_SCHED_1",
-      "pandas_si_fault_seconds": 28800.0,
-      "pandas_si_status": "computed",
-      "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-05"
-    },
-    {
-      "equipment_id": "AHU_CASE_SCHED_1",
-      "pandas_si_fault_seconds": 28800.0,
-      "pandas_si_status": "computed",
-      "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-06"
-    },
-    {
-      "equipment_id": "AHU_CASE_SCHED_1",
-      "pandas_si_fault_seconds": 28800.0,
-      "pandas_si_status": "computed",
-      "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-07"
-    },
-    {
-      "equipment_id": "AHU_CASE_SCHED_1",
-      "pandas_si_fault_seconds": 28800.0,
-      "pandas_si_status": "computed",
-      "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-08"
-    },
-    {
-      "equipment_id": "AHU_CASE_SCHED_1",
-      "pandas_si_fault_seconds": 28800.0,
-      "pandas_si_status": "computed",
-      "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-09"
-    },
-    {
-      "equipment_id": "AHU_CASE_SCHED_1",
-      "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
-      "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
-      "utc_day": "2026-01-10"
-    },
-    {
-      "equipment_id": "AHU_CASE_SCHED_1",
-      "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
-      "rule_id": "SV-RANGE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
       "equipment_id": "AHU_CASE_SCHED_1",
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
+      "rule_id": "SV-RANGE",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
+      "utc_day": "2026-01-05"
+    },
+    {
+      "equipment_id": "AHU_CASE_SCHED_1",
+      "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
+      "rule_id": "SV-RANGE",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
+      "utc_day": "2026-01-06"
+    },
+    {
+      "equipment_id": "AHU_CASE_SCHED_1",
+      "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
+      "rule_id": "SV-RANGE",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
+      "utc_day": "2026-01-07"
+    },
+    {
+      "equipment_id": "AHU_CASE_SCHED_1",
+      "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
+      "rule_id": "SV-RANGE",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
+      "utc_day": "2026-01-08"
+    },
+    {
+      "equipment_id": "AHU_CASE_SCHED_1",
+      "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
+      "rule_id": "SV-RANGE",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
+      "utc_day": "2026-01-09"
+    },
+    {
+      "equipment_id": "AHU_CASE_SCHED_1",
+      "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
+      "rule_id": "SV-RANGE",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
+      "utc_day": "2026-01-10"
+    },
+    {
+      "equipment_id": "AHU_CASE_SCHED_1",
+      "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
+      "rule_id": "SV-RANGE",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
+      "utc_day": "2026-01-11"
+    },
+    {
+      "equipment_id": "AHU_CASE_SCHED_1",
+      "pandas_si_fault_seconds": 0.0,
+      "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -337,8 +323,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -346,8 +332,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -355,8 +341,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -364,8 +350,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -373,8 +359,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -382,8 +368,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -391,8 +377,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -400,8 +386,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -409,8 +395,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -418,8 +404,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -427,8 +413,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -436,8 +422,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -445,8 +431,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     },
     {
@@ -454,8 +440,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
     {
@@ -463,8 +449,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
     {
@@ -472,8 +458,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
     {
@@ -481,8 +467,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
     {
@@ -490,8 +476,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
     {
@@ -499,8 +485,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-10"
     },
     {
@@ -508,8 +494,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-01-11"
     }
   ],
@@ -2211,55 +2197,55 @@
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-05"
     },
     {
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-06"
     },
     {
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-07"
     },
     {
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-08"
     },
     {
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 28800.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-09"
     },
     {
@@ -2270,7 +2256,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-10"
     },
     {
@@ -2281,7 +2267,7 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "FAULT",
+      "status": "PASS",
       "utc_day": "2026-01-11"
     },
     {
@@ -3360,7 +3346,7 @@
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 4500.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -3371,7 +3357,7 @@
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 4500.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -3382,7 +3368,7 @@
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 5100.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -3393,7 +3379,7 @@
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 4500.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",
@@ -3404,7 +3390,7 @@
       "building_id": "SYNTH_AHU_CASE_SCHED_1",
       "covered_seconds": 86400.0,
       "equipment_id": "AHU_CASE_SCHED_1",
-      "fault_seconds": 4500.0,
+      "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-FLATLINE",

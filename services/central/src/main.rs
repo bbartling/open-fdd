@@ -59,6 +59,8 @@ mod runtime_weekly_fixtures;
 #[cfg(test)]
 mod sat_pairing_fixtures;
 mod series_binding;
+mod si_api_response;
+mod si_cutover_admin;
 mod sql_anomaly;
 #[cfg(test)]
 mod sql_anomaly_fixtures;
@@ -67,6 +69,8 @@ mod starter_seed;
 mod state;
 #[cfg(test)]
 mod t1284_2_ingest_si_test;
+#[cfg(test)]
+mod t1284_3_si_cutover_test;
 mod tenant;
 mod tenant_budget;
 #[cfg(test)]

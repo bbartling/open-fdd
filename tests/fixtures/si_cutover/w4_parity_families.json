@@ -60,6 +60,30 @@
         "FCU-MODE-CYCLE"
       ]
     },
+    "W4b_ahu_econ": {
+      "wave": "W4b",
+      "description": "AHU economizer + ventilation SI family (#1284 W4b)",
+      "rules": [
+        "ECON-1",
+        "ECON-2",
+        "ECON-3",
+        "ECON-4",
+        "ECON-5",
+        "ECON-6",
+        "ECON-7",
+        "AHU-SATDEV",
+        "AHU-DUCTHI",
+        "AHU-SIMUL",
+        "MECH-OAT-1",
+        "CMD-1",
+        "OA-1",
+        "DMP-1",
+        "VLV-1",
+        "PID-HUNT-1",
+        "RESET-1",
+        "FAN-RUNTIME-HOURS"
+      ]
+    },
     "W4d_si_plant": {
       "wave": "W4d",
       "description": "Central plant + trim (CHW/CW/HP/TRIM) — SI SQL pack",
@@ -80,7 +104,7 @@
     },
     "W4e_sensor_validation": {
       "wave": "W4e",
-      "description": "Sensor validation SV-* — pandas SI vs IP parity row",
+      "description": "Sensor validation SV-* \u2014 pandas SI vs IP parity row",
       "rules": [
         "SV-RANGE",
         "SV-FLATLINE",

@@ -29,6 +29,7 @@ from scripts.stress.si_cutover.product_sql_params import (  # noqa: E402
 )
 from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
     W4C_SI_ZONE_FAMILY,
+    ahu_econ_si_sql_shipped,
     family_dataset_ids,
     sql_si_pack_enabled,
 )
@@ -595,7 +596,7 @@ def p2_pair_for_si_row(
             "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
             "sql_si_status": "computed" if sql_si_fault_seconds is not None else PENDING_W4,
         }
-    if rule_si_sql_shipped(rule_id):
+    if rule_si_sql_shipped(rule_id) or ahu_econ_si_sql_shipped(rule_id):
         if pandas_si_missing or sql_si_fault_seconds is None:
             return {
                 "rule_id": rule_id,

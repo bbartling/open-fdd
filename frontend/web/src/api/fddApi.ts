@@ -482,6 +482,9 @@ export interface FddRuleParamDef {
   unit: string;
   /** Catalog quantity: pressure, fraction, temperature, temperature_delta, minutes, … */
   quantity?: string;
+  /** branch_sensitive | no_op | unsupported (W2a tuning catalog honesty) */
+  effect?: string;
+  effect_reason?: string;
   control: string;
   sql_placeholder: string;
 }

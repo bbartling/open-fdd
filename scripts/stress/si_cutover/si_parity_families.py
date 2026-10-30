@@ -13,6 +13,7 @@ W4C_SI_ZONE_FAMILY = "W4c_si_zone"
 W4A_SI_AHU_FC_FAMILY = "W4a_si_ahu_fc"
 # Families whose Postgres rules run on SI storage with SI registry parameters.
 SI_SQL_PACK_FAMILIES = (W4A_SI_AHU_FC_FAMILY, W4C_SI_ZONE_FAMILY)
+W4B_AHU_ECON_FAMILY = "W4b_ahu_econ"
 
 
 def load_families_doc() -> dict:
@@ -69,3 +70,8 @@ def family_dataset_ids(family: str) -> frozenset[str]:
 def sql_si_pack_enabled(rule_id: str) -> bool:
     """Postgres rules converted to SI storage (W4a AHU FC and W4c zone families)."""
     return any(rule_id in family_rule_ids(fam) for fam in SI_SQL_PACK_FAMILIES)
+
+
+def ahu_econ_si_sql_shipped(rule_id: str) -> bool:
+    """AHU economizer/ventilation rules whose product SQL is SI-native (W4b)."""
+    return rule_id in family_rule_ids(W4B_AHU_ECON_FAMILY)

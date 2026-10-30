@@ -58,6 +58,22 @@ ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "pump-speed-feedback": (0.0, 100.0),
 }
 
+
+def _storage_si(df: pd.DataFrame) -> bool:
+    us = str(df.attrs.get("unit_system") or "").strip().lower()
+    if us in ("metric", "si"):
+        return True
+    for key in ("role_units", "units_map"):
+        block = df.attrs.get(key)
+        if not isinstance(block, dict):
+            continue
+        for unit in block.values():
+            tok = str(unit).strip().lower().replace(" ", "")
+            if tok in {"°c", "degc", "c", "celsius"}:
+                return True
+    return False
+
+
 STATUS_ROLES = {
     "fan-status",
     "pump-status",

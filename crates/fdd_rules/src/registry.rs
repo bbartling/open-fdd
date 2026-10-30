@@ -17,6 +17,9 @@ pub struct RuleParameterDef {
     /// Optional catalog override. Empty means classify from `unit` and the parameter key.
     #[serde(default)]
     pub quantity: Option<String>,
+    /// W2a metric-contract quantity id (`kind` in registry.yaml), used by SI cutover.
+    #[serde(default)]
+    pub kind: Option<String>,
     #[serde(default = "default_control")]
     pub frontend_control: String,
     pub sql_placeholder: String,
@@ -24,6 +27,13 @@ pub struct RuleParameterDef {
 
 fn default_control() -> String {
     "slider".into()
+}
+
+/// Declared unit of one metric output column and the quantity kind it carries.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct OutputUnit {
+    pub unit: String,
+    pub kind: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -47,6 +57,11 @@ pub struct RuleSpec {
     pub equipment_kinds: Vec<String>,
     #[serde(default)]
     pub output_columns: Vec<String>,
+    /// Declared unit and kind of each quantity-bearing metric output column (pack ABI
+    /// unit the SQL emits). Metric responses convert from this unit to metric-c-v2
+    /// exactly once.
+    #[serde(default)]
+    pub output_units: HashMap<String, OutputUnit>,
     #[serde(default = "default_confirm")]
     pub confirm_seconds: u32,
     #[serde(default)]

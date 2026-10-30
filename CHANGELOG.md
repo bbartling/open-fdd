@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+### open-fdd 5.0.0 (PyPI)
+
+Breaking: the pandas oracle and offline report path treat historian/package
+frames as **metric-c-v2** storage when ``storage_abi`` is declared on the column
+map. ``open-fdd-anomaly report`` adds ``--units imperial|si`` (default imperial)
+for presentation-only conversion on Plotly figures and Typst copy. Economizer
+scatter keeps x = OAT − RAT and y = MAT − RAT in the active display units.
+Legacy device folders without ``storage_abi`` remain imperial-f-v1 until
+re-exported in SI.
+
 ## 4.0.6 — 2026-10-28
 
 Workspace patch after the 4.0.6 issue cycle on master. `/api/health` and `/api/version` report `4.0.6+<sha>`. PyPI `open-fdd` stays **4.4.9**. No SQL or product behavior changes in this bump PR.

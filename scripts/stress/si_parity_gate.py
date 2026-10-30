@@ -4,8 +4,10 @@
 CI default (full matrix, report-only mismatches):
   python scripts/stress/si_parity_gate.py --fixtures-only --report-json si_parity_report.json
 
-Blocking W4 family (example FC1 / W4b):
+Blocking W4 family (W4a AHU fault conditions):
   python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4a_si_ahu_fc
+Blocking W4 family (W4b AHU economizer):
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4b_ahu_econ
 
 T1284-4 gate failure under mutation + blocking scope:
   python scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 --inject-t1284-4-mutation
@@ -79,6 +81,11 @@ def _blocking_errors(
             continue
         if scope is not None and r.stage in ("P1", "P2"):
             out.extend(r.errors)
+        if scope is not None and r.stage == "P2" and r.pending:
+            # A scoped blocking family gate may not pass on cells it never compared.
+            out.append(
+                f"P2: {r.pending} cell(s) pending_W4 in blocking scope (must be zero)"
+            )
     return out
 
 
@@ -119,7 +126,7 @@ def run_fixtures_gate(
     safe_print(
         f"  P0 comparisons={p0_n} mismatches={p0_m}  "
         f"P1 comparisons={p1_n} mismatches={p1_m}  "
-        f"P2 comparisons={p2_n}"
+        f"P2 comparisons={p2_n} pending_W4={p2.pending if p2 else 0}"
     )
 
     if p0 and p0.errors:

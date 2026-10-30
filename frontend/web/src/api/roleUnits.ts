@@ -1,6 +1,8 @@
 /** Cookbook snake_case roles → display unit + quantity-aware scalar conversion. */
 
-export type UnitSystem = "imperial" | "metric";
+import type { DisplayPreference } from "../lib/displayPreference";
+
+export type UnitSystem = DisplayPreference;
 
 /**
  * How a numeric parameter converts between display systems.
@@ -150,8 +152,26 @@ function keySuggestsTemperatureDelta(key: string | undefined): boolean {
   );
 }
 
+function isSiDeltaToken(token: string): boolean {
+  return (
+    token.includes("deltac") ||
+    token.includes("k_diff") ||
+    token === "k" ||
+    token === "delta_degC".toLowerCase().replace(/[^a-z0-9]/g, "")
+  );
+}
+
+function isSiAbsoluteTempToken(token: string): boolean {
+  return token === "degc" || token === "c" || token === "°c";
+}
+
 function isTemperatureToken(token: string): boolean {
-  return token === "°f" || token === "degf" || token === "f" || token === "°c" || token === "degc" || token === "c";
+  return (
+    isSiAbsoluteTempToken(token) ||
+    token === "°f" ||
+    token === "degf" ||
+    token === "f"
+  );
 }
 
 /** Fahrenheit storage versus Celsius storage. Rate units such as degF_per_h count. */
@@ -203,12 +223,16 @@ export function resolveQuantityKind(
   if (token === "degf_per_h" || token === "degc_per_h" || token === "°f/h" || token === "°c/h") {
     return "temperature_rate";
   }
+  if (token === "delta_degC_per_h".toLowerCase().replace(/[^a-z0-9]/g, "") || token === "degc_per_h") {
+    return "temperature_rate";
+  }
   if (token === "h" || token === "hr" || token === "hours") return "hours";
   if (token === "sec" || token === "secs" || token === "s" || token === "seconds") return "seconds";
   if (token === "bool" || token === "boolean" || token === "0/1") return "boolean";
   if (token === "cfm" || token === "l/s" || token === "gpm") return "volumetric_flow";
   if (DELTA_UNIT_TOKENS.has(token) || token.includes("delta")) return "temperature_delta";
-  if (isTemperatureToken(token)) {
+  if (isSiDeltaToken(token)) return "temperature_delta";
+  if (isSiAbsoluteTempToken(token) || isTemperatureToken(token)) {
     return keySuggestsTemperatureDelta(key) ? "temperature_delta" : "temperature";
   }
   return "other";
@@ -252,6 +276,23 @@ export function displayScalar(
   key?: string,
 ): number {
   const q = resolveQuantityKind(unit, key, kind);
+  const token = unitToken(unit);
+  if (q === "temperature" && isSiAbsoluteTempToken(token)) {
+    return unitSystem === "imperial" ? celsiusToFahrenheit(value) : value;
+  }
+  if (
+    (q === "temperature_delta" || q === "temperature_rate") &&
+    (isSiDeltaToken(token) || token.includes("deltac"))
+  ) {
+    return unitSystem === "imperial" ? deltaCToDeltaF(value) : value;
+  }
+  if (q === "pressure" && (token === "pa" || token === "pascal")) {
+    const factor = pressureToPaFactor("Pa");
+    if (unitSystem === "imperial" && factor != null && factor !== 0) {
+      return value / factor;
+    }
+    return value;
+  }
   const scale = temperatureScale(unit);
   if (q === "temperature" || q === "temperature_delta" || q === "temperature_rate") {
     const delta = q !== "temperature";
@@ -297,9 +338,8 @@ export function storeScalar(
 }
 
 /**
- * Display conversion for a stored sample. Canonical history stays °F.
- * Absolute temperature shifts; a temperature difference only scales.
- * Pressure scales to pascals. Fraction, percent, and minutes stay put.
+ * Display conversion for a stored sample. API values are metric-c-v2 with unit metadata.
+ * Absolute temperature shifts; temperature differences and rates scale only.
  */
 export function displayStoredQuantity(
   value: number,
@@ -308,19 +348,24 @@ export function displayStoredQuantity(
   unitSystem: UnitSystem,
 ): number {
   const q = (quantity ?? "").trim().toLowerCase();
+  const unitTokenRaw = unitToken(unit);
   if (
     q === "absolute_temperature" ||
     q === "dry_bulb_temperature" ||
     q === "wet_bulb_temperature" ||
     q === "temperature"
   ) {
-    return displayScalar(value, unit || "°F", unitSystem, "temperature");
+    const storageUnit = isSiAbsoluteTempToken(unitTokenRaw) ? "degC" : unit || "°F";
+    return displayScalar(value, storageUnit, unitSystem, "temperature");
   }
   if (q === "temperature_difference" || q === "temperature_delta") {
-    return displayScalar(value, unit || "°F", unitSystem, "temperature_delta");
+    const storageUnit =
+      isSiDeltaToken(unitTokenRaw) || unitTokenRaw.includes("deltac") ? "K_diff" : unit || "°F";
+    return displayScalar(value, storageUnit, unitSystem, "temperature_delta");
   }
   if (q === "air_pressure" || q === "pressure") {
-    return displayScalar(value, unit || "in. w.c.", unitSystem, "pressure");
+    const storageUnit = unitTokenRaw === "pa" ? "Pa" : unit || "in. w.c.";
+    return displayScalar(value, storageUnit, unitSystem, "pressure");
   }
   if (
     q === "percent" ||
@@ -393,7 +438,9 @@ export function displayUnitLabel(
     return unitSystem === "metric" ? "°C/h" : "°F/h";
   }
   if (q === "temperature") {
-    if (scale === "c") return unitSystem === "imperial" ? "°F" : "°C";
+    if (scale === "c" || isSiAbsoluteTempToken(unitToken(unit))) {
+      return unitSystem === "imperial" ? "°F" : "°C";
+    }
     if (scale === "f" || isTempUnit(unit)) return unitSystem === "metric" ? "°C" : "°F";
     return unitSystem === "metric" ? "°C" : "°F";
   }
