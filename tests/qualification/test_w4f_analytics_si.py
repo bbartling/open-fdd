@@ -8,9 +8,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from open_fdd.analytics.core import _mech_oat_sql_bin, mech_cooling_oat_bins
+from open_fdd.analytics.core import (
+    _mech_oat_sql_bin,
+    economizer_weather_summary,
+    mech_cooling_oat_bins,
+)
 from open_fdd.analytics.si_thresholds import (
     ECON_DIAG_DT_MIN_C,
+    ECON_FREE_COOL_DB_MAX_C,
+    ECON_FREE_COOL_DB_MIN_C,
+    ECON_FREE_COOL_DP_MAX_C,
+    FREEZE_OAT_C,
     MECH_OAT_BIN_LABELS,
     SENSOR_TEMP_RANGE_MAX_C,
     SENSOR_TEMP_RANGE_MIN_C,
@@ -32,6 +40,106 @@ class W4fAnalyticsSiTests(unittest.TestCase):
 
     def test_economizer_dt_min_is_guideline_36_si(self) -> None:
         self.assertAlmostEqual(ECON_DIAG_DT_MIN_C, 10.0 * 5.0 / 9.0, places=9)
+
+    def test_economizer_free_cool_thresholds_si(self) -> None:
+        self.assertAlmostEqual(ECON_FREE_COOL_DB_MIN_C, 15.555555555555555, places=9)
+        self.assertAlmostEqual(ECON_FREE_COOL_DB_MAX_C, 22.22222222222222, places=9)
+        self.assertAlmostEqual(ECON_FREE_COOL_DP_MAX_C, 15.555555555555555, places=9)
+        self.assertAlmostEqual(FREEZE_OAT_C, -3.888888888888889, places=9)
+
+    def test_economizer_weather_web_f_matches_si_physical(self) -> None:
+        idx = pd.date_range("2026-01-01", periods=6, freq="1h", tz="UTC")
+        role_map = {
+            "AHU_1": {
+                "equipType": "ahu",
+                "outside-air-damper": "outside-air-damper",
+                "cooling-valve": "cooling-valve",
+                "compressor-status": "compressor-status",
+            }
+        }
+        web_f = pd.DataFrame(
+            {
+                "timestamp_utc": idx,
+                "web-outside-air-temp": 65.0,
+                "web-outside-air-dewpoint": 50.0,
+                "outside-air-damper": 0.1,
+                "cooling-valve": 0.0,
+                "compressor-status": 0.0,
+            },
+            index=idx,
+        )
+        web_c = web_f.copy()
+        web_c["web-outside-air-temp"] = (65.0 - 32.0) * 5.0 / 9.0
+        web_c["web-outside-air-dewpoint"] = (50.0 - 32.0) * 5.0 / 9.0
+        # Declared °F web columns must not be converted twice when already stored as °C.
+        web_c.attrs["role_units"] = {
+            "web-outside-air-temp": "degC",
+            "web-outside-air-dewpoint": "degC",
+        }
+        imp = economizer_weather_summary({"AHU_1": web_f}, role_map)
+        met = economizer_weather_summary({"AHU_1": web_c}, role_map)
+        self.assertAlmostEqual(
+            float(imp.iloc[0]["opportunity_hours"]),
+            float(met.iloc[0]["opportunity_hours"]),
+            places=6,
+        )
+        self.assertGreater(float(imp.iloc[0]["opportunity_hours"]), 0.0)
+
+    def test_economizer_weather_winter_band_uses_si_freeze(self) -> None:
+        idx = pd.date_range("2026-01-01", periods=4, freq="1h", tz="UTC")
+        role_map = {"AHU_1": {"equipType": "ahu", "outside-air-damper": "outside-air-damper"}}
+        frame = pd.DataFrame(
+            {
+                "timestamp_utc": idx,
+                "web-outside-air-temp": 20.0,
+                "web-outside-air-dewpoint": 15.0,
+                "outside-air-damper": 0.5,
+            },
+            index=idx,
+        )
+        out = economizer_weather_summary({"AHU_1": frame}, role_map, damper_winter_max=0.25)
+        self.assertGreater(float(out.iloc[0]["winter_economizing_hours_below_25f"]), 0.0)
+
+    def test_mech_bins_web_fahrenheit_uses_si_edges(self) -> None:
+        idx = pd.date_range("2026-01-01", periods=12, freq="5min", tz="UTC")
+        role_map = {
+            "CHILLER_1": {
+                "equipType": "chiller",
+                "chiller-status": "chiller-status",
+            }
+        }
+        web_f = mech_cooling_oat_bins(
+            {
+                "CHILLER_1": pd.DataFrame(
+                    {"timestamp_utc": idx, "chiller-status": 1.0, "web-outside-air-temp": 72.0},
+                    index=idx,
+                )
+            },
+            role_map,
+            prefer_web_oat=True,
+            unit_system="metric",
+        )
+        bas_c = mech_cooling_oat_bins(
+            {
+                "CHILLER_1": pd.DataFrame(
+                    {
+                        "timestamp_utc": idx,
+                        "chiller-status": 1.0,
+                        "outside-air-temp": (72.0 - 32.0) * 5.0 / 9.0,
+                    },
+                    index=idx,
+                )
+            },
+            role_map,
+            prefer_web_oat=False,
+            unit_system="metric",
+        )
+        self.assertIn("21-27", set(web_f["bin_label"].astype(str)))
+        self.assertAlmostEqual(
+            float(web_f["runtime_hours"].sum()),
+            float(bas_c["runtime_hours"].sum()),
+            places=6,
+        )
 
     def test_mech_oat_bin_labels_match_sql(self) -> None:
         samples = [

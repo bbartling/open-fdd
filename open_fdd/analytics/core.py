@@ -13,6 +13,10 @@ from open_fdd.analytics.si_thresholds import (
     CHW_LEAVE_MAX_C,
     COLD_OAT_C,
     ECON_DIAG_DT_MIN_C,
+    ECON_FREE_COOL_DB_MAX_C,
+    ECON_FREE_COOL_DB_MIN_C,
+    ECON_FREE_COOL_DP_MAX_C,
+    FREEZE_OAT_C,
     MECH_OAT_BIN_EDGES_C,
     MECH_OAT_BIN_LABELS,
 )
@@ -544,7 +548,7 @@ def _discover_chiller_on(
     role_map: dict,
     *,
     equipment_id: str,
-    chw_leave_max: float = CHW_LEAVE_MAX_C,
+    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
 ) -> list[dict[str, Any]]:
     """Chiller plant runtime: prefer mapped/heuristic **pump**, else status proof.
 
@@ -552,7 +556,7 @@ def _discover_chiller_on(
     ``chiller_status`` / ``compressor_status`` / ``equipment_enable``.
     Never invent runtime from CHW leave/supply temp.
     """
-    del chw_leave_max  # kept for call-site compat; leave-temp never drives this chart
+    del chw_leave_max_f  # kept for call-site compat; leave-temp never drives this chart
     # 1) Role-map designated pump (possibly on linked equipment)
     linked, link_role, link_label = _resolve_linked_pump_series(
         frames, role_map, equipment_id=equipment_id
@@ -656,7 +660,7 @@ def discover_plant_motor_series(
     frames: dict[str, pd.DataFrame],
     role_map: dict,
     *,
-    chw_leave_max: float = CHW_LEAVE_MAX_C,
+    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
 ) -> list[dict[str, Any]]:
     """Discover per-motor series for air / boiler / chiller weekly charts.
 
@@ -715,7 +719,7 @@ def discover_plant_motor_series(
                     frames,
                     role_map,
                     equipment_id=eq_id,
-                    chw_leave_max=chw_leave_max,
+                    chw_leave_max_f=chw_leave_max_f,
                 )
             )
         elif plant == PLANT_CHILLER:
@@ -783,7 +787,7 @@ def motor_run_hours_weekly(
     frames: dict[str, pd.DataFrame],
     role_map: dict,
     *,
-    chw_leave_max: float = CHW_LEAVE_MAX_C,
+    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
     weather: pd.DataFrame | None = None,
     prefer_web_oat: bool = True,
     include_all_mapped: bool = False,
@@ -801,7 +805,7 @@ def motor_run_hours_weekly(
 
     rows: list[dict[str, Any]] = []
     series_list = discover_plant_motor_series(
-        frames, role_map, chw_leave_max=chw_leave_max
+        frames, role_map, chw_leave_max_f=chw_leave_max_f
     )
     if include_all_mapped:
         series_list = union_mapped_motor_series(series_list, frames, role_map)
@@ -939,7 +943,7 @@ def _chw_temp_proof(df: pd.DataFrame, leave_max_f: float) -> pd.Series | None:
 def _chiller_on_mask(
     df: pd.DataFrame,
     *,
-    chw_leave_max: float,
+    chw_leave_max_f: float,
     chiller_amps_min: float = 5.0,
     chiller_power_kw_min: float = 1.0,
 ) -> tuple[pd.Series | None, str]:
@@ -951,7 +955,7 @@ def _chiller_on_mask(
         return _above_threshold(df["chiller-amps"], chiller_amps_min), "chiller-amps"
     if "chiller-power" in df.columns and df["chiller-power"].notna().any():
         return _above_threshold(df["chiller-power"], chiller_power_kw_min), "chiller_power"
-    temp = _chw_temp_proof(df, chw_leave_max)
+    temp = _chw_temp_proof(df, chw_leave_max_f)
     if temp is not None:
         return temp, "chw_leave_temp"
     return None, ""
@@ -998,7 +1002,7 @@ def _select_mech_cooling_proof(
     *,
     equipment_type: str,
     equipment_id: str = "",
-    chw_leave_max: float = CHW_LEAVE_MAX_C,
+    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
     chiller_amps_min: float = 5.0,
     chiller_power_kw_min: float = 1.0,
     use_status_proof: bool = True,
@@ -1059,7 +1063,7 @@ def _select_mech_cooling_proof(
 
     if et == "CHW_PLANT":
         if not use_status_proof:
-            temp = _chw_temp_proof(df, chw_leave_max)
+            temp = _chw_temp_proof(df, chw_leave_max_f)
             if temp is None:
                 return empty
             return {
@@ -1069,7 +1073,7 @@ def _select_mech_cooling_proof(
                     df, ("chilled-water-supply-temp", "chw_leave_t", "chws_t")
                 )
                 or "chilled-water-supply-temp",
-                "proof_threshold": float(chw_leave_max),
+                "proof_threshold": float(chw_leave_max_f),
                 "proof_quality": "inferred",
                 "legacy_proof": "inferred: chw_leave_temp",
             }
@@ -1143,7 +1147,7 @@ def _select_mech_cooling_proof(
             df,
             equipment_type="AHU",
             equipment_id=equipment_id,
-            chw_leave_max=chw_leave_max,
+            chw_leave_max_f=chw_leave_max_f,
             chiller_amps_min=chiller_amps_min,
             chiller_power_kw_min=chiller_power_kw_min,
             use_status_proof=True,
@@ -1170,7 +1174,7 @@ def mech_cooling_run_mask(
     *,
     equipment_type: str,
     equipment_id: str = "",
-    chw_leave_max: float = CHW_LEAVE_MAX_C,
+    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
     include_ahu_chw_valve: bool = False,
     clg_valve_thr_pct: float = 5.0,
     chiller_amps_min: float = 5.0,
@@ -1192,7 +1196,7 @@ def mech_cooling_run_mask(
         df,
         equipment_type=equipment_type,
         equipment_id=equipment_id,
-        chw_leave_max=chw_leave_max,
+        chw_leave_max_f=chw_leave_max_f,
         chiller_amps_min=chiller_amps_min,
         chiller_power_kw_min=chiller_power_kw_min,
         use_status_proof=use_status_proof,
@@ -1268,7 +1272,7 @@ def _mechanical_cooling_devices(
     *,
     weather: pd.DataFrame | None = None,
     prefer_web_oat: bool = True,
-    chw_leave_max: float = CHW_LEAVE_MAX_C,
+    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
     use_status_proof: bool = True,
     chiller_amps_min: float = 5.0,
     chiller_power_kw_min: float = 1.0,
@@ -1290,7 +1294,13 @@ def _mechanical_cooling_devices(
             continue
 
         poll = float(raw.attrs.get("poll_seconds") or infer_poll_seconds(raw) or 3600.0)
-        oat = _oat_series(mapped, weather, prefer_web=prefer_web_oat)
+        from open_fdd.analytics.weather_resolver import resolve_effective_oat
+
+        if prefer_web_oat:
+            oat, oat_src = resolve_effective_oat(mapped, weather)
+        else:
+            oat = _oat_series(mapped, weather, prefer_web=False)
+            oat_src = "bas" if oat is not None else None
         base: dict[str, Any] = {
             "equipment_id": eq_id,
             "equipment_type": et,
@@ -1298,6 +1308,7 @@ def _mechanical_cooling_devices(
             "mapped": mapped,
             "poll_seconds": poll,
             "oat": oat,
+            "oat_source": oat_src,
             "run_mask": None,
             "cooling_technology": "unknown",
             "compressor_based": False,
@@ -1362,7 +1373,7 @@ def _mechanical_cooling_devices(
             mapped,
             equipment_type=et,
             equipment_id=eq_id,
-            chw_leave_max=chw_leave_max,
+            chw_leave_max_f=chw_leave_max_f,
             chiller_amps_min=chiller_amps_min,
             chiller_power_kw_min=chiller_power_kw_min,
             use_status_proof=use_status_proof,
@@ -1433,7 +1444,7 @@ def mech_cooling_coverage(
     *,
     weather: pd.DataFrame | None = None,
     prefer_web_oat: bool = True,
-    chw_leave_max: float = CHW_LEAVE_MAX_C,
+    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
     use_status_proof: bool = True,
 ) -> pd.DataFrame:
     """Per-device inclusion/exclusion report for the mech-cooling OAT-bin chart.
@@ -1449,7 +1460,7 @@ def mech_cooling_coverage(
         role_map,
         weather=weather,
         prefer_web_oat=prefer_web_oat,
-        chw_leave_max=chw_leave_max,
+        chw_leave_max_f=chw_leave_max_f,
         use_status_proof=use_status_proof,
     )
     cols = [
@@ -1483,6 +1494,30 @@ def mech_cooling_coverage(
     )
 
 
+def _normalize_abs_temp_to_storage_c(
+    series: pd.Series,
+    df: pd.DataFrame,
+    role: str,
+) -> pd.Series:
+    """Convert one absolute temperature series to canonical storage °C once."""
+    from open_fdd.rules.cookbook_catalog import _role_series_unit
+    from open_fdd.units.convert import normalize_unit_token
+
+    s = pd.to_numeric(series, errors="coerce")
+    tok = normalize_unit_token(_role_series_unit(df, role))
+    if tok in {"c", "degc", "celsius"}:
+        return s
+    return (s - 32.0) * 5.0 / 9.0
+
+
+def _series_declared_imperial_f(df: pd.DataFrame, role: str) -> bool:
+    from open_fdd.rules.cookbook_catalog import _role_series_unit
+    from open_fdd.units.convert import normalize_unit_token
+
+    tok = normalize_unit_token(_role_series_unit(df, role))
+    return tok not in {"c", "degc", "celsius"}
+
+
 def _mech_oat_sql_bin(oat_c: float) -> tuple[int, str]:
     """Match ``mechanical_cooling_oat_bins.sql`` SI bucket labels."""
     edges = MECH_OAT_BIN_EDGES_C
@@ -1506,12 +1541,13 @@ def _bin_runtime_rows(
     mask: pd.Series,
     nominal_seconds: float,
     bin_width_f: float,
-    display_units: str = "metric",
+    unit_system: str = "metric",
     equipment_type: str = "",
     cooling_technology: str = "",
     proof_role: str = "",
     proof_quality: str = "",
     device_count: int = 1,
+    oat_needs_f_to_c: bool = False,
 ) -> list[dict[str, Any]]:
     """Attribute interval durations under mask into OAT bins."""
     aligned_mask = mask.groupby(level=0).max().sort_index().fillna(False).astype(bool)
@@ -1527,7 +1563,7 @@ def _bin_runtime_rows(
         return []
     idx = durations.index[usable.to_numpy()]
     oat_vals = oat_aligned.reindex(idx)
-    metric = str(display_units).lower() in {"metric", "si"}
+    metric = str(unit_system).lower() in {"metric", "si"}
     valid_elapsed = float(durations.sum() / 3600.0)
     span = 0.0
     if len(durations.index) > 1:
@@ -1537,14 +1573,14 @@ def _bin_runtime_rows(
     coverage_pct = round(100.0 * valid_elapsed / span, 2) if span > 0 else 0.0
     rows: list[dict[str, Any]] = []
     if metric:
+        oat_for_bins = pd.to_numeric(oat_vals, errors="coerce")
+        if oat_needs_f_to_c:
+            oat_for_bins = (oat_for_bins - 32.0) * 5.0 / 9.0
+        oat_np = oat_for_bins.to_numpy(dtype=float)
         tmp = pd.DataFrame(
             {
-                "bin_key": [
-                    _mech_oat_sql_bin(float(v))[1] for v in oat_vals.to_numpy(dtype=float)
-                ],
-                "bin_start": [
-                    _mech_oat_sql_bin(float(v))[0] for v in oat_vals.to_numpy(dtype=float)
-                ],
+                "bin_key": [_mech_oat_sql_bin(float(v))[1] for v in oat_np],
+                "bin_start": [_mech_oat_sql_bin(float(v))[0] for v in oat_np],
                 "seconds": durations.reindex(idx).to_numpy(dtype=float),
             },
             index=idx,
@@ -1620,12 +1656,12 @@ def mech_cooling_oat_bins(
     weather: pd.DataFrame | None = None,
     bin_width_f: float = 5.0,
     prefer_web_oat: bool = True,
-    chw_leave_max: float = CHW_LEAVE_MAX_C,
+    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
     include_ahu_chw_valve: bool = False,
     clg_valve_thr_pct: float = 5.0,
     include_total: bool = False,
     use_status_proof: bool = True,
-    display_units: str = "metric",
+    unit_system: str = "metric",
 ) -> pd.DataFrame:
     """
     Mechanical cooling run hours binned by OAT (default: web/Open-Meteo dry bulb).
@@ -1641,7 +1677,7 @@ def mech_cooling_oat_bins(
         role_map,
         weather=weather,
         prefer_web_oat=prefer_web_oat,
-        chw_leave_max=chw_leave_max,
+        chw_leave_max_f=chw_leave_max_f,
         use_status_proof=use_status_proof,
     )
     rows: list[dict[str, Any]] = []
@@ -1668,15 +1704,27 @@ def mech_cooling_oat_bins(
                 mask=run,
                 nominal_seconds=d["poll_seconds"],
                 bin_width_f=bin_width_f,
-                display_units=display_units,
+                unit_system=unit_system,
                 equipment_type=d["equipment_type"],
                 cooling_technology=d["cooling_technology"],
                 proof_role=d["proof_role"],
                 proof_quality=d["proof_quality"],
                 device_count=1,
+                oat_needs_f_to_c=(
+                    d.get("oat_source") == "web"
+                    and _series_declared_imperial_f(d["mapped"], "web-outside-air-temp")
+                ),
             )
         )
-        active_parts.append((run, oat, float(d["poll_seconds"])))
+        active_parts.append(
+            (
+                run,
+                oat,
+                float(d["poll_seconds"]),
+                d.get("oat_source"),
+                d["mapped"],
+            )
+        )
 
     if not rows:
         return pd.DataFrame(columns=_OAT_BIN_COLUMNS)
@@ -1722,16 +1770,20 @@ def mech_cooling_oat_bins(
             # A median cadence can over-credit a sparse union interval when a
             # fast device's last active sample precedes a slow device timestamp.
             nominal = float(min(p[2] for p in active_parts))
-            for run, oat, _poll in active_parts:
+            for run, oat, _poll, src, mapped in active_parts:
                 r = run.groupby(level=0).max().sort_index()
                 any_active = any_active | r.astype(bool).reindex(
                     union_idx, fill_value=False
                 )
                 o = oat.groupby(level=0).max().sort_index().reindex(union_idx)
-                oat_pieces.append(o)
-            oat_union = oat_pieces[0]
-            for o in oat_pieces[1:]:
+                oat_pieces.append((o, src, mapped))
+            oat_union = oat_pieces[0][0]
+            for o, _src, _mapped in oat_pieces[1:]:
                 oat_union = oat_union.fillna(o)
+            aggregate_needs_f = bool(oat_pieces) and all(
+                src == "web" and _series_declared_imperial_f(mapped, "web-outside-air-temp")
+                for _o, src, mapped in oat_pieces
+            )
             rows.extend(
                 _bin_runtime_rows(
                     equipment_id="ACTIVE",
@@ -1743,8 +1795,9 @@ def mech_cooling_oat_bins(
                     mask=any_active,
                     nominal_seconds=nominal,
                     bin_width_f=bin_width_f,
-                    display_units=display_units,
+                    unit_system=unit_system,
                     device_count=n_devices,
+                    oat_needs_f_to_c=aggregate_needs_f,
                 )
             )
 
@@ -2011,11 +2064,11 @@ def economizer_weather_summary(
     weather: pd.DataFrame | None = None,
     damper_hi: float = 0.90,
     damper_winter_max: float = 0.25,
-    db_min: float = 15.5555555556,
-    db_max: float = 22.2222222222,
-    dp_max: float = 15.5555555556,
-    cold_oat_c: float = COLD_OAT_C,
-    freeze_oat_c: float = -3.8888888889,
+    db_min: float = ECON_FREE_COOL_DB_MIN_C,
+    db_max: float = ECON_FREE_COOL_DB_MAX_C,
+    dp_max: float = ECON_FREE_COOL_DP_MAX_C,
+    cold_oat: float = COLD_OAT_C,
+    freeze_oat: float = FREEZE_OAT_C,
 ) -> pd.DataFrame:
     """Per-equipment economizer opportunity / compliance / prohibited-cooling hours.
 
@@ -2042,6 +2095,8 @@ def economizer_weather_summary(
         n = len(mapped)
         coverage = 0.0
         if weather_ok and n:
+            db = _normalize_abs_temp_to_storage_c(db, mapped, "web-outside-air-temp")
+            dp = _normalize_abs_temp_to_storage_c(dp, mapped, "web-outside-air-dewpoint")
             coverage = float((db.notna() & dp.notna()).sum() / n)
 
         opp = (
@@ -2065,7 +2120,7 @@ def economizer_weather_summary(
 
         run, proof = mechanical_proof_mask(mapped, equipment_type=et, equipment_id=eq_id)
         cold = (
-            (db.notna() & (db < float(cold_oat_c)))
+            (db.notna() & (db < float(cold_oat)))
             if db is not None
             else pd.Series(False, index=mapped.index)
         )
@@ -2073,7 +2128,7 @@ def economizer_weather_summary(
 
         winter = pd.Series(False, index=mapped.index)
         if damper is not None and db is not None:
-            winter = db.notna() & (db < float(freeze_oat_c)) & (damper > float(damper_winter_max))
+            winter = db.notna() & (db < float(freeze_oat)) & (damper > float(damper_winter_max))
 
         rows.append(
             {
