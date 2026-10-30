@@ -53,6 +53,8 @@ scored AS (
     SELECT
       avg(p.val) AS avg_val,
       stddev_samp(p.val) AS stddev_val,
+      min(p.val) AS min_val,
+      max(p.val) AS max_val,
       count(*)::bigint AS n_window
     FROM (
       SELECT p.val
@@ -67,7 +69,9 @@ scored AS (
   ) stats
     ON stats.n_window >= $5::int
    AND stats.stddev_val IS NOT NULL
-   AND stats.stddev_val > 0
+   -- Non-constant window test is exact (min < max); stddev_samp of a constant
+   -- window is round-off noise after unit conversion, not a real spread.
+   AND stats.max_val > stats.min_val
 ),
 marked AS (
   SELECT

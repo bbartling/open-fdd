@@ -4,23 +4,36 @@
   "families": {
     "W4f_analytics_si_p2": {
       "wave": "W4f",
-      "description": "W4f SI SQL storage path (#1284): rules whose fixture P2 SQL SI cells W4f moved from pending_W4 to computed, excluding SV-* (W4e) and VAV-7 (W4c) whose pandas SI twins are still owned by those rows. Analytics bodies are gated by test_w4f_analytics_si. P0 FC1 mode-delay is report-only (#1459).",
-      "rules": ["AHU-DUCTHI", "CMD-1", "FC1", "PID-HUNT-1", "SCHED-247", "VAV-4", "VAV-5"]
+      "description": "W4f SI SQL storage path (#1284): the 19 sql/analytics/postgres/queries/* bodies. P1 = pandas IP->SI vs pandas SI, P2 = committed SQL SI goldens (analytics_si_goldens.json) vs pandas SI, per query x equipment x bucket. Rules are owned by W4a/W4b/W4c/W4e.",
+      "rules": [],
+      "analytics_queries": [
+        "*"
+      ]
     },
-    "W4b_fc1_duct_static": {
-      "wave": "W4b",
-      "description": "FC1 duct static (GL36 A) — T1284-4 blocking scope",
-      "rules": ["FC1"]
+    "W4a_fc1_duct_static": {
+      "wave": "W4a",
+      "description": "FC1 duct static (GL36 A) \u2014 owned by W4a #1450; report-only until W4a lands",
+      "rules": [
+        "FC1"
+      ]
     },
     "W4e_sensor_validation": {
       "wave": "W4e",
-      "description": "Sensor validation SV-* — pandas SI vs IP parity row",
-      "rules": ["SV-RANGE", "SV-FLATLINE", "SV-RATE", "SV-SPIKE", "SV-STALE"]
+      "description": "Sensor validation SV-* \u2014 pandas SI vs IP parity row",
+      "rules": [
+        "SV-RANGE",
+        "SV-FLATLINE",
+        "SV-RATE",
+        "SV-SPIKE",
+        "SV-STALE"
+      ]
     },
     "W3_full_matrix": {
       "wave": "W3",
       "description": "Full cookbook + SYNTH ip golden matrix (report-only on chain PR)",
-      "rules": ["*"]
+      "rules": [
+        "*"
+      ]
     }
   }
 }

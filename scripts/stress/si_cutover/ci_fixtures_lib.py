@@ -341,6 +341,22 @@ def _apply_unit_metadata(frame, unit_system: str) -> None:
         stamp_display_units(frame, {"unit_system": unit_system})
 
 
+def column_quantity_unit(col: str) -> tuple[str, str] | None:
+    """(metric quantity, imperial unit) for a wide-frame column, or None if unitless."""
+    if col == "occ_mode":
+        return None
+    unit = _role_unit(col)
+    if not unit:
+        return None
+    if unit in ("percent", "pct"):
+        return "percent", unit
+    if unit in ("inWC", "in_wc"):
+        return "air_pressure", unit
+    if unit == "cfm":
+        return "volumetric_flow", unit
+    return "absolute_temperature", unit
+
+
 def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, float], float] | None = None):
     import pandas as pd
 
@@ -349,16 +365,10 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
     for col in out.columns:
         if col == "occ_mode":
             continue
-        unit = _role_unit(str(col))
-        if not unit:
+        qu = column_quantity_unit(str(col))
+        if qu is None:
             continue
-        q = "absolute_temperature"
-        if unit in ("percent", "pct"):
-            q = "dimensionless"
-        elif unit in ("inWC", "in_wc"):
-            q = "air_pressure"
-        elif unit == "cfm":
-            q = "volumetric_flow"
+        q, unit = qu
         series = pd.to_numeric(out[col], errors="coerce")
         converted = []
         for v in series:
@@ -368,10 +378,7 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
             fv = float(v)
             if value_hook:
                 fv = value_hook(str(col), fv)
-            try:
-                converted.append(uc.convert_to_canonical(metric, q, fv, unit))
-            except ValueError:
-                converted.append(v)
+            converted.append(uc.convert_to_canonical(metric, q, fv, unit))
         out[col] = converted
         if q == "absolute_temperature":
             role_units[str(col)] = "°C"

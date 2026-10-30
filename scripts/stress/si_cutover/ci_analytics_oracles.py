@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Sequence
 
 import numpy as np
 import pandas as pd
 
 from scripts.stress.si_cutover import ci_fixtures_lib as cfl
-from scripts.stress.si_cutover.parity_chain import ANALYTICS_REL_TOL, analytics_relative_equal
+from scripts.stress.si_cutover import ci_timescale_sql as cts
 
 
 @dataclass(frozen=True)
@@ -23,13 +23,16 @@ class OracleRowSet:
 def _melt_si_frame(si_frame: pd.DataFrame, equipment_id: str) -> pd.DataFrame:
     """Long sample rows matching Timescale seed (openfdd_key = equipment_id.role)."""
     records: list[dict[str, Any]] = []
-    idx = si_frame.index
     for col in si_frame.columns:
-        if col in {"equipment_id", "occ_mode"}:
+        if col == "equipment_id":
             continue
-        role = cfl.frame_column_to_sql_role(str(col))
+        if col == "occ_mode":
+            role = "occ_mode"
+            ser = si_frame[col].map(cts.occ_mode_value)
+        else:
+            role = cfl.frame_column_to_sql_role(str(col))
+            ser = pd.to_numeric(si_frame[col], errors="coerce")
         key = f"{equipment_id}.{role}"
-        ser = pd.to_numeric(si_frame[col], errors="coerce")
         for ts, val in ser.items():
             if pd.isna(val):
                 continue
@@ -64,64 +67,6 @@ def _window_filter(long: pd.DataFrame, ws: str | None, we: str | None) -> pd.Dat
     return out
 
 
-def compare_oracle_to_sql(
-    sql_rows: Sequence[Sequence[Any]],
-    oracle: OracleRowSet,
-    *,
-    stem: str,
-    abs_tol: float | None = None,
-) -> tuple[int, list[str]]:
-    errors: list[str] = []
-    pd_rows = oracle.rows
-
-    def row_key(row: Sequence[Any]) -> tuple[Any, ...]:
-        return tuple(row[i] for i in oracle.key_columns)
-
-    sql_by_key = {row_key(r): r for r in sql_rows}
-    pd_by_key = {row_key(r): r for r in pd_rows}
-    comparisons = 0
-
-    extra_sql = set(sql_by_key) - set(pd_by_key)
-    extra_pd = set(pd_by_key) - set(sql_by_key)
-    if extra_sql or extra_pd:
-        if len(extra_sql) <= 3 and len(extra_pd) <= 3:
-            for k in sorted(extra_sql)[:5]:
-                errors.append(f"{stem}: SQL-only key {k!r}")
-            for k in sorted(extra_pd)[:5]:
-                errors.append(f"{stem}: pandas-only key {k!r}")
-        else:
-            errors.append(
-                f"{stem}: row key mismatch sql={len(sql_by_key)} pandas={len(pd_by_key)} "
-                f"(sql_only={len(extra_sql)} pandas_only={len(extra_pd)})"
-            )
-
-    for key in sorted(set(sql_by_key) & set(pd_by_key)):
-        srow = sql_by_key[key]
-        prow = pd_by_key[key]
-        comparisons += 1
-        for col_i in oracle.numeric_columns:
-            sv, pv = srow[col_i], prow[col_i]
-            if sv is None and pv is None:
-                continue
-            if (sv is None) != (pv is None):
-                if sv is None and pv == 0.0:
-                    continue
-                if pv is None and sv == 0.0:
-                    continue
-                errors.append(f"{stem} key={key} col={col_i}: sql={sv!r} pandas={pv!r}")
-                continue
-            if isinstance(sv, (int, np.integer)) and isinstance(pv, (int, np.integer)):
-                if int(sv) != int(pv):
-                    errors.append(f"{stem} key={key} col={col_i}: sql={sv} pandas={pv}")
-                continue
-            if not analytics_relative_equal(float(sv), float(pv)):
-                if abs_tol is not None and abs(float(sv) - float(pv)) <= abs_tol:
-                    continue
-                errors.append(f"{stem} key={key} col={col_i}: sql={sv} pandas={pv}")
-
-    if comparisons == 0 and not sql_rows and not pd_rows:
-        comparisons = 1
-    return comparisons, errors
 
 
 def oracle_plant_health_inventory(*, equipment_id: str, equip_type: str) -> OracleRowSet:
@@ -418,57 +363,42 @@ def oracle_sql_anomaly_series(long: pd.DataFrame) -> OracleRowSet:
 def oracle_sql_anomaly_zscore(
     long: pd.DataFrame, *, window_rows: int, z_threshold: float, transition_events: bool
 ) -> OracleRowSet:
+    """Mirror ``sql_anomaly_zscore.sql``: trailing-window z-score per series, global
+    counts joined to every selected event (or one counts row when there are none)."""
     roles = {"sat", "mat", "rat", "oa_t", "web_oa_t", "zone_t", "dsp"}
     sub = long[long["role"].isin(roles)].sort_values(["openfdd_key", "ts"])
     events: list[tuple[Any, ...]] = []
-    n_scored = n_flagged = n_ok = 0
-    for _key, grp in sub.groupby("openfdd_key", sort=False):
+    n_scored = n_flagged = 0
+    for _key, grp in sub.groupby("openfdd_key", sort=True):
         vals = grp["val"].to_numpy(dtype=float)
         tss = grp["ts"].tolist()
-        flagged: list[bool] = []
-        for i in range(len(vals)):
-            if i < window_rows:
-                continue
+        prev_anom: bool | None = None
+        for i in range(window_rows, len(vals)):
             window = vals[i - window_rows : i]
-            if len(window) < window_rows:
+            if not window.max() > window.min():
                 continue
             std = float(np.std(window, ddof=1))
-            if std <= 0:
-                continue
             mean = float(np.mean(window))
             z = abs((vals[i] - mean) / std)
+            is_anom = bool(z >= z_threshold)
             n_scored += 1
-            is_anom = z >= z_threshold
-            flagged.append(is_anom)
             if is_anom:
                 n_flagged += 1
-                prev = flagged[-2] if len(flagged) > 1 else False
-                if not transition_events or not prev:
+                transition = prev_anom is not True
+                if not transition_events or transition:
                     events.append(
                         (
-                            n_scored,
-                            n_flagged,
-                            n_ok,
-                            len(events) + 1,
-                            grp.iloc[i]["equipment_id"],
-                            grp.iloc[i]["role"],
-                            tss[i],
-                            vals[i],
-                            mean,
-                            std,
-                            z,
-                            True,
+                            grp.iloc[i]["equipment_id"], grp.iloc[i]["role"], tss[i],
+                            float(vals[i]), mean, std, float(z), transition,
                         )
                     )
-            else:
-                n_ok += 1
-    if n_scored == 0:
-        row = (0, 0, 0, 0, None, None, None, None, None, None, None, None)
-        return OracleRowSet((row,), (0,), (0, 1, 2, 3), "numeric_parity")
-    # SQL returns one counts row joined with events; compare first row counts + event keys separately
-    head = (n_scored, n_flagged, n_ok, len(events), None, None, None, None, None, None, None, None)
-    out = [head] + events[:2000]
-    return OracleRowSet(tuple(out), (0, 1, 2, 3), (0, 1, 2, 3), "numeric_parity")
+            prev_anom = is_anom
+    head = (n_scored, n_flagged, n_scored - n_flagged, len(events))
+    if not events:
+        return OracleRowSet((head + (None,) * 8,), (4, 5, 6), (0, 1, 2, 3), "numeric_parity")
+    events.sort(key=lambda e: (-e[6], -pd.Timestamp(e[2]).value, e[0], e[1]))
+    rows = tuple(head + e for e in events[:2000])
+    return OracleRowSet(rows, (4, 5, 6), (0, 1, 2, 3, 7, 8, 9, 10), "numeric_parity")
 
 
 def oracle_bas_vs_web_oat(
@@ -596,3 +526,147 @@ def build_oracle_for_stem(
     if fn is None:
         return None
     return fn()
+
+
+def _unique_role_pivot(long: pd.DataFrame, roles: Sequence[str]) -> pd.DataFrame:
+    """Per (ts, equipment_id) wide rows of roles with exactly one series (SQL ``unique_role``)."""
+    sub = long[long["role"].isin(roles)]
+    if sub.empty:
+        return pd.DataFrame(columns=["ts", "equipment_id", *roles])
+    keys_per_role = sub.groupby(["equipment_id", "role"])["openfdd_key"].nunique()
+    unique = {k for k, v in keys_per_role.items() if int(v) == 1}
+    sub = sub[np.array([(e, r) in unique for e, r in zip(sub["equipment_id"], sub["role"])], dtype=bool)]
+    wide = sub.pivot_table(index=["ts", "equipment_id"], columns="role", values="val", aggfunc="max")
+    for r in roles:
+        if r not in wide.columns:
+            wide[r] = np.nan
+    return wide.reset_index()
+
+
+def oracle_economizer_deltas(long: pd.DataFrame, *, dt_min: float) -> list[tuple[Any, ...]]:
+    roles = ("oa_t", "rat", "mat", "sat", "oa_damper_pct", "fan_status")
+    w = _unique_role_pivot(long, roles)
+    rows: list[tuple[Any, ...]] = []
+    for r in w.itertuples(index=False):
+        oa, rat, mat, fan = r.oa_t, r.rat, r.mat, r.fan_status
+        if pd.isna(oa) or pd.isna(rat) or pd.isna(mat) or pd.isna(fan):
+            continue
+        if not float(fan) > 0.05 or not abs(float(oa) - float(rat)) >= dt_min:
+            continue
+        damper = None if pd.isna(r.oa_damper_pct) else float(r.oa_damper_pct)
+        resid = None if damper is None else float(mat) - (float(rat) + (damper / 100.0) * (float(oa) - float(rat)))
+        rows.append(
+            (
+                r.ts, r.equipment_id, float(oa), float(rat), float(mat),
+                None if pd.isna(r.sat) else float(r.sat), damper,
+                float(oa) - float(rat), float(mat) - float(rat), resid, True, True,
+            )
+        )
+    rows.sort(key=lambda x: x[0], reverse=True)
+    return rows[:2000]
+
+
+def oracle_mech_cooling_oat_bins(long: pd.DataFrame, *, edges: Sequence[float]) -> list[tuple[Any, ...]]:
+    labels = ("<10", "10-16", "16-21", "21-27", "27-32", ">=32")
+    if len(edges) != len(labels) - 1:
+        raise ValueError(f"mech OAT bins need {len(labels) - 1} edges, got {len(edges)}")
+    comp_roles = ("chiller_status", "compressor_status", "chiller_cmd", "compressor_cmd")
+    keys = long.groupby(["equipment_id", "role"])["openfdd_key"].nunique()
+    unique = {k for k, v in keys.items() if int(v) == 1}
+    oat_roles = [r for r in ("web_oa_t", "oa_t") if sum(1 for (_e, rr) in unique if rr == r) == 1]
+    if not oat_roles:
+        return []
+    oat_role = oat_roles[0]
+    oat = long[(long["role"] == oat_role) & np.array([(e, r) in unique for e, r in zip(long["equipment_id"], long["role"])], dtype=bool)]
+    oat = oat.groupby("ts")["val"].max()
+    comp = long[long["role"].isin(comp_roles) & np.array([(e, r) in unique for e, r in zip(long["equipment_id"], long["role"])], dtype=bool)]
+    if comp.empty or oat.empty:
+        return []
+    active = comp.groupby(["equipment_id", "ts"])["val"].max().reset_index()
+    active = active[active["ts"].isin(oat.index)]
+    out: dict[tuple[str, str], float] = {}
+    for eid, grp in active.groupby("equipment_id", sort=True):
+        grp = grp.sort_values("ts")
+        nxt = grp["ts"].shift(-1)
+        for (_, r), n_ts in zip(grp.iterrows(), nxt):
+            if not float(r["val"]) > 0.05:
+                continue
+            o = float(oat.loc[r["ts"]])
+            idx = next((i for i, e in enumerate(edges) if o < e), len(edges))
+            label = labels[idx]
+            secs = 0.0
+            if not pd.isna(n_ts):
+                d = (n_ts - r["ts"]).total_seconds()
+                if 0.0 < d <= 3600.0:
+                    secs = d
+            out[(str(eid), label)] = out.get((str(eid), label), 0.0) + secs
+    rows = [("oat_bin", eid, label, secs / 3600.0) for (eid, label), secs in out.items()]
+    rows.sort(key=lambda x: (x[1], x[2]))
+    return rows[:500]
+
+
+def oracle_sensor_faults_staleness(
+    long: pd.DataFrame, *, range_min: float, range_max: float, as_of: Any
+) -> list[tuple[Any, ...]]:
+    stale_before = pd.Timestamp(as_of) - pd.Timedelta(hours=24)
+    rows: list[tuple[Any, ...]] = []
+    for (eid, role, key), grp in long.groupby(["equipment_id", "role", "openfdd_key"], sort=True):
+        vals = grp["val"]
+        n = int(len(vals))
+        std = float(vals.std(ddof=1)) if n > 1 else None
+        last = grp["ts"].max()
+        mn, mx = float(vals.min()), float(vals.max())
+        # SQL ``role LIKE '%_t'``: '_' is a single-char wildcard -> len >= 2 and ends with 't'.
+        temp_like = len(role) >= 2 and role.endswith("t")
+        if last < stale_before:
+            flag, rank = "STALE", 0
+        elif std is not None and std == 0 and n >= 12:
+            flag, rank = "FLATLINE", 1
+        elif (mn < range_min or mx > range_max) and temp_like:
+            flag, rank = "RANGE", 2
+        else:
+            flag, rank = "OK", 3
+        rows.append((rank, (eid, role, key, n, last, mn, mx, std, flag)))
+    rows.sort(key=lambda x: (x[0], x[1][0], x[1][1], x[1][2]))
+    return [r for _rank, r in rows][:2000]
+
+
+def oracle_motor_weekly_runtime_sql(long: pd.DataFrame, *, equip_type: str) -> list[tuple[Any, ...]]:
+    import re
+
+    roles = ("fan_status", "fan_cmd", "pump_status", "pump_cmd")
+    keys = long.groupby(["equipment_id", "role"])["openfdd_key"].nunique()
+    unique = {k for k, v in keys.items() if int(v) == 1}
+    sub = long[long["role"].isin(roles) & np.array([(e, r) in unique for e, r in zip(long["equipment_id"], long["role"])], dtype=bool)].copy()
+    if sub.empty:
+        return []
+    sub["family"] = ["fan" if r in ("fan_status", "fan_cmd") else "pump" for r in sub["role"]]
+    sub["rank"] = [1 if r in ("fan_status", "pump_status") else 2 for r in sub["role"]]
+    best = sub.groupby(["equipment_id", "family"])["rank"].transform("min")
+    sub = sub[sub["rank"] == best]
+    rows: list[tuple[Any, ...]] = []
+    boiler = re.search(r"(boiler|hot.?water|hw.?plant)", equip_type.lower()) is not None
+    for (eid, signal), grp in sub.groupby(["equipment_id", "role"], sort=True):
+        grp = grp.sort_values("ts").copy()
+        grp["dt"] = (grp["ts"].shift(-1) - grp["ts"]).dt.total_seconds()
+        grp["week"] = grp["ts"].dt.tz_convert("UTC").dt.tz_localize(None).dt.to_period("W-SUN").dt.start_time.dt.tz_localize("UTC")
+        if signal.startswith("fan"):
+            pg = "air"
+        elif boiler:
+            pg = "boiler"
+        elif signal.startswith("pump"):
+            pg = "chiller"
+        else:
+            pg = "air"
+        for week, wk in grp.groupby("week", sort=True):
+            run = wk[(wk["val"] > 0.05) & (wk["dt"] > 0.0) & (wk["dt"] <= 3600.0)]["dt"].sum() / 3600.0
+            iso = week.isocalendar()
+            rows.append(
+                (
+                    eid, "motor", signal, pg, week, f"{iso[0]:04d}-W{iso[1]:02d}",
+                    float(run), float(run), int(len(wk)),
+                    bool((wk["ts"].max() - wk["ts"].min()) < pd.Timedelta(days=6)),
+                )
+            )
+    rows.sort(key=lambda x: (x[0], x[4]))
+    return rows[:500]

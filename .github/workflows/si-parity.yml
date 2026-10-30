@@ -88,6 +88,7 @@ jobs:
           doc = json.loads(Path("si_parity_report.json").read_text())
           p0 = doc["stages"]["P0"]
           p1 = doc["stages"]["P1"]
+          an = doc["analytics"]["stages"]
           print(
               f"P0 comparisons={p0['comparisons']} mismatches={p0['mismatch_count']} "
               f"by_kind={p0['by_kind']}"
@@ -96,6 +97,8 @@ jobs:
               f"P1 comparisons={p1['comparisons']} mismatches={p1['mismatch_count']} "
               f"by_rule={p1['by_rule_id']}"
           )
+          for name, st in sorted(an.items()):
+              print(f"{name} comparisons={st['comparisons']} mismatches={st['mismatch_count']}")
           PY
 
       - name: Upload si_parity_report.json
@@ -104,24 +107,21 @@ jobs:
           name: si-parity-report
           path: si_parity_report.json
 
-      - name: Blocking W4b FC1 scope (clean)
+      - name: Blocking W4f analytics family (19 queries, P1/P2-analytics)
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
-            --family W4b_fc1_duct_static
+            --family W4f_analytics_si_p2
 
-      - name: W4f analytics SI (pandas thresholds vs SQL)
-        run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si -v
-
-      - name: W4f analytics P2 (19 SQL bodies, SI CI seeds)
+      - name: W4f analytics SI (offline P1/P2 + live SQL SI golden check)
         env:
           OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
-        run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si.W4fAnalyticsP2Tests -v
+        run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si -v
 
-      - name: T1284-4 blocking FC1 mutation must fail gate
+      - name: T1284-4 blocking W4f analytics mutation must fail gate
         run: |
           set +e
-          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 \
-            --inject-t1284-4-mutation
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4f_analytics_si_p2 --inject-t1284-4-mutation
           code=$?
           set -e
           if [ "$code" -ne 1 ]; then
@@ -129,7 +129,7 @@ jobs:
             exit 1
           fi
 
-      - name: T1284-4 unit-vector + FC1 probe self-test
+      - name: T1284-4 unit-vector + FC1 + analytics probe self-test
         run: python3 scripts/stress/si_parity_gate.py --mutation-self-test
 
       - name: Qualification unit tests

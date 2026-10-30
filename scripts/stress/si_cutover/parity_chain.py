@@ -170,6 +170,21 @@ def analytics_relative_equal(a: float, b: float) -> bool:
     return abs(a - b) / denom <= ANALYTICS_REL_TOL
 
 
+def analytics_spread_equal(a: float, b: float, scale: float) -> bool:
+    """Spread statistics (stddev, deltas) relative to the series magnitude ``scale``.
+
+    A spread of a constant series is 0 in exact arithmetic but round-off differs per
+    engine (Postgres stddev_samp vs NumPy); the documented ANALYTICS_REL_TOL is applied
+    against max(|a|, |b|, |scale|) where ``scale`` is the row's value magnitude.
+    """
+    if not math.isfinite(a) and not math.isfinite(b):
+        return math.isnan(a) and math.isnan(b)
+    if a == b:
+        return True
+    denom = max(abs(a), abs(b), abs(scale), 1e-12)
+    return abs(a - b) / denom <= ANALYTICS_REL_TOL
+
+
 def fdd_daily_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
     return (
         str(row.get("building_id", "")),

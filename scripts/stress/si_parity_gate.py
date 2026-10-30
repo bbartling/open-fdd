@@ -5,10 +5,13 @@ CI default (full matrix, report-only mismatches):
   python scripts/stress/si_parity_gate.py --fixtures-only --report-json si_parity_report.json
 
 Blocking W4 family (example FC1 / W4b):
-  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4b_fc1_duct_static
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4a_fc1_duct_static
+
+Blocking W4f analytics family (19 analytics queries, P1/P2-analytics):
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4f_analytics_si_p2
 
 T1284-4 gate failure under mutation + blocking scope:
-  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 --inject-t1284-4-mutation
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4f_analytics_si_p2 --inject-t1284-4-mutation
 
 Fault seconds are exact. Analytics use relative tolerance 1e-6 (see parity_chain.ANALYTICS_REL_TOL).
 """
@@ -27,7 +30,8 @@ if str(_SCRIPTS) not in sys.path:
 
 from helpers import EXIT_BLOCKED, EXIT_FAIL, EXIT_PASS, record_check, run_child, safe_print  # noqa: E402
 from si_cutover import parity_chain as pc  # noqa: E402
-from si_cutover.si_parity_families import resolve_rule_scope  # noqa: E402
+from si_cutover import analytics_parity as ap  # noqa: E402
+from si_cutover.si_parity_families import resolve_analytics_scope, resolve_rule_scope  # noqa: E402
 
 
 def _print_mismatch_table(label: str, table: dict[str, int], *, limit: int = 20) -> None:
@@ -64,7 +68,9 @@ def _blocking_errors(
     blocking: bool,
     scope: set[str] | None,
 ) -> list[str]:
-    """Structural gate: P0 never blocks; scoped P1/P2 mismatches always block."""
+    """Structural gate: P0 never blocks; scoped P1/P2 (rule and analytics) mismatches
+    block under --blocking. The full matrix without --blocking is report-only so
+    rules/queries not yet migrated by their W4 row do not block (W6 requires green)."""
     out: list[str] = []
     always_block = ("unit_vectors", "unit_scenarios", "pandas-errors", "P0-carryover")
     for r in results:
@@ -72,10 +78,10 @@ def _blocking_errors(
             out.extend(r.errors)
             continue
         if not blocking:
-            if r.stage == "P2":
-                out.extend(r.errors)
             continue
-        if scope is not None and r.stage in ("P1", "P2"):
+        if r.stage in ("P1-analytics", "P2-analytics"):
+            out.extend(r.errors)
+        elif scope is not None and r.stage in ("P1", "P2"):
             out.extend(r.errors)
     return out
 
@@ -96,11 +102,17 @@ def run_fixtures_gate(
     blocking: bool,
     report_json: Path | None,
     inject_t1284_4: bool,
+    analytics_scope: set[str] | None = None,
 ) -> int:
-    param_hook = None
-    si_post = _fc1_t1284_si_param_post_hook if inject_t1284_4 else None
-    results = pc.run_fixture_stages(scope=scope, si_param_post_hook=si_post)
-    stage_map = {r.stage: r for r in results}
+    analytics_mutation = inject_t1284_4 and analytics_scope != set()
+    si_post = _fc1_t1284_si_param_post_hook if inject_t1284_4 and not analytics_mutation else None
+    rules_in_scope = scope is None or bool(scope)
+    results = pc.run_fixture_stages(scope=scope, si_param_post_hook=si_post) if rules_in_scope else []
+    analytics_results: list[pc.StageResult] = []
+    if analytics_scope != set():
+        hook = ap.t1284_4_analytics_double_conversion if analytics_mutation else None
+        analytics_results = list(ap.run_analytics_stages(scope=analytics_scope, param_hook=hook))
+    stage_map = {r.stage: r for r in results + analytics_results}
 
     p0 = stage_map.get("P0")
     p1 = stage_map.get("P1")
@@ -128,10 +140,27 @@ def run_fixtures_gate(
     if p2 and p2.mismatch_table:
         for line in p2.mismatch_table:
             safe_print(f"  {line}")
+    for ar in analytics_results:
+        safe_print(f"  {ar.stage} comparisons={ar.comparisons} mismatches={len(ar.errors)}")
+        for line in ar.errors[:20]:
+            safe_print(f"    {line[:200]}")
 
     report = pc.build_si_parity_report(
         results, scope=scope, scope_label=scope_label, blocking=blocking
     )
+    report["analytics"] = {
+        "scope_queries": sorted(analytics_scope) if analytics_scope is not None else ["*"],
+        "rel_tol": pc.ANALYTICS_REL_TOL,
+        "stages": {
+            ar.stage: {
+                "comparisons": ar.comparisons,
+                "mismatch_count": len(ar.errors),
+                "mismatches": list(ar.errors),
+                "coverage": list(ar.structured),
+            }
+            for ar in analytics_results
+        },
+    }
     if report_json:
         report_json.parent.mkdir(parents=True, exist_ok=True)
         report_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -153,7 +182,31 @@ def run_fixtures_gate(
         elif r.errors and blocking:
             record_check(f"si_parity.{r.stage}", False, comparisons=r.comparisons)
 
-    gate_failures = _blocking_errors(results, blocking=blocking, scope=scope)
+    for ar in analytics_results:
+        record_check(
+            f"si_parity.{ar.stage}",
+            ar.comparisons > 0 and not (blocking and ar.errors),
+            comparisons=ar.comparisons,
+        )
+
+    gate_failures = _blocking_errors(results + analytics_results, blocking=blocking, scope=scope)
+
+    if analytics_mutation:
+        if not blocking or analytics_scope is None and scope is None:
+            safe_print(
+                "FAIL T1284-4: analytics mutation requires --blocking and a family that owns analytics queries"
+            )
+            return EXIT_FAIL
+        ap1 = stage_map.get("P1-analytics")
+        if not ap1 or not ap1.errors:
+            safe_print("FAIL T1284-4: analytics mutation did not produce P1-analytics mismatches")
+            return EXIT_FAIL
+        safe_print(
+            f"PASS T1284-4 blocking gate failure under analytics mutation "
+            f"(P1-analytics mismatches={len(ap1.errors)} e.g. {ap1.errors[0][:100]})"
+        )
+        record_check("T1284-4.blocking_mutation", True, comparisons=ap1.comparisons)
+        return EXIT_FAIL
 
     if inject_t1284_4:
         if scope is None or "FC1" not in scope:
@@ -177,8 +230,14 @@ def run_fixtures_gate(
         safe_print(f"FAIL si-parity (blocking): {len(gate_failures)} error(s); first: {gate_failures[0]}")
         return EXIT_FAIL
 
-    if blocking and scope is not None:
-        for required in ("P0", "P1", "P2"):
+    if blocking and (scope is not None or analytics_scope is not None):
+        required_stages = (("P0", "P1", "P2") if rules_in_scope else ()) + (
+            ("P1-analytics", "P2-analytics") if analytics_results else ()
+        )
+        if not required_stages:
+            safe_print("BLOCKED si-parity: scope owns no rules and no analytics queries")
+            return EXIT_BLOCKED
+        for required in required_stages:
             st = stage_map.get(required)
             if st is None or st.comparisons < 1:
                 safe_print(f"BLOCKED si-parity: scoped stage {required} needs nonzero comparisons")
@@ -186,14 +245,14 @@ def run_fixtures_gate(
         safe_print(f"PASS si-parity blocking scope={scope_label}")
         return EXIT_PASS
 
-    for required in ("P0", "P1", "P2"):
+    for required in ("P0", "P1", "P2", "P1-analytics", "P2-analytics"):
         st = stage_map.get(required)
         if st is None or st.comparisons < 1:
             safe_print(f"BLOCKED si-parity: stage {required} needs nonzero comparisons")
             return EXIT_BLOCKED
     safe_print(
-        f"PASS si-parity fixtures report-only (P0={p0_n}/{p0_m} P1={p1_n}/{p1_m} P2={p2_n}; "
-        "full-matrix P0/P1 mismatches logged + si_parity_report.json)"
+        f"PASS si-parity fixtures report-only (P0={p0_n}/{p0_m} P1={p1_n}/{p1_m} P2={p2_n} "
+        f"P2 mismatches={len(p2.errors) if p2 else 0}; full-matrix mismatches logged + si_parity_report.json)"
     )
     return EXIT_PASS
 
@@ -239,8 +298,16 @@ def run_t1284_4_mutation_self_test() -> int:
         safe_print("FAIL T1284-4: FC1 SI param unit mutation did not fail P1 parity")
         return EXIT_FAIL
 
+    a_p1, _a_p2 = ap.run_analytics_stages(
+        scope=None, param_hook=ap.t1284_4_analytics_double_conversion
+    )
+    if not a_p1.errors:
+        safe_print("FAIL T1284-4: analytics SI param unit mutation did not fail P1-analytics")
+        return EXIT_FAIL
+
     safe_print(
         f"PASS T1284-4 mutation guard ({vector_checks} vector cases; "
+        f"P1-analytics failures={len(a_p1.errors)}; "
         f"P1 failures={len(p1_broken.errors)} e.g. {p1_broken.errors[0][:72]})"
     )
     record_check("T1284-4.unit_mutation", True, comparisons=vector_checks + p1_broken.comparisons)
@@ -317,7 +384,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--inject-t1284-4-mutation",
         action="store_true",
-        help="Mutate FC1 SI params; with --blocking --rules FC1 expect exit 1",
+        help="Mutate SI params (analytics OAT bin edges for a family owning analytics queries, "
+        "else FC1); with --blocking expect exit 1",
     )
     ap.add_argument(
         "--mutation-self-test",
@@ -342,6 +410,7 @@ def main(argv: list[str] | None = None) -> int:
     rules_tuple = _parse_rules_arg(args.rules)
     try:
         scope = resolve_rule_scope(rules=rules_tuple or None, family=args.family)
+        analytics_scope = set() if rules_tuple else resolve_analytics_scope(args.family)
     except (ValueError, KeyError) as exc:
         safe_print(f"FAIL si-parity scope: {exc}")
         return EXIT_FAIL
@@ -354,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
             blocking=bool(args.blocking),
             report_json=args.report_json,
             inject_t1284_4=bool(args.inject_t1284_4_mutation),
+            analytics_scope=analytics_scope,
         )
     ap.error("no mode selected")
 

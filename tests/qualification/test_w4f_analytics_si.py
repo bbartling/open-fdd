@@ -119,27 +119,42 @@ class W4fAnalyticsP2Tests(unittest.TestCase):
             f"registry missing shipped analytics SQL: {sorted(missing)}",
         )
 
+    def test_analytics_p1_p2_offline_all_queries(self) -> None:
+        from scripts.stress.si_cutover import analytics_parity as ap
+
+        p1, p2 = ap.run_analytics_stages(scope=None)
+        self.assertEqual(list(p1.errors), [], "\n".join(p1.errors[:20]))
+        self.assertEqual(list(p2.errors), [], "\n".join(p2.errors[:20]))
+        for cov in p2.structured:
+            self.assertGreater(cov["p1_rows"], 0, cov)
+            self.assertGreater(cov["p2_rows"], 0, cov)
+        self.assertEqual(len(p2.structured), 19)
+
+    def test_analytics_mutation_fails_p1(self) -> None:
+        from scripts.stress.si_cutover import analytics_parity as ap
+
+        p1, _p2 = ap.run_analytics_stages(
+            scope={"mechanical_cooling_oat_bins"},
+            param_hook=ap.t1284_4_analytics_double_conversion,
+        )
+        self.assertTrue(p1.errors)
+
     @unittest.skipUnless(
         os.environ.get("OPENFDD_DATABASE_URL", "").strip(),
-        "OPENFDD_DATABASE_URL required for analytics P2 Timescale parity",
+        "OPENFDD_DATABASE_URL required for analytics SQL SI golden check",
     )
-    def test_analytics_p2_all_queries_on_si_ci_seeds(self) -> None:
-        from scripts.ci import unit_contract_lib as uc
-        from scripts.stress.si_cutover import ci_analytics_p2 as cap2
+    def test_analytics_sql_si_goldens_match_live_sql(self) -> None:
+        from scripts.stress.si_cutover import analytics_parity as ap
         from scripts.stress.si_cutover import ci_timescale_sql as cts
-        from scripts.stress.si_cutover.parity_chain import load_all_ip_goldens
 
         parity = cts._load_parity_module()
         conn = parity.connect_with_retry(os.environ["OPENFDD_DATABASE_URL"])
         try:
-            goldens = load_all_ip_goldens()
-            metric = uc.load_json(uc.METRIC_UNITS)
-            results = cap2.run_p2_all_analytics(conn, goldens, metric)
-            _total, errors = cap2.summarize(results)
+            n, errors = ap.check_goldens_against_db(conn)
         finally:
             conn.close()
         self.assertEqual(errors, [], "\n".join(errors[:20]))
-
+        self.assertGreater(n, 0)
 
 if __name__ == "__main__":
     unittest.main()
