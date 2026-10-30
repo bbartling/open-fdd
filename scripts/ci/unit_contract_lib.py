@@ -375,6 +375,81 @@ def git_show_master(relpath: str) -> str:
     return proc.stdout
 
 
+def _rules_by_id(doc: Any) -> dict[str, dict[str, Any]]:
+    rules = doc.get("rules") if isinstance(doc, dict) else None
+    if not isinstance(rules, list):
+        raise AssertionError("registry.yaml rules must be a list")
+    out: dict[str, dict[str, Any]] = {}
+    for rule in rules:
+        if not isinstance(rule, dict):
+            raise AssertionError("registry rule entries must be mappings")
+        rid = rule.get("rule_id")
+        if not rid:
+            raise AssertionError("registry rule missing rule_id")
+        out[str(rid)] = rule
+    return out
+
+
+def registry_without_role_lists(doc: Any) -> Any:
+    import copy
+
+    stripped = copy.deepcopy(doc)
+    stripped = strip_registry_metadata(stripped)
+    for rule in stripped.get("rules", []):
+        if isinstance(rule, dict):
+            rule.pop("required_roles", None)
+            rule.pop("optional_roles", None)
+    return stripped
+
+
+def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -> None:
+    """Allow only optional_roles additions justified by rule SQL history reads."""
+    from check_rule_columns import sql_history_roles_for_rule
+
+    master_rules = _rules_by_id(master_doc)
+    branch_rules = _rules_by_id(branch_doc)
+    if set(master_rules) != set(branch_rules):
+        raise AssertionError(
+            "registry.yaml rule_id set differs from origin/master "
+            "(add/remove rule entries not allowed in metadata-only PRs)"
+        )
+
+    for rule_id, branch_rule in branch_rules.items():
+        master_rule = master_rules[rule_id]
+        master_req = list(master_rule.get("required_roles") or [])
+        branch_req = list(branch_rule.get("required_roles") or [])
+        if master_req != branch_req:
+            raise AssertionError(
+                f"registry.yaml {rule_id}: required_roles changed "
+                f"(master={master_req!r} branch={branch_req!r})"
+            )
+
+        master_opt = {str(r).lower() for r in master_rule.get("optional_roles") or []}
+        branch_opt = {str(r).lower() for r in branch_rule.get("optional_roles") or []}
+        if not branch_opt.issuperset(master_opt):
+            removed = sorted(master_opt - branch_opt)
+            raise AssertionError(
+                f"registry.yaml {rule_id}: optional_roles removal not allowed "
+                f"(removed {removed!r})"
+            )
+        added = branch_opt - master_opt
+        if not added:
+            continue
+        sql_roles = {r.lower() for r in sql_history_roles_for_rule(branch_rule)}
+        for role in sorted(added):
+            if role not in sql_roles:
+                raise AssertionError(
+                    f"registry.yaml {rule_id}: optional_roles addition `{role}` "
+                    "is not referenced in the rule SQL FROM history SELECT"
+                )
+
+    if registry_without_role_lists(master_doc) != registry_without_role_lists(branch_doc):
+        raise AssertionError(
+            "registry.yaml differs from origin/master beyond kind/effect metadata "
+            "and SQL-justified optional_roles additions"
+        )
+
+
 def assert_metadata_only_registry_diff() -> None:
     try:
         import yaml
@@ -384,11 +459,7 @@ def assert_metadata_only_registry_diff() -> None:
     branch_text = REGISTRY.read_text(encoding="utf-8")
     master_doc = registry_doc_for_metadata_diff(yaml.safe_load(master_text))
     branch_doc = registry_doc_for_metadata_diff(yaml.safe_load(branch_text))
-    if master_doc != branch_doc:
-        raise AssertionError(
-            "registry.yaml differs from origin/master beyond kind/effect metadata "
-            "(excluding W4d SI plant rules)"
-        )
+    validate_registry_role_declarations_diff(master_doc, branch_doc)
 
 
 def assert_metadata_only_tuning_diff() -> None:
