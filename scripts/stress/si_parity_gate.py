@@ -77,6 +77,11 @@ def _blocking_errors(
             continue
         if scope is not None and r.stage in ("P1", "P2"):
             out.extend(r.errors)
+        if scope is not None and r.stage == "P2" and r.pending:
+            # A scoped blocking family gate may not pass on cells it never compared.
+            out.append(
+                f"P2: {r.pending} cell(s) pending_W4 in blocking scope (must be zero)"
+            )
     return out
 
 
@@ -115,7 +120,7 @@ def run_fixtures_gate(
     safe_print(
         f"  P0 comparisons={p0_n} mismatches={p0_m}  "
         f"P1 comparisons={p1_n} mismatches={p1_m}  "
-        f"P2 comparisons={p2_n}"
+        f"P2 comparisons={p2_n} pending_W4={p2.pending if p2 else 0}"
     )
 
     if p0 and p0.errors:

@@ -50,6 +50,8 @@ class StageResult:
     errors: tuple[str, ...]
     mismatch_table: tuple[str, ...] = ()
     structured: tuple[dict[str, Any], ...] = ()
+    # Cells not compared (sql_si_status pending_W4). Never counted in ``comparisons``.
+    pending: int = 0
 
 
 def rule_in_scope(rule_id: str, scope: set[str] | None) -> bool:
@@ -147,6 +149,7 @@ def build_si_parity_report(
             },
             "P2": {
                 "comparisons": p2.comparisons if p2 else 0,
+                "pending_W4": p2.pending if p2 else 0,
                 "blocking_errors": list(p2.errors) if p2 else [],
                 "notes": list(p2.mismatch_table) if p2 else [],
             },
@@ -691,11 +694,16 @@ def run_p2_all_goldens(
             rule_id = str(row.get("rule_id") or "")
             if not rule_in_scope(rule_id, scope):
                 continue
-            comparisons += 1
             status = str(row.get("sql_si_status") or "")
             if status == PENDING_W4:
                 pending_cells += 1
+                reason = row.get("sql_si_pending_reason")
+                if reason:
+                    pending_notes.append(
+                        f"P2 pending {rule_id}/{row.get('equipment_id')}/{row.get('utc_day')}: {reason}"
+                    )
                 continue
+            comparisons += 1
             sql_raw = row.get("sql_si_fault_seconds")
             pandas_raw = row.get("pandas_si_fault_seconds")
             if sql_raw is None:
@@ -718,18 +726,20 @@ def run_p2_all_goldens(
                     f"sql_si={sql_s} pandas_si={pandas_s}"
                 )
     if pending_cells:
-        pending_notes.append(
-            f"P2: {pending_cells} cell(s) pending_W4 (SI SQL pack not shipped; not compared)"
+        pending_notes.insert(
+            0, f"P2: {pending_cells} cell(s) pending_W4 (not compared; not counted as comparisons)"
         )
-    if scope is None and comparisons < min_required:
+    # Full-matrix coverage: every required SI pair is either compared or reported pending.
+    if scope is None and comparisons + pending_cells < min_required:
         errors.append(
-            f"P2: comparisons {comparisons} < required si pairs {min_required}"
+            f"P2: comparisons {comparisons} + pending {pending_cells} < required si pairs {min_required}"
         )
     return StageResult(
         "P2",
         comparisons,
         tuple(errors),
         tuple(pending_notes),
+        pending=pending_cells,
     )
 
 
