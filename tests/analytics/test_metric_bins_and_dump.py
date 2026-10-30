@@ -7,29 +7,23 @@ from pathlib import Path
 import pandas as pd
 
 from open_fdd.analytics import DUMP_FILENAMES, dump_tables, mech_cooling_oat_bins
-from open_fdd.analytics.report_storage import STORAGE_ABI_METRIC
-from open_fdd.analytics.units import stamp_display_units
 from open_fdd.units.convert import fahrenheit_to_celsius
 
 
-def _chiller_frame(*, oat_c: float) -> dict:
+def _chiller_frame(*, oat: float) -> dict:
     idx = pd.date_range("2026-01-01", periods=12, freq="5min", tz="UTC")
     df = pd.DataFrame(
         {
             "chiller-status": 1.0,
-            "outside-air-temp": oat_c,
+            "outside-air-temp": oat,
         },
         index=idx,
     )
-    df.attrs["storage_abi"] = STORAGE_ABI_METRIC
-    df.attrs["role_units"] = {"outside-air-temp": "°C", "chiller-status": "bool"}
-    stamp_display_units(df, {"display_units": "si"})
     return {"CHILLER_1": df}
 
 
 def test_metric_bins_same_physical_hours():
-    oat_c = fahrenheit_to_celsius(72.0)
-    frames = _chiller_frame(oat_c=oat_c)
+    frames_f = _chiller_frame(oat=72.0)
     role_map = {
         "CHILLER_1": {
             "equipType": "chiller",
@@ -37,11 +31,17 @@ def test_metric_bins_same_physical_hours():
             "outside-air-temp": "outside-air-temp",
         }
     }
-    met = mech_cooling_oat_bins(frames, role_map, prefer_web_oat=False, unit_system="metric")
-    assert not met.empty
-    assert float(met["hours"].sum()) > 0
-    labels = set(met["bin_label"].astype(str))
-    assert any("21" in label or "22" in label for label in labels)
+    imp = mech_cooling_oat_bins(
+        frames_f, role_map, unit_system="imperial", prefer_web_oat=False
+    )
+    frames_c = _chiller_frame(oat=fahrenheit_to_celsius(72.0))
+    met = mech_cooling_oat_bins(
+        frames_c, role_map, unit_system="metric", prefer_web_oat=False
+    )
+    assert not imp.empty and not met.empty
+    assert float(imp["runtime_hours"].sum()) == float(met["runtime_hours"].sum())
+    assert "70–75" in set(imp["bin_label"].astype(str))
+    assert "21-27" in set(met["bin_label"].astype(str))
 
 
 def test_dump_tables_filenames(tmp_path: Path):

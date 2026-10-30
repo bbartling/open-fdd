@@ -172,6 +172,17 @@ def _f(p: dict, key: str, default: float) -> float:
         return float(default)
 
 
+def _role_series_unit(d: pd.DataFrame, role: str) -> str:
+    from open_fdd.analytics.units import DEFAULT_ROLE_UNITS
+
+    units = d.attrs.get("role_units") or d.attrs.get("units_map") or {}
+    if isinstance(units, dict):
+        u = units.get(role)
+        if u:
+            return str(u)
+    return str(DEFAULT_ROLE_UNITS.get(role, "°F"))
+
+
 def _param_si_abs_temp_to_series(_d: pd.DataFrame, _role: str, value_c: float) -> float:
     """Rule frames store canonical SI; parameters already use degC."""
     return float(value_c)

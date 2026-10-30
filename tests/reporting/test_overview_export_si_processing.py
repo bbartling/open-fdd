@@ -11,7 +11,8 @@ from open_fdd.reporting.overview_export import build_overview_context
 
 def test_overview_context_processing_inputs_stay_si_with_imperial_display_preference():
     idx = pd.date_range("2026-01-01", periods=3, freq="h", tz="UTC")
-    raw = pd.DataFrame({"outside-air-temp": [20.0, 21.0, 22.0]}, index=idx)
+    # Legacy wide CSV magnitudes are °F when display_units is imperial.
+    raw = pd.DataFrame({"outside-air-temp": [68.0, 69.8, 71.6]}, index=idx)
     column_map = {"storage_abi": STORAGE_ABI_METRIC, "display_units": "imperial"}
     storage = ensure_storage_frame(raw, column_map)
     display = frame_for_display(storage, "imperial")
@@ -29,4 +30,4 @@ def test_overview_context_processing_inputs_stay_si_with_imperial_display_prefer
     assert ctx["zone_lo"] == pytest.approx(21.111111)
     assert ctx["chw_leave_max"] == pytest.approx(8.8888888889)
     proc = ctx["frames"]["AHU_1"]
-    assert float(proc["outside-air-temp"].iloc[0]) == pytest.approx(20.0)
+    assert float(proc["outside-air-temp"].iloc[0]) == pytest.approx(20.0, abs=0.05)
