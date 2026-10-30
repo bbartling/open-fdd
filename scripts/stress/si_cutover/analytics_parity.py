@@ -37,7 +37,8 @@ STALE_AGE = dt.timedelta(hours=24)
 #   key            bucket/identity column (exact)
 #   text / bool    exact
 #   ts             timestamp, compared as UTC ISO string
-#   count          dimensionless number (counts, hours, percent-free ratios)
+#   count          dimensionless numeric scalar (hours, ratios, z-scores)
+#   integer        exact, finite, integral quantity (row/sample/event counts)
 #   abs:<role>     absolute value in the unit of <role>; "@" = the row's ``role`` column
 #   delta:<role>   difference/spread in the unit of <role>; "@" = the row's ``role`` column
 STEM_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
@@ -47,7 +48,7 @@ STEM_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "diurnal_hourly": (
         ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("hour_utc", "key"),
-        ("avg_val", "abs:@"), ("n", "count"),
+        ("avg_val", "abs:@"), ("n", "integer"),
     ),
     "economizer_deltas": (
         ("ts", "key"), ("equipment_id", "key"), ("oa_t", "abs:oa_t"), ("rat", "abs:rat"),
@@ -57,7 +58,7 @@ STEM_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "fuel_daily": (
         ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("day_utc", "key"),
-        ("n", "count"), ("min_val", "abs:@"), ("max_val", "abs:@"), ("avg_val", "abs:@"),
+        ("n", "integer"), ("min_val", "abs:@"), ("max_val", "abs:@"), ("avg_val", "abs:@"),
         ("delta_val", "delta:@"),
     ),
     "mechanical_cooling_oat_bins": (
@@ -65,26 +66,26 @@ STEM_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
     "metering_kwh": (
         ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("day_utc", "key"),
-        ("n", "count"), ("min_val", "abs:@"), ("max_val", "abs:@"), ("avg_val", "abs:@"),
+        ("n", "integer"), ("min_val", "abs:@"), ("max_val", "abs:@"), ("avg_val", "abs:@"),
         ("delta_val", "delta:@"),
     ),
     "motor_weekly_runtime": (
         ("equipment_id", "key"), ("kind", "key"), ("signal", "key"), ("plant_group", "key"),
         ("week_start", "key"), ("week_label", "key"), ("run_hours", "count"),
-        ("runtime_hours", "count"), ("n_observations", "count"), ("partial_week", "bool"),
+        ("runtime_hours", "count"), ("n_observations", "integer"), ("partial_week", "bool"),
     ),
     "mv_change_point_daily": (
         ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("day_utc", "key"),
-        ("avg_val", "abs:@"), ("prev_avg", "abs:@"), ("delta_avg", "delta:@"), ("n", "count"),
+        ("avg_val", "abs:@"), ("prev_avg", "abs:@"), ("delta_avg", "delta:@"), ("n", "integer"),
         ("change_flag", "text"),
     ),
     "pid_hunting_proxy": (
-        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "count"),
+        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "integer"),
         ("avg_val", "abs:@"), ("stddev_val", "delta:@"), ("hunt_flag", "text"),
     ),
     "plant_health_inventory": (("equipment_id", "key"), ("equip_type", "text")),
     "rcx_preset_role_coverage": (
-        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "count"),
+        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "integer"),
         ("first_ts", "ts"), ("last_ts", "ts"),
     ),
     "role_timeseries": (
@@ -95,12 +96,12 @@ STEM_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("ts", "key"), ("openfdd_key", "key"), ("val", "count"), ("equipment_id", "text"),
     ),
     "sensor_faults_staleness": (
-        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "count"),
+        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "integer"),
         ("last_ts", "ts"), ("min_val", "abs:@"), ("max_val", "abs:@"),
         ("stddev_val", "delta:@"), ("fault_flag", "text"),
     ),
     "sensor_stats": (
-        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "count"),
+        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "integer"),
         ("min_val", "abs:@"), ("max_val", "abs:@"), ("avg_val", "abs:@"),
         ("stddev_val", "delta:@"), ("first_ts", "ts"), ("last_ts", "ts"),
     ),
@@ -109,18 +110,18 @@ STEM_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
         ("setpoint", "abs:@"),
     ),
     "sql_anomaly_series": (
-        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "count"),
-        ("n_null", "count"), ("stddev_val", "delta:@"),
+        ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("n", "integer"),
+        ("n_null", "integer"), ("stddev_val", "delta:@"),
     ),
     "sql_anomaly_zscore": (
-        ("n_scored", "count"), ("n_flagged", "count"), ("n_ok", "count"),
-        ("n_selected", "count"), ("equipment_id", "key"), ("role", "key"), ("ts", "key"),
+        ("n_scored", "integer"), ("n_flagged", "integer"), ("n_ok", "integer"),
+        ("n_selected", "integer"), ("equipment_id", "key"), ("role", "key"), ("ts", "key"),
         ("val", "abs:@"), ("avg_val", "abs:@"), ("stddev_val", "delta:@"),
         ("z_abs", "count"), ("transition", "bool"),
     ),
     "topology_equipment": (
         ("equipment_id", "key"), ("equip_type", "text"), ("parent_equipment_id", "text"),
-        ("role_count", "count"), ("last_sample_ts", "ts"),
+        ("role_count", "integer"), ("last_sample_ts", "ts"),
     ),
 }
 
@@ -279,6 +280,20 @@ def role_units_of(ip_frame) -> dict[str, tuple[str, str]]:
         if qu is None:
             continue
         out[cfl.frame_column_to_sql_role(str(col))] = qu
+    # Canonical analytics role IDs may arrive as short source columns that do
+    # not carry display metadata themselves. Resolve their units through the
+    # shared role-to-column contract rather than guessing from sample values.
+    role_source_columns = {
+        "oa_t": "outside-air-temp",
+        "web_oa_t": "web-outside-air-temp",
+        "sat": "discharge-air-temp",
+        "zone_t": "zone-air-temp",
+        "dsp": "duct-static-pressure",
+    }
+    for role, column in role_source_columns.items():
+        quantity_unit = cfl.column_quantity_unit(column)
+        if quantity_unit is not None:
+            out.setdefault(role, quantity_unit)
     return out
 
 
@@ -292,6 +307,9 @@ def pandas_rows(
     ds: AnalyticsDataset,
     params: dict[str, dict[str, tuple[float, ...]]],
     as_of: dt.datetime,
+    unit_system: str,
+    source_role_units: dict[str, tuple[str, str]],
+    metric: dict[str, Any],
 ) -> list[tuple[Any, ...]]:
     from scripts.stress.si_cutover import ci_analytics_oracles as cao
 
@@ -307,6 +325,35 @@ def pandas_rows(
     if stem == "motor_weekly_runtime":
         return cao.oracle_motor_weekly_runtime_sql(long, equip_type=ds.equipment_type)
     extra: dict[str, Any] = {}
+    if stem == "pid_hunting_proxy":
+        roles = {
+            "clg_valve_pct", "htg_valve_pct", "oa_damper_pct", "fan_cmd",
+            "dsp", "sat", "zone_t",
+        }
+        thresholds = {role: 8.0 for role in roles}
+        if unit_system == "metric":
+            for role in roles:
+                quantity_unit = source_role_units.get(role)
+                if quantity_unit is None:
+                    continue
+                quantity, unit = quantity_unit
+                if quantity == "absolute_temperature":
+                    thresholds[role] = _to_si(metric, "temperature_difference", 8.0, "deltaF")
+                elif quantity == "air_pressure":
+                    thresholds[role] = _to_si(metric, quantity, 8.0, unit)
+        extra["pid_stddev_thresholds"] = thresholds
+    if stem == "mv_change_point_daily" and unit_system == "metric":
+        extra["change_point_temperature_roles"] = {
+            role
+            for role, (quantity, _unit) in source_role_units.items()
+            if quantity == "absolute_temperature"
+        }
+        extra["change_point_temperature_origin_c"] = _to_si(
+            metric, "absolute_temperature", 0.0, "degF"
+        )
+        extra["change_point_temperature_min_delta_c"] = _to_si(
+            metric, "temperature_difference", 1.0, "deltaF"
+        )
     if stem == "bas_vs_web_oat":
         extra = {"oa_key": f"{ds.equipment_id}.oa_t", "max_age_s": 7200.0, "limit": 500}
     oracle = cao.build_oracle_for_stem(
@@ -410,6 +457,20 @@ def cells_equal(a: Any, b: Any, *, kind: str = "", scale: float = 0.0) -> bool:
         analytics_spread_equal,
     )
 
+    if kind == "integer":
+        # PostgreSQL COUNT returns bigint, while pandas may normalize the same
+        # value as float. Accept representation differences, never value drift.
+        return (
+            not isinstance(a, bool)
+            and not isinstance(b, bool)
+            and isinstance(a, (int, float))
+            and isinstance(b, (int, float))
+            and math.isfinite(float(a))
+            and math.isfinite(float(b))
+            and float(a).is_integer()
+            and float(b).is_integer()
+            and int(a) == int(b)
+        )
     if a is None or b is None:
         return a is None and b is None
     if isinstance(a, bool) or isinstance(b, bool):
@@ -425,6 +486,11 @@ def compare_rows(
     stage: str, cell: str, stem: str, left_name: str, left: list[list[Any]],
     right_name: str, right: list[list[Any]],
 ) -> tuple[int, list[str]]:
+    """Compare keyed rows across every declared output column, not just numerics.
+
+    `STEM_COLUMNS` marks text, booleans, timestamps, and numeric outputs so
+    categorical results such as `hunt_flag` participate in parity too.
+    """
     errors: list[str] = []
     names = [c for c, _k in STEM_COLUMNS[stem]]
     lk: dict[tuple[Any, ...], list[Any]] = {}
@@ -512,8 +578,20 @@ def run_analytics_stages(
         units = role_units_of(ds.ip_frame)
         for stem in stems:
             cell = f"{ds.dataset_id}/{ds.equipment_id}"
-            pd_si = norm_rows(stem, pandas_rows(stem, si_frame, ds=ds, params=si_params, as_of=as_of))
-            pd_ip = norm_rows(stem, pandas_rows(stem, ds.ip_frame, ds=ds, params=ip_params, as_of=as_of))
+            pd_si = norm_rows(
+                stem,
+                pandas_rows(
+                    stem, si_frame, ds=ds, params=si_params, as_of=as_of,
+                    unit_system="metric", source_role_units=units, metric=metric,
+                ),
+            )
+            pd_ip = norm_rows(
+                stem,
+                pandas_rows(
+                    stem, ds.ip_frame, ds=ds, params=ip_params, as_of=as_of,
+                    unit_system="imperial", source_role_units=units, metric=metric,
+                ),
+            )
             pd_ip_si = rows_ip_to_si(stem, pd_ip, units, metric)
             n, e = compare_rows("P1-analytics", cell, stem, "pandas_ip", pd_ip_si, "pandas_si", pd_si)
             p1_n += n

@@ -101,6 +101,22 @@ class W4fAnalyticsSiTests(unittest.TestCase):
 
 
 class W4fAnalyticsP2Tests(unittest.TestCase):
+    def test_integral_analytics_counts_compare_exactly(self) -> None:
+        from scripts.stress.si_cutover.analytics_parity import cells_equal
+
+        self.assertFalse(cells_equal(1_000_000, 1_000_001, kind="integer"))
+        # PostgreSQL bigint and pandas may represent the same count differently.
+        self.assertTrue(cells_equal(1_000_000, 1_000_000.0, kind="integer"))
+        self.assertFalse(cells_equal(1_000_000.5, 1_000_000, kind="integer"))
+        self.assertFalse(cells_equal(float("nan"), float("nan"), kind="integer"))
+        self.assertFalse(cells_equal(float("inf"), 1, kind="integer"))
+        self.assertFalse(cells_equal(float("-inf"), float("-inf"), kind="integer"))
+        self.assertFalse(cells_equal(True, 1, kind="integer"))
+        self.assertFalse(cells_equal(True, True, kind="integer"))
+        self.assertFalse(cells_equal("1", "1", kind="integer"))
+        # Dimensionless scalars such as hours remain tolerant continuous values.
+        self.assertTrue(cells_equal(10.0, 10.000001, kind="count"))
+
     def test_ip_goldens_no_pending_w4_cells(self) -> None:
         import json
 
@@ -148,6 +164,61 @@ class W4fAnalyticsP2Tests(unittest.TestCase):
             param_hook=ap.t1284_4_analytics_double_conversion,
         )
         self.assertTrue(p1.errors)
+
+    def test_analytics_comparator_checks_text_bool_and_hunt_outputs(self) -> None:
+        from scripts.stress.si_cutover.analytics_parity import compare_rows
+
+        cases = (
+            (
+                "pid_hunting_proxy",
+                ["equip:1", "zone_t", "equip:1.zone_t", 24, 22.0, 5.0, "HUNT_PROXY"],
+                ["equip:1", "zone_t", "equip:1.zone_t", 24, 22.0, 5.0, "OK"],
+                "hunt_flag",
+            ),
+            (
+                "motor_weekly_runtime",
+                ["equip:1", "motor", "fan_status", "air", "2026-01-05", "2026-W02", 1.0, 1.0, 24, False],
+                ["equip:1", "motor", "fan_status", "air", "2026-01-05", "2026-W02", 1.0, 1.0, 24, True],
+                "partial_week",
+            ),
+            (
+                "plant_health_inventory",
+                ["equip:1", "ahu"],
+                ["equip:1", "vav"],
+                "equip_type",
+            ),
+        )
+        for stem, sql_row, oracle_row, output_name in cases:
+            with self.subTest(stem=stem, output=output_name):
+                comparisons, errors = compare_rows(
+                    "P2-analytics", "fixture", stem, "sql", [sql_row], "pandas", [oracle_row]
+                )
+                self.assertEqual(comparisons, 1)
+                self.assertTrue(any(output_name in error for error in errors), errors)
+
+    def test_motor_oracle_respects_half_open_window(self) -> None:
+        from scripts.stress.si_cutover.ci_analytics_oracles import oracle_motor_weekly_runtime
+
+        index = pd.date_range("2026-01-05T00:00:00Z", periods=4, freq="h")
+        frame = pd.DataFrame({"fan-status": [1.0, 1.0, 1.0, 1.0]}, index=index)
+        frame.attrs["poll_seconds"] = 3600.0
+        rows = oracle_motor_weekly_runtime(
+            frame,
+            equipment_id="equip:1",
+            equip_type="ahu",
+            ws="2026-01-05T01:00:00Z",
+            we="2026-01-05T03:00:00Z",
+        ).rows
+        full_rows = oracle_motor_weekly_runtime(
+            frame, equipment_id="equip:1", equip_type="ahu"
+        ).rows
+        self.assertEqual(sum(float(row[6]) for row in rows), 2.0)
+        self.assertEqual(sum(float(row[6]) for row in full_rows), 4.0)
+
+    def test_zscore_sql_excludes_zero_standard_deviation_windows(self) -> None:
+        query = (REPO / "sql/analytics/postgres/queries/sql_anomaly_zscore.sql").read_text()
+        self.assertIn("stats.stddev_val > 0", query)
+        self.assertIn("stats.max_val > stats.min_val", query)
 
     @unittest.skipUnless(
         os.environ.get("OPENFDD_DATABASE_URL", "").strip(),
