@@ -88,7 +88,7 @@ async fn upgraded_portal_enqueues_due_windows_and_accepts_backfill() {
                 .connect(&url)
                 .await
                 .expect("upgrade postgres fixture");
-            super::postgres::apply_schema(&pool)
+            crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
                 .await
                 .expect("ingest schema");
             purge_fixture(&pool).await;

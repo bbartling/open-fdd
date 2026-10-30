@@ -1378,12 +1378,7 @@ mod contract_timescale {
     async fn ensure_schema(tsdb: &Tsdb) {
         static ONCE: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
         ONCE.get_or_init(|| async {
-            for stmt in crate::db_lifecycle::forward_statements() {
-                sqlx::query(&stmt)
-                    .execute(tsdb.pool())
-                    .await
-                    .expect("schema");
-            }
+            crate::test_ddl::apply_forward_schema(tsdb.pool()).await;
         })
         .await;
     }
