@@ -16,6 +16,15 @@ The old fixture held duct static at 1.2 against a 1.5 setpoint during ordinary f
 
 Some SQL rules check fan-on stability, while pandas GL36 rules suppress faults after heat/cool/economizer mode changes. The raw synthetic contract explicitly sets `mode_delay_min=0` and `startup_delay_min=0` where exposed; confirmation is tested separately. Source UI/default tuner values are retained unchanged. Passing these controlled cases does not establish full default-mode or arbitrary-tuning parity. Implement and test the selected holdoff policy before shipping those controls as equivalent.
 
+## W4e SI-first sensor validation, weather, schedule and utility rules (#1284, #1439)
+
+- SV-RATE is excluded from the `W4e_si_sensor_util` parity family. It stays unsupported on SI (see the SV-RATE section above) and is not claimed by W4e.
+- Sensor-sweep tolerances (`flatline_tol`, `stale_tol`, `spike_limit`) and `oat_err` are temperature differences (K / delta degC), never absolute temperatures. Humidity roles use declared percent-RH literals (flatline 0.1, stale 0.05), not the temperature tolerance.
+- SV-RANGE, SV-FLATLINE and SV-SPIKE SQL now mirror the pandas operational gate fallback order (fan status, fan command, VAV zone airflow, pump, chiller). The airflow proof is 50 cfm = 23.597350 L/s on SI storage. The SQL checks airflow per row while pandas checks column presence; rows with NULL airflow fall through to the next proof in SQL.
+- The IP (P0, report-only) SQL rendering applies the SI airflow literal to cfm data, so P0 shows SV-FLATLINE value differences on VAV fixtures. P1 and P2 are the blocking stages.
+- The CI Timescale harness now seeds `point_map.unit` (authorized_series reads units from point_map since W1a #1406). Earlier goldens masked every sweep value and recorded zero SQL fault seconds.
+- SCHED-1 comfort tuners are `comfort_low`/`comfort_high` (degC). The runner's legacy `comfort_low_f` path is W4f scope.
+
 ## Oracle versions
 
 The preparation host's installed `open-fdd` distribution is 4.4.1 (62 diagnostic rules). The copied local source snapshot declares 4.4.9 (71 rules). The installed-mode report has nine `ORACLE_UNAVAILABLE` entries for FCU rules, plus the SV-RATE failure. An absent oracle is never counted as pass. The source snapshot is explicitly selected; it is not represented as a downloaded/installed 4.4.9 release. Pin the actual published package available in your environment and rerun that mode.

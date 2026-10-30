@@ -1,6 +1,8 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sv_flatline.sql — Sensor flatline (stuck) — pandas FLATLINE_SENSOR_ROLES catalog
+-- Storage is SI (metric-c-v2): FLATLINE_TOL is a temperature difference in K (delta °C)
+-- for temperature roles; humidity roles use the declared 0.1 percent-RH humidity tolerance.
 -- Temperature/humidity analogs (SENSOR_LIMITS minus duct static). Faults when ANY
 -- mapped role is flat while the equipment is energized.
 -- {{FLATLINE_ROWS}} / {{FLATLINE_ROWS_PRECEDING}} are derived from FLATLINE_HOURS
@@ -47,6 +49,7 @@ gated AS (
     fdd.mask_sweep_val('ma_h', b.u_ma_h, h.ma_h) AS ma_h,
     fdd.mask_sweep_val('sa_h', b.u_sa_h, h.sa_h) AS sa_h,
     h.fan_cmd,
+    h.zone_flow,
     h.fan_status,
     h.pump_status,
     h.chw_pump_cmd,
@@ -64,6 +67,8 @@ h AS (
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      -- VAV airflow proxy (operational_gate.resolve_fan_running): 50 cfm = 23.597350 L/s SI.
+      WHEN zone_flow IS NOT NULL THEN CASE WHEN zone_flow > 23.597350 THEN 1 ELSE 0 END
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
@@ -135,11 +140,11 @@ base AS (
       WHEN n_chw_return_t >= {{FLATLINE_ROWS}} AND span_chw_return_t <= {{FLATLINE_TOL}} THEN 1
       WHEN n_hw_supply_t >= {{FLATLINE_ROWS}} AND span_hw_supply_t <= {{FLATLINE_TOL}} THEN 1
       WHEN n_hw_return_t >= {{FLATLINE_ROWS}} AND span_hw_return_t <= {{FLATLINE_TOL}} THEN 1
-      WHEN n_oa_h >= {{FLATLINE_ROWS}} AND span_oa_h <= {{FLATLINE_TOL}} THEN 1
-      WHEN n_ra_h >= {{FLATLINE_ROWS}} AND span_ra_h <= {{FLATLINE_TOL}} THEN 1
-      WHEN n_zone_rh >= {{FLATLINE_ROWS}} AND span_zone_rh <= {{FLATLINE_TOL}} THEN 1
-      WHEN n_ma_h >= {{FLATLINE_ROWS}} AND span_ma_h <= {{FLATLINE_TOL}} THEN 1
-      WHEN n_sa_h >= {{FLATLINE_ROWS}} AND span_sa_h <= {{FLATLINE_TOL}} THEN 1
+      WHEN n_oa_h >= {{FLATLINE_ROWS}} AND span_oa_h <= 0.1 THEN 1
+      WHEN n_ra_h >= {{FLATLINE_ROWS}} AND span_ra_h <= 0.1 THEN 1
+      WHEN n_zone_rh >= {{FLATLINE_ROWS}} AND span_zone_rh <= 0.1 THEN 1
+      WHEN n_ma_h >= {{FLATLINE_ROWS}} AND span_ma_h <= 0.1 THEN 1
+      WHEN n_sa_h >= {{FLATLINE_ROWS}} AND span_sa_h <= 0.1 THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM win

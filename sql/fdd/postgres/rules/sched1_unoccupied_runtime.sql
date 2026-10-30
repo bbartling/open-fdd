@@ -1,6 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sched1_unoccupied_runtime.sql — Excess / wasted unoccupied runtime
+-- Storage is SI (metric-c-v2): zone_t and the ZONE_T_LO / ZONE_T_HI comfort band are °C.
 -- Pandas sched1: unoccupied & fan_on; when zone_t mapped, also require comfort band
 -- (zone already satisfied → optimal-start / bad schedule signal).
 -- When zone_t is absent from history, the runner injects NULL zone_t (optional role)

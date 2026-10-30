@@ -83,8 +83,83 @@ def _legacy_unit_tuning_parameters() -> dict[str, dict[str, Any]]:
 
 
 def ip_parameter_controls(rule_id: str) -> dict[str, Any] | None:
-    """Imperial tuning_catalog controls for SI-cutover rules on IP SQL / P0 paths."""
-    return _legacy_unit_tuning_parameters().get(rule_id)
+    """Imperial tuning_catalog controls for SI-cutover rules on IP SQL / P0 paths.
+
+    Rules still cutting over on this branch use the base ref's imperial controls.
+    Rules already SI on the base ref have no imperial base, so their imperial
+    controls are converted from the current SI catalog declarations.
+    """
+    legacy = _legacy_unit_tuning_parameters().get(rule_id)
+    if legacy is not None:
+        return legacy
+    return _si_catalog_controls_as_ip(rule_id)
+
+
+# Declared SI catalog unit -> (metric quantity, imperial target) per parameter kind.
+_SI_TO_IP_UNITS: dict[tuple[str, str], tuple[str, str, str]] = {
+    ("degC", "absolute_temperature"): ("absolute_temperature", "degC", "degF"),
+    ("degC", "temperature_difference"): ("temperature_difference", "degC_delta", "degF_delta"),
+    ("degC_delta", "temperature_difference"): ("temperature_difference", "degC_delta", "degF_delta"),
+    ("Pa", "air_pressure"): ("air_pressure", "Pa", "in_wc"),
+    ("kPa", "hydronic_pressure"): ("hydronic_pressure", "kPa", "psi"),
+}
+_SI_FLOW_UNITS = frozenset({"L_per_s", "L/s"})
+
+
+def _si_control_as_ip(rule_id: str, key: str, ctrl: dict[str, Any], metric: dict[str, Any]) -> dict[str, Any]:
+    from scripts.ci import unit_contract_lib as uc
+
+    unit = str(ctrl.get("unit") or "")
+    kind = str(ctrl.get("kind") or "")
+    if kind in uc.AMBIGUOUS_IP_KIND_UNITS:
+        # The medium (air cfm vs water gpm) comes from the declared ip_unit, never a guess.
+        uc.assert_ip_unit_declared(metric, f"{rule_id}.{key}", kind, ctrl)
+        conv = (kind, uc.kind_source_unit(kind, unit), str(ctrl["ip_unit"]))
+    elif unit in _SI_FLOW_UNITS:
+        raise ValueError(f"{rule_id}.{key}: SI flow control declares kind {kind!r}, not a flow kind")
+    else:
+        conv = _SI_TO_IP_UNITS.get((unit, kind))
+    if conv is None:
+        return dict(ctrl)
+    quantity, si_unit, ip_unit = conv
+    delta = (
+        "temperature_difference" if quantity == "absolute_temperature" else quantity,
+        "degC_delta" if quantity == "absolute_temperature" else si_unit,
+        "degF_delta" if quantity == "absolute_temperature" else ip_unit,
+    )
+
+    def level(v: float) -> float:
+        return uc.convert_from_canonical(metric, quantity, uc.convert_to_canonical(metric, quantity, float(v), si_unit), ip_unit)
+
+    def span(v: float) -> float:
+        q, su, iu = delta
+        return uc.convert_from_canonical(metric, q, uc.convert_to_canonical(metric, q, float(v), su), iu)
+
+    out = {f: v for f, v in ctrl.items() if f != "ip_unit"}
+    out["unit"] = ip_unit
+    for field in ("default", "min", "max"):
+        if field in ctrl:
+            out[field] = level(ctrl[field])
+    if "step" in ctrl:
+        out["step"] = span(ctrl["step"])
+    return out
+
+
+@lru_cache(maxsize=None)
+def _si_catalog_controls_as_ip(rule_id: str) -> dict[str, Any] | None:
+    """Imperial controls for a catalog rule whose parameters are declared in SI units."""
+    from scripts.ci import unit_contract_lib as uc
+
+    si_units = {u for u, _k in _SI_TO_IP_UNITS} | _SI_FLOW_UNITS
+    rules = json.loads(TUNING_CATALOG_PATH.read_text(encoding="utf-8"))["rules"]
+    rule = next((r for r in rules if str(r.get("rule_id")) == rule_id), None)
+    if rule is None:
+        return None
+    params = dict(rule.get("parameters") or {})
+    if not any(str(c.get("unit") or "") in si_units for c in params.values()):
+        return None
+    metric = uc.load_json(uc.METRIC_UNITS)
+    return {k: _si_control_as_ip(rule_id, k, c, metric) for k, c in params.items()}
 
 
 def catalog_overrides_from_registry(

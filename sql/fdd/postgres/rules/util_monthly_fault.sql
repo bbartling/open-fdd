@@ -1,6 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- util_monthly_fault.sql — BAS monthly kWh vs utility monthly bills (% deviation)
+-- Storage is SI (metric-c-v2): energy is kWh; UTIL_PCT_ERR is a percent of utility kWh.
 WITH bas_raw AS (
   SELECT
     timestamp_utc,

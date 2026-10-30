@@ -130,6 +130,8 @@ PUMP_PROOF_ROLES = (
 )
 PUMP_CMD_FALLBACK = ("pump-cmd", "chw-pump-cmd", "hw-pump-cmd")
 
+VAV_AIRFLOW_PROOF_CFM = 50.0
+
 COMPRESSOR_ROLES = ("compressor-status", "equipment-enable", "fan-status", "fan-cmd")
 
 
@@ -164,8 +166,13 @@ def resolve_fan_running(df: pd.DataFrame, *, command_fallback: bool = True) -> t
             return mask.fillna(False), f"{role} (cmd fallback)"
     # VAV airflow proxy
     if "zone-airflow" in df.columns and df["zone-airflow"].notna().any():
+        from open_fdd.quality import _storage_si
+        from open_fdd.units.convert import LPS_PER_CFM
+
+        # 50 cfm proof threshold; SI storage carries airflow in L/s.
+        threshold = VAV_AIRFLOW_PROOF_CFM * LPS_PER_CFM if _storage_si(df) else VAV_AIRFLOW_PROOF_CFM
         flow = pd.to_numeric(df["zone-airflow"], errors="coerce").fillna(0)
-        return (flow > 50.0), "zone-airflow"
+        return (flow > threshold), "zone-airflow"
     return pd.Series(True, index=df.index), "ungated_no_proof_roles"
 
 

@@ -25,6 +25,7 @@ from unit_contract_lib import (  # noqa: E402
     collect_alias_map,
     convert_to_canonical,
     derive_tuner_effect,
+    assert_ip_unit_declared,
     assert_unit_matches_kind,
     load_json,
     normalize_alias,
@@ -133,6 +134,17 @@ def check_registry_kinds() -> None:
             assert_unit_matches_kind(metric, f"registry {rule_id}.{key}", kind, unit)
         except ValueError as exc:
             fail(str(exc))
+    import yaml
+
+    for rule in (yaml.safe_load(text) or {}).get("rules") or []:
+        rid = str(rule.get("rule_id") or "")
+        for key, param in (rule.get("parameters") or {}).items():
+            if not isinstance(param, dict) or not param.get("kind"):
+                continue
+            try:
+                assert_ip_unit_declared(metric, f"registry {rid}.{key}", str(param["kind"]), param)
+            except ValueError as exc:
+                fail(str(exc))
     if missing:
         fail(f"registry parameters missing kind: {missing[:20]} (total {len(missing)})")
     print(f"PASS registry.yaml parameter kinds ({len(list(registry_param_blocks(text)))})")

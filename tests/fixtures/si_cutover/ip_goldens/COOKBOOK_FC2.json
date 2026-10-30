@@ -61,7 +61,6 @@
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "SCHED-247",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -70,7 +69,6 @@
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -79,7 +77,6 @@
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "SV-RANGE",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -97,7 +94,6 @@
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "SV-SPIKE",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -106,7 +102,6 @@
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -1044,6 +1039,17 @@
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
+      "rule_id": "SV-RATE",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC2",
+      "covered_seconds": 120.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
       "rule_id": "SCHED-247",
       "status": "PASS",
       "utc_day": "2026-07-01"
@@ -1067,17 +1073,6 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
-      "status": "PASS",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_FC2",
-      "covered_seconds": 120.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "SV-RATE",
       "status": "PASS",
       "utc_day": "2026-07-01"
     },
