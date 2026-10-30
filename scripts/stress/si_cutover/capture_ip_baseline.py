@@ -42,10 +42,15 @@ CI: ``--self-test`` (offline shapes); ``--emit-ip-goldens DIR`` for W0c fixtures
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import subprocess
 import sys
+import tempfile
 import time
+import tomllib
+import uuid
 from collections import Counter
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -179,6 +184,67 @@ def _sparql_equipment_id(pt: dict[str, Any]) -> str:
     return str(pt.get("equipmentId") or pt.get("equipment_id") or "").strip()
 
 
+def _explicit_openfdd_key(point: dict[str, Any]) -> str | None:
+    candidates: list[str] = []
+    for key in ("openfdd_key", "history_openfdd_key", "history_key"):
+        value = point.get(key)
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+    for container_key in ("history", "history_ref", "historyRef"):
+        nested = point.get(container_key)
+        if isinstance(nested, dict):
+            for key in ("openfdd_key", "history_openfdd_key", "key"):
+                value = nested.get(key)
+                if isinstance(value, str) and value.strip():
+                    candidates.append(value.strip())
+    distinct = set(candidates)
+    if len(distinct) > 1:
+        raise ValueError("conflicting explicit history keys in typed point binding")
+    return next(iter(distinct), None)
+
+
+def resolve_bound_openfdd_key(conn, *, site_id: str, equipment_id: str, point: dict[str, Any]) -> str | None:
+    """Resolve explicit, exact typed IDs, or documented equipment.point key encoding."""
+    explicit = _explicit_openfdd_key(point)
+    point_id = str(point.get("pointId") or point.get("point_id") or "").strip()
+    column = str(point.get("column") or "").strip()
+    with conn.cursor() as cur:
+        if explicit:
+            cur.execute(
+                "SELECT openfdd_key FROM point_map WHERE site_id = %s AND equipment_id = %s AND openfdd_key = %s",
+                (site_id, equipment_id, explicit),
+            )
+            rows = cur.fetchall()
+            if len(rows) != 1:
+                raise ValueError("explicit history key is absent or ambiguous in point_map")
+            return str(rows[0][0])
+        rows = []
+        if point_id:
+            cur.execute(
+                """SELECT DISTINCT openfdd_key FROM point_map
+                   WHERE site_id = %s AND equipment_id = %s
+                     AND (portal_point_id = %s OR haystack_id = %s)""",
+                (site_id, equipment_id, point_id, point_id),
+            )
+            rows = cur.fetchall()
+        if len(rows) > 1:
+            raise ValueError("typed point identity maps to multiple point_map keys")
+        exact_keys = {str(row[0]) for row in rows}
+        canonical_candidates = sorted(
+            {f"{equipment_id}.{value}" for value in (point_id, column) if value}
+        )
+        if canonical_candidates:
+            cur.execute(
+                """SELECT DISTINCT openfdd_key FROM point_map
+                   WHERE site_id = %s AND equipment_id = %s AND openfdd_key = ANY(%s)""",
+                (site_id, equipment_id, canonical_candidates),
+            )
+            exact_keys.update(str(row[0]) for row in cur.fetchall())
+    if len(exact_keys) > 1:
+        raise ValueError("typed point identity maps to multiple point_map keys")
+    return next(iter(exact_keys), None)
+
+
 def post_fdd_run_with_busy_retry(
     http: HttpClient,
     headers: dict[str, str],
@@ -297,6 +363,87 @@ def load_rule_registry() -> list[dict[str, Any]]:
     return rules
 
 
+def _tree_sha256(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*.py")):
+        if any(part in {".git", "__pycache__", ".venv", "venv"} for part in path.parts):
+            continue
+        digest.update(path.relative_to(root).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def load_ip_oracle(source_root: Path) -> dict[str, Any]:
+    """Load only the explicitly pinned IP oracle and report its provenance."""
+    import importlib
+    import yaml
+
+    root = source_root.expanduser().resolve()
+    project_file = root / "pyproject.toml"
+    registry_path = root / "sql" / "fdd" / "registry.yaml"
+    if not project_file.is_file() or not registry_path.is_file():
+        raise SystemExit("oracle source root must contain pyproject.toml and sql/fdd/registry.yaml")
+    project = tomllib.loads(project_file.read_text(encoding="utf-8"))
+    project_version = str(
+        project.get("project", {}).get("version")
+        or project.get("tool", {}).get("poetry", {}).get("version")
+        or ""
+    )
+    if project_version != "4.4.9":
+        raise SystemExit("IP oracle source must declare open-fdd version 4.4.9")
+    for name in tuple(sys.modules):
+        if name == "open_fdd" or name.startswith("open_fdd."):
+            del sys.modules[name]
+    sys.path.insert(0, str(root))
+    try:
+        importlib.invalidate_caches()
+        package = importlib.import_module("open_fdd")
+        package_path = Path(package.__file__).resolve()
+        if not package_path.is_relative_to(root):
+            raise SystemExit("imported open_fdd is outside the explicit oracle source root")
+        version = str(getattr(package, "__version__", ""))
+        if version != "4.4.9":
+            raise SystemExit(f"IP oracle runtime version mismatch: expected 4.4.9, found {version!r}")
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if head != "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0":
+            raise SystemExit("IP oracle source must be pinned to registry baseline commit 35c17ac")
+        dirty = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--", "pyproject.toml", "open_fdd", "sql/fdd/registry.yaml"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if dirty:
+            raise SystemExit("IP oracle package and registry files must be clean at the pinned commit")
+        registry_bytes = registry_path.read_bytes()
+        registry = yaml.safe_load(registry_bytes)
+        rules = registry.get("rules") or []
+        if len(rules) < 70:
+            raise SystemExit(f"pinned IP registry expected ~77 rules, found {len(rules)}")
+        registry_hash = hashlib.sha256(registry_bytes).hexdigest()
+        if registry_hash != "b0397a06d834109a77e85599c81e7c81cbacfab7d38372503c943c1f26e1fcbf":
+            raise SystemExit("IP registry ABI mismatch for pinned 4.4.9 baseline")
+        return {
+            "source_root": str(root),
+            "version": version,
+            "import_path": str(package_path),
+            "git_head": head,
+            "registry_sha256": registry_hash,
+            "python_tree_sha256": _tree_sha256(root / "open_fdd"),
+            "rule_count": len(rules),
+            "rules": rules,
+        }
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit("oracle source root must be a git checkout with a resolvable HEAD") from exc
+
+
 def require_database_url() -> str:
     url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
     if not url:
@@ -361,14 +508,52 @@ def require_pandas_oracle() -> None:
         )
 
 
+def require_oracle_runtime(oracle: dict[str, Any]) -> None:
+    """Ensure oracle imports used by the capture remain inside the pinned checkout."""
+    from open_fdd.rules import RULES_BY_ID
+
+    registry_ids = {str(rule.get("rule_id")) for rule in oracle["rules"] if rule.get("rule_id")}
+    aliases = {"economizer-high-limit": "ECON_HL", "economizer-high-limit-fault": "ECON_HL"}
+    # Registry rows without a Python implementation remain explicit in output as
+    # no_pandas_function; they must not be mistaken for package/provenance errors.
+    oracle["pandas_implemented_rule_ids"] = sorted(
+        rid for rid in registry_ids if rid in RULES_BY_ID or aliases.get(rid) in RULES_BY_ID
+    )
+    oracle["no_pandas_function_rule_ids"] = sorted(
+        registry_ids.difference(oracle["pandas_implemented_rule_ids"])
+    )
+
+
+def require_unit_inventory(point_map_count: int, rows: list[dict[str, Any]]) -> None:
+    keys = [str(row.get("openfdd_key") or "") for row in rows]
+    if len(keys) != point_map_count or len(set(keys)) != point_map_count or any(not key for key in keys):
+        raise RuntimeError(
+            f"unit inventory does not cover every point_map key: "
+            f"expected={point_map_count} rows={len(keys)} unique={len(set(keys))}"
+        )
+
+
 def default_output_dir(shortsha: str) -> Path:
     day = datetime.now(timezone.utc).strftime("%Y%m%d")
     sha = shortsha.removeprefix("sha-")[:7] or "local"
     return Path(os.path.expanduser("~")) / "openfdd-si-cutover" / f"baseline-{sha}-{day}"
 
 
+def baseline_capture_disqualifiers(meta: dict[str, Any]) -> list[str]:
+    """Reasons a capture manifest cannot qualify as the frozen IP baseline."""
+    reasons: list[str] = []
+    if meta.get("skip_pandas"):
+        reasons.append("skip_pandas")
+    if meta.get("allow_errors"):
+        reasons.append("allow_errors")
+    oracle = meta.get("ip_oracle")
+    if not isinstance(oracle, dict):
+        reasons.append("missing_ip_oracle")
+    return reasons
+
+
 def health_shortsha(http, headers: dict[str, str]) -> str:
-    body = http.get_json("/api/health", headers=headers)
+    body = http.get_json("/api/version", headers=headers)
     version = str(body.get("version") or body.get("semver") or "")
     if "+" in version:
         return version.split("+", 1)[1]
@@ -465,12 +650,123 @@ def fetch_run_status_rows(
     return out
 
 
+def no_applicable_status_rows(status_map: dict[tuple[str, str], str]) -> list[dict[str, str]]:
+    """Keep persisted no-target statuses visible even when there is no equipment row."""
+    out = []
+    for (rule_id, equipment_id), status in sorted(status_map.items()):
+        if status == "SKIP_NO_TARGETS" or status.startswith("NOT_APPLICABLE"):
+            out.append(
+                {
+                    "rule_id": rule_id,
+                    "equipment_id": equipment_id,
+                    "status": status,
+                    "pair_status": "not_applicable",
+                }
+            )
+    return out
+
+
+def fetch_run_scope(
+    conn, *, building_id: str, run_id: str
+) -> tuple[set[str], tuple[Any, Any, Any, Any] | None]:
+    """Read persisted rule/window scope so a successful HTTP response cannot mask omission."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT array_agg(DISTINCT rule_id), MIN(window_start), MAX(window_start),
+                      MIN(window_end), MAX(window_end)
+               FROM fdd_run WHERE site_id = %s AND detail->>'run_id' = %s""",
+            (building_id, run_id),
+        )
+        rule_ids, start_min, start_max, end_min, end_max = cur.fetchone()
+    return {str(rule_id) for rule_id in (rule_ids or [])}, (
+        start_min, start_max, end_min, end_max
+    ) if start_min is not None else None
+
+
+def parse_utc_instant(value: str | datetime) -> datetime:
+    """Parse an API/DB timestamp and normalize it to UTC for instant comparisons."""
+    parsed = (
+        value
+        if isinstance(value, datetime)
+        else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    )
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def effective_run_window(
+    run_resp: dict[str, Any], *, requested_start: str | None, requested_end: str | None
+) -> tuple[str, str]:
+    """Read effective sample-clamped bounds from the run manifest or direct fields."""
+    manifest_window = run_resp.get("window") if isinstance(run_resp.get("window"), dict) else {}
+    start = str(run_resp.get("window_start") or manifest_window.get("start") or requested_start or "")
+    end = str(run_resp.get("window_end") or manifest_window.get("end") or requested_end or "")
+    if not start or not end:
+        raise ValueError("FDD run returned no effective window bounds")
+    start_instant = parse_utc_instant(start)
+    end_instant = parse_utc_instant(end)
+    if start_instant >= end_instant:
+        raise ValueError("FDD run returned an empty or reversed effective window")
+    if requested_start and start_instant < parse_utc_instant(requested_start):
+        raise ValueError("FDD effective window starts before the requested window")
+    if requested_end and end_instant > parse_utc_instant(requested_end):
+        raise ValueError("FDD effective window ends after the requested window")
+    return start, end
+
+
+def require_same_batch_window(
+    candidate_start: str, candidate_end: str, frozen_start: str, frozen_end: str
+) -> None:
+    """Keep every rule batch on the first batch's effective half-open window."""
+    if (
+        parse_utc_instant(candidate_start) != parse_utc_instant(frozen_start)
+        or parse_utc_instant(candidate_end) != parse_utc_instant(frozen_end)
+    ):
+        raise ValueError("rule batch changed the frozen effective window")
+
+
+def write_atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    """Durably publish a unique receipt file without exposing partial JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, sort_keys=True, indent=2)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_name, path)
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
+
+
 def merge_status(
     daily_rows: list[dict[str, Any]], status_map: dict[tuple[str, str], str]
 ) -> None:
     for row in daily_rows:
         key = (row["rule_id"], row["equipment_id"])
         row["status"] = status_map.get(key, row.get("status", "OK"))
+
+
+def build_rule_batches(rules: list[dict[str, Any]], batch_size: int) -> list[list[str]]:
+    """Partition the ordered registry IDs without changing the requested window."""
+    rule_ids = [str(rule.get("rule_id") or "").strip() for rule in rules]
+    rule_ids = [rule_id for rule_id in rule_ids if rule_id]
+    if len(rule_ids) != len(set(rule_ids)):
+        raise ValueError("registry contains duplicate rule IDs")
+    width = batch_size if batch_size > 0 else max(1, len(rule_ids))
+    batches = [rule_ids[index : index + width] for index in range(0, len(rule_ids), width)]
+    flattened = [rule_id for batch in batches for rule_id in batch]
+    if flattened != rule_ids:
+        raise ValueError("rule batches do not cover registry IDs exactly once in order")
+    return batches
 
 
 def resolve_w2c_source_unit(
@@ -502,44 +798,97 @@ def unit_inventory_rows(
     session = mapping.get("session_config") if isinstance(mapping, dict) else {}
     if isinstance(session, dict):
         package_unit_system = str(session.get("unit_system") or "")
-    columns = mapping.get("columns") if isinstance(mapping, dict) else []
-    if not isinstance(columns, list):
-        columns = []
-    sample_units: dict[str, str] = {}
+    mapping_column_units: dict[tuple[str, str], set[str]] = {}
+    equipment_rows = mapping.get("equipment") if isinstance(mapping, dict) else []
+    for equipment in equipment_rows if isinstance(equipment_rows, list) else []:
+        if not isinstance(equipment, dict):
+            continue
+        equipment_id = str(equipment.get("equipment_id") or "").strip()
+        columns = equipment.get("columns")
+        for column in columns if isinstance(columns, list) else []:
+            if not isinstance(column, dict):
+                continue
+            role = str(column.get("role") or column.get("fdd_role") or "").strip()
+            unit = str(column.get("unit") or column.get("column_unit") or column.get("csv_unit") or "").strip()
+            if equipment_id and role and unit:
+                mapping_column_units.setdefault((equipment_id, role), set()).add(unit)
+    typed_units_by_key: dict[str, set[str]] = {}
+    typed_points = post_sparql(
+        http,
+        headers,
+        building_id=building_id,
+        query_id="fdd_role_candidates",
+    )
+    for point in typed_points:
+        if not isinstance(point, dict):
+            continue
+        equipment_id = _sparql_equipment_id(point)
+        unit = str(point.get("unit") or "").strip()
+        if not equipment_id or not unit:
+            continue
+        key = resolve_bound_openfdd_key(
+            conn, site_id=building_id, equipment_id=equipment_id, point=point
+        )
+        if key:
+            typed_units_by_key.setdefault(key, set()).add(unit)
+    sample_metadata: dict[str, dict[str, Any]] = {}
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT openfdd_key, max(unit) AS unit
+            SELECT openfdd_key,
+                   array_agg(DISTINCT unit) FILTER (WHERE unit IS NOT NULL AND unit <> '') AS units,
+                   COUNT(*)::bigint AS sample_count,
+                   MIN(ts) AS first_sample_at,
+                   MAX(ts) AS last_sample_at
             FROM sample
             WHERE site_id = %s
             GROUP BY openfdd_key
             """,
             (building_id,),
         )
-        for key, unit in cur.fetchall():
-            if key and unit:
-                sample_units[str(key)] = str(unit)
+        for key, units, sample_count, first_at, last_at in cur.fetchall():
+            if key:
+                sample_metadata[str(key)] = {
+                    "units": sorted({str(unit) for unit in (units or []) if unit}),
+                    "sample_count": int(sample_count or 0),
+                    "first_sample_at": first_at.isoformat() if first_at else "",
+                    "last_sample_at": last_at.isoformat() if last_at else "",
+                }
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT equipment_id, role, openfdd_key,
+                      to_jsonb(point_map)->>'unit' AS unit,
+                      to_jsonb(point_map)->>'source_unit' AS source_unit
+               FROM point_map WHERE site_id = %s
+               ORDER BY equipment_id, role, openfdd_key""",
+            (building_id,),
+        )
+        point_rows = cur.fetchall()
     rows: list[dict[str, Any]] = []
     unresolved = 0
-    for col in columns:
-        if not isinstance(col, dict):
-            continue
-        openfdd_key = str(col.get("openfdd_key") or col.get("column") or "").strip()
+    for equipment_value, role_value, key_value, unit_value, source_unit_value in point_rows:
+        equipment_id = str(equipment_value or "").strip()
+        role = str(role_value or "").strip()
+        openfdd_key = str(key_value or "").strip()
         if not openfdd_key:
             continue
-        role = str(col.get("role") or col.get("fdd_role") or "").strip()
-        point_map_unit = str(col.get("unit") or col.get("point_map_unit") or "").strip()
-        overlay_unit = str(col.get("overlay_unit") or col.get("engineer_unit") or "").strip()
-        tag_unit = str(col.get("tag_unit") or col.get("nf_unit") or "").strip()
-        column_unit = str(col.get("column_unit") or col.get("csv_unit") or "").strip()
+        point_map_unit = str(unit_value or "").strip()
+        declared_source_unit = str(source_unit_value or "").strip()
+        column_units = set(mapping_column_units.get((equipment_id, role), set()))
+        sparql_units = typed_units_by_key.get(openfdd_key, set())
+        column_units.update(sparql_units)
+        column_unit = next(iter(column_units)) if len(column_units) == 1 else None
         resolved = resolve_w2c_source_unit(
-            overlay_unit=overlay_unit or None,
-            tag_unit=tag_unit or None,
-            column_unit=column_unit or None,
+            overlay_unit=point_map_unit or None,
+            tag_unit=declared_source_unit or None,
+            column_unit=column_unit,
             package_unit_system=package_unit_system or None,
         )
         if resolved == "unresolved":
             unresolved += 1
+        sample_meta = sample_metadata.get(openfdd_key, {})
+        sample_unit_values = sample_meta.get("units", [])
+        storage_units = {unit for unit in [point_map_unit, *sample_unit_values] if unit}
         inventory_status = "ok" if role else "no_role"
         rows.append(
             {
@@ -548,9 +897,22 @@ def unit_inventory_rows(
                 "role": role,
                 "inventory_status": inventory_status,
                 "point_map_unit": point_map_unit,
-                "sample_unit": sample_units.get(openfdd_key, ""),
+                "sample_unit": sample_unit_values[0] if len(sample_unit_values) == 1 else "",
+                "sample_unit_values": sample_unit_values,
+                "sparql_unit_values": sorted(sparql_units),
+                "sample_count": sample_meta.get("sample_count", 0),
+                "first_sample_at": sample_meta.get("first_sample_at", ""),
+                "last_sample_at": sample_meta.get("last_sample_at", ""),
                 "package_unit_system": package_unit_system,
                 "w2c_source_unit": resolved,
+                "declared_source_unit": declared_source_unit,
+                "storage_source_unit_conflict": bool(
+                    (declared_source_unit and any(unit != declared_source_unit for unit in storage_units))
+                    or (not declared_source_unit and resolved != "unresolved" and any(unit != resolved for unit in storage_units))
+                ),
+                "ambiguous_sample_units": len(sample_unit_values) > 1,
+                "ambiguous_column_units": len(column_units) > 1,
+                "ambiguous_sparql_units": len(sparql_units) > 1,
             }
         )
     return rows, unresolved
@@ -599,6 +961,18 @@ def analytics_rows_for_site(
             if isinstance(row, dict):
                 out.append({"building_id": building_id, "endpoint": path, "row": row})
     return out
+
+
+def analytics_error_messages(rows: list[dict[str, Any]]) -> list[str]:
+    errors: list[str] = []
+    for row in rows:
+        payload = row.get("row")
+        if not isinstance(payload, dict):
+            continue
+        message = payload.get("error")
+        if message or payload.get("ok") is False:
+            errors.append(f"{row['endpoint']}: {message or 'ok=false'}")
+    return errors
 
 
 def rule_params_from_registry(rule: dict[str, Any]) -> dict[str, float]:
@@ -681,6 +1055,7 @@ def equipment_frame_from_db(
             "skipped_unbound_no_column": 0,
             "skipped_no_role": 0,
             "skipped_unmapped_role": 0,
+            "skipped_unmapped_point": 0,
         }
     )
     pts = post_sparql(
@@ -698,10 +1073,8 @@ def equipment_frame_from_db(
         if row_eid and row_eid != equipment_id:
             skip_counts["skipped_other_equipment"] += 1
             continue
-        col = str(pt.get("column") or pt.get("pointId") or "").strip()
-        if not col:
-            skip_counts["skipped_unbound_no_column"] += 1
-            continue
+        point_id = str(pt.get("pointId") or pt.get("point_id") or "").strip()
+        col = str(pt.get("column") or point_id).strip()
         role_raw = str(pt.get("fddSelection") or pt.get("canonicalRole") or "").strip()
         if not role_raw:
             skip_counts["skipped_no_role"] += 1
@@ -710,11 +1083,15 @@ def equipment_frame_from_db(
         if haystack_col is None:
             skip_counts["skipped_unmapped_role"] += 1
             continue
-        openfdd_key = resolve_openfdd_key(
-            equipment_id,
-            col,
-            str(pt.get("openfdd_key") or "").strip() or None,
+        openfdd_key = resolve_bound_openfdd_key(
+            conn, site_id=building_id, equipment_id=equipment_id, point=pt
         )
+        if openfdd_key is None:
+            if not point_id:
+                skip_counts["skipped_unbound_no_column"] += 1
+            else:
+                skip_counts["skipped_unmapped_point"] += 1
+            continue
         samples = load_samples_in_window(
             conn,
             site_id=building_id,
@@ -726,6 +1103,10 @@ def equipment_frame_from_db(
             continue
         idx = pd.to_datetime([ts for ts, _ in samples], utc=True)
         vals = [val for _, val in samples]
+        if haystack_col in series:
+            raise ValueError(
+                f"multiple point_map identities bind to role {haystack_col} for equipment {equipment_id}"
+            )
         series[haystack_col] = pd.Series(vals, index=idx, name=haystack_col)
     if not series:
         raise frame_builder_empty_error(equipment_id, skip_counts=dict(skip_counts))
@@ -792,6 +1173,7 @@ def collect_pandas_fdd_rows(
     error_messages: list[str] = []
     frame_skip_totals: Counter[str] = Counter()
     role_map = load_role_id_to_haystack()
+    frame_cache: dict[tuple[str, str, str, str], Any] = {}
 
     for rule in rules_iter:
         rule_id = str(rule.get("rule_id") or "").strip()
@@ -820,14 +1202,10 @@ def collect_pandas_fdd_rows(
                 out.append(
                     {
                         **base,
-                        "pair_status": "not_applicable",
-                        "reason": "unknown_rule",
+                        "pair_status": "no_pandas_function",
+                        "reason": "rule absent from pinned Python oracle",
                     }
                 )
-                coverage["not_applicable"] += 1
-                continue
-            if not rule.get("pandas_function"):
-                out.append({**base, "pair_status": "no_pandas_function", "reason": ""})
                 coverage["no_pandas_function"] += 1
                 continue
             unmapped_required = missing_required_roles_unmapped(rule, role_map=role_map)
@@ -843,17 +1221,21 @@ def collect_pandas_fdd_rows(
                 continue
             try:
                 params = rule_params_from_registry(rule)
-                frame, skip_counts = equipment_frame_from_db(
-                    conn,
-                    http,
-                    headers,
-                    building_id=building_id,
-                    equipment_id=eid,
-                    window_start=window_start,
-                    window_end=window_end,
-                    equipment_type=etype,
-                )
-                frame_skip_totals.update(skip_counts)
+                frame_key = (eid, window_start, window_end, etype)
+                if frame_key not in frame_cache:
+                    built_frame, skip_counts = equipment_frame_from_db(
+                        conn,
+                        http,
+                        headers,
+                        building_id=building_id,
+                        equipment_id=eid,
+                        window_start=window_start,
+                        window_end=window_end,
+                        equipment_type=etype,
+                    )
+                    frame_cache[frame_key] = built_frame
+                    frame_skip_totals.update(skip_counts)
+                frame = frame_cache[frame_key].copy(deep=True)
             except UnmappedRoleError as exc:
                 frame_skip_totals.update(exc.skip_counts)
                 roles = ", ".join(exc.roles)
@@ -960,6 +1342,7 @@ def capture_site(
     rules: list[dict[str, Any]],
     skip_pandas: bool,
     pandas_max_rules: int | None,
+    rule_batch_size: int = 0,
     request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
 ) -> dict[str, Any]:
     building_id = str(site["building_id"]).strip()
@@ -970,42 +1353,116 @@ def capture_site(
         conn, building_id, sample_before=window_end
     )
 
-    run_body: dict[str, Any] = {
-        "mode": "registry",
-        "building_id": building_id,
-        "force_new_data": True,
-    }
-    if window_start:
-        run_body["window_start"] = window_start
-    if window_end:
-        run_body["window_end"] = window_end
-    run_resp, fdd_run_http = post_fdd_run_with_busy_retry(
-        http, headers, run_body, request_timeout_s=request_timeout_s
-    )
-    if not run_resp.get("ok", True) and run_resp.get("error"):
-        raise RuntimeError(f"/api/fdd/run failed: {run_resp.get('error')}")
-
-    run_id = str(run_resp.get("run_id") or "")
-    ws = str(run_resp.get("window_start") or window_start or "")
-    we = str(run_resp.get("window_end") or window_end or "")
+    rule_batches = build_rule_batches(rules, rule_batch_size)
+    run_records: list[dict[str, Any]] = []
+    fdd_run_http: list[dict[str, Any]] = []
+    ws = window_start or ""
+    we = window_end or ""
+    receipt_id = uuid.uuid4().hex
+    receipt_dir = out_dir / building_id / "run_receipts" / receipt_id
+    for batch_index, batch in enumerate(rule_batches):
+        run_body: dict[str, Any] = {
+            "mode": "registry",
+            "building_id": building_id,
+            "force_new_data": True,
+            "rule_ids": batch,
+        }
+        if ws or window_start:
+            run_body["window_start"] = ws or window_start
+        if we or window_end:
+            run_body["window_end"] = we or window_end
+        run_resp, http_meta = post_fdd_run_with_busy_retry(
+            http, headers, run_body, request_timeout_s=request_timeout_s
+        )
+        fdd_run_http.append({"batch_index": batch_index, **http_meta})
+        if not run_resp.get("ok", True) and run_resp.get("error"):
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} failed: {run_resp.get('error')}")
+        run_id = str(run_resp.get("run_id") or "")
+        try:
+            batch_ws, batch_we = effective_run_window(
+                run_resp, requested_start=window_start, requested_end=window_end
+            )
+        except ValueError as exc:
+            raise RuntimeError(f"/api/fdd/run batch {batch_index}: {exc}") from exc
+        if batch_index > 0:
+            try:
+                require_same_batch_window(batch_ws, batch_we, ws, we)
+            except ValueError as exc:
+                raise RuntimeError(f"/api/fdd/run batch {batch_index}: {exc}") from exc
+        ws, we = batch_ws, batch_we
+        echoed_ids = run_resp.get("rule_ids")
+        if echoed_ids is not None and set(map(str, echoed_ids)) != set(batch):
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} returned unexpected rule scope")
+        if not run_id:
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} returned no run_id")
+        receipt_path = receipt_dir / f"batch-{batch_index:04d}.json"
+        run_record = {
+            "capture_id": receipt_id,
+            "building_id": building_id,
+            "batch_index": batch_index,
+            "batch_count": len(rule_batches),
+            "rule_ids": batch,
+            "run_id": run_id,
+            "requested_window_start": window_start,
+            "requested_window_end": window_end,
+            "window_start": ws,
+            "window_end": we,
+            "window_contract": "effective half-open window must stay within request and remain frozen across batches",
+            "run_status": run_resp.get("run_status", ""),
+            "rules_run": run_resp.get("rules_run"),
+            "receipt_path": str(receipt_path),
+        }
+        # This is published before validation or the next batch so an interrupted
+        # capture never loses the API run ID. Receipts are append-only per capture.
+        write_atomic_json(receipt_path, run_record)
+        persisted_rule_ids, persisted_bounds = fetch_run_scope(
+            conn, building_id=building_id, run_id=run_id
+        )
+        if persisted_rule_ids != set(batch):
+            raise RuntimeError(
+                f"/api/fdd/run batch {batch_index} persisted unexpected rule scope"
+            )
+        if (
+            persisted_bounds is None
+            or parse_utc_instant(persisted_bounds[0])
+            != parse_utc_instant(persisted_bounds[1])
+            or parse_utc_instant(persisted_bounds[2])
+            != parse_utc_instant(persisted_bounds[3])
+        ):
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} persisted inconsistent window bounds")
+        if (
+            parse_utc_instant(persisted_bounds[0]) != parse_utc_instant(batch_ws)
+            or parse_utc_instant(persisted_bounds[2]) != parse_utc_instant(batch_we)
+        ):
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} persisted a different window")
+        run_record["persisted_rule_ids"] = sorted(persisted_rule_ids)
+        run_record["persisted_window_start"] = persisted_bounds[0].isoformat()
+        run_record["persisted_window_end"] = persisted_bounds[2].isoformat()
+        run_record["no_applicable_rows"] = no_applicable_status_rows(
+            fetch_run_status_rows(conn, building_id=building_id, run_id=run_id)
+        )
+        write_atomic_json(receipt_path, run_record)
+        run_records.append(run_record)
     if not ws or not we:
         raise RuntimeError("FDD run returned no window_start/window_end")
 
     sql_daily = fetch_sql_daily_rows(
         conn, building_id=building_id, window_start=ws, window_end=we
     )
-    if run_id:
+    for run_record in run_records:
         merge_status(
             sql_daily,
-            fetch_run_status_rows(conn, building_id=building_id, run_id=run_id),
+            fetch_run_status_rows(conn, building_id=building_id, run_id=run_record["run_id"]),
         )
 
     analytics = analytics_rows_for_site(
         http, headers, building_id=building_id, window_start=ws, window_end=we
     )
+    analytics_errors = analytics_error_messages(analytics)
     units, unresolved_units = unit_inventory_rows(
         http, headers, conn, building_id=building_id
     )
+    require_unit_inventory(counts_before.get("point_map", 0), units)
 
     pandas_rows: list[dict[str, Any]] = []
     pandas_coverage: dict[str, int] = {}
@@ -1025,7 +1482,9 @@ def capture_site(
             pandas_max_rules=pandas_max_rules,
         )
 
-    counts_after = telemetry_row_counts(conn, building_id, sample_before=we)
+    # The unchanged-telemetry guard must compare the same snapshot boundary on
+    # both reads; the API's effective sample-clamped end may precede the request.
+    counts_after = telemetry_row_counts(conn, building_id, sample_before=window_end)
     sample_counts = [
         {"building_id": building_id, "table": table, "row_count": counts_after[table]}
         for table in TELEMETRY_TABLES
@@ -1056,7 +1515,8 @@ def capture_site(
     persisted = [
         {
             "building_id": building_id,
-            "run_id": run_id,
+            "run_id": run_records[-1]["run_id"] if run_records else "",
+            "run_records": run_records,
             "window_start": ws,
             "window_end": we,
             "fdd_run_http": fdd_run_http,
@@ -1068,7 +1528,8 @@ def capture_site(
 
     return {
         "building_id": building_id,
-        "run_id": run_id,
+        "run_id": run_records[-1]["run_id"] if run_records else "",
+        "run_records": run_records,
         "sql_rows": len(sql_daily),
         "analytics_rows": len(analytics),
         "pandas_rows": len(pandas_rows),
@@ -1077,6 +1538,7 @@ def capture_site(
         "pandas_coverage": pandas_coverage,
         "pandas_frame_skips": pandas_frame_skips,
         "pandas_errors": pandas_errors,
+        "analytics_errors": analytics_errors,
         "fdd_run_http": fdd_run_http,
     }
 
@@ -1192,6 +1654,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Timescale URL for host-side capture (overrides OPENFDD_DATABASE_URL)",
     )
     ap.add_argument(
+        "--oracle-source-root",
+        type=Path,
+        help="Explicit pinned open-fdd 4.4.9 source checkout used as the IP oracle",
+    )
+    ap.add_argument(
         "--jwt-env",
         type=Path,
         help="dotenv file with OPENFDD_API_BASE, OPENFDD_AGENT_PASSWORD, etc.",
@@ -1204,6 +1671,12 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=0,
         help="If >0, limit pandas rules to first N in registry (recorded in manifest)",
+    )
+    ap.add_argument(
+        "--rule-batch-size",
+        type=int,
+        default=0,
+        help="If >0, run all SQL registry rules in batches of this size over the same full window",
     )
     ap.add_argument(
         "--allow-errors",
@@ -1231,8 +1704,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    if args.request_timeout_s <= 0:
-        ap.error("--request-timeout-s must be positive")
+    if args.request_timeout_s <= 0 or args.rule_batch_size < 0:
+        ap.error("--request-timeout-s must be positive and --rule-batch-size non-negative")
 
     if args.self_test:
         return run_self_test()
@@ -1252,15 +1725,19 @@ def main(argv: list[str] | None = None) -> int:
     if not args.jwt_env or not args.sites_config:
         ap.error("--jwt-env and --sites-config are required unless --self-test")
 
+    if not args.oracle_source_root:
+        ap.error("--oracle-source-root is required for IP baseline capture")
+    oracle = load_ip_oracle(args.oracle_source_root)
+    if not args.skip_pandas:
+        require_pandas_oracle()
+    require_oracle_runtime(oracle)
+
     load_dotenv_file(args.jwt_env.expanduser())
     if args.database_url:
         os.environ["OPENFDD_DATABASE_URL"] = str(args.database_url).strip()
     require_database_url()
-    if not args.skip_pandas:
-        require_pandas_oracle()
-
     sites = load_sites_config(args.sites_config.expanduser())
-    rules = load_rule_registry()
+    rules = oracle["rules"]
     base = apply_base_url(
         resolve_base_url(base_url=args.base_url, host=args.host, port=args.port)
     )
@@ -1287,26 +1764,34 @@ def main(argv: list[str] | None = None) -> int:
                     rules=rules,
                     skip_pandas=args.skip_pandas,
                     pandas_max_rules=pandas_cap,
+                    rule_batch_size=args.rule_batch_size,
                     request_timeout_s=args.request_timeout_s,
                 )
                 summaries.append(summary)
                 all_errors.extend(summary.get("pandas_errors") or [])
+                all_errors.extend(summary.get("analytics_errors") or [])
         meta = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "health_shortsha": shortsha,
             "base_url": base,
             "skip_pandas": args.skip_pandas,
+            "ip_oracle": {k: v for k, v in oracle.items() if k != "rules"},
             "pandas_max_rules": pandas_cap,
+            "rule_batch_size": args.rule_batch_size,
             "allow_errors": args.allow_errors,
             "request_timeout_s": args.request_timeout_s,
             "sites": summaries,
         }
+        disqualifiers = baseline_capture_disqualifiers(meta)
+        meta["qualifying"] = not disqualifiers
+        if disqualifiers:
+            meta["disqualifying_reasons"] = disqualifiers
         write_manifest(out_dir, meta=meta)
         if args.emit_ip_goldens:
             emit_ip_goldens(out_dir, golden_dir=args.emit_ip_goldens, site_summaries=summaries)
 
     if all_errors and not args.allow_errors:
-        safe_print(f"FAIL capture — {len(all_errors)} pandas pair error(s)")
+        safe_print(f"FAIL capture — {len(all_errors)} captured analytics/pandas error(s)")
         for msg in all_errors[:20]:
             safe_print(f"  {msg}")
         return 1

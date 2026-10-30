@@ -10,6 +10,12 @@
 |-----------|--------------------------|-----------------|
 | **W4f analytics count comparison** | The P1/P2 comparator applied continuous relative tolerance to true integral fields, allowing a small count discrepancy in a large result to pass. | **PATCHING** in PR1447: declare SQL count fields as `integer`, compare exact integral values while accepting int/float representation equivalence; preserve tolerance for hours, ratios, and z-scores. W4f blocking gate and qualification module pass; live DB golden test skipped because no disposable database was provisioned. |
 
+## 4.0.7 W0c baseline tooling integrity (2026-10-30)
+
+| Gate / ID | Symptom found before fix | Status / action |
+|-----------|--------------------------|-----------------|
+| **W0c IP baseline provenance and point identity** | Capture could label the current SI registry/oracle as the IP baseline; template SPARQL normalization dropped typed fields; inventory allowed empty coverage; analytics errors could be ignored; long SQL runs had no bounded rule batching. Failed SYNTH capture showed the API's effective window is nested at `window.start/end`, and its telemetry guard compared different requested/effective sample cutoffs. | **PATCHED LOCALLY; full qualification pending** in `fix/4.0.7-w0-baseline-integrity`: pinned oracle provenance, exact point-map key coverage, error propagation, frozen same-window registry batches with persisted scope checks, per-batch atomic receipts preserving run IDs/no-target statuses, and identical telemetry count cutoffs before/after. Effective bounds are validated as UTC instants inside the request. Read-only smoke covered SYNTH_03, BOSSPI, and BUILDING_50. BOSSPI’s four declared roles have no quantity or unit metadata, so they remain unresolved. No additional baseline capture was performed for this fix. |
+
 ## 4.0.1 platform patch (2026-10-20)
 
 Workspace **4.0.1** on master `04673e4f` (prior workspace **4.0.0**). This row is the release note for the patch. It is not a new gate FAIL and it is not an ops pin.
