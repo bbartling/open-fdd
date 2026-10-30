@@ -483,7 +483,7 @@ def _legacy_ip_control_unit(rule: dict[str, Any], name: str) -> str:
     rid = str(rule.get("rule_id") or "")
     controls = ip_parameter_controls(rid)
     if controls is None:
-        raise ValueError(f"{rid}.{name}: no base-branch IP controls for SI flow parameter")
+        return _imperial_flow_unit_for_rule(rule, name)
     base = controls.get(name) or controls.get(legacy_param_key(name))
     if not isinstance(base, dict) or not base.get("unit"):
         raise ValueError(f"{rid}.{name}: base-branch control declares no IP flow unit")
@@ -498,10 +498,28 @@ _SI_REGISTRY_PARAM_UNITS = frozenset(
         "degC_per_h",
         "m3/s",
         "L/s",
+        "L_per_s",
         "kW",
         "ppm",
     }
 )
+
+
+def _imperial_flow_unit_for_rule(rule: dict[str, Any], param_name: str) -> str:
+    """Infer air cfm vs hydronic gpm when base-branch tuning controls are unavailable."""
+    kinds = [str(k).lower() for k in (rule.get("equipment_kinds") or [])]
+    roles = [str(r) for r in (rule.get("required_roles") or []) + (rule.get("optional_roles") or [])]
+    if any(k in kinds for k in ("vav", "fcu", "ahu", "rtu", "mau", "doas")):
+        return "cfm"
+    if any(r in roles for r in ("zone_flow", "supply_air_flow", "oa_flow", "ra_flow")):
+        return "cfm"
+    if any(k in kinds for k in ("chiller", "chwplant", "boiler", "hwplant")):
+        return "gpm"
+    if any(r in roles for r in ("chw_flow", "hw_flow", "condenser_water_flow")):
+        return "gpm"
+    raise ValueError(
+        f"{rule.get('rule_id')}.{param_name}: cannot infer imperial flow unit from equipment kinds/roles"
+    )
 
 
 def registry_defaults_stored_in_si(rule: dict[str, Any]) -> bool:
