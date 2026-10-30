@@ -1473,7 +1473,6 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Logged W4f count-comparison false-pass before fix in `BUG_REPORT_OT_MODBUS_HAYSTACK.md`: exact integer counts were using continuous relative tolerance.
 - Updated analytics row schema to mark only integral SQL counts exact; kept runtime hours, ratios, occupancy values, and z-scores on continuous scalar tolerance. Added regression cases for large one-count drift, DB int/float representation, fractional/non-finite/bool rejection, and retained scalar tolerance.
 - W4f qualification module passes (10 tests, 2 expected skips: live SQL requires a disposable DB and no pending-W4 fixture is available); blocking W4f parity passes with 4,664 P1 and 4,664 P2 comparisons, zero mismatches. Regression covers a one-count mismatch at one million, int/float representation, fractional/NaN/±Inf/bool/string rejection, and continuous scalar tolerance. `git diff --check` passes. No live DB was started.
-<<<<<<< HEAD
 ## 2026-10-30 — 4.0.7 W0c baseline tooling integrity
 
 - Read-only review found the IP capture path could import whichever `open_fdd` was active while loading the current SI registry, and template SPARQL normalization discarded typed history keys before the frame builder guessed an `equipment.column` identity.

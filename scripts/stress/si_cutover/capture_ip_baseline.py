@@ -539,6 +539,19 @@ def default_output_dir(shortsha: str) -> Path:
     return Path(os.path.expanduser("~")) / "openfdd-si-cutover" / f"baseline-{sha}-{day}"
 
 
+def baseline_capture_disqualifiers(meta: dict[str, Any]) -> list[str]:
+    """Reasons a capture manifest cannot qualify as the frozen IP baseline."""
+    reasons: list[str] = []
+    if meta.get("skip_pandas"):
+        reasons.append("skip_pandas")
+    if meta.get("allow_errors"):
+        reasons.append("allow_errors")
+    oracle = meta.get("ip_oracle")
+    if not isinstance(oracle, dict):
+        reasons.append("missing_ip_oracle")
+    return reasons
+
+
 def health_shortsha(http, headers: dict[str, str]) -> str:
     body = http.get_json("/api/version", headers=headers)
     version = str(body.get("version") or body.get("semver") or "")
@@ -1712,19 +1725,19 @@ def main(argv: list[str] | None = None) -> int:
     if not args.jwt_env or not args.sites_config:
         ap.error("--jwt-env and --sites-config are required unless --self-test")
 
-    if not args.skip_pandas and not args.oracle_source_root:
-        ap.error("--oracle-source-root is required unless --skip-pandas")
-    oracle = load_ip_oracle(args.oracle_source_root) if args.oracle_source_root else None
-    if oracle:
+    if not args.oracle_source_root:
+        ap.error("--oracle-source-root is required for IP baseline capture")
+    oracle = load_ip_oracle(args.oracle_source_root)
+    if not args.skip_pandas:
         require_pandas_oracle()
-        require_oracle_runtime(oracle)
+    require_oracle_runtime(oracle)
 
     load_dotenv_file(args.jwt_env.expanduser())
     if args.database_url:
         os.environ["OPENFDD_DATABASE_URL"] = str(args.database_url).strip()
     require_database_url()
     sites = load_sites_config(args.sites_config.expanduser())
-    rules = oracle["rules"] if oracle else load_rule_registry()
+    rules = oracle["rules"]
     base = apply_base_url(
         resolve_base_url(base_url=args.base_url, host=args.host, port=args.port)
     )
@@ -1762,13 +1775,17 @@ def main(argv: list[str] | None = None) -> int:
             "health_shortsha": shortsha,
             "base_url": base,
             "skip_pandas": args.skip_pandas,
-            "ip_oracle": {k: v for k, v in oracle.items() if k != "rules"} if oracle else None,
+            "ip_oracle": {k: v for k, v in oracle.items() if k != "rules"},
             "pandas_max_rules": pandas_cap,
             "rule_batch_size": args.rule_batch_size,
             "allow_errors": args.allow_errors,
             "request_timeout_s": args.request_timeout_s,
             "sites": summaries,
         }
+        disqualifiers = baseline_capture_disqualifiers(meta)
+        meta["qualifying"] = not disqualifiers
+        if disqualifiers:
+            meta["disqualifying_reasons"] = disqualifiers
         write_manifest(out_dir, meta=meta)
         if args.emit_ip_goldens:
             emit_ip_goldens(out_dir, golden_dir=args.emit_ip_goldens, site_summaries=summaries)

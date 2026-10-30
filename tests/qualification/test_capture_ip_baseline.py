@@ -37,6 +37,19 @@ def _load_capture():
 capture = _load_capture()
 baseline_io = importlib.import_module("si_cutover.baseline_io")
 baseline_history = importlib.import_module("si_cutover.baseline_history")
+IP_ORACLE_ROOT = Path("/tmp/open-fdd-wt-407-ipbase")
+MOCK_ORACLE = {
+    "source_root": str(IP_ORACLE_ROOT),
+    "version": "4.4.9",
+    "import_path": str(IP_ORACLE_ROOT / "open_fdd" / "__init__.py"),
+    "git_head": "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0",
+    "registry_sha256": "b0397a06d834109a77e85599c81e7c81cbacfab7d38372503c943c1f26e1fcbf",
+    "python_tree_sha256": "mock",
+    "rule_count": 77,
+    "rules": [{"rule_id": "FC1"}],
+    "pandas_implemented_rule_ids": ["FC1"],
+    "no_pandas_function_rule_ids": [],
+}
 
 
 class CaptureIpBaselineSelfTest(unittest.TestCase):
@@ -124,6 +137,33 @@ class CaptureRequirements(unittest.TestCase):
                     capture.main(["--jwt-env", str(jwt), "--sites-config", str(sites)])
             self.assertEqual(ctx.exception.code, 2)
             load_env.assert_not_called()
+            with mock.patch.object(capture, "load_dotenv_file") as load_env_skip:
+                with self.assertRaises(SystemExit) as ctx_skip:
+                    capture.main(
+                        [
+                            "--jwt-env",
+                            str(jwt),
+                            "--sites-config",
+                            str(sites),
+                            "--skip-pandas",
+                        ]
+                    )
+            self.assertEqual(ctx_skip.exception.code, 2)
+            load_env_skip.assert_not_called()
+
+    def test_disqualifying_manifest_flags_skip_pandas_and_allow_errors(self) -> None:
+        meta = {
+            "skip_pandas": False,
+            "allow_errors": False,
+            "ip_oracle": {"version": "4.4.9"},
+        }
+        self.assertEqual(capture.baseline_capture_disqualifiers(meta), [])
+        meta_skip = dict(meta, skip_pandas=True)
+        self.assertIn("skip_pandas", capture.baseline_capture_disqualifiers(meta_skip))
+        meta_allow = dict(meta, allow_errors=True)
+        self.assertIn("allow_errors", capture.baseline_capture_disqualifiers(meta_allow))
+        meta_missing = dict(meta, ip_oracle=None)
+        self.assertIn("missing_ip_oracle", capture.baseline_capture_disqualifiers(meta_missing))
 
     def test_oracle_source_validation_rejects_non_449_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -138,11 +178,11 @@ class CaptureRequirements(unittest.TestCase):
 
     def test_oracle_source_validation_rejects_si_checkout_with_ip_version(self) -> None:
         with self.assertRaises(SystemExit) as ctx:
-            capture.load_ip_oracle(Path("/tmp/open-fdd-wt-407-w0c"))
+            capture.load_ip_oracle(REPO)
         self.assertIn("4.4.9", str(ctx.exception))
 
     def test_pinned_oracle_provenance_matches_frozen_registry(self) -> None:
-        oracle = capture.load_ip_oracle(Path("/tmp/open-fdd-wt-407-ipbase"))
+        oracle = capture.load_ip_oracle(IP_ORACLE_ROOT)
         self.assertEqual(oracle["version"], "4.4.9")
         self.assertEqual(oracle["git_head"], "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0")
         self.assertEqual(oracle["registry_sha256"], "b0397a06d834109a77e85599c81e7c81cbacfab7d38372503c943c1f26e1fcbf")
@@ -286,73 +326,78 @@ class CaptureRequirements(unittest.TestCase):
                 "building_id": "SITE_A",
                 "analytics_errors": ["/api/analytics/runtime: timeout"],
             }
-            with mock.patch.dict(os.environ, env, clear=False):
-                with mock.patch.object(capture, "load_dotenv_file"):
-                    with mock.patch.object(capture, "load_sites_config", return_value=[{"building_id": "SITE_A"}]):
-                        with mock.patch.object(capture, "load_rule_registry", return_value=[{"rule_id": "FC1"}]):
-                            with mock.patch.object(capture, "HttpClient") as client_cm:
-                                http = mock.MagicMock()
-                                client_cm.return_value.__enter__ = mock.Mock(return_value=http)
-                                client_cm.return_value.__exit__ = mock.Mock(return_value=False)
-                                with mock.patch.object(capture, "wait_until_ready"):
-                                    with mock.patch.object(capture, "login", return_value={}):
-                                        with mock.patch.object(capture, "health_shortsha", return_value="abc1234"):
-                                            with mock.patch.object(capture, "db_connect") as db_cm:
-                                                conn = mock.MagicMock()
-                                                db_cm.return_value.__enter__ = mock.Mock(return_value=conn)
-                                                db_cm.return_value.__exit__ = mock.Mock(return_value=False)
+            oracle_args = [
+                "--oracle-source-root",
+                str(IP_ORACLE_ROOT),
+            ]
+
+            def run_main(extra: list[str], out_name: str) -> tuple[int, dict]:
+                with mock.patch.dict(os.environ, env, clear=False):
+                    with mock.patch.object(capture, "load_ip_oracle", return_value=dict(MOCK_ORACLE)):
+                        with mock.patch.object(capture, "require_oracle_runtime"):
+                            with mock.patch.object(capture, "load_dotenv_file"):
+                                with mock.patch.object(
+                                    capture,
+                                    "load_sites_config",
+                                    return_value=[{"building_id": "SITE_A"}],
+                                ):
+                                    with mock.patch.object(capture, "HttpClient") as client_cm:
+                                        http = mock.MagicMock()
+                                        client_cm.return_value.__enter__ = mock.Mock(return_value=http)
+                                        client_cm.return_value.__exit__ = mock.Mock(return_value=False)
+                                        with mock.patch.object(capture, "wait_until_ready"):
+                                            with mock.patch.object(capture, "login", return_value={}):
                                                 with mock.patch.object(
                                                     capture,
-                                                    "capture_site",
-                                                    return_value=summary,
+                                                    "health_shortsha",
+                                                    return_value="abc1234",
                                                 ):
-                                                    with mock.patch.object(capture, "require_pandas_oracle"):
-                                                        rc = capture.main(
-                                                            [
-                                                                "--jwt-env",
-                                                                jwt.name,
-                                                                "--sites-config",
-                                                                sites.name,
-                                                                "--output-dir",
-                                                                str(Path(jwt.name).parent / "out-first"),
-                                                                "--skip-pandas",
-                                                            ]
+                                                    with mock.patch.object(capture, "db_connect") as db_cm:
+                                                        conn = mock.MagicMock()
+                                                        db_cm.return_value.__enter__ = mock.Mock(
+                                                            return_value=conn
                                                         )
+                                                        db_cm.return_value.__exit__ = mock.Mock(
+                                                            return_value=False
+                                                        )
+                                                        with mock.patch.object(
+                                                            capture,
+                                                            "capture_site",
+                                                            return_value=summary,
+                                                        ):
+                                                            out_dir = Path(jwt.name).parent / out_name
+                                                            rc = capture.main(
+                                                                [
+                                                                    "--jwt-env",
+                                                                    jwt.name,
+                                                                    "--sites-config",
+                                                                    sites.name,
+                                                                    "--output-dir",
+                                                                    str(out_dir),
+                                                                    *oracle_args,
+                                                                    *extra,
+                                                                ]
+                                                            )
+                                                            manifest_doc = json.loads(
+                                                                (
+                                                                    out_dir / "manifest.sha256.json"
+                                                                ).read_text(encoding="utf-8")
+                                                            )
+                                                            return rc, manifest_doc["meta"]
+
+            rc, manifest_fail = run_main(["--skip-pandas"], "out-first")
             self.assertEqual(rc, 1)
-            with mock.patch.dict(os.environ, env, clear=False):
-                with mock.patch.object(capture, "load_dotenv_file"):
-                    with mock.patch.object(capture, "load_sites_config", return_value=[{"building_id": "SITE_A"}]):
-                        with mock.patch.object(capture, "load_rule_registry", return_value=[{"rule_id": "FC1"}]):
-                            with mock.patch.object(capture, "HttpClient") as client_cm:
-                                http = mock.MagicMock()
-                                client_cm.return_value.__enter__ = mock.Mock(return_value=http)
-                                client_cm.return_value.__exit__ = mock.Mock(return_value=False)
-                                with mock.patch.object(capture, "wait_until_ready"):
-                                    with mock.patch.object(capture, "login", return_value={}):
-                                        with mock.patch.object(capture, "health_shortsha", return_value="abc1234"):
-                                            with mock.patch.object(capture, "db_connect") as db_cm:
-                                                conn = mock.MagicMock()
-                                                db_cm.return_value.__enter__ = mock.Mock(return_value=conn)
-                                                db_cm.return_value.__exit__ = mock.Mock(return_value=False)
-                                                with mock.patch.object(
-                                                    capture,
-                                                    "capture_site",
-                                                    return_value=summary,
-                                                ):
-                                                    with mock.patch.object(capture, "require_pandas_oracle"):
-                                                        rc_ok = capture.main(
-                                                            [
-                                                                "--jwt-env",
-                                                                jwt.name,
-                                                                "--sites-config",
-                                                                sites.name,
-                                                                "--output-dir",
-                                                                str(Path(jwt.name).parent / "out-second"),
-                                                                "--skip-pandas",
-                                                                "--allow-errors",
-                                                            ]
-                                                        )
+            self.assertFalse(manifest_fail["qualifying"])
+            self.assertIn("skip_pandas", manifest_fail["disqualifying_reasons"])
+
+            rc_ok, manifest_ok = run_main(
+                ["--skip-pandas", "--allow-errors"],
+                "out-second",
+            )
             self.assertEqual(rc_ok, 0)
+            self.assertFalse(manifest_ok["qualifying"])
+            self.assertIn("allow_errors", manifest_ok["disqualifying_reasons"])
+            self.assertIn("skip_pandas", manifest_ok["disqualifying_reasons"])
         finally:
             os.unlink(jwt.name)
             os.unlink(sites.name)
