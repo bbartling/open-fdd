@@ -68,30 +68,29 @@ def macro_fan_proven_on(d: pd.DataFrame) -> pd.Series:
 
 ## macro.mode_delay
 
-**Intent:** Suppress faults for N minutes after mode change (GL36-style startup delay).
+**Intent:** Suppress GL36-style FC faults during the product mode-delay holdoff after a fan restart (#1459). Effective holdoff minutes = `max(mode_delay_min, startup_delay_min)`. Both parameters are required at evaluation time (no silent default). Holdoff length in samples = `max(1, ceil(delay_min × 60 / poll_seconds))`. A sample is mode-stable only when the fan was on for every sample in that trailing window (`ROWS BETWEEN rows−1 PRECEDING AND CURRENT ROW` in SQL). Registry label “Mode delay after fan-on” names the primary tuner; startup delay can extend the holdoff.
 
 ### PostgreSQL SQL
 
 ```sql
--- Requires mode_change_ts column or infer from occ_mode / fan_cmd edges
--- Default: 300 s after fan transitions off→on
-NOT (
-  fan_cmd_rising
-  AND timestamp < mode_change_ts + INTERVAL '300' SECOND
-)
+-- Implemented in sql/fdd/render_rule.py / fdd_rules params (MODE_DELAY_MIN, STARTUP_DELAY_MIN).
+-- mode_stable := fan_on AND no fan_off in trailing holdoff_rows window.
+-- See tests/qualification/test_mode_delay_shared.py.
+true  -- per-rule; do not reimplement a second holdoff definition
 ```
 
 ### Pandas
 
 ```python
-MODE_DELAY_SECONDS = 300  # site-adjustable
+from open_fdd.rules.mode_delay import (
+    effective_mode_delay_min,
+    fan_restart_stable,
+    mode_delay_rows,
+)
 
-def macro_mode_delay(d: pd.DataFrame, col: str = "fan_cmd") -> pd.Series:
-    cmd = norm_cmd(d[col]) if col in d else pd.Series(0, index=d.index)
-    rising = (cmd >= 0.05) & (cmd.shift(1).fillna(0) < 0.05)
-    t0 = d["timestamp"].where(rising).ffill()
-    elapsed = (d["timestamp"] - t0).dt.total_seconds()
-    return elapsed.isna() | (elapsed >= MODE_DELAY_SECONDS)
+def macro_mode_delay(fan_on: pd.Series, params: dict, poll_seconds: float) -> pd.Series:
+    rows = mode_delay_rows(effective_mode_delay_min(params), poll_seconds)
+    return fan_restart_stable(fan_on.astype(bool), rows)
 ```
 
 ---

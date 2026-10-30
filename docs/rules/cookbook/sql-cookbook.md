@@ -261,6 +261,8 @@ FROM telemetry_pivot
 
 
 {: .important }
+**Contract status (metric-c-v2):** `SV-RATE` is `unsupported` in `sql/contract/metric_units.json` until its time policy is versioned. Pandas may implement screening logic; SQL remains a stub. Do not mark parity passing or flip availability without a versioned contract and green si-parity evidence.
+
 **Simplified SQL variant.** Full rolling / multi-sensor logic for `SV-RATE` is validated in Pandas. Use SQL for screening; use Pandas for parity and RCx studies.
 ```sql
 -- confirmation_seconds: 600
@@ -1584,6 +1586,9 @@ WHERE equipment_id = 'equip:your-id'
 **Family:** `vav` · **Equipment:** `vav`  
 **Equation:** OAT < 18.33°C AND reheat valve > 25% (optional cooling-available).  
 **Default confirmation:** 900 s
+
+{: .important }
+**SI SQL parity:** P2 SQL SI for `VAV-6` remains **pending** on the si-parity gate until plant-family SQL SI is qualified on fixtures (pandas SI may run; do not edit frozen IP goldens or globally enable SQL SI to greenwash the matrix).
 
 | Parameter | Kind | Label | SI unit | Default | Range |
 |---|---|---|---|---:|---:|

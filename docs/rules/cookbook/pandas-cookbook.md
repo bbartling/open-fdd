@@ -292,6 +292,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 **Equation:** Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.
 **Default confirmation:** 600 s
 
+**Contract status (metric-c-v2):** listed `unsupported` in `sql/contract/metric_units.json` until time policy is versioned. Oracle code here is engineering screening only — not a passing si-parity or production SQL claim.
+
 **Tunable params**
 
 | Parameter | Kind | Label | SI unit | Default | Range |
@@ -381,8 +383,13 @@ Includes GL36 FC1–FC15, AHU auxiliaries, economizer/ventilation, leakage, and 
 ### GL36 shared helpers
 
 The FC rules read canonical GL36 epsilon variables (`eps_*`) with legacy session-param
-fallbacks (`mix_tol`, `duct_static_err`, …), and suspend faulting for `mode_delay_min`
-minutes after an AHU operating-state change:
+fallbacks (`mix_tol`, `duct_static_err`, …). Most FC rules suspend faulting during the
+product **mode-delay holdoff** (#1459): effective delay minutes =
+`max(mode_delay_min, startup_delay_min)`; holdoff sample count =
+`max(1, ceil(delay_min × 60 / poll_seconds))`; a sample is stable only when the fan
+stays on for every sample in that trailing window (`open_fdd.rules.mode_delay` matches
+`sql/fdd/render_rule.py` and `crates/fdd_rules/src/params.rs`). FC1 duct-static uses a
+separate fan-gap gate documented on that rule.
 
 ```python
 MIX_TOL = 0.638889
@@ -402,10 +409,10 @@ def _false(index) -> pd.Series:
     return pd.Series(False, index=index)
 
 def _fan(d: pd.DataFrame) -> pd.Series:
-    if "fan-cmd" in d.columns:
-        return norm_cmd(d["fan-cmd"]).fillna(0)
     if "fan-status" in d.columns:
         return as_bool(d["fan-status"]).astype(float)
+    if "fan-cmd" in d.columns:
+        return norm_cmd(d["fan-cmd"]).fillna(0)
     return pd.Series(1.0, index=d.index)
 
 def _gl36_value(p: dict, key: str, legacy_key: str | None, default: float) -> float:
@@ -417,29 +424,16 @@ def _gl36_value(p: dict, key: str, legacy_key: str | None, default: float) -> fl
     return float(default)
 
 def _gl36_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """False during GL36 ModeDelay after an AHU operating-state change."""
-    delay_min = _f(p, "mode_delay_min", 0.0)
-    if delay_min <= 0 or d.empty:
-        return pd.Series(True, index=d.index)
-    htg = norm_cmd(d["heating-valve"]).fillna(0) if "heating-valve" in d else pd.Series(0.0, index=d.index)
-    clg = norm_cmd(d["cooling-valve"]).fillna(0) if "cooling-valve" in d else pd.Series(0.0, index=d.index)
-    econ = norm_cmd(d["outside-air-damper"]).fillna(0) if "outside-air-damper" in d else pd.Series(0.0, index=d.index)
-    fan = _fan(d)
-    fan_on = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
-    econ_min = _gl36_value(p, "econ_min_pos", None, AHU_MIN_OA_DPR)
-    clg_on = _gl36_value(p, "clg_on_min", None, 0.01)
-    htg_on = _gl36_value(p, "htg_on_min", None, 0.01)
-    state = pd.Series(0, index=d.index, dtype=int)
-    state[(fan > fan_on) & (htg > htg_on) & (clg <= clg_on)] = 1
-    state[(fan > fan_on) & (htg <= htg_on) & (clg <= clg_on) & (econ > econ_min)] = 2
-    state[(fan > fan_on) & (htg <= htg_on) & (clg > clg_on) & (econ > econ_min)] = 3
-    state[(fan > fan_on) & (htg <= htg_on) & (clg > clg_on) & (econ <= econ_min)] = 4
-    changed = state.ne(state.shift()).fillna(False)
-    if len(changed):
-        changed.iloc[0] = False
-    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
-    recent_change = changed.astype(int).rolling(samples, min_periods=1).max().astype(bool)
-    return ~recent_change
+    """False during the product mode-delay holdoff after a fan restart (#1459)."""
+    from open_fdd.rules.mode_delay import (
+        effective_mode_delay_min,
+        fan_restart_stable,
+        mode_delay_rows,
+    )
+
+    delay_min = effective_mode_delay_min(p)
+    fan_on = _fan(d) > _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
+    return fan_restart_stable(fan_on, mode_delay_rows(delay_min, float(poll)))
 
 def _gl36_fault(raw: pd.Series, d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     return raw.fillna(False) & _gl36_mode_stable(d, p, poll)
@@ -1961,6 +1955,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 **Family:** `vav` · **Equipment:** `vav`
 **Equation:** OAT < 18.33°C AND reheat valve > 25% (optional cooling-available must be true when mapped).
 **Default confirmation:** 900 s
+
+**SI SQL parity:** P2 SQL SI for `VAV-6` remains **pending** on the si-parity gate until plant-family SQL SI is fixture-qualified. Do not edit frozen IP goldens or flip global SQL SI availability to greenwash the matrix.
 
 **Required roles:** `outside-air-temp`, `reheat-valve`
 
