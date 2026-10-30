@@ -202,9 +202,10 @@ def _explicit_openfdd_key(point: dict[str, Any]) -> str | None:
 
 
 def resolve_bound_openfdd_key(conn, *, site_id: str, equipment_id: str, point: dict[str, Any]) -> str | None:
-    """Resolve only a declared key or exact typed portal/Haystack point identity."""
+    """Resolve explicit, exact typed IDs, or documented equipment.point key encoding."""
     explicit = _explicit_openfdd_key(point)
     point_id = str(point.get("pointId") or point.get("point_id") or "").strip()
+    column = str(point.get("column") or "").strip()
     with conn.cursor() as cur:
         if explicit:
             cur.execute(
@@ -215,18 +216,31 @@ def resolve_bound_openfdd_key(conn, *, site_id: str, equipment_id: str, point: d
             if len(rows) != 1:
                 raise ValueError("explicit history key is absent or ambiguous in point_map")
             return str(rows[0][0])
-        if not point_id:
-            return None
-        cur.execute(
-            """SELECT DISTINCT openfdd_key FROM point_map
-               WHERE site_id = %s AND equipment_id = %s
-                 AND (portal_point_id = %s OR haystack_id = %s)""",
-            (site_id, equipment_id, point_id, point_id),
+        rows = []
+        if point_id:
+            cur.execute(
+                """SELECT DISTINCT openfdd_key FROM point_map
+                   WHERE site_id = %s AND equipment_id = %s
+                     AND (portal_point_id = %s OR haystack_id = %s)""",
+                (site_id, equipment_id, point_id, point_id),
+            )
+            rows = cur.fetchall()
+        if len(rows) > 1:
+            raise ValueError("typed point identity maps to multiple point_map keys")
+        exact_keys = {str(row[0]) for row in rows}
+        canonical_candidates = sorted(
+            {f"{equipment_id}.{value}" for value in (point_id, column) if value}
         )
-        rows = cur.fetchall()
-    if len(rows) > 1:
+        if canonical_candidates:
+            cur.execute(
+                """SELECT DISTINCT openfdd_key FROM point_map
+                   WHERE site_id = %s AND equipment_id = %s AND openfdd_key = ANY(%s)""",
+                (site_id, equipment_id, canonical_candidates),
+            )
+            exact_keys.update(str(row[0]) for row in cur.fetchall())
+    if len(exact_keys) > 1:
         raise ValueError("typed point identity maps to multiple point_map keys")
-    return str(rows[0][0]) if rows else None
+    return next(iter(exact_keys), None)
 
 
 def post_fdd_run_with_busy_retry(
@@ -509,8 +523,12 @@ def require_oracle_runtime(oracle: dict[str, Any]) -> None:
 
 
 def require_unit_inventory(point_map_count: int, rows: list[dict[str, Any]]) -> None:
-    if point_map_count > 0 and not rows:
-        raise RuntimeError("point_map contains rows but unit inventory resolved zero rows")
+    keys = [str(row.get("openfdd_key") or "") for row in rows]
+    if len(keys) != point_map_count or len(set(keys)) != point_map_count or any(not key for key in keys):
+        raise RuntimeError(
+            f"unit inventory does not cover every point_map key: "
+            f"expected={point_map_count} rows={len(keys)} unique={len(set(keys))}"
+        )
 
 
 def default_output_dir(shortsha: str) -> Path:
@@ -617,12 +635,41 @@ def fetch_run_status_rows(
     return out
 
 
+def fetch_run_scope(conn, *, building_id: str, run_id: str) -> tuple[set[str], tuple[Any, Any, Any, Any] | None]:
+    """Read persisted rule/window scope so a successful HTTP response cannot mask omission."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT array_agg(DISTINCT rule_id), MIN(window_start), MAX(window_start),
+                      MIN(window_end), MAX(window_end)
+               FROM fdd_run WHERE site_id = %s AND detail->>'run_id' = %s""",
+            (building_id, run_id),
+        )
+        rule_ids, start_min, start_max, end_min, end_max = cur.fetchone()
+    return {str(rule_id) for rule_id in (rule_ids or [])}, (
+        start_min, start_max, end_min, end_max
+    ) if start_min is not None else None
+
+
 def merge_status(
     daily_rows: list[dict[str, Any]], status_map: dict[tuple[str, str], str]
 ) -> None:
     for row in daily_rows:
         key = (row["rule_id"], row["equipment_id"])
         row["status"] = status_map.get(key, row.get("status", "OK"))
+
+
+def build_rule_batches(rules: list[dict[str, Any]], batch_size: int) -> list[list[str]]:
+    """Partition the ordered registry IDs without changing the requested window."""
+    rule_ids = [str(rule.get("rule_id") or "").strip() for rule in rules]
+    rule_ids = [rule_id for rule_id in rule_ids if rule_id]
+    if len(rule_ids) != len(set(rule_ids)):
+        raise ValueError("registry contains duplicate rule IDs")
+    width = batch_size if batch_size > 0 else max(1, len(rule_ids))
+    batches = [rule_ids[index : index + width] for index in range(0, len(rule_ids), width)]
+    flattened = [rule_id for batch in batches for rule_id in batch]
+    if flattened != rule_ids:
+        raise ValueError("rule batches do not cover registry IDs exactly once in order")
+    return batches
 
 
 def resolve_w2c_source_unit(
@@ -654,23 +701,67 @@ def unit_inventory_rows(
     session = mapping.get("session_config") if isinstance(mapping, dict) else {}
     if isinstance(session, dict):
         package_unit_system = str(session.get("unit_system") or "")
-    sample_units: dict[str, str] = {}
+    mapping_column_units: dict[tuple[str, str], set[str]] = {}
+    equipment_rows = mapping.get("equipment") if isinstance(mapping, dict) else []
+    for equipment in equipment_rows if isinstance(equipment_rows, list) else []:
+        if not isinstance(equipment, dict):
+            continue
+        equipment_id = str(equipment.get("equipment_id") or "").strip()
+        columns = equipment.get("columns")
+        for column in columns if isinstance(columns, list) else []:
+            if not isinstance(column, dict):
+                continue
+            role = str(column.get("role") or column.get("fdd_role") or "").strip()
+            unit = str(column.get("unit") or column.get("column_unit") or column.get("csv_unit") or "").strip()
+            if equipment_id and role and unit:
+                mapping_column_units.setdefault((equipment_id, role), set()).add(unit)
+    typed_units_by_key: dict[str, set[str]] = {}
+    typed_points = post_sparql(
+        http,
+        headers,
+        building_id=building_id,
+        query_id="fdd_role_candidates",
+    )
+    for point in typed_points:
+        if not isinstance(point, dict):
+            continue
+        equipment_id = _sparql_equipment_id(point)
+        unit = str(point.get("unit") or "").strip()
+        if not equipment_id or not unit:
+            continue
+        key = resolve_bound_openfdd_key(
+            conn, site_id=building_id, equipment_id=equipment_id, point=point
+        )
+        if key:
+            typed_units_by_key.setdefault(key, set()).add(unit)
+    sample_metadata: dict[str, dict[str, Any]] = {}
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT openfdd_key, max(unit) AS unit
+            SELECT openfdd_key,
+                   array_agg(DISTINCT unit) FILTER (WHERE unit IS NOT NULL AND unit <> '') AS units,
+                   COUNT(*)::bigint AS sample_count,
+                   MIN(ts) AS first_sample_at,
+                   MAX(ts) AS last_sample_at
             FROM sample
             WHERE site_id = %s
             GROUP BY openfdd_key
             """,
             (building_id,),
         )
-        for key, unit in cur.fetchall():
-            if key and unit:
-                sample_units[str(key)] = str(unit)
+        for key, units, sample_count, first_at, last_at in cur.fetchall():
+            if key:
+                sample_metadata[str(key)] = {
+                    "units": sorted({str(unit) for unit in (units or []) if unit}),
+                    "sample_count": int(sample_count or 0),
+                    "first_sample_at": first_at.isoformat() if first_at else "",
+                    "last_sample_at": last_at.isoformat() if last_at else "",
+                }
     with conn.cursor() as cur:
         cur.execute(
-            """SELECT equipment_id, role, openfdd_key, unit, source_unit
+            """SELECT equipment_id, role, openfdd_key,
+                      to_jsonb(point_map)->>'unit' AS unit,
+                      to_jsonb(point_map)->>'source_unit' AS source_unit
                FROM point_map WHERE site_id = %s
                ORDER BY equipment_id, role, openfdd_key""",
             (building_id,),
@@ -678,20 +769,29 @@ def unit_inventory_rows(
         point_rows = cur.fetchall()
     rows: list[dict[str, Any]] = []
     unresolved = 0
-    for _equipment_id, role_value, key_value, unit_value, source_unit_value in point_rows:
+    for equipment_value, role_value, key_value, unit_value, source_unit_value in point_rows:
+        equipment_id = str(equipment_value or "").strip()
         role = str(role_value or "").strip()
         openfdd_key = str(key_value or "").strip()
         if not openfdd_key:
             continue
         point_map_unit = str(unit_value or "").strip()
+        declared_source_unit = str(source_unit_value or "").strip()
+        column_units = set(mapping_column_units.get((equipment_id, role), set()))
+        sparql_units = typed_units_by_key.get(openfdd_key, set())
+        column_units.update(sparql_units)
+        column_unit = next(iter(column_units)) if len(column_units) == 1 else None
         resolved = resolve_w2c_source_unit(
-            overlay_unit=None,
-            tag_unit=str(source_unit_value or "").strip() or None,
-            column_unit=None,
+            overlay_unit=point_map_unit or None,
+            tag_unit=declared_source_unit or None,
+            column_unit=column_unit,
             package_unit_system=package_unit_system or None,
         )
         if resolved == "unresolved":
             unresolved += 1
+        sample_meta = sample_metadata.get(openfdd_key, {})
+        sample_unit_values = sample_meta.get("units", [])
+        storage_units = {unit for unit in [point_map_unit, *sample_unit_values] if unit}
         inventory_status = "ok" if role else "no_role"
         rows.append(
             {
@@ -700,9 +800,22 @@ def unit_inventory_rows(
                 "role": role,
                 "inventory_status": inventory_status,
                 "point_map_unit": point_map_unit,
-                "sample_unit": sample_units.get(openfdd_key, ""),
+                "sample_unit": sample_unit_values[0] if len(sample_unit_values) == 1 else "",
+                "sample_unit_values": sample_unit_values,
+                "sparql_unit_values": sorted(sparql_units),
+                "sample_count": sample_meta.get("sample_count", 0),
+                "first_sample_at": sample_meta.get("first_sample_at", ""),
+                "last_sample_at": sample_meta.get("last_sample_at", ""),
                 "package_unit_system": package_unit_system,
                 "w2c_source_unit": resolved,
+                "declared_source_unit": declared_source_unit,
+                "storage_source_unit_conflict": bool(
+                    (declared_source_unit and any(unit != declared_source_unit for unit in storage_units))
+                    or (not declared_source_unit and resolved != "unresolved" and any(unit != resolved for unit in storage_units))
+                ),
+                "ambiguous_sample_units": len(sample_unit_values) > 1,
+                "ambiguous_column_units": len(column_units) > 1,
+                "ambiguous_sparql_units": len(sparql_units) > 1,
             }
         )
     return rows, unresolved
@@ -751,6 +864,18 @@ def analytics_rows_for_site(
             if isinstance(row, dict):
                 out.append({"building_id": building_id, "endpoint": path, "row": row})
     return out
+
+
+def analytics_error_messages(rows: list[dict[str, Any]]) -> list[str]:
+    errors: list[str] = []
+    for row in rows:
+        payload = row.get("row")
+        if not isinstance(payload, dict):
+            continue
+        message = payload.get("error")
+        if message or payload.get("ok") is False:
+            errors.append(f"{row['endpoint']}: {message or 'ok=false'}")
+    return errors
 
 
 def rule_params_from_registry(rule: dict[str, Any]) -> dict[str, float]:
@@ -951,6 +1076,7 @@ def collect_pandas_fdd_rows(
     error_messages: list[str] = []
     frame_skip_totals: Counter[str] = Counter()
     role_map = load_role_id_to_haystack()
+    frame_cache: dict[tuple[str, str, str, str], Any] = {}
 
     for rule in rules_iter:
         rule_id = str(rule.get("rule_id") or "").strip()
@@ -998,17 +1124,21 @@ def collect_pandas_fdd_rows(
                 continue
             try:
                 params = rule_params_from_registry(rule)
-                frame, skip_counts = equipment_frame_from_db(
-                    conn,
-                    http,
-                    headers,
-                    building_id=building_id,
-                    equipment_id=eid,
-                    window_start=window_start,
-                    window_end=window_end,
-                    equipment_type=etype,
-                )
-                frame_skip_totals.update(skip_counts)
+                frame_key = (eid, window_start, window_end, etype)
+                if frame_key not in frame_cache:
+                    built_frame, skip_counts = equipment_frame_from_db(
+                        conn,
+                        http,
+                        headers,
+                        building_id=building_id,
+                        equipment_id=eid,
+                        window_start=window_start,
+                        window_end=window_end,
+                        equipment_type=etype,
+                    )
+                    frame_cache[frame_key] = built_frame
+                    frame_skip_totals.update(skip_counts)
+                frame = frame_cache[frame_key].copy(deep=True)
             except UnmappedRoleError as exc:
                 frame_skip_totals.update(exc.skip_counts)
                 roles = ", ".join(exc.roles)
@@ -1115,6 +1245,7 @@ def capture_site(
     rules: list[dict[str, Any]],
     skip_pandas: bool,
     pandas_max_rules: int | None,
+    rule_batch_size: int = 0,
     request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
 ) -> dict[str, Any]:
     building_id = str(site["building_id"]).strip()
@@ -1125,39 +1256,70 @@ def capture_site(
         conn, building_id, sample_before=window_end
     )
 
-    run_body: dict[str, Any] = {
-        "mode": "registry",
-        "building_id": building_id,
-        "force_new_data": True,
-    }
-    if window_start:
-        run_body["window_start"] = window_start
-    if window_end:
-        run_body["window_end"] = window_end
-    run_resp, fdd_run_http = post_fdd_run_with_busy_retry(
-        http, headers, run_body, request_timeout_s=request_timeout_s
-    )
-    if not run_resp.get("ok", True) and run_resp.get("error"):
-        raise RuntimeError(f"/api/fdd/run failed: {run_resp.get('error')}")
-
-    run_id = str(run_resp.get("run_id") or "")
-    ws = str(run_resp.get("window_start") or window_start or "")
-    we = str(run_resp.get("window_end") or window_end or "")
+    rule_batches = build_rule_batches(rules, rule_batch_size)
+    run_records: list[dict[str, Any]] = []
+    fdd_run_http: list[dict[str, Any]] = []
+    ws = window_start or ""
+    we = window_end or ""
+    for batch_index, batch in enumerate(rule_batches):
+        run_body: dict[str, Any] = {
+            "mode": "registry",
+            "building_id": building_id,
+            "force_new_data": True,
+            "rule_ids": batch,
+        }
+        if window_start or ws:
+            run_body["window_start"] = window_start or ws
+        if window_end or we:
+            run_body["window_end"] = window_end or we
+        run_resp, http_meta = post_fdd_run_with_busy_retry(
+            http, headers, run_body, request_timeout_s=request_timeout_s
+        )
+        fdd_run_http.append({"batch_index": batch_index, **http_meta})
+        if not run_resp.get("ok", True) and run_resp.get("error"):
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} failed: {run_resp.get('error')}")
+        run_id = str(run_resp.get("run_id") or "")
+        batch_ws = str(run_resp.get("window_start") or window_start or "")
+        batch_we = str(run_resp.get("window_end") or window_end or "")
+        if not batch_ws or not batch_we:
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} returned no window bounds")
+        if ws and batch_ws != ws or we and batch_we != we:
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} changed the requested window")
+        ws, we = batch_ws, batch_we
+        echoed_ids = run_resp.get("rule_ids")
+        if echoed_ids is not None and set(map(str, echoed_ids)) != set(batch):
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} returned unexpected rule scope")
+        if not run_id:
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} returned no run_id")
+        persisted_rule_ids, persisted_bounds = fetch_run_scope(
+            conn, building_id=building_id, run_id=run_id
+        )
+        if persisted_rule_ids != set(batch):
+            raise RuntimeError(
+                f"/api/fdd/run batch {batch_index} persisted unexpected rule scope"
+            )
+        if persisted_bounds is None or persisted_bounds[0] != persisted_bounds[1] or persisted_bounds[2] != persisted_bounds[3]:
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} persisted inconsistent window bounds")
+        if persisted_bounds[0] != datetime.fromisoformat(batch_ws.replace("Z", "+00:00")) or persisted_bounds[2] != datetime.fromisoformat(batch_we.replace("Z", "+00:00")):
+            raise RuntimeError(f"/api/fdd/run batch {batch_index} persisted a different window")
+        run_records.append({"batch_index": batch_index, "rule_ids": batch, "run_id": run_id,
+                            "window_start": ws, "window_end": we})
     if not ws or not we:
         raise RuntimeError("FDD run returned no window_start/window_end")
 
     sql_daily = fetch_sql_daily_rows(
         conn, building_id=building_id, window_start=ws, window_end=we
     )
-    if run_id:
+    for run_record in run_records:
         merge_status(
             sql_daily,
-            fetch_run_status_rows(conn, building_id=building_id, run_id=run_id),
+            fetch_run_status_rows(conn, building_id=building_id, run_id=run_record["run_id"]),
         )
 
     analytics = analytics_rows_for_site(
         http, headers, building_id=building_id, window_start=ws, window_end=we
     )
+    analytics_errors = analytics_error_messages(analytics)
     units, unresolved_units = unit_inventory_rows(
         http, headers, conn, building_id=building_id
     )
@@ -1212,7 +1374,8 @@ def capture_site(
     persisted = [
         {
             "building_id": building_id,
-            "run_id": run_id,
+            "run_id": run_records[-1]["run_id"] if run_records else "",
+            "run_records": run_records,
             "window_start": ws,
             "window_end": we,
             "fdd_run_http": fdd_run_http,
@@ -1224,7 +1387,8 @@ def capture_site(
 
     return {
         "building_id": building_id,
-        "run_id": run_id,
+        "run_id": run_records[-1]["run_id"] if run_records else "",
+        "run_records": run_records,
         "sql_rows": len(sql_daily),
         "analytics_rows": len(analytics),
         "pandas_rows": len(pandas_rows),
@@ -1233,6 +1397,7 @@ def capture_site(
         "pandas_coverage": pandas_coverage,
         "pandas_frame_skips": pandas_frame_skips,
         "pandas_errors": pandas_errors,
+        "analytics_errors": analytics_errors,
         "fdd_run_http": fdd_run_http,
     }
 
@@ -1367,6 +1532,12 @@ def main(argv: list[str] | None = None) -> int:
         help="If >0, limit pandas rules to first N in registry (recorded in manifest)",
     )
     ap.add_argument(
+        "--rule-batch-size",
+        type=int,
+        default=0,
+        help="If >0, run all SQL registry rules in batches of this size over the same full window",
+    )
+    ap.add_argument(
         "--allow-errors",
         action="store_true",
         help="Do not exit non-zero when any rule×equipment pair_status is error",
@@ -1392,8 +1563,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    if args.request_timeout_s <= 0:
-        ap.error("--request-timeout-s must be positive")
+    if args.request_timeout_s <= 0 or args.rule_batch_size < 0:
+        ap.error("--request-timeout-s must be positive and --rule-batch-size non-negative")
 
     if args.self_test:
         return run_self_test()
@@ -1452,10 +1623,12 @@ def main(argv: list[str] | None = None) -> int:
                     rules=rules,
                     skip_pandas=args.skip_pandas,
                     pandas_max_rules=pandas_cap,
+                    rule_batch_size=args.rule_batch_size,
                     request_timeout_s=args.request_timeout_s,
                 )
                 summaries.append(summary)
                 all_errors.extend(summary.get("pandas_errors") or [])
+                all_errors.extend(summary.get("analytics_errors") or [])
         meta = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "health_shortsha": shortsha,
@@ -1463,6 +1636,7 @@ def main(argv: list[str] | None = None) -> int:
             "skip_pandas": args.skip_pandas,
             "ip_oracle": {k: v for k, v in oracle.items() if k != "rules"} if oracle else None,
             "pandas_max_rules": pandas_cap,
+            "rule_batch_size": args.rule_batch_size,
             "allow_errors": args.allow_errors,
             "request_timeout_s": args.request_timeout_s,
             "sites": summaries,
@@ -1472,7 +1646,7 @@ def main(argv: list[str] | None = None) -> int:
             emit_ip_goldens(out_dir, golden_dir=args.emit_ip_goldens, site_summaries=summaries)
 
     if all_errors and not args.allow_errors:
-        safe_print(f"FAIL capture — {len(all_errors)} pandas pair error(s)")
+        safe_print(f"FAIL capture — {len(all_errors)} captured analytics/pandas error(s)")
         for msg in all_errors[:20]:
             safe_print(f"  {msg}")
         return 1

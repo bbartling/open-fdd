@@ -14,7 +14,7 @@
 
 | Gate / ID | Symptom found before fix | Status / action |
 |-----------|--------------------------|-----------------|
-| **W0c IP baseline provenance and point identity** | Capture could label the current SI registry/oracle as the IP baseline; template SPARQL normalization dropped explicit history keys and frame construction guessed `equipment.column`. Exact `point_map` checks confirmed BOSSPI and BUILDING_50 have typed point matches and samples in the target hour, so guessed keys caused empty frames. | **PATCHED LOCALLY; full SYNTH qualification pending** in `fix/4.0.7-w0-baseline-integrity`: pinned oracle and registry provenance are validated before credentials load; typed bindings are preserved; point keys resolve only through exact identities; nonempty point maps cannot yield empty inventory. No baseline chunks captured by this tooling change. |
+| **W0c IP baseline provenance and point identity** | Capture could label the current SI registry/oracle as the IP baseline; template SPARQL normalization dropped typed fields; inventory allowed empty coverage; analytics errors could be ignored; long SQL runs had no bounded rule batching. | **PATCHED LOCALLY; full qualification pending** in `fix/4.0.7-w0-baseline-integrity`: pinned oracle provenance, exact point-map key coverage, error propagation, same-window registry rule batches with persisted scope checks, and per-equipment frame caching. Read-only smoke covered SYNTH_03, BOSSPI, and BUILDING_50. BOSSPI’s four declared roles have no quantity or unit metadata, so they remain unresolved. No baseline capture or telemetry write was performed. |
 
 ## 4.0.1 platform patch (2026-10-20)
 

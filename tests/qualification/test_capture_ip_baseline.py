@@ -100,6 +100,19 @@ class CaptureRequirements(unittest.TestCase):
         self.assertEqual(capture.health_shortsha(http, {}), "35c17ac")
         http.get_json.assert_called_once_with("/api/version", headers={})
 
+    def test_analytics_error_rows_are_qualification_errors(self) -> None:
+        errors = capture.analytics_error_messages(
+            [
+                {"endpoint": "/api/analytics/runtime", "row": {"ok": False, "error": "timeout"}},
+                {"endpoint": "/api/analytics/ahu-health", "row": {"ok": False}},
+                {"endpoint": "/api/analytics/ahu-health", "row": {"ok": True}},
+            ]
+        )
+        self.assertEqual(
+            errors,
+            ["/api/analytics/runtime: timeout", "/api/analytics/ahu-health: ok=false"],
+        )
+
     def test_oracle_source_root_is_required_before_dotenv_or_login(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             jwt = Path(tmp) / "auth.env"
@@ -138,9 +151,16 @@ class CaptureRequirements(unittest.TestCase):
         self.assertGreater(len(oracle["no_pandas_function_rule_ids"]), 0)
 
     def test_zero_unit_inventory_with_point_map_rows_fails(self) -> None:
-        with self.assertRaisesRegex(RuntimeError, "unit inventory resolved zero"):
+        with self.assertRaisesRegex(RuntimeError, "every point_map key"):
             capture.require_unit_inventory(1, [])
         capture.require_unit_inventory(0, [])
+
+    def test_unit_inventory_incomplete_key_set_fails(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "every point_map key"):
+            capture.require_unit_inventory(
+                2,
+                [{"openfdd_key": "EQ.a"}],
+            )
 
     def test_unit_inventory_reads_exact_point_map_rows(self) -> None:
         conn = mock.MagicMock()
@@ -148,8 +168,8 @@ class CaptureRequirements(unittest.TestCase):
         conn.cursor.return_value.__enter__ = mock.Mock(return_value=cur)
         conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
         cur.fetchall.side_effect = [
-            [("AHU_1.fan_status", "1")],
-            [("AHU_1", "fan-status", "AHU_1.fan_status", "1", "1")],
+            [("AHU_1.fan_status", ["degF", "K"], 8, None, None)],
+            [("AHU_1", "fan-status", "AHU_1.fan_status", "degC", "degF")],
         ]
         http = mock.MagicMock()
         http.get_json.return_value = {
@@ -157,11 +177,18 @@ class CaptureRequirements(unittest.TestCase):
             "equipment": [{"equipment_id": "AHU_1", "columns": [{"column": "fan_status"}]}],
             "session_config": {"unit_system": "imperial"},
         }
-        rows, unresolved = capture.unit_inventory_rows(http, {}, conn, building_id="SITE_X")
+        with mock.patch.object(capture, "post_sparql", return_value=[]):
+            rows, unresolved = capture.unit_inventory_rows(http, {}, conn, building_id="SITE_X")
         self.assertEqual(unresolved, 0)
         self.assertEqual(rows[0]["openfdd_key"], "AHU_1.fan_status")
-        self.assertEqual(rows[0]["sample_unit"], "1")
-        self.assertEqual(rows[0]["point_map_unit"], "1")
+        self.assertEqual(rows[0]["sample_unit"], "")
+        self.assertEqual(rows[0]["sample_unit_values"], ["K", "degF"])
+        self.assertEqual(rows[0]["point_map_unit"], "degC")
+        self.assertEqual(rows[0]["w2c_source_unit"], "degC")
+        self.assertEqual(rows[0]["declared_source_unit"], "degF")
+        self.assertTrue(rows[0]["storage_source_unit_conflict"])
+        self.assertTrue(rows[0]["ambiguous_sample_units"])
+        self.assertIn("to_jsonb(point_map)->>'source_unit'", cur.execute.call_args_list[1].args[0])
 
     def test_explicit_history_key_conflict_fails_closed(self) -> None:
         with self.assertRaises(ValueError):
@@ -183,9 +210,43 @@ class CaptureRequirements(unittest.TestCase):
         )
         self.assertEqual(key, "AHU_1.dsp")
         self.assertEqual(
-            cur.execute.call_args.args[1],
+            cur.execute.call_args_list[0].args[1],
             ("SITE_X", "AHU_1", "portal-17", "portal-17"),
         )
+
+    def test_exact_equipment_column_key_encoding_resolves_key(self) -> None:
+        conn = mock.MagicMock()
+        cur = mock.MagicMock()
+        conn.cursor.return_value.__enter__ = mock.Mock(return_value=cur)
+        conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+        cur.fetchall.side_effect = [[], [("AHU_1.dsp",)]]
+        self.assertEqual(
+            capture.resolve_bound_openfdd_key(
+                conn,
+                site_id="SITE_X",
+                equipment_id="AHU_1",
+                point={"pointId": "unmapped-id", "column": "dsp"},
+            ),
+            "AHU_1.dsp",
+        )
+        self.assertEqual(
+            cur.execute.call_args.args[1],
+            ("SITE_X", "AHU_1", ["AHU_1.dsp", "AHU_1.unmapped-id"]),
+        )
+
+    def test_ambiguous_exact_equipment_role_fails_closed(self) -> None:
+        conn = mock.MagicMock()
+        cur = mock.MagicMock()
+        conn.cursor.return_value.__enter__ = mock.Mock(return_value=cur)
+        conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+        cur.fetchall.side_effect = [[], [("AHU_1.dsp",), ("AHU_1.static",)]]
+        with self.assertRaisesRegex(ValueError, "multiple point_map keys"):
+            capture.resolve_bound_openfdd_key(
+                conn,
+                site_id="SITE_X",
+                equipment_id="AHU_1",
+                point={"pointId": "unmapped-id", "column": "dsp"},
+            )
 
     def test_require_database_url_missing_fails(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -210,7 +271,7 @@ class CaptureRequirements(unittest.TestCase):
         args_explicit = argparse.Namespace(password="cli")
         self.assertEqual(capture.resolve_capture_password(args_explicit), "cli")
 
-    def test_main_exits_nonzero_on_pandas_pair_errors(self) -> None:
+    def test_main_exits_nonzero_on_capture_errors(self) -> None:
         jwt = tempfile.NamedTemporaryFile(mode="w", suffix=".env", delete=False)
         sites = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
         try:
@@ -223,7 +284,7 @@ class CaptureRequirements(unittest.TestCase):
             }
             summary = {
                 "building_id": "SITE_A",
-                "pandas_errors": ["FC1/AHU_1: boom"],
+                "analytics_errors": ["/api/analytics/runtime: timeout"],
             }
             with mock.patch.dict(os.environ, env, clear=False):
                 with mock.patch.object(capture, "load_dotenv_file"):
@@ -350,7 +411,20 @@ class CaptureFixtureStack(unittest.TestCase):
             "window_start": "2026-06-01T00:00:00Z",
             "window_end": "2026-06-02T00:00:00Z",
         }
-        counts = {"sample": 12, "point_map": 4, "authorized_series": 4}
+        counts = {"sample": 12, "point_map": 1, "authorized_series": 1}
+        run_requests: list[dict] = []
+
+        def fake_run(_http, _headers, run_body, **_kwargs):
+            run_requests.append(dict(run_body))
+            return (
+                {
+                    "ok": True,
+                    "run_id": f"run-ci-{len(run_requests)}",
+                    "window_start": "2026-06-01T00:00:00Z",
+                    "window_end": "2026-06-02T00:00:00Z",
+                },
+                {"http_attempts": [{"attempt": 1, "http_status": 200}]},
+            )
 
         class FakeHttp:
             def post_json(self, path, headers=None, json_body=None):
@@ -379,7 +453,7 @@ class CaptureFixtureStack(unittest.TestCase):
         count_values = [n for n in counts.values()] * 2
         fake_cursor.fetchone.side_effect = [(n,) for n in count_values]
         fake_cursor.fetchall.side_effect = [
-            [("AHU_1.fan_status", "1")],
+            [("AHU_1.fan_status", ["1"], 8, None, None)],
             [("AHU_1", "fan-status", "AHU_1.fan_status", "1", "1")],
         ]
 
@@ -397,11 +471,25 @@ class CaptureFixtureStack(unittest.TestCase):
             out_dir = Path(tmp)
             with mock.patch.object(capture, "fetch_sql_daily_rows", return_value=[sql_row]):
                 with mock.patch.object(capture, "fetch_run_status_rows", return_value={}):
+                  with mock.patch.object(
+                      capture,
+                      "fetch_run_scope",
+                      side_effect=lambda _conn, *, run_id, **_kw: (
+                          {"FC1" if run_id == "run-ci-1" else "FC2"},
+                          (
+                              capture.datetime.fromisoformat("2026-06-01T00:00:00+00:00"),
+                              capture.datetime.fromisoformat("2026-06-01T00:00:00+00:00"),
+                              capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
+                              capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
+                          ),
+                      ),
+                  ):
                     with mock.patch.object(capture, "analytics_rows_for_site", return_value=[]):
+                      with mock.patch.object(capture, "post_sparql", return_value=[]):
                         with mock.patch.object(
                             capture,
                             "post_fdd_run_with_busy_retry",
-                            return_value=(run_resp, {"http_attempts": [{"attempt": 1, "http_status": 200}]}),
+                            side_effect=fake_run,
                         ):
                             summary = capture.capture_site(
                                 FakeHttp(),
@@ -409,9 +497,10 @@ class CaptureFixtureStack(unittest.TestCase):
                                 fake_conn,
                                 site={"building_id": building_id},
                                 out_dir=out_dir,
-                                rules=[{"rule_id": "FC1", "pandas_function": "fc1"}],
+                                rules=[{"rule_id": "FC1"}, {"rule_id": "FC2"}],
                                 skip_pandas=True,
                                 pandas_max_rules=None,
+                                rule_batch_size=1,
                             )
             self.assertEqual(summary["building_id"], building_id)
             site_dir = out_dir / building_id
@@ -426,7 +515,23 @@ class CaptureFixtureStack(unittest.TestCase):
                 self.assertTrue((site_dir / name).is_file(), name)
             with gzip.open(site_dir / "persisted_runs.jsonl.gz", "rt", encoding="utf-8") as fh:
                 persisted = json.loads(fh.read().strip())
-            self.assertEqual(persisted["run_id"], "run-ci-1")
+            self.assertEqual(persisted["run_id"], "run-ci-2")
+            self.assertEqual([r["rule_ids"] for r in persisted["run_records"]], [["FC1"], ["FC2"]])
+            self.assertEqual(len({(r["window_start"], r["window_end"]) for r in persisted["run_records"]}), 1)
+            self.assertEqual([request["rule_ids"] for request in run_requests], [["FC1"], ["FC2"]])
+            self.assertNotIn("window_start", run_requests[0])
+            self.assertEqual(run_requests[1]["window_start"], run_resp["window_start"])
+            self.assertEqual(run_requests[1]["window_end"], run_resp["window_end"])
+
+    def test_rule_batches_cover_registry_once_and_reject_duplicates(self) -> None:
+        rules = [{"rule_id": f"R{i}"} for i in range(5)]
+        self.assertEqual(
+            capture.build_rule_batches(rules, 2),
+            [["R0", "R1"], ["R2", "R3"], ["R4"]],
+        )
+        self.assertEqual(capture.build_rule_batches(rules, 0), [[f"R{i}" for i in range(5)]])
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            capture.build_rule_batches([{"rule_id": "R1"}, {"rule_id": "R1"}], 1)
 
 
 class DailyFaultSecondsTest(unittest.TestCase):
