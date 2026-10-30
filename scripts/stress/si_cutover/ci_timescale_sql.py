@@ -22,6 +22,7 @@ from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
     registry_role_column,
 )
 from scripts.stress.si_cutover.product_sql_params import (  # noqa: E402
+    NonSiCatalogControls,
     catalog_overrides_for_si_render,
     catalog_overrides_from_registry,
 )
@@ -492,8 +493,14 @@ def run_sql_si_for_dataset(
     poll_seconds: float,
     params_by_rule: dict[str, dict[str, float]] | None = None,
     metric: dict[str, Any] | None = None,
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """Seed canonical SI samples and run postgres rules with SI registry params."""
+) -> tuple[list[dict[str, Any]], list[str], dict[str, str]]:
+    """Seed canonical SI samples and run postgres rules with SI registry params.
+
+    Returns (daily rows, errors, pending). ``pending`` maps rule_id -> reason for rules
+    whose tuning catalog still declares non-SI controls: their SQL cannot be rendered
+    with SI parameters yet, so their P2 cells stay ``pending_W4`` with that reason
+    (derived from the catalog, not a list). Any other render or SQL failure is an error.
+    """
     from scripts.ci import unit_contract_lib as uc
 
     if metric is None:
@@ -511,6 +518,7 @@ def run_sql_si_for_dataset(
                 continue
             sql_cols.add(frame_column_to_sql_role(col))
     errors: list[str] = []
+    pending: dict[str, str] = {}
     out: list[dict[str, Any]] = []
     with conn.cursor() as cur:
         purge_site(cur, site_id)
@@ -531,8 +539,8 @@ def run_sql_si_for_dataset(
             params = (params_by_rule or {}).get(rule_id) or {}
             try:
                 render_overrides = catalog_overrides_for_si_render(rule, params, metric)
-            except ValueError as exc:
-                errors.append(f"{rule_id}: {exc}")
+            except NonSiCatalogControls as exc:
+                pending[rule_id] = str(exc)
                 continue
             cur.execute("SAVEPOINT si_cutover_rule")
             daily, err = execute_sql_rule_daily(
@@ -551,7 +559,7 @@ def run_sql_si_for_dataset(
             cur.execute("RELEASE SAVEPOINT si_cutover_rule")
             out.extend(daily)
         conn.commit()
-    return out, errors
+    return out, errors, pending
 
 
 def p2_pair_for_si_row(
@@ -563,7 +571,19 @@ def p2_pair_for_si_row(
     sql_si_fault_seconds: float | None,
     pandas_si_missing: bool = False,
     sql_si_missing: bool = False,
+    sql_si_pending_reason: str | None = None,
 ) -> dict[str, Any]:
+    if sql_si_pending_reason is not None:
+        return {
+            "rule_id": rule_id,
+            "equipment_id": equipment_id,
+            "utc_day": utc_day,
+            "sql_si_fault_seconds": None,
+            "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
+            "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
+            "sql_si_status": PENDING_W4,
+            "sql_si_pending_reason": sql_si_pending_reason,
+        }
     if not SI_SQL_PACK_AVAILABLE:
         return {
             "rule_id": rule_id,

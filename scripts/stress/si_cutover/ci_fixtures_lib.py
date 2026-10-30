@@ -565,7 +565,7 @@ def build_golden_for_dataset(
             param_hook=lambda n, v, rid=rule_id: ph(rid, n, v),
         )
 
-    sql_si_computed, sql_si_notes = cts.run_sql_si_for_dataset(
+    sql_si_computed, sql_si_notes, sql_si_pending = cts.run_sql_si_for_dataset(
         conn,
         spec=spec,
         frame=si_frame,
@@ -639,6 +639,7 @@ def build_golden_for_dataset(
                     ),
                     pandas_si_missing=si_row is None,
                     sql_si_missing=sql_row is None,
+                    sql_si_pending_reason=sql_si_pending.get(rule_id),
                 )
             )
 

@@ -5074,12 +5074,23 @@ mod elapsed_time_contract {
         .execute(&mut *tx)
         .await
         .expect("temp history");
+        // The history view is canonical SI storage: seed the same 2.0 / 1.0 inH2O
+        // fixture as the ingest path, converted by the metric units contract.
+        let contract = fdd_core::MetricUnitsContract::load_embedded().expect("contract");
+        let static_pa = contract
+            .convert_to_canonical("air_pressure", 2.0, "inH2O")
+            .expect("duct_static Pa");
+        let setpoint_pa = contract
+            .convert_to_canonical("air_pressure", 1.0, "inH2O")
+            .expect("duct_static_sp Pa");
         sqlx::query(
             "INSERT INTO history VALUES
-                ('AHU_DUP', '2026-06-01 00:00:00+00', 2, 1, 1, 1),
-                ('AHU_DUP', '2026-06-01 00:00:00+00', 2, 1, 1, 1),
-                ('AHU_DUP', '2026-06-01 00:01:00+00', 2, 1, 1, 1)",
+                ('AHU_DUP', '2026-06-01 00:00:00+00', $1, $2, 1, 1),
+                ('AHU_DUP', '2026-06-01 00:00:00+00', $1, $2, 1, 1),
+                ('AHU_DUP', '2026-06-01 00:01:00+00', $1, $2, 1, 1)",
         )
+        .bind(static_pa)
+        .bind(setpoint_pa)
         .execute(&mut *tx)
         .await
         .expect("duplicate rows");
