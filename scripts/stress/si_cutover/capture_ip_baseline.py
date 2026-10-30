@@ -47,8 +47,10 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
+import uuid
 from collections import Counter
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -635,7 +637,25 @@ def fetch_run_status_rows(
     return out
 
 
-def fetch_run_scope(conn, *, building_id: str, run_id: str) -> tuple[set[str], tuple[Any, Any, Any, Any] | None]:
+def no_applicable_status_rows(status_map: dict[tuple[str, str], str]) -> list[dict[str, str]]:
+    """Keep persisted no-target statuses visible even when there is no equipment row."""
+    out = []
+    for (rule_id, equipment_id), status in sorted(status_map.items()):
+        if status == "SKIP_NO_TARGETS" or status.startswith("NOT_APPLICABLE"):
+            out.append(
+                {
+                    "rule_id": rule_id,
+                    "equipment_id": equipment_id,
+                    "status": status,
+                    "pair_status": "not_applicable",
+                }
+            )
+    return out
+
+
+def fetch_run_scope(
+    conn, *, building_id: str, run_id: str
+) -> tuple[set[str], tuple[Any, Any, Any, Any] | None]:
     """Read persisted rule/window scope so a successful HTTP response cannot mask omission."""
     with conn.cursor() as cur:
         cur.execute(
@@ -648,6 +668,70 @@ def fetch_run_scope(conn, *, building_id: str, run_id: str) -> tuple[set[str], t
     return {str(rule_id) for rule_id in (rule_ids or [])}, (
         start_min, start_max, end_min, end_max
     ) if start_min is not None else None
+
+
+def parse_utc_instant(value: str | datetime) -> datetime:
+    """Parse an API/DB timestamp and normalize it to UTC for instant comparisons."""
+    parsed = (
+        value
+        if isinstance(value, datetime)
+        else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    )
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def effective_run_window(
+    run_resp: dict[str, Any], *, requested_start: str | None, requested_end: str | None
+) -> tuple[str, str]:
+    """Read effective sample-clamped bounds from the run manifest or direct fields."""
+    manifest_window = run_resp.get("window") if isinstance(run_resp.get("window"), dict) else {}
+    start = str(run_resp.get("window_start") or manifest_window.get("start") or requested_start or "")
+    end = str(run_resp.get("window_end") or manifest_window.get("end") or requested_end or "")
+    if not start or not end:
+        raise ValueError("FDD run returned no effective window bounds")
+    start_instant = parse_utc_instant(start)
+    end_instant = parse_utc_instant(end)
+    if start_instant >= end_instant:
+        raise ValueError("FDD run returned an empty or reversed effective window")
+    if requested_start and start_instant < parse_utc_instant(requested_start):
+        raise ValueError("FDD effective window starts before the requested window")
+    if requested_end and end_instant > parse_utc_instant(requested_end):
+        raise ValueError("FDD effective window ends after the requested window")
+    return start, end
+
+
+def require_same_batch_window(
+    candidate_start: str, candidate_end: str, frozen_start: str, frozen_end: str
+) -> None:
+    """Keep every rule batch on the first batch's effective half-open window."""
+    if (
+        parse_utc_instant(candidate_start) != parse_utc_instant(frozen_start)
+        or parse_utc_instant(candidate_end) != parse_utc_instant(frozen_end)
+    ):
+        raise ValueError("rule batch changed the frozen effective window")
+
+
+def write_atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    """Durably publish a unique receipt file without exposing partial JSON."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, sort_keys=True, indent=2)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temp_name, path)
+        dir_fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
 
 
 def merge_status(
@@ -1261,6 +1345,8 @@ def capture_site(
     fdd_run_http: list[dict[str, Any]] = []
     ws = window_start or ""
     we = window_end or ""
+    receipt_id = uuid.uuid4().hex
+    receipt_dir = out_dir / building_id / "run_receipts" / receipt_id
     for batch_index, batch in enumerate(rule_batches):
         run_body: dict[str, Any] = {
             "mode": "registry",
@@ -1268,10 +1354,10 @@ def capture_site(
             "force_new_data": True,
             "rule_ids": batch,
         }
-        if window_start or ws:
-            run_body["window_start"] = window_start or ws
-        if window_end or we:
-            run_body["window_end"] = window_end or we
+        if ws or window_start:
+            run_body["window_start"] = ws or window_start
+        if we or window_end:
+            run_body["window_end"] = we or window_end
         run_resp, http_meta = post_fdd_run_with_busy_retry(
             http, headers, run_body, request_timeout_s=request_timeout_s
         )
@@ -1279,18 +1365,43 @@ def capture_site(
         if not run_resp.get("ok", True) and run_resp.get("error"):
             raise RuntimeError(f"/api/fdd/run batch {batch_index} failed: {run_resp.get('error')}")
         run_id = str(run_resp.get("run_id") or "")
-        batch_ws = str(run_resp.get("window_start") or window_start or "")
-        batch_we = str(run_resp.get("window_end") or window_end or "")
-        if not batch_ws or not batch_we:
-            raise RuntimeError(f"/api/fdd/run batch {batch_index} returned no window bounds")
-        if ws and batch_ws != ws or we and batch_we != we:
-            raise RuntimeError(f"/api/fdd/run batch {batch_index} changed the requested window")
+        try:
+            batch_ws, batch_we = effective_run_window(
+                run_resp, requested_start=window_start, requested_end=window_end
+            )
+        except ValueError as exc:
+            raise RuntimeError(f"/api/fdd/run batch {batch_index}: {exc}") from exc
+        if batch_index > 0:
+            try:
+                require_same_batch_window(batch_ws, batch_we, ws, we)
+            except ValueError as exc:
+                raise RuntimeError(f"/api/fdd/run batch {batch_index}: {exc}") from exc
         ws, we = batch_ws, batch_we
         echoed_ids = run_resp.get("rule_ids")
         if echoed_ids is not None and set(map(str, echoed_ids)) != set(batch):
             raise RuntimeError(f"/api/fdd/run batch {batch_index} returned unexpected rule scope")
         if not run_id:
             raise RuntimeError(f"/api/fdd/run batch {batch_index} returned no run_id")
+        receipt_path = receipt_dir / f"batch-{batch_index:04d}.json"
+        run_record = {
+            "capture_id": receipt_id,
+            "building_id": building_id,
+            "batch_index": batch_index,
+            "batch_count": len(rule_batches),
+            "rule_ids": batch,
+            "run_id": run_id,
+            "requested_window_start": window_start,
+            "requested_window_end": window_end,
+            "window_start": ws,
+            "window_end": we,
+            "window_contract": "effective half-open window must stay within request and remain frozen across batches",
+            "run_status": run_resp.get("run_status", ""),
+            "rules_run": run_resp.get("rules_run"),
+            "receipt_path": str(receipt_path),
+        }
+        # This is published before validation or the next batch so an interrupted
+        # capture never loses the API run ID. Receipts are append-only per capture.
+        write_atomic_json(receipt_path, run_record)
         persisted_rule_ids, persisted_bounds = fetch_run_scope(
             conn, building_id=building_id, run_id=run_id
         )
@@ -1298,12 +1409,27 @@ def capture_site(
             raise RuntimeError(
                 f"/api/fdd/run batch {batch_index} persisted unexpected rule scope"
             )
-        if persisted_bounds is None or persisted_bounds[0] != persisted_bounds[1] or persisted_bounds[2] != persisted_bounds[3]:
+        if (
+            persisted_bounds is None
+            or parse_utc_instant(persisted_bounds[0])
+            != parse_utc_instant(persisted_bounds[1])
+            or parse_utc_instant(persisted_bounds[2])
+            != parse_utc_instant(persisted_bounds[3])
+        ):
             raise RuntimeError(f"/api/fdd/run batch {batch_index} persisted inconsistent window bounds")
-        if persisted_bounds[0] != datetime.fromisoformat(batch_ws.replace("Z", "+00:00")) or persisted_bounds[2] != datetime.fromisoformat(batch_we.replace("Z", "+00:00")):
+        if (
+            parse_utc_instant(persisted_bounds[0]) != parse_utc_instant(batch_ws)
+            or parse_utc_instant(persisted_bounds[2]) != parse_utc_instant(batch_we)
+        ):
             raise RuntimeError(f"/api/fdd/run batch {batch_index} persisted a different window")
-        run_records.append({"batch_index": batch_index, "rule_ids": batch, "run_id": run_id,
-                            "window_start": ws, "window_end": we})
+        run_record["persisted_rule_ids"] = sorted(persisted_rule_ids)
+        run_record["persisted_window_start"] = persisted_bounds[0].isoformat()
+        run_record["persisted_window_end"] = persisted_bounds[2].isoformat()
+        run_record["no_applicable_rows"] = no_applicable_status_rows(
+            fetch_run_status_rows(conn, building_id=building_id, run_id=run_id)
+        )
+        write_atomic_json(receipt_path, run_record)
+        run_records.append(run_record)
     if not ws or not we:
         raise RuntimeError("FDD run returned no window_start/window_end")
 
@@ -1343,7 +1469,9 @@ def capture_site(
             pandas_max_rules=pandas_max_rules,
         )
 
-    counts_after = telemetry_row_counts(conn, building_id, sample_before=we)
+    # The unchanged-telemetry guard must compare the same snapshot boundary on
+    # both reads; the API's effective sample-clamped end may precede the request.
+    counts_after = telemetry_row_counts(conn, building_id, sample_before=window_end)
     sample_counts = [
         {"building_id": building_id, "table": table, "row_count": counts_after[table]}
         for table in TELEMETRY_TABLES

@@ -413,15 +413,25 @@ class CaptureFixtureStack(unittest.TestCase):
         }
         counts = {"sample": 12, "point_map": 1, "authorized_series": 1}
         run_requests: list[dict] = []
+        receipt_site_dir: Path | None = None
 
         def fake_run(_http, _headers, run_body, **_kwargs):
+            if len(run_requests) == 1:
+                assert receipt_site_dir is not None
+                prior_receipt = next(receipt_site_dir.rglob("batch-0000.json"))
+                self.assertEqual(
+                    json.loads(prior_receipt.read_text(encoding="utf-8"))["run_id"],
+                    "run-ci-1",
+                )
             run_requests.append(dict(run_body))
             return (
                 {
                     "ok": True,
                     "run_id": f"run-ci-{len(run_requests)}",
-                    "window_start": "2026-06-01T00:00:00Z",
-                    "window_end": "2026-06-02T00:00:00Z",
+                    "window": {
+                        "start": "2026-06-01T00:05:00+00:00",
+                        "end": "2026-06-02T00:00:00Z",
+                    },
                 },
                 {"http_attempts": [{"attempt": 1, "http_status": 200}]},
             )
@@ -448,6 +458,13 @@ class CaptureFixtureStack(unittest.TestCase):
 
         fake_conn = mock.MagicMock()
         fake_cursor = mock.MagicMock()
+        telemetry_sample_bounds: list[str] = []
+
+        def record_query(sql, params=None):
+            if "ts < %s" in sql and params:
+                telemetry_sample_bounds.append(params[1])
+
+        fake_cursor.execute.side_effect = record_query
         fake_conn.cursor.return_value.__enter__ = mock.Mock(return_value=fake_cursor)
         fake_conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
         count_values = [n for n in counts.values()] * 2
@@ -469,6 +486,7 @@ class CaptureFixtureStack(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp)
+            receipt_site_dir = out_dir / building_id / "run_receipts"
             with mock.patch.object(capture, "fetch_sql_daily_rows", return_value=[sql_row]):
                 with mock.patch.object(capture, "fetch_run_status_rows", return_value={}):
                   with mock.patch.object(
@@ -477,8 +495,8 @@ class CaptureFixtureStack(unittest.TestCase):
                       side_effect=lambda _conn, *, run_id, **_kw: (
                           {"FC1" if run_id == "run-ci-1" else "FC2"},
                           (
-                              capture.datetime.fromisoformat("2026-06-01T00:00:00+00:00"),
-                              capture.datetime.fromisoformat("2026-06-01T00:00:00+00:00"),
+                              capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                              capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
                               capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
                               capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
                           ),
@@ -495,7 +513,11 @@ class CaptureFixtureStack(unittest.TestCase):
                                 FakeHttp(),
                                 {},
                                 fake_conn,
-                                site={"building_id": building_id},
+                                site={
+                                    "building_id": building_id,
+                                    "window_start": "2026-06-01T00:00:00Z",
+                                    "window_end": "2026-06-02T03:00:00Z",
+                                },
                                 out_dir=out_dir,
                                 rules=[{"rule_id": "FC1"}, {"rule_id": "FC2"}],
                                 skip_pandas=True,
@@ -518,10 +540,15 @@ class CaptureFixtureStack(unittest.TestCase):
             self.assertEqual(persisted["run_id"], "run-ci-2")
             self.assertEqual([r["rule_ids"] for r in persisted["run_records"]], [["FC1"], ["FC2"]])
             self.assertEqual(len({(r["window_start"], r["window_end"]) for r in persisted["run_records"]}), 1)
+            receipts = sorted((site_dir / "run_receipts").rglob("batch-*.json"))
+            self.assertEqual(len(receipts), 2)
+            self.assertEqual(json.loads(receipts[0].read_text(encoding="utf-8"))["run_id"], "run-ci-1")
             self.assertEqual([request["rule_ids"] for request in run_requests], [["FC1"], ["FC2"]])
-            self.assertNotIn("window_start", run_requests[0])
-            self.assertEqual(run_requests[1]["window_start"], run_resp["window_start"])
-            self.assertEqual(run_requests[1]["window_end"], run_resp["window_end"])
+            self.assertEqual(run_requests[0]["window_start"], "2026-06-01T00:00:00Z")
+            self.assertEqual(run_requests[0]["window_end"], "2026-06-02T03:00:00Z")
+            self.assertEqual(run_requests[1]["window_start"], "2026-06-01T00:05:00+00:00")
+            self.assertEqual(run_requests[1]["window_end"], "2026-06-02T00:00:00Z")
+            self.assertEqual(telemetry_sample_bounds, ["2026-06-02T03:00:00Z"] * 2)
 
     def test_rule_batches_cover_registry_once_and_reject_duplicates(self) -> None:
         rules = [{"rule_id": f"R{i}"} for i in range(5)]
@@ -532,6 +559,78 @@ class CaptureFixtureStack(unittest.TestCase):
         self.assertEqual(capture.build_rule_batches(rules, 0), [[f"R{i}" for i in range(5)]])
         with self.assertRaisesRegex(ValueError, "duplicate"):
             capture.build_rule_batches([{"rule_id": "R1"}, {"rule_id": "R1"}], 1)
+
+    def test_effective_window_reads_manifest_and_compares_instants(self) -> None:
+        start, end = capture.effective_run_window(
+            {"window": {"start": "2026-10-09T22:35:00+00:00", "end": "2026-10-16T12:50:00Z"}},
+            requested_start="2026-10-09T22:00:00Z",
+            requested_end="2026-10-16T13:00:00+00:00",
+        )
+        self.assertEqual(capture.parse_utc_instant(start), capture.parse_utc_instant("2026-10-09T22:35:00Z"))
+        self.assertEqual(capture.parse_utc_instant(end), capture.parse_utc_instant("2026-10-16T12:50:00+00:00"))
+        exact_start, exact_end = capture.effective_run_window(
+            {"window": {"start": "2026-10-09T22:00:00+00:00", "end": "2026-10-16T13:00:00Z"}},
+            requested_start="2026-10-09T22:00:00Z",
+            requested_end="2026-10-16T13:00:00+00:00",
+        )
+        self.assertEqual(capture.parse_utc_instant(exact_start), capture.parse_utc_instant("2026-10-09T22:00:00Z"))
+        self.assertEqual(capture.parse_utc_instant(exact_end), capture.parse_utc_instant("2026-10-16T13:00:00Z"))
+        with self.assertRaisesRegex(ValueError, "before the requested"):
+            capture.effective_run_window(
+                {"window": {"start": "2026-10-09T21:59:00Z", "end": "2026-10-16T12:50:00Z"}},
+                requested_start="2026-10-09T22:00:00Z",
+                requested_end="2026-10-16T13:00:00Z",
+            )
+        with self.assertRaisesRegex(ValueError, "ends after the requested"):
+            capture.effective_run_window(
+                {"window": {"start": "2026-10-09T22:00:00Z", "end": "2026-10-16T13:01:00Z"}},
+                requested_start="2026-10-09T22:00:00Z",
+                requested_end="2026-10-16T13:00:00Z",
+            )
+        with self.assertRaises(ValueError):
+            capture.effective_run_window(
+                {"window": {"start": "not-a-time", "end": "2026-10-16T12:50:00Z"}},
+                requested_start=None,
+                requested_end=None,
+            )
+        with self.assertRaisesRegex(ValueError, "changed the frozen"):
+            capture.require_same_batch_window(
+                "2026-10-09T22:36:00Z", "2026-10-16T12:50:00Z",
+                "2026-10-09T22:35:00+00:00", "2026-10-16T12:50:00+00:00",
+            )
+
+    def test_batch_receipt_is_atomic_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "receipts" / "batch-0000.json"
+            capture.write_atomic_json(path, {"run_id": "run-test", "rule_ids": ["FC1"]})
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["run_id"], "run-test")
+            self.assertEqual(list(path.parent.iterdir()), [path])
+
+    def test_receipt_preserves_no_target_status_without_equipment(self) -> None:
+        rows = capture.no_applicable_status_rows(
+            {
+                ("CHW-1", ""): "SKIP_NO_TARGETS",
+                ("FC1", "AHU_1"): "FAULT",
+                ("VAV-1", "VAV_1"): "NOT_APPLICABLE_EQUIPMENT_TYPE",
+            }
+        )
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "rule_id": "CHW-1",
+                    "equipment_id": "",
+                    "status": "SKIP_NO_TARGETS",
+                    "pair_status": "not_applicable",
+                },
+                {
+                    "rule_id": "VAV-1",
+                    "equipment_id": "VAV_1",
+                    "status": "NOT_APPLICABLE_EQUIPMENT_TYPE",
+                    "pair_status": "not_applicable",
+                },
+            ],
+        )
 
 
 class DailyFaultSecondsTest(unittest.TestCase):
