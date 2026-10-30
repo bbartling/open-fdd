@@ -91,6 +91,22 @@ class W4fAnalyticsSiTests(unittest.TestCase):
 
 
 class W4fAnalyticsP2Tests(unittest.TestCase):
+    def test_integral_analytics_counts_compare_exactly(self) -> None:
+        from scripts.stress.si_cutover.analytics_parity import cells_equal
+
+        self.assertFalse(cells_equal(1_000_000, 1_000_001, kind="integer"))
+        # PostgreSQL bigint and pandas may represent the same count differently.
+        self.assertTrue(cells_equal(1_000_000, 1_000_000.0, kind="integer"))
+        self.assertFalse(cells_equal(1_000_000.5, 1_000_000, kind="integer"))
+        self.assertFalse(cells_equal(float("nan"), float("nan"), kind="integer"))
+        self.assertFalse(cells_equal(float("inf"), 1, kind="integer"))
+        self.assertFalse(cells_equal(float("-inf"), float("-inf"), kind="integer"))
+        self.assertFalse(cells_equal(True, 1, kind="integer"))
+        self.assertFalse(cells_equal(True, True, kind="integer"))
+        self.assertFalse(cells_equal("1", "1", kind="integer"))
+        # Dimensionless scalars such as hours remain tolerant continuous values.
+        self.assertTrue(cells_equal(10.0, 10.000001, kind="count"))
+
     def test_ip_goldens_no_pending_w4_cells(self) -> None:
         import json
 

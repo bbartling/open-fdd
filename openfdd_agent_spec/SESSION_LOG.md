@@ -1467,4 +1467,8 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - H12–H16 tip: integration KATs + gate-36 SPARQL honesty update + perf budgets doc
 - #1002/#1123 remain Soft-OPEN until live dual-tenant + C6 smoke evidence
 - H18 VERSION/GHCR deferred to master-finish M11
+# 2026-10-30 — PR1447 W4f analytics parity correction
 
+- Logged W4f count-comparison false-pass before fix in `BUG_REPORT_OT_MODBUS_HAYSTACK.md`: exact integer counts were using continuous relative tolerance.
+- Updated analytics row schema to mark only integral SQL counts exact; kept runtime hours, ratios, occupancy values, and z-scores on continuous scalar tolerance. Added regression cases for large one-count drift, DB int/float representation, fractional/non-finite/bool rejection, and retained scalar tolerance.
+- W4f qualification module passes (10 tests, 2 expected skips: live SQL requires a disposable DB and no pending-W4 fixture is available); blocking W4f parity passes with 4,664 P1 and 4,664 P2 comparisons, zero mismatches. Regression covers a one-count mismatch at one million, int/float representation, fractional/NaN/±Inf/bool/string rejection, and continuous scalar tolerance. `git diff --check` passes. No live DB was started.
