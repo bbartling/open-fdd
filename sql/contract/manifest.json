@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-sql-schema-fdd-v1",
-  "contract_version": "4.0.0-softopen",
+  "contract_version": "4.0.7",
   "engine": "timescale/postgresql",
   "product": "open-fdd",
   "bps_oss_parity": "apples-to-apples: same schema + same sql/fdd + sql/analytics pack hash; twin layers must not fork equations",
@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 110,
-  "pack_sha256": "88d5729cced27c77cc4e7781f36c062481f294b351f5855f08dd0bdde8c47900",
+  "pack_sha256": "aaf2eb2fff34bbc6bbfe8e02bfa3b5c4deef89d1f59c1cdff75acc2c30f7ceab",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -122,13 +122,13 @@
     },
     {
       "path": "sql/fdd/postgres/rules/econ5_preheat_over.sql",
-      "sha256": "1b0e1a76c8a69067c5caff368d55dd09316e7c2bac8190351244c1dc4509369f",
-      "bytes": 3277
+      "sha256": "e2bdc74267fc8b32beb13c9d2d69a798672459fc5cd80ba79ed09a0c46448ca0",
+      "bytes": 3273
     },
     {
       "path": "sql/fdd/postgres/rules/econ6_econ_freezing.sql",
-      "sha256": "734211861325cb09108eaf84a8ded6f32d363389130f8409374afa616ae08ece",
-      "bytes": 3293
+      "sha256": "7c961a597fac636704d466c749bb8f14bc0dacd14177f74ea0fa59dec0109e21",
+      "bytes": 3291
     },
     {
       "path": "sql/fdd/postgres/rules/econ7_ok_not_economizing.sql",
@@ -242,8 +242,8 @@
     },
     {
       "path": "sql/fdd/postgres/rules/fcu_htg_coil.sql",
-      "sha256": "21f7bf3508de4d6a9b9d688c7a4016ae8e1ab6df64d4680ad67e72c5b7d109ea",
-      "bytes": 3149
+      "sha256": "83ac5fe81612d8f3d6111b70bbe231b257dbbea90ba269bbb19e8823e7b46839",
+      "bytes": 3147
     },
     {
       "path": "sql/fdd/postgres/rules/fcu_mode_cycle.sql",
@@ -257,13 +257,13 @@
     },
     {
       "path": "sql/fdd/postgres/rules/fcu_valve_pass_clg.sql",
-      "sha256": "cef3fd63afffb5a2f63c793eba278ec3f7e99671aeb84a1156a1ac4a9d6f5fff",
-      "bytes": 3161
+      "sha256": "dd9be4dfb193dfc671951248b92e1059caf9d2ece868d8a55fc68254ca2047f5",
+      "bytes": 3159
     },
     {
       "path": "sql/fdd/postgres/rules/fcu_valve_pass_htg.sql",
-      "sha256": "e161e11f64147fbfe0f2f9928fd8d6f386042c4477c415f07f18e5c9a3debe8b",
-      "bytes": 3161
+      "sha256": "4f1f8a06d650b3d2ff6f302c2432d4d083bf6c06999655b42dade2056fcd4b01",
+      "bytes": 3159
     },
     {
       "path": "sql/fdd/postgres/rules/hp1_discharge_cold.sql",
@@ -272,8 +272,8 @@
     },
     {
       "path": "sql/fdd/postgres/rules/mech_oat_1.sql",
-      "sha256": "9a58c3458ab1fab7c11f61771eed3496282e44b5ae8b17a17f1702f849a55cbe",
-      "bytes": 2880
+      "sha256": "fde116196535902b270bd637981a9b126a6044016a6ce8a549a33598c76d3da8",
+      "bytes": 2878
     },
     {
       "path": "sql/fdd/postgres/rules/oa1_low_oa_frac.sql",
@@ -292,8 +292,8 @@
     },
     {
       "path": "sql/fdd/postgres/rules/reset1_sat_oa_reset.sql",
-      "sha256": "7e3b2bc1541d387fdee03dc933228c2de8817b0978fe8ea97ae59742360fa2f8",
-      "bytes": 2929
+      "sha256": "a3105c01e85a74f9ebe4c6223ba6b7b024f0a85da7349ba0abc652a3f8e28de4",
+      "bytes": 2927
     },
     {
       "path": "sql/fdd/postgres/rules/sat_high_fault.sql",
@@ -397,8 +397,8 @@
     },
     {
       "path": "sql/fdd/postgres/rules/vav_ahu_leave.sql",
-      "sha256": "f7bfbedd95a13fb0d683cb4a208fddf39948a5a0bfbf1f3989d7fd9877fd10a3",
-      "bytes": 2919
+      "sha256": "098952f03c5badc3d11d204f25680fd79a5af69ea79bcb25ba2a3795ac1ff49f",
+      "bytes": 2917
     },
     {
       "path": "sql/fdd/postgres/rules/vav_reheat.sql",
@@ -432,12 +432,12 @@
     },
     {
       "path": "sql/fdd/registry.yaml",
-      "sha256": "ea3d28c541ab2c0d7ae2437b592459bc3189119b8a441542207daf0bbd365df7",
-      "bytes": 157260
+      "sha256": "e83c44738a51642efc9d4459ae97035c7c0b55e5d3af93a63f576b5b88d28942",
+      "bytes": 157228
     },
     {
       "path": "sql/analytics/postgres/queries/bas_vs_web_oat.sql",
-      "sha256": "8b158c051611cca4a20ae999114dbba39d1c3b6d2a471bf23a341da22acbec86",
+      "sha256": "a1dfdedc05ed1cf54d40c65321dcbfc9e9381380fd4f9edd87493ec0f3c91e82",
       "bytes": 2298
     },
     {
@@ -447,7 +447,7 @@
     },
     {
       "path": "sql/analytics/postgres/queries/economizer_deltas.sql",
-      "sha256": "16a1cfd15c40cbd2babb62d9dd216f14a30bdecf0bb88c18619a018b0e3c6c9c",
+      "sha256": "6d152d91e8a393e9ea1fe35deda4a2b932ba23ca5b182331a3916198d6dc843f",
       "bytes": 2277
     },
     {
@@ -532,8 +532,8 @@
     },
     {
       "path": "sql/analytics/registry.json",
-      "sha256": "82780247ee01440bbdd6a06ada04fec047821fb2f93e2d21d835b5e23d149291",
-      "bytes": 4262
+      "sha256": "37eea39ba4393264e0ee588f0c630a34a01441ecfa51366ad0c7c3673b061c4c",
+      "bytes": 4253
     },
     {
       "path": "sql/contract/successor_bundle/manifest.softopen.json",
@@ -542,12 +542,12 @@
     },
     {
       "path": "sql/contract/metric_units.json",
-      "sha256": "9b580ec56fe379ecfc6e4b5c41db8abced39318f3a0e4aab8b612479ba76ee8c",
+      "sha256": "d3d977d6623ed8428a84c3553fdd7e17a97e565e1aa8bb35b43993053b609ad7",
       "bytes": 8508
     },
     {
       "path": "sql/contract/goldens/unit_vectors.json",
-      "sha256": "8a9e8798f6055ace3910e815e41ee51c98c7805f773968ed4581980ed1ddb2cc",
+      "sha256": "7a6ce5a4a14cd351364b71d4f7926a74db7af9768bf48782ae424a27c519ad0e",
       "bytes": 2772
     },
     {
@@ -557,8 +557,8 @@
     },
     {
       "path": "sql/contract/parameter_si_rename_map.json",
-      "sha256": "2fe2fc81b0bb96c062b4fdefebb35967dfd8abab845a2f1feb8b67a100ee5aba",
-      "bytes": 801
+      "sha256": "bdca79e99d1f33a82b1b1e649304ca6cd193c64dbbbc1b1dbca45184c3305cbf",
+      "bytes": 1876
     },
     {
       "path": "sql/contract/goldens/alias_normalize_tokens.json",
@@ -571,6 +571,6 @@
   "processing_abi_current": "metric-c-v2",
   "processing_abi_target": "metric-c-v2",
   "processing_abi": "metric-c-v2",
-  "metric_units_sha256": "9b580ec56fe379ecfc6e4b5c41db8abced39318f3a0e4aab8b612479ba76ee8c",
-  "metric_storage_status": "contract_defined"
+  "metric_units_sha256": "d3d977d6623ed8428a84c3553fdd7e17a97e565e1aa8bb35b43993053b609ad7",
+  "metric_storage_status": "released"
 }
