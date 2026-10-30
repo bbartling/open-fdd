@@ -170,7 +170,10 @@ rules:
     required_roles: [zone_t]
     output_columns: [equipment_id, avg_zone_temp, min_zone_temp, max_zone_temp]
     # SQL aggregates metric-c-v2 zone_t samples, so outputs are already SI.
-    output_units: {avg_zone_temp: degC, min_zone_temp: degC, max_zone_temp: degC}
+    output_units:
+      avg_zone_temp: {unit: degC, kind: absolute_temperature}
+      min_zone_temp: {unit: degC, kind: absolute_temperature}
+      max_zone_temp: {unit: degC, kind: absolute_temperature}
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
@@ -204,7 +207,8 @@ rules:
     description: Percent of samples in comfort band
     required_roles: [zone_t]
     output_columns: [equipment_id, comfort_pct]
-    output_units: {comfort_pct: percent_0_100}
+    output_units:
+      comfort_pct: {unit: percent_0_100, kind: percent}
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false

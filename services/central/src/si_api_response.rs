@@ -33,6 +33,13 @@ pub enum MetricUnitError {
         rule_id: String,
         column: String,
     },
+    /// The registry declares a kind for the column that is not the column's quantity.
+    OutputKindMismatch {
+        rule_id: String,
+        column: String,
+        declared: String,
+        expected: String,
+    },
     /// The SQL value is not a finite f64.
     NonFiniteValue {
         rule_id: String,
@@ -47,6 +54,15 @@ impl std::fmt::Display for MetricUnitError {
             Self::UndeclaredOutputUnit { rule_id, column } => write!(
                 f,
                 "{rule_id}.{column}: registry declares no output unit for a quantity-bearing metric column"
+            ),
+            Self::OutputKindMismatch {
+                rule_id,
+                column,
+                declared,
+                expected,
+            } => write!(
+                f,
+                "{rule_id}.{column}: registry declares output kind {declared}, column carries {expected}"
             ),
             Self::NonFiniteValue { rule_id, column } => {
                 write!(f, "{rule_id}.{column}: metric value is not a finite number")

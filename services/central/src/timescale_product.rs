@@ -3194,7 +3194,20 @@ fn metric_payload(
                     column: name.to_string(),
                 }
             })?;
-            json!(crate::si_api_response::metric_output_to_si(quantity_id, declared, raw)?.value)
+            if declared.kind != quantity_id {
+                return Err(
+                    crate::si_api_response::MetricUnitError::OutputKindMismatch {
+                        rule_id: rule.rule_id.clone(),
+                        column: name.to_string(),
+                        declared: declared.kind.clone(),
+                        expected: quantity_id.to_string(),
+                    },
+                );
+            }
+            json!(
+                crate::si_api_response::metric_output_to_si(quantity_id, &declared.unit, raw)?
+                    .value
+            )
         }
         _ => value,
     };
@@ -5197,7 +5210,7 @@ rules:
     equipment_kinds: [ahu]
     required_roles: [zone_t]
     output_columns: [equipment_id, avg_zone_temp]
-    output_units: {avg_zone_temp: degC}
+    output_units: {avg_zone_temp: {unit: degC, kind: absolute_temperature}}
     confirm_seconds: 0
   - rule_id: VAV-ONLY
     sql_file: vav_only.sql
