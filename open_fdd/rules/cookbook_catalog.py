@@ -1273,7 +1273,7 @@ def fcu_mode_cycle(d, p, poll):
 
 
 def chw1(d, p, poll):
-    min_dt = _f(p, "min_dt", 4.0)
+    min_dt = _f(p, "min_dt", 2.222222)
     dt = d["chilled-water-return-temp"] - d["chilled-water-supply-temp"]
     return (
         d["chilled-water-supply-temp"].notna()
@@ -1283,7 +1283,7 @@ def chw1(d, p, poll):
 
 
 def chw2(d, p, poll):
-    margin = _f(p, "dp_margin", 2.2)
+    margin = _f(p, "dp_margin", 15.1685)
     pmp_hi = _f(p, "pump_hi", 0.87)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return (
@@ -1293,7 +1293,7 @@ def chw2(d, p, poll):
 
 
 def chw3(d, p, poll):
-    band = _f(p, "sp_band", 2.2)
+    band = _f(p, "sp_band", 1.222222)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return (
         (pump > 0.01) & d["chilled-water-supply-temp"].notna() & d["chilled-water-supply-temp-sp"].notna()
@@ -1302,7 +1302,7 @@ def chw3(d, p, poll):
 
 
 def chw4(d, p, poll):
-    flow_hi = _f(p, "flow_hi", 1100.0)
+    flow_hi = _f(p, "flow_hi", 69.3992)
     pmp_hi = _f(p, "pump_hi", 0.87)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return d["chw-flow"].notna() & (d["chw-flow"] > flow_hi) & (pump >= pmp_hi)
@@ -1314,8 +1314,8 @@ def chw4(d, p, poll):
 
 
 def hp1(d, p, poll):
-    min_sat = _f(p, "min_sat", 85.0)
-    zone_cold = _f(p, "zone_cold", 69.0)
+    min_sat = _f(p, "min_sat", 29.4444)
+    zone_cold = _f(p, "zone_cold", 20.5556)
     fan = _fan(d)
     return (
         d["discharge-air-temp"].notna() & d["zone-air-temp"].notna() & (fan > FAN_ON_MIN)
@@ -1351,8 +1351,8 @@ def cw_opt(d, p, poll):
     wb = d["web-outside-air-wetbulb"] if "web-outside-air-wetbulb" in d.columns else None
     if wb is None or wb.notna().sum() == 0:
         return _false(d.index)
-    approach = _f(p, "cw_approach", 7.0)
-    slack = _f(p, "cw_slack", 2.0)
+    approach = _f(p, "cw_approach", 3.888889)
+    slack = _f(p, "cw_slack", 1.111111)
     # Over-cooled tower water: supply significantly below wet-bulb + design approach
     return (
         d["condenser-water-supply-temp"].notna()
@@ -1385,7 +1385,7 @@ def cw_apr(d, p, poll):
         return _false(d.index)
     if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
         return _false(d.index)
-    limit = _f(p, "approach_max_f", 8.0)
+    limit = _f(p, "approach_max", _f(p, "approach_max_f", 4.444444))
     apr = _cw_approach_f(d)
     return (
         d["condenser-water-supply-temp"].notna()
@@ -1403,8 +1403,8 @@ def cw_fan_excess(d, p, poll):
         return _false(d.index)
     if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
         return _false(d.index)
-    approach = _f(p, "cw_approach", 7.0)
-    excess = _f(p, "excess_beyond_approach_f", 5.0)
+    approach = _f(p, "cw_approach", 3.888889)
+    excess = _f(p, "excess_beyond_approach", _f(p, "excess_beyond_approach_f", 2.777778))
     apr = _cw_approach_f(d)
     return (
         d["condenser-water-supply-temp"].notna()
@@ -1453,7 +1453,7 @@ def oat_vs_meteo(d, p, poll):
 
 
 def trim1(d, p, poll):
-    duct_hi = _f(p, "duct_hi", 1.35)
+    duct_hi = _f(p, "duct_hi", 335.934)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["duct-static-pressure"].notna() & d["vav-pressure-request-sum"].notna()
@@ -1462,7 +1462,7 @@ def trim1(d, p, poll):
 
 
 def trim3(d, p, poll):
-    hwst_hi = _f(p, "hwst_hi", 160.0)
+    hwst_hi = _f(p, "hwst_hi", 71.1111)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["hot-water-supply-temp"].notna() & d["hw-reset-request-sum"].notna()
@@ -1471,7 +1471,7 @@ def trim3(d, p, poll):
 
 
 def trim4(d, p, poll):
-    chw_lo = _f(p, "chw_lo", 45.0)
+    chw_lo = _f(p, "chw_lo", 7.222222)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["chilled-water-supply-temp"].notna() & d["chw-reset-request-sum"].notna()

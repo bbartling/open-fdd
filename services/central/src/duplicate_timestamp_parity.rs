@@ -93,8 +93,21 @@ fn load_fixture(rule: &str) -> Fixture {
     }
 }
 
+const ROLE_MAP: &str = include_str!("../../../sql/fdd/role_map.json");
+
+/// Quantity for an oracle fixture column: the sensor-sweep SQL role table first,
+/// then the registry role map's Haystack slug (covers setpoints such as `sat_sp`).
+fn oracle_fixture_quantity(role: &str) -> Option<&'static str> {
+    if let Some(q) = fdd_core::quantity_for_sql_role(role) {
+        return Some(q);
+    }
+    let map: Value = serde_json::from_str(ROLE_MAP).expect("role_map.json");
+    let slug = map.get(role)?.as_str()?;
+    fdd_core::quantity_for_haystack_role(slug)
+}
+
 fn oracle_fixture_declared_unit(role: &str) -> Option<&'static str> {
-    match fdd_core::quantity_for_sql_role(role)? {
+    match oracle_fixture_quantity(role)? {
         "absolute_temperature" => Some("degF"),
         "air_pressure" => Some("inH2O"),
         "relative_humidity" | "percent" => Some("%"),
@@ -102,7 +115,35 @@ fn oracle_fixture_declared_unit(role: &str) -> Option<&'static str> {
     }
 }
 
-fn batch(site: &str, fx: &Fixture) -> UpsertBatch {
+/// Whether the registry has cut `rule_id` over to SI thresholds. Mixed SI/IP
+/// threshold units on one rule are a registry defect, not a storage mode.
+fn rule_thresholds_are_si(rule_id: &str) -> bool {
+    const SI: [&str; 3] = ["degC", "degC_delta", "Pa"];
+    const IP: [&str; 4] = ["degF", "degF_delta", "inH2O", "in_wc"];
+    let reg = load_reg().expect("registry");
+    let rule = reg
+        .rules
+        .iter()
+        .find(|r| r.rule_id == rule_id)
+        .unwrap_or_else(|| panic!("{rule_id} in registry"));
+    let si = rule
+        .parameters
+        .values()
+        .any(|p| SI.contains(&p.unit.as_str()));
+    let ip = rule
+        .parameters
+        .values()
+        .any(|p| IP.contains(&p.unit.as_str()));
+    assert!(
+        !(si && ip),
+        "{rule_id}: registry mixes SI and IP threshold units"
+    );
+    si
+}
+
+/// SI-cut-over rules ingest the oracle's IP fixture with declared IP units so the
+/// writer stores canonical SI; rules still on IP thresholds keep the raw fixture.
+fn batch(site: &str, fx: &Fixture, declare_units: bool) -> UpsertBatch {
     let mut batch = UpsertBatch::default();
     for (ts, values) in &fx.rows {
         for (col, val) in fx.columns.iter().zip(values) {
@@ -111,9 +152,14 @@ fn batch(site: &str, fx: &Fixture) -> UpsertBatch {
                 SampleRow::new(*ts, site, format!("{}.{col}", fx.equipment_id), Some(*val));
             row.equipment_id = Some(fx.equipment_id.clone());
             row.role = Some(col.clone());
-            if let Some(unit) = oracle_fixture_declared_unit(col) {
-                row.unit = Some(unit.to_string());
-                row.source_unit = Some(unit.to_string());
+            if declare_units {
+                if let Some(quantity) = oracle_fixture_quantity(col) {
+                    row.quantity = Some(quantity.to_string());
+                }
+                if let Some(unit) = oracle_fixture_declared_unit(col) {
+                    row.unit = Some(unit.to_string());
+                    row.source_unit = Some(unit.to_string());
+                }
             }
             batch.push(row);
         }
@@ -225,7 +271,7 @@ async fn duplicate_timestamp_fixtures_match_pandas_and_never_double_count() {
                     .map(move |(c, _)| (*ts, c.as_str()))
             })
             .collect();
-        let rows = batch(&site, &fx);
+        let rows = batch(&site, &fx, rule_thresholds_are_si(rule));
         assert!(
             rows.len() > distinct.len(),
             "{rule}: fixture has no duplicate timestamp"

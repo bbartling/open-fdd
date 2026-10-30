@@ -199,7 +199,7 @@
       ],
       "sql_file": "vav2_night_setback.sql",
       "pandas_function": "vav2",
-      "description": "Night setback miss \u2014 unoccupied zone above heating setback",
+      "description": "Night setback miss — unoccupied zone above heating setback",
       "required_roles": [
         "zone_t",
         "occ_mode"
@@ -450,7 +450,7 @@
       "rule_id": "FAULT-ELAPSED-HOURS",
       "sql_file": "fault_elapsed_hours.sql",
       "pandas_function": null,
-      "description": "Comfort fault sample count \u2192 hours",
+      "description": "Comfort fault sample count → hours",
       "required_roles": [
         "zone_t"
       ],
@@ -1525,7 +1525,7 @@
       "parity_status": "sql_screening",
       "dashboard_wired": true,
       "delete_python_candidate": false,
-      "blocker": "htg_valve_pct missing on some AHUs \u2014 Python and SQL both skip",
+      "blocker": "htg_valve_pct missing on some AHUs — Python and SQL both skip",
       "confirm_seconds": 600,
       "parameters": {
         "minimum_active_coverage_pct": {
@@ -1827,7 +1827,7 @@
           "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
-          "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
+          "label": "Supply-fan delta (GL36 0.55 °F)",
           "default": 0.55,
           "min": 0.0,
           "max": 5.0,
@@ -2051,7 +2051,7 @@
           "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
-          "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
+          "label": "Supply-fan delta (GL36 0.55 °F)",
           "default": 0.55,
           "min": 0.0,
           "max": 5.0,
@@ -2501,7 +2501,7 @@
           "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
-          "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
+          "label": "Supply-fan delta (GL36 0.55 °F)",
           "default": 0.55,
           "min": 0.0,
           "max": 5.0,
@@ -2742,7 +2742,7 @@
           "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
-          "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
+          "label": "Supply-fan delta (GL36 0.55 °F)",
           "default": 0.55,
           "min": 0.0,
           "max": 5.0,
@@ -3040,7 +3040,7 @@
           "effect": "branch_sensitive"
         },
         "oat_rat_delta_min": {
-          "label": "Min |RAT\u2212OAT| for OA-fraction estimate (\u00b0F)",
+          "label": "Min |RAT−OAT| for OA-fraction estimate (°F)",
           "default": 1.222222,
           "min": 0.277778,
           "max": 5.555556,
@@ -4312,7 +4312,7 @@
           "effect": "branch_sensitive"
         },
         "delta_supply_fan": {
-          "label": "Supply-fan delta (GL36 0.55 \u00b0F)",
+          "label": "Supply-fan delta (GL36 0.55 °F)",
           "default": 0.55,
           "min": 0.0,
           "max": 5.0,
@@ -4542,7 +4542,7 @@
       ],
       "sql_file": "fc14_chw_coil_dt_inactive.sql",
       "pandas_function": null,
-      "description": "CHW coil \u0394T when inactive (GL36 L)",
+      "description": "CHW coil ΔT when inactive (GL36 L)",
       "required_roles": [
         "clg_valve_pct"
       ],
@@ -4802,7 +4802,7 @@
       ],
       "sql_file": "fc15_hw_coil_dt_inactive.sql",
       "pandas_function": null,
-      "description": "HW coil \u0394T when inactive (GL36 M)",
+      "description": "HW coil ΔT when inactive (GL36 M)",
       "required_roles": [],
       "optional_roles": [
         "heating_coil_entering_temp",
@@ -5679,7 +5679,7 @@
           "effect": "no_op"
         },
         "preheat_over_f": {
-          "label": "Preheat over \u0394T",
+          "label": "Preheat over ΔT",
           "default": 1.222222,
           "min": 0.277778,
           "max": 4.444444,
@@ -6053,7 +6053,7 @@
       ],
       "sql_file": "mech_oat_1.sql",
       "pandas_function": null,
-      "description": "Mechanical cooling below 60\u00b0F web OAT",
+      "description": "Mechanical cooling below 60°F web OAT",
       "required_roles": [
         "web_oa_t"
       ],
@@ -6357,7 +6357,7 @@
           "effect": "no_op"
         },
         "leak_delta": {
-          "label": "Leak \u0394T",
+          "label": "Leak ΔT",
           "default": 1.111111,
           "min": 0.277778,
           "max": 3.333333,
@@ -6472,7 +6472,7 @@
           "effect": "no_op"
         },
         "sat_err": {
-          "label": "SAT vs SP leak \u0394T",
+          "label": "SAT vs SP leak ΔT",
           "default": 1.111111,
           "min": 0.277778,
           "max": 4.444444,
@@ -6487,7 +6487,7 @@
           "effect": "branch_sensitive"
         },
         "mat_leak_delta": {
-          "label": "SAT vs MAT leak \u0394T",
+          "label": "SAT vs MAT leak ΔT",
           "default": 1.111111,
           "min": 0.277778,
           "max": 6.666667,
@@ -7252,7 +7252,7 @@
       "confirm_seconds": 900,
       "parameters": {
         "delta_f": {
-          "label": "Leave \u0394 vs AHU SAT",
+          "label": "Leave Δ vs AHU SAT",
           "default": 8.0,
           "min": 2.0,
           "max": 25.0,
@@ -7765,7 +7765,7 @@
       ],
       "sql_file": "chw1_low_dt.sql",
       "pandas_function": "chw1",
-      "description": "Low chilled-water \u0394T",
+      "description": "Low chilled-water ΔT",
       "required_roles": [
         "chw_supply_t",
         "chw_return_t"
@@ -7836,17 +7836,17 @@
         },
         "min_dt": {
           "label": "Minimum delta-T",
-          "default": 4.0,
-          "min": 1.0,
-          "max": 12.0,
-          "step": 0.5,
-          "unit": "degF",
+          "default": 2.222222,
+          "min": 0.555556,
+          "max": 6.666667,
+          "step": 0.277778,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "MIN_DT",
           "key": "min_dt",
           "control": "slider",
           "effect_in_sql": true,
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "effect": "branch_sensitive"
         },
         "confirm_min": {
@@ -7946,11 +7946,11 @@
         },
         "dp_margin": {
           "label": "DP margin",
-          "default": 2.2,
-          "min": 0.5,
-          "max": 6.0,
-          "step": 0.1,
-          "unit": "psi",
+          "default": 15.168465,
+          "min": 3.447379,
+          "max": 41.368542,
+          "step": 0.689476,
+          "unit": "kPa",
           "frontend_control": "slider",
           "sql_placeholder": "DP_MARGIN",
           "key": "dp_margin",
@@ -8072,17 +8072,17 @@
         },
         "sp_band": {
           "label": "SP band",
-          "default": 2.2,
-          "min": 0.5,
-          "max": 6.0,
-          "step": 0.1,
-          "unit": "degF",
+          "default": 1.222222,
+          "min": 0.277778,
+          "max": 3.333333,
+          "step": 0.055556,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "SP_BAND",
           "key": "sp_band",
           "control": "slider",
           "effect_in_sql": true,
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "effect": "branch_sensitive"
         },
         "confirm_min": {
@@ -8181,11 +8181,11 @@
         },
         "flow_hi": {
           "label": "Flow high",
-          "default": 1100.0,
-          "min": 200.0,
-          "max": 3000.0,
-          "step": 50.0,
-          "unit": "gpm",
+          "default": 69.39922,
+          "min": 12.61804,
+          "max": 189.2706,
+          "step": 3.15451,
+          "unit": "L_per_s",
           "frontend_control": "slider",
           "sql_placeholder": "FLOW_HI",
           "key": "flow_hi",
@@ -8313,32 +8313,32 @@
         },
         "cw_approach": {
           "label": "Design approach",
-          "default": 7.0,
-          "min": 3.0,
-          "max": 15.0,
-          "step": 0.5,
-          "unit": "degF",
+          "default": 3.888889,
+          "min": 1.666667,
+          "max": 8.333333,
+          "step": 0.277778,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "CW_APPROACH",
           "key": "cw_approach",
           "control": "slider",
           "effect_in_sql": true,
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "effect": "branch_sensitive"
         },
         "cw_slack": {
           "label": "Slack below target",
-          "default": 2.0,
-          "min": 0.5,
-          "max": 6.0,
-          "step": 0.5,
-          "unit": "degF",
+          "default": 1.111111,
+          "min": 0.277778,
+          "max": 3.333333,
+          "step": 0.277778,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "CW_SLACK",
           "key": "cw_slack",
           "control": "slider",
           "effect_in_sql": true,
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "effect": "branch_sensitive"
         },
         "confirm_min": {
@@ -8444,21 +8444,6 @@
           "kind": "boolean",
           "effect": "no_op"
         },
-        "approach_max_f": {
-          "label": "Max approach at full fan",
-          "default": 8.0,
-          "min": 5.0,
-          "max": 15.0,
-          "step": 0.5,
-          "unit": "degF",
-          "frontend_control": "slider",
-          "sql_placeholder": "APPROACH_MAX_F",
-          "key": "approach_max_f",
-          "control": "slider",
-          "effect_in_sql": true,
-          "kind": "temperature_difference",
-          "effect": "branch_sensitive"
-        },
         "tower_fan_hi": {
           "label": "Tower fan full-speed threshold",
           "default": 0.95,
@@ -8486,6 +8471,21 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true,
           "kind": "duration_minutes",
+          "effect": "branch_sensitive"
+        },
+        "approach_max": {
+          "key": "approach_max",
+          "control": "slider",
+          "label": "Max approach at full fan",
+          "default": 4.444444,
+          "min": 2.777778,
+          "max": 8.333333,
+          "step": 0.277778,
+          "unit": "degC",
+          "kind": "temperature_difference",
+          "frontend_control": "slider",
+          "sql_placeholder": "APPROACH_MAX",
+          "effect_in_sql": true,
           "effect": "branch_sensitive"
         }
       },
@@ -8579,29 +8579,14 @@
         },
         "cw_approach": {
           "label": "Design approach",
-          "default": 7.0,
-          "min": 3.0,
-          "max": 15.0,
-          "step": 0.5,
-          "unit": "degF",
+          "default": 3.888889,
+          "min": 1.666667,
+          "max": 8.333333,
+          "step": 0.277778,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "CW_APPROACH",
           "key": "cw_approach",
-          "control": "slider",
-          "effect_in_sql": true,
-          "kind": "absolute_temperature",
-          "effect": "branch_sensitive"
-        },
-        "excess_beyond_approach_f": {
-          "label": "Excess beyond approach",
-          "default": 5.0,
-          "min": 2.0,
-          "max": 20.0,
-          "step": 0.5,
-          "unit": "degF",
-          "frontend_control": "slider",
-          "sql_placeholder": "EXCESS_BEYOND_APPROACH_F",
-          "key": "excess_beyond_approach_f",
           "control": "slider",
           "effect_in_sql": true,
           "kind": "temperature_difference",
@@ -8634,6 +8619,21 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "effect_in_sql": true,
           "kind": "duration_minutes",
+          "effect": "branch_sensitive"
+        },
+        "excess_beyond_approach": {
+          "key": "excess_beyond_approach",
+          "control": "slider",
+          "label": "Excess beyond approach",
+          "default": 2.777778,
+          "min": 1.111111,
+          "max": 11.111111,
+          "step": 0.277778,
+          "unit": "degC",
+          "kind": "temperature_difference",
+          "frontend_control": "slider",
+          "sql_placeholder": "EXCESS_BEYOND_APPROACH",
+          "effect_in_sql": true,
           "effect": "branch_sensitive"
         }
       },
@@ -8725,11 +8725,11 @@
         },
         "min_sat": {
           "label": "Min discharge SAT",
-          "default": 85.0,
-          "min": 70.0,
-          "max": 110.0,
-          "step": 1.0,
-          "unit": "degF",
+          "default": 29.444444,
+          "min": 21.111111,
+          "max": 43.333333,
+          "step": 0.555556,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "MIN_SAT",
           "key": "min_sat",
@@ -8740,11 +8740,11 @@
         },
         "zone_cold": {
           "label": "Zone cold threshold",
-          "default": 69.0,
-          "min": 60.0,
-          "max": 72.0,
-          "step": 0.5,
-          "unit": "degF",
+          "default": 20.555556,
+          "min": 15.555556,
+          "max": 22.222222,
+          "step": 0.277778,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "ZONE_COLD",
           "key": "zone_cold",
@@ -8914,11 +8914,11 @@
         },
         "duct_hi": {
           "label": "Duct static high",
-          "default": 1.35,
-          "min": 0.5,
-          "max": 3.0,
-          "step": 0.05,
-          "unit": "in_wc",
+          "default": 335.934,
+          "min": 124.42,
+          "max": 746.52,
+          "step": 12.442,
+          "unit": "Pa",
           "frontend_control": "slider",
           "sql_placeholder": "DUCT_HI",
           "key": "duct_hi",
@@ -9044,11 +9044,11 @@
         },
         "hwst_hi": {
           "label": "HWST high",
-          "default": 160.0,
-          "min": 120.0,
-          "max": 200.0,
-          "step": 1.0,
-          "unit": "degF",
+          "default": 71.111111,
+          "min": 48.888889,
+          "max": 93.333333,
+          "step": 0.555556,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "HWST_HI",
           "key": "hwst_hi",
@@ -9174,11 +9174,11 @@
         },
         "chw_lo": {
           "label": "CHWS low",
-          "default": 45.0,
-          "min": 35.0,
-          "max": 55.0,
-          "step": 0.5,
-          "unit": "degF",
+          "default": 7.222222,
+          "min": 1.666667,
+          "max": 12.777778,
+          "step": 0.277778,
+          "unit": "degC",
           "frontend_control": "slider",
           "sql_placeholder": "CHW_LO",
           "key": "chw_lo",
@@ -9265,7 +9265,7 @@
           "min": 50.0,
           "max": 80.0,
           "step": 0.5,
-          "unit": "\u00b0F",
+          "unit": "°F",
           "frontend_control": "slider",
           "sql_placeholder": "ZONE_T_LO",
           "key": "comfort_low_f",
@@ -9280,7 +9280,7 @@
           "min": 55.0,
           "max": 90.0,
           "step": 0.5,
-          "unit": "\u00b0F",
+          "unit": "°F",
           "frontend_control": "slider",
           "sql_placeholder": "ZONE_T_HI",
           "key": "comfort_high_f",

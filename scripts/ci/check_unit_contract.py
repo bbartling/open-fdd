@@ -25,7 +25,7 @@ from unit_contract_lib import (  # noqa: E402
     collect_alias_map,
     convert_to_canonical,
     derive_tuner_effect,
-    infer_kind,
+    assert_unit_matches_kind,
     load_json,
     normalize_alias,
     registry_param_blocks,
@@ -121,6 +121,7 @@ def check_manifest_digest() -> None:
 
 
 def check_registry_kinds() -> None:
+    metric = load_json(METRIC_UNITS)
     text = REGISTRY.read_text(encoding="utf-8")
     missing = []
     for rule_id, key, unit, _ in registry_param_blocks(text):
@@ -128,9 +129,10 @@ def check_registry_kinds() -> None:
         if kind is None:
             missing.append(f"{rule_id}.{key}")
             continue
-        expected = infer_kind(key, unit)
-        if kind != expected:
-            fail(f"registry {rule_id}.{key}: kind {kind} != expected {expected}")
+        try:
+            assert_unit_matches_kind(metric, f"registry {rule_id}.{key}", kind, unit)
+        except ValueError as exc:
+            fail(str(exc))
     if missing:
         fail(f"registry parameters missing kind: {missing[:20]} (total {len(missing)})")
     print(f"PASS registry.yaml parameter kinds ({len(list(registry_param_blocks(text)))})")
@@ -138,7 +140,10 @@ def check_registry_kinds() -> None:
 
 def check_tuning_catalog() -> None:
     data = load_json(TUNING)
-    expected = apply_tuning_catalog(json.loads(json.dumps(data)))
+    try:
+        expected = apply_tuning_catalog(json.loads(json.dumps(data)))
+    except ValueError as exc:
+        fail(str(exc))
     for rule_a, rule_b in zip(data["rules"], expected["rules"], strict=True):
         rid = rule_a["rule_id"]
         pa = rule_a.get("parameters") or {}
@@ -182,8 +187,8 @@ def check_metadata_only_diff() -> None:
         fail(str(exc))
     print(
         "PASS registry.yaml and tuning_catalog.json differ from merge-base with the "
-        "default branch only by kind/effect, SQL-justified optional_roles additions, "
-        "or kind-aware SI contract fields"
+        "default branch only by kind/effect, declared-kind SI cutover, additive "
+        "equipment_kinds, and SQL-justified optional_roles additions"
     )
 
 
