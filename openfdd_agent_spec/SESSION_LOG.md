@@ -1474,3 +1474,8 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Preserved the full SQL engineering cookbook while moving it from the legacy `datafusion-sql-cookbook.md` name to `sql-cookbook.md`; updated path references and protected-path checks only. Retired the obsolete `docs/rules/datafusion-sql.md` lifecycle page.
 - Added the SI unit guide and ADR-012; updated SI/declared-unit/parity-chain guidance in root instructions, cookbook ownership, schema/template, contracts, analytics docs, parity/gap pages, and the canonical cookbook-parity skill. Generated parity inventory remains explicitly legacy pending an actual candidate `si-parity` artifact; no P0/P2 or FQ result was invented.
 - Reconciled rule equations, parameter keys/defaults, absolute-versus-delta temperature units, pressure limits, and flow examples across both protected cookbooks. The remaining imperial unit mention is the explicit source-limit conversion proof in the pandas sweep-catalog text. Local architecture, cookbook docs-only, generated-report freshness, unit/default audit, and `git diff --check` pass. The generated candidate SI parity artifact is an external dependency and remains explicitly absent; no P0/P2 or FQ result was invented.
+
+
+## 2026-10-30 — W5d review: canonical SI agent instructions
+
+Removed conflicting pre-SI instructions from canonical AGENTS rules34/36 and DATA_CONTRACT FDD/append tables. Source unit validation and one-time writer normalization now agree with metric-c-v2; display preference cannot select a processing ABI. Clarified complete sample identity for idempotency. This documentation describes the candidate, not a claim that the live 4.0.6 stack was migrated or W9 qualified.

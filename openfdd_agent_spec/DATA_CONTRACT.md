@@ -139,7 +139,7 @@ Target shape (Phase 4 hardening):
 | Registry | `sql/fdd/registry.yaml` |
 | Rules | `sql/fdd/postgres/rules/*.sql` |
 | Storage | Timescale / PostgreSQL. Rule results persist in PostgreSQL or bounded memory. A file-format result cache is not permitted; the result cache is the PostgreSQL `analytics_result` table. |
-| Units | °F canonical. Metric inputs convert at query (`unit_system=metric\|si`). |
+| Units | `metric-c-v2` SI storage and processing. The canonical writer normalizes supported engineer-declared source units once; SQL reads SI directly. Rule parameters declare their quantity/kind and SI unit. User display preference is independent. |
 | Time | UTC `timestamptz`. Fault duration uses the forward timestamp delta. A gap longer than `MAX_GAP_HOURS` (default 1) is unknown: not fault time and not covered time. |
 | Ingest | Normal Framework portal API and CSV packages only |
 
@@ -154,8 +154,8 @@ Agents must not treat pandas oracle output as production FDD execution. `sql_rul
 | Seed | `POST /api/csv/import/package` |
 | Append | `POST /api/csv/import/package/append` with JWT + `confirm: true` |
 | Body | `{ building_id, equipment_id, csv }` history_wide chunk |
-| Dedup | exact `timestamp` last-write-wins |
-| Units | session `unit_system`; FDD converts metric→°F at query |
+| Dedup | exact `(site_id, openfdd_key, ts)` sample identity; identical replay is idempotent |
+| Units | Validate declared source quantity/unit at ingest and store canonical SI through the same Timescale writer. Session display preference does not convert stored samples or SQL inputs. |
 
 Do not commit vendor appenders or full Building 50 zips. CI uses `tests/fixtures/hourly_append/`.
 
