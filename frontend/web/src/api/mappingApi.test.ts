@@ -23,7 +23,7 @@ describe("mappingApi", () => {
             JSON.stringify({
               ok: true,
               building_id: "B1",
-              unit_system: "imperial",
+              display_units: "imperial",
               equipment_ids: ["AHU_1"],
               equipment: [
                 {
@@ -90,7 +90,7 @@ describe("mappingApi", () => {
     const json = buildMappingManifest({
       ok: true,
       building_id: "B1",
-      unit_system: "metric",
+      display_units: "metric",
       validation: { blocker_count: 1, warning_count: 2, equipment_count: 1 },
       equipment: [
         {

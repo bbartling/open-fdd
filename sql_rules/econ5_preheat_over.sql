@@ -25,8 +25,8 @@ base AS (
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN preheat_leave_t IS NULL OR sat_sp IS NULL OR oa_t IS NULL THEN 0
       WHEN htg > {{HTG_OPEN_MIN}} AND (
-        (oa_t > sat_sp AND preheat_leave_t - oa_t > {{PREHEAT_OVER_F}})
-        OR (oa_t < sat_sp AND preheat_leave_t - sat_sp > {{PREHEAT_OVER_F}})
+        (oa_t > sat_sp AND preheat_leave_t - oa_t > {{PREHEAT_OVER}})
+        OR (oa_t < sat_sp AND preheat_leave_t - sat_sp > {{PREHEAT_OVER}})
       ) THEN 1
       ELSE 0
     END AS INT) AS raw_fault

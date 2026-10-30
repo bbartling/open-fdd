@@ -85,7 +85,7 @@ export async function loadOverviewRcxPreset(
   const body = {
     building_id: buildingId,
     max_points: 4000,
-    dt_min_f: 10,
+    dt_min_c: 10,
     ...window,
     ...(refresh ? { refresh: true } : {}),
   };
@@ -138,7 +138,7 @@ export async function loadOverviewRcxPreset(
     presetId === "economizer_temps_overlay"
   ) {
     const env = normalizeTipOverviewEnvelope("economizer", await postEconomizer(body, { signal }), {
-      dtMinF: body.dt_min_f,
+      dtMinC: body.dt_min_c,
     });
     const points = env.points ?? [];
     if (presetId === "economizer_delta") {

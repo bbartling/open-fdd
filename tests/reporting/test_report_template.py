@@ -97,12 +97,13 @@ def test_api_and_vendor_sources_wait_for_a_reader():
     with pytest.raises(NotImplementedError, match="Vendor API"):
         VendorApiSource("example-vendor").load()
     frame = pd.DataFrame(
-        {"discharge-air-temp": [55.0]},
+        {"discharge-air-temp": [12.7777777778]},
         index=pd.date_range("2026-06-01", periods=1, freq="h", tz="UTC"),
     )
+    frame.attrs["storage_abi"] = "metric-c-v2"
     loaded = OpenFddApiSource("https://central.example", reader=lambda: frame).load()
     assert loaded.source_id == "openfdd_api"
-    assert loaded.frame["discharge-air-temp"].iloc[0] == 55.0
+    assert loaded.frame["discharge-air-temp"].iloc[0] == pytest.approx(12.7777777778)
 
 
 def test_ai_comment_slot_lands_in_the_pdf(tmp_path):

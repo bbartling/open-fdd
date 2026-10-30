@@ -17,9 +17,11 @@ python scripts/cookbook_parity_check.py --all
 
 Workflow: `.github/workflows/cookbook-parity.yml`.
 
-When changing rule identity or count, update both cookbooks and the parity
-matrix in the same PR family. Accidental cookbook shrinkage must fail CI
-(harden under Milestone A Phase 0/2).
+SI (`metric-c-v2`) is canonical for storage and processing. Engineer-declared source units are normalized once by the Timescale writer; rule parameters declare semantic kinds and SI units. Display preference conversion is presentation-only.
+
+When changing rule identity or count, update both cookbooks and the parity matrix in the same PR family. Preserve the PostgreSQL SQL expression cookbook and pandas oracle cookbook. Accidental cookbook shrinkage must fail CI.
+
+For SI cutover claims, document the ordered chain: frozen IP baseline, pandas IP = pandas SI, pandas SI = SQL SI, then live post-cutover SQL SI = IP baseline per site. Offline parity does not establish live P3 or FQ.
 
 Display-name contract (registry `description` ↔ cookbook short title ↔ React
 labels): [`docs/RULE_DISPLAY_NAMES.md`](../../docs/RULE_DISPLAY_NAMES.md).

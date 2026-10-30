@@ -424,7 +424,7 @@ fn config_material(req: &AnalyticsRequest, identity: &CacheIdentity) -> String {
         "req_qv={}\nread_tenant={}\ndt_min={}\ngap={}\nmax_points={}\nequipment={}\nseries={}\nresult_contract={}\nsql_pack={}\nmodel_revision={}",
         req.query.query_version.as_deref().unwrap_or(""),
         req.read_tenant_id.as_deref().unwrap_or(""),
-        req.dt_min_f.map(|v| v.to_string()).unwrap_or_default(),
+        req.dt_min_c.map(|v| v.to_string()).unwrap_or_default(),
         req.max_gap_seconds
             .map(|v| v.to_string())
             .unwrap_or_default(),
@@ -454,7 +454,7 @@ fn legacy_request_material(req: &AnalyticsRequest) -> String {
         "req_qv={}\nread_tenant={}\ndt_min={}\ngap={}\nmax_points={}\nequipment={}\nseries={}",
         req.query.query_version.as_deref().unwrap_or(""),
         req.read_tenant_id.as_deref().unwrap_or(""),
-        req.dt_min_f.map(|v| v.to_string()).unwrap_or_default(),
+        req.dt_min_c.map(|v| v.to_string()).unwrap_or_default(),
         req.max_gap_seconds
             .map(|v| v.to_string())
             .unwrap_or_default(),

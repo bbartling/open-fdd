@@ -13,11 +13,11 @@ from open_fdd.rules.cookbook_catalog import _f, _false, as_bool, norm_cmd
 
 
 def resolve_web_drybulb_dewpoint(d: pd.DataFrame) -> tuple[pd.Series | None, pd.Series | None, str]:
-    """Return (dry_bulb_f, dewpoint_f, source) from web weather columns only.
+    """Return (dry_bulb_c, dewpoint_c, source) from web weather columns only.
 
     Dewpoint comes from ``web-outside-air-dewpoint`` or is calculated from web DB+RH.
     """
-    from open_fdd.analytics.weather_psychrometrics import dewpoint_f_from_db_rh
+    from open_fdd.analytics.weather_psychrometrics import dewpoint_c_from_db_rh
 
     if "web-outside-air-temp" not in d.columns or not d["web-outside-air-temp"].notna().any():
         return None, None, "missing_web_oat"
@@ -27,7 +27,7 @@ def resolve_web_drybulb_dewpoint(d: pd.DataFrame) -> tuple[pd.Series | None, pd.
         return db, dp, "web_dewpoint"
     if "web-outside-air-humidity" in d.columns and d["web-outside-air-humidity"].notna().any():
         rh = pd.to_numeric(d["web-outside-air-humidity"], errors="coerce")
-        dp = dewpoint_f_from_db_rh(db, rh)
+        dp = dewpoint_c_from_db_rh(db, rh)
         return db, dp, "web_db_rh_magnus"
     return db, None, "missing_web_dewpoint_and_rh"
 
@@ -36,11 +36,11 @@ def free_cool_opportunity_mask(
     db: pd.Series,
     dp: pd.Series,
     *,
-    db_min: float = 60.0,
-    db_max: float = 72.0,
-    dp_max: float = 60.0,
+    db_min: float = 15.555556,
+    db_max: float = 22.222222,
+    dp_max: float = 15.555556,
 ) -> pd.Series:
-    """60°F ≤ DB < 72°F AND DP < 60°F (inclusive low dry-bulb)."""
+    """15.6°C ≤ DB < 22.2°C AND DP < 15.6°C (inclusive low dry-bulb)."""
     return db.notna() & dp.notna() & (db >= db_min) & (db < db_max) & (dp < dp_max)
 
 
@@ -62,7 +62,7 @@ def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> 
     """Fault: mech cooling while free cooling available but OA damper not integrated-open.
 
     Weather: strict web dry-bulb + dewpoint (calculated from web RH if needed).
-    Band: 60 ≤ DB < 72°F and DP < 60°F. Damper must be ≥ integrated threshold (default 90%).
+    Band: 15.6 ≤ DB < 22.2°C and DP < 15.6°C. Damper must be ≥ integrated threshold (default 90%).
     """
     del wx_ok  # web presence is resolved explicitly below
     if not {"outside-air-damper", "cooling-valve"}.issubset(d.columns):
@@ -72,9 +72,9 @@ def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> 
         d.attrs["econ3_weather_source"] = src
         return _false(d.index)
 
-    db_min = _f(p, "econ3_db_min", 60.0)
-    db_max = _f(p, "econ3_db_max", 72.0)
-    dp_max = _f(p, "econ3_dp_max", 60.0)
+    db_min = _f(p, "econ3_db_min", 15.555556)
+    db_max = _f(p, "econ3_db_max", 22.222222)
+    dp_max = _f(p, "econ3_dp_max", 15.555556)
     damper_hi = _f(p, "econ3_damper_hi", 0.90)
 
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
@@ -90,11 +90,11 @@ def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> 
 def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     """Fault: economizer-OK web weather with cooling demand, but OA damper not economizing.
 
-    Economizer OK: web dew point < 60°F AND dry-bulb < 72°F (above a freeze-guard
-    floor, default 35°F). Dewpoint comes from the web sensor or is calculated from
+    Economizer OK: web dew point < 15.555556°C AND dry-bulb < 22.222222°C (above a freeze-guard
+    floor, default 1.666667°C). Dewpoint comes from the web sensor or is calculated from
     web DB+RH. Cooling demand: cooling valve open OR proven DX/chiller cooling.
-    Expected operation: economizer-only below 60°F DB (see MECH-OAT-1) and
-    mech + integrated economizer in the 60–72°F band (see ECON-3).
+    Expected operation: economizer-only below 15.555556°C DB (see MECH-OAT-1) and
+    mech + integrated economizer in the 60–22.222222°C band (see ECON-3).
     """
     del poll
     if "outside-air-damper" not in d.columns:
@@ -104,9 +104,9 @@ def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     if db is None or dp is None:
         return _false(d.index)
 
-    db_min = _f(p, "econ7_db_min", 35.0)
-    db_max = _f(p, "econ7_db_max", 72.0)
-    dp_max = _f(p, "econ7_dp_max", 60.0)
+    db_min = _f(p, "econ7_db_min", 1.666667)
+    db_max = _f(p, "econ7_db_max", 22.222222)
+    dp_max = _f(p, "econ7_dp_max", 15.555556)
     damper_min = _f(p, "econ7_damper_min", 0.50)
 
     econ_ok = free_cool_opportunity_mask(db, dp, db_min=db_min, db_max=db_max, dp_max=dp_max)
@@ -130,13 +130,13 @@ def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 
 def mech_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Fault: proven mechanical cooling while web dry-bulb < 60°F."""
+    """Fault: proven mechanical cooling while web dry-bulb < 15.555556°C."""
     del poll
     db, _dp, src = resolve_web_drybulb_dewpoint(d)
     d.attrs["mech_oat1_weather_source"] = src
     if db is None:
         return _false(d.index)
-    oat_max = _f(p, "mech_oat_max_f", 60.0)
+    oat_max = _f(p, "mech_oat_max", 60.0)
     run, kind = mechanical_proof_mask(d)
     d.attrs["mech_oat1_proof"] = kind
     if not kind:
@@ -145,7 +145,7 @@ def mech_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 
 def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Fault: OA damper above winter min-OA ceiling while web OAT < 25°F."""
+    """Fault: OA damper above winter min-OA ceiling while web OAT < −3.888889°C."""
     del poll
     if "outside-air-damper" not in d.columns:
         return _false(d.index)
@@ -153,7 +153,7 @@ def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     d.attrs["econ6_weather_source"] = src
     if db is None:
         return _false(d.index)
-    oat_max = _f(p, "econ6_oat_max_f", 25.0)
+    oat_max = _f(p, "econ6_oat_max", 25.0)
     damper_max = _f(p, "econ6_damper_max", 0.25)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return (db.notna() & (db < oat_max) & (econ > damper_max)).fillna(False)

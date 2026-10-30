@@ -12,7 +12,7 @@ Implementation order for expanding the public Open-FDD cookbooks. Priorities der
 
 ## P0 — validated pandas catalog ✅ (71 rules)
 
-Production Open-FDD SQL registry is **77** rules (`sql_rules/registry.yaml`). The **71** figure is the pandas oracle catalog floor (see [parity matrix](parity-matrix.html)). Nine of those diagnostics are the FCU / `zone_other` family.
+Production Open-FDD SQL registry is **77** rules (`sql/fdd/registry.yaml`). The **71** figure is the pandas oracle catalog floor (see [parity matrix](parity-matrix.html)). Nine of those diagnostics are the FCU / `zone_other` family.
 
 - Sensor sweeps: SV-RANGE, SV-FLATLINE, SV-SPIKE, SV-STALE, SV-RATE
 - Control: PID-HUNT-1

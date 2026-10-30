@@ -12,7 +12,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -36,9 +36,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -358,7 +358,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -391,9 +391,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -765,7 +765,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -822,9 +822,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -1327,7 +1327,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -1360,9 +1360,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -1750,7 +1750,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -1783,9 +1783,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -2173,7 +2173,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -2197,9 +2197,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -2528,7 +2528,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -2552,9 +2552,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -2883,7 +2883,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -2916,9 +2916,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -3243,7 +3243,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -3276,9 +3276,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -3653,7 +3653,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -3686,9 +3686,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -4083,7 +4083,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -4300,9 +4300,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -8177,7 +8177,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -8394,9 +8394,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -12280,7 +12280,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -12689,9 +12689,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -28599,7 +28599,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -29008,9 +29008,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -32880,7 +32880,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -33097,9 +33097,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -33478,7 +33478,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": []
     },
@@ -33695,9 +33695,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],
@@ -34027,7 +34027,7 @@
       "equipment_id",
       "bas_oa_t",
       "web_oa_t",
-      "delta_f"
+      "delta_c"
      ],
      "sql_si": [
       [
@@ -35294,9 +35294,9 @@
       "mat",
       "sat",
       "oa_damper_pct",
-      "delta_or_f",
-      "delta_mr_f",
-      "mat_resid_f",
+      "delta_or_c",
+      "delta_mr_c",
+      "mat_resid_c",
       "fan_on",
       "identifiable"
      ],

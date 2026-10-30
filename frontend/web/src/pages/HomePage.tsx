@@ -77,7 +77,7 @@ async function loadEquipment(key: string, signal: AbortSignal): Promise<FddEquip
 
 function readUnits(): "imperial" | "metric" {
   try {
-    return localStorage.getItem("openfdd.ui.unit_system") === "metric"
+    return localStorage.getItem("openfdd.ui.display_units") === "metric"
       ? "metric"
       : "imperial";
   } catch {

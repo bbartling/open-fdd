@@ -5,7 +5,7 @@ export type DisplayPreference = "imperial" | "metric";
 /** @deprecated use DisplayPreference */
 export type UnitSystem = DisplayPreference;
 
-export const DISPLAY_PREFERENCE_KEY = "openfdd.ui.unit_system";
+export const DISPLAY_PREFERENCE_KEY = "openfdd.ui.display_units";
 
 /** Imperial default for US English locales; SI (metric) otherwise. */
 export function defaultDisplayPreference(): DisplayPreference {

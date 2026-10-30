@@ -23,7 +23,7 @@ Some SQL rules check fan-on stability, while pandas GL36 rules suppress faults a
 - SV-RANGE, SV-FLATLINE and SV-SPIKE SQL now mirror the pandas operational gate fallback order (fan status, fan command, VAV zone airflow, pump, chiller). The airflow proof is 50 cfm = 23.597350 L/s on SI storage. The SQL checks airflow per row while pandas checks column presence; rows with NULL airflow fall through to the next proof in SQL.
 - The IP (P0, report-only) SQL rendering applies the SI airflow literal to cfm data, so P0 shows SV-FLATLINE value differences on VAV fixtures. P1 and P2 are the blocking stages.
 - The CI Timescale harness now seeds `point_map.unit` (authorized_series reads units from point_map since W1a #1406). Earlier goldens masked every sweep value and recorded zero SQL fault seconds.
-- SCHED-1 comfort tuners are `comfort_low`/`comfort_high` (degC). The runner's legacy `comfort_low_f` path is W4f scope.
+- SCHED-1 comfort tuners are `comfort_low`/`comfort_high` (degC), matching the SI runner parameters.
 
 ## Oracle versions
 

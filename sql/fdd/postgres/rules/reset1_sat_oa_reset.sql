@@ -22,7 +22,7 @@ base AS (
     CAST(CASE
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN sat_sp IS NULL OR oa_t IS NULL THEN 0
-      WHEN abs(sat_sp - ({{RESET_SAT_AT_65}} + {{RESET_SLOPE}} * (oa_t - {{RESET_OAT_REF}}))) > {{RESET_ERR_F}} THEN 1
+      WHEN abs(sat_sp - ({{RESET_SAT_AT_65}} + {{RESET_SLOPE}} * (oa_t - {{RESET_OAT_REF}}))) > {{RESET_ERR}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

@@ -67,6 +67,22 @@ def _window_filter(long: pd.DataFrame, ws: str | None, we: str | None) -> pd.Dat
     return out
 
 
+def _frame_window_filter(frame: pd.DataFrame, ws: str | None, we: str | None) -> pd.DataFrame:
+    """Apply the same half-open UTC window to a wide frame as `_window_filter`."""
+    out = frame
+    if ws:
+        start = pd.Timestamp(ws)
+        if start.tzinfo is None:
+            start = start.tz_localize("UTC")
+        out = out[out.index >= start]
+    if we:
+        end = pd.Timestamp(we)
+        if end.tzinfo is None:
+            end = end.tz_localize("UTC")
+        out = out[out.index < end]
+    return out
+
+
 
 
 def oracle_plant_health_inventory(*, equipment_id: str, equip_type: str) -> OracleRowSet:
@@ -174,7 +190,9 @@ def oracle_setpoints_snapshot(long: pd.DataFrame) -> OracleRowSet:
     return OracleRowSet(tuple(rows[:2000]), (0, 1, 2), (4,), "numeric_parity")
 
 
-def oracle_pid_hunting_proxy(long: pd.DataFrame) -> OracleRowSet:
+def oracle_pid_hunting_proxy(
+    long: pd.DataFrame, *, stddev_thresholds: dict[str, float] | None = None
+) -> OracleRowSet:
     roles = {
         "clg_valve_pct",
         "htg_valve_pct",
@@ -191,7 +209,8 @@ def oracle_pid_hunting_proxy(long: pd.DataFrame) -> OracleRowSet:
             continue
         vals = grp["val"]
         std = float(vals.std(ddof=1)) if len(vals) > 1 else 0.0
-        flag = "HUNT_PROXY" if len(vals) >= 24 and std > 8.0 else "OK"
+        threshold = float((stddev_thresholds or {}).get(role, 8.0))
+        flag = "HUNT_PROXY" if len(vals) >= 24 and std > threshold else "OK"
         rows.append(
             (
                 eid,
@@ -204,7 +223,7 @@ def oracle_pid_hunting_proxy(long: pd.DataFrame) -> OracleRowSet:
             )
         )
     rows.sort(key=lambda r: (-(r[5] or 0.0), r[2]))
-    return OracleRowSet(tuple(rows[:2000]), (0, 1, 2), (3, 4, 5), "numeric_parity")
+    return OracleRowSet(tuple(rows[:2000]), (0, 1, 2, 6), (3, 4, 5), "numeric_parity")
 
 
 def oracle_rcx_preset_role_coverage(long: pd.DataFrame) -> OracleRowSet:
@@ -299,7 +318,13 @@ def oracle_fuel_or_metering(long: pd.DataFrame, *, fuel: bool) -> OracleRowSet:
     return OracleRowSet(tuple(rows[:2000]), (0, 1, 2, 3), (4, 5, 6, 7, 8), "numeric_parity")
 
 
-def oracle_mv_change_point_daily(long: pd.DataFrame) -> OracleRowSet:
+def oracle_mv_change_point_daily(
+    long: pd.DataFrame,
+    *,
+    temperature_roles: set[str] | None = None,
+    temperature_origin_c: float = -17.77777777777778,
+    temperature_min_delta_c: float = 0.5555555555555556,
+) -> OracleRowSet:
     roles = {
         "electric_kwh",
         "gas_therm",
@@ -329,7 +354,14 @@ def oracle_mv_change_point_daily(long: pd.DataFrame) -> OracleRowSet:
                 if pd.isna(pavg):
                     continue
                 delta = float(row["mean"] - pavg)
-                if abs(delta) < max(abs(float(pavg)) * 0.25, 1.0):
+                if temperature_roles is not None and row["role"] in temperature_roles:
+                    threshold = max(
+                        abs(float(pavg) - temperature_origin_c) * 0.25,
+                        temperature_min_delta_c,
+                    )
+                else:
+                    threshold = max(abs(float(pavg)) * 0.25, 1.0)
+                if abs(delta) < threshold:
                     continue
                 rows.append(
                     (
@@ -433,7 +465,8 @@ def oracle_bas_vs_web_oat(
 
 
 def oracle_motor_weekly_runtime(
-    si_frame: pd.DataFrame, *, equipment_id: str, equip_type: str
+    si_frame: pd.DataFrame, *, equipment_id: str, equip_type: str,
+    ws: str | None = None, we: str | None = None,
 ) -> OracleRowSet:
     from open_fdd.analytics.core import motor_run_hours_weekly
 
@@ -446,7 +479,8 @@ def oracle_motor_weekly_runtime(
             "pump-cmd": "pump-cmd",
         }
     }
-    weekly = motor_run_hours_weekly({equipment_id: si_frame}, role_map)
+    windowed = _frame_window_filter(si_frame, ws, we)
+    weekly = motor_run_hours_weekly({equipment_id: windowed}, role_map)
     if weekly is None or weekly.empty:
         return OracleRowSet((), (0, 3, 4), (6, 7), "numeric_parity")
     rows: list[tuple[Any, ...]] = []
@@ -496,14 +530,25 @@ def build_oracle_for_stem(
         ),
         "schedule_occupancy": lambda: oracle_schedule_occupancy(long),
         "setpoints_snapshot": lambda: oracle_setpoints_snapshot(long),
-        "pid_hunting_proxy": lambda: oracle_pid_hunting_proxy(long),
+        "pid_hunting_proxy": lambda: oracle_pid_hunting_proxy(
+            long, stddev_thresholds=extra.get("pid_stddev_thresholds")
+        ),
         "rcx_preset_role_coverage": lambda: oracle_rcx_preset_role_coverage(long),
         "topology_equipment": lambda: oracle_topology_equipment(
             long, equipment_id=equipment_id, equip_type=equip_type
         ),
         "fuel_daily": lambda: oracle_fuel_or_metering(long, fuel=True),
         "metering_kwh": lambda: oracle_fuel_or_metering(long, fuel=False),
-        "mv_change_point_daily": lambda: oracle_mv_change_point_daily(long),
+        "mv_change_point_daily": lambda: oracle_mv_change_point_daily(
+            long,
+            temperature_roles=extra.get("change_point_temperature_roles"),
+            temperature_origin_c=float(
+                extra.get("change_point_temperature_origin_c", -17.77777777777778)
+            ),
+            temperature_min_delta_c=float(
+                extra.get("change_point_temperature_min_delta_c", 0.5555555555555556)
+            ),
+        ),
         "sql_anomaly_series": lambda: oracle_sql_anomaly_series(long),
         "sql_anomaly_zscore": lambda: oracle_sql_anomaly_zscore(
             long,
@@ -519,7 +564,7 @@ def build_oracle_for_stem(
             limit=int(extra.get("limit") or 500),
         ),
         "motor_weekly_runtime": lambda: oracle_motor_weekly_runtime(
-            si_frame, equipment_id=equipment_id, equip_type=equip_type
+            si_frame, equipment_id=equipment_id, equip_type=equip_type, ws=ws, we=we
         ),
     }
     fn = builders.get(stem)

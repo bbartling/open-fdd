@@ -29,7 +29,7 @@ OUT_DIR = ROOT / "sql_rules" / "generated"
 FIXTURE_ROOT = ROOT / "crates" / "fdd_rules" / "fixtures" / "oracle"
 TESTS_ROOT = ROOT / "tests"
 PANDAS_COOKBOOK = "docs/rules/cookbook/pandas-cookbook.md"
-SQL_COOKBOOK = "docs/rules/cookbook/datafusion-sql-cookbook.md"
+SQL_COOKBOOK = "docs/rules/cookbook/sql-cookbook.md"
 
 SQL_ANALYTICS = frozenset(
     {

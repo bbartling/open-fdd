@@ -29,7 +29,7 @@ base AS (
       WHEN COALESCE(proof_on, 0) = 0 THEN 0
       WHEN cw_supply_t IS NULL OR web_wb_t IS NULL OR fan IS NULL THEN 0
       WHEN fan >= {{TOWER_FAN_HI}}
-       AND (cw_supply_t - web_wb_t) > {{APPROACH_MAX_F}} THEN 1
+       AND (cw_supply_t - web_wb_t) > {{APPROACH_MAX}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

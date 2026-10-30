@@ -43,13 +43,13 @@ test.describe("T1284-5 display preference", () => {
     await metricRadio.check();
     await expect
       .poll(async () =>
-        page.evaluate(() => localStorage.getItem("openfdd.ui.unit_system")),
+        page.evaluate(() => localStorage.getItem("openfdd.ui.display_units")),
       )
       .toBe("metric");
     await imperialRadio.check();
     await expect
       .poll(async () =>
-        page.evaluate(() => localStorage.getItem("openfdd.ui.unit_system")),
+        page.evaluate(() => localStorage.getItem("openfdd.ui.display_units")),
       )
       .toBe("imperial");
   });

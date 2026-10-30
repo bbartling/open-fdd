@@ -446,23 +446,47 @@ def resolve_rule_params_ip_si(
     return params_ip, params_si
 
 
-def _role_unit(role: str) -> str | None:
-    from open_fdd.analytics.units import DEFAULT_ROLE_UNITS
+_FROZEN_IP_ROLE_SOURCE_UNITS = {
+    "discharge-air-temp": "degF",
+    "discharge-air-temp-sp": "degF",
+    "mixed-air-temp": "degF",
+    "return-air-temp": "degF",
+    "outside-air-temp": "degF",
+    "vav-discharge-air-temp": "degF",
+    "vav-inlet-air-temp": "degF",
+    "ahu-discharge-air-temp": "degF",
+    "chilled-water-supply-temp": "degF",
+    "chilled-water-return-temp": "degF",
+    "hot-water-supply-temp": "degF",
+    "hot-water-return-temp": "degF",
+    "zone-air-temp": "degF",
+    "web-outside-air-temp": "degF",
+    "web-outside-air-dewpoint": "degF",
+    "web-outside-air-wetbulb": "degF",
+    "outside-air-damper": "percent",
+    "cooling-valve": "percent",
+    "heating-valve": "percent",
+    "damper": "percent",
+    "reheat-valve": "percent",
+    "fan-cmd": "percent",
+    "control-output-pct": "percent",
+    "web-outside-air-humidity": "percent",
+    "outside-air-humidity": "percent",
+    "return-air-humidity": "percent",
+    "zone-air-humidity": "percent",
+    "zone-humidity": "percent",
+    "mixed-air-humidity": "percent",
+    "supply-air-humidity": "percent",
+    "duct-static-pressure": "inWC",
+    "duct-static-pressure-sp": "inWC",
+    "zone-airflow": "cfm",
+    "min-flow-sp": "cfm",
+}
 
-    u = DEFAULT_ROLE_UNITS.get(role)
-    if u in ("", None):
-        return None
-    if u == "°F":
-        return "degF"
-    if u == "in. w.c.":
-        return "inWC"
-    if u == "cfm":
-        return "cfm"
-    if u == "%":
-        return "percent"
-    if u == "bool":
-        return None
-    return str(u)
+
+def _role_unit(role: str) -> str | None:
+    # Frozen IP fixture semantics must not follow mutable product/display defaults.
+    return _FROZEN_IP_ROLE_SOURCE_UNITS.get(role)
 
 
 def _apply_unit_metadata(frame, unit_system: str) -> None:

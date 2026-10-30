@@ -51,13 +51,13 @@ def delta_f_to_delta_c(df: float) -> float:
     return df * 5.0 / 9.0
 
 
-def admit_temperature_to_pack_f(value: float, source_unit: str | None) -> float:
-    """Convert a temperature reading into imperial-f-v1 pack units (°F)."""
+def source_temperature_to_si(value: float, source_unit: str) -> float:
+    """Convert an explicitly declared source temperature to canonical °C."""
     tok = normalize_unit_token(source_unit)
     if tok in {"c", "degc", "celsius"}:
-        return celsius_to_fahrenheit(value)
-    if tok in {"f", "degf", "fahrenheit", ""}:
-        return value
+        return float(value)
+    if tok in {"f", "degf", "fahrenheit"}:
+        return fahrenheit_to_celsius(float(value))
     raise ValueError(f"unknown temperature unit: {source_unit!r}")
 
 
@@ -91,19 +91,19 @@ def norm_command(
     raise ValueError(f"unknown command representation: {representation!r}")
 
 
-def series_admit_temp_to_f(values, units=None):
+def series_source_temp_to_c(values, units):
     import numpy as np
     import pandas as pd
 
     vals = pd.to_numeric(values, errors="coerce")
     if units is None:
-        return vals
-    out = vals.copy()
+        raise ValueError("declared source units are required for temperature conversion")
+    out = pd.Series(np.nan, index=vals.index, dtype=float)
     for i, (v, u) in enumerate(zip(vals.tolist(), units.tolist(), strict=False)):
         if v is None or (isinstance(v, float) and np.isnan(v)):
             continue
         try:
-            out.iloc[i] = admit_temperature_to_pack_f(float(v), None if u is None else str(u))
+            out.iloc[i] = source_temperature_to_si(float(v), str(u))
         except ValueError:
             out.iloc[i] = np.nan
     return out

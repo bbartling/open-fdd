@@ -554,9 +554,19 @@ matrix:
   datafusion_sql_implementation: fc1_duct_static_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc1
   test_coverage: &id042
+  - tests/analytics/test_equipment_stamp.py
+  - tests/ci/test_unit_contract_si_cutover_diff.py
+  - tests/qualification/test_capture_ip_baseline.py
+  - tests/qualification/test_fc_tolerance_param_kinds.py
+  - tests/qualification/test_mode_delay_shared.py
+  - tests/qualification/test_product_sql_params.py
+  - tests/qualification/test_si_parity_gate_blocking.py
+  - tests/qualification/test_stress_evidence_integrity.py
+  - tests/qualification/test_stress_gate_fail_closed.py
   - tests/reporting/test_single_system_typst.py
   - tests/rules/test_evidence_json.py
   - tests/test_wattlab_parity_diff.py
+  - tests/units/test_unit_contract_metadata_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -1696,6 +1706,7 @@ matrix:
   datafusion_sql_implementation: sat_high_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc13
   test_coverage: &id114
+  - tests/qualification/test_fc_tolerance_param_kinds.py
   - tests/rules/test_parity_inventory.py
   parity_status: sql_screening
   known_semantic_differences: 'aliases: FC13 (not independent rules)'
@@ -1943,7 +1954,8 @@ matrix:
   pandas_implementation: fc15
   datafusion_sql_implementation: fc15_hw_coil_dt_inactive.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc15
-  test_coverage: &id126 []
+  test_coverage: &id126
+  - tests/qualification/test_fc_tolerance_param_kinds.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -1997,6 +2009,8 @@ matrix:
   datafusion_sql_implementation: ahu_satdev.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-satdev
   test_coverage: &id132
+  - tests/qualification/test_stress_gate_fail_closed.py
+  - tests/rules/test_sql_quality_contract.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -2059,6 +2073,7 @@ matrix:
   datafusion_sql_implementation: ahu_ducthi.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi
   test_coverage: &id138
+  - tests/qualification/test_stress_gate_fail_closed.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -2404,7 +2419,8 @@ matrix:
   pandas_implementation: econ4
   datafusion_sql_implementation: econ4_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-4
-  test_coverage: &id174 []
+  test_coverage: &id174
+  - tests/qualification/test_si_parity_gate_blocking.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -2449,7 +2465,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    preheat_over_f:
+    preheat_over:
       default: 2.2
       unit: degF
       min: 0.5
@@ -2509,7 +2525,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    econ6_oat_max_f:
+    econ6_oat_max:
       default: 25.0
       unit: degF
       min: 15.0
@@ -2630,7 +2646,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    mech_oat_max_f:
+    mech_oat_max:
       default: 60.0
       unit: degF
       min: 45.0
@@ -2746,7 +2762,7 @@ matrix:
       max: 1
       step: 0.05
       label: Valve open threshold
-    coil_delta_f:
+    coil_delta:
       default: 5.4
       unit: degF
       min: 1
@@ -2808,7 +2824,7 @@ matrix:
   - fan_cmd
   operational_proof_roles: &id226 []
   default_thresholds: &id227
-    pass_delta_f:
+    pass_delta:
       default: 5.4
       unit: degF
       min: 1
@@ -2839,7 +2855,7 @@ matrix:
   - fan_cmd
   operational_proof_roles: &id232 []
   default_thresholds: &id233
-    pass_delta_f:
+    pass_delta:
       default: 5.4
       unit: degF
       min: 1
@@ -2939,7 +2955,7 @@ matrix:
   optional_roles: &id249 []
   operational_proof_roles: &id250 []
   default_thresholds: &id251
-    deadband_c:
+    deadband:
       default: 1
       unit: degC
       min: 0
@@ -2950,6 +2966,7 @@ matrix:
   datafusion_sql_implementation: fcu_deadband.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-deadband
   test_coverage: &id252
+  - tests/ci/test_unit_contract_si_cutover_diff.py
   - tests/rules/test_fcu_family.py
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -2986,7 +3003,7 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: VAV-1
-  title: Zone comfort band violation hours with confirm window
+  title: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2
   equipment_types: &id259 []
   required_roles: &id260
   - zone_t
@@ -3029,6 +3046,13 @@ matrix:
       max: 85.0
       step: 0.5
       label: Zone high
+    require_occupied:
+      default: 1.0
+      unit: bool
+      min: 0.0
+      max: 1.0
+      step: 1.0
+      label: Require occupied
     confirm_seconds:
       default: 900
       unit: sec
@@ -3040,7 +3064,11 @@ matrix:
   datafusion_sql_implementation: vav1_comfort_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-1
   test_coverage: &id264
+  - tests/analytics/test_equipment_stamp.py
+  - tests/ci/test_unit_contract_si_cutover_diff.py
   - tests/rules/test_quality.py
+  - tests/rules/test_vav1_occupancy.py
+  - tests/rules/test_vav1_t1407.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -3092,7 +3120,8 @@ matrix:
   pandas_implementation: vav2
   datafusion_sql_implementation: vav2_night_setback.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-2
-  test_coverage: &id270 []
+  test_coverage: &id270
+  - tests/rules/test_vav1_occupancy.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -3160,7 +3189,9 @@ matrix:
   pandas_implementation: vav_3
   datafusion_sql_implementation: vav3_excessive_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-3
-  test_coverage: &id276 []
+  test_coverage: &id276
+  - tests/ci/test_unit_contract_si_cutover_diff.py
+  - tests/units/test_ip_unit_declaration.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -3438,7 +3469,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    delta_f:
+    delta:
       default: 8.0
       unit: degF
       min: 2.0
@@ -3768,7 +3799,8 @@ matrix:
   pandas_implementation: chw_4
   datafusion_sql_implementation: chw4_flow_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-4
-  test_coverage: &id336 []
+  test_coverage: &id336
+  - tests/units/test_ip_unit_declaration.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -3966,7 +3998,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    approach_max_f:
+    approach_max:
       default: 8.0
       unit: degF
       min: 5.0
@@ -4036,7 +4068,7 @@ matrix:
       max: 15.0
       step: 0.5
       label: Design approach
-    excess_beyond_approach_f:
+    excess_beyond_approach:
       default: 5.0
       unit: degF
       min: 2.0
@@ -4175,7 +4207,8 @@ matrix:
   pandas_implementation: trim_3
   datafusion_sql_implementation: trim3_hwst.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-3
-  test_coverage: &id378 []
+  test_coverage: &id378
+  - tests/units/test_registry_role_diff_guard.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -4257,14 +4290,14 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    comfort_low_f:
+    comfort_low:
       default: 70.0
       unit: °F
       min: 50.0
       max: 80.0
       step: 0.5
       label: Zone comfort low
-    comfort_high_f:
+    comfort_high:
       default: 75.0
       unit: °F
       min: 55.0
@@ -4275,6 +4308,7 @@ matrix:
   datafusion_sql_implementation: sched1_unoccupied_runtime.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-1
   test_coverage: &id390
+  - tests/analytics/test_equipment_stamp.py
   - tests/reporting/test_findings_smoke.py
   - tests/rules/test_catalog_smoke.py
   - tests/rules/test_quality.py
@@ -4348,7 +4382,7 @@ matrix:
       max: 1.0
       step: 1.0
       label: Require operational gate
-    reset_err_f:
+    reset_err:
       default: 3.0
       unit: degF
       min: 0.5
@@ -4615,7 +4649,7 @@ matrix:
       label: Zone comfort high (reference)
   pandas_implementation: null
   datafusion_sql_implementation: avg_zone_temp.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#avg-zone-temp
   test_coverage: &id429 []
   parity_status: sql_screening
   known_semantic_differences: SQL analytics rollup — not a pandas diagnostic
@@ -4630,7 +4664,7 @@ matrix:
   default_thresholds: &id431 {}
   pandas_implementation: null
   datafusion_sql_implementation: fan_runtime_hours.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#fan-runtime-hours
   test_coverage: &id432
   - tests/rules/test_parity_inventory.py
   parity_status: sql_screening
@@ -4660,7 +4694,7 @@ matrix:
       label: Zone comfort high
   pandas_implementation: null
   datafusion_sql_implementation: fault_elapsed_hours.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#fault-elapsed-hours
   test_coverage: &id435 []
   parity_status: sql_screening
   known_semantic_differences: SQL analytics rollup — not a pandas diagnostic
@@ -4681,7 +4715,7 @@ matrix:
       label: Interval MAE threshold
   pandas_implementation: null
   datafusion_sql_implementation: util_interval_fault.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#util-interval
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#util-interval
   test_coverage: &id438 []
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -4702,7 +4736,7 @@ matrix:
       label: Monthly kWh deviation
   pandas_implementation: null
   datafusion_sql_implementation: util_monthly_fault.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#util-monthly
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#util-monthly
   test_coverage: &id441 []
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -4731,7 +4765,7 @@ matrix:
       label: Zone comfort high
   pandas_implementation: null
   datafusion_sql_implementation: zone_comfort_pct.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#zone-comfort-pct
   test_coverage: &id444 []
   parity_status: sql_screening
   known_semantic_differences: SQL analytics rollup — not a pandas diagnostic
@@ -4753,7 +4787,7 @@ concepts:
   datafusion_sql_implementation: sv_range.sql
   sql_file: sv_range.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-range
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sv-range
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#sv-range
   test_coverage: *id006
   parity_status: sql_screening
   parity_level: sql_screening
@@ -4897,7 +4931,7 @@ concepts:
   datafusion_sql_implementation: sv_flatline.sql
   sql_file: sv_flatline.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-flatline
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sv-flatline
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#sv-flatline
   test_coverage: *id012
   parity_status: sql_screening
   parity_level: sql_screening
@@ -5032,7 +5066,7 @@ concepts:
   datafusion_sql_implementation: sv_spike.sql
   sql_file: sv_spike.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-spike
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sv-spike
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#sv-spike
   test_coverage: *id018
   parity_status: sql_screening
   parity_level: sql_screening
@@ -5185,7 +5219,7 @@ concepts:
   datafusion_sql_implementation: sv_stale.sql
   sql_file: sv_stale.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-stale
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sv-stale
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#sv-stale
   test_coverage: *id024
   parity_status: sql_screening
   parity_level: sql_screening
@@ -5294,7 +5328,7 @@ concepts:
   datafusion_sql_implementation: sv_rate.sql
   sql_file: sv_rate.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sv-rate
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sv-rate
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#sv-rate
   test_coverage: *id030
   parity_status: sql_screening
   parity_level: sql_screening
@@ -5420,7 +5454,7 @@ concepts:
   datafusion_sql_implementation: pid_hunt_1.sql
   sql_file: pid_hunt_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#pid-hunt-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#pid-hunt-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#pid-hunt-1
   test_coverage: *id036
   parity_status: sql_screening
   parity_level: sql_screening
@@ -5600,7 +5634,7 @@ concepts:
   datafusion_sql_implementation: fc1_duct_static_low.sql
   sql_file: fc1_duct_static_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc1
   test_coverage: *id042
   parity_status: sql_screening
   parity_level: sql_screening
@@ -5753,7 +5787,7 @@ concepts:
   datafusion_sql_implementation: fc2_mat_low.sql
   sql_file: fc2_mat_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc2
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc2
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc2
   test_coverage: *id048
   parity_status: sql_screening
   parity_level: sql_screening
@@ -5924,7 +5958,7 @@ concepts:
   datafusion_sql_implementation: fc3_mat_high.sql
   sql_file: fc3_mat_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc3
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc3
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc3
   test_coverage: *id054
   parity_status: sql_screening
   parity_level: sql_screening
@@ -6095,7 +6129,7 @@ concepts:
   datafusion_sql_implementation: fc4_os_hunting.sql
   sql_file: fc4_os_hunting.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc4
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc4
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc4
   test_coverage: *id060
   parity_status: sql_screening
   parity_level: sql_screening
@@ -6239,7 +6273,7 @@ concepts:
   datafusion_sql_implementation: fc5_sat_cold_heating.sql
   sql_file: fc5_sat_cold_heating.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc5
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc5
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc5
   test_coverage: *id066
   parity_status: sql_screening
   parity_level: sql_screening
@@ -6419,7 +6453,7 @@ concepts:
   datafusion_sql_implementation: fc6_oa_frac_mismatch.sql
   sql_file: fc6_oa_frac_mismatch.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc6
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc6
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc6
   test_coverage: *id072
   parity_status: sql_screening
   parity_level: sql_screening
@@ -6581,7 +6615,7 @@ concepts:
   datafusion_sql_implementation: fc7_sat_low_heating.sql
   sql_file: fc7_sat_low_heating.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc7
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc7
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc7
   test_coverage: *id078
   parity_status: sql_screening
   parity_level: sql_screening
@@ -6734,7 +6768,7 @@ concepts:
   datafusion_sql_implementation: fc8_sat_mat_econ.sql
   sql_file: fc8_sat_mat_econ.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc8
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc8
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc8
   test_coverage: *id084
   parity_status: sql_screening
   parity_level: sql_screening
@@ -6932,7 +6966,7 @@ concepts:
   datafusion_sql_implementation: fc9_oa_sat_sp_econ.sql
   sql_file: fc9_oa_sat_sp_econ.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc9
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc9
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc9
   test_coverage: *id090
   parity_status: sql_screening
   parity_level: sql_screening
@@ -7121,7 +7155,7 @@ concepts:
   datafusion_sql_implementation: fc10_mat_oa_clg.sql
   sql_file: fc10_mat_oa_clg.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc10
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc10
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc10
   test_coverage: *id096
   parity_status: sql_screening
   parity_level: sql_screening
@@ -7301,7 +7335,7 @@ concepts:
   datafusion_sql_implementation: fc11_oa_sat_sp_clg.sql
   sql_file: fc11_oa_sat_sp_clg.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc11
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc11
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc11
   test_coverage: *id102
   parity_status: sql_screening
   parity_level: sql_screening
@@ -7490,7 +7524,7 @@ concepts:
   datafusion_sql_implementation: fc12_sat_mat_clg.sql
   sql_file: fc12_sat_mat_clg.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc12
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc12
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc12
   test_coverage: *id108
   parity_status: sql_screening
   parity_level: sql_screening
@@ -7698,7 +7732,7 @@ concepts:
   datafusion_sql_implementation: sat_high_fault.sql
   sql_file: sat_high_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc13
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc13-sat-high
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc13-sat-high
   test_coverage: *id114
   parity_status: sql_screening
   parity_level: sql_screening
@@ -7878,7 +7912,7 @@ concepts:
   datafusion_sql_implementation: fc14_chw_coil_dt_inactive.sql
   sql_file: fc14_chw_coil_dt_inactive.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc14
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc14
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc14
   test_coverage: *id120
   parity_status: sql_screening
   parity_level: sql_screening
@@ -8085,7 +8119,7 @@ concepts:
   datafusion_sql_implementation: fc15_hw_coil_dt_inactive.sql
   sql_file: fc15_hw_coil_dt_inactive.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc15
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fc15
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fc15
   test_coverage: *id126
   parity_status: sql_screening
   parity_level: sql_screening
@@ -8301,7 +8335,7 @@ concepts:
   datafusion_sql_implementation: ahu_satdev.sql
   sql_file: ahu_satdev.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-satdev
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-satdev
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#ahu-satdev
   test_coverage: *id132
   parity_status: sql_screening
   parity_level: sql_screening
@@ -8427,7 +8461,7 @@ concepts:
   datafusion_sql_implementation: ahu_ducthi.sql
   sql_file: ahu_ducthi.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-ducthi
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#ahu-ducthi
   test_coverage: *id138
   parity_status: sql_screening
   parity_level: sql_screening
@@ -8562,7 +8596,7 @@ concepts:
   datafusion_sql_implementation: ahu_simul.sql
   sql_file: ahu_simul.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-simul
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-simul
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#ahu-simul
   test_coverage: *id144
   parity_status: sql_screening
   parity_level: sql_screening
@@ -8688,7 +8722,7 @@ concepts:
   datafusion_sql_implementation: oat_meteo_fault.sql
   sql_file: oat_meteo_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#oat-meteo
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#oat-meteo
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#oat-meteo
   test_coverage: *id150
   parity_status: sql_screening
   parity_level: sql_screening
@@ -8788,7 +8822,7 @@ concepts:
   datafusion_sql_implementation: econ1_stuck_closed.sql
   sql_file: econ1_stuck_closed.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#econ-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#econ-1
   test_coverage: *id156
   parity_status: sql_screening
   parity_level: sql_screening
@@ -8914,7 +8948,7 @@ concepts:
   datafusion_sql_implementation: economizer_fault.sql
   sql_file: economizer_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-2
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#econ-2
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#econ-2
   test_coverage: *id162
   parity_status: sql_screening
   parity_level: sql_screening
@@ -9049,7 +9083,7 @@ concepts:
   datafusion_sql_implementation: econ3_mech_without_econ.sql
   sql_file: econ3_mech_without_econ.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-3
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#econ-3
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#econ-3
   test_coverage: *id168
   parity_status: sql_screening
   parity_level: sql_screening
@@ -9211,7 +9245,7 @@ concepts:
   datafusion_sql_implementation: econ4_low_oa_frac.sql
   sql_file: econ4_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-4
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#econ-4
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#econ-4
   test_coverage: *id174
   parity_status: sql_screening
   parity_level: sql_screening
@@ -9346,7 +9380,7 @@ concepts:
   datafusion_sql_implementation: econ5_preheat_over.sql
   sql_file: econ5_preheat_over.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-5
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#econ-5
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#econ-5
   test_coverage: *id180
   parity_status: sql_screening
   parity_level: sql_screening
@@ -9392,7 +9426,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    preheat_over_f:
+    preheat_over:
       label: Preheat over ΔT
       default: 2.2
       min: 0.5
@@ -9400,7 +9434,7 @@ concepts:
       step: 0.1
       unit: degF
       frontend_control: slider
-      sql_placeholder: PREHEAT_OVER_F
+      sql_placeholder: PREHEAT_OVER
     htg_open_min:
       label: Heating valve open minimum
       default: 0.01
@@ -9481,7 +9515,7 @@ concepts:
   datafusion_sql_implementation: econ6_econ_freezing.sql
   sql_file: econ6_econ_freezing.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-6
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#econ-6
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#econ-6
   test_coverage: *id186
   parity_status: sql_screening
   parity_level: sql_screening
@@ -9527,7 +9561,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    econ6_oat_max_f:
+    econ6_oat_max:
       label: Winter OAT ceiling
       default: 25.0
       min: 15.0
@@ -9535,7 +9569,7 @@ concepts:
       step: 1.0
       unit: degF
       frontend_control: slider
-      sql_placeholder: ECON6_OAT_MAX_F
+      sql_placeholder: ECON6_OAT_MAX
     econ6_damper_max:
       label: Winter min-OA damper
       default: 0.25
@@ -9616,7 +9650,7 @@ concepts:
   datafusion_sql_implementation: econ7_ok_not_economizing.sql
   sql_file: econ7_ok_not_economizing.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-7
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#econ-7
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#econ-7
   test_coverage: *id192
   parity_status: sql_screening
   parity_level: sql_screening
@@ -9778,7 +9812,7 @@ concepts:
   datafusion_sql_implementation: mech_oat_1.sql
   sql_file: mech_oat_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#mech-oat-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#mech-oat-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#mech-oat-1
   test_coverage: *id198
   parity_status: sql_screening
   parity_level: sql_screening
@@ -9797,7 +9831,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    mech_oat_max_f:
+    mech_oat_max:
       label: Mech-cool OAT ceiling
       default: 60.0
       min: 45.0
@@ -9805,7 +9839,7 @@ concepts:
       step: 1.0
       unit: degF
       frontend_control: slider
-      sql_placeholder: MECH_OAT_MAX_F
+      sql_placeholder: MECH_OAT_MAX
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -9877,7 +9911,7 @@ concepts:
   datafusion_sql_implementation: chw_noload_1.sql
   sql_file: chw_noload_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-noload-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-noload-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#chw-noload-1
   test_coverage: *id204
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10003,7 +10037,7 @@ concepts:
   datafusion_sql_implementation: fcu_sensor_null.sql
   sql_file: fcu_sensor_null.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-sensor-null
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-sensor-null
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-sensor-null
   test_coverage: *id210
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10048,7 +10082,7 @@ concepts:
   datafusion_sql_implementation: fcu_htg_coil.sql
   sql_file: fcu_htg_coil.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-htg-coil
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-htg-coil
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-htg-coil
   test_coverage: *id216
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10067,7 +10101,7 @@ concepts:
       unit: frac
       frontend_control: slider
       sql_placeholder: VALVE_OPEN
-    coil_delta_f:
+    coil_delta:
       label: Minimum heating rise
       default: 5.4
       min: 1
@@ -10075,7 +10109,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: COIL_DELTA_F
+      sql_placeholder: COIL_DELTA
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -10097,7 +10131,7 @@ concepts:
   datafusion_sql_implementation: fcu_clg_coil.sql
   sql_file: fcu_clg_coil.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-clg-coil
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-clg-coil
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-clg-coil
   test_coverage: *id222
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10142,7 +10176,7 @@ concepts:
   datafusion_sql_implementation: fcu_valve_pass_htg.sql
   sql_file: fcu_valve_pass_htg.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-valve-pass-htg
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-valve-pass-htg
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-valve-pass-htg
   test_coverage: *id228
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10152,7 +10186,7 @@ concepts:
   startup_delay_seconds: null
   confirm_seconds: 900
   parameters:
-    pass_delta_f:
+    pass_delta:
       label: Passing temperature rise
       default: 5.4
       min: 1
@@ -10160,7 +10194,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: PASS_DELTA_F
+      sql_placeholder: PASS_DELTA
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -10182,7 +10216,7 @@ concepts:
   datafusion_sql_implementation: fcu_valve_pass_clg.sql
   sql_file: fcu_valve_pass_clg.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-valve-pass-clg
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-valve-pass-clg
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-valve-pass-clg
   test_coverage: *id234
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10192,7 +10226,7 @@ concepts:
   startup_delay_seconds: null
   confirm_seconds: 900
   parameters:
-    pass_delta_f:
+    pass_delta:
       label: Passing temperature drop
       default: 5.4
       min: 1
@@ -10200,7 +10234,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: PASS_DELTA_F
+      sql_placeholder: PASS_DELTA
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -10222,7 +10256,7 @@ concepts:
   datafusion_sql_implementation: fcu_damper_pos.sql
   sql_file: fcu_damper_pos.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-damper-pos
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-damper-pos
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-damper-pos
   test_coverage: *id240
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10276,7 +10310,7 @@ concepts:
   datafusion_sql_implementation: fcu_co2_damper.sql
   sql_file: fcu_co2_damper.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-co2-damper
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-co2-damper
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-co2-damper
   test_coverage: *id246
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10325,7 +10359,7 @@ concepts:
   datafusion_sql_implementation: fcu_deadband.sql
   sql_file: fcu_deadband.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-deadband
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-deadband
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-deadband
   test_coverage: *id252
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10335,7 +10369,7 @@ concepts:
   startup_delay_seconds: null
   confirm_seconds: 0
   parameters:
-    deadband_c:
+    deadband:
       label: Minimum deadband
       default: 1
       min: 0
@@ -10370,7 +10404,7 @@ concepts:
   datafusion_sql_implementation: fcu_mode_cycle.sql
   sql_file: fcu_mode_cycle.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-mode-cycle
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-mode-cycle
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fcu-mode-cycle
   test_coverage: *id258
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10411,7 +10445,7 @@ concepts:
 - canonical_id: VAV-1
   pandas_id: VAV-1
   rule_id: VAV-1
-  title: Zone comfort band violation hours with confirm window
+  title: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2
   aliases: []
   kind: diagnostic
   equipment_types: *id259
@@ -10424,7 +10458,7 @@ concepts:
   datafusion_sql_implementation: vav1_comfort_fault.sql
   sql_file: vav1_comfort_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-1
   test_coverage: *id264
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10479,6 +10513,15 @@ concepts:
       unit: degF
       frontend_control: slider
       sql_placeholder: ZONE_T_HI
+    require_occupied:
+      label: Require occupied
+      default: 1.0
+      min: 0.0
+      max: 1.0
+      step: 1.0
+      unit: bool
+      frontend_control: slider
+      sql_placeholder: REQUIRE_OCCUPIED
     confirm_seconds:
       label: Confirm time
       default: 900
@@ -10560,7 +10603,7 @@ concepts:
   datafusion_sql_implementation: vav2_night_setback.sql
   sql_file: vav2_night_setback.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-2
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-2
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-2
   test_coverage: *id270
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10686,7 +10729,7 @@ concepts:
   datafusion_sql_implementation: vav3_excessive_reheat.sql
   sql_file: vav3_excessive_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-3
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-3
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-3
   test_coverage: *id276
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10830,7 +10873,7 @@ concepts:
   datafusion_sql_implementation: vav4_damper_full_open.sql
   sql_file: vav4_damper_full_open.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-4
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-4
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-4
   test_coverage: *id282
   parity_status: sql_screening
   parity_level: sql_screening
@@ -10974,7 +11017,7 @@ concepts:
   datafusion_sql_implementation: vav5_airflow_bias.sql
   sql_file: vav5_airflow_bias.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-5
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-5
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-5
   test_coverage: *id288
   parity_status: sql_screening
   parity_level: sql_screening
@@ -11109,7 +11152,7 @@ concepts:
   datafusion_sql_implementation: vav6_reheat_free_cool.sql
   sql_file: vav6_reheat_free_cool.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-6
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-6
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-6
   test_coverage: *id294
   parity_status: sql_screening
   parity_level: sql_screening
@@ -11244,7 +11287,7 @@ concepts:
   datafusion_sql_implementation: vav_reheat.sql
   sql_file: vav_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-reheat
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-reheat
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-reheat
   test_coverage: *id300
   parity_status: sql_screening
   parity_level: sql_screening
@@ -11388,7 +11431,7 @@ concepts:
   datafusion_sql_implementation: vav_ahu_leave.sql
   sql_file: vav_ahu_leave.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-ahu-leave
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-ahu-leave
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-ahu-leave
   test_coverage: *id306
   parity_status: sql_screening
   parity_level: sql_screening
@@ -11407,7 +11450,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    delta_f:
+    delta:
       label: Leave Δ vs AHU SAT
       default: 8.0
       min: 2.0
@@ -11415,7 +11458,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: DELTA_F
+      sql_placeholder: DELTA
     flow_on_min:
       label: Airflow-on min
       default: 25.0
@@ -11496,7 +11539,7 @@ concepts:
   datafusion_sql_implementation: vav7_min_airflow.sql
   sql_file: vav7_min_airflow.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-7
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vav-7
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vav-7
   test_coverage: *id312
   parity_status: sql_screening
   parity_level: sql_screening
@@ -11658,7 +11701,7 @@ concepts:
   datafusion_sql_implementation: chw1_low_dt.sql
   sql_file: chw1_low_dt.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#chw-1
   test_coverage: *id318
   parity_status: sql_screening
   parity_level: sql_screening
@@ -11784,7 +11827,7 @@ concepts:
   datafusion_sql_implementation: chw2_dp_low.sql
   sql_file: chw2_dp_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-2
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-2
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#chw-2
   test_coverage: *id324
   parity_status: sql_screening
   parity_level: sql_screening
@@ -11919,7 +11962,7 @@ concepts:
   datafusion_sql_implementation: chw3_supply_band.sql
   sql_file: chw3_supply_band.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-3
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-3
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#chw-3
   test_coverage: *id330
   parity_status: sql_screening
   parity_level: sql_screening
@@ -12045,7 +12088,7 @@ concepts:
   datafusion_sql_implementation: chw4_flow_high.sql
   sql_file: chw4_flow_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-4
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#chw-4
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#chw-4
   test_coverage: *id336
   parity_status: sql_screening
   parity_level: sql_screening
@@ -12180,7 +12223,7 @@ concepts:
   datafusion_sql_implementation: hp1_discharge_cold.sql
   sql_file: hp1_discharge_cold.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#hp-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#hp-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#hp-1
   test_coverage: *id342
   parity_status: sql_screening
   parity_level: sql_screening
@@ -12315,7 +12358,7 @@ concepts:
   datafusion_sql_implementation: wx1_oa_spike.sql
   sql_file: wx1_oa_spike.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#wx-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#wx-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#wx-1
   test_coverage: *id348
   parity_status: sql_screening
   parity_level: sql_screening
@@ -12414,7 +12457,7 @@ concepts:
   datafusion_sql_implementation: cw_opt_1.sql
   sql_file: cw_opt_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-opt-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#cw-opt-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#cw-opt-1
   test_coverage: *id354
   parity_status: sql_screening
   parity_level: sql_screening
@@ -12549,7 +12592,7 @@ concepts:
   datafusion_sql_implementation: cw_apr_1.sql
   sql_file: cw_apr_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-apr-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#cw-apr-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#cw-apr-1
   test_coverage: *id360
   parity_status: sql_screening
   parity_level: sql_screening
@@ -12595,7 +12638,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    approach_max_f:
+    approach_max:
       label: Max approach at full fan
       default: 8.0
       min: 5.0
@@ -12603,7 +12646,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: APPROACH_MAX_F
+      sql_placeholder: APPROACH_MAX
     tower_fan_hi:
       label: Tower fan full-speed threshold
       default: 0.95
@@ -12684,7 +12727,7 @@ concepts:
   datafusion_sql_implementation: cw_fan_1.sql
   sql_file: cw_fan_1.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cw-fan-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#cw-fan-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#cw-fan-1
   test_coverage: *id366
   parity_status: sql_screening
   parity_level: sql_screening
@@ -12739,7 +12782,7 @@ concepts:
       unit: degF
       frontend_control: slider
       sql_placeholder: CW_APPROACH
-    excess_beyond_approach_f:
+    excess_beyond_approach:
       label: Excess beyond approach
       default: 5.0
       min: 2.0
@@ -12747,7 +12790,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: EXCESS_BEYOND_APPROACH_F
+      sql_placeholder: EXCESS_BEYOND_APPROACH
     tower_fan_hi:
       label: Tower fan full-speed threshold
       default: 0.95
@@ -12828,7 +12871,7 @@ concepts:
   datafusion_sql_implementation: trim1_duct_static.sql
   sql_file: trim1_duct_static.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#trim-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#trim-1
   test_coverage: *id372
   parity_status: sql_screening
   parity_level: sql_screening
@@ -12963,7 +13006,7 @@ concepts:
   datafusion_sql_implementation: trim3_hwst.sql
   sql_file: trim3_hwst.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-3
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#trim-3
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#trim-3
   test_coverage: *id378
   parity_status: sql_screening
   parity_level: sql_screening
@@ -13098,7 +13141,7 @@ concepts:
   datafusion_sql_implementation: trim4_chw_reset.sql
   sql_file: trim4_chw_reset.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-4
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#trim-4
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#trim-4
   test_coverage: *id384
   parity_status: sql_screening
   parity_level: sql_screening
@@ -13234,7 +13277,7 @@ concepts:
   datafusion_sql_implementation: sched1_unoccupied_runtime.sql
   sql_file: sched1_unoccupied_runtime.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sched-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#sched-1
   test_coverage: *id390
   parity_status: sql_screening
   parity_level: sql_screening
@@ -13253,7 +13296,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    comfort_low_f:
+    comfort_low:
       label: Zone comfort low
       default: 70.0
       min: 50.0
@@ -13262,7 +13305,7 @@ concepts:
       unit: °F
       frontend_control: slider
       sql_placeholder: ZONE_T_LO
-    comfort_high_f:
+    comfort_high:
       label: Zone comfort high
       default: 75.0
       min: 55.0
@@ -13342,7 +13385,7 @@ concepts:
   datafusion_sql_implementation: sched247_always_on.sql
   sql_file: sched247_always_on.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-247
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#sched-247
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#sched-247
   test_coverage: *id396
   parity_status: sql_screening
   parity_level: sql_screening
@@ -13441,7 +13484,7 @@ concepts:
   datafusion_sql_implementation: reset1_sat_oa_reset.sql
   sql_file: reset1_sat_oa_reset.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#reset-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#reset-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#reset-1
   test_coverage: *id402
   parity_status: sql_screening
   parity_level: sql_screening
@@ -13478,7 +13521,7 @@ concepts:
       unit: bool
       frontend_control: slider
       sql_placeholder: REQUIRE_OPERATIONAL_GATE
-    reset_err_f:
+    reset_err:
       label: Reset error
       default: 3.0
       min: 0.5
@@ -13486,7 +13529,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: RESET_ERR_F
+      sql_placeholder: RESET_ERR
     reset_sat_at_65:
       label: SAT SP at 65F OAT
       default: 52.0
@@ -13594,7 +13637,7 @@ concepts:
   datafusion_sql_implementation: cmd1_fan_mismatch.sql
   sql_file: cmd1_fan_mismatch.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#cmd-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#cmd-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#cmd-1
   test_coverage: *id408
   parity_status: sql_screening
   parity_level: sql_screening
@@ -13684,7 +13727,7 @@ concepts:
   datafusion_sql_implementation: oa1_low_oa_frac.sql
   sql_file: oa1_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#oa-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#oa-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#oa-1
   test_coverage: *id414
   parity_status: sql_screening
   parity_level: sql_screening
@@ -13819,7 +13862,7 @@ concepts:
   datafusion_sql_implementation: dmp1_oa_damper_leak.sql
   sql_file: dmp1_oa_damper_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#dmp-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#dmp-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#dmp-1
   test_coverage: *id420
   parity_status: sql_screening
   parity_level: sql_screening
@@ -13945,7 +13988,7 @@ concepts:
   datafusion_sql_implementation: vlv1_clg_valve_leak.sql
   sql_file: vlv1_clg_valve_leak.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vlv-1
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#vlv-1
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#vlv-1
   test_coverage: *id426
   parity_status: sql_screening
   parity_level: sql_screening
@@ -14079,8 +14122,8 @@ concepts:
   pandas_implementation: null
   datafusion_sql_implementation: avg_zone_temp.sql
   sql_file: avg_zone_temp.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#avg-zone-temp
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#avg-zone-temp
   test_coverage: *id429
   parity_status: sql_screening
   parity_level: sql_screening
@@ -14130,8 +14173,8 @@ concepts:
   pandas_implementation: null
   datafusion_sql_implementation: fan_runtime_hours.sql
   sql_file: fan_runtime_hours.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#fan-runtime-hours
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fan-runtime-hours
   test_coverage: *id432
   parity_status: sql_screening
   parity_level: sql_screening
@@ -14162,8 +14205,8 @@ concepts:
   pandas_implementation: null
   datafusion_sql_implementation: fault_elapsed_hours.sql
   sql_file: fault_elapsed_hours.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#fault-elapsed-hours
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#fault-elapsed-hours
   test_coverage: *id435
   parity_status: sql_screening
   parity_level: sql_screening
@@ -14214,8 +14257,8 @@ concepts:
   pandas_implementation: null
   datafusion_sql_implementation: util_interval_fault.sql
   sql_file: util_interval_fault.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#util-interval
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#util-interval
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#util-interval
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#util-interval
   test_coverage: *id438
   parity_status: sql_screening
   parity_level: sql_screening
@@ -14256,8 +14299,8 @@ concepts:
   pandas_implementation: null
   datafusion_sql_implementation: util_monthly_fault.sql
   sql_file: util_monthly_fault.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#util-monthly
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#util-monthly
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#util-monthly
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#util-monthly
   test_coverage: *id441
   parity_status: sql_screening
   parity_level: sql_screening
@@ -14296,8 +14339,8 @@ concepts:
   pandas_implementation: null
   datafusion_sql_implementation: zone_comfort_pct.sql
   sql_file: zone_comfort_pct.sql
-  documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct
-  sql_documentation_link: docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct
+  documentation_link: docs/rules/cookbook/sql-cookbook.md#zone-comfort-pct
+  sql_documentation_link: docs/rules/cookbook/sql-cookbook.md#zone-comfort-pct
   test_coverage: *id444
   parity_status: sql_screening
   parity_level: sql_screening

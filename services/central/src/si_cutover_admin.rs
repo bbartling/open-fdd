@@ -32,6 +32,10 @@ const SESSION_CHW_SI: &str = "chw_leave_max";
 #[derive(Debug, Deserialize)]
 struct RenameMapFile {
     renames: HashMap<String, String>,
+    #[serde(default)]
+    legacy_units: HashMap<String, String>,
+    #[serde(default)]
+    quantities: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,10 +52,12 @@ pub struct SiCutoverDryRunQuery {
     pub site_id: Option<String>,
 }
 
+fn parameter_rename_map() -> Result<RenameMapFile, String> {
+    serde_json::from_str(PARAM_RENAME_JSON).map_err(|e| format!("rename map: {e}"))
+}
+
 fn rename_map() -> Result<HashMap<String, String>, String> {
-    let parsed: RenameMapFile =
-        serde_json::from_str(PARAM_RENAME_JSON).map_err(|e| format!("rename map: {e}"))?;
-    Ok(parsed.renames)
+    Ok(parameter_rename_map()?.renames)
 }
 
 fn registry_rules() -> HashMap<String, fdd_rules::registry::RuleSpec> {
@@ -107,24 +113,41 @@ fn convert_param_value(
     def: Option<&RuleParameterDef>,
     value: f64,
 ) -> Result<(String, f64), String> {
-    let renames = rename_map()?;
+    let rename_doc = parameter_rename_map()?;
+    let renames = &rename_doc.renames;
     let out_key = renames
         .get(param_key)
         .cloned()
         .unwrap_or_else(|| param_key.to_string());
-    let Some(def) = def else {
+    let rules = registry_rules();
+    let target_def = def.or_else(|| {
+        let (rule_id, _) = param_key.split_once('.')?;
+        rules.get(rule_id)?.parameters.get(out_key.as_str())
+    });
+    let qty = target_def
+        .and_then(|d| contract_quantity(&out_key, d))
+        .or_else(|| rename_doc.quantities.get(param_key).map(String::as_str));
+    let Some(qty) = qty else {
         return Ok((out_key, value));
     };
-    let Some(qty) = contract_quantity(param_key, def) else {
-        return Ok((out_key, value));
-    };
-    let source_unit = if qty == "temperature_difference"
-        && matches!(def.unit.as_str(), "degF" | "°F" | "degF_delta" | "Δ°F")
-    {
-        "degF_delta"
-    } else {
-        def.unit.as_str()
-    };
+    // Renamed saved keys carry frozen source-unit metadata. The live registry uses
+    // canonical SI units, so migration must not reinterpret old values as SI.
+    let source_unit = rename_doc
+        .legacy_units
+        .get(param_key)
+        .map(String::as_str)
+        .or_else(|| {
+            target_def.map(|def| {
+                if qty == "temperature_difference"
+                    && matches!(def.unit.as_str(), "degF" | "°F" | "degF_delta" | "Δ°F")
+                {
+                    "degF_delta"
+                } else {
+                    def.unit.as_str()
+                }
+            })
+        })
+        .unwrap_or("");
     let converted = contract
         .convert_to_canonical(qty, value, source_unit)
         .map_err(|e| format!("param {param_key}: {e}"))?;
@@ -185,7 +208,7 @@ fn migrate_session_config_object(obj: &mut Map<String, Value>) -> Result<i64, St
         obj.insert(SESSION_CHW_SI.into(), json!(converted));
         touched += 1;
     }
-    obj.insert("unit_system".into(), json!("si"));
+    obj.insert("display_units".into(), json!("si"));
 
     let Some(params) = obj.get_mut("params").and_then(Value::as_object_mut) else {
         return Ok(touched);
@@ -205,7 +228,11 @@ fn migrate_session_config_object(obj: &mut Map<String, Value>) -> Result<i64, St
                 rp.insert(key, val);
                 continue;
             };
-            let def = spec.and_then(|s| s.parameters.get(key.as_str()));
+            let renamed = rename_map()?
+                .get(&key)
+                .cloned()
+                .unwrap_or_else(|| key.clone());
+            let def = spec.and_then(|s| s.parameters.get(renamed.as_str()));
             let (new_key, new_val) = convert_param_value(&contract, &key, def, n)?;
             if new_key != key || def.is_some() {
                 touched += 1;
@@ -610,6 +637,24 @@ fn map_si_err(err: SiCutoverError) -> (StatusCode, Json<Value>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn saved_fahrenheit_parameter_migrates_to_new_key_and_si_value() {
+        let mut config = serde_json::from_value::<Map<String, Value>>(json!({
+            "params": {
+                "VAV-AHU-LEAVE": {"delta_f": 9.0},
+                "CHW-NOLOAD-1": {"sat_band_f": 2.0}
+            }
+        }))
+        .expect("session config");
+        let touched = migrate_session_config_object(&mut config).expect("migrate");
+        assert_eq!(touched, 2);
+        assert_eq!(config["params"]["VAV-AHU-LEAVE"]["delta"], json!(5.0));
+        assert_eq!(
+            config["params"]["CHW-NOLOAD-1"]["sat_band"],
+            json!(1.1111111111111112)
+        );
+    }
 
     #[test]
     fn delta_f_param_converts_scale_only_to_si_key() {

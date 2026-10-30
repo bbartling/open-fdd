@@ -193,7 +193,7 @@ pub async fn schedule_from_history(
 
 pub async fn economizer_from_history(
     equipment_filter: Option<&[String]>,
-    dt_min_f: f64,
+    dt_min_c: f64,
     building_id: Option<&str>,
     max_points: usize,
     start: Option<DateTime<Utc>>,
@@ -201,7 +201,7 @@ pub async fn economizer_from_history(
 ) -> Result<Option<AnalyticsEnvelope>> {
     let _ = (
         equipment_filter,
-        dt_min_f,
+        dt_min_c,
         building_id,
         max_points,
         start,
@@ -370,8 +370,8 @@ pub async fn rcx_box_from_history(
 pub async fn rcx_zone_comfort_rank_from_history(
     building_id: Option<&str>,
     eq_kinds: &[&str],
-    comfort_low_f: f64,
-    comfort_high_f: f64,
+    comfort_low_c: f64,
+    comfort_high_c: f64,
     scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
     if crate::timescale_historian::historian_is_timescale() {
@@ -381,8 +381,8 @@ pub async fn rcx_zone_comfort_rank_from_history(
         return crate::timescale_product::rcx_zone_comfort_rank(
             bid,
             eq_kinds,
-            comfort_low_f,
-            comfort_high_f,
+            comfort_low_c,
+            comfort_high_c,
             scope,
         )
         .await;

@@ -46,7 +46,7 @@ python3 scripts/rule_parity_mutation_check.py
 | Check | Expectation |
 |-------|-------------|
 | Registry count | `sql_rules/registry.yaml` ≥ 63 rules |
-| Dual cookbooks | `pandas-cookbook.md` + `datafusion-sql-cookbook.md` exist |
+| Dual cookbooks | `pandas-cookbook.md` + `sql-cookbook.md` exist |
 | Heading floor | ≥ 59 `### RULE —` headings per cookbook |
 | High-risk keywords | `fan-status` / `fan_status`, `occupied` / `occ_mode`, `compressor`, identifiability language |
 | Mutation paths | Missing protected cookbook file → exit non-zero |

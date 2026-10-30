@@ -13,7 +13,7 @@ description: >-
 - Registry: `sql/fdd/registry.yaml`
 - Rules: `sql/fdd/postgres/rules/*.sql`
 - Engine: openfdd-central on Timescale / PostgreSQL
-- Expression record: `docs/rules/cookbook/` (the file `datafusion-sql-cookbook.md` is not a DataFusion runner)
+- Expression record: `docs/rules/cookbook/` (the file `sql-cookbook.md` is not a DataFusion runner)
 - Architecture: `docs/architecture/adr-010-timescale-hard-cutover.md`
 
 `sql_rules/` is the retired DataFusion pack (historical). New product rules go in `sql/fdd`, not there.

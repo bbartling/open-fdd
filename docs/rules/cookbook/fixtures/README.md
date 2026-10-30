@@ -1,5 +1,7 @@
 # Cookbook parity fixtures
 
+Fixtures use declared source-unit metadata and SI-processing expectations. Frozen IP goldens are qualification data only. Offline fixture results do not prove post-cutover live P3 or FQ.
+
 Synthetic `telemetry_pivot` JSONL for offline Pandas parity checks. Not published to GitHub Pages.
 
 Run: `python3 scripts/cookbook_parity_check.py --all`
@@ -12,6 +14,9 @@ Run: `python3 scripts/cookbook_parity_check.py --all`
 | `reset1_obvious_fault.jsonl`, `reset1_normal.jsonl` | Reset fault vs normal |
 | `sched1_obvious_fault.jsonl`, `sched247_obvious_fault.jsonl` | Schedule faults |
 | `vav1_obvious_fault.jsonl`, `vav6_obvious_fault.jsonl`, `vav7_obvious_fault.jsonl` | VAV faults |
+
+The fixture suite includes unit vectors for declared source units and SI processing. Frozen IP goldens remain qualification test data only. Fixture results do not establish live post-cutover P3 or FQ.
+
 
 ## Milestone C parity states
 

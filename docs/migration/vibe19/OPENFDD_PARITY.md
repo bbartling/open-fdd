@@ -44,7 +44,7 @@ When a rule stabilizes, add SQL twin under `fdd_app/backend/docs/` following `ec
 - Parameterize `@poll_seconds`, `@confirm_samples`
 - Cross-check against pandas on same CSV window
 
-Reference: [DataFusion SQL cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/datafusion-sql-cookbook.html)
+Reference: [PostgreSQL SQL cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/sql-cookbook.html)
 
 ---
 

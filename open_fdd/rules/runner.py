@@ -59,7 +59,7 @@ def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFram
     Adds ``oa_t_effective`` / ``oa_t_effective_source`` / optional ``bas_oa_t`` before
     missing-role checks. Never overwrites a real BAS ``oa_t`` column.
     """
-    from open_fdd.analytics.weather_psychrometrics import dewpoint_f_from_db_rh, enrich_weather_frame, wetbulb_f_stull
+    from open_fdd.analytics.weather_psychrometrics import dewpoint_c_from_db_rh, enrich_weather_frame, wetbulb_c_stull
     from open_fdd.analytics.weather_resolver import apply_effective_oat_columns
 
     out = df.copy()
@@ -78,12 +78,12 @@ def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFram
         "web-outside-air-temp",
         "web-outside-air-humidity",
     }.issubset(out.columns):
-        out["web-outside-air-dewpoint"] = dewpoint_f_from_db_rh(out["web-outside-air-temp"], out["web-outside-air-humidity"])
+        out["web-outside-air-dewpoint"] = dewpoint_c_from_db_rh(out["web-outside-air-temp"], out["web-outside-air-humidity"])
     if ("web-outside-air-wetbulb" not in out.columns or out["web-outside-air-wetbulb"].notna().sum() == 0) and {
         "web-outside-air-temp",
         "web-outside-air-humidity",
     }.issubset(out.columns):
-        out["web-outside-air-wetbulb"] = wetbulb_f_stull(out["web-outside-air-temp"], out["web-outside-air-humidity"])
+        out["web-outside-air-wetbulb"] = wetbulb_c_stull(out["web-outside-air-temp"], out["web-outside-air-humidity"])
     return apply_effective_oat_columns(out)
 
 
@@ -761,28 +761,28 @@ def run_batch(
             enrich_frames_with_ahu_feeds(equipment_frames, vav_to_ahu, role_map=rm)
 
     # Comfort band from CHW-NOLOAD / VAV-1 params when present
-    comfort_lo = 70.0
-    comfort_hi = 75.0
-    sat_band = 2.0
+    comfort_lo = 21.111111
+    comfort_hi = 23.888889
+    sat_band = 1.111111
     pbr = params_by_rule or {}
     for rid in ("CHW-NOLOAD-1", "VAV-1", "SCHED-1"):
         block = pbr.get(rid) or {}
-        if "comfort_low_f" in block:
-            comfort_lo = float(block["comfort_low_f"])
-        if "comfort_high_f" in block:
-            comfort_hi = float(block["comfort_high_f"])
+        if "comfort_low" in block:
+            comfort_lo = float(block["comfort_low"])
+        if "comfort_high" in block:
+            comfort_hi = float(block["comfort_high"])
         if "zone_lo" in block:
             comfort_lo = float(block["zone_lo"])
         if "zone_hi" in block:
             comfort_hi = float(block["zone_hi"])
-        if "sat_band_f" in block:
-            sat_band = float(block["sat_band_f"])
+        if "sat_band" in block:
+            sat_band = float(block["sat_band"])
     aggregate_load_satisfaction(
         equipment_frames,
         rm,
-        comfort_low_f=comfort_lo,
-        comfort_high_f=comfort_hi,
-        sat_band_f=sat_band,
+        comfort_low=comfort_lo,
+        comfort_high=comfort_hi,
+        sat_band=sat_band,
     )
 
     results: list[RuleResult] = []

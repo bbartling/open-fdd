@@ -1144,8 +1144,8 @@ pub async fn rcx_box(
 #[derive(Debug)]
 pub enum ComfortRankError {
     InvalidBand {
-        low_f: f64,
-        high_f: f64,
+        low_c: f64,
+        high_c: f64,
     },
     Decode {
         column: &'static str,
@@ -1160,9 +1160,9 @@ pub enum ComfortRankError {
 impl std::fmt::Display for ComfortRankError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidBand { low_f, high_f } => write!(
+            Self::InvalidBand { low_c, high_c } => write!(
                 f,
-                "comfort band must be finite with low <= high (low={low_f}, high={high_f})"
+                "comfort band must be finite with low <= high (low={low_c}, high={high_c})"
             ),
             Self::Decode { column, source } => {
                 write!(
@@ -1229,8 +1229,8 @@ pub async fn rcx_zone_comfort_rank(
 ) -> Result<Option<AnalyticsEnvelope>> {
     if !comfort_low_c.is_finite() || !comfort_high_c.is_finite() || comfort_low_c > comfort_high_c {
         return Err(ComfortRankError::InvalidBand {
-            low_f: comfort_low_c,
-            high_f: comfort_high_c,
+            low_c: comfort_low_c,
+            high_c: comfort_high_c,
         }
         .into());
     }
@@ -1288,8 +1288,12 @@ pub async fn rcx_zone_comfort_rank(
                 .and_then(|entry| entry.unit.clone())
         });
         let effective = engineer.as_deref().or(sample_unit.as_deref());
-        if crate::zone_comfort_units::comfort_band_in_unit(comfort_low_c, comfort_high_c, effective)
-            .is_some()
+        if crate::zone_comfort_units::comfort_band_si_for_source_unit(
+            comfort_low_c,
+            comfort_high_c,
+            effective,
+        )
+        .is_some()
         {
             assessable.push(equipment_id);
         }
@@ -2841,14 +2845,13 @@ async fn fill_history_for_equipment(
     // NULL column in the pivot (#1405). Weather and CHW fall back to one stamped
     // equipment, the lexicographically first unique binding, when the target has none.
     // $1..$3 are building, equipment, and roles. Admission binds follow those.
-    let mut admit = crate::admitted_sample::AdmitBuilder::after_occupied(3);
     let mut max_cols = String::new();
     let bound_roles = roles_with_unique_binding(conn, building_id, equipment_id, roles).await?;
     let site_oa_key = fill
         .and_then(|opts| opts.site_oa_t.as_ref())
         .map(|r| r.openfdd_key.replace('\'', "''"));
     for role in roles {
-        let admitted = admit.admitted_on_sample(role);
+        let admitted = "s.val";
         let alias = crate::series_binding::quote_ident(role);
         let role_lit = role.replace('\'', "''");
         if !bound_roles.contains(role) && !is_chw_plant_role(role) && !is_weather_role(role) {
@@ -3004,16 +3007,13 @@ WHERE s.site_id = $1
 GROUP BY s.ts
 "#
     );
-    let res = crate::admitted_sample::apply_binds(
-        sqlx::query(&sql)
-            .bind(building_id)
-            .bind(equipment_id)
-            .bind(roles),
-        admit.binds(),
-    )
-    .execute(&mut *conn)
-    .await
-    .context("fill history")?;
+    let res = sqlx::query(&sql)
+        .bind(building_id)
+        .bind(equipment_id)
+        .bind(roles)
+        .execute(&mut *conn)
+        .await
+        .context("fill history")?;
     Ok(res.rows_affected() as i64)
 }
 
@@ -3101,6 +3101,67 @@ fn metric_unit_for_column(column: &str) -> (&'static str, &'static str) {
     }
 }
 
+fn not_assessed_metric_payload(
+    name: &str,
+    quantity: &str,
+    unit: &str,
+    facts: &MetricWindowFacts<'_>,
+    reason: &str,
+) -> Value {
+    json!({
+        "name": name,
+        "value": Value::Null,
+        "unit": unit,
+        "quantity": quantity,
+        "assessment": "not_assessed",
+        "assessment_reason": reason,
+        "window": {
+            "start": Value::Null,
+            "end": Value::Null,
+            "requested_start": facts.requested_start,
+            "requested_end": facts.requested_end,
+            "observed_start": facts.observed_start,
+            "observed_end": facts.observed_end,
+            "watermark": facts.watermark,
+            "sample_rows": facts.sample_rows,
+            "config_fingerprint": facts.config_fingerprint,
+            "unknown": true
+        }
+    })
+}
+
+#[cfg(test)]
+mod metric_payload_assessment_tests {
+    use super::{not_assessed_metric_payload, MetricWindowFacts};
+    use serde_json::json;
+
+    #[test]
+    fn missing_or_unsupported_unit_metadata_cannot_report_a_stored_value_as_si() {
+        let facts = MetricWindowFacts {
+            requested_start: None,
+            requested_end: None,
+            observed_start: Some("2026-01-01T00:00:00Z"),
+            observed_end: Some("2026-01-01T01:00:00Z"),
+            watermark: None,
+            sample_rows: 12,
+            config_fingerprint: "test",
+        };
+        for reason in ["missing_output_unit", "unsupported_output_unit"] {
+            let payload = not_assessed_metric_payload(
+                "avg_zone_temp",
+                "absolute_temperature",
+                "degC",
+                &facts,
+                reason,
+            );
+            assert_eq!(payload["value"], json!(null));
+            assert_eq!(payload["assessment"], json!("not_assessed"));
+            assert_eq!(payload["assessment_reason"], json!(reason));
+            assert_eq!(payload["window"]["unknown"], json!(true));
+        }
+    }
+}
+
 fn numeric_column_map(row: &sqlx::postgres::PgRow) -> serde_json::Map<String, Value> {
     let mut values = serde_json::Map::new();
     for column in row.columns() {
@@ -3180,25 +3241,46 @@ fn metric_payload(
                     column: name.to_string(),
                 }
             })?;
-            let declared = rule.output_units.get(name).ok_or_else(|| {
-                crate::si_api_response::MetricUnitError::UndeclaredOutputUnit {
-                    rule_id: rule.rule_id.clone(),
-                    column: name.to_string(),
-                }
-            })?;
+            // Missing or unsupported output-unit metadata is not an assessment.
+            // Keep its value unavailable rather than inferring SI from storage.
+            let Some(declared) = rule.output_units.get(name) else {
+                return Ok(not_assessed_metric_payload(
+                    name,
+                    quantity,
+                    unit_label,
+                    &facts,
+                    "missing_output_unit",
+                ));
+            };
             if declared.kind != quantity_id {
-                return Err(
-                    crate::si_api_response::MetricUnitError::OutputKindMismatch {
-                        rule_id: rule.rule_id.clone(),
-                        column: name.to_string(),
-                        declared: declared.kind.clone(),
-                        expected: quantity_id.to_string(),
-                    },
-                );
+                return Ok(not_assessed_metric_payload(
+                    name,
+                    quantity,
+                    unit_label,
+                    &facts,
+                    "unsupported_output_kind",
+                ));
+            }
+            let contract = fdd_core::units_contract::MetricUnitsContract::load_embedded()?;
+            let canonical = contract.canonical_unit(quantity_id)?;
+            if declared.unit != canonical {
+                return Ok(not_assessed_metric_payload(
+                    name,
+                    quantity,
+                    unit_label,
+                    &facts,
+                    "unsupported_output_unit",
+                ));
             }
             json!(
-                crate::si_api_response::metric_output_to_si(quantity_id, &declared.unit, raw)?
-                    .value
+                crate::si_api_response::metric_output_to_si(
+                    &rule.rule_id,
+                    name,
+                    quantity_id,
+                    &declared.unit,
+                    raw,
+                )?
+                .value
             )
         }
         _ => value,

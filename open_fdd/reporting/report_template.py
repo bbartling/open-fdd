@@ -249,6 +249,16 @@ def load_ai_comments(folder: Path | str, override: dict[str, str] | None = None)
     return comments
 
 
+def _storage_column_map(frame: pd.DataFrame) -> dict[str, str]:
+    attrs = getattr(frame, "attrs", {}) or {}
+    out: dict[str, str] = {}
+    if isinstance(attrs.get("storage_abi"), str) and str(attrs["storage_abi"]).strip():
+        out["storage_abi"] = str(attrs["storage_abi"]).strip()
+    if isinstance(attrs.get("display_units"), str) and str(attrs["display_units"]).strip():
+        out["display_units"] = str(attrs["display_units"]).strip()
+    return out
+
+
 @dataclass
 class RoleHistory:
     """Role-named history, independent of where the rows came from."""
@@ -314,7 +324,7 @@ class OpenFddApiSource:
         from open_fdd.analytics.report_storage import ensure_storage_frame
 
         frame = self.reader()
-        frame = ensure_storage_frame(frame, {})
+        frame = ensure_storage_frame(frame, _storage_column_map(frame))
         points = [(str(column), str(column)) for column in frame.columns]
         return RoleHistory(
             frame=frame,
@@ -344,7 +354,7 @@ class VendorApiSource:
         from open_fdd.analytics.report_storage import ensure_storage_frame
 
         frame = self.reader()
-        frame = ensure_storage_frame(frame, {})
+        frame = ensure_storage_frame(frame, _storage_column_map(frame))
         points = [(str(column), str(column)) for column in frame.columns]
         return RoleHistory(
             frame=frame,

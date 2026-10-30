@@ -9,6 +9,8 @@ nav_exclude: true
 # Generated parity report
 
 Auto-generated from `sql_rules/generated/parity_inventory.yaml`.
+This legacy rule inventory is not the 4.0.7 SI parity artifact and is not P0–P2 or FQ evidence.
+Replace it from a reviewed candidate `si-parity` artifact after W4 completes; do not invent missing results.
 Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 
 71 is the executable pandas cookbook (CookbookRule constructors). 77 is the SQL registry: 71 pandas diagnostics plus 6 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.
@@ -75,7 +77,7 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `FCU-CO2-DAMPER` | High valid CO2 with low outdoor-air damper command | `fcu_co2_damper` | `fcu_co2_damper.sql` | `sql_screening` | `none` |
 | `FCU-DEADBAND` | Heating/cooling pass-through setpoint deadband below 1 C | `fcu_deadband` | `fcu_deadband.sql` | `sql_screening` | `none` |
 | `FCU-MODE-CYCLE` | Four or more heat/cool valve mode changes in window | `fcu_mode_cycle` | `fcu_mode_cycle.sql` | `sql_screening` | `none` |
-| `VAV-1` | Zone comfort band violation hours with confirm window | `vav1` | `vav1_comfort_fault.sql` | `sql_screening` | `none` |
+| `VAV-1` | Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2 | `vav1` | `vav1_comfort_fault.sql` | `sql_screening` | `none` |
 | `VAV-2` | Night setback miss — unoccupied zone above heating setback | `vav2` | `vav2_night_setback.sql` | `sql_screening` | `none` |
 | `VAV-3` | Excessive reheat during warm weather | `vav_3` | `vav3_excessive_reheat.sql` | `sql_screening` | `none` |
 | `VAV-4` | Damper stuck at full open | `vav_4` | `vav4_damper_full_open.sql` | `sql_screening` | `none` |

@@ -23,7 +23,7 @@ base AS (
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN vav_discharge_t IS NULL OR ahu_sat IS NULL THEN 0
       WHEN COALESCE(zone_flow, 0) > {{FLOW_ON_MIN}}
-       AND ABS(vav_discharge_t - ahu_sat) > {{DELTA_F}} THEN 1
+       AND ABS(vav_discharge_t - ahu_sat) > {{DELTA}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

@@ -512,10 +512,10 @@ mod tests {
     #[test]
     fn flatline_when_std_near_zero_and_n_gt_min() {
         let pts: Vec<_> = (0..8)
-            .map(|i| pt("SEN-1", "zone_t", i * 300, Some(72.0)))
+            .map(|i| pt("SEN-1", "zone_t", i * 300, Some(22.222222)))
             .collect();
         let mut units = BTreeMap::new();
-        units.insert(("SEN-1".into(), "zone_t".into()), "degF".into());
+        units.insert(("SEN-1".into(), "zone_t".into()), "degC".into());
         let rows = compute_sensor_health_with_units(&pts, 5, 1e-9, Some(&units));
         assert!(rows[0].flatline_flag);
         assert_eq!(rows[0].std, Some(0.0));

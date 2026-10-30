@@ -74,7 +74,7 @@ SELECT
   j.equipment_id,
   j.bas_oa_t,
   j.web_oa_t,
-  (j.bas_oa_t - j.web_oa_t) AS delta_f
+  (j.bas_oa_t - j.web_oa_t) AS delta_c
 FROM joined j
 WHERE j.web_oa_t IS NOT NULL
   AND j.web_ts IS NOT NULL

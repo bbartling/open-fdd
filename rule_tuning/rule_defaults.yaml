@@ -160,24 +160,24 @@ CHW-4:
     step: 0.01
     unit: frac
 CHW-NOLOAD-1:
-  comfort_high_f:
-    default: 75.0
+  comfort_high:
+    default: 23.888889
     direction: ''
     help: Comfort high
     label: Comfort high
-    max: 85.0
-    min: 68.0
-    step: 0.5
-    unit: "\xB0F"
-  comfort_low_f:
-    default: 70.0
+    max: 29.444444
+    min: 20.0
+    step: 0.277778
+    unit: degC
+  comfort_low:
+    default: 21.111111
     direction: ''
     help: Comfort low
     label: Comfort low
-    max: 78.0
-    min: 60.0
-    step: 0.5
-    unit: "\xB0F"
+    max: 25.555556
+    min: 15.555556
+    step: 0.277778
+    unit: degC
   confirm_min:
     default: 30.0
     direction: fewer
@@ -187,15 +187,15 @@ CHW-NOLOAD-1:
     min: 0.0
     step: 1.0
     unit: min
-  sat_band_f:
-    default: 2.0
+  sat_band:
+    default: 1.111111
     direction: ''
     help: "AHU SAT\u2248SP band"
     label: "AHU SAT\u2248SP band"
-    max: 6.0
-    min: 0.5
-    step: 0.5
-    unit: "\xB0F"
+    max: 3.333333
+    min: 0.277778
+    step: 0.277778
+    unit: degC_delta
 CMD-1:
   confirm_min:
     default: 10.0
@@ -207,15 +207,15 @@ CMD-1:
     step: 1.0
     unit: min
 CW-APR-1:
-  approach_max_f:
-    default: 8.0
+  approach_max:
+    default: 4.444444
     direction: ''
     help: Max approach at full fan
     label: Max approach at full fan
-    max: 15.0
-    min: 5.0
-    step: 0.5
-    unit: "\xB0F"
+    max: 8.333333
+    min: 2.777778
+    step: 0.277778
+    unit: degC_delta
   confirm_min:
     default: 15.0
     direction: fewer
@@ -253,15 +253,15 @@ CW-FAN-1:
     min: 3.0
     step: 0.5
     unit: "\xB0F"
-  excess_beyond_approach_f:
-    default: 5.0
+  excess_beyond_approach:
+    default: 2.777778
     direction: ''
     help: Excess beyond approach
     label: Excess beyond approach
-    max: 20.0
-    min: 2.0
-    step: 0.5
-    unit: "\xB0F"
+    max: 11.111111
+    min: 1.111111
+    step: 0.277778
+    unit: degC_delta
   tower_fan_hi:
     default: 0.95
     direction: ''
@@ -387,32 +387,32 @@ ECON-3:
     step: 0.02
     unit: frac
   econ3_db_max:
-    default: 72.0
+    default: 22.222222
     direction: ''
     help: Free-cool OA dry-bulb max
     label: Free-cool OA dry-bulb max
-    max: 80.0
-    min: 65.0
-    step: 1.0
-    unit: "\xB0F"
+    max: 26.666667
+    min: 18.333333
+    step: 0.555556
+    unit: degC
   econ3_db_min:
-    default: 60.0
+    default: 15.555556
     direction: ''
     help: Free-cool OA dry-bulb min
     label: Free-cool OA dry-bulb min
-    max: 68.0
-    min: 50.0
-    step: 1.0
-    unit: "\xB0F"
+    max: 20.0
+    min: 10.0
+    step: 0.555556
+    unit: degC
   econ3_dp_max:
-    default: 60.0
+    default: 15.555556
     direction: ''
     help: Free-cool OA dew point max
     label: Free-cool OA dew point max
-    max: 68.0
-    min: 45.0
-    step: 1.0
-    unit: "\xB0F"
+    max: 20.0
+    min: 7.222222
+    step: 0.555556
+    unit: degC
 ECON-4:
   confirm_min:
     default: 10.0
@@ -443,15 +443,15 @@ ECON-5:
     min: 0.0
     step: 1.0
     unit: min
-  preheat_over_f:
-    default: 2.2
+  preheat_over:
+    default: 1.222222
     direction: fewer
     help: "Preheat over \u0394T \u2014 increasing this usually flags fewer faults."
     label: "Preheat over \u0394T"
-    max: 8.0
-    min: 0.5
-    step: 0.1
-    unit: "\xB0F"
+    max: 4.444444
+    min: 0.277778
+    step: 0.055556
+    unit: degC_delta
 ECON-6:
   confirm_min:
     default: 10.0
@@ -471,15 +471,15 @@ ECON-6:
     min: 0.05
     step: 0.01
     unit: frac
-  econ6_oat_max_f:
-    default: 25.0
+  econ6_oat_max:
+    default: -3.888889
     direction: ''
     help: Winter OAT ceiling
     label: Winter OAT ceiling
-    max: 40.0
-    min: 15.0
-    step: 1.0
-    unit: "\xB0F"
+    max: 4.444444
+    min: -9.444444
+    step: 0.555556
+    unit: degC
 ECON-7:
   confirm_min:
     default: 10.0
@@ -501,32 +501,32 @@ ECON-7:
     step: 0.02
     unit: frac
   econ7_db_max:
-    default: 72.0
+    default: 22.222222
     direction: ''
     help: Econ-OK dry-bulb max
     label: Econ-OK dry-bulb max
-    max: 80.0
-    min: 65.0
-    step: 1.0
-    unit: "\xB0F"
+    max: 26.666667
+    min: 18.333333
+    step: 0.555556
+    unit: degC
   econ7_db_min:
-    default: 35.0
+    default: 1.666667
     direction: ''
     help: Econ-OK dry-bulb floor (freeze guard)
     label: Econ-OK dry-bulb floor (freeze guard)
-    max: 50.0
-    min: 20.0
-    step: 1.0
-    unit: "\xB0F"
+    max: 10.0
+    min: -6.666667
+    step: 0.555556
+    unit: degC
   econ7_dp_max:
-    default: 60.0
+    default: 15.555556
     direction: ''
     help: Econ-OK dew point max
     label: Econ-OK dew point max
-    max: 68.0
-    min: 45.0
-    step: 1.0
-    unit: "\xB0F"
+    max: 20.0
+    min: 7.222222
+    step: 0.555556
+    unit: degC
 FC1:
   confirm_min:
     default: 5.0
@@ -1655,16 +1655,16 @@ MECH-OAT-1:
     min: 0.0
     step: 1.0
     unit: min
-  mech_oat_max_f:
-    default: 60.0
+  mech_oat_max:
+    default: 15.555556
     direction: stricter
     help: "Mech-cool OAT ceiling \u2014 increasing this usually flags more faults\
       \ (stricter / wider detection)."
     label: Mech-cool OAT ceiling
-    max: 65.0
-    min: 45.0
-    step: 1.0
-    unit: "\xB0F"
+    max: 18.333333
+    min: 7.222222
+    step: 0.555556
+    unit: degC
 OA-1:
   confirm_min:
     default: 15.0
@@ -1778,24 +1778,24 @@ PID-HUNT-1:
     step: 50.0
     unit: '%/h'
 SCHED-1:
-  comfort_high_f:
-    default: 75.0
+  comfort_high:
+    default: 23.888889
     direction: ''
     help: Comfort high
     label: Comfort high
-    max: 85.0
-    min: 68.0
-    step: 0.5
-    unit: "\xB0F"
-  comfort_low_f:
-    default: 70.0
+    max: 29.444444
+    min: 20.0
+    step: 0.277778
+    unit: degC
+  comfort_low:
+    default: 21.111111
     direction: ''
     help: Comfort low
     label: Comfort low
-    max: 78.0
-    min: 60.0
-    step: 0.5
-    unit: "\xB0F"
+    max: 25.555556
+    min: 15.555556
+    step: 0.277778
+    unit: degC
   confirm_min:
     default: 30.0
     direction: fewer
@@ -2286,15 +2286,15 @@ VAV-AHU-LEAVE:
     min: 0.0
     step: 1.0
     unit: min
-  delta_f:
-    default: 8.0
+  delta:
+    default: 4.444444
     direction: ''
     help: "Leave \u0394 vs AHU SAT"
     label: "Leave \u0394 vs AHU SAT"
-    max: 25.0
-    min: 2.0
-    step: 0.5
-    unit: "\xB0F"
+    max: 13.888889
+    min: 1.111111
+    step: 0.277778
+    unit: degC_delta
   flow_on_min:
     default: 25.0
     direction: ''
