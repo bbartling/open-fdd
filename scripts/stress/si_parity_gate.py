@@ -4,8 +4,8 @@
 CI default (full matrix, report-only mismatches):
   python scripts/stress/si_parity_gate.py --fixtures-only --report-json si_parity_report.json
 
-Blocking W4 family (example FC1 / W4b):
-  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4b_fc1_duct_static
+Blocking W4 family (W4b AHU economizer):
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4b_ahu_econ
 
 T1284-4 gate failure under mutation + blocking scope:
   python scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 --inject-t1284-4-mutation

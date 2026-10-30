@@ -2,10 +2,12 @@
   "schema": "openfdd-si-parity-w4-families-v1",
   "issue": "1284",
   "families": {
-    "W4b_fc1_duct_static": {
-      "wave": "W4b",
-      "description": "FC1 duct static (GL36 A) — T1284-4 blocking scope",
-      "rules": ["FC1"]
+    "W4a_fc1_duct_static": {
+      "wave": "W4a",
+      "description": "FC1 duct static (GL36 A) \u2014 owned by W4a #1450; FC1 P2 cells stay pending_W4 on W4b, so this scope is report-only until W4a lands",
+      "rules": [
+        "FC1"
+      ]
     },
     "W4b_ahu_econ": {
       "wave": "W4b",
@@ -33,13 +35,21 @@
     },
     "W4e_sensor_validation": {
       "wave": "W4e",
-      "description": "Sensor validation SV-* — pandas SI vs IP parity row",
-      "rules": ["SV-RANGE", "SV-FLATLINE", "SV-RATE", "SV-SPIKE", "SV-STALE"]
+      "description": "Sensor validation SV-* \u2014 pandas SI vs IP parity row",
+      "rules": [
+        "SV-RANGE",
+        "SV-FLATLINE",
+        "SV-RATE",
+        "SV-SPIKE",
+        "SV-STALE"
+      ]
     },
     "W3_full_matrix": {
       "wave": "W3",
       "description": "Full cookbook + SYNTH ip golden matrix (report-only on chain PR)",
-      "rules": ["*"]
+      "rules": [
+        "*"
+      ]
     }
   }
 }

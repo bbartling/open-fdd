@@ -96,11 +96,6 @@ jobs:
           name: si-parity-report
           path: si_parity_report.json
 
-      - name: Blocking W4b FC1 scope (clean)
-        run: |
-          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
-            --family W4b_fc1_duct_static
-
       - name: Blocking W4b AHU econ SI family (P1/P2 scope)
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
