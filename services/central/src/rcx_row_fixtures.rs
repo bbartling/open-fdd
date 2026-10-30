@@ -295,7 +295,9 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
     );
     for point in primary.iter().chain(setpoint.iter()) {
         assert_eq!(point["quantity"], "air_pressure", "{point}");
-        assert_eq!(point["unit"], "in. w.c.", "{point}");
+        // Historian samples are canonical SI (metric-c-v2); the SPA applies the
+        // imperial display preference. The API labels stored values in SI.
+        assert_eq!(point["unit"], "Pa", "{point}");
         assert_eq!(point["equipment_id"], AHU, "{point}");
     }
     assert!(

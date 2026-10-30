@@ -5691,7 +5691,9 @@ rules:
             .expect("other site");
         assert_eq!(other["run_status"], json!("complete"), "{other}");
         let other_metric = row_for(&other, "AVG-ZONE-TEMP", "AHU_B");
-        assert!((other_metric["metric"]["value"].as_f64().unwrap() - 50.0).abs() < 1e-6);
+        // AVG-ZONE-TEMP pack output 50 degF is reported in SI: (50 - 32) * 5/9 = 10 degC.
+        assert!((other_metric["metric"]["value"].as_f64().unwrap() - 10.0).abs() < 1e-6);
+        assert_eq!(other_metric["metric"]["unit"], json!("degC"));
         let site_a_after = rest_rows(&pool, &site_a, &stale_types).await;
         assert!(site_a_after["results"]
             .as_array()

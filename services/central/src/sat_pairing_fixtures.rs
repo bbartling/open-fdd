@@ -297,7 +297,8 @@ async fn sat_scatter_binds_one_weather_series_and_scopes_the_window() {
     assert_eq!(dats["coverage"]["equipment_ids"], json!([AHU_A]));
     assert_eq!(dats["coverage"]["effective_equipment_ids"], json!([AHU_A]));
     assert_eq!(primary[0]["quantity"], "absolute_temperature");
-    assert_eq!(primary[0]["unit"], "°F");
+    // Stored SAT samples are canonical SI; the API labels them degC.
+    assert_eq!(primary[0]["unit"], "degC");
 
     let vav = post_json(
         &app,
