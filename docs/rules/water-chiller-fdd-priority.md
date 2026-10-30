@@ -8,9 +8,12 @@ permalink: /rules/water-chiller-fdd-priority/
 
 # Water-system & chiller-plant FDD — research priority (#1009)
 
+The unit contract is SI (`metric-c-v2`), with engineer-declared point units and one-time normalization at ingest. Parity status must come from executable SI fixtures; live FQ requires P3 on every site.
+
+
 Research backlog for **deterministic, Haystack-oriented** fault detection on commercial **chilled-water**, **condenser-water / cooling-tower**, and **hot-water / hydronic** loops. Equipment is selected by **`equipType` / registry `equipment_kinds`** and mapped **SQL roles** — never by vendor name, device instance, or substring match on `equipment_id`.
 
-**Parity honesty:** Rules listed here that already appear in [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) and the [DataFusion](cookbook/datafusion-sql-cookbook.html#central-plant--condenser-water) / [Pandas](cookbook/pandas-cookbook.html#central-plant--condenser-water) cookbooks are **`sql_screening`** catalog entries. **Do not claim Pandas↔SQL predicate, mask, or duration parity** until executable fixtures pass the levels in the [parity matrix](cookbook/parity-matrix.html). Plant rules are documented in both catalogs; that is not oracle proof.
+**Parity honesty:** Rules listed here that already appear in [`sql/fdd/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/registry.yaml) and the [PostgreSQL SQL](cookbook/sql-cookbook.html#central-plant--condenser-water) / [Pandas](cookbook/pandas-cookbook.html#central-plant--condenser-water) cookbooks are **`sql_screening`** catalog entries. **Do not claim Pandas↔SQL predicate, mask, or duration parity** until executable fixtures pass the levels in the [parity matrix](cookbook/parity-matrix.html). Plant rules are documented in both catalogs; that is not oracle proof.
 
 **Related framework docs:** [taxonomy](cookbook/taxonomy.html) (`plant.chw`, `plant.hw`, `plant.tower`), [gap matrix](cookbook/gap-matrix.html), [roadmap](cookbook/roadmap.html), [P0 rule catalog](cookbook/p0-rule-catalog.html).
 

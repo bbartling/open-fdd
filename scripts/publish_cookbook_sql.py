@@ -3,7 +3,7 @@
 
 Rewrites docs/rules/sql-analytics-cookbook.md from sql/analytics/registry.json
 and refreshes the shipped-SQL section of
-docs/rules/cookbook/datafusion-sql-cookbook.md from sql/fdd/postgres/rules/.
+docs/rules/cookbook/sql-cookbook.md from sql/fdd/postgres/rules/.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ANALYTICS_MD = ROOT / "docs" / "rules" / "sql-analytics-cookbook.md"
-FDD_MD = ROOT / "docs" / "rules" / "cookbook" / "datafusion-sql-cookbook.md"
+FDD_MD = ROOT / "docs" / "rules" / "cookbook" / "sql-cookbook.md"
 REGISTRY = ROOT / "sql" / "analytics" / "registry.json"
 QUERY_DIR = ROOT / "sql" / "analytics" / "postgres" / "queries"
 RULE_DIR = ROOT / "sql" / "fdd" / "postgres" / "rules"

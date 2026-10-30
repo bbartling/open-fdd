@@ -8,7 +8,7 @@ nav_exclude: true
 
 # Rule documentation template
 
-Copy this structure for every new rule in **both** [DataFusion SQL](datafusion-sql-cookbook.html) and [Pandas](pandas-cookbook.html) cookbooks.
+Copy this structure for every new rule in **both** [PostgreSQL SQL](sql-cookbook.html) and [Pandas](pandas-cookbook.html) cookbooks.
 
 ---
 
@@ -25,8 +25,8 @@ Copy this structure for every new rule in **both** [DataFusion SQL](datafusion-s
 | **priority** | P0–P3 |
 | **confirmation_seconds** | default 300 (site-adjustable) |
 
-**required_points:** `point_a`, `point_b`  
-**optional_points:** `point_c`  
+**required_points:** `point_a`, `point_b`
+**optional_points:** `point_c`
 **prerequisites:** `macro.fan_proven_on`, …
 
 ### Description
@@ -45,9 +45,9 @@ Why this matters for energy, comfort, or equipment life (public literature refer
 
 ### Tunables
 
-| Parameter | Default | Unit | Notes |
-|-----------|---------|------|-------|
-| `threshold_x` | 5.0 | °F | site-adjustable |
+| Parameter | Kind | Default | SI unit | Notes |
+|-----------|------|---------|---------|-------|
+| `threshold_x` | `temperature_difference` | 2.78 | Δ°C | site-adjustable |
 
 ### Suppression logic
 
@@ -67,7 +67,7 @@ When the rule must **not** run (override, startup delay, unoccupied, bad sensor)
 - Fan cmd/status overlay
 - …
 
-### Detection — DataFusion SQL
+### Detection — PostgreSQL / Timescale SQL
 
 ```sql
 -- confirmation_seconds: 300

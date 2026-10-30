@@ -171,14 +171,14 @@ behind the same contracts where appropriate.
 API semantics used by MCP. Contract/version changes require consumer tests.
 Do not embed an AI chat relay into the UI as part of this modernization.
 
-## DataFusion SQL and rules
+## PostgreSQL / Timescale SQL FDD and rules
 
 | Path | Inspect/use |
 | --- | --- |
-| `sql_rules/registry.yaml` | canonical execution registry and parity metadata |
-| `sql_rules/*.sql` | production rule and rollup expressions |
-| `docs/rules/datafusion-sql.md` | workbench/API lifecycle |
-| `docs/rules/cookbook/datafusion-sql-cookbook.md` | human-readable SQL patterns |
+| `sql/fdd/registry.yaml` | canonical production registry and parameter metadata |
+| `sql/fdd/postgres/rules/` | production PostgreSQL rule expressions |
+| `docs/rules/cookbook/sql-cookbook.md` | PostgreSQL SQL expressions and rule guidance |
+| `docs/rules/cookbook/sql-cookbook.md` | human-readable PostgreSQL SQL patterns |
 | `docs/rules/cookbook/parity-matrix.md` | rule-level honesty |
 | `docs/migration/MILESTONE_D_RULE_PARITY.md` | historical parity evidence |
 | `docs/migration/vibe19/STAGE2_PARITY_AND_WIRING.md` | prior oracle/compare design and known gaps |

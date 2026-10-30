@@ -1,13 +1,17 @@
 # Cookbook ownership
 
-Both expression cookbooks are **permanent project deliverables**.
+Both expression cookbooks are **permanent project deliverables**. SI (`metric-c-v2`) is the storage and processing ABI; no engine or cookbook is a second telemetry writer.
 
 | Cookbook | Path | Engine |
 | --- | --- | --- |
-| DataFusion SQL | [`docs/rules/cookbook/datafusion-sql-cookbook.md`](../../docs/rules/cookbook/datafusion-sql-cookbook.md) | Expression record (filename is historical; production rules are `sql/fdd/` on Timescale) |
+| PostgreSQL / Timescale SQL | [`docs/rules/cookbook/sql-cookbook.md`](../../docs/rules/cookbook/sql-cookbook.md) | Production expression catalog and SQL reference (`sql/fdd/` on Timescale) |
 | Pandas | [`docs/rules/cookbook/pandas-cookbook.md`](../../docs/rules/cookbook/pandas-cookbook.md) | Oracle (`open_fdd.rules`) |
 | Parity matrix | [`docs/rules/cookbook/parity-matrix.md`](../../docs/rules/cookbook/parity-matrix.md) | Honesty layer |
 | Gap / taxonomy / schema | sibling files under `docs/rules/cookbook/` | Supporting |
+
+## Unit and parity contract
+
+SI (`metric-c-v2`) is canonical for rule and analytics processing. Each source point has an engineer-declared unit and quantity; the single Timescale writer normalizes supported inputs once. Parameter metadata declares a semantic `kind` and SI unit. The parity chain is frozen IP baseline → pandas IP = pandas SI → pandas SI = SQL SI → live post-cutover SQL SI = IP baseline (P3). `displayIP` is allowed as a user presentation preference; it does not alter storage or computation. FQ remains unclaimed until live P3 and live P2 pass for every site. See [units](../../docs/modeling/units.md) and [ADR-012](../../docs/architecture/adr-012-si-processing-and-qualification.md).
 
 ## Rules for agents
 

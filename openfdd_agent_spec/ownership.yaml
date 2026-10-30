@@ -102,10 +102,10 @@ components:
 
   cookbooks:
     sql:
-      path: docs/rules/cookbook/datafusion-sql-cookbook.md
-      role: expression_record
+      path: docs/rules/cookbook/sql-cookbook.md
+      role: production_expression_catalog
       engine: timescale_postgresql
-      note: Filename is historical. Product execution is sql/fdd on Timescale.
+      note: Product execution is PostgreSQL/Timescale SQL in sql/fdd.
       protected: true
     pandas:
       path: docs/rules/cookbook/pandas-cookbook.md
@@ -156,11 +156,11 @@ protected_docs:
       - "FDD Rule Cookbook"
       - "pypi.org/project/open-fdd"
       - "Timescale"
-      - "datafusion-sql-cookbook"
+      - "sql-cookbook"
       - "pandas-cookbook"
   pandas_cookbook:
     path: docs/rules/cookbook/pandas-cookbook.md
   sql_cookbook:
-    path: docs/rules/cookbook/datafusion-sql-cookbook.md
+    path: docs/rules/cookbook/sql-cookbook.md
   parity_matrix:
     path: docs/rules/cookbook/parity-matrix.md

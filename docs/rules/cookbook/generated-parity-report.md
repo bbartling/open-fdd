@@ -9,6 +9,8 @@ nav_exclude: true
 # Generated parity report
 
 Auto-generated from `sql_rules/generated/parity_inventory.yaml`.
+This legacy rule inventory is not the 4.0.7 SI parity artifact and is not P0–P2 or FQ evidence.
+Replace it from a reviewed candidate `si-parity` artifact after W4 completes; do not invent missing results.
 Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 
 71 is the executable pandas cookbook (CookbookRule constructors). 77 is the SQL registry: 71 pandas diagnostics plus 6 SQL-only analytics. Aliases SV-SLEW, FC13, and excess_runtime are not extra rules.

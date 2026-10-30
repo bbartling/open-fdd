@@ -10,10 +10,12 @@ permalink: /rules/cookbook/
 # HVAC FDD Rule Cookbook
 
 The nine fan-coil and standalone-controller diagnostics are in the cookbook
-catalogs: [DataFusion SQL](datafusion-sql-cookbook.html#fan-coil--zone_other)
+catalogs: [PostgreSQL SQL](sql-cookbook.html#fan-coil--zone_other)
 and [Pandas](pandas-cookbook.html#fan-coil--zone_other). Role requirements,
-equipment kinds, and the °F / °C unit boundary stay on
+equipment kinds, and the SI unit contract stay on
 [FCU / zone_other rules](fcu-zone-other.md).
+
+SI (metric-c-v2) is the canonical storage and processing ABI. Every point requires an engineer-declared unit; the single writer normalizes supported source values once. User display preference may convert values in the interface. See [Unit contract](../../modeling/units.md).
 
 Open-source, **standards-first** fault detection for commercial HVAC. Rules use generic semantic variables / Haystack roles (`discharge-air-temp`, `outside-air-temp`, `fan-cmd`, …) — portable across modeled sites and generic BAS telemetry.
 
@@ -21,25 +23,25 @@ Open-source, **standards-first** fault detection for commercial HVAC. Rules use 
 
 | Catalog | Count | Role |
 |---------|------:|------|
-| **DataFusion SQL** — [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) | **77** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
+| **PostgreSQL SQL** — [`sql/fdd/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/registry.yaml) | **77** | **Production** FDD in Open-FDD Rust / central (`POST /api/fdd/run`) |
 | **Pandas** — `open_fdd.rules` (`pip install "open-fdd[oracle]"`) | **71** | **Oracle / docs / notebooks** — packaged on PyPI; consumers pin the wheel |
 
-Parity honesty ([parity matrix](parity-matrix.html), [generated report](generated-parity-report.html)): see live `sql_rules/registry.yaml` counts. SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
+Parity honesty ([parity matrix](parity-matrix.html), [generated report](generated-parity-report.html)): see live `sql/fdd/registry.yaml` counts. SQL presence ≠ oracle-proven. Do not claim “54 full parity.”
 
 ## Two cookbooks — complementary, not identical
 
 | Cookbook | Runtime | Use when |
 |----------|---------|----------|
-| [**DataFusion SQL**](datafusion-sql-cookbook.html) | **Open-FDD central / edge** | Live historian, registry SQL FDD, confirmation engine |
+| [**PostgreSQL SQL**](sql-cookbook.html) | **Open-FDD central** | Live historian, registry SQL FDD, confirmation engine |
 | [**Pandas**](pandas-cookbook.html) | **Docs + PyPI oracle** | CSV exports, notebooks, RCx studies, parity oracles |
 
-SQL adds rollups (`FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS`) and aliases `FC13` → `FC13-SAT-HIGH`. Rolling / multi-sensor screens (e.g. `SV-RATE`, `PID-HUNT-1`) may ship a **simplified SQL** variant with an explicit caveat — full logic stays Pandas-validated until proven.
+SQL adds rollups (`FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS`) and aliases `FC13` → `FC13-SAT-HIGH`. Rolling / multi-sensor screens (e.g. `SV-RATE`, `PID-HUNT-1`) must state their current parity status from executable evidence; a catalog entry alone is not proof.
 
 Product UI is the React SPA. Pandas stays on PyPI for third-party tooling.
 
 ## Framework
 
-These pages are the sidebar children of **Cookbook reference**. The DataFusion SQL and Pandas cookbooks keep the full rule catalogs, including the nine `FCU-*` / `zone_other` rules.
+These pages are the sidebar children of **Cookbook reference**. The PostgreSQL SQL and Pandas cookbooks keep the full rule catalogs, including the nine `FCU-*` / `zone_other` rules.
 
 | Doc | Description |
 |-----|-------------|
@@ -48,7 +50,7 @@ These pages are the sidebar children of **Cookbook reference**. The DataFusion S
 | [Water & chiller FDD priority](../water-chiller-fdd-priority.html) | #1009 — plant/hydronic rule backlog (P0/P1/P2) |
 | [Gap matrix](gap-matrix.html) | Coverage vs ASHRAE GL36, Berkeley, PNNL, NIST |
 | [Parity matrix](parity-matrix.html) | SQL ↔ Pandas audit |
-| [Generated parity report](generated-parity-report.html) | Inventory rendered from `sql_rules/generated/parity_inventory.yaml` |
+| [Generated parity report](generated-parity-report.html) | Legacy rule inventory snapshot; not SI parity evidence |
 | [Roadmap](roadmap.html) | Priority-ranked expansion |
 | [Prerequisite macros](prerequisite-macros.html) | Occupancy, fan proven, override / operational gates |
 | [Benchmark strategy](benchmark-strategy.html) | Fixtures + regression (`scripts/cookbook_parity_check.py`) |

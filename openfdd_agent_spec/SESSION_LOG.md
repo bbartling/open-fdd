@@ -1473,10 +1473,19 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Updated analytics row schema to mark only integral SQL counts exact; kept runtime hours, ratios, occupancy values, and z-scores on continuous scalar tolerance. Added regression cases for large one-count drift, DB int/float representation, fractional/non-finite/bool rejection, and retained scalar tolerance.
 - W4f qualification module passes (10 tests, 2 expected skips: live SQL requires a disposable DB and no pending-W4 fixture is available); blocking W4f parity passes with 4,664 P1 and 4,664 P2 comparisons, zero mismatches. Regression covers a one-count mismatch at one million, int/float representation, fractional/NaN/±Inf/bool/string rejection, and continuous scalar tolerance. `git diff --check` passes. No live DB was started.
 
-
 ## 2026-10-30 — W4f takeover review and SQL boundary qualification
 
 - Ben authorized Codex to finish the existing Grok/Cursor train with Luna implementation and independent review. Follow-up commits b8bf9f7b and de8c6589 address categorical comparisons, half-open motor windows, mutation positive controls, z-score zero divisors, and physical PID/change-point threshold invariance.
 - Root independently ran `OPENFDD_DATABASE_URL=<owned disposable DB> PYTHONPATH=. python -B -m unittest tests.qualification.test_w4f_analytics_threshold_invariance tests.qualification.test_w4f_analytics_si -v`: 17 tests, 16 passed, 1 skipped because global SI pack availability remains false. Both live SQL threshold boundaries and existing analytics SI SQL goldens passed. No live source data was used by these tests.
 - Added the new threshold suite to the live-database si-parity workflow and its path triggers. YAML parse and diff checks pass. This is scoped analytics evidence, not W0c baseline completion or W6/W8/W9 qualification.
 - Candidate images remain forbidden on the live stack until the full migration gate; no platform version bump or deployment was performed.
+
+## 2026-10-30 — W5d SI docs (Codex takeover; isolated W4f head)
+
+- Preserved the full SQL engineering cookbook while moving it from the legacy `datafusion-sql-cookbook.md` name to `sql-cookbook.md`; updated path references and protected-path checks only. Retired the obsolete `docs/rules/datafusion-sql.md` lifecycle page.
+- Added the SI unit guide and ADR-012; updated SI/declared-unit/parity-chain guidance in root instructions, cookbook ownership, schema/template, contracts, analytics docs, parity/gap pages, and the canonical cookbook-parity skill. Generated parity inventory remains explicitly legacy pending an actual candidate `si-parity` artifact; no P0/P2 or FQ result was invented.
+- Reconciled rule equations, parameter keys/defaults, absolute-versus-delta temperature units, pressure limits, and flow examples across both protected cookbooks. The remaining imperial unit mention is the explicit source-limit conversion proof in the pandas sweep-catalog text. Local architecture, cookbook docs-only, generated-report freshness, unit/default audit, and `git diff --check` pass. The generated candidate SI parity artifact is an external dependency and remains explicitly absent; no P0/P2 or FQ result was invented.
+
+## 2026-10-30 — W5d review: canonical SI agent instructions
+
+Removed conflicting pre-SI instructions from canonical AGENTS rules34/36 and DATA_CONTRACT FDD/append tables. Source unit validation and one-time writer normalization now agree with metric-c-v2; display preference cannot select a processing ABI. Clarified complete sample identity for idempotency. This documentation describes the candidate, not a claim that the live 4.0.6 stack was migrated or W9 qualified.

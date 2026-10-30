@@ -1,6 +1,6 @@
-# SQL ↔ pandas quality contract (#1253)
+# SQL ↔ pandas quality contract (#1253, #1284)
 
-Soft-OPEN evidence. Soft-OPEN ≠ FQ.
+Soft-OPEN evidence. Soft-OPEN ≠ FQ. SI (`metric-c-v2`) is canonical for storage and processing. Engineer-declared source units are normalized once by the telemetry writer; user display preference is presentation-only. See [unit contract](../modeling/units.md) and [ADR-012](../architecture/adr-012-si-processing-and-qualification.md).
 
 ## Finding
 
@@ -9,6 +9,10 @@ SQL fault hours matched a pandas oracle with `quality=False` exactly. The gap vs
 full `open_fdd.rules.run_rule` (`quality=True`) was fully explained by
 `open_fdd.quality` nulling `OUT_OF_RANGE` / sentinel samples — **not** by
 SAT_DEV_ERR, fan-gate, or confirm equation drift.
+
+## Unit contract and parity chain
+
+Rule and analytics thresholds, samples, and parameters use SI semantic kinds. Never compare an IP baseline with SI values without the explicit parity chain. The qualification order is frozen IP baseline → pandas IP = pandas SI on identical physical frames → pandas SI = SQL SI → post-cutover SQL SI = IP baseline on every site (P3). Fault seconds compare exactly; analytics use the parity harness tolerance. Fixture parity does not establish live P3, and this document does not declare FQ.
 
 ## Contract (Soft-OPEN)
 

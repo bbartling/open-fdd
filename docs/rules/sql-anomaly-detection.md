@@ -7,12 +7,15 @@ permalink: /rules/sql-anomaly-detection/
 
 # SQL anomaly detection
 
+The API and SQL processing contract is SI (`metric-c-v2`). Engineer-declared source units are normalized once at ingest. User display preference is applied only in presentation; relative quantities use scale-only conversion. See [unit contract]({{ site.baseurl }}/modeling/units/).
+
+
 Open-FDD ships **two** anomaly-style layers. Do not conflate them:
 
 | Layer | What it is | Where you see it | Tuners |
 |-------|------------|------------------|--------|
 | **Overview SQL anomaly screening** | Prior-window z-score event table on mapped sensors | Overview → **Anomaly screening (SQL)** | Request `series` params (not Lab rule sliders) |
-| **Registry rules (`SV-*`, `PID-HUNT-1`, `WX-1`)** | Deterministic physics / quality / hunting screens in DataFusion SQL | Lab → **SQL FDD Rules** → Run all / FDD Plots · plant health matrices | Lab sliders from [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) |
+| **Registry rules (`SV-*`, `PID-HUNT-1`, `WX-1`)** | Deterministic physics / quality / hunting screens in PostgreSQL SQL | Lab → **SQL FDD Rules** → Run all / FDD Plots · plant health matrices | Lab sliders from [`sql/fdd/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/registry.yaml) |
 
 Neither layer is ML or peer-fleet scoring. Peer / self-baseline expansion beyond the Overview screen remains optional follow-on work.
 
@@ -88,7 +91,7 @@ There is no Lab slider strip for this analytics path. Tune it from Overview or t
 
 These are **production FDD rules** in the SQL registry (also pandas cookbook twins). They feed fault hours, plant/VAV health matrices, and FDD Plots — not the Overview Z-score table.
 
-Tune in **Lab** (A–Z rule menu). Sliders write `session_config` / rule params; **Update this rule** then re-run so Reports / FDD Plots refetch (`RULES_UPDATED`). Units follow the Lab unit system (°F canonical in SQL; metric convert at query).
+Tune in **Lab** (A–Z rule menu). Sliders write `session_config` / rule params; **Update this rule** then re-run so Reports / FDD Plots refetch (`RULES_UPDATED`). Rule processing uses SI (`metric-c-v2`); display preference is applied only in the SPA.
 
 | Rule | Detects | Primary Lab tuners |
 |------|---------|-------------------|
@@ -100,7 +103,7 @@ Tune in **Lab** (A–Z rule menu). Sliders write `session_config` / rule params;
 
 Shared gate knobs on most sweeps: `minimum_active_coverage_pct`, `startup_delay_min`, `require_operational_gate`, `confirm_seconds` (confirm = consecutive seconds before a fault sticks).
 
-Full equations + copy-paste SQL stubs: [DataFusion SQL cookbook → Sensor validation]({{ site.baseurl }}/rules/cookbook/datafusion-sql-cookbook.html#sensor-validation-sweep). Catalog metadata: [P0 rule catalog]({{ site.baseurl }}/rules/cookbook/p0-rule-catalog.html).
+Full equations + copy-paste SQL stubs: [PostgreSQL SQL cookbook → Sensor validation]({{ site.baseurl }}/rules/cookbook/sql-cookbook.html#sensor-validation-sweep). Catalog metadata: [P0 rule catalog]({{ site.baseurl }}/rules/cookbook/p0-rule-catalog.html).
 
 ---
 
@@ -110,7 +113,7 @@ Full equations + copy-paste SQL stubs: [DataFusion SQL cookbook → Sensor valid
 |--|--|
 | **Detects** | Rolling lookback where a 0–100% actuator (damper / valve / fan cmd) shows large total variation **and** span |
 | **Lab tuners** | `window_hours` (default 1 h), `change_deadband_pct`, `minimum_span_pct`, `total_variation_fault_pct`, plus shared gates / `confirm_seconds` |
-| **Cookbook** | [PID-HUNT-1]({{ site.baseurl }}/rules/cookbook/datafusion-sql-cookbook.html#pid-hunt-1--suspected-control-output-hunting) |
+| **Cookbook** | [PID-HUNT-1]({{ site.baseurl }}/rules/cookbook/sql-cookbook.html#pid-hunt-1--suspected-control-output-hunting) |
 
 Distinct from `SV-SPIKE` / `SV-RATE` (sensor path) and from ASHRAE FC4 hunting where that FC rule is also enabled.
 

@@ -6,7 +6,7 @@ Operators see the same FDD rule under different labels today. This doc defines *
 
 | Surface | Example (FC1) | Source today |
 | --- | --- | --- |
-| Cookbook heading | `FC1 — Duct static below SP at full fan (GL36 A)` | `docs/rules/cookbook/datafusion-sql-cookbook.md` |
+| Cookbook heading | `FC1 — Duct static below SP at full fan (GL36 A)` | `docs/rules/cookbook/sql-cookbook.md` |
 | Registry / API | `description: Duct static below SP at full fan` | `sql_rules/registry.yaml` |
 | Left rail (Rule tuning) | `FC1 — Duct static below SP at full fan` **truncated to 36 chars** | `RuleTuningPanel` summary |
 | FDD Plots rule `<select>` | `FC1 — Duct static below SP at full fan` (full) | `ReportsPage` + `GET /api/fdd/rules` |

@@ -15,7 +15,7 @@ FIXTURES = COOKBOOK / "fixtures"
 
 REQUIRED_PAGES = [
     "index.md",
-    "datafusion-sql-cookbook.md",
+    "sql-cookbook.md",
     "pandas-cookbook.md",
     "taxonomy.md",
     "rule-schema.md",
@@ -160,24 +160,24 @@ def run_docs_integrity() -> None:
         raise AssertionError("docs/index.md must not claim React as product UI")
     print("PASS docs/index.md React product UI")
 
-    registry = (ROOT / "sql_rules" / "registry.yaml").read_text(encoding="utf-8")
+    registry = (ROOT / "sql" / "fdd" / "registry.yaml").read_text(encoding="utf-8")
     # Count top-level rule id entries of form `- id:` or `id:` under rules list.
     reg_ids = re.findall(r"(?m)^\s+-\s+rule_id:\s+\S+", registry)
     if len(reg_ids) < 68:
         raise AssertionError(
-            f"sql_rules/registry.yaml expected >= 68 rule ids, found {len(reg_ids)}"
+            f"sql/fdd/registry.yaml expected >= 68 rule ids, found {len(reg_ids)}"
         )
-    print(f"PASS sql_rules/registry.yaml ({len(reg_ids)} rule ids)")
+    print(f"PASS sql/fdd/registry.yaml ({len(reg_ids)} rule ids)")
 
     hub = (COOKBOOK / "index.md").read_text(encoding="utf-8")
     if "77" not in hub or "71" not in hub:
         raise AssertionError(
             "cookbook/index.md must state both SQL registry 77 and pandas catalog 71"
         )
-    sql_intro = (COOKBOOK / "datafusion-sql-cookbook.md").read_text(encoding="utf-8")[:2500]
+    sql_intro = (COOKBOOK / "sql-cookbook.md").read_text(encoding="utf-8")[:2500]
     pd_intro = (COOKBOOK / "pandas-cookbook.md").read_text(encoding="utf-8")[:2500]
     if "77" not in sql_intro:
-        raise AssertionError("datafusion-sql-cookbook.md intro must mention registry 77")
+        raise AssertionError("sql-cookbook.md intro must mention registry 77")
     if "59" not in pd_intro or "not" not in pd_intro.lower():
         # require "not" near keep/delete messaging — soft check for retention language
         if "not vibe-coded away" not in pd_intro and "intentionally maintained" not in pd_intro:
@@ -186,7 +186,7 @@ def run_docs_integrity() -> None:
             )
     print("PASS cookbook hub + intros dual-catalog honesty")
 
-    for name in ("pandas-cookbook.md", "datafusion-sql-cookbook.md"):
+    for name in ("pandas-cookbook.md", "sql-cookbook.md"):
         text = (COOKBOOK / name).read_text(encoding="utf-8")
         n = len(RULE_HEADING_RE.findall(text))
         if n < MIN_RULE_HEADINGS:
