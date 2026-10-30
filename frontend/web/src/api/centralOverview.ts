@@ -188,7 +188,7 @@ export function weeklyPlantFigures(
       // Avg OAT while on: mean across equipment that reported OAT that week.
       const oatByWeek = new Map<string, { sum: number; n: number }>();
       for (const r of sorted) {
-        const o = num(r.avg_oat_f);
+        const o = num(r.avg_oa_t) ?? num(r.avg_oat_f);
         if (o == null) continue;
         const w = String(r.week_label ?? "");
         const e = oatByWeek.get(w) ?? { sum: 0, n: 0 };
@@ -547,7 +547,7 @@ export function econMatResidual(
   const usable = points.filter(
     (p) =>
       (p.identifiable === true || p.identifiable === "true") &&
-      num(p.mat_resid_f) != null,
+      num(p.mat_resid_c) != null,
   );
   if (usable.length < 5) return null;
   const byEq = new Map<string, Array<Record<string, unknown>>>();
@@ -565,7 +565,7 @@ export function econMatResidual(
       mode: "lines",
       name: eq,
       x: rows.map((r) => String(r.timestamp_utc ?? "")),
-      y: rows.map((r) => showQuantity(num(r.mat_resid_f), unitSystem, "temperature_delta")),
+      y: rows.map((r) => showQuantity(num(r.mat_resid_c), unitSystem, "temperature_delta")),
       line: { width: 1.4, color: rainbowColor(colorIdx) },
     });
     colorIdx += 1;

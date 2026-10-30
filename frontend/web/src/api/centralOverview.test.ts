@@ -196,7 +196,7 @@ vi.mock("./analyticsApi", () => ({
       damper_fb_pct: 40,
       delta_or_c: 55 + i - 72,
       delta_mr_c: 65 + i * 0.5 - 72,
-      mat_resid_f: -1.5,
+      mat_resid_c: -1.5,
       identifiable: true,
       fan_on: true,
     })),

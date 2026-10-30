@@ -133,7 +133,7 @@ describe("C4 tip Overview known answers", () => {
     expect(env.points[0]?.fan_on).toBe(true);
     expect(env.points[0]?.oa_t).toBe(50);
     expect(env.points[0]?.damper_fb_pct).toBe(35);
-    expect(env.points[0]?.mat_resid_f).toBeCloseTo(
+    expect(env.points[0]?.mat_resid_c).toBeCloseTo(
       65 - (72 + (35 / 100) * (50 - 72)),
       6,
     );
