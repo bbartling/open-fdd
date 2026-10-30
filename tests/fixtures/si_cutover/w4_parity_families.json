@@ -102,15 +102,21 @@
         "TRIM-4"
       ]
     },
-    "W4e_sensor_validation": {
+    "W4e_si_sensor_util": {
       "wave": "W4e",
-      "description": "Sensor validation SV-* — pandas SI vs IP parity row",
+      "description": "Sensor validation, weather, schedule and utility rules — SI SQL pack (SV-RATE excluded: unsupported in metric_units.json)",
       "rules": [
         "SV-RANGE",
         "SV-FLATLINE",
-        "SV-RATE",
         "SV-SPIKE",
-        "SV-STALE"
+        "SV-STALE",
+        "OAT-METEO",
+        "WX-1",
+        "SCHED-1",
+        "SCHED-247",
+        "FAULT-ELAPSED-HOURS",
+        "UTIL-MONTHLY",
+        "UTIL-INTERVAL"
       ]
     },
     "W3_full_matrix": {

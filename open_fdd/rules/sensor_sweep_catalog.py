@@ -90,6 +90,23 @@ def limits_for_haystack_role_si(role: str) -> dict[str, float] | None:
     }
 
 
+# Flatline tolerance per quantity. Temperature roles use the tuned ``flatline_tol``
+# (a temperature difference, so it is unit-system invariant up to the K/delta-F scale).
+# %RH is identical in IP and SI, so its tolerance is a declared %RH constant matching
+# ``sv_flatline.sql``; it must never inherit a temperature tolerance.
+HUMIDITY_FLATLINE_TOL_PCT: Final[float] = 0.1
+
+
+def flatline_tolerance_for_role(role: str, temperature_tol: float) -> float:
+    """Flatline span tolerance for ``role`` in the frame's storage units."""
+    q = quantity_for_haystack_role(role)
+    if q == "relative_humidity":
+        return HUMIDITY_FLATLINE_TOL_PCT
+    if q == "absolute_temperature":
+        return float(temperature_tol)
+    raise ValueError(f"flatline role {role!r} has no declared tolerance quantity ({q!r})")
+
+
 def is_expected_constant_role(role: str) -> bool:
     r = (role or "").strip().lower()
     if not r:

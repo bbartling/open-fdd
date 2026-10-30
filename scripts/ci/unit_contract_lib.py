@@ -151,6 +151,30 @@ def kind_source_unit(kind: str, unit: str) -> str:
     return u
 
 
+# Kinds whose SI unit does not determine one imperial unit (air cfm vs water gpm).
+# A parameter of such a kind must declare ``ip_unit`` from the allowed set.
+AMBIGUOUS_IP_KIND_UNITS: dict[str, frozenset[str]] = {
+    "volumetric_flow": frozenset({"cfm", "gpm"}),
+}
+
+
+def assert_ip_unit_declared(metric: dict[str, Any], where: str, kind: str, param: dict[str, Any]) -> None:
+    """Ambiguous kinds must declare their imperial unit; others must not declare one."""
+    ip_unit = param.get("ip_unit")
+    allowed = AMBIGUOUS_IP_KIND_UNITS.get(kind)
+    if allowed is None:
+        if ip_unit is not None:
+            raise ValueError(f"{where}: ip_unit {ip_unit!r} declared for unambiguous kind {kind}")
+        return
+    if not isinstance(ip_unit, str) or not ip_unit:
+        raise ValueError(
+            f"{where}: kind {kind} must declare ip_unit (one of {sorted(allowed)}) naming its medium"
+        )
+    if ip_unit not in allowed:
+        raise ValueError(f"{where}: ip_unit {ip_unit!r} not in {sorted(allowed)} for kind {kind}")
+    assert_unit_matches_kind(metric, f"{where} ip_unit", kind, ip_unit)
+
+
 def assert_unit_matches_kind(metric: dict[str, Any], where: str, kind: str, unit: str) -> None:
     """Declared unit must belong to the declared kind."""
     u = unit.strip().strip("'\"")
@@ -269,7 +293,7 @@ def strip_registry_metadata(doc: Any) -> Any:
 
 
 _VALUE_FIELDS = ("default", "min", "max", "step")
-_SI_CUTOVER_FIELDS = frozenset({"kind", "effect", "unit", *_VALUE_FIELDS})
+_SI_CUTOVER_FIELDS = frozenset({"kind", "effect", "unit", "ip_unit", *_VALUE_FIELDS})
 
 
 def _float_close(a: float, b: float, *, rel: float = 1e-6, abs_tol: float = 1e-6) -> bool:
@@ -692,5 +716,6 @@ def apply_tuning_catalog(data: dict[str, Any]) -> dict[str, Any]:
             where = f"tuning {rid}.{key}"
             kind = declared_kind(where, param)
             assert_unit_matches_kind(metric, where, kind, str(param.get("unit") or ""))
+            assert_ip_unit_declared(metric, where, kind, param)
             param["effect"] = derive_tuner_effect(rid, param.get("effect_in_sql"))
     return data

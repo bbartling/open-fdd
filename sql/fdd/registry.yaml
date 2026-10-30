@@ -250,21 +250,21 @@ rules:
     parameters:
       zone_t_lo:
         label: Zone comfort low
-        default: 68.0
-        min: 60.0
-        max: 72.0
-        step: 0.5
-        unit: degF
+        default: 20.0
+        min: 15.555556
+        max: 22.222222
+        step: 0.277778
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
       zone_t_hi:
         label: Zone comfort high
-        default: 76.0
-        min: 72.0
-        max: 85.0
-        step: 0.5
-        unit: degF
+        default: 24.444444
+        min: 22.222222
+        max: 29.444444
+        step: 0.277778
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_HI
@@ -285,12 +285,12 @@ rules:
     parameters:
       oat_err:
         label: OAT vs meteo tolerance
-        default: 5.0
-        min: 2.0
-        max: 20.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
+        default: 2.777778
+        min: 1.111111
+        max: 11.111111
+        step: 0.277778
+        unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: OAT_ERR
       confirm_seconds:
@@ -1790,7 +1790,7 @@ rules:
     description: Sensor out of hard range
     required_roles: []
     # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, kwh, electric_kw, electric_kwh]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow, kwh, electric_kw, electric_kwh]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1876,7 +1876,7 @@ rules:
     description: Sensor flatline (stuck)
     required_roles: []
     # Pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1926,12 +1926,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       flatline_tol:
         label: Flatline tolerance
-        default: 0.1
-        min: 0.02
-        max: 1.0
-        step: 0.02
-        unit: degF
-        kind: absolute_temperature
+        default: 0.055556
+        min: 0.011111
+        max: 0.555556
+        step: 0.011111
+        unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: FLATLINE_TOL
       flatline_hours:
@@ -1952,7 +1952,7 @@ rules:
     description: Sensor rate-of-change spike
     required_roles: []
     # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2079,12 +2079,12 @@ rules:
         sql_placeholder: STALE_HOURS
       stale_tol:
         label: Stale tolerance
-        default: 0.05
+        default: 0.027778
         min: 0.0
-        max: 1.0
-        step: 0.01
-        unit: degF
-        kind: absolute_temperature
+        max: 0.555556
+        step: 0.005556
+        unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: STALE_TOL
 
@@ -2590,6 +2590,7 @@ rules:
         max: 94389.49
         step: 47.194745
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: MIN_CFM_DESIGN
@@ -3834,6 +3835,7 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -3909,6 +3911,7 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -3984,6 +3987,7 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_BIAS_CFM
@@ -4154,6 +4158,7 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -4199,6 +4204,7 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -4264,6 +4270,7 @@ rules:
         max: 943.894
         step: 4.71947
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: HIGH_MIN_FLOW_SP
@@ -4274,6 +4281,7 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -4294,6 +4302,7 @@ rules:
         max: 37.75576
         step: 0.471947
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FIXED_FLOW_MAX_STD
@@ -4304,6 +4313,7 @@ rules:
         max: 943.894
         step: 4.71947
         unit: L_per_s
+        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FIXED_FLOW_MIN_MEAN
@@ -4734,6 +4744,7 @@ rules:
         max: 189.2706
         step: 3.15451
         unit: L_per_s
+        ip_unit: gpm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_HI
@@ -5083,12 +5094,12 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       spike_limit:
         label: Spike limit
-        default: 16.0
-        min: 4.0
-        max: 40.0
-        step: 1.0
-        unit: degF
-        kind: absolute_temperature
+        default: 8.888889
+        min: 2.222222
+        max: 22.222222
+        step: 0.555556
+        unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: SPIKE_LIMIT
 
@@ -5345,23 +5356,23 @@ rules:
         kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      comfort_low_f:
+      comfort_low:
         label: Zone comfort low
-        default: 70.0
-        min: 50.0
-        max: 80.0
-        step: 0.5
-        unit: °F
+        default: 21.111111
+        min: 10.0
+        max: 26.666667
+        step: 0.277778
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
-      comfort_high_f:
+      comfort_high:
         label: Zone comfort high
-        default: 75.0
-        min: 55.0
-        max: 90.0
-        step: 0.5
-        unit: °F
+        default: 23.888889
+        min: 12.777778
+        max: 32.222222
+        step: 0.277778
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_T_HI

@@ -153,6 +153,25 @@ class SiParityGateBlockingTests(unittest.TestCase):
             "W4d plant scope: P1/P2 for shipped SI SQL should PASS",
         )
 
+    def test_scoped_blocking_w4e_sensor_util_passes(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(STRESS / "si_parity_gate.py"),
+                "--fixtures-only",
+                "--blocking",
+                "--family",
+                "W4e_si_sensor_util",
+            ],
+            cwd=str(REPO),
+            check=False,
+        )
+        self.assertEqual(
+            proc.returncode,
+            0,
+            "W4e sensor/weather/schedule/utility scope: P1/P2 for shipped SI SQL should PASS",
+        )
+
     def test_scoped_blocking_w4a_passes_with_p0_fc1_matching(self) -> None:
         """#1459: pandas shares the product mode-delay holdoff, so P0 FC1 matches SQL."""
         proc = subprocess.run(

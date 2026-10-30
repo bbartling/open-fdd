@@ -405,74 +405,6 @@ def convert_params_from_si(
     return out
 
 
-def _registry_scalar_si_to_ip(
-    rule: dict[str, Any],
-    param_name: str,
-    value: float,
-    metric: dict[str, Any],
-) -> float:
-    spec = (rule.get("parameters") or {}).get(param_name)
-    if not isinstance(spec, dict):
-        return value
-    kind = str(spec.get("kind") or "")
-    unit = str(spec.get("unit") or "")
-    if kind in ("duration_minutes", "duration_seconds", "boolean", "percent"):
-        return value
-    if unit in ("percent", "pct", "bool", "min", "count", "sec"):
-        return value
-    q = _quantity_for_param(spec)
-    if not q:
-        return value
-    if q == "volumetric_flow":
-        target = _legacy_ip_control_unit(rule, param_name)
-    else:
-        target = _imperial_unit_for_quantity(q, param_key=param_name)
-    if not target:
-        return value
-    return uc.convert_from_canonical(metric, q, float(value), target)
-
-
-def imperial_tuning_controls_for_ip_render(
-    rule: dict[str, Any],
-    metric: dict[str, Any],
-) -> dict[str, Any]:
-    """Imperial min/max/default for render_rule IP validation when base catalog diff is empty."""
-    import copy
-
-    from scripts.stress.si_cutover.product_sql_params import TUNING_CATALOG_PATH, legacy_param_key
-
-    rule_id = str(rule.get("rule_id") or "")
-    tuning = next(
-        r
-        for r in json.loads(TUNING_CATALOG_PATH.read_text(encoding="utf-8"))["rules"]
-        if str(r.get("rule_id")) == rule_id
-    )
-    reg_params = rule.get("parameters") or {}
-    out: dict[str, Any] = {}
-    for key, spec in (tuning.get("parameters") or {}).items():
-        if not isinstance(spec, dict):
-            continue
-        reg_name = key if key in reg_params else legacy_param_key(key)
-        reg_spec = reg_params.get(reg_name) if reg_name in reg_params else None
-        if not isinstance(reg_spec, dict) or not registry_defaults_stored_in_si(
-            {"parameters": {reg_name: reg_spec}}
-        ):
-            out[key] = spec
-            continue
-        entry = copy.deepcopy(spec)
-        for field in ("min", "max", "default", "step"):
-            if field in entry and entry[field] is not None:
-                entry[field] = _registry_scalar_si_to_ip(
-                    rule, reg_name, float(entry[field]), metric
-                )
-        q = _quantity_for_param(reg_spec)
-        ip_unit = _imperial_unit_for_quantity(q or "", param_key=reg_name) if q else None
-        if ip_unit:
-            entry["unit"] = ip_unit
-        out[key] = entry
-    return out
-
-
 def _legacy_ip_control_unit(rule: dict[str, Any], name: str) -> str:
     """Imperial unit declared by the base-branch control (air cfm vs water gpm)."""
     from scripts.stress.si_cutover.product_sql_params import (
@@ -483,51 +415,11 @@ def _legacy_ip_control_unit(rule: dict[str, Any], name: str) -> str:
     rid = str(rule.get("rule_id") or "")
     controls = ip_parameter_controls(rid)
     if controls is None:
-        return _imperial_flow_unit_for_rule(rule, name)
+        raise ValueError(f"{rid}.{name}: no base-branch IP controls for SI flow parameter")
     base = controls.get(name) or controls.get(legacy_param_key(name))
     if not isinstance(base, dict) or not base.get("unit"):
         raise ValueError(f"{rid}.{name}: base-branch control declares no IP flow unit")
     return str(base["unit"])
-
-
-_SI_REGISTRY_PARAM_UNITS = frozenset(
-    {
-        "Pa",
-        "degC",
-        "degC_delta",
-        "degC_per_h",
-        "m3/s",
-        "L/s",
-        "L_per_s",
-        "kW",
-        "ppm",
-    }
-)
-
-
-def _imperial_flow_unit_for_rule(rule: dict[str, Any], param_name: str) -> str:
-    """Infer air cfm vs hydronic gpm when base-branch tuning controls are unavailable."""
-    kinds = [str(k).lower() for k in (rule.get("equipment_kinds") or [])]
-    roles = [str(r) for r in (rule.get("required_roles") or []) + (rule.get("optional_roles") or [])]
-    if any(k in kinds for k in ("vav", "fcu", "ahu", "rtu", "mau", "doas")):
-        return "cfm"
-    if any(r in roles for r in ("zone_flow", "supply_air_flow", "oa_flow", "ra_flow")):
-        return "cfm"
-    if any(k in kinds for k in ("chiller", "chwplant", "boiler", "hwplant")):
-        return "gpm"
-    if any(r in roles for r in ("chw_flow", "hw_flow", "condenser_water_flow")):
-        return "gpm"
-    raise ValueError(
-        f"{rule.get('rule_id')}.{param_name}: cannot infer imperial flow unit from equipment kinds/roles"
-    )
-
-
-def registry_defaults_stored_in_si(rule: dict[str, Any]) -> bool:
-    """True when registry.yaml defaults use SI storage units (W4d+), not legacy IP."""
-    for spec in (rule.get("parameters") or {}).values():
-        if isinstance(spec, dict) and str(spec.get("unit") or "") in _SI_REGISTRY_PARAM_UNITS:
-            return True
-    return False
 
 
 def resolve_rule_params_ip_si(
@@ -541,17 +433,7 @@ def resolve_rule_params_ip_si(
 
     raw = rule_params_from_registry(rule)
     rid = str(rule.get("rule_id") or "")
-    if registry_defaults_stored_in_si(rule):
-        params_si = dict(raw)
-        if param_hook:
-            params_si = {k: param_hook(k, float(v)) for k, v in params_si.items()}
-        params_ip = convert_params_from_si(rule, params_si, metric)
-        return params_ip, params_si
-    try:
-        has_legacy_ip_controls = ip_parameter_controls(rid) is not None
-    except RuntimeError:
-        has_legacy_ip_controls = False
-    if has_legacy_ip_controls:
+    if ip_parameter_controls(rid) is not None:
         params_si = dict(raw)
         if param_hook:
             params_si = {k: param_hook(k, float(v)) for k, v in params_si.items()}

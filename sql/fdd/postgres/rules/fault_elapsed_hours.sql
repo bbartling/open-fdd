@@ -1,6 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fault_elapsed_hours.sql — comfort fault elapsed rollup
+-- Storage is SI (metric-c-v2): zone_t and ZONE_T_LO / ZONE_T_HI are °C.
 -- Out-of-band zone temperature holds forward until the next sample.
 -- Gaps longer than MAX_GAP_HOURS are unknown (not fault, not covered).
 WITH ordered AS (

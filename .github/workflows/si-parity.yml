@@ -74,8 +74,7 @@ jobs:
       OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch base ref for IP tuning catalog diff (shallow PR checkouts)
-        run: git fetch origin master --depth=1
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -141,6 +140,11 @@ jobs:
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
             --family W4d_si_plant
+
+      - name: Blocking W4e sensor/weather/schedule/utility SI family (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4e_si_sensor_util
 
       - name: Blocking W4f analytics family (19 queries, P1/P2-analytics)
         run: |

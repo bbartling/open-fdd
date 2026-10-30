@@ -43,3 +43,19 @@ def test_sv_range_flags_out_of_range_humidity():
     stamp_display_units(frame)
     mask = _sweep_range(frame, {}, 300.0)
     assert mask.iloc[0]
+
+
+def test_t1408_3_airflow_proxy_gate_uses_si_litres_per_second() -> None:
+    """W4e: the VAV airflow proof is 50 cfm, i.e. 23.597 L/s on SI storage."""
+    from open_fdd.rules.operational_gate import resolve_fan_running
+
+    idx = pd.date_range("2026-01-05", periods=3, freq="5min", tz="UTC")
+    si = pd.DataFrame({"zone-airflow": [30.0, 20.0, 30.0]}, index=idx)
+    si.attrs["unit_system"] = "si"
+    mask, src = resolve_fan_running(si)
+    assert src == "zone-airflow"
+    assert mask.tolist() == [True, False, True]
+
+    ip = pd.DataFrame({"zone-airflow": [30.0, 20.0, 60.0]}, index=idx)
+    mask_ip, _ = resolve_fan_running(ip)
+    assert mask_ip.tolist() == [False, False, True]

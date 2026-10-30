@@ -316,6 +316,7 @@ enum PackInput {
     UtilityInterval,
     UtilityMonthly,
     AuthorizedSeries,
+    Equipment,
 }
 
 impl PackInput {
@@ -325,6 +326,7 @@ impl PackInput {
             "utility_interval" => Some(Self::UtilityInterval),
             "utility_monthly" => Some(Self::UtilityMonthly),
             "authorized_series" => Some(Self::AuthorizedSeries),
+            "equipment" => Some(Self::Equipment),
             _ => None,
         }
     }
@@ -335,6 +337,7 @@ impl PackInput {
             Self::UtilityInterval => "utility_interval",
             Self::UtilityMonthly => "utility_monthly",
             Self::AuthorizedSeries => "authorized_series",
+            Self::Equipment => "equipment",
         }
     }
 }
@@ -429,7 +432,31 @@ async fn project_input(
             project_utility(conn, building_id, start, end, UtilityKind::Monthly).await
         }
         PackInput::AuthorizedSeries => project_authorized_series(conn, building_id).await,
+        PackInput::Equipment => project_equipment(conn, building_id).await,
     }
+}
+
+async fn project_equipment(conn: &mut PgConnection, building_id: &str) -> Result<InputGate> {
+    // Sensor-sweep SQL (SV-RANGE/FLATLINE/SPIKE) joins `equipment` to bind declared units.
+    // Project only the scoped building's rows; the temp table shadows public.equipment.
+    sqlx::query(
+        "CREATE TEMP TABLE equipment ON COMMIT DROP AS
+         SELECT * FROM public.equipment WHERE building_id = $1",
+    )
+    .bind(building_id)
+    .execute(&mut *conn)
+    .await
+    .context("create scoped equipment projection")?;
+    let ids: Vec<String> =
+        sqlx::query_scalar("SELECT DISTINCT equipment_id FROM equipment ORDER BY 1")
+            .fetch_all(&mut *conn)
+            .await
+            .context("equipment projection ids")?;
+    let rows = i64::try_from(ids.len()).context("equipment projection row count")?;
+    Ok(InputGate::Ready(json!({
+        "rows": rows,
+        "equipment_ids": ids,
+    })))
 }
 
 async fn project_authorized_series(
@@ -2186,15 +2213,15 @@ mod tests {
         .await
         .expect("sv sweep run");
         let range = row(&run, "SV-RANGE", "eq_ahu");
-        assert_eq!(range["status"], "OK", "{range}");
+        assert_eq!(range["status"], "PASS", "{range}");
         assert!(
             hours(range).abs() < 1.0 / 3600.0,
             "ununit ra_h must not fault: {range}"
         );
         let flat = row(&run, "SV-FLATLINE", "eq_ahu");
-        assert_eq!(flat["status"], "OK", "{flat}");
+        assert_eq!(flat["status"], "PASS", "{flat}");
         let stale = row(&run, "SV-STALE", "eq_ahu");
-        assert_eq!(stale["status"], "OK", "{stale}");
+        assert_eq!(stale["status"], "PASS", "{stale}");
 
         sqlx::query(
             "UPDATE point_map SET unit = '%RH'
@@ -2343,7 +2370,7 @@ mod tests {
 
         let range = row(&run, "SV-RANGE", "eq_ahu");
         assert_ne!(range["status"], "SKIP_UNSUPPORTED", "{range}");
-        assert_eq!(range["status"], "OK", "{range}");
+        assert_eq!(range["status"], "PASS", "{range}");
         assert!(
             hours(range).abs() < 1.0 / 3600.0,
             "in-range humidity must not range-fault: {range}"
@@ -2389,13 +2416,13 @@ mod tests {
         let flat_sp = row(&run, "SV-FLATLINE", "eq_sp_only");
         assert_ne!(flat_sp["status"], "SKIP_UNSUPPORTED", "{flat_sp}");
         assert_eq!(
-            flat_sp["status"], "OK",
+            flat_sp["status"], "PASS",
             "constant sat_sp alone must not flatline-fault: {flat_sp}"
         );
         let stale_sp = row(&run, "SV-STALE", "eq_sp_only");
         assert_ne!(stale_sp["status"], "SKIP_UNSUPPORTED", "{stale_sp}");
         assert_eq!(
-            stale_sp["status"], "OK",
+            stale_sp["status"], "PASS",
             "constant sat_sp alone must not stale-fault: {stale_sp}"
         );
 
@@ -2413,6 +2440,214 @@ mod tests {
             "out-of-range foreign humidity must range-fault: {foreign_range}"
         );
         assert!(hours(foreign_range) > 0.0, "{foreign_range}");
+
+        pool.close().await;
+        fdd_tsdb::clear_shared_pool();
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "OPENFDD_* env is process-global while disposable pack databases are connected"
+    )]
+    #[tokio::test]
+    async fn t1408_3_si_sv_pack_flags_stuck_humidity_with_airflow_gate() {
+        let Some(shared_url) = database_url() else {
+            eprintln!("skip: no postgres url");
+            return;
+        };
+        let admin = admin_url(&shared_url);
+        let admin_pool = match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(3))
+            .connect(&admin)
+            .await
+        {
+            Ok(pool) => pool,
+            Err(_) if explicit_database_url() => {
+                panic!("pack database admin connect failed");
+            }
+            Err(_) => {
+                eprintln!("skip: postgres admin unavailable");
+                return;
+            }
+        };
+        let timescale: bool = sqlx::query_scalar(
+            "SELECT EXISTS (
+                SELECT 1 FROM pg_available_extensions WHERE name = 'timescaledb'
+             )",
+        )
+        .fetch_one(&admin_pool)
+        .await
+        .expect("timescale probe");
+        drop(admin_pool);
+        if !timescale {
+            if timescale_required() {
+                panic!("timescaledb extension is not available");
+            }
+            eprintln!("skip: timescaledb extension is not available");
+            return;
+        }
+        let _lock = crate::test_env_lock::lock_env();
+        let results = tempfile::tempdir().expect("results");
+        let _env = EnvHold::capture(&[
+            "OPENFDD_DATABASE_URL",
+            "OPENFDD_HISTORIAN",
+            "OPENFDD_SQL_ROOT",
+            "OPENFDD_SQL_RULES_DIR",
+            "OPENFDD_RULE_RESULTS_DIR",
+        ]);
+        std::env::remove_var("OPENFDD_RESET_DB");
+        std::env::remove_var("OPENFDD_ALLOW_DESTRUCTIVE_DB");
+        std::env::remove_var("OPENFDD_SQL_ROOT");
+        std::env::remove_var("OPENFDD_SQL_RULES_DIR");
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        std::env::set_var("OPENFDD_RULE_RESULTS_DIR", results.path());
+
+        let db_name = format!("t14083{}", uuid::Uuid::new_v4().simple());
+        let _drop = DropDb {
+            admin: admin.clone(),
+            name: db_name.clone(),
+        };
+        let pool = create_database(&admin, &db_name).await;
+        let mut url = url::Url::parse(&admin).expect("admin");
+        url.set_path(&format!("/{db_name}"));
+        std::env::set_var("OPENFDD_DATABASE_URL", url.as_str());
+        fdd_tsdb::clear_shared_pool();
+        crate::db_lifecycle::apply_on_startup()
+            .await
+            .expect("db startup");
+
+        // SI storage: humidity in percent RH, temperatures in degC, airflow in L/s.
+        let site = format!("s{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
+        seed_dimensions(
+            &pool,
+            &site,
+            &[
+                ("eq_ahu", "ahu"),
+                ("eq_live", "ahu"),
+                ("eq_vav_on", "vav"),
+                ("eq_vav_off", "vav"),
+            ],
+        )
+        .await;
+        for (idx, minutes) in (0..269_i64).map(|idx| (idx, idx * 5)) {
+            let wobble = if idx % 2 == 0 { 0.0 } else { 2.0 };
+            put_sample(&pool, &site, "eq_ahu", "fan_status", minutes, 1.0, None).await;
+            put_sample(&pool, &site, "eq_ahu", "ra_h", minutes, 45.0, Some("%RH")).await;
+            put_sample(
+                &pool,
+                &site,
+                "eq_ahu",
+                "sat",
+                minutes,
+                12.8 + wobble,
+                Some("degC"),
+            )
+            .await;
+            put_sample(&pool, &site, "eq_live", "fan_status", minutes, 1.0, None).await;
+            put_sample(
+                &pool,
+                &site,
+                "eq_live",
+                "ra_h",
+                minutes,
+                45.0 + wobble,
+                Some("%RH"),
+            )
+            .await;
+            put_sample(
+                &pool,
+                &site,
+                "eq_vav_on",
+                "zone_flow",
+                minutes,
+                100.0,
+                Some("L/s"),
+            )
+            .await;
+            put_sample(
+                &pool,
+                &site,
+                "eq_vav_on",
+                "zone_rh",
+                minutes,
+                50.0,
+                Some("%RH"),
+            )
+            .await;
+            put_sample(
+                &pool,
+                &site,
+                "eq_vav_off",
+                "zone_flow",
+                minutes,
+                10.0,
+                Some("L/s"),
+            )
+            .await;
+            put_sample(
+                &pool,
+                &site,
+                "eq_vav_off",
+                "zone_rh",
+                minutes,
+                50.0,
+                Some("%RH"),
+            )
+            .await;
+        }
+        for (equipment, role, unit) in [
+            ("eq_ahu", "ra_h", "%RH"),
+            ("eq_ahu", "sat", "degC"),
+            ("eq_live", "ra_h", "%RH"),
+            ("eq_vav_on", "zone_flow", "L/s"),
+            ("eq_vav_on", "zone_rh", "%RH"),
+            ("eq_vav_off", "zone_flow", "L/s"),
+            ("eq_vav_off", "zone_rh", "%RH"),
+        ] {
+            sqlx::query(
+                "UPDATE point_map SET unit = $4
+                 WHERE site_id = $1 AND equipment_id = $2 AND role = $3",
+            )
+            .bind(&site)
+            .bind(equipment)
+            .bind(role)
+            .bind(unit)
+            .execute(&pool)
+            .await
+            .expect("si point unit");
+        }
+
+        fdd_tsdb::clear_shared_pool();
+        let run = crate::timescale_product::run_fdd_registry(&serde_json::json!({
+            "building_id": site,
+            "rule_ids": ["SV-FLATLINE"],
+            "confirmation_seconds": 0,
+        }))
+        .await
+        .expect("t1408-3 si sv pack run");
+
+        // Positive control: stuck percent-RH under fan proof faults even though SI sat moves.
+        let flat = row(&run, "SV-FLATLINE", "eq_ahu");
+        assert_ne!(flat["status"], "SKIP_UNSUPPORTED", "{flat}");
+        assert_eq!(flat["status"], "FAULT", "{flat}");
+        assert!(hours(flat) > 0.0, "{flat}");
+
+        // Negative control: live humidity must not flatline-fault.
+        let live = row(&run, "SV-FLATLINE", "eq_live");
+        assert_ne!(live["status"], "SKIP_UNSUPPORTED", "{live}");
+        assert_eq!(live["status"], "PASS", "{live}");
+
+        // Airflow proxy gate in L/s: 100 L/s is energized, 10 L/s is below the 50 cfm proof.
+        let vav_on = row(&run, "SV-FLATLINE", "eq_vav_on");
+        assert_eq!(vav_on["status"], "FAULT", "{vav_on}");
+        assert!(hours(vav_on) > 0.0, "{vav_on}");
+        let vav_off = row(&run, "SV-FLATLINE", "eq_vav_off");
+        assert_ne!(vav_off["status"], "SKIP_UNSUPPORTED", "{vav_off}");
+        assert!(
+            hours(vav_off).abs() < 1.0 / 3600.0,
+            "airflow below proof must not flatline-fault: {vav_off}"
+        );
 
         pool.close().await;
         fdd_tsdb::clear_shared_pool();
