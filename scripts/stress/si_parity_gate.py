@@ -72,7 +72,8 @@ def _blocking_errors(
             out.extend(r.errors)
             continue
         if not blocking:
-            # Full matrix: P0/P1/P2 mismatches are logged in si_parity_report.json only.
+            if r.stage == "P2":
+                out.extend(r.errors)
             continue
         if scope is not None and r.stage in ("P1", "P2"):
             out.extend(r.errors)

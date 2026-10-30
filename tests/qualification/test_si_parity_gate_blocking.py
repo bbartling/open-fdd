@@ -63,7 +63,7 @@ class SiParityGateBlockingTests(unittest.TestCase):
         failures = self.gate._blocking_errors([p1], blocking=True, scope={"FC1"})
         self.assertEqual(len(failures), 1)
 
-    def test_p2_errors_not_blocking_in_report_only_full_matrix(self) -> None:
+    def test_p2_errors_block_in_report_only_full_matrix(self) -> None:
         p2 = self.pc.StageResult(
             "P2",
             10,
@@ -72,6 +72,17 @@ class SiParityGateBlockingTests(unittest.TestCase):
             (),
         )
         failures = self.gate._blocking_errors([p2], blocking=False, scope=None)
+        self.assertEqual(len(failures), 1)
+
+    def test_p0_errors_report_only_in_scoped_blocking(self) -> None:
+        p0 = self.pc.StageResult(
+            "P0",
+            10,
+            ("P0 FC1/equip:test/2026-07-01: ip_sql=28800.0 ip_pandas=28500.0",),
+            (),
+            (),
+        )
+        failures = self.gate._blocking_errors([p0], blocking=True, scope={"FC1"})
         self.assertEqual(failures, [])
 
     def test_scoped_blocking_passes_despite_p0_fc1_mismatches(self) -> None:

@@ -24,7 +24,7 @@ if str(ROOT) not in sys.path:
 from scripts.ci import unit_contract_lib as uc  # noqa: E402
 
 ANALYTICS_REL_TOL = 1e-6
-FAULT_SECONDS_ATOL = 0.0  # exact — use math.isclose with rel_tol=0, abs_tol=1e-9
+FAULT_SECONDS_ATOL = 0.0  # exact equality; no tolerance
 
 REPO = ROOT
 IP_GOLDENS_DIR = REPO / "tests" / "fixtures" / "si_cutover" / "ip_goldens"
@@ -157,8 +157,8 @@ def _metric_doc() -> dict[str, Any]:
 
 
 def fault_seconds_equal(a: float, b: float) -> bool:
-    """Exact FDD fault_seconds parity (P1/P2); no poll or boundary tolerance."""
-    return math.isclose(float(a), float(b), rel_tol=0.0, abs_tol=1e-9)
+    """Exact FDD fault_seconds parity (P1/P2); no poll, boundary or float tolerance."""
+    return float(a) == float(b)
 
 
 def analytics_relative_equal(a: float, b: float) -> bool:
@@ -764,7 +764,7 @@ def run_p2_all_goldens(
                 continue
             sql_s = float(sql_raw)
             pandas_s = float(pandas_raw)
-            if not fault_seconds_equal(sql_s, pandas_s):  # exact; no poll tolerance (P2)
+            if not fault_seconds_equal(sql_s, pandas_s):
                 errors.append(
                     f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
                     f"sql_si={sql_s} pandas_si={pandas_s}"
