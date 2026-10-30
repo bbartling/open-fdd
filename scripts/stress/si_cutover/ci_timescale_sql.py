@@ -37,6 +37,13 @@ from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
 )
 
 PENDING_W4 = "pending_W4"
+
+
+def pc_fault_seconds_equal(a: float, b: float) -> bool:
+    """Exact FDD seconds after microsecond rounding (hours*3600 float noise)."""
+    return round(float(a), 6) == round(float(b), 6)
+
+
 W4D_PLANT_RULES = frozenset(
     {
         "CHW-NOLOAD-1",
@@ -404,7 +411,7 @@ def compare_sql_daily_rows(
         if b is None:
             return f"{label_right} missing day/equipment {key} present in {label_left}"
         for field in ("fault_seconds",):
-            if float(a.get(field, 0)) != float(b.get(field, 0)):
+            if not pc_fault_seconds_equal(float(a.get(field, 0)), float(b.get(field, 0))):
                 return (
                     f"{label_left} vs {label_right} {key} {field}: "
                     f"{a.get(field)} != {b.get(field)}"
@@ -604,7 +611,7 @@ def execute_sql_rule_daily(
                 if tot_err:
                     return [], f"aggregate total alongside overlay: {tot_err}"
                 overlay_total = sum(float(r.get("fault_seconds", 0)) for r in overlay_rows)
-                if overlay_total != agg_total:
+                if not pc_fault_seconds_equal(agg_total, overlay_total):
                     return [], (
                         f"ORIGINAL_AGGREGATE vs OVERLAY total fault_seconds: "
                         f"{agg_total} != {overlay_total}"
