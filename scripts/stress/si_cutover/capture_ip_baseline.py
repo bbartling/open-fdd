@@ -99,6 +99,14 @@ class UnmappedRoleError(Exception):
         super().__init__(", ".join(roles))
 
 
+class CaptureQualificationError(RuntimeError):
+    """Capture cannot qualify as the frozen IP baseline (recorded in the manifest)."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(reason)
+
+
 @lru_cache(maxsize=1)
 def load_role_id_to_haystack() -> dict[str, str]:
     """Map canonical role ids (and Haystack names) to pandas cookbook column names."""
@@ -549,6 +557,13 @@ def baseline_capture_disqualifiers(meta: dict[str, Any]) -> list[str]:
     oracle = meta.get("ip_oracle")
     if not isinstance(oracle, dict):
         reasons.append("missing_ip_oracle")
+    for site in meta.get("sites") or []:
+        if not isinstance(site, dict):
+            continue
+        for reason in site.get("disqualifying_reasons") or []:
+            token = str(reason).strip()
+            if token and token not in reasons:
+                reasons.append(token)
     return reasons
 
 
@@ -664,6 +679,202 @@ def no_applicable_status_rows(status_map: dict[tuple[str, str], str]) -> list[di
                 }
             )
     return out
+
+
+def validate_batch_scope_rule_sets(
+    *,
+    computed_rule_ids: set[str],
+    carried_rule_ids: set[str],
+    batch: set[str],
+    registry_rule_ids: set[str],
+) -> None:
+    """Ensure a scoped registry run split matches batch vs carry-forward semantics."""
+    overlap = computed_rule_ids & carried_rule_ids
+    if overlap:
+        raise ValueError(
+            "persisted batch scope overlap between computed and carried rules: "
+            + ", ".join(sorted(overlap))
+        )
+    if computed_rule_ids != batch:
+        missing = sorted(batch - computed_rule_ids)
+        extra = sorted(computed_rule_ids - batch)
+        detail = []
+        if missing:
+            detail.append(f"missing computed={missing}")
+        if extra:
+            detail.append(f"unexpected computed={extra}")
+        raise ValueError(
+            "freshly computed rule set must equal batch"
+            + (f" ({'; '.join(detail)})" if detail else "")
+        )
+    all_persisted = computed_rule_ids | carried_rule_ids
+    if carried_rule_ids or len(all_persisted) == len(registry_rule_ids):
+        expected_carried = registry_rule_ids - batch
+        if carried_rule_ids != expected_carried:
+            missing = sorted(expected_carried - carried_rule_ids)
+            extra = sorted(carried_rule_ids - expected_carried)
+            detail = []
+            if missing:
+                detail.append(f"missing carried={missing}")
+            if extra:
+                detail.append(f"unexpected carried={extra}")
+            raise ValueError(
+                "carried-forward rule set must equal registry minus batch"
+                + (f" ({'; '.join(detail)})" if detail else "")
+            )
+    elif carried_rule_ids:
+        raise ValueError(
+            "unexpected carried-forward rows without a full registry cohort"
+        )
+
+
+def fetch_batch_run_rule_sets(
+    conn, *, building_id: str, run_id: str, batch: set[str]
+) -> tuple[set[str], set[str]]:
+    """Split persisted rows for one logical run into batch-computed vs parent carry-forward.
+
+    Partial registry runs copy untouched rules from the parent generation under the new
+    ``detail->>'run_id'`` (``fdd_registry_persist::copy_parent_runs`` stamps
+    ``detail.generation.parent_run_id``). Freshly evaluated rules belong to ``batch``.
+    """
+    computed: set[str] = set()
+    carried: set[str] = set()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT rule_id,
+                   bool_and(detail->'generation'->>'parent_run_id' IS NOT NULL) AS has_parent
+            FROM fdd_run
+            WHERE site_id = %s AND detail->>'run_id' = %s
+            GROUP BY rule_id
+            """,
+            (building_id, run_id),
+        )
+        rows = cur.fetchall()
+    for rule_id, has_parent in rows:
+        rid = str(rule_id)
+        if rid in batch:
+            computed.add(rid)
+        else:
+            if batch and not has_parent:
+                raise RuntimeError(
+                    f"carried-forward rule {rid} missing detail.generation.parent_run_id"
+                )
+            carried.add(rid)
+    return computed, carried
+
+
+def fetch_computed_run_window_bounds(
+    conn, *, building_id: str, run_id: str, batch: set[str]
+) -> tuple[Any, Any, Any, Any] | None:
+    """Window bounds for rows this batch evaluated (ignore carry-forward copies)."""
+    if not batch:
+        return None
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT MIN(window_start), MAX(window_start), MIN(window_end), MAX(window_end)
+            FROM fdd_run
+            WHERE site_id = %s AND detail->>'run_id' = %s AND rule_id = ANY(%s::text[])
+            """,
+            (building_id, run_id, list(batch)),
+        )
+        start_min, start_max, end_min, end_max = cur.fetchone()
+    return (
+        (start_min, start_max, end_min, end_max) if start_min is not None else None
+    )
+
+
+def validate_batch_persisted_scope(
+    conn,
+    *,
+    building_id: str,
+    run_id: str,
+    batch: set[str],
+    registry_rule_ids: set[str],
+) -> tuple[Any, Any, Any, Any]:
+    """Validate scoped persist semantics and return computed-row window bounds."""
+    computed, carried = fetch_batch_run_rule_sets(
+        conn, building_id=building_id, run_id=run_id, batch=batch
+    )
+    try:
+        validate_batch_scope_rule_sets(
+            computed_rule_ids=computed,
+            carried_rule_ids=carried,
+            batch=batch,
+            registry_rule_ids=registry_rule_ids,
+        )
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    bounds = fetch_computed_run_window_bounds(
+        conn, building_id=building_id, run_id=run_id, batch=batch
+    )
+    if bounds is None:
+        raise RuntimeError("batch persisted no computed window bounds")
+    return bounds
+
+
+def fdd_run_created_at_marker(conn, building_id: str) -> datetime:
+    """Latest ``fdd_run.created_at`` for a site (UTC)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT COALESCE(MAX(created_at), TIMESTAMPTZ '1970-01-01 00:00:00+00')
+            FROM fdd_run WHERE site_id = %s
+            """,
+            (building_id,),
+        )
+        marker = cur.fetchone()[0]
+    if isinstance(marker, datetime):
+        if marker.tzinfo is None:
+            marker = marker.replace(tzinfo=timezone.utc)
+        return marker.astimezone(timezone.utc)
+    return datetime.fromisoformat(str(marker).replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
+def interleaved_logical_run_ids(
+    conn,
+    *,
+    building_id: str,
+    after: datetime,
+    allowed_run_ids: set[str],
+) -> list[str]:
+    """Logical run ids written after ``after`` that are not part of this capture."""
+    allowed = sorted(allowed_run_ids)
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT detail->>'run_id' AS logical_run_id
+            FROM fdd_run
+            WHERE site_id = %s
+              AND created_at > %s
+              AND detail->>'run_id' IS NOT NULL
+              AND NOT (detail->>'run_id' = ANY(%s::text[]))
+            ORDER BY logical_run_id
+            """,
+            (building_id, after, allowed),
+        )
+        return [str(row[0]) for row in cur.fetchall() if row[0]]
+
+
+def assert_no_interleaved_fdd_run(
+    conn,
+    *,
+    building_id: str,
+    marker: datetime,
+    allowed_run_ids: set[str],
+) -> None:
+    """Fail closed when AFDD or another writer publishes a new generation mid-capture."""
+    foreign = interleaved_logical_run_ids(
+        conn,
+        building_id=building_id,
+        after=marker,
+        allowed_run_ids=allowed_run_ids,
+    )
+    if foreign:
+        raise CaptureQualificationError(
+            f"concurrent_non_capture_fdd_run:{foreign[0]}"
+        )
 
 
 def fetch_run_scope(
@@ -1354,6 +1565,11 @@ def capture_site(
     )
 
     rule_batches = build_rule_batches(rules, rule_batch_size)
+    registry_rule_ids = {
+        str(rule.get("rule_id") or "").strip()
+        for rule in rules
+        if str(rule.get("rule_id") or "").strip()
+    }
     run_records: list[dict[str, Any]] = []
     fdd_run_http: list[dict[str, Any]] = []
     ws = window_start or ""
@@ -1361,6 +1577,15 @@ def capture_site(
     receipt_id = uuid.uuid4().hex
     receipt_dir = out_dir / building_id / "run_receipts" / receipt_id
     for batch_index, batch in enumerate(rule_batches):
+        batch_set = set(batch)
+        allowed_run_ids = {str(record["run_id"]) for record in run_records if record.get("run_id")}
+        scope_marker = fdd_run_created_at_marker(conn, building_id)
+        assert_no_interleaved_fdd_run(
+            conn,
+            building_id=building_id,
+            marker=scope_marker,
+            allowed_run_ids=allowed_run_ids,
+        )
         run_body: dict[str, Any] = {
             "mode": "registry",
             "building_id": building_id,
@@ -1415,13 +1640,24 @@ def capture_site(
         # This is published before validation or the next batch so an interrupted
         # capture never loses the API run ID. Receipts are append-only per capture.
         write_atomic_json(receipt_path, run_record)
-        persisted_rule_ids, persisted_bounds = fetch_run_scope(
-            conn, building_id=building_id, run_id=run_id
+        allowed_run_ids.add(run_id)
+        assert_no_interleaved_fdd_run(
+            conn,
+            building_id=building_id,
+            marker=scope_marker,
+            allowed_run_ids=allowed_run_ids,
         )
-        if persisted_rule_ids != set(batch):
-            raise RuntimeError(
-                f"/api/fdd/run batch {batch_index} persisted unexpected rule scope"
+        try:
+            persisted_bounds = validate_batch_persisted_scope(
+                conn,
+                building_id=building_id,
+                run_id=run_id,
+                batch=batch_set,
+                registry_rule_ids=registry_rule_ids,
             )
+        except RuntimeError as exc:
+            raise RuntimeError(f"/api/fdd/run batch {batch_index}: {exc}") from exc
+        computed_rule_ids = batch_set
         if (
             persisted_bounds is None
             or parse_utc_instant(persisted_bounds[0])
@@ -1435,11 +1671,20 @@ def capture_site(
             or parse_utc_instant(persisted_bounds[2]) != parse_utc_instant(batch_we)
         ):
             raise RuntimeError(f"/api/fdd/run batch {batch_index} persisted a different window")
-        run_record["persisted_rule_ids"] = sorted(persisted_rule_ids)
+        run_record["persisted_rule_ids"] = sorted(computed_rule_ids | (registry_rule_ids - batch_set))
+        run_record["computed_rule_ids"] = sorted(computed_rule_ids)
+        run_record["carried_rule_ids"] = sorted(registry_rule_ids - batch_set)
         run_record["persisted_window_start"] = persisted_bounds[0].isoformat()
         run_record["persisted_window_end"] = persisted_bounds[2].isoformat()
+        batch_status = fetch_run_status_rows(
+            conn, building_id=building_id, run_id=run_id
+        )
         run_record["no_applicable_rows"] = no_applicable_status_rows(
-            fetch_run_status_rows(conn, building_id=building_id, run_id=run_id)
+            {
+                key: status
+                for key, status in batch_status.items()
+                if key[0] in batch_set
+            }
         )
         write_atomic_json(receipt_path, run_record)
         run_records.append(run_record)
@@ -1450,9 +1695,13 @@ def capture_site(
         conn, building_id=building_id, window_start=ws, window_end=we
     )
     for run_record in run_records:
+        batch_rules = set(run_record["rule_ids"])
+        status_map = fetch_run_status_rows(
+            conn, building_id=building_id, run_id=run_record["run_id"]
+        )
         merge_status(
             sql_daily,
-            fetch_run_status_rows(conn, building_id=building_id, run_id=run_record["run_id"]),
+            {key: value for key, value in status_map.items() if key[0] in batch_rules},
         )
 
     analytics = analytics_rows_for_site(
@@ -1755,19 +2004,28 @@ def main(argv: list[str] | None = None) -> int:
         with db_connect() as conn:
             for site in sites:
                 safe_print(f"capture site {site.get('building_id')}")
-                summary = capture_site(
-                    http,
-                    headers,
-                    conn,
-                    site=site,
-                    out_dir=out_dir,
-                    rules=rules,
-                    skip_pandas=args.skip_pandas,
-                    pandas_max_rules=pandas_cap,
-                    rule_batch_size=args.rule_batch_size,
-                    request_timeout_s=args.request_timeout_s,
-                )
+                try:
+                    summary = capture_site(
+                        http,
+                        headers,
+                        conn,
+                        site=site,
+                        out_dir=out_dir,
+                        rules=rules,
+                        skip_pandas=args.skip_pandas,
+                        pandas_max_rules=pandas_cap,
+                        rule_batch_size=args.rule_batch_size,
+                        request_timeout_s=args.request_timeout_s,
+                    )
+                except CaptureQualificationError as exc:
+                    summary = {
+                        "building_id": str(site.get("building_id") or "").strip(),
+                        "disqualifying_reasons": [exc.reason],
+                        "failed": True,
+                    }
                 summaries.append(summary)
+                if summary.get("failed"):
+                    continue
                 all_errors.extend(summary.get("pandas_errors") or [])
                 all_errors.extend(summary.get("analytics_errors") or [])
         meta = {
@@ -1794,6 +2052,9 @@ def main(argv: list[str] | None = None) -> int:
         safe_print(f"FAIL capture — {len(all_errors)} captured analytics/pandas error(s)")
         for msg in all_errors[:20]:
             safe_print(f"  {msg}")
+        return 1
+    if any(site.get("failed") for site in summaries if isinstance(site, dict)):
+        safe_print("FAIL capture — site disqualification (see manifest disqualifying_reasons)")
         return 1
     safe_print(f"PASS capture — {len(summaries)} site(s)")
     return 0
