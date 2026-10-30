@@ -27,8 +27,10 @@ struct TuningCatalog {
     rules: Vec<TuningRule>,
 }
 
-static CATALOG: OnceLock<Result<HashMap<String, HashMap<String, TuningParam>>, String>> =
-    OnceLock::new();
+/// rule_id -> parameter name -> tuner metadata.
+type CatalogMap = HashMap<String, HashMap<String, TuningParam>>;
+
+static CATALOG: OnceLock<Result<CatalogMap, String>> = OnceLock::new();
 
 /// `sql/fdd` pack root — same env contract as openfdd-central `sql_root_for_registry` (no cwd/build fallbacks).
 pub fn sql_fdd_pack_root() -> Result<PathBuf, String> {
@@ -50,7 +52,7 @@ pub fn tuning_catalog_path() -> Result<PathBuf, String> {
     Ok(root.join("tuning_catalog.json"))
 }
 
-fn load_catalog_map() -> Result<HashMap<String, HashMap<String, TuningParam>>, String> {
+fn load_catalog_map() -> Result<CatalogMap, String> {
     let path = tuning_catalog_path()?;
     if !path.is_file() {
         return Err(format!(
@@ -69,7 +71,7 @@ fn load_catalog_map() -> Result<HashMap<String, HashMap<String, TuningParam>>, S
         .collect())
 }
 
-fn catalog() -> Result<&'static HashMap<String, HashMap<String, TuningParam>>, String> {
+fn catalog() -> Result<&'static CatalogMap, String> {
     match CATALOG.get_or_init(load_catalog_map).as_ref() {
         Ok(map) => Ok(map),
         Err(msg) => Err(msg.clone()),
