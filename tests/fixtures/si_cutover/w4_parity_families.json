@@ -39,6 +39,24 @@
       "description": "FC1 duct static (GL36 A) — T1284-4 blocking scope",
       "rules": ["FC1"]
     },
+    "W4d_si_plant": {
+      "wave": "W4d",
+      "description": "Central plant + trim (CHW/CW/HP/TRIM) — SI SQL pack",
+      "rules": [
+        "CHW-NOLOAD-1",
+        "CHW-1",
+        "CHW-2",
+        "CHW-3",
+        "CHW-4",
+        "CW-OPT-1",
+        "CW-APR-1",
+        "CW-FAN-1",
+        "HP-1",
+        "TRIM-1",
+        "TRIM-3",
+        "TRIM-4"
+      ]
+    },
     "W4e_sensor_validation": {
       "wave": "W4e",
       "description": "Sensor validation SV-* — pandas SI vs IP parity row",

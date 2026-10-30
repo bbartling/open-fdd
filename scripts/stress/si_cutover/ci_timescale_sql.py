@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from datetime import timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +23,10 @@ from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
     frame_column_to_sql_role,
     registry_role_column,
 )
-from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_registry  # noqa: E402
+from scripts.stress.si_cutover.product_sql_params import (  # noqa: E402
+    catalog_overrides_from_registry,
+    ip_parameter_controls,
+)
 from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
     W4C_SI_ZONE_FAMILY,
     family_dataset_ids,
@@ -29,11 +34,32 @@ from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
 )
 
 PENDING_W4 = "pending_W4"
-SI_SQL_PACK_AVAILABLE = False
+W4D_PLANT_RULES = frozenset(
+    {
+        "CHW-NOLOAD-1",
+        "CHW-1",
+        "CHW-2",
+        "CHW-3",
+        "CHW-4",
+        "CW-OPT-1",
+        "CW-APR-1",
+        "CW-FAN-1",
+        "HP-1",
+        "TRIM-1",
+        "TRIM-3",
+        "TRIM-4",
+    }
+)
+SI_SQL_PACK_AVAILABLE = False  # global flag; W4c zone and W4d plant rules ship per-rule.
 
 
 def w4c_target_datasets() -> frozenset[str]:
     return family_dataset_ids(W4C_SI_ZONE_FAMILY)
+
+
+def rule_si_sql_shipped(rule_id: str) -> bool:
+    """W4d plant rules whose P2 cells are computed live per row."""
+    return str(rule_id) in W4D_PLANT_RULES
 
 
 def _load_parity_module():
@@ -83,17 +109,67 @@ def frame_sql_columns(frame) -> set[str]:
     return cols
 
 
+@lru_cache(maxsize=1)
+def _registry_history_column_names() -> frozenset[str]:
+    from scripts.stress.si_cutover.ci_fixtures_lib import load_rule_registry
+
+    cols: set[str] = {"equipment_id", "timestamp_utc", "occ_mode"}
+    for rule in load_rule_registry():
+        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
+            col = registry_role_column(str(role))
+            if col == "occ_mode":
+                cols.add("occ_mode")
+            else:
+                cols.add(frame_column_to_sql_role(col))
+    return frozenset(cols)
+
+
+def history_columns_for_rules(frame, rules: list[dict[str, Any]]) -> set[str]:
+    """Union frame columns, registry roles, and postgres SQL-referenced history columns."""
+    cols = frame_sql_columns(frame)
+    for rule in rules:
+        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
+            col = registry_role_column(str(role))
+            if col == "occ_mode":
+                cols.add("occ_mode")
+            else:
+                cols.add(frame_column_to_sql_role(col))
+        sql_file = rule.get("sql_file")
+        if not sql_file:
+            continue
+        path = REPO / "sql" / "fdd" / "postgres" / "rules" / str(sql_file)
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        for col in _registry_history_column_names():
+            if col in ("equipment_id", "timestamp_utc"):
+                continue
+            if re.search(rf"(?<![a-z0-9_]){re.escape(col)}(?![a-z0-9_])", text):
+                cols.add(col)
+    return cols
+
+
 def render_rule_sql(
     rule: dict[str, Any],
     poll_seconds: float,
     *,
     overrides: dict[str, float] | None = None,
+    storage: str = "si",
 ) -> str:
     sys.path.insert(0, str(REPO / "sql" / "fdd"))
     from render_rule import render  # type: ignore
 
     rule_id = str(rule["rule_id"])
-    return render(rule_id, poll_seconds=poll_seconds, overrides=overrides, dialect="postgres")
+    controls = None
+    if storage == "ip":
+        controls = ip_parameter_controls(rule_id)
+    return render(
+        rule_id,
+        poll_seconds=poll_seconds,
+        overrides=overrides,
+        dialect="postgres",
+        parameter_controls=controls,
+    )
 
 
 def rewrite_fault_series(sql: str, equipment_id: str) -> str | None:
@@ -111,6 +187,11 @@ def purge_site(cur, site_id: str) -> None:
 
 
 def default_role_unit(sql_role: str) -> str | None:
+    return default_role_unit_storage(sql_role, storage="ip")
+
+
+def default_role_unit_storage(sql_role: str, *, storage: str) -> str | None:
+    si = storage == "si"
     temps = {
         "oa_t",
         "mat",
@@ -121,29 +202,24 @@ def default_role_unit(sql_role: str) -> str | None:
         "chw_return_t",
         "hw_supply_t",
         "hw_return_t",
+        "cw_supply_t",
+        "web_wb_t",
     }
     if sql_role in temps:
-        return "degF"
+        return "degC" if si else "degF"
     if sql_role in ("oa_h", "ra_h", "zone_rh", "ma_h", "sa_h"):
         return "percent"
     if sql_role == "duct_static":
-        return "inWC"
+        return "Pa" if si else "inWC"
+    if sql_role == "chw_dp":
+        return "kPa" if si else "psi"
+    if sql_role == "chw_flow":
+        return "L_per_s" if si else "gpm"
     if sql_role in ("fan_status", "fan_cmd", "pump_status", "chiller_status"):
         return "bool"
     if sql_role == "zone_flow":
-        return "cfm"
+        return "L_per_s" if si else "cfm"
     return None
-
-
-def si_role_unit(sql_role: str) -> str | None:
-    unit = default_role_unit(sql_role)
-    if unit == "degF":
-        return "degC"
-    if unit == "inWC":
-        return "Pa"
-    if unit == "cfm":
-        return "L_per_s"
-    return unit
 
 
 def seed_frame(
@@ -154,7 +230,7 @@ def seed_frame(
     equipment_id: str,
     equip_type: str,
     frame,
-    role_unit_fn=default_role_unit,
+    storage: str = "ip",
 ) -> None:
     cur.execute(
         "INSERT INTO site(site_id, dis, timezone, enabled) VALUES (%s, %s, 'UTC', true)",
@@ -211,7 +287,7 @@ def seed_frame(
                 (stamp, site_id, openfdd_key, openfdd_key, fval),
             )
             parity.bind_current(cur, site_id, equipment_id, sql_role, openfdd_key)
-            unit = role_unit_fn(sql_role)
+            unit = default_role_unit_storage(sql_role, storage=storage)
             if unit:
                 cur.execute(
                     """
@@ -223,7 +299,7 @@ def seed_frame(
 
 
 def fill_history(cur, site_id: str, sql_columns: set[str]) -> None:
-    sql_columns = {c for c in sql_columns if c != "equipment_id"}
+    sql_columns = {c for c in sql_columns if c not in ("equipment_id", "timestamp_utc")}
     if not sql_columns:
         sql_columns = {"fan_status"}
     ordered = sorted(sql_columns)
@@ -298,6 +374,7 @@ def execute_sql_rule_daily(
     poll_seconds: float,
     index,
     render_overrides: dict[str, float] | None = None,
+    storage: str = "si",
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Run one postgres rule; return daily rows or (empty, error reason)."""
     import pandas as pd
@@ -307,7 +384,7 @@ def execute_sql_rule_daily(
     if not sql_file:
         return [], "no_sql_file"
     try:
-        sql = render_rule_sql(rule, poll_seconds, overrides=render_overrides)
+        sql = render_rule_sql(rule, poll_seconds, overrides=render_overrides, storage=storage)
     except Exception as exc:
         return [], f"render: {exc}"
 
@@ -361,20 +438,23 @@ def execute_sql_rule_daily(
         return [], "equipment missing in sql result"
     if not isinstance(index, pd.DatetimeIndex) or len(index) == 0:
         return [], "bad index"
-    day = index[0].date().isoformat()
-    return [
-        {
-            "building_id": building_id,
-            "rule_id": rule_id,
-            "equipment_id": equipment_id,
-            "utc_day": day,
-            "fault_seconds": hours * 3600.0,
-            "covered_seconds": float(len(index)) * poll_seconds,
-            "status": "FAULT" if hours > 0 else "OK",
-            "pair_status": "computed",
-            "reason": "",
-        }
-    ], None
+    days = sorted({ts.date().isoformat() for ts in index})
+    if len(days) == 1:
+        day = days[0]
+        return [
+            {
+                "building_id": building_id,
+                "rule_id": rule_id,
+                "equipment_id": equipment_id,
+                "utc_day": day,
+                "fault_seconds": hours * 3600.0,
+                "covered_seconds": float(len(index)) * poll_seconds,
+                "status": "FAULT" if hours > 0 else "OK",
+                "pair_status": "computed",
+                "reason": "",
+            }
+        ], None
+    return [], "aggregate fault_hours spans multiple UTC days; need fault series overlay"
 
 
 def apply_fdd_postgres_helpers(conn) -> None:
@@ -398,14 +478,7 @@ def run_sql_ip_for_dataset(
     parity.apply_schema(conn)
     apply_fdd_postgres_helpers(conn)
     site_id = spec.building_id
-    sql_cols = frame_sql_columns(frame)
-    for rule in rules:
-        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
-            col = registry_role_column(str(role))
-            if col == "occ_mode":
-                sql_cols.add("occ_mode")
-                continue
-            sql_cols.add(frame_column_to_sql_role(col))
+    sql_cols = history_columns_for_rules(frame, rules)
     errors: list[str] = []
     out: list[dict[str, Any]] = []
     with conn.cursor() as cur:
@@ -434,6 +507,7 @@ def run_sql_ip_for_dataset(
                 poll_seconds=poll_seconds,
                 index=frame.index,
                 render_overrides=render_overrides,
+                storage="ip",
             )
             if err:
                 cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")
@@ -455,19 +529,12 @@ def run_sql_si_for_dataset(
     poll_seconds: float,
     params_by_rule: dict[str, dict[str, float]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """Run postgres FDD SQL on SI-seeded Timescale (metric units + registry SI params)."""
+    """Run postgres rules against SI-valued history (W4d plant pack)."""
     parity = _load_parity_module()
     parity.apply_schema(conn)
     apply_fdd_postgres_helpers(conn)
     site_id = f"{spec.building_id}__si"
-    sql_cols = frame_sql_columns(frame)
-    for rule in rules:
-        for role in list(rule.get("required_roles") or []) + list(rule.get("optional_roles") or []):
-            col = registry_role_column(str(role))
-            if col == "occ_mode":
-                sql_cols.add("occ_mode")
-                continue
-            sql_cols.add(frame_column_to_sql_role(col))
+    sql_cols = history_columns_for_rules(frame, rules)
     errors: list[str] = []
     out: list[dict[str, Any]] = []
     with conn.cursor() as cur:
@@ -479,7 +546,7 @@ def run_sql_si_for_dataset(
             equipment_id=equipment_id,
             equip_type=spec.equipment_type,
             frame=frame,
-            role_unit_fn=si_role_unit,
+            storage="si",
         )
         fill_history(cur, site_id, sql_cols)
         for rule in rules:
@@ -492,19 +559,19 @@ def run_sql_si_for_dataset(
             daily, err = execute_sql_rule_daily(
                 cur,
                 rule=rule,
-                building_id=site_id,
+                building_id=spec.building_id,
                 equipment_id=equipment_id,
                 poll_seconds=poll_seconds,
                 index=frame.index,
                 render_overrides=render_overrides,
+                storage="si",
             )
             if err:
                 cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")
                 errors.append(f"{rule_id}: {err}")
                 continue
-            for row in daily:
-                out.append({**row, "building_id": spec.building_id})
             cur.execute("RELEASE SAVEPOINT si_cutover_rule")
+            out.extend(daily)
         conn.commit()
     return out, errors
 
@@ -527,6 +594,25 @@ def p2_pair_for_si_row(
             "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
             "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
             "sql_si_status": "computed" if sql_si_fault_seconds is not None else PENDING_W4,
+        }
+    if rule_si_sql_shipped(rule_id):
+        if pandas_si_missing or sql_si_fault_seconds is None:
+            return {
+                "rule_id": rule_id,
+                "equipment_id": equipment_id,
+                "utc_day": utc_day,
+                "sql_si_fault_seconds": None,
+                "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
+                "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
+                "sql_si_status": "pending_sql_si",
+            }
+        return {
+            "rule_id": rule_id,
+            "equipment_id": equipment_id,
+            "utc_day": utc_day,
+            "sql_si_fault_seconds": float(sql_si_fault_seconds),
+            "pandas_si_fault_seconds": float(pandas_si_fault_seconds),
+            "sql_si_status": "computed",
         }
     if SI_SQL_PACK_AVAILABLE:
         return {

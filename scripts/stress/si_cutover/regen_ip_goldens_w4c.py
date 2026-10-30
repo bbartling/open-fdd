@@ -49,9 +49,7 @@ def refresh_pandas_side(golden: dict, metric: dict, rules_by_id: dict) -> None:
     for rule_id, rule in sorted(rules_by_id.items()):
         if rule_id not in W4C_ZONE_RULES or not rule.get("pandas_function"):
             continue
-        params_reg = cfl.rule_params_from_registry(rule)
-        params_ip = cfl.convert_params_to_ip(rule, params_reg, metric)
-        params_si = cfl.convert_params_to_si(rule, params_reg, metric)
+        params_ip, params_si = cfl.resolve_rule_params_ip_si(rule, metric)
         ip_daily = cfl.run_rule_daily_rows(
             rule,
             ip_frame,

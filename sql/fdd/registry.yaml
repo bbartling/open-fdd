@@ -63,7 +63,7 @@ rules:
         default: 21.111111111
         min: 12.777777778
         max: 22.222222222
-        step: -17.5
+        step: 0.277777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -73,7 +73,7 @@ rules:
         default: 23.888888889
         min: 22.222222222
         max: 29.444444444
-        step: -17.5
+        step: 0.277777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -147,7 +147,7 @@ rules:
         default: 20.0
         min: 12.777777778
         max: 22.222222222
-        step: -17.5
+        step: 0.277777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -180,7 +180,7 @@ rules:
         default: 20.0
         min: 15.555555556
         max: 22.222222222
-        step: -17.5
+        step: 0.277777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -190,7 +190,7 @@ rules:
         default: 24.444444444
         min: 22.222222222
         max: 29.444444444
-        step: -17.5
+        step: 0.277777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -213,7 +213,7 @@ rules:
         default: 20.0
         min: 15.555555556
         max: 22.222222222
-        step: -17.5
+        step: 0.277777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -223,7 +223,7 @@ rules:
         default: 24.444444444
         min: 22.222222222
         max: 29.444444444
-        step: -17.5
+        step: 0.277777778
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -3805,7 +3805,7 @@ rules:
         default: 25.555555556
         min: 18.333333333
         max: 32.222222222
-        step: -17.222222222
+        step: 0.555555556
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -4040,7 +4040,7 @@ rules:
         default: 18.333333333
         min: 7.222222222
         max: 23.888888889
-        step: -17.222222222
+        step: 0.555555556
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
@@ -4397,7 +4397,7 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: CHW-NOLOAD-1
-    equipment_kinds: [chiller]
+    equipment_kinds: [chiller, chwPlant]
     sql_file: chw_noload_1.sql
     pandas_function: null
     description: Chiller running with no building load
@@ -4462,7 +4462,7 @@ rules:
         sql_placeholder: LOAD_SAT_HI
 
   - rule_id: CHW-1
-    equipment_kinds: [chiller]
+    equipment_kinds: [chiller, chwPlant]
     sql_file: chw1_low_dt.sql
     pandas_function: chw1
     description: Low chilled-water ΔT
@@ -4517,17 +4517,17 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       min_dt:
         label: Minimum delta-T
-        default: 4.0
-        min: 1.0
-        max: 12.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
+        default: 2.222222
+        min: 0.555556
+        max: 6.666667
+        step: 0.277778
+        unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: MIN_DT
 
   - rule_id: CHW-2
-    equipment_kinds: [chiller]
+    equipment_kinds: [chiller, chwPlant]
     sql_file: chw2_dp_low.sql
     pandas_function: null
     description: DP below SP at max pump speed
@@ -4582,11 +4582,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       dp_margin:
         label: DP margin
-        default: 2.2
-        min: 0.5
-        max: 6.0
-        step: 0.1
-        unit: psi
+        default: 15.168465
+        min: 3.447379
+        max: 41.368542
+        step: 0.689476
+        unit: kPa
         kind: hydronic_pressure
         frontend_control: slider
         sql_placeholder: DP_MARGIN
@@ -4602,7 +4602,7 @@ rules:
         sql_placeholder: PUMP_HI
 
   - rule_id: CHW-3
-    equipment_kinds: [chiller]
+    equipment_kinds: [chiller, chwPlant]
     sql_file: chw3_supply_band.sql
     pandas_function: null
     description: Plant supply temp outside deadband
@@ -4657,17 +4657,17 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       sp_band:
         label: SP band
-        default: 2.2
-        min: 0.5
-        max: 6.0
-        step: 0.1
-        unit: degF
-        kind: absolute_temperature
+        default: 1.222222
+        min: 0.277778
+        max: 3.333333
+        step: 0.055556
+        unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: SP_BAND
 
   - rule_id: CHW-4
-    equipment_kinds: [chiller]
+    equipment_kinds: [chiller, chwPlant]
     sql_file: chw4_flow_high.sql
     pandas_function: null
     description: Flow high at max pump
@@ -4722,11 +4722,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       flow_hi:
         label: Flow high
-        default: 1100.0
-        min: 200.0
-        max: 3000.0
-        step: 50.0
-        unit: gpm
+        default: 69.39922
+        min: 12.61804
+        max: 189.2706
+        step: 3.15451
+        unit: L_per_s
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_HI
@@ -4742,7 +4742,7 @@ rules:
         sql_placeholder: PUMP_HI
 
   - rule_id: CW-OPT-1
-    equipment_kinds: [chiller, cooling_tower]
+    equipment_kinds: [chiller, cooling_tower, chwPlant]
     sql_file: cw_opt_1.sql
     pandas_function: null
     description: Condenser water not optimized vs wet-bulb
@@ -4797,27 +4797,27 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       cw_approach:
         label: Design approach
-        default: 7.0
-        min: 3.0
-        max: 15.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
+        default: 3.888889
+        min: 1.666667
+        max: 8.333333
+        step: 0.277778
+        unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: CW_APPROACH
       cw_slack:
         label: Slack below target
-        default: 2.0
-        min: 0.5
-        max: 6.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
+        default: 1.111111
+        min: 0.277778
+        max: 3.333333
+        step: 0.277778
+        unit: degC
+        kind: temperature_difference
         frontend_control: slider
         sql_placeholder: CW_SLACK
 
   - rule_id: CW-APR-1
-    equipment_kinds: [chiller, cooling_tower]
+    equipment_kinds: [chiller, cooling_tower, chwPlant]
     sql_file: cw_apr_1.sql
     pandas_function: null
     description: High CW approach at full tower fan
@@ -4870,16 +4870,16 @@ rules:
         kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      approach_max_f:
+      approach_max:
         label: Max approach at full fan
-        default: 8.0
-        min: 5.0
-        max: 15.0
-        step: 0.5
-        unit: degF
+        default: 4.444444
+        min: 2.777778
+        max: 8.333333
+        step: 0.277778
+        unit: degC
         kind: temperature_difference
         frontend_control: slider
-        sql_placeholder: APPROACH_MAX_F
+        sql_placeholder: APPROACH_MAX
       tower_fan_hi:
         label: Tower fan full-speed threshold
         default: 0.95
@@ -4892,7 +4892,7 @@ rules:
         sql_placeholder: TOWER_FAN_HI
 
   - rule_id: CW-FAN-1
-    equipment_kinds: [chiller, cooling_tower]
+    equipment_kinds: [chiller, cooling_tower, chwPlant]
     sql_file: cw_fan_1.sql
     pandas_function: null
     description: Excess tower fan energy vs wet-bulb limit
@@ -4947,24 +4947,24 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       cw_approach:
         label: Design approach
-        default: 7.0
-        min: 3.0
-        max: 15.0
-        step: 0.5
-        unit: degF
-        kind: absolute_temperature
-        frontend_control: slider
-        sql_placeholder: CW_APPROACH
-      excess_beyond_approach_f:
-        label: Excess beyond approach
-        default: 5.0
-        min: 2.0
-        max: 20.0
-        step: 0.5
-        unit: degF
+        default: 3.888889
+        min: 1.666667
+        max: 8.333333
+        step: 0.277778
+        unit: degC
         kind: temperature_difference
         frontend_control: slider
-        sql_placeholder: EXCESS_BEYOND_APPROACH_F
+        sql_placeholder: CW_APPROACH
+      excess_beyond_approach:
+        label: Excess beyond approach
+        default: 2.777778
+        min: 1.111111
+        max: 11.111111
+        step: 0.277778
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: EXCESS_BEYOND_APPROACH
       tower_fan_hi:
         label: Tower fan full-speed threshold
         default: 0.95
@@ -5032,21 +5032,21 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       min_sat:
         label: Min discharge SAT
-        default: 85.0
-        min: 70.0
-        max: 110.0
-        step: 1.0
-        unit: degF
+        default: 29.444444
+        min: 21.111111
+        max: 43.333333
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MIN_SAT
       zone_cold:
         label: Zone cold threshold
-        default: 69.0
-        min: 60.0
-        max: 72.0
-        step: 0.5
-        unit: degF
+        default: 20.555556
+        min: 15.555556
+        max: 22.222222
+        step: 0.277778
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: ZONE_COLD
@@ -5141,11 +5141,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       duct_hi:
         label: Duct static high
-        default: 1.35
-        min: 0.5
-        max: 3.0
-        step: 0.05
-        unit: in_wc
+        default: 335.934
+        min: 124.42
+        max: 746.52
+        step: 12.442
+        unit: Pa
         kind: air_pressure
         frontend_control: slider
         sql_placeholder: DUCT_HI
@@ -5216,11 +5216,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       hwst_hi:
         label: HWST high
-        default: 160.0
-        min: 120.0
-        max: 200.0
-        step: 1.0
-        unit: degF
+        default: 71.111111
+        min: 48.888889
+        max: 93.333333
+        step: 0.555556
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: HWST_HI
@@ -5236,7 +5236,7 @@ rules:
         sql_placeholder: REQUEST_LO
 
   - rule_id: TRIM-4
-    equipment_kinds: [chiller]
+    equipment_kinds: [chiller, chwPlant]
     sql_file: trim4_chw_reset.sql
     pandas_function: null
     description: CHW plant reset advisory
@@ -5291,11 +5291,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       chw_lo:
         label: CHWS low
-        default: 45.0
-        min: 35.0
-        max: 55.0
-        step: 0.5
-        unit: degF
+        default: 7.222222
+        min: 1.666667
+        max: 12.777778
+        step: 0.277778
+        unit: degC
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: CHW_LO

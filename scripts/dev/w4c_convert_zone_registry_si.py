@@ -18,7 +18,7 @@ from unit_contract_lib import (  # noqa: E402
     TUNING,
     REGISTRY,
     convert_to_canonical,
-    infer_kind,
+    declared_kind,
     load_json,
 )
 
@@ -102,7 +102,7 @@ def convert_param_spec(name: str, spec: dict[str, Any], metric: dict) -> dict[st
     unit = str(spec.get("unit") or "")
     if unit not in IMPERIAL_UNITS:
         return patches
-    kind = str(spec.get("kind") or infer_kind(name, unit))
+    kind = declared_kind(name, spec)
     convert_kind = kind
     if unit in ("degF", "degF_delta", "°F") and name in _CONVERT_AS_TEMP_DELTA:
         convert_kind = "temperature_difference"
