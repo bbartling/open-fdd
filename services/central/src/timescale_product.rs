@@ -5197,6 +5197,7 @@ rules:
     equipment_kinds: [ahu]
     required_roles: [zone_t]
     output_columns: [equipment_id, avg_zone_temp]
+    output_units: {avg_zone_temp: degC}
     confirm_seconds: 0
   - rule_id: VAV-ONLY
     sql_file: vav_only.sql
