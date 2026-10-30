@@ -41,7 +41,7 @@ mod quantity_tests {
             {
                 std::env::set_var(
                     "OPENFDD_SQL_ROOT",
-                    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../sql/fdd"),
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../sql/fdd"),
                 );
             }
         });
