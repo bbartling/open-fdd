@@ -31,30 +31,31 @@ async fn schema(pool: &sqlx::PgPool) {
                 include_str!("../../../sql/schema/08_analytics_result_cache.sql"),
                 include_str!("../../../sql/schema/10_incremental_fdd.sql"),
             ] {
-                for sql in blob.split(';') {
-                    let stmt = sql.trim();
-                    if !stmt.is_empty() {
-                        crate::test_ddl::execute_idempotent_ddl(pool, stmt).await;
+                // Other fixtures share `sample` as a plain table with rows, so
+                // hypertable conversion cannot run here; these tests only need
+                // the relations and columns.
+                for stmt in crate::db_lifecycle::statements(blob) {
+                    if !stmt.contains("create_hypertable") {
+                        crate::test_ddl::execute_idempotent_ddl(pool, &stmt).await;
                     }
                 }
             }
+            for stmt in crate::db_lifecycle::statements(include_str!(
+                "../../../sql/schema/11_point_map_binding_metadata.sql"
+            )) {
+                crate::test_ddl::execute_idempotent_ddl(pool, &stmt).await;
+            }
+            // Once per process: concurrent CREATE TYPE races in pg_type.
+            fdd_tsdb::ensure_si_cutover_schema(pool)
+                .await
+                .expect("si cutover schema");
+            for stmt in crate::db_lifecycle::statements(include_str!(
+                "../../../sql/schema/09_data_revision.sql"
+            )) {
+                crate::test_ddl::execute_idempotent_ddl(pool, &stmt).await;
+            }
         })
         .await;
-    for sql in include_str!("../../../sql/schema/11_point_map_binding_metadata.sql").split(';') {
-        let stmt = sql.trim();
-        if !stmt.is_empty() {
-            crate::test_ddl::execute_idempotent_ddl(pool, stmt).await;
-        }
-    }
-    fdd_tsdb::ensure_si_cutover_schema(pool)
-        .await
-        .expect("si cutover schema");
-    for sql in include_str!("../../../sql/schema/09_data_revision.sql").split(';') {
-        let stmt = sql.trim();
-        if !stmt.is_empty() {
-            crate::test_ddl::execute_idempotent_ddl(pool, stmt).await;
-        }
-    }
 }
 
 async fn schema_with_fdd_tables(pool: &sqlx::PgPool) {
@@ -136,18 +137,17 @@ async fn seed_convertible_site(pool: &sqlx::PgPool, site: &str) {
     .execute(pool)
     .await
     .expect("point_map");
-    let tsdb = Tsdb::from_pool(pool.clone());
-    let mut batch = UpsertBatch::default();
-    batch.push(sample(
-        site,
-        &format!("{site}.AHU.oa_t"),
-        "AHU",
-        "oa_t",
-        ts,
-        50.0,
-        "degF",
-    ));
-    tsdb.upsert_samples(&batch).await.expect("upsert");
+    // Pre-cutover legacy row: ingest now stores SI, so write the IP row directly.
+    sqlx::query(
+        "INSERT INTO sample (ts, site_id, openfdd_key, val, haystack_id, unit) \
+         VALUES ($1, $2, $3, 50.0, 'h1', 'degF')",
+    )
+    .bind(ts)
+    .bind(site)
+    .bind(format!("{site}.AHU.oa_t"))
+    .execute(pool)
+    .await
+    .expect("legacy IP sample");
 }
 
 async fn clear_cutover_token(pool: &sqlx::PgPool) {
@@ -214,12 +214,13 @@ async fn t1284_3_cutover_does_not_delete_derived_rows_marks_cache_stale() {
     .execute(&pool)
     .await
     .expect("fdd_run");
+    // Computed before any data_revision row exists, i.e. at revision 0.
     sqlx::query(
         "INSERT INTO fdd_interval_result
            (site_id, rule_id, equipment_id, scope_digest, bucket_start, bucket_end,
             fault_seconds, covered_seconds, sample_count, data_revision, fence)
          VALUES ($1, 'FC1', 'AHU', md5('scope'), $2, $2 + interval '15 minutes',
-                 0, 900, 1, 1, 1)",
+                 0, 900, 1, 0, 1)",
     )
     .bind(&site)
     .bind(ts)

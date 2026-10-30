@@ -202,7 +202,7 @@ async fn load_series_rows(
         SELECT openfdd_key,
                count(*)::bigint AS row_count,
                max(unit) AS sample_unit,
-               bool_or(quality IN ($2, $3)) AS has_undeclared,
+               bool_or(quality IS NOT NULL AND quality IN ($2, $3)) AS has_undeclared,
                min(ts) AS min_ts,
                max(ts) AS max_ts
         FROM sample
