@@ -109,6 +109,55 @@ describe("defaultLabFamily", () => {
   });
 });
 
+describe("T1284-5 unsupported tuner honesty", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(listFddRules).mockResolvedValue([
+      { rule_id: "SV-RATE", description: "Sensor rate", equipment_kinds: ["ahu"] },
+    ]);
+    vi.mocked(getFddRuleParams).mockResolvedValue({
+      ok: true,
+      rule_id: "SV-RATE",
+      params: {
+        sensor_span: {
+          key: "sensor_span",
+          label: "Sensor span",
+          default: 100,
+          min: 1,
+          max: 500,
+          step: 1,
+          unit: "unit",
+          control: "slider",
+          sql_placeholder: "SENSOR_SPAN",
+          effect: "unsupported",
+          effect_reason: "This control is not supported for this rule yet.",
+        },
+      },
+    });
+    vi.mocked(getSessionConfig).mockResolvedValue({
+      ok: true,
+      config: { schema_version: "openfdd_session_v1", params: {} },
+    });
+  });
+
+  it("disables unsupported tuners with a reason", async () => {
+    render(
+      <MemoryRouter initialEntries={["/?site=lab-fixture"]}>
+        <RuleTuningPanel />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("rule-tune-SV-RATE")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId("rule-tune-SV-RATE").querySelector("summary")!);
+    const slider = await screen.findByTestId("tune-slider-sensor_span");
+    expect((slider as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByTestId("tune-disabled-sensor_span").textContent).toMatch(
+      /not supported/i,
+    );
+  });
+});
+
 const FC1_PARAMS = {
   confirm_min: {
     key: "confirm_min",

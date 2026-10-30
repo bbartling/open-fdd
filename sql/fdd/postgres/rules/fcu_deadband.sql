@@ -29,13 +29,13 @@ SELECT
   equipment_id,
   SUM(CASE
     WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
-     AND cooling_sp - heating_sp < {{DEADBAND_C}}
+     AND cooling_sp - heating_sp < {{DEADBAND}}
     THEN held_seconds ELSE 0.0
   END) / 3600.0 AS fault_hours,
   SUM(held_seconds) / 3600.0 AS covered_hours,
   100.0 * SUM(CASE
     WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
-     AND cooling_sp - heating_sp < {{DEADBAND_C}}
+     AND cooling_sp - heating_sp < {{DEADBAND}}
     THEN held_seconds ELSE 0.0
   END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
 FROM held

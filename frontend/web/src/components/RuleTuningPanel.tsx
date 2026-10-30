@@ -142,6 +142,8 @@ function RuleExpander({
           const max = displayScalar(def.max, def.unit, unitSystem, quantity, key);
           const step = displayStep(def.step, def.unit, unitSystem, quantity, key);
           const unitLabel = displayUnitLabel(def.unit, unitSystem, quantity, key);
+          const tunerDisabled =
+            def.effect === "unsupported" || def.effect === "no_op";
           return (
             <label key={key} className="oracle-sidebar__field">
               <span className="oracle-sidebar__label" data-testid={`tune-label-${key}`}>
@@ -155,6 +157,7 @@ function RuleExpander({
                 max={max}
                 step={step}
                 value={val}
+                disabled={tunerDisabled}
                 onChange={(e) =>
                   onChange(
                     rule.rule_id,
@@ -164,8 +167,15 @@ function RuleExpander({
                 }
                 title={def.label}
                 data-testid={`tune-slider-${key}`}
+                aria-disabled={tunerDisabled}
               />
-              <span className="oracle-sidebar__caption">{formatTunerCaption(val, quantity)}</span>
+              {tunerDisabled && def.effect_reason ? (
+                <span className="oracle-sidebar__caption" data-testid={`tune-disabled-${key}`}>
+                  {def.effect_reason}
+                </span>
+              ) : (
+                <span className="oracle-sidebar__caption">{formatTunerCaption(val, quantity)}</span>
+              )}
             </label>
           );
         })}

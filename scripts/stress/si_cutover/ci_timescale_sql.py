@@ -27,6 +27,11 @@ from scripts.stress.si_cutover.product_sql_params import (  # noqa: E402
     catalog_overrides_from_registry,
     ip_parameter_controls,
 )
+from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
+    W4C_SI_ZONE_FAMILY,
+    family_dataset_ids,
+    sql_si_pack_enabled,
+)
 
 PENDING_W4 = "pending_W4"
 W4D_PLANT_RULES = frozenset(
@@ -45,10 +50,15 @@ W4D_PLANT_RULES = frozenset(
         "TRIM-4",
     }
 )
-SI_SQL_PACK_AVAILABLE = False  # global flag; W4d plant rules ship per-rule via rule_si_sql_shipped.
+SI_SQL_PACK_AVAILABLE = False  # global flag; W4c zone and W4d plant rules ship per-rule.
+
+
+def w4c_target_datasets() -> frozenset[str]:
+    return family_dataset_ids(W4C_SI_ZONE_FAMILY)
 
 
 def rule_si_sql_shipped(rule_id: str) -> bool:
+    """W4d plant rules whose P2 cells are computed live per row."""
     return str(rule_id) in W4D_PLANT_RULES
 
 
@@ -207,6 +217,8 @@ def default_role_unit_storage(sql_role: str, *, storage: str) -> str | None:
         return "L_per_s" if si else "gpm"
     if sql_role in ("fan_status", "fan_cmd", "pump_status", "chiller_status"):
         return "bool"
+    if sql_role == "zone_flow":
+        return "L_per_s" if si else "cfm"
     return None
 
 
@@ -569,10 +581,20 @@ def p2_pair_for_si_row(
     rule_id: str,
     equipment_id: str,
     utc_day: str,
-    pandas_si_fault_seconds: float,
+    pandas_si_fault_seconds: float | None,
     pandas_si_missing: bool = False,
     sql_si_fault_seconds: float | None = None,
 ) -> dict[str, Any]:
+    if sql_si_pack_enabled(rule_id):
+        return {
+            "rule_id": rule_id,
+            "equipment_id": equipment_id,
+            "utc_day": utc_day,
+            "sql_si_fault_seconds": sql_si_fault_seconds,
+            "pandas_si_fault_seconds": None if pandas_si_missing else pandas_si_fault_seconds,
+            "pandas_si_status": "missing_si_cell" if pandas_si_missing else "computed",
+            "sql_si_status": "computed" if sql_si_fault_seconds is not None else PENDING_W4,
+        }
     if rule_si_sql_shipped(rule_id):
         if pandas_si_missing or sql_si_fault_seconds is None:
             return {

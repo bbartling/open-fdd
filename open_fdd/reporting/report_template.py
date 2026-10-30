@@ -270,15 +270,15 @@ class DeviceFolderSource:
     def load(self) -> RoleHistory:
         from open_fdd.analytics.anomaly.io import load_device_folder
         from open_fdd.reporting.single_system_typst import equipment_label, role_frame
-
-        from open_fdd.analytics.units import stamp_display_units
+        from open_fdd.analytics.report_storage import ensure_storage_frame
 
         folder = Path(self.folder)
         device = load_device_folder(folder)
         if not device.points:
             device = load_device_folder(folder, ahu_only=False)
         frame = role_frame(device)
-        stamp_display_units(frame, device.column_map if isinstance(device.column_map, dict) else {})
+        column_map = device.column_map if isinstance(device.column_map, dict) else {}
+        frame = ensure_storage_frame(frame, column_map)
         equip_type = str(frame.attrs.get("equipment_type") or "UNKNOWN")
         return RoleHistory(
             frame=frame,
@@ -311,10 +311,10 @@ class OpenFddApiSource:
                 "Use a device folder (history_wide.csv + column_map.json) until that reader is supplied. "
                 f"Central origin: {self.base_url}"
             )
-        from open_fdd.analytics.units import stamp_display_units
+        from open_fdd.analytics.report_storage import ensure_storage_frame
 
         frame = self.reader()
-        stamp_display_units(frame)
+        frame = ensure_storage_frame(frame, {})
         points = [(str(column), str(column)) for column in frame.columns]
         return RoleHistory(
             frame=frame,
@@ -341,10 +341,10 @@ class VendorApiSource:
                 f"Vendor API {self.vendor!r} is registered and not connected. "
                 "Map the export into a device folder, or pass a reader that returns a role-named frame."
             )
-        from open_fdd.analytics.units import stamp_display_units
+        from open_fdd.analytics.report_storage import ensure_storage_frame
 
         frame = self.reader()
-        stamp_display_units(frame)
+        frame = ensure_storage_frame(frame, {})
         points = [(str(column), str(column)) for column in frame.columns]
         return RoleHistory(
             frame=frame,

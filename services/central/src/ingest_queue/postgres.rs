@@ -77,17 +77,65 @@ pub fn statements(ddl: &str) -> Vec<String> {
     out
 }
 
+/// `seed_meta` key holding the fingerprint of the last applied ingest-queue DDL.
+const SCHEMA_FINGERPRINT_KEY: &str = "ingest_queue_schema_sha256";
+
+/// Bump when `migrate_idempotency_scope` changes so the fingerprint changes too.
+const IDEMPOTENCY_SCOPE_MIGRATION: &str = "idempotency-scope-v1";
+
+fn schema_fingerprint() -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(SCHEMA_SQL.as_bytes());
+    hasher.update(IDEMPOTENCY_SCOPE_MIGRATION.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
 pub async fn apply_schema(pool: &PgPool) -> Result<(), QueueError> {
     // Ingest tables, the applied-sample ledger, the audit table, and the
     // scheduler fence are one batch. The transaction lock serializes this
     // with hourly-job schema init and the startup migration.
+    //
+    // The advisory lock only orders DDL against DDL. Queue DML does not take
+    // it, so re-running `ALTER TABLE ... IF NOT EXISTS` while workers run
+    // holds ACCESS EXCLUSIVE on `ingest_receipt` and then waits on
+    // `ingest_job`, the reverse of a finish transaction: 40P01. When the
+    // recorded fingerprint already matches this DDL, take no table locks.
+    let fingerprint = schema_fingerprint();
     let mut tx = crate::db_lifecycle::begin_schema_ddl(pool)
         .await
         .map_err(db_err)?;
+    let has_seed_meta: bool = sqlx::query_scalar("SELECT to_regclass('seed_meta') IS NOT NULL")
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(db_err)?;
+    if has_seed_meta {
+        let applied: Option<String> =
+            sqlx::query_scalar("SELECT value FROM seed_meta WHERE key = $1")
+                .bind(SCHEMA_FINGERPRINT_KEY)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(db_err)?;
+        if applied.as_deref() == Some(fingerprint.as_str()) {
+            tx.commit().await.map_err(db_err)?;
+            return Ok(());
+        }
+    }
     for stmt in statements(SCHEMA_SQL) {
         sqlx::query(&stmt).execute(&mut *tx).await.map_err(db_err)?;
     }
     migrate_idempotency_scope(&mut tx).await?;
+    if has_seed_meta {
+        sqlx::query(
+            "INSERT INTO seed_meta(key, value) VALUES ($1, $2)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+        )
+        .bind(SCHEMA_FINGERPRINT_KEY)
+        .bind(&fingerprint)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+    }
     tx.commit().await.map_err(db_err)?;
     Ok(())
 }

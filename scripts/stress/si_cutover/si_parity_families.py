@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 FAMILIES_PATH = REPO / "tests" / "fixtures" / "si_cutover" / "w4_parity_families.json"
+
+W4C_SI_ZONE_FAMILY = "W4c_si_zone"
 
 
 def load_families_doc() -> dict:
@@ -40,3 +43,26 @@ def family_meta(family: str) -> dict:
     if not fam:
         raise KeyError(f"unknown parity family {family!r}")
     return dict(fam)
+
+
+@lru_cache(maxsize=16)
+def family_rule_ids(family: str) -> frozenset[str]:
+    fam = family_meta(family)
+    rules = fam.get("rules") or []
+    if rules == ["*"]:
+        raise ValueError(f"family {family!r} is full-matrix; no rule subset")
+    return frozenset(str(r) for r in rules)
+
+
+@lru_cache(maxsize=16)
+def family_dataset_ids(family: str) -> frozenset[str]:
+    fam = family_meta(family)
+    datasets = fam.get("datasets")
+    if not datasets:
+        raise KeyError(f"family {family!r} has no datasets[] in {FAMILIES_PATH.name}")
+    return frozenset(str(d) for d in datasets)
+
+
+def sql_si_pack_enabled(rule_id: str) -> bool:
+    """Postgres rules converted to SI storage in the W4c_si_zone family."""
+    return rule_id in family_rule_ids(W4C_SI_ZONE_FAMILY)
