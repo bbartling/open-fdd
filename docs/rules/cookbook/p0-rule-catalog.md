@@ -71,18 +71,18 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | `FCU-CO2-DAMPER` | `fcu` | zone_other, general, ahu | zone-co2, damper-cmd | 900 | Fan on, valid CO₂ > 1000 ppm, damper command < 10%. |
 | `FCU-DEADBAND` | `fcu` | zone_other, general, ahu | cooling-sp, heating-sp | 0 | Pass-through cooling SP − heating SP < 1°C. |
 | `FCU-MODE-CYCLE` | `fcu` | zone_other, general, ahu | heating-valve, cooling-valve | 0 | At least four heat/cool valve mode changes in the window. |
-| `CHW-1` | `plant` | chiller | chilled-water-supply-temp, chilled-water-return-temp | 900 | Pump on AND (CHWR − CHWS) < 4°F. |
+| `CHW-1` | `plant` | chiller | chilled-water-supply-temp, chilled-water-return-temp | 900 | Pump on AND (CHWR − CHWS) < 2.2 °C (ΔT). |
 | `CHW-2` | `plant` | chiller | chw-diff-pressure, chw-diff-pressure-sp, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW DP < DP SP − 2.2. |
 | `CHW-3` | `plant` | chiller | chilled-water-supply-temp, chilled-water-supply-temp-sp, chw-pump-cmd | 300 | Pump on AND \\|CHWS − CHWS SP\\| > 2.2°F. |
-| `CHW-4` | `plant` | chiller | chw-flow, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW flow > 1100 gpm. |
+| `CHW-4` | `plant` | chiller | chw-flow, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW flow > 69 L/s (~1100 gpm). |
 | `HP-1` | `heatpump` | heatpump | discharge-air-temp, zone-air-temp, fan-cmd | 600 | Fan on, zone < 69°F, discharge SAT < 85°F. |
 | `WX-1` | `weather` | weather | outside-air-temp | 300 | OAT sample-to-sample jump > 16°F. |
 | `CW-OPT-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized. |
-| `CW-APR-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). Suspect OA→w… |
+| `CW-APR-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 4.4 °C Δ, typically 2.8–5.6 °C). Suspect OA→w… |
 | `CW-FAN-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fa… |
 | `TRIM-1` | `trim` | ahu | duct-static-pressure, vav-pressure-request-sum | 1800 | Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low. |
-| `TRIM-3` | `trim` | boiler | hot-water-supply-temp, hw-reset-request-sum | 1800 | HW supply > 160°F while reset requests are low. |
-| `TRIM-4` | `trim` | chiller | chilled-water-supply-temp, chw-reset-request-sum | 1800 | CHW supply < 45°F while reset requests are low. |
+| `TRIM-3` | `trim` | boiler | hot-water-supply-temp, hw-reset-request-sum | 1800 | HW supply > 71 °C while reset requests are low. |
+| `TRIM-4` | `trim` | chiller | chilled-water-supply-temp, chw-reset-request-sum | 1800 | CHW supply < 7.2 °C while reset requests are low. |
 | `SCHED-1` | `schedule` | ahu | occupied, fan-status | 1800 | Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone in… |
 | `SCHED-247` | `schedule` | ahu, vav, chiller, boiler, heatpump |  | 3600 | Fan or pump (or similar motor proof/command) is on for ≥ always_on_pct of the analysis window — highlights equipment … |
 | `CMD-1` | `ahu` | ahu | fan-cmd, fan-status | 600 | Fan command and proven status disagree. |
