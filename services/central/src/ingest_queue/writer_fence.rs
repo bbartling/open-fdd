@@ -163,7 +163,7 @@ async fn stale_worker_cannot_overwrite_canonical_history() {
     let _env = crate::test_env_lock::lock_env();
     let replica_a = connect(&url, "replica a").await;
     let replica_b = connect(&url, "replica b").await;
-    postgres::apply_schema(&replica_a)
+    crate::ingest_queue::test_schema::apply_ingest_queue_schema(&replica_a)
         .await
         .expect("ingest schema");
     apply_historian_schema(&replica_a).await;

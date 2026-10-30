@@ -97,7 +97,7 @@ async fn ingest_jobs_and_gaps_contract() {
                 .connect(&url)
                 .await
                 .expect("ingest ledger postgres fixture");
-            super::postgres::apply_schema(&pool)
+            crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
                 .await
                 .expect("ingest schema");
             purge_fixture(&pool).await;

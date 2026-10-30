@@ -75,7 +75,9 @@ async fn test_pool() -> Option<PgPool> {
         .connect(&url)
         .await
         .expect("test database");
-    postgres::apply_schema(&pool).await.expect("schema");
+    crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
+        .await
+        .expect("schema");
     Some(pool)
 }
 

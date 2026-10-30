@@ -1862,7 +1862,9 @@ mod tests {
             .connect(&url)
             .await
             .expect("server request id postgres");
-        apply_schema(&pool).await.expect("ingest schema");
+        crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
+            .await
+            .expect("ingest schema");
 
         let device = format!("device-{}", Uuid::new_v4());
         let tenant = "tenant-audit";
