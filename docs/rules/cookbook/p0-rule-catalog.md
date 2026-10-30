@@ -28,19 +28,19 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | `SV-STALE` | `sensor` | ahu, vav, chiller, boiler, weather, zone, heatpump |  | 300 | All modeled sensors unchanged over the stale window — data feed likely dropped. |
 | `SV-RATE` | `sensor` | ahu, vav, chiller, boiler, weather, zone, heatpump |  | 600 | Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state… |
 | `PID-HUNT-1` | `control` | ahu, vav, chiller, boiler, heatpump |  | 300 | Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%,… |
-| `FC1` | `ahu` | ahu | duct-static-pressure, duct-static-pressure-sp, fan-cmd | 300 | Fan ≥ 87% AND duct static < static SP − 0.12 Pa |
+| `FC1` | `ahu` | ahu | duct-static-pressure, duct-static-pressure-sp, fan-cmd | 300 | Fan ≥ 87% AND duct static < static SP − 29.8608 Pa (0.12 in. w.c.) |
 | `FC2` | `ahu` | ahu | mixed-air-temp, outside-air-temp, return-air-temp, fan-cmd | 600 | Fan on AND MAT + mix_tol < min(RAT − mix_tol, OAT − mix_tol) (≡ MAT < min(RAT, OAT) − 2·mix_tol; default mix_tol = 1.… |
 | `FC3` | `ahu` | ahu | mixed-air-temp, outside-air-temp, return-air-temp, fan-cmd | 600 | Fan on AND MAT − mix_tol > max(RAT + mix_tol, OAT + mix_tol) (≡ MAT > max(RAT, OAT) + 2·mix_tol; default mix_tol = 1.… |
 | `FC4` | `ahu` | ahu | outside-air-damper, cooling-valve, fan-cmd | 3600 | More than 5 operating-mode entry transitions in any hour (heating/econ/mech modes). |
 | `FC5` | `ahu` | ahu | discharge-air-temp, mixed-air-temp, fan-cmd, heating-valve | 600 | Fan on AND heating > 1% AND SAT + mix_tol ≤ MAT − mix_tol + 0.31Δ°C (default mix_tol = 0.64°C). |
 | `FC6` | `ahu` | ahu | mixed-air-temp, outside-air-temp, return-air-temp, vav-total-airflow | 600 | \\|RAT−OAT\\| ≥ 2.78Δ°C AND \\|estimated OA% − design min OA%\\| > 15% in heating/mech-only modes. |
-| `FC7` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp, fan-cmd, heating-valve | 600 | Fan on AND heating > 90% AND SAT < SAT SP − -17.22°C. |
+| `FC7` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp, fan-cmd, heating-valve | 600 | Fan on AND heating > 90% AND SAT < SAT SP − 0.638889°C (temperature difference). |
 | `FC8` | `ahu` | ahu | discharge-air-temp, mixed-air-temp, outside-air-damper, cooling-valve | 600 | Economizer open, CHW < 10%, \\|SAT − 0.31Δ°C − MAT\\| > √(supply_tol²+mix_tol²). |
 | `FC9` | `ahu` | ahu | outside-air-temp, discharge-air-temp-sp, outside-air-damper, cooling-valve | 600 | Economizer open, CHW < 10%, OAT − mix_tol > SAT SP − 0.31Δ°C + mix_tol. |
 | `FC10` | `ahu` | ahu | mixed-air-temp, outside-air-temp, outside-air-damper, cooling-valve | 600 | CHW > 1%, economizer > 90%, \\|MAT − OAT\\| > √(mix_tol²+mix_tol²). |
 | `FC11` | `ahu` | ahu | outside-air-temp, discharge-air-temp-sp, outside-air-damper, cooling-valve | 600 | CHW > 1%, economizer > 90%, OAT + mix_tol < SAT SP − 0.31Δ°C − mix_tol. |
 | `FC12` | `ahu` | ahu | discharge-air-temp, mixed-air-temp, outside-air-damper, cooling-valve | 600 | CHW > 1%, SAT − supply_tol − 0.31Δ°C > MAT + mix_tol at min or full economizer. |
-| `FC13` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp, outside-air-damper, cooling-valve | 600 | CHW > 1%, SAT > SAT SP + -17.22°C at min or full economizer. |
+| `FC13` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp, outside-air-damper, cooling-valve | 600 | CHW > 1%, SAT > SAT SP + 0.638889°C (temperature difference) at min or full economizer. |
 | `FC14` | `ahu` | ahu | cooling-coil-entering-temp, cooling-coil-leaving-temp, outside-air-damper, cooling-valve | 600 | Cooling coil ΔT ≥ √(mix_tol²+mix_tol²)+0.31Δ°C while coil should be inactive. |
 | `FC15` | `ahu` | ahu | heating-coil-entering-temp, heating-coil-leaving-temp, outside-air-damper, cooling-valve | 600 | Heating coil ΔT ≥ √(mix_tol²+mix_tol²)+0.31Δ°C while coil should be inactive. |
 | `AHU-SATDEV` | `ahu` | ahu | discharge-air-temp, discharge-air-temp-sp | 600 | \\|SAT − SAT SP\\| > 2.78Δ°C. |
@@ -77,13 +77,13 @@ All **thresholds are defaults** — site-adjustable. **confirmation_seconds** de
 | `CHW-1` | `plant` | chiller | chilled-water-supply-temp, chilled-water-return-temp | 900 | Pump on AND (CHWR − CHWS) < 2.2 °C (ΔT). |
 | `CHW-2` | `plant` | chiller | chw-diff-pressure, chw-diff-pressure-sp, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW DP < DP SP − 2.2. |
 | `CHW-3` | `plant` | chiller | chilled-water-supply-temp, chilled-water-supply-temp-sp, chw-pump-cmd | 300 | Pump on AND \\|CHWS − CHWS SP\\| > 1.22Δ°C. |
-| `CHW-4` | `plant` | chiller | chw-flow, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW flow > 69 L/s (~1100 L/s). |
+| `CHW-4` | `plant` | chiller | chw-flow, chw-pump-cmd | 300 | Pump ≥ 87% AND CHW flow > 69.4 L/s (~1100 US gpm). |
 | `HP-1` | `heatpump` | heatpump | discharge-air-temp, zone-air-temp, fan-cmd | 600 | Fan on, zone < 20.56°C, discharge SAT < 29.44°C. |
 | `WX-1` | `weather` | weather | outside-air-temp | 300 | OAT sample-to-sample jump > 8.89Δ°C. |
 | `CW-OPT-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized. |
 | `CW-APR-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 4.4 °C Δ, typically 2.8–5.6 °C). Suspect OA→w… |
 | `CW-FAN-1` | `plant` | chiller, cooling_tower | condenser-water-supply-temp | 900 | Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fa… |
-| `TRIM-1` | `trim` | ahu | duct-static-pressure, vav-pressure-request-sum | 1800 | Duct static high (> 1.35 Pa) while VAV pressure requests are low. |
+| `TRIM-1` | `trim` | ahu | duct-static-pressure, vav-pressure-request-sum | 1800 | Duct static high (> 335.934 Pa, equivalent to 1.35 in. w.c.) while VAV pressure requests are low. |
 | `TRIM-3` | `trim` | boiler | hot-water-supply-temp, hw-reset-request-sum | 1800 | HW supply > 71 °C while reset requests are low. |
 | `TRIM-4` | `trim` | chiller | chilled-water-supply-temp, chw-reset-request-sum | 1800 | CHW supply < 7.2 °C while reset requests are low. |
 | `SCHED-1` | `schedule` | ahu | occupied, fan-status | 1800 | Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone in… |

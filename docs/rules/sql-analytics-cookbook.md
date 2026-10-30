@@ -460,6 +460,14 @@ LIMIT 2000;
 
 `sql/analytics/postgres/queries/pid_hunting_proxy.sql`.
 
+The threshold is role-dependent after metric-c-v2 normalization: temperature
+roles (`sat`, `zone_t`) use a sample standard deviation greater than
+`4.444444444444445 °C`; duct static pressure (`dsp`) uses greater than
+`1990.72 Pa`; percent-command roles retain the unitless numeric cutoff `8`.
+The SQL applies the role-specific equivalent so source-declared units do not
+change which historical samples cross the threshold. This is a hunting proxy,
+not the full PID-HUNT diagnostic.
+
 ```sql
 -- Soft-OPEN analytics pack: hunting proxy via role stddev (not full PID-HUNT suite).
 -- Parameter: $1 = site_id. Soft-OPEN ≠ FQ.
@@ -509,6 +517,15 @@ Screened roles: `sat`, `mat`, `rat`, `oa_t`, `web_oa_t`, `zone_t`, `dsp`. The ev
 
 `sql/analytics/postgres/queries/mv_change_point_daily.sql`.
 
+For temperature roles, the legacy 25% test was relative to a 0 °F origin and
+had a 1 °F minimum delta. Its metric-c-v2 equivalent uses the SI origin
+`−17.77777777777778 °C` and minimum delta `0.5555555555555556 °C`:
+`abs(delta_C) >= greatest(abs(prev_C − (−17.77777777777778)) * 0.25,
+0.5555555555555556)`. This deliberately preserves the legacy predicate rather
+than making 0 °C the new reference. Non-temperature scalar roles retain their
+existing relative/minimum comparison. The pack remains Soft-OPEN and this
+description does not qualify the rule.
+
 ```sql
 -- Soft-OPEN analytics pack: day-over-day mean change (change-point Soft-OPEN).
 -- Parameter: $1 = site_id. Soft-OPEN ≠ FQ (not full MV suite).
@@ -533,13 +550,24 @@ ranked AS (
   SELECT
     equipment_id,
     role,
+    openfdd_key,
     day_utc,
     avg_val,
     n,
     lag(avg_val) OVER (
-      PARTITION BY equipment_id, role ORDER BY day_utc
+      PARTITION BY openfdd_key ORDER BY day_utc
     ) AS prev_avg
   FROM daily
+),
+thresholded AS (
+  SELECT
+    *,
+    CASE
+      WHEN role IN ('oa_t', 'web_oa_t', 'sat', 'zone_t')
+        THEN greatest(abs(prev_avg - (-17.77777777777778)) * 0.25, 0.5555555555555556)
+      ELSE greatest(abs(prev_avg) * 0.25, 1.0)
+    END AS required_delta
+  FROM ranked
 )
 SELECT
   equipment_id,
@@ -551,13 +579,13 @@ SELECT
   n,
   CASE
     WHEN prev_avg IS NULL THEN 'FIRST'
-    WHEN abs(avg_val - prev_avg) >= greatest(abs(prev_avg) * 0.25, 1.0)
+    WHEN abs(avg_val - prev_avg) >= required_delta
       THEN 'CHANGE'
     ELSE 'STABLE'
   END AS change_flag
-FROM ranked
+FROM thresholded
 WHERE prev_avg IS NOT NULL
-  AND abs(avg_val - prev_avg) >= greatest(abs(prev_avg) * 0.25, 1.0)
+  AND abs(avg_val - prev_avg) >= required_delta
 ORDER BY day_utc DESC, abs(avg_val - prev_avg) DESC
 LIMIT 2000;
 ```

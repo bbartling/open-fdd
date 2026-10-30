@@ -256,7 +256,7 @@ FROM telemetry_pivot
 | `max_gap_hours` | `dimensionless` | Max sample gap | h | 1.0 | 0.1–12.0 |
 | `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
 | `persistence_min` | `duration_minutes` | Fault persistence | min | 10.0 | 5.0–60.0 |
-| `steady_fault_per_hour` | `temperature_rate` | Steady-state slew limit | degF_per_h | 6.0 | 1.0–60.0 |
+| `steady_fault_per_hour` | `temperature_rate` | Steady-state slew limit | Δ°C/h | 3.333333333 | 0.555555556–33.333333333 |
 
 
 
@@ -339,7 +339,7 @@ Includes GL36 FC1–FC15, AHU auxiliaries, economizer/ventilation, leakage, and 
 | `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
 | `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
 | `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
-| `eps_dsp` | `air_pressure` | Duct-static error epsDSP (GL36 default 0.1 Pa) | Pa | 29.8608 | 0.0–124.42 |
+| `eps_dsp` | `air_pressure` | Duct-static error epsDSP (default 0.12 in. w.c.) | Pa | 29.8608 | 0.0–124.42 |
 | `eps_vfd_spd` | `fraction` | VFD speed error epsVFDSPD (GL36 default 5%) | frac | 0.13 | 0.0–0.5 |
 | `confirm_seconds` | `duration_seconds` | Confirm time | s | 300 | 0–3600 |
 
