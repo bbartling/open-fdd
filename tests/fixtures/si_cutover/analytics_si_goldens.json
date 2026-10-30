@@ -1,6 +1,352 @@
 {
  "datasets": [
   {
+   "building_id": "COOKBOOK_CHW1",
+   "dataset_id": "COOKBOOK_CHW1",
+   "equipment_id": "equip:test-chiller",
+   "equipment_type": "chwPlant",
+   "stems": {
+    "bas_vs_web_oat": {
+     "columns": [
+      "ts",
+      "equipment_id",
+      "bas_oa_t",
+      "web_oa_t",
+      "delta_f"
+     ],
+     "sql_si": []
+    },
+    "diurnal_hourly": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "hour_utc",
+      "avg_val",
+      "n"
+     ],
+     "sql_si": []
+    },
+    "economizer_deltas": {
+     "columns": [
+      "ts",
+      "equipment_id",
+      "oa_t",
+      "rat",
+      "mat",
+      "sat",
+      "oa_damper_pct",
+      "delta_or_f",
+      "delta_mr_f",
+      "mat_resid_f",
+      "fan_on",
+      "identifiable"
+     ],
+     "sql_si": []
+    },
+    "fuel_daily": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "day_utc",
+      "n",
+      "min_val",
+      "max_val",
+      "avg_val",
+      "delta_val"
+     ],
+     "sql_si": []
+    },
+    "mechanical_cooling_oat_bins": {
+     "columns": [
+      "kind",
+      "equipment_id",
+      "oat_bin",
+      "run_hours"
+     ],
+     "sql_si": []
+    },
+    "metering_kwh": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "day_utc",
+      "n",
+      "min_val",
+      "max_val",
+      "avg_val",
+      "delta_val"
+     ],
+     "sql_si": []
+    },
+    "motor_weekly_runtime": {
+     "columns": [
+      "equipment_id",
+      "kind",
+      "signal",
+      "plant_group",
+      "week_start",
+      "week_label",
+      "run_hours",
+      "runtime_hours",
+      "n_observations",
+      "partial_week"
+     ],
+     "sql_si": []
+    },
+    "mv_change_point_daily": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "day_utc",
+      "avg_val",
+      "prev_avg",
+      "delta_avg",
+      "n",
+      "change_flag"
+     ],
+     "sql_si": []
+    },
+    "pid_hunting_proxy": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "n",
+      "avg_val",
+      "stddev_val",
+      "hunt_flag"
+     ],
+     "sql_si": []
+    },
+    "plant_health_inventory": {
+     "columns": [
+      "equipment_id",
+      "equip_type"
+     ],
+     "sql_si": [
+      [
+       "equip:test-chiller",
+       "chwPlant"
+      ]
+     ]
+    },
+    "rcx_preset_role_coverage": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "n",
+      "first_ts",
+      "last_ts"
+     ],
+     "sql_si": [
+      [
+       "equip:test-chiller",
+       "chw_supply_t",
+       "equip:test-chiller.chw_supply_t",
+       17,
+       "2026-07-01T14:00:00+00:00",
+       "2026-07-01T15:20:00+00:00"
+      ]
+     ]
+    },
+    "role_timeseries": {
+     "columns": [
+      "ts",
+      "openfdd_key",
+      "val",
+      "equipment_id",
+      "role"
+     ],
+     "sql_si": []
+    },
+    "schedule_occupancy": {
+     "columns": [
+      "ts",
+      "openfdd_key",
+      "val",
+      "equipment_id"
+     ],
+     "sql_si": []
+    },
+    "sensor_faults_staleness": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "n",
+      "last_ts",
+      "min_val",
+      "max_val",
+      "stddev_val",
+      "fault_flag"
+     ],
+     "sql_si": [
+      [
+       "equip:test-chiller",
+       "chiller_status",
+       "equip:test-chiller.chiller_status",
+       17,
+       "2026-07-01T15:20:00+00:00",
+       1.0,
+       1.0,
+       0.0,
+       "STALE"
+      ],
+      [
+       "equip:test-chiller",
+       "chw_return_t",
+       "equip:test-chiller.chw_return_t",
+       17,
+       "2026-07-01T15:20:00+00:00",
+       7.222222222222221,
+       7.222222222222221,
+       2.1154315069099284e-15,
+       "STALE"
+      ],
+      [
+       "equip:test-chiller",
+       "chw_supply_t",
+       "equip:test-chiller.chw_supply_t",
+       17,
+       "2026-07-01T15:20:00+00:00",
+       6.666666666666668,
+       6.666666666666668,
+       2.0415081739109048e-15,
+       "STALE"
+      ]
+     ]
+    },
+    "sensor_stats": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "n",
+      "min_val",
+      "max_val",
+      "avg_val",
+      "stddev_val",
+      "first_ts",
+      "last_ts"
+     ],
+     "sql_si": [
+      [
+       "equip:test-chiller",
+       "chiller_status",
+       "equip:test-chiller.chiller_status",
+       17,
+       1.0,
+       1.0,
+       1.0,
+       0.0,
+       "2026-07-01T14:00:00+00:00",
+       "2026-07-01T15:20:00+00:00"
+      ],
+      [
+       "equip:test-chiller",
+       "chw_return_t",
+       "equip:test-chiller.chw_return_t",
+       17,
+       7.222222222222221,
+       7.222222222222221,
+       7.222222222222225,
+       2.1154315069099284e-15,
+       "2026-07-01T14:00:00+00:00",
+       "2026-07-01T15:20:00+00:00"
+      ],
+      [
+       "equip:test-chiller",
+       "chw_supply_t",
+       "equip:test-chiller.chw_supply_t",
+       17,
+       6.666666666666668,
+       6.666666666666668,
+       6.6666666666666705,
+       2.0415081739109048e-15,
+       "2026-07-01T14:00:00+00:00",
+       "2026-07-01T15:20:00+00:00"
+      ]
+     ]
+    },
+    "setpoints_snapshot": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "ts",
+      "setpoint"
+     ],
+     "sql_si": []
+    },
+    "sql_anomaly_series": {
+     "columns": [
+      "equipment_id",
+      "role",
+      "openfdd_key",
+      "n",
+      "n_null",
+      "stddev_val"
+     ],
+     "sql_si": []
+    },
+    "sql_anomaly_zscore": {
+     "columns": [
+      "n_scored",
+      "n_flagged",
+      "n_ok",
+      "n_selected",
+      "equipment_id",
+      "role",
+      "ts",
+      "val",
+      "avg_val",
+      "stddev_val",
+      "z_abs",
+      "transition"
+     ],
+     "sql_si": [
+      [
+       0,
+       0,
+       0,
+       0,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null,
+       null
+      ]
+     ]
+    },
+    "topology_equipment": {
+     "columns": [
+      "equipment_id",
+      "equip_type",
+      "parent_equipment_id",
+      "role_count",
+      "last_sample_ts"
+     ],
+     "sql_si": [
+      [
+       "equip:test-chiller",
+       "chwPlant",
+       null,
+       3,
+       "2026-07-01T15:20:00+00:00"
+      ]
+     ]
+    }
+   }
+  },
+  {
    "building_id": "COOKBOOK_FC1",
    "dataset_id": "COOKBOOK_FC1",
    "equipment_id": "equip:test-ahu",
