@@ -2313,6 +2313,82 @@
     },
     {
       "method": "GET",
+      "path": "/api/admin/si-cutover/dry-run",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "hub_admin",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_admin_si_cutover_dry_run",
+        "y.authz.get_api_admin_si_cutover_dry_run"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_admin_si_cutover_dry_run",
+        "y.authz.get_api_admin_si_cutover_dry_run"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "W2c #1284 SI cutover dry-run; hub admin; token not required on GET"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/si-cutover",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "hub_admin",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.post_api_admin_si_cutover",
+        "y.authz.post_api_admin_si_cutover"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.post_api_admin_si_cutover",
+        "y.authz.post_api_admin_si_cutover"
+      ],
+      "request_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "mutation_possible",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "W2c #1284 SI cutover POST; confirm:true + OPENFDD_SI_CUTOVER_TOKEN; single-use token in seed_meta"
+    },
+    {
+      "method": "GET",
       "path": "/api/edges",
       "section": "protected",
       "auth": "jwt_required",

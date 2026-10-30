@@ -208,6 +208,7 @@ mod tests {
                     step: 0.5,
                     unit: "degF".into(),
                     quantity: None,
+                    kind: None,
                     frontend_control: "slider".into(),
                     sql_placeholder: "ZONE_T_LO".into(),
                 },
