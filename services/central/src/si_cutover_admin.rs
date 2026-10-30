@@ -63,7 +63,7 @@ fn session_config_object(cfg: &Value) -> Option<&Map<String, Value>> {
 }
 
 fn contract_quantity(param_key: &str, def: &RuleParameterDef) -> Option<&'static str> {
-    if let Some(q) = def.quantity.as_deref() {
+    if let Some(q) = def.kind.as_deref() {
         return match q {
             "absolute_temperature" | "temperature" => Some("absolute_temperature"),
             "temperature_difference" | "temperature_delta" => Some("temperature_difference"),
@@ -621,7 +621,8 @@ mod tests {
             max: 20.0,
             step: 0.5,
             unit: "degF".into(),
-            quantity: Some("temperature_difference".into()),
+            quantity: None,
+            kind: Some("temperature_difference".into()),
             frontend_control: "slider".into(),
             sql_placeholder: "DELTA_F".into(),
         };

@@ -14,9 +14,12 @@ pub struct RuleParameterDef {
     pub max: f64,
     pub step: f64,
     pub unit: String,
-    /// W2a metric quantity id (`kind` in registry.yaml).
-    #[serde(default, alias = "kind")]
+    /// Optional catalog override. Empty means classify from `unit` and the parameter key.
+    #[serde(default)]
     pub quantity: Option<String>,
+    /// W2a metric-contract quantity id (`kind` in registry.yaml), used by SI cutover.
+    #[serde(default)]
+    pub kind: Option<String>,
     #[serde(default = "default_control")]
     pub frontend_control: String,
     pub sql_placeholder: String,
