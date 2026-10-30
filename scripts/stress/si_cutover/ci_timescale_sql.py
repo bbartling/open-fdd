@@ -426,20 +426,23 @@ def execute_sql_rule_daily(
         return [], "equipment missing in sql result"
     if not isinstance(index, pd.DatetimeIndex) or len(index) == 0:
         return [], "bad index"
-    day = index[0].date().isoformat()
-    return [
-        {
-            "building_id": building_id,
-            "rule_id": rule_id,
-            "equipment_id": equipment_id,
-            "utc_day": day,
-            "fault_seconds": hours * 3600.0,
-            "covered_seconds": float(len(index)) * poll_seconds,
-            "status": "FAULT" if hours > 0 else "OK",
-            "pair_status": "computed",
-            "reason": "",
-        }
-    ], None
+    days = sorted({ts.date().isoformat() for ts in index})
+    if len(days) == 1:
+        day = days[0]
+        return [
+            {
+                "building_id": building_id,
+                "rule_id": rule_id,
+                "equipment_id": equipment_id,
+                "utc_day": day,
+                "fault_seconds": hours * 3600.0,
+                "covered_seconds": float(len(index)) * poll_seconds,
+                "status": "FAULT" if hours > 0 else "OK",
+                "pair_status": "computed",
+                "reason": "",
+            }
+        ], None
+    return [], "aggregate fault_hours spans multiple UTC days; need fault series overlay"
 
 
 def apply_fdd_postgres_helpers(conn) -> None:
