@@ -5673,18 +5673,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "preheat_over_f": {
+        "preheat_over": {
           "control": "slider",
           "default": 1.222222,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "preheat_over_f",
+          "key": "preheat_over",
           "kind": "temperature_difference",
           "label": "Preheat over ΔT",
           "max": 4.444444,
           "min": 0.277778,
-          "sql_placeholder": "PREHEAT_OVER_F",
+          "sql_placeholder": "PREHEAT_OVER",
           "step": 0.055556,
           "unit": "degC_delta"
         },
@@ -5724,7 +5724,7 @@
         "CONFIRM_ROWS",
         "HTG_OPEN_MIN",
         "POLL_SECONDS",
-        "PREHEAT_OVER_F"
+        "PREHEAT_OVER"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -5790,18 +5790,18 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "econ6_oat_max_f": {
+        "econ6_oat_max": {
           "control": "slider",
           "default": -3.888889,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "econ6_oat_max_f",
+          "key": "econ6_oat_max",
           "kind": "absolute_temperature",
           "label": "Winter OAT ceiling",
           "max": 4.444444,
           "min": -9.444444,
-          "sql_placeholder": "ECON6_OAT_MAX_F",
+          "sql_placeholder": "ECON6_OAT_MAX",
           "step": 0.555556,
           "unit": "degC"
         },
@@ -5855,7 +5855,7 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "ECON6_DAMPER_MAX",
-        "ECON6_OAT_MAX_F",
+        "ECON6_OAT_MAX",
         "POLL_SECONDS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -6080,18 +6080,18 @@
           "step": 5.0,
           "unit": "min"
         },
-        "mech_oat_max_f": {
+        "mech_oat_max": {
           "control": "slider",
           "default": 15.555556,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "mech_oat_max_f",
+          "key": "mech_oat_max",
           "kind": "absolute_temperature",
           "label": "Mech-cool OAT ceiling",
           "max": 18.333333,
           "min": 7.222222,
-          "sql_placeholder": "MECH_OAT_MAX_F",
+          "sql_placeholder": "MECH_OAT_MAX",
           "step": 0.555556,
           "unit": "degC"
         }
@@ -6099,7 +6099,7 @@
       "parity_status": "sql_screening",
       "placeholders": [
         "CONFIRM_ROWS",
-        "MECH_OAT_MAX_F",
+        "MECH_OAT_MAX",
         "POLL_SECONDS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -7262,18 +7262,18 @@
           "step": 5.0,
           "unit": "min"
         },
-        "delta_f": {
+        "delta": {
           "control": "slider",
           "default": 4.444444444,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "delta_f",
+          "key": "delta",
           "kind": "temperature_difference",
           "label": "Leave Δ vs AHU SAT",
           "max": 13.888888889,
           "min": 1.111111111,
-          "sql_placeholder": "DELTA_F",
+          "sql_placeholder": "DELTA",
           "step": 0.277777778,
           "unit": "degC"
         },
@@ -7297,7 +7297,7 @@
       "parity_status": "sql_screening",
       "placeholders": [
         "CONFIRM_ROWS",
-        "DELTA_F",
+        "DELTA",
         "FLOW_ON_MIN",
         "POLL_SECONDS"
       ],
@@ -7560,18 +7560,18 @@
           "step": 1.0,
           "unit": "bool"
         },
-        "reset_err_f": {
+        "reset_err": {
           "control": "slider",
           "default": 1.666667,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "reset_err_f",
+          "key": "reset_err",
           "kind": "temperature_difference",
           "label": "Reset error",
           "max": 5.555556,
           "min": 0.277778,
-          "sql_placeholder": "RESET_ERR_F",
+          "sql_placeholder": "RESET_ERR",
           "step": 0.277778,
           "unit": "degC_delta"
         },
@@ -7640,7 +7640,7 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "POLL_SECONDS",
-        "RESET_ERR_F",
+        "RESET_ERR",
         "RESET_OAT_REF",
         "RESET_SAT_AT_65",
         "RESET_SLOPE"
@@ -8498,7 +8498,7 @@
       },
       "parity_status": "sql_screening",
       "placeholders": [
-        "APPROACH_MAX_F",
+        "APPROACH_MAX",
         "CONFIRM_ROWS",
         "POLL_SECONDS",
         "TOWER_FAN_HI"
@@ -8648,7 +8648,7 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "CW_APPROACH",
-        "EXCESS_BEYOND_APPROACH_F",
+        "EXCESS_BEYOND_APPROACH",
         "POLL_SECONDS",
         "TOWER_FAN_HI"
       ],
@@ -9482,18 +9482,18 @@
       ],
       "pandas_function": "fcu_htg_coil",
       "parameters": {
-        "coil_delta_f": {
+        "coil_delta": {
           "control": "slider",
           "default": 3.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "coil_delta_f",
+          "key": "coil_delta",
           "kind": "temperature_difference",
           "label": "Minimum heating rise",
           "max": 11.111111111,
           "min": 0.555555556,
-          "sql_placeholder": "COIL_DELTA_F",
+          "sql_placeholder": "COIL_DELTA",
           "step": 0.277777778,
           "unit": "degC"
         },
@@ -9529,7 +9529,7 @@
       },
       "parity_status": "sql_screening",
       "placeholders": [
-        "COIL_DELTA_F",
+        "COIL_DELTA",
         "CONFIRM_ROWS",
         "POLL_SECONDS",
         "VALVE_OPEN"
@@ -9653,18 +9653,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "pass_delta_f": {
+        "pass_delta": {
           "control": "slider",
           "default": 3.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "pass_delta_f",
+          "key": "pass_delta",
           "kind": "temperature_difference",
           "label": "Passing temperature rise",
           "max": 11.111111111,
           "min": 0.555555556,
-          "sql_placeholder": "PASS_DELTA_F",
+          "sql_placeholder": "PASS_DELTA",
           "step": 0.277777778,
           "unit": "degC"
         }
@@ -9672,7 +9672,7 @@
       "parity_status": "sql_screening",
       "placeholders": [
         "CONFIRM_ROWS",
-        "PASS_DELTA_F",
+        "PASS_DELTA",
         "POLL_SECONDS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -9724,18 +9724,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "pass_delta_f": {
+        "pass_delta": {
           "control": "slider",
           "default": 3.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "pass_delta_f",
+          "key": "pass_delta",
           "kind": "temperature_difference",
           "label": "Passing temperature drop",
           "max": 11.111111111,
           "min": 0.555555556,
-          "sql_placeholder": "PASS_DELTA_F",
+          "sql_placeholder": "PASS_DELTA",
           "step": 0.277777778,
           "unit": "degC"
         }
@@ -9743,7 +9743,7 @@
       "parity_status": "sql_screening",
       "placeholders": [
         "CONFIRM_ROWS",
-        "PASS_DELTA_F",
+        "PASS_DELTA",
         "POLL_SECONDS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -9970,7 +9970,7 @@
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "deadband_c",
+          "key": "deadband",
           "kind": "temperature_difference",
           "label": "Minimum deadband",
           "max": 5,

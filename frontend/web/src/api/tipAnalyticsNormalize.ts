@@ -4,7 +4,7 @@
  *
  * Tip SQL often returns `rows` only with warehouse column names (`ts`, `bas_oa_t`,
  * `oa_t`, `oat_bin`, `run_hours`). Overview builders still expect vibe19 field
- * names (`timestamp_utc`, `bas_oat_f`, `points`, `bin_label`, `hours`, …).
+ * names (`timestamp_utc`, `bas_oat_c`, `points`, `bin_label`, `hours`, …).
  */
 import type { AnalyticsEnvelope } from "./analyticsApi";
 
@@ -242,11 +242,11 @@ export function normalizeTipBasPoints(
       ...r,
       timestamp_utc: str(r.timestamp_utc) || str(r.ts) || str(r.time_utc),
       equipment_id: str(r.equipment_id) || "site",
-      bas_oat_f: num(r.bas_oat_f) ?? num(r.bas_oa_t),
-      web_oat_f: num(r.web_oat_f) ?? num(r.web_oa_t),
-      delta_f: num(r.delta_f),
+      bas_oat_c: num(r.bas_oat_c) ?? num(r.bas_oa_t),
+      web_oat_c: num(r.web_oat_c) ?? num(r.web_oa_t),
+      delta_c: num(r.delta_c),
     }))
-    .filter((p) => p.timestamp_utc && (p.bas_oat_f != null || p.web_oat_f != null));
+    .filter((p) => p.timestamp_utc && (p.bas_oat_c != null || p.web_oat_c != null));
 }
 
 /**

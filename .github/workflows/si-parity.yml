@@ -86,6 +86,9 @@ jobs:
           pip install pyyaml
           pip install -e ".[oracle]"
 
+      - name: No-imperial product guard
+        run: bash scripts/ci/check_no_imperial_product.sh
+
       - name: Unit contract (T1284-1 baseline)
         run: python3 scripts/ci/check_unit_contract.py
 

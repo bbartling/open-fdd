@@ -15,7 +15,7 @@ WITH normalized AS (
   FROM history
 ), base AS (
   SELECT equipment_id, timestamp_utc,
-    CAST(CASE WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1 AND htg <= 0.05 AND clg <= 0.05 AND sat - zone_t > {{PASS_DELTA_F}} THEN 1 ELSE 0 END AS INT) AS raw_fault
+    CAST(CASE WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1 AND htg <= 0.05 AND clg <= 0.05 AND sat - zone_t > {{PASS_DELTA}} THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM normalized
 ), elapsed_hold AS (
   -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:

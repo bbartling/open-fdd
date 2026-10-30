@@ -165,14 +165,14 @@ describe("C4 tip Overview known answers", () => {
           equipment_id: "SYN_WX",
           bas_oa_t: 70,
           web_oa_t: 68,
-          delta_f: 2,
+          delta_c: 2,
         },
         {
           ts: "2026-04-01T01:00:00Z",
           equipment_id: "SYN_WX",
           bas_oa_t: 71,
           web_oa_t: 69,
-          delta_f: 2,
+          delta_c: 2,
         },
       ],
       equipment: [],
@@ -180,8 +180,8 @@ describe("C4 tip Overview known answers", () => {
       skipped: [],
       query_id: "bas-vs-web-oat",
     });
-    expect(env.points[0]?.bas_oat_f).toBe(70);
-    expect(env.points[0]?.web_oat_f).toBe(68);
+    expect(env.points[0]?.bas_oat_c).toBe(70);
+    expect(env.points[0]?.web_oat_c).toBe(68);
     const overlay = basOverlay(env.points, 5);
     expect(overlay?.data?.some((t) => t.name === "BAS oa_t")).toBe(true);
     expect(overlay?.data?.some((t) => t.name === "Web OAT")).toBe(true);

@@ -32,8 +32,8 @@ def overview_settings_from_context(ctx: dict[str, Any] | None) -> dict[str, Any]
         "dataset_start": _ts_label(ctx.get("dataset_start")),
         "dataset_end": _ts_label(ctx.get("dataset_end")),
         "span_hours": ctx.get("span_hours"),
-        "zone_lo_f": ctx.get("zone_lo_f"),
-        "zone_hi_f": ctx.get("zone_hi_f"),
+        "zone_lo": ctx.get("zone_lo"),
+        "zone_hi": ctx.get("zone_hi"),
         "bare_min_occ_hours": ctx.get("bare_min_occ_hours"),
         "occupancy_schedule": ctx.get("occupancy_schedule"),
         "oat_err": ctx.get("oat_err"),
@@ -66,10 +66,10 @@ def build_overview_context(
     weather=None,
     prefer_web_oat: bool = True,
     oat_err: float = 5.0,
-    chw_leave_max_f: float = 48.0,
+    chw_leave_max: float = 8.8888888889,
     use_status_proof: bool = True,
-    zone_lo_f: float = 70.0,
-    zone_hi_f: float = 75.0,
+    zone_lo: float = 21.111111,
+    zone_hi: float = 23.888889,
     bare_min_occ_hours: float | None = None,
     occupancy_schedule: dict | None = None,
     dataset_start=None,
@@ -83,10 +83,10 @@ def build_overview_context(
         "weather": weather,
         "prefer_web_oat": prefer_web_oat,
         "oat_err": oat_err,
-        "chw_leave_max_f": chw_leave_max_f,
+        "chw_leave_max": chw_leave_max,
         "use_status_proof": use_status_proof,
-        "zone_lo_f": zone_lo_f,
-        "zone_hi_f": zone_hi_f,
+        "zone_lo": zone_lo,
+        "zone_hi": zone_hi,
         "bare_min_occ_hours": bare_min_occ_hours,
         "occupancy_schedule": occupancy_schedule,
         "dataset_start": dataset_start,
@@ -114,7 +114,7 @@ def build_overview_charts(
     weather = ctx.get("weather")
     prefer_web = bool(ctx.get("prefer_web_oat", True))
     oat_err = float(ctx.get("oat_err") or 5.0)
-    chw_leave = float(ctx.get("chw_leave_max_f") or 48.0)
+    chw_leave = float(ctx.get("chw_leave_max") or 8.8888888889)
     use_status = bool(ctx.get("use_status_proof", True))
     bare_min = ctx.get("bare_min_occ_hours")
     bare_min_f = float(bare_min) if bare_min is not None else None
@@ -152,7 +152,7 @@ def build_overview_charts(
             role_map,
             weather=weather,
             prefer_web_oat=prefer_web,
-            chw_leave_max_f=chw_leave,
+            chw_leave_max=chw_leave,
         )
         titles = {
             "air": "Air side — supply fans",
@@ -198,7 +198,7 @@ def build_overview_charts(
             role_map,
             weather=weather,
             prefer_web_oat=prefer_web,
-            chw_leave_max_f=chw_leave,
+            chw_leave_max=chw_leave,
             use_status_proof=use_status,
         )
         fig = mech_cooling_oat_histogram(bins)

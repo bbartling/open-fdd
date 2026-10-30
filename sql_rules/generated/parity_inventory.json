@@ -641,9 +641,19 @@
       "datafusion_sql_implementation": "fc1_duct_static_low.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
+        "tests/qualification/test_capture_ip_baseline.py",
+        "tests/qualification/test_fc_tolerance_param_kinds.py",
+        "tests/qualification/test_mode_delay_shared.py",
+        "tests/qualification/test_product_sql_params.py",
+        "tests/qualification/test_si_parity_gate_blocking.py",
+        "tests/qualification/test_stress_evidence_integrity.py",
+        "tests/qualification/test_stress_gate_fail_closed.py",
         "tests/reporting/test_single_system_typst.py",
         "tests/rules/test_evidence_json.py",
-        "tests/test_wattlab_parity_diff.py"
+        "tests/test_wattlab_parity_diff.py",
+        "tests/units/test_unit_contract_metadata_diff.py"
       ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
@@ -1974,6 +1984,7 @@
       "datafusion_sql_implementation": "sat_high_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc13",
       "test_coverage": [
+        "tests/qualification/test_fc_tolerance_param_kinds.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "sql_screening",
@@ -2260,7 +2271,9 @@
       "pandas_implementation": "fc15",
       "datafusion_sql_implementation": "fc15_hw_coil_dt_inactive.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc15",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/qualification/test_fc_tolerance_param_kinds.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -2324,6 +2337,8 @@
       "datafusion_sql_implementation": "ahu_satdev.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-satdev",
       "test_coverage": [
+        "tests/qualification/test_stress_gate_fail_closed.py",
+        "tests/rules/test_sql_quality_contract.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -2398,6 +2413,7 @@
       "datafusion_sql_implementation": "ahu_ducthi.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi",
       "test_coverage": [
+        "tests/qualification/test_stress_gate_fail_closed.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -2810,7 +2826,9 @@
       "pandas_implementation": "econ4",
       "datafusion_sql_implementation": "econ4_low_oa_frac.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-4",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/qualification/test_si_parity_gate_blocking.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -2863,7 +2881,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "preheat_over_f": {
+        "preheat_over": {
           "default": 2.2,
           "unit": "degF",
           "min": 0.5,
@@ -2934,7 +2952,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "econ6_oat_max_f": {
+        "econ6_oat_max": {
           "default": 25.0,
           "unit": "degF",
           "min": 15.0,
@@ -3077,7 +3095,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "mech_oat_max_f": {
+        "mech_oat_max": {
           "default": 60.0,
           "unit": "degF",
           "min": 45.0,
@@ -3216,7 +3234,7 @@
           "step": 0.05,
           "label": "Valve open threshold"
         },
-        "coil_delta_f": {
+        "coil_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -3292,7 +3310,7 @@
       ],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "pass_delta_f": {
+        "pass_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -3330,7 +3348,7 @@
       ],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "pass_delta_f": {
+        "pass_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -3452,7 +3470,7 @@
       "optional_roles": [],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "deadband_c": {
+        "deadband": {
           "default": 1,
           "unit": "degC",
           "min": 0,
@@ -3465,6 +3483,7 @@
       "datafusion_sql_implementation": "fcu_deadband.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-deadband",
       "test_coverage": [
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
         "tests/rules/test_fcu_family.py"
       ],
       "parity_status": "sql_screening",
@@ -3511,7 +3530,7 @@
     },
     {
       "rule_id": "VAV-1",
-      "title": "Zone comfort band violation hours with confirm window",
+      "title": "Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2",
       "equipment_types": [],
       "required_roles": [
         "zone_t"
@@ -3561,6 +3580,14 @@
           "step": 0.5,
           "label": "Zone high"
         },
+        "require_occupied": {
+          "default": 1.0,
+          "unit": "bool",
+          "min": 0.0,
+          "max": 1.0,
+          "step": 1.0,
+          "label": "Require occupied"
+        },
         "confirm_seconds": {
           "default": 900,
           "unit": "sec",
@@ -3574,7 +3601,11 @@
       "datafusion_sql_implementation": "vav1_comfort_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
         "tests/rules/test_quality.py",
+        "tests/rules/test_vav1_occupancy.py",
+        "tests/rules/test_vav1_t1407.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -3636,7 +3667,9 @@
       "pandas_implementation": "vav2",
       "datafusion_sql_implementation": "vav2_night_setback.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-2",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/rules/test_vav1_occupancy.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -3716,7 +3749,10 @@
       "pandas_implementation": "vav_3",
       "datafusion_sql_implementation": "vav3_excessive_reheat.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-3",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
+        "tests/units/test_ip_unit_declaration.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -4045,7 +4081,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "delta_f": {
+        "delta": {
           "default": 8.0,
           "unit": "degF",
           "min": 2.0,
@@ -4433,7 +4469,9 @@
       "pandas_implementation": "chw_4",
       "datafusion_sql_implementation": "chw4_flow_high.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-4",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/units/test_ip_unit_declaration.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -4667,7 +4705,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "approach_max_f": {
+        "approach_max": {
           "default": 8.0,
           "unit": "degF",
           "min": 5.0,
@@ -4749,7 +4787,7 @@
           "step": 0.5,
           "label": "Design approach"
         },
-        "excess_beyond_approach_f": {
+        "excess_beyond_approach": {
           "default": 5.0,
           "unit": "degF",
           "min": 2.0,
@@ -4913,7 +4951,9 @@
       "pandas_implementation": "trim_3",
       "datafusion_sql_implementation": "trim3_hwst.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#trim-3",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/units/test_registry_role_diff_guard.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -5011,7 +5051,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "comfort_low_f": {
+        "comfort_low": {
           "default": 70.0,
           "unit": "\u00b0F",
           "min": 50.0,
@@ -5019,7 +5059,7 @@
           "step": 0.5,
           "label": "Zone comfort low"
         },
-        "comfort_high_f": {
+        "comfort_high": {
           "default": 75.0,
           "unit": "\u00b0F",
           "min": 55.0,
@@ -5032,6 +5072,7 @@
       "datafusion_sql_implementation": "sched1_unoccupied_runtime.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sched-1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
         "tests/reporting/test_findings_smoke.py",
         "tests/rules/test_catalog_smoke.py",
         "tests/rules/test_quality.py"
@@ -5120,7 +5161,7 @@
           "step": 1.0,
           "label": "Require operational gate"
         },
-        "reset_err_f": {
+        "reset_err": {
           "default": 3.0,
           "unit": "degF",
           "min": 0.5,
@@ -7134,9 +7175,19 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc1",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
+        "tests/qualification/test_capture_ip_baseline.py",
+        "tests/qualification/test_fc_tolerance_param_kinds.py",
+        "tests/qualification/test_mode_delay_shared.py",
+        "tests/qualification/test_product_sql_params.py",
+        "tests/qualification/test_si_parity_gate_blocking.py",
+        "tests/qualification/test_stress_evidence_integrity.py",
+        "tests/qualification/test_stress_gate_fail_closed.py",
         "tests/reporting/test_single_system_typst.py",
         "tests/rules/test_evidence_json.py",
-        "tests/test_wattlab_parity_diff.py"
+        "tests/test_wattlab_parity_diff.py",
+        "tests/units/test_unit_contract_metadata_diff.py"
       ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -10799,6 +10850,7 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc13",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc13-sat-high",
       "test_coverage": [
+        "tests/qualification/test_fc_tolerance_param_kinds.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "sql_screening",
@@ -11515,7 +11567,9 @@
       "sql_file": "fc15_hw_coil_dt_inactive.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc15",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc15",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/qualification/test_fc_tolerance_param_kinds.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -11819,6 +11873,8 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-satdev",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-satdev",
       "test_coverage": [
+        "tests/qualification/test_stress_gate_fail_closed.py",
+        "tests/rules/test_sql_quality_contract.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -12033,6 +12089,7 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-ducthi",
       "test_coverage": [
+        "tests/qualification/test_stress_gate_fail_closed.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -13316,7 +13373,9 @@
       "sql_file": "econ4_low_oa_frac.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-4",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-4",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/qualification/test_si_parity_gate_blocking.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -13517,7 +13576,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "preheat_over_f": {
+        "preheat_over": {
           "default": 2.2,
           "unit": "degF",
           "min": 0.5,
@@ -13588,7 +13647,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "preheat_over_f": {
+        "preheat_over": {
           "label": "Preheat over \u0394T",
           "default": 2.2,
           "min": 0.5,
@@ -13596,7 +13655,7 @@
           "step": 0.1,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "PREHEAT_OVER_F"
+          "sql_placeholder": "PREHEAT_OVER"
         },
         "htg_open_min": {
           "label": "Heating valve open minimum",
@@ -13738,7 +13797,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "econ6_oat_max_f": {
+        "econ6_oat_max": {
           "default": 25.0,
           "unit": "degF",
           "min": 15.0,
@@ -13809,7 +13868,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "econ6_oat_max_f": {
+        "econ6_oat_max": {
           "label": "Winter OAT ceiling",
           "default": 25.0,
           "min": 15.0,
@@ -13817,7 +13876,7 @@
           "step": 1.0,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "ECON6_OAT_MAX_F"
+          "sql_placeholder": "ECON6_OAT_MAX"
         },
         "econ6_damper_max": {
           "label": "Winter min-OA damper",
@@ -14211,7 +14270,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "mech_oat_max_f": {
+        "mech_oat_max": {
           "default": 60.0,
           "unit": "degF",
           "min": 45.0,
@@ -14244,7 +14303,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "mech_oat_max_f": {
+        "mech_oat_max": {
           "label": "Mech-cool OAT ceiling",
           "default": 60.0,
           "min": 45.0,
@@ -14252,7 +14311,7 @@
           "step": 1.0,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "MECH_OAT_MAX_F"
+          "sql_placeholder": "MECH_OAT_MAX"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -14637,7 +14696,7 @@
           "step": 0.05,
           "label": "Valve open threshold"
         },
-        "coil_delta_f": {
+        "coil_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -14672,7 +14731,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "VALVE_OPEN"
         },
-        "coil_delta_f": {
+        "coil_delta": {
           "label": "Minimum heating rise",
           "default": 5.4,
           "min": 1,
@@ -14680,7 +14739,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "COIL_DELTA_F"
+          "sql_placeholder": "COIL_DELTA"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -14789,7 +14848,7 @@
       ],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "pass_delta_f": {
+        "pass_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -14814,7 +14873,7 @@
       "startup_delay_seconds": null,
       "confirm_seconds": 900,
       "parameters": {
-        "pass_delta_f": {
+        "pass_delta": {
           "label": "Passing temperature rise",
           "default": 5.4,
           "min": 1,
@@ -14822,7 +14881,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "PASS_DELTA_F"
+          "sql_placeholder": "PASS_DELTA"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -14856,7 +14915,7 @@
       ],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "pass_delta_f": {
+        "pass_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -14881,7 +14940,7 @@
       "startup_delay_seconds": null,
       "confirm_seconds": 900,
       "parameters": {
-        "pass_delta_f": {
+        "pass_delta": {
           "label": "Passing temperature drop",
           "default": 5.4,
           "min": 1,
@@ -14889,7 +14948,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "PASS_DELTA_F"
+          "sql_placeholder": "PASS_DELTA"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -15093,7 +15152,7 @@
       "optional_roles": [],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "deadband_c": {
+        "deadband": {
           "default": 1,
           "unit": "degC",
           "min": 0,
@@ -15108,6 +15167,7 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-deadband",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-deadband",
       "test_coverage": [
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
         "tests/rules/test_fcu_family.py"
       ],
       "parity_status": "sql_screening",
@@ -15118,7 +15178,7 @@
       "startup_delay_seconds": null,
       "confirm_seconds": 0,
       "parameters": {
-        "deadband_c": {
+        "deadband": {
           "label": "Minimum deadband",
           "default": 1,
           "min": 0,
@@ -15233,7 +15293,7 @@
       "canonical_id": "VAV-1",
       "pandas_id": "VAV-1",
       "rule_id": "VAV-1",
-      "title": "Zone comfort band violation hours with confirm window",
+      "title": "Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2",
       "aliases": [],
       "kind": "diagnostic",
       "equipment_types": [],
@@ -15286,6 +15346,14 @@
           "step": 0.5,
           "label": "Zone high"
         },
+        "require_occupied": {
+          "default": 1.0,
+          "unit": "bool",
+          "min": 0.0,
+          "max": 1.0,
+          "step": 1.0,
+          "label": "Require occupied"
+        },
         "confirm_seconds": {
           "default": 900,
           "unit": "sec",
@@ -15301,7 +15369,11 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-1",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
         "tests/rules/test_quality.py",
+        "tests/rules/test_vav1_occupancy.py",
+        "tests/rules/test_vav1_t1407.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -15361,6 +15433,16 @@
           "unit": "degF",
           "frontend_control": "slider",
           "sql_placeholder": "ZONE_T_HI"
+        },
+        "require_occupied": {
+          "label": "Require occupied",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 1.0,
+          "unit": "bool",
+          "frontend_control": "slider",
+          "sql_placeholder": "REQUIRE_OCCUPIED"
         },
         "confirm_seconds": {
           "label": "Confirm time",
@@ -15514,7 +15596,9 @@
       "sql_file": "vav2_night_setback.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-2",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-2",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/rules/test_vav1_occupancy.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -15734,7 +15818,10 @@
       "sql_file": "vav3_excessive_reheat.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-3",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-3",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
+        "tests/units/test_ip_unit_declaration.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -16841,7 +16928,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "delta_f": {
+        "delta": {
           "default": 8.0,
           "unit": "degF",
           "min": 2.0,
@@ -16882,7 +16969,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "delta_f": {
+        "delta": {
           "label": "Leave \u0394 vs AHU SAT",
           "default": 8.0,
           "min": 2.0,
@@ -16890,7 +16977,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "DELTA_F"
+          "sql_placeholder": "DELTA"
         },
         "flow_on_min": {
           "label": "Airflow-on min",
@@ -17961,7 +18048,9 @@
       "sql_file": "chw4_flow_high.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-4",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#chw-4",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/units/test_ip_unit_declaration.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -18753,7 +18842,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "approach_max_f": {
+        "approach_max": {
           "default": 8.0,
           "unit": "degF",
           "min": 5.0,
@@ -18824,7 +18913,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "approach_max_f": {
+        "approach_max": {
           "label": "Max approach at full fan",
           "default": 8.0,
           "min": 5.0,
@@ -18832,7 +18921,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "APPROACH_MAX_F"
+          "sql_placeholder": "APPROACH_MAX"
         },
         "tower_fan_hi": {
           "label": "Tower fan full-speed threshold",
@@ -18985,7 +19074,7 @@
           "step": 0.5,
           "label": "Design approach"
         },
-        "excess_beyond_approach_f": {
+        "excess_beyond_approach": {
           "default": 5.0,
           "unit": "degF",
           "min": 2.0,
@@ -19066,7 +19155,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CW_APPROACH"
         },
-        "excess_beyond_approach_f": {
+        "excess_beyond_approach": {
           "label": "Excess beyond approach",
           "default": 5.0,
           "min": 2.0,
@@ -19074,7 +19163,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "EXCESS_BEYOND_APPROACH_F"
+          "sql_placeholder": "EXCESS_BEYOND_APPROACH"
         },
         "tower_fan_hi": {
           "label": "Tower fan full-speed threshold",
@@ -19461,7 +19550,9 @@
       "sql_file": "trim3_hwst.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#trim-3",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#trim-3",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/units/test_registry_role_diff_guard.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -19859,7 +19950,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "comfort_low_f": {
+        "comfort_low": {
           "default": 70.0,
           "unit": "\u00b0F",
           "min": 50.0,
@@ -19867,7 +19958,7 @@
           "step": 0.5,
           "label": "Zone comfort low"
         },
-        "comfort_high_f": {
+        "comfort_high": {
           "default": 75.0,
           "unit": "\u00b0F",
           "min": 55.0,
@@ -19882,6 +19973,7 @@
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sched-1",
       "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sched-1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
         "tests/reporting/test_findings_smoke.py",
         "tests/rules/test_catalog_smoke.py",
         "tests/rules/test_quality.py"
@@ -19904,7 +19996,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "comfort_low_f": {
+        "comfort_low": {
           "label": "Zone comfort low",
           "default": 70.0,
           "min": 50.0,
@@ -19914,7 +20006,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "ZONE_T_LO"
         },
-        "comfort_high_f": {
+        "comfort_high": {
           "label": "Zone comfort high",
           "default": 75.0,
           "min": 55.0,
@@ -20198,7 +20290,7 @@
           "step": 1.0,
           "label": "Require operational gate"
         },
-        "reset_err_f": {
+        "reset_err": {
           "default": 3.0,
           "unit": "degF",
           "min": 0.5,
@@ -20283,7 +20375,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE"
         },
-        "reset_err_f": {
+        "reset_err": {
           "label": "Reset error",
           "default": 3.0,
           "min": 0.5,
@@ -20291,7 +20383,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "RESET_ERR_F"
+          "sql_placeholder": "RESET_ERR"
         },
         "reset_sat_at_65": {
           "label": "SAT SP at 65F OAT",

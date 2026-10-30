@@ -30,8 +30,8 @@ def _overview_context_from_dataset(ds) -> dict:
         weather=getattr(ds, "weather", None),
         prefer_web_oat=bool(getattr(ds, "prefer_web_oat", session.get("prefer_web_oat", True))),
         oat_err=oat_err,
-        chw_leave_max_f=float(
-            getattr(ds, "chw_leave_max_f", None) or session.get("chw_leave_max_f", 48.0)
+        chw_leave_max=float(
+            getattr(ds, "chw_leave_max", None) or session.get("chw_leave_max", 8.8888888889)
         ),
         use_status_proof=bool(
             getattr(
@@ -40,8 +40,8 @@ def _overview_context_from_dataset(ds) -> dict:
                 session.get("use_mech_cooling_status_proof", True),
             )
         ),
-        zone_lo_f=float(session.get("zone_lo_f", 70.0)),
-        zone_hi_f=float(session.get("zone_hi_f", 75.0)),
+        zone_lo=float(session.get("zone_lo", 21.111111)),
+        zone_hi=float(session.get("zone_hi", 23.888889)),
         bare_min_occ_hours=float(occupied_hours_per_week(sched)),
         occupancy_schedule=sched.to_dict(),
         dataset_start=span.get("start"),

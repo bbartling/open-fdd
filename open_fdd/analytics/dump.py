@@ -30,7 +30,7 @@ def dump_tables(
     rule_results: pd.DataFrame | None = None,
     weather: pd.DataFrame | None = None,
     building_id: str = "BUILDING",
-    unit_system: str = "imperial",
+    display_units: str = "imperial",
 ) -> dict[str, Path]:
     """Write pandas-oracle analytics tables for dump-vs-dump contract files."""
     dest = Path(out_dir)
@@ -52,7 +52,7 @@ def dump_tables(
         frames_d,
         role_map,
         weather=weather,
-        unit_system=unit_system,
+        display_units=display_units,
     )
     p = dest / "mech_cooling_oat_bins.csv"
     bins.to_csv(p, index=False)

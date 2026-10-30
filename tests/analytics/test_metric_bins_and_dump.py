@@ -32,11 +32,11 @@ def test_metric_bins_same_physical_hours():
         }
     }
     imp = mech_cooling_oat_bins(
-        frames_f, role_map, unit_system="imperial", prefer_web_oat=False
+        frames_f, role_map, display_units="imperial", prefer_web_oat=False
     )
     frames_c = _chiller_frame(oat_f=(72.0 - 32.0) * 5.0 / 9.0)
     met = mech_cooling_oat_bins(
-        frames_c, role_map, unit_system="metric", prefer_web_oat=False
+        frames_c, role_map, display_units="metric", prefer_web_oat=False
     )
     assert not imp.empty and not met.empty
     assert float(imp["runtime_hours"].sum()) == float(met["runtime_hours"].sum())

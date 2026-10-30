@@ -172,43 +172,19 @@ def _f(p: dict, key: str, default: float) -> float:
         return float(default)
 
 
-def _role_series_unit(d: pd.DataFrame, role: str) -> str:
-    from open_fdd.analytics.units import DEFAULT_ROLE_UNITS
-
-    units = d.attrs.get("role_units") or d.attrs.get("units_map") or {}
-    if isinstance(units, dict):
-        u = units.get(role)
-        if u:
-            return str(u)
-    return str(DEFAULT_ROLE_UNITS.get(role, "°F"))
+def _param_si_abs_temp_to_series(_d: pd.DataFrame, _role: str, value_c: float) -> float:
+    """Rule frames store canonical SI; parameters already use degC."""
+    return float(value_c)
 
 
-def _param_si_abs_temp_to_series(d: pd.DataFrame, role: str, value_c: float) -> float:
-    """Map an SI (°C) rule threshold onto the series unit for ``role``."""
-    from open_fdd.units.convert import celsius_to_fahrenheit, normalize_unit_token
-
-    tok = normalize_unit_token(_role_series_unit(d, role))
-    if tok in {"c", "degc", "celsius"}:
-        return value_c
-    return celsius_to_fahrenheit(value_c)
+def _param_si_delta_temp_to_series(_d: pd.DataFrame, _role: str, delta_c: float) -> float:
+    """Rule frames store canonical SI; difference parameters use degC_delta."""
+    return float(delta_c)
 
 
-def _param_si_delta_temp_to_series(d: pd.DataFrame, role: str, delta_c: float) -> float:
-    from open_fdd.units.convert import delta_c_to_delta_f, normalize_unit_token
-
-    tok = normalize_unit_token(_role_series_unit(d, role))
-    if tok in {"c", "degc", "celsius"}:
-        return delta_c
-    return delta_c_to_delta_f(delta_c)
-
-
-def _param_si_flow_to_series(d: pd.DataFrame, value_lps: float) -> float:
-    from open_fdd.units.convert import LPS_PER_CFM, normalize_unit_token
-
-    tok = normalize_unit_token(_role_series_unit(d, "zone-airflow"))
-    if tok in {"lps", "ls"}:
-        return value_lps
-    return value_lps / LPS_PER_CFM
+def _param_si_flow_to_series(_d: pd.DataFrame, value_lps: float) -> float:
+    """Rule frames store canonical SI; flow parameters already use L/s."""
+    return float(value_lps)
 
 
 def _false(index) -> pd.Series:
@@ -1010,7 +986,7 @@ def econ4(d, p, poll):
 
 
 def econ5(d, p, poll):
-    over = _f(p, "preheat_over_f", 2.2)
+    over = _f(p, "preheat_over", 1.222222)
     return (
         d["preheat-leaving-temp"].notna() & d["discharge-air-temp-sp"].notna() & d["outside-air-temp"].notna() & d["heating-valve"].notna()
         & (norm_cmd(d["heating-valve"]).fillna(0) > 0.01)
@@ -1412,8 +1388,8 @@ def _tower_fan_full_mask(d: pd.DataFrame, p: dict) -> pd.Series:
     return _false(d.index)
 
 
-def _cw_approach_f(d: pd.DataFrame) -> pd.Series:
-    """Leaving CW minus web wet-bulb (°F)."""
+def _cw_approach(d: pd.DataFrame) -> pd.Series:
+    """Leaving CW minus web wet-bulb (°C difference)."""
     cw = pd.to_numeric(d["condenser-water-supply-temp"], errors="coerce")
     wb = pd.to_numeric(d["web-outside-air-wetbulb"], errors="coerce")
     return cw - wb
@@ -1427,8 +1403,8 @@ def cw_apr(d, p, poll):
         return _false(d.index)
     if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
         return _false(d.index)
-    limit = _f(p, "approach_max", _f(p, "approach_max_f", 4.444444))
-    apr = _cw_approach_f(d)
+    limit = _f(p, "approach_max", 4.444444)
+    apr = _cw_approach(d)
     return (
         d["condenser-water-supply-temp"].notna()
         & d["web-outside-air-wetbulb"].notna()
@@ -1446,8 +1422,8 @@ def cw_fan_excess(d, p, poll):
     if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
         return _false(d.index)
     approach = _f(p, "cw_approach", 3.888889)
-    excess = _f(p, "excess_beyond_approach", _f(p, "excess_beyond_approach_f", 2.777778))
-    apr = _cw_approach_f(d)
+    excess = _f(p, "excess_beyond_approach", 2.777778)
+    apr = _cw_approach(d)
     return (
         d["condenser-water-supply-temp"].notna()
         & d["web-outside-air-wetbulb"].notna()
@@ -1528,7 +1504,7 @@ def trim4(d, p, poll):
 
 def reset1(d, p, poll):
     """SAT SP not tracking the OA reset curve."""
-    err = _f(p, "reset_err_f", 1.666667)
+    err = _f(p, "reset_err", 1.666667)
     intercept = _f(p, "reset_sat_at_65", 11.111111)
     slope = _f(p, "reset_slope", 0.25)
     oat_ref = _f(p, "reset_oat_ref", 18.333333)
@@ -1563,8 +1539,8 @@ def sched1(d, p, poll):
     base = unoccupied & as_bool(d["fan-status"])
     if "zone-air-temp" not in d.columns or d["zone-air-temp"].notna().sum() == 0:
         return base
-    lo = _f(p, "comfort_low", _f(p, "comfort_low_f", 21.111111))
-    hi = _f(p, "comfort_high", _f(p, "comfort_high_f", 23.888889))
+    lo = _f(p, "comfort_low", 21.111111)
+    hi = _f(p, "comfort_high", 23.888889)
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     in_band = zt.notna() & (zt >= lo) & (zt <= hi)
     return base & in_band
@@ -1880,9 +1856,9 @@ RULES: list[CookbookRule] = [
         # placeholder; engine substitutes weather-aware econ3_compute
         econ2,
         params=[
-            CookbookParam("econ3_db_min", "Free-cool OA dry-bulb min", "°F", 50.0, 68.0, 1.0, 60.0),
-            CookbookParam("econ3_db_max", "Free-cool OA dry-bulb max", "°F", 65.0, 80.0, 1.0, 72.0),
-            CookbookParam("econ3_dp_max", "Free-cool OA dew point max", "°F", 45.0, 68.0, 1.0, 60.0),
+            CookbookParam("econ3_db_min", "Free-cool OA dry-bulb min", "°C", 10.0, 20.0, 0.555556, 15.555556),
+            CookbookParam("econ3_db_max", "Free-cool OA dry-bulb max", "°C", 18.333333, 26.666667, 0.555556, 22.222222),
+            CookbookParam("econ3_dp_max", "Free-cool OA dew point max", "°C", 7.222222, 20.0, 0.555556, 15.555556),
             CookbookParam("econ3_damper_hi", "Integrated economizer damper", "frac", 0.5, 1.0, 0.02, 0.90, direction="fewer"),
             CONFIRM_PARAM(),
         ],
@@ -1893,19 +1869,19 @@ RULES: list[CookbookRule] = [
         ["mixed-air-temp", "return-air-temp", "outside-air-temp", "fan-cmd"], "Fan on, |RAT−OAT| > 2.2°F, estimated OA fraction < 21%.",
         econ4, params=[CookbookParam("oa_min_pct", "Min OA fraction", "%", 5.0, 40.0, 1.0, 21.0, direction="stricter"), CONFIRM_PARAM()], confirm_seconds=600),
     CookbookRule("ECON-5", "Preheat over-conditioning", "ahu", ["ahu"],
-        ["preheat-leaving-temp", "discharge-air-temp-sp", "outside-air-temp", "heating-valve"], "Preheat leaving air > 2.2°F above target while preheat active.",
-        econ5, params=[CookbookParam("preheat_over_f", "Preheat over ΔT", "°F", 0.5, 8.0, 0.1, 2.2, direction="fewer"), CONFIRM_PARAM()], confirm_seconds=600),
+        ["preheat-leaving-temp", "discharge-air-temp-sp", "outside-air-temp", "heating-valve"], "Preheat leaving air > 1.2°C above target while preheat active.",
+        econ5, params=[CookbookParam("preheat_over", "Preheat over ΔT", "°C_delta", 0.277778, 4.444444, 0.055556, 1.222222, direction="fewer"), CONFIRM_PARAM()], confirm_seconds=600),
     CookbookRule(
         "ECON-6",
         "Economizing in freezing weather",
         "ahu",
         ["ahu"],
         ["outside-air-damper"],
-        "Web dry-bulb < 25°F AND OA damper above winter min-OA ceiling (default 25%). "
+        "Web dry-bulb < −3.9°C AND OA damper above winter min-OA ceiling (default 25%). "
         "AHU should be at minimum OA in cold weather.",
         __import__("open_fdd.rules.economizer_weather", fromlist=["econ6_compute"]).econ6_compute,
         params=[
-            CookbookParam("econ6_oat_max_f", "Winter OAT ceiling", "°F", 15.0, 40.0, 1.0, 25.0),
+            CookbookParam("econ6_oat_max", "Winter OAT ceiling", "°C", -9.444444, 4.444444, 0.555556, -3.888889),
             CookbookParam("econ6_damper_max", "Winter min-OA damper", "frac", 0.05, 0.5, 0.01, 0.25),
             CONFIRM_PARAM(),
         ],
@@ -1918,17 +1894,17 @@ RULES: list[CookbookRule] = [
         "ahu",
         ["ahu"],
         ["outside-air-damper"],
-        "Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a "
-        "35°F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). "
+        "Economizer-OK web weather: dew point < 15.6°C AND dry-bulb < 22.2°C (above a "
+        "1.7°C freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). "
         "Fault when there is cooling demand (cooling valve open or proven DX/chiller "
         "cooling) but the OA damper stays below the economizing threshold (default 50%). "
-        "Expected: economizer-only below 60°F DB (MECH-OAT-1) and mech + integrated "
-        "economizer in the 60–72°F band (ECON-3). All thresholds are imperial sliders.",
+        "Expected: economizer-only below 15.6°C DB (MECH-OAT-1) and mech + integrated "
+        "economizer in the 15.6–22.2°C band (ECON-3). All temperature thresholds are SI.",
         __import__("open_fdd.rules.economizer_weather", fromlist=["econ7_compute"]).econ7_compute,
         params=[
-            CookbookParam("econ7_db_min", "Econ-OK dry-bulb floor (freeze guard)", "°F", 20.0, 50.0, 1.0, 35.0),
-            CookbookParam("econ7_db_max", "Econ-OK dry-bulb max", "°F", 65.0, 80.0, 1.0, 72.0),
-            CookbookParam("econ7_dp_max", "Econ-OK dew point max", "°F", 45.0, 68.0, 1.0, 60.0),
+            CookbookParam("econ7_db_min", "Econ-OK dry-bulb floor (freeze guard)", "°C", -6.666667, 10.0, 0.555556, 1.666667),
+            CookbookParam("econ7_db_max", "Econ-OK dry-bulb max", "°C", 18.333333, 26.666667, 0.555556, 22.222222),
+            CookbookParam("econ7_dp_max", "Econ-OK dew point max", "°C", 7.222222, 20.0, 0.555556, 15.555556),
             CookbookParam("econ7_damper_min", "Economizing damper threshold", "frac", 0.2, 0.9, 0.02, 0.50, direction="stricter"),
             CONFIRM_PARAM(),
         ],
@@ -1953,7 +1929,7 @@ RULES: list[CookbookRule] = [
         "Below 60°F is outside the free-cool + integrated economizer band.",
         __import__("open_fdd.rules.economizer_weather", fromlist=["mech_oat1_compute"]).mech_oat1_compute,
         params=[
-            CookbookParam("mech_oat_max_f", "Mech-cool OAT ceiling", "°F", 45.0, 65.0, 1.0, 60.0, direction="stricter"),
+            CookbookParam("mech_oat_max", "Mech-cool OAT ceiling", "°C", 7.222222, 18.333333, 0.555556, 15.555556, direction="stricter"),
             CONFIRM_PARAM(),
         ],
         optional_roles=[
@@ -1975,9 +1951,9 @@ RULES: list[CookbookRule] = [
         "comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.",
         __import__("open_fdd.rules.economizer_weather", fromlist=["chw_noload1_compute"]).chw_noload1_compute,
         params=[
-            CookbookParam("comfort_low_f", "Comfort low", "°F", 60.0, 78.0, 0.5, 70.0),
-            CookbookParam("comfort_high_f", "Comfort high", "°F", 68.0, 85.0, 0.5, 75.0),
-            CookbookParam("sat_band_f", "AHU SAT≈SP band", "°F", 0.5, 6.0, 0.5, 2.0),
+            CookbookParam("comfort_low", "Comfort low", "°C", 15.555556, 25.555556, 0.277778, 21.111111),
+            CookbookParam("comfort_high", "Comfort high", "°C", 20.0, 29.444444, 0.277778, 23.888889),
+            CookbookParam("sat_band", "AHU SAT≈SP band", "°C_delta", 0.277778, 3.333333, 0.277778, 1.111111),
             CookbookParam("confirm_min", "Fault confirm delay", "min", 0.0, 60.0, 1.0, 30.0),
         ],
         optional_roles=[
@@ -2176,11 +2152,11 @@ RULES: list[CookbookRule] = [
         "plant",
         ["chiller", "cooling_tower"],
         ["condenser-water-supply-temp"],
-        "At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). "
+        "At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 4.44°C, typically 2.8–5.6°C). "
         "Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.",
         cw_apr,
         params=[
-            CookbookParam("approach_max_f", "Max approach at full fan", "°F", 5.0, 15.0, 0.5, 8.0),
+            CookbookParam("approach_max", "Max approach at full fan", "°C_delta", 2.777778, 8.333333, 0.277778, 4.444444),
             CookbookParam("tower_fan_hi", "Tower fan full-speed threshold", "frac", 0.8, 1.0, 0.01, 0.95),
             CONFIRM_PARAM(),
         ],
@@ -2198,7 +2174,7 @@ RULES: list[CookbookRule] = [
         cw_fan_excess,
         params=[
             CookbookParam("cw_approach", "Design approach", "°F", 3.0, 15.0, 0.5, 7.0),
-            CookbookParam("excess_beyond_approach_f", "Excess beyond approach", "°F", 2.0, 20.0, 0.5, 5.0),
+            CookbookParam("excess_beyond_approach", "Excess beyond approach", "°C_delta", 1.111111, 11.111111, 0.277778, 2.777778),
             CookbookParam("tower_fan_hi", "Tower fan full-speed threshold", "frac", 0.8, 1.0, 0.01, 0.95),
             CONFIRM_PARAM(),
         ],
@@ -2234,12 +2210,12 @@ RULES: list[CookbookRule] = [
         ["ahu"],
         ["occupied", "fan-status"],
         "Fan running while occupancy is unoccupied (Overview calendar → occ_mode). "
-        "When zone_t is mapped, also require zone inside comfort_low_f…comfort_high_f "
+        "When zone_t is mapped, also require zone inside comfort_low…comfort_high "
         "(defaults 70–75°F; synced from Overview zone band).",
         sched1,
         params=[
-            CookbookParam("comfort_low_f", "Comfort low", "°F", 60.0, 78.0, 0.5, 70.0),
-            CookbookParam("comfort_high_f", "Comfort high", "°F", 68.0, 85.0, 0.5, 75.0),
+            CookbookParam("comfort_low", "Comfort low", "°C", 15.555556, 25.555556, 0.277778, 21.111111),
+            CookbookParam("comfort_high", "Comfort high", "°C", 20.0, 29.444444, 0.277778, 23.888889),
             CONFIRM_PARAM(),
         ],
         optional_roles=["zone-air-temp"],
@@ -2289,7 +2265,7 @@ RULES: list[CookbookRule] = [
         ["discharge-air-temp-sp", "outside-air-temp"],
         "Fan on AND |SAT SP − (52 + 0.25×(OAT−65))| > 3°F.",
         reset1, params=[
-            CookbookParam("reset_err_f", "Reset error", "°F", 0.5, 10.0, 0.5, 3.0),
+            CookbookParam("reset_err", "Reset error", "°C_delta", 0.277778, 5.555556, 0.277778, 1.666667),
             CookbookParam("reset_sat_at_65", "SAT SP at 65°F OAT", "°F", 45.0, 65.0, 0.5, 52.0),
             CookbookParam("reset_slope", "Reset slope", "°F/°F", 0.05, 1.0, 0.05, 0.25),
             CookbookParam("reset_oat_ref", "Reset OAT ref", "°F", 50.0, 80.0, 1.0, 65.0),

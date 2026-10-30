@@ -354,8 +354,8 @@ def _add_overview_settings(doc, artifacts: ReportArtifacts) -> None:
     span = s.get("span_hours")
     span_s = f"{float(span):.1f} h" if isinstance(span, (int, float)) else "—"
     doc.add_paragraph(f"Dataset window: {start} → {end} (span {span_s}).")
-    lo = s.get("zone_lo_f")
-    hi = s.get("zone_hi_f")
+    lo = s.get("zone_lo")
+    hi = s.get("zone_hi")
     bare = s.get("bare_min_occ_hours")
     bits = []
     if lo is not None and hi is not None:

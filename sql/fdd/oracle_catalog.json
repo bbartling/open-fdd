@@ -2151,31 +2151,31 @@
       {
         "key": "econ3_db_min",
         "label": "Free-cool OA dry-bulb min",
-        "unit": "\u00b0F",
-        "min": 50.0,
-        "max": 68.0,
-        "step": 1.0,
-        "default": 60.0,
+        "unit": "°C",
+        "min": 10.0,
+        "max": 20.0,
+        "step": 0.555556,
+        "default": 15.555556,
         "direction": ""
       },
       {
         "key": "econ3_db_max",
         "label": "Free-cool OA dry-bulb max",
-        "unit": "\u00b0F",
-        "min": 65.0,
-        "max": 80.0,
-        "step": 1.0,
-        "default": 72.0,
+        "unit": "°C",
+        "min": 18.333333,
+        "max": 26.666667,
+        "step": 0.555556,
+        "default": 22.222222,
         "direction": ""
       },
       {
         "key": "econ3_dp_max",
         "label": "Free-cool OA dew point max",
-        "unit": "\u00b0F",
-        "min": 45.0,
-        "max": 68.0,
-        "step": 1.0,
-        "default": 60.0,
+        "unit": "°C",
+        "min": 7.222222,
+        "max": 20.0,
+        "step": 0.555556,
+        "default": 15.555556,
         "direction": ""
       },
       {
@@ -2256,20 +2256,20 @@
       "heating-valve"
     ],
     "optional_roles": [],
-    "equation": "Preheat leaving air > 2.2\u00b0F above target while preheat active.",
-    "summary": "Preheat leaving air > 2.2\u00b0F above target while preheat active.",
+    "equation": "Preheat leaving air > 1.2\u00b0C above target while preheat active.",
+    "summary": "Preheat leaving air > 1.2\u00b0C above target while preheat active.",
     "confirm_seconds": 600,
     "sensor_sweep": false,
     "control_output_sweep": false,
     "params": [
       {
-        "key": "preheat_over_f",
+        "key": "preheat_over",
         "label": "Preheat over \u0394T",
-        "unit": "\u00b0F",
-        "min": 0.5,
-        "max": 8.0,
-        "step": 0.1,
-        "default": 2.2,
+        "unit": "°C_delta",
+        "min": 0.277778,
+        "max": 4.444444,
+        "step": 0.055556,
+        "default": 1.222222,
         "direction": "fewer"
       },
       {
@@ -2304,13 +2304,13 @@
     "control_output_sweep": false,
     "params": [
       {
-        "key": "econ6_oat_max_f",
+        "key": "econ6_oat_max",
         "label": "Winter OAT ceiling",
-        "unit": "\u00b0F",
-        "min": 15.0,
-        "max": 40.0,
-        "step": 1.0,
-        "default": 25.0,
+        "unit": "°C",
+        "min": -9.444444,
+        "max": 4.444444,
+        "step": 0.555556,
+        "default": -3.888889,
         "direction": ""
       },
       {
@@ -2362,31 +2362,31 @@
       {
         "key": "econ7_db_min",
         "label": "Econ-OK dry-bulb floor (freeze guard)",
-        "unit": "\u00b0F",
-        "min": 20.0,
-        "max": 50.0,
-        "step": 1.0,
-        "default": 35.0,
+        "unit": "°C",
+        "min": -6.666667,
+        "max": 10.0,
+        "step": 0.555556,
+        "default": 1.666667,
         "direction": ""
       },
       {
         "key": "econ7_db_max",
         "label": "Econ-OK dry-bulb max",
-        "unit": "\u00b0F",
-        "min": 65.0,
-        "max": 80.0,
-        "step": 1.0,
-        "default": 72.0,
+        "unit": "°C",
+        "min": 18.333333,
+        "max": 26.666667,
+        "step": 0.555556,
+        "default": 22.222222,
         "direction": ""
       },
       {
         "key": "econ7_dp_max",
         "label": "Econ-OK dew point max",
-        "unit": "\u00b0F",
-        "min": 45.0,
-        "max": 68.0,
-        "step": 1.0,
-        "default": 60.0,
+        "unit": "°C",
+        "min": 7.222222,
+        "max": 20.0,
+        "step": 0.555556,
+        "default": 15.555556,
         "direction": ""
       },
       {
@@ -2428,20 +2428,20 @@
       "chw-pump-status",
       "dx-cool-cmd"
     ],
-    "equation": "Proven DX/chiller mechanical cooling while web dry-bulb < 60\u00b0F. Uses compressor/chiller/pump/amps/power proof \u2014 not AHU cooling-valve alone. Below 60\u00b0F is outside the free-cool + integrated economizer band.",
+    "equation": "Proven DX/chiller mechanical cooling while web dry-bulb < 15.6\u00b0C. Uses compressor/chiller/pump/amps/power proof \u2014 not AHU cooling-valve alone. Below 60\u00b0F is outside the free-cool + integrated economizer band.",
     "summary": "Flags proven DX or chiller cooling while web dry-bulb is below 60\u00b0F.",
     "confirm_seconds": 600,
     "sensor_sweep": false,
     "control_output_sweep": false,
     "params": [
       {
-        "key": "mech_oat_max_f",
+        "key": "mech_oat_max",
         "label": "Mech-cool OAT ceiling",
-        "unit": "\u00b0F",
-        "min": 45.0,
-        "max": 65.0,
-        "step": 1.0,
-        "default": 60.0,
+        "unit": "°C",
+        "min": 7.222222,
+        "max": 18.333333,
+        "step": 0.555556,
+        "default": 15.555556,
         "direction": "stricter"
       },
       {
@@ -2478,33 +2478,33 @@
     "control_output_sweep": false,
     "params": [
       {
-        "key": "comfort_low_f",
+        "key": "comfort_low",
         "label": "Comfort low",
-        "unit": "\u00b0F",
-        "min": 60.0,
-        "max": 78.0,
-        "step": 0.5,
-        "default": 70.0,
+        "unit": "°C",
+        "min": 15.555556,
+        "max": 25.555556,
+        "step": 0.277778,
+        "default": 21.111111,
         "direction": ""
       },
       {
-        "key": "comfort_high_f",
+        "key": "comfort_high",
         "label": "Comfort high",
-        "unit": "\u00b0F",
-        "min": 68.0,
-        "max": 85.0,
-        "step": 0.5,
-        "default": 75.0,
+        "unit": "°C",
+        "min": 20.0,
+        "max": 29.444444,
+        "step": 0.277778,
+        "default": 23.888889,
         "direction": ""
       },
       {
-        "key": "sat_band_f",
+        "key": "sat_band",
         "label": "AHU SAT\u2248SP band",
-        "unit": "\u00b0F",
-        "min": 0.5,
-        "max": 6.0,
-        "step": 0.5,
-        "default": 2.0,
+        "unit": "°C_delta",
+        "min": 0.277778,
+        "max": 3.333333,
+        "step": 0.277778,
+        "default": 1.111111,
         "direction": ""
       },
       {
@@ -2597,13 +2597,13 @@
         "direction": ""
       },
       {
-        "key": "coil_delta_f",
+        "key": "coil_delta",
         "label": "Minimum heating rise",
-        "unit": "\u00b0F",
-        "min": 1.0,
-        "max": 20.0,
-        "step": 0.5,
-        "default": 5.4,
+        "unit": "°C_delta",
+        "min": 0.555556,
+        "max": 11.111111,
+        "step": 0.277778,
+        "default": 3.0,
         "direction": ""
       },
       {
@@ -2691,13 +2691,13 @@
     "control_output_sweep": false,
     "params": [
       {
-        "key": "pass_delta_f",
+        "key": "pass_delta",
         "label": "Passing temperature rise",
-        "unit": "\u00b0F",
-        "min": 1.0,
-        "max": 20.0,
-        "step": 0.5,
-        "default": 5.4,
+        "unit": "°C_delta",
+        "min": 0.555556,
+        "max": 11.111111,
+        "step": 0.277778,
+        "default": 3.0,
         "direction": ""
       },
       {
@@ -2738,13 +2738,13 @@
     "control_output_sweep": false,
     "params": [
       {
-        "key": "pass_delta_f",
+        "key": "pass_delta",
         "label": "Passing temperature drop",
-        "unit": "\u00b0F",
-        "min": 1.0,
-        "max": 20.0,
-        "step": 0.5,
-        "default": 5.4,
+        "unit": "°C_delta",
+        "min": 0.555556,
+        "max": 11.111111,
+        "step": 0.277778,
+        "default": 3.0,
         "direction": ""
       },
       {
@@ -2890,7 +2890,7 @@
     "control_output_sweep": false,
     "params": [
       {
-        "key": "deadband_c",
+        "key": "deadband",
         "label": "Minimum deadband",
         "unit": "\u00b0C",
         "min": 0.0,
@@ -3354,13 +3354,13 @@
     "control_output_sweep": false,
     "params": [
       {
-        "key": "delta_f",
+        "key": "delta",
         "label": "Leave \u0394 vs AHU SAT",
-        "unit": "\u00b0F",
-        "min": 2.0,
-        "max": 25.0,
-        "step": 0.5,
-        "default": 8.0,
+        "unit": "°C_delta",
+        "min": 1.111111,
+        "max": 13.888889,
+        "step": 0.277778,
+        "default": 4.444444,
         "direction": ""
       },
       {
@@ -3800,13 +3800,13 @@
     "control_output_sweep": false,
     "params": [
       {
-        "key": "approach_max_f",
+        "key": "approach_max",
         "label": "Max approach at full fan",
-        "unit": "\u00b0F",
-        "min": 5.0,
-        "max": 15.0,
-        "step": 0.5,
-        "default": 8.0,
+        "unit": "°C_delta",
+        "min": 2.777778,
+        "max": 8.333333,
+        "step": 0.277778,
+        "default": 4.444444,
         "direction": ""
       },
       {
@@ -3865,13 +3865,13 @@
         "direction": ""
       },
       {
-        "key": "excess_beyond_approach_f",
+        "key": "excess_beyond_approach",
         "label": "Excess beyond approach",
-        "unit": "\u00b0F",
-        "min": 2.0,
-        "max": 20.0,
-        "step": 0.5,
-        "default": 5.0,
+        "unit": "°C_delta",
+        "min": 1.111111,
+        "max": 11.111111,
+        "step": 0.277778,
+        "default": 2.777778,
         "direction": ""
       },
       {
@@ -4060,30 +4060,30 @@
     "optional_roles": [
       "zone-air-temp"
     ],
-    "equation": "Fan running while occupancy is unoccupied (Overview calendar \u2192 occ_mode). When zone_t is mapped, also require zone inside comfort_low_f\u2026comfort_high_f (defaults 70\u201375\u00b0F; synced from Overview zone band).",
+    "equation": "Fan running while occupancy is unoccupied (Overview calendar \u2192 occ_mode). When zone_t is mapped, also require zone inside comfort_low\u2026comfort_high (defaults 21.1\u201323.9\u00b0C; synced from Overview zone band).",
     "summary": "Flags fan runtime during unoccupied hours from the Overview calendar.",
     "confirm_seconds": 1800,
     "sensor_sweep": false,
     "control_output_sweep": false,
     "params": [
       {
-        "key": "comfort_low_f",
+        "key": "comfort_low",
         "label": "Comfort low",
-        "unit": "\u00b0F",
-        "min": 60.0,
-        "max": 78.0,
-        "step": 0.5,
-        "default": 70.0,
+        "unit": "°C",
+        "min": 15.555556,
+        "max": 25.555556,
+        "step": 0.277778,
+        "default": 21.111111,
         "direction": ""
       },
       {
-        "key": "comfort_high_f",
+        "key": "comfort_high",
         "label": "Comfort high",
-        "unit": "\u00b0F",
-        "min": 68.0,
-        "max": 85.0,
-        "step": 0.5,
-        "default": 75.0,
+        "unit": "°C",
+        "min": 20.0,
+        "max": 29.444444,
+        "step": 0.277778,
+        "default": 23.888889,
         "direction": ""
       },
       {
@@ -4185,13 +4185,13 @@
     "control_output_sweep": false,
     "params": [
       {
-        "key": "reset_err_f",
+        "key": "reset_err",
         "label": "Reset error",
-        "unit": "\u00b0F",
-        "min": 0.5,
-        "max": 10.0,
-        "step": 0.5,
-        "default": 3.0,
+        "unit": "°C_delta",
+        "min": 0.277778,
+        "max": 5.555556,
+        "step": 0.277778,
+        "default": 1.666667,
         "direction": ""
       },
       {

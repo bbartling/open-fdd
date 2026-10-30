@@ -1612,9 +1612,9 @@ pub fn get_package_mapping_handler_scoped(
             Some(building_id.as_str()),
         ),
     );
-    let unit_system = session
+    let display_units = session
         .get("config")
-        .and_then(|c| c.get("unit_system"))
+        .and_then(|c| c.get("display_units"))
         .cloned()
         .unwrap_or(json!("imperial"));
     let session_role_map = session
@@ -1777,7 +1777,7 @@ pub fn get_package_mapping_handler_scoped(
         return json!({
             "ok": true,
             "building_id": building_id,
-            "unit_system": unit_system,
+            "display_units": display_units,
             "equipment_ids": ids,
             "equipment": equipment,
             "session_role_map": session_role_map,
@@ -1793,7 +1793,7 @@ pub fn get_package_mapping_handler_scoped(
     json!({
         "ok": true,
         "building_id": building_id,
-        "unit_system": unit_system,
+        "display_units": display_units,
         "equipment_ids": all_ids,
         "equipment": equipment,
         "session_role_map": session_role_map,
@@ -2313,9 +2313,9 @@ fn mapping_from_timescale_rows(
     let session = crate::fdd::session_config::get_session_config_scoped(
         &crate::fdd::session_config::SessionConfigScope::new(preferred_tenant, Some(building_id)),
     );
-    let unit_system = session
+    let display_units = session
         .get("config")
-        .and_then(|c| c.get("unit_system"))
+        .and_then(|c| c.get("display_units"))
         .cloned()
         .unwrap_or(json!("imperial"));
     let session_role_map = session
@@ -2349,7 +2349,7 @@ fn mapping_from_timescale_rows(
         "ok": true,
         "building_id": building_id,
         "source": "timescale",
-        "unit_system": unit_system,
+        "display_units": display_units,
         "equipment_ids": equipment_ids,
         "equipment": equipment,
         "session_role_map": session_role_map,
@@ -2795,7 +2795,7 @@ mod tests {
             ),
             (
                 "BUILDING_9/session_config.json",
-                r#"{"schema_version":"openfdd_session_v1","unit_system":"imperial"}"#,
+                r#"{"schema_version":"openfdd_session_v1","display_units":"imperial"}"#,
             ),
             ("BUILDING_9/AHU_1/history_wide.csv", &history_csv()),
             ("BUILDING_9/AHU_1/history_wide.json", map),
@@ -2808,7 +2808,7 @@ mod tests {
         assert_eq!(out["equipment"][0]["roles"]["SF_SPD"], json!("fan_cmd"));
         assert_eq!(out["equipment"][0]["roles"]["DA_P"], json!("duct_static"));
         assert_eq!(
-            out["session_config"]["unit_system"],
+            out["session_config"]["display_units"],
             json!("imperial"),
             "{out}"
         );

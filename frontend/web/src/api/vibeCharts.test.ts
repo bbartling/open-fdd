@@ -168,13 +168,13 @@ describe("vibeCharts", () => {
       [
         {
           timestamp_utc: "2026-07-01T00:00:00Z",
-          bas_oat_f: 70,
-          web_oat_f: 68,
+          bas_oat_c: 70,
+          web_oat_c: 68,
         },
         {
           timestamp_utc: "2026-07-01T01:00:00Z",
-          bas_oat_f: 72,
-          web_oat_f: 69,
+          bas_oat_c: 72,
+          web_oat_c: 69,
         },
       ],
       5,

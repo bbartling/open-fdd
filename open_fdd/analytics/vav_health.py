@@ -32,8 +32,8 @@ ENGINE_PANDAS = "pandas"
 @dataclass
 class VavHealthConfig:
     broken_rule_ids: tuple[str, ...] = DEFAULT_BROKEN_RULES
-    comfort_low_f: float = 70.0
-    comfort_high_f: float = 75.0
+    comfort_low: float = 70.0
+    comfort_high: float = 75.0
     min_occupied_hours: float = 8.0
     min_coverage_pct: float = 80.0
     damper_full_open: float = FULL_OPEN_DEFAULT
@@ -156,7 +156,7 @@ def vav_health_matrix(
                 poor = None
             else:
                 z = zone.reindex(idx)
-                outside = om & z.notna() & ((z < cfg.comfort_low_f) | (z > cfg.comfort_high_f))
+                outside = om & z.notna() & ((z < cfg.comfort_low) | (z > cfg.comfort_high))
                 denom = float((om & z.notna()).sum())
                 fail_pct = 100.0 * float(outside.sum()) / denom if denom else None
                 poor = bool(fail_pct is not None and fail_pct > 0)

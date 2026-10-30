@@ -150,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         session = make_session_config(
             dataset.role_map,
             run.params or dataset.params,
-            unit_system=dataset.unit_system,
+            display_units=dataset.display_units,
             prefer_web_oat=dataset.prefer_web_oat,
         )
         boot = build_bootstrap_payload(

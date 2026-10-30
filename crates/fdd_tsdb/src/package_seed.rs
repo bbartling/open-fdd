@@ -196,16 +196,12 @@ struct SeedPlan {
 }
 
 fn package_unit_system(package_root: &Path) -> Option<String> {
-    for name in ["session_config.json", "manifest.json"] {
+    for name in ["manifest.json"] {
         let path = package_root.join(name);
         let Ok(v) = load_json(&path) else {
             continue;
         };
-        if let Some(sys) = v
-            .pointer("/session_config/unit_system")
-            .or_else(|| v.get("unit_system"))
-            .and_then(|u| u.as_str())
-        {
+        if let Some(sys) = v.get("unit_system").and_then(|u| u.as_str()) {
             let trimmed = sys.trim();
             if !trimmed.is_empty() {
                 return Some(trimmed.to_string());

@@ -544,7 +544,7 @@ def _discover_chiller_on(
     role_map: dict,
     *,
     equipment_id: str,
-    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
+    chw_leave_max: float = CHW_LEAVE_MAX_C,
 ) -> list[dict[str, Any]]:
     """Chiller plant runtime: prefer mapped/heuristic **pump**, else status proof.
 
@@ -552,7 +552,7 @@ def _discover_chiller_on(
     ``chiller_status`` / ``compressor_status`` / ``equipment_enable``.
     Never invent runtime from CHW leave/supply temp.
     """
-    del chw_leave_max_f  # kept for call-site compat; leave-temp never drives this chart
+    del chw_leave_max  # kept for call-site compat; leave-temp never drives this chart
     # 1) Role-map designated pump (possibly on linked equipment)
     linked, link_role, link_label = _resolve_linked_pump_series(
         frames, role_map, equipment_id=equipment_id
@@ -656,7 +656,7 @@ def discover_plant_motor_series(
     frames: dict[str, pd.DataFrame],
     role_map: dict,
     *,
-    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
+    chw_leave_max: float = CHW_LEAVE_MAX_C,
 ) -> list[dict[str, Any]]:
     """Discover per-motor series for air / boiler / chiller weekly charts.
 
@@ -715,7 +715,7 @@ def discover_plant_motor_series(
                     frames,
                     role_map,
                     equipment_id=eq_id,
-                    chw_leave_max_f=chw_leave_max_f,
+                    chw_leave_max=chw_leave_max,
                 )
             )
         elif plant == PLANT_CHILLER:
@@ -783,7 +783,7 @@ def motor_run_hours_weekly(
     frames: dict[str, pd.DataFrame],
     role_map: dict,
     *,
-    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
+    chw_leave_max: float = CHW_LEAVE_MAX_C,
     weather: pd.DataFrame | None = None,
     prefer_web_oat: bool = True,
     include_all_mapped: bool = False,
@@ -801,7 +801,7 @@ def motor_run_hours_weekly(
 
     rows: list[dict[str, Any]] = []
     series_list = discover_plant_motor_series(
-        frames, role_map, chw_leave_max_f=chw_leave_max_f
+        frames, role_map, chw_leave_max=chw_leave_max
     )
     if include_all_mapped:
         series_list = union_mapped_motor_series(series_list, frames, role_map)
@@ -939,7 +939,7 @@ def _chw_temp_proof(df: pd.DataFrame, leave_max_f: float) -> pd.Series | None:
 def _chiller_on_mask(
     df: pd.DataFrame,
     *,
-    chw_leave_max_f: float,
+    chw_leave_max: float,
     chiller_amps_min: float = 5.0,
     chiller_power_kw_min: float = 1.0,
 ) -> tuple[pd.Series | None, str]:
@@ -951,7 +951,7 @@ def _chiller_on_mask(
         return _above_threshold(df["chiller-amps"], chiller_amps_min), "chiller-amps"
     if "chiller-power" in df.columns and df["chiller-power"].notna().any():
         return _above_threshold(df["chiller-power"], chiller_power_kw_min), "chiller_power"
-    temp = _chw_temp_proof(df, chw_leave_max_f)
+    temp = _chw_temp_proof(df, chw_leave_max)
     if temp is not None:
         return temp, "chw_leave_temp"
     return None, ""
@@ -998,7 +998,7 @@ def _select_mech_cooling_proof(
     *,
     equipment_type: str,
     equipment_id: str = "",
-    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
+    chw_leave_max: float = CHW_LEAVE_MAX_C,
     chiller_amps_min: float = 5.0,
     chiller_power_kw_min: float = 1.0,
     use_status_proof: bool = True,
@@ -1059,7 +1059,7 @@ def _select_mech_cooling_proof(
 
     if et == "CHW_PLANT":
         if not use_status_proof:
-            temp = _chw_temp_proof(df, chw_leave_max_f)
+            temp = _chw_temp_proof(df, chw_leave_max)
             if temp is None:
                 return empty
             return {
@@ -1069,7 +1069,7 @@ def _select_mech_cooling_proof(
                     df, ("chilled-water-supply-temp", "chw_leave_t", "chws_t")
                 )
                 or "chilled-water-supply-temp",
-                "proof_threshold": float(chw_leave_max_f),
+                "proof_threshold": float(chw_leave_max),
                 "proof_quality": "inferred",
                 "legacy_proof": "inferred: chw_leave_temp",
             }
@@ -1143,7 +1143,7 @@ def _select_mech_cooling_proof(
             df,
             equipment_type="AHU",
             equipment_id=equipment_id,
-            chw_leave_max_f=chw_leave_max_f,
+            chw_leave_max=chw_leave_max,
             chiller_amps_min=chiller_amps_min,
             chiller_power_kw_min=chiller_power_kw_min,
             use_status_proof=True,
@@ -1170,7 +1170,7 @@ def mech_cooling_run_mask(
     *,
     equipment_type: str,
     equipment_id: str = "",
-    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
+    chw_leave_max: float = CHW_LEAVE_MAX_C,
     include_ahu_chw_valve: bool = False,
     clg_valve_thr_pct: float = 5.0,
     chiller_amps_min: float = 5.0,
@@ -1192,7 +1192,7 @@ def mech_cooling_run_mask(
         df,
         equipment_type=equipment_type,
         equipment_id=equipment_id,
-        chw_leave_max_f=chw_leave_max_f,
+        chw_leave_max=chw_leave_max,
         chiller_amps_min=chiller_amps_min,
         chiller_power_kw_min=chiller_power_kw_min,
         use_status_proof=use_status_proof,
@@ -1268,7 +1268,7 @@ def _mechanical_cooling_devices(
     *,
     weather: pd.DataFrame | None = None,
     prefer_web_oat: bool = True,
-    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
+    chw_leave_max: float = CHW_LEAVE_MAX_C,
     use_status_proof: bool = True,
     chiller_amps_min: float = 5.0,
     chiller_power_kw_min: float = 1.0,
@@ -1362,7 +1362,7 @@ def _mechanical_cooling_devices(
             mapped,
             equipment_type=et,
             equipment_id=eq_id,
-            chw_leave_max_f=chw_leave_max_f,
+            chw_leave_max=chw_leave_max,
             chiller_amps_min=chiller_amps_min,
             chiller_power_kw_min=chiller_power_kw_min,
             use_status_proof=use_status_proof,
@@ -1433,7 +1433,7 @@ def mech_cooling_coverage(
     *,
     weather: pd.DataFrame | None = None,
     prefer_web_oat: bool = True,
-    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
+    chw_leave_max: float = CHW_LEAVE_MAX_C,
     use_status_proof: bool = True,
 ) -> pd.DataFrame:
     """Per-device inclusion/exclusion report for the mech-cooling OAT-bin chart.
@@ -1449,7 +1449,7 @@ def mech_cooling_coverage(
         role_map,
         weather=weather,
         prefer_web_oat=prefer_web_oat,
-        chw_leave_max_f=chw_leave_max_f,
+        chw_leave_max=chw_leave_max,
         use_status_proof=use_status_proof,
     )
     cols = [
@@ -1506,7 +1506,7 @@ def _bin_runtime_rows(
     mask: pd.Series,
     nominal_seconds: float,
     bin_width_f: float,
-    unit_system: str = "metric",
+    display_units: str = "metric",
     equipment_type: str = "",
     cooling_technology: str = "",
     proof_role: str = "",
@@ -1527,7 +1527,7 @@ def _bin_runtime_rows(
         return []
     idx = durations.index[usable.to_numpy()]
     oat_vals = oat_aligned.reindex(idx)
-    metric = str(unit_system).lower() in {"metric", "si"}
+    metric = str(display_units).lower() in {"metric", "si"}
     valid_elapsed = float(durations.sum() / 3600.0)
     span = 0.0
     if len(durations.index) > 1:
@@ -1620,12 +1620,12 @@ def mech_cooling_oat_bins(
     weather: pd.DataFrame | None = None,
     bin_width_f: float = 5.0,
     prefer_web_oat: bool = True,
-    chw_leave_max_f: float = CHW_LEAVE_MAX_C,
+    chw_leave_max: float = CHW_LEAVE_MAX_C,
     include_ahu_chw_valve: bool = False,
     clg_valve_thr_pct: float = 5.0,
     include_total: bool = False,
     use_status_proof: bool = True,
-    unit_system: str = "metric",
+    display_units: str = "metric",
 ) -> pd.DataFrame:
     """
     Mechanical cooling run hours binned by OAT (default: web/Open-Meteo dry bulb).
@@ -1641,7 +1641,7 @@ def mech_cooling_oat_bins(
         role_map,
         weather=weather,
         prefer_web_oat=prefer_web_oat,
-        chw_leave_max_f=chw_leave_max_f,
+        chw_leave_max=chw_leave_max,
         use_status_proof=use_status_proof,
     )
     rows: list[dict[str, Any]] = []
@@ -1668,7 +1668,7 @@ def mech_cooling_oat_bins(
                 mask=run,
                 nominal_seconds=d["poll_seconds"],
                 bin_width_f=bin_width_f,
-                unit_system=unit_system,
+                display_units=display_units,
                 equipment_type=d["equipment_type"],
                 cooling_technology=d["cooling_technology"],
                 proof_role=d["proof_role"],
@@ -1743,7 +1743,7 @@ def mech_cooling_oat_bins(
                     mask=any_active,
                     nominal_seconds=nominal,
                     bin_width_f=bin_width_f,
-                    unit_system=unit_system,
+                    display_units=display_units,
                     device_count=n_devices,
                 )
             )
@@ -2011,11 +2011,11 @@ def economizer_weather_summary(
     weather: pd.DataFrame | None = None,
     damper_hi: float = 0.90,
     damper_winter_max: float = 0.25,
-    db_min: float = 60.0,
-    db_max: float = 72.0,
-    dp_max: float = 60.0,
-    cold_oat_f: float = COLD_OAT_C,
-    freeze_oat_f: float = 25.0,
+    db_min: float = 15.5555555556,
+    db_max: float = 22.2222222222,
+    dp_max: float = 15.5555555556,
+    cold_oat_c: float = COLD_OAT_C,
+    freeze_oat_c: float = -3.8888888889,
 ) -> pd.DataFrame:
     """Per-equipment economizer opportunity / compliance / prohibited-cooling hours.
 
@@ -2065,7 +2065,7 @@ def economizer_weather_summary(
 
         run, proof = mechanical_proof_mask(mapped, equipment_type=et, equipment_id=eq_id)
         cold = (
-            (db.notna() & (db < float(cold_oat_f)))
+            (db.notna() & (db < float(cold_oat_c)))
             if db is not None
             else pd.Series(False, index=mapped.index)
         )
@@ -2073,7 +2073,7 @@ def economizer_weather_summary(
 
         winter = pd.Series(False, index=mapped.index)
         if damper is not None and db is not None:
-            winter = db.notna() & (db < float(freeze_oat_f)) & (damper > float(damper_winter_max))
+            winter = db.notna() & (db < float(freeze_oat_c)) & (damper > float(damper_winter_max))
 
         rows.append(
             {

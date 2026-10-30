@@ -320,7 +320,7 @@ pub async fn bas_vs_web_oat(
             "equipment_id": r.try_get::<String, _>("equipment_id").ok(),
             "bas_oa_t": r.try_get::<f64, _>("bas_oa_t").ok(),
             "web_oa_t": r.try_get::<f64, _>("web_oa_t").ok(),
-            "delta_f": r.try_get::<f64, _>("delta_f").ok(),
+            "delta_c": r.try_get::<f64, _>("delta_c").ok(),
         }));
     }
     let mut body = finish_row_envelope(

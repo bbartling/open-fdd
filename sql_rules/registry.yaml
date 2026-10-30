@@ -2980,7 +2980,7 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      preheat_over_f:
+      preheat_over:
         label: Preheat over ΔT
         default: 2.2
         min: 0.5
@@ -2988,7 +2988,7 @@ rules:
         step: 0.1
         unit: degF
         frontend_control: slider
-        sql_placeholder: PREHEAT_OVER_F
+        sql_placeholder: PREHEAT_OVER
       htg_open_min:
         label: Heating valve open minimum
         default: 0.01
@@ -3049,7 +3049,7 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      econ6_oat_max_f:
+      econ6_oat_max:
         label: Winter OAT ceiling
         default: 25.0
         min: 15.0
@@ -3057,7 +3057,7 @@ rules:
         step: 1.0
         unit: degF
         frontend_control: slider
-        sql_placeholder: ECON6_OAT_MAX_F
+        sql_placeholder: ECON6_OAT_MAX
       econ6_damper_max:
         label: Winter min-OA damper
         default: 0.25
@@ -3187,7 +3187,7 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      mech_oat_max_f:
+      mech_oat_max:
         label: Mech-cool OAT ceiling
         default: 60.0
         min: 45.0
@@ -3195,7 +3195,7 @@ rules:
         step: 1.0
         unit: degF
         frontend_control: slider
-        sql_placeholder: MECH_OAT_MAX_F
+        sql_placeholder: MECH_OAT_MAX
 
   - rule_id: CMD-1
     equipment_kinds: [ahu]
@@ -3813,7 +3813,7 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      delta_f:
+      delta:
         label: Leave Δ vs AHU SAT
         default: 8.0
         min: 2.0
@@ -3821,7 +3821,7 @@ rules:
         step: 0.5
         unit: degF
         frontend_control: slider
-        sql_placeholder: DELTA_F
+        sql_placeholder: DELTA
       flow_on_min:
         label: Airflow-on min
         default: 25.0
@@ -3969,7 +3969,7 @@ rules:
         unit: bool
         frontend_control: slider
         sql_placeholder: REQUIRE_OPERATIONAL_GATE
-      reset_err_f:
+      reset_err:
         label: Reset error
         default: 3.0
         min: 0.5
@@ -3977,7 +3977,7 @@ rules:
         step: 0.5
         unit: degF
         frontend_control: slider
-        sql_placeholder: RESET_ERR_F
+        sql_placeholder: RESET_ERR
       reset_sat_at_65:
         label: SAT SP at 65F OAT
         default: 52.0
@@ -4449,7 +4449,7 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      approach_max_f:
+      approach_max:
         label: Max approach at full fan
         default: 8.0
         min: 5.0
@@ -4457,7 +4457,7 @@ rules:
         step: 0.5
         unit: degF
         frontend_control: slider
-        sql_placeholder: APPROACH_MAX_F
+        sql_placeholder: APPROACH_MAX
       tower_fan_hi:
         label: Tower fan full-speed threshold
         default: 0.95
@@ -4527,7 +4527,7 @@ rules:
         unit: degF
         frontend_control: slider
         sql_placeholder: CW_APPROACH
-      excess_beyond_approach_f:
+      excess_beyond_approach:
         label: Excess beyond approach
         default: 5.0
         min: 2.0
@@ -4535,7 +4535,7 @@ rules:
         step: 0.5
         unit: degF
         frontend_control: slider
-        sql_placeholder: EXCESS_BEYOND_APPROACH_F
+        sql_placeholder: EXCESS_BEYOND_APPROACH
       tower_fan_hi:
         label: Tower fan full-speed threshold
         default: 0.95
@@ -4881,7 +4881,7 @@ rules:
         unit: sec
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      comfort_low_f:
+      comfort_low:
         label: Zone comfort low
         default: 70.0
         min: 50.0
@@ -4890,7 +4890,7 @@ rules:
         unit: °F
         frontend_control: slider
         sql_placeholder: ZONE_T_LO
-      comfort_high_f:
+      comfort_high:
         label: Zone comfort high
         default: 75.0
         min: 55.0
@@ -4979,7 +4979,7 @@ rules:
         unit: frac
         frontend_control: slider
         sql_placeholder: VALVE_OPEN
-      coil_delta_f:
+      coil_delta:
         label: Minimum heating rise
         default: 5.4
         min: 1
@@ -4987,7 +4987,7 @@ rules:
         step: 0.5
         unit: degF
         frontend_control: slider
-        sql_placeholder: COIL_DELTA_F
+        sql_placeholder: COIL_DELTA
   - rule_id: FCU-CLG-COIL
     equipment_kinds: [zone_other, general, ahu]
     sql_file: fcu_clg_coil.sql
@@ -5025,7 +5025,7 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      pass_delta_f:
+      pass_delta:
         label: Passing temperature rise
         default: 5.4
         min: 1
@@ -5033,7 +5033,7 @@ rules:
         step: 0.5
         unit: degF
         frontend_control: slider
-        sql_placeholder: PASS_DELTA_F
+        sql_placeholder: PASS_DELTA
   - rule_id: FCU-VALVE-PASS-CLG
     equipment_kinds: [zone_other, general, ahu]
     sql_file: fcu_valve_pass_clg.sql
@@ -5048,7 +5048,7 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      pass_delta_f:
+      pass_delta:
         label: Passing temperature drop
         default: 5.4
         min: 1
@@ -5056,7 +5056,7 @@ rules:
         step: 0.5
         unit: degF
         frontend_control: slider
-        sql_placeholder: PASS_DELTA_F
+        sql_placeholder: PASS_DELTA
   - rule_id: FCU-DAMPER-POS
     equipment_kinds: [zone_other, general, ahu]
     sql_file: fcu_damper_pos.sql
@@ -5134,7 +5134,7 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
-      deadband_c:
+      deadband:
         label: Minimum deadband
         default: 1
         min: 0

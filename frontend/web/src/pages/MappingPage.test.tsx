@@ -147,7 +147,7 @@ describe("MappingPage", () => {
       ok: true,
       config: {
         schema_version: "openfdd_session_v1",
-        unit_system: "imperial",
+        display_units: "imperial",
         role_map: {},
         params: {},
       },
@@ -155,7 +155,7 @@ describe("MappingPage", () => {
     vi.mocked(getPackageMapping).mockResolvedValue({
       ok: true,
       building_id: "B1",
-      unit_system: "imperial",
+      display_units: "imperial",
       equipment_ids: ["AHU_1"],
       equipment: [
         {
@@ -185,7 +185,7 @@ describe("MappingPage", () => {
       ok: true,
       config: {
         schema_version: "openfdd_session_v1",
-        unit_system: "imperial",
+        display_units: "imperial",
         role_map: { AHU_1: { fan_status: "SF_SPD" } },
       },
       warnings: [],
@@ -294,7 +294,7 @@ describe("MappingPage", () => {
     vi.mocked(getPackageMapping).mockResolvedValue({
       ok: true,
       building_id: "B1",
-      unit_system: "imperial",
+      display_units: "imperial",
       equipment_ids: ["AHU_1"],
       equipment: [
         {
@@ -360,7 +360,7 @@ describe("MappingPage", () => {
     vi.mocked(getPackageMapping).mockResolvedValue({
       ok: true,
       building_id: "B1",
-      unit_system: "imperial",
+      display_units: "imperial",
       source: "csv_column_map",
       equipment_ids: ["AHU_1"],
       equipment: [
@@ -413,7 +413,7 @@ describe("MappingPage", () => {
     vi.mocked(getPackageMapping).mockResolvedValue({
       ok: true,
       building_id: "B1",
-      unit_system: "imperial",
+      display_units: "imperial",
       source: "timescale_sample",
       equipment_ids: ["EQ1"],
       equipment: [

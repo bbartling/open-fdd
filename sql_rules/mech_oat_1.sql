@@ -15,7 +15,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN web_oa_t IS NULL THEN 0
-      WHEN web_oa_t >= {{MECH_OAT_MAX_F}} THEN 0
+      WHEN web_oa_t >= {{MECH_OAT_MAX}} THEN 0
       WHEN chill_on IS NOT NULL AND chill_on > 0.05 THEN 1
       WHEN clg IS NOT NULL AND clg > 0.05 THEN 1
       ELSE 0

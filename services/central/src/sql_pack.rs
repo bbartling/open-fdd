@@ -552,17 +552,12 @@ async fn project_weather(
         }));
     }
     create_weather_table(conn).await?;
-    // $1..$3 are building, start, and end. Admission binds follow those.
-    let mut admit = crate::admitted_sample::AdmitBuilder::after_occupied(3);
-    let oa = admit.admitted_on_sample("oa_t");
-    let web = admit.admitted_on_sample("web_oa_t");
-    let dew = admit.admitted_on_sample("web_oa_dp");
-    let insert = format!(
+    let insert =
         "INSERT INTO weather (timestamp_utc, oa_t, web_oa_t, web_oa_dp, source_equipment_id)
          SELECT s.ts,
-           MAX(CASE WHEN a.role = 'oa_t' THEN {oa} END),
-           MAX(CASE WHEN a.role = 'web_oa_t' THEN {web} END),
-           MAX(CASE WHEN a.role = 'web_oa_dp' THEN {dew} END),
+           MAX(CASE WHEN a.role = 'oa_t' THEN s.val END),
+           MAX(CASE WHEN a.role = 'web_oa_t' THEN s.val END),
+           MAX(CASE WHEN a.role = 'web_oa_dp' THEN s.val END),
            a.equipment_id
          FROM sample s
          JOIN authorized_series a
@@ -580,15 +575,14 @@ async fn project_weather(
            ) = 1
            AND ($2::timestamptz IS NULL OR s.ts >= $2)
            AND ($3::timestamptz IS NULL OR s.ts < $3)
-         GROUP BY a.equipment_id, s.ts"
-    );
-    crate::admitted_sample::apply_binds(
-        sqlx::query(&insert).bind(building_id).bind(start).bind(end),
-        admit.binds(),
-    )
-    .execute(&mut *conn)
-    .await
-    .context("insert scoped weather projection")?;
+         GROUP BY a.equipment_id, s.ts";
+    sqlx::query(insert)
+        .bind(building_id)
+        .bind(start)
+        .bind(end)
+        .execute(&mut *conn)
+        .await
+        .context("insert scoped weather projection")?;
     Ok(InputGate::Ready(relation_stats(conn, "weather").await?))
 }
 

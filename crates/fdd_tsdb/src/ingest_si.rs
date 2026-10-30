@@ -1,8 +1,13 @@
 //! Single-writer SI ingest: declared source units convert once to metric-c-v2 storage.
 
-use fdd_core::{
-    is_metric_unit_system, quantity_for_sql_role, MetricContractError, MetricUnitsContract,
-};
+use fdd_core::{quantity_for_sql_role, MetricContractError, MetricUnitsContract};
+
+fn is_metric_source_unit_system(unit_system: &str) -> bool {
+    matches!(
+        unit_system.trim().to_ascii_lowercase().as_str(),
+        "metric" | "si"
+    )
+}
 
 pub const QUALITY_UNIT_UNDECLARED: &str = "unit_undeclared";
 pub const QUALITY_UNIT_CONTRACT_MISSING: &str = "unit_contract_missing";
@@ -64,7 +69,7 @@ pub fn resolve_declared_source_unit(
 }
 
 fn unit_system_default_declared_unit(quantity: &str, unit_system: &str) -> Option<&'static str> {
-    let metric = is_metric_unit_system(unit_system);
+    let metric = is_metric_source_unit_system(unit_system);
     match quantity {
         "absolute_temperature" => Some(if metric { "degC" } else { "degF" }),
         "temperature_difference" => Some(if metric { "degC_delta" } else { "degF_delta" }),

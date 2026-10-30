@@ -15,11 +15,21 @@ from open_fdd.analytics.si_thresholds import (
     SENSOR_TEMP_RANGE_MAX_C,
     SENSOR_TEMP_RANGE_MIN_C,
 )
+from scripts.stress.si_cutover.ci_fixtures_lib import column_quantity_unit
 
 REPO = Path(__file__).resolve().parents[2]
 
 
 class W4fAnalyticsSiTests(unittest.TestCase):
+    def test_frozen_ip_fixture_source_units_do_not_follow_product_display_defaults(self) -> None:
+        # Historical fixture values stay IP even when current product defaults are SI.
+        self.assertEqual(column_quantity_unit("zone-air-temp"), ("absolute_temperature", "degF"))
+        self.assertAlmostEqual((72.0 - 32.0) * 5.0 / 9.0, 22.2222222222, places=8)
+        self.assertEqual(column_quantity_unit("duct-static-pressure"), ("air_pressure", "inWC"))
+        self.assertAlmostEqual(1.0 * 249.08891, 249.08891, places=4)
+        self.assertEqual(column_quantity_unit("zone-airflow"), ("volumetric_flow", "cfm"))
+        self.assertAlmostEqual(100.0 * 0.47194745, 47.1947, places=3)
+
     def test_economizer_dt_min_is_guideline_36_si(self) -> None:
         self.assertAlmostEqual(ECON_DIAG_DT_MIN_C, 10.0 * 5.0 / 9.0, places=9)
 
@@ -63,7 +73,7 @@ class W4fAnalyticsSiTests(unittest.TestCase):
                 )
             },
             role_map,
-            unit_system="imperial",
+            display_units="imperial",
             prefer_web_oat=False,
         )
         met = mech_cooling_oat_bins(
@@ -78,7 +88,7 @@ class W4fAnalyticsSiTests(unittest.TestCase):
                 )
             },
             role_map,
-            unit_system="metric",
+            display_units="metric",
             prefer_web_oat=False,
         )
         self.assertFalse(imp.empty)

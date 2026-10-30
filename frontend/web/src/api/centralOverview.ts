@@ -688,13 +688,13 @@ export function basOverlay(
   if (!points.length) return null;
   const x = points.map((p) => String(p.timestamp_utc ?? ""));
   const showT = (v: number | null) => showQuantity(v, unitSystem, "temperature");
-  const bas = points.map((p) => showT(num(p.bas_oat_f)));
-  const web = points.map((p) => showT(num(p.web_oat_f)));
+  const bas = points.map((p) => showT(num(p.bas_oat_c)));
+  const web = points.map((p) => showT(num(p.web_oat_c)));
   const errShown = showQuantity(oatErr, unitSystem, "temperature_delta") ?? oatErr;
   const errLabel =
     unitSystem === "metric" ? errShown.toFixed(1) : String(oatErr);
-  const hi = points.map((p) => showT(num(p.web_oat_f) == null ? null : (num(p.web_oat_f) as number) + oatErr));
-  const lo = points.map((p) => showT(num(p.web_oat_f) == null ? null : (num(p.web_oat_f) as number) - oatErr));
+  const hi = points.map((p) => showT(num(p.web_oat_c) == null ? null : (num(p.web_oat_c) as number) + oatErr));
+  const lo = points.map((p) => showT(num(p.web_oat_c) == null ? null : (num(p.web_oat_c) as number) - oatErr));
   const data: PlotlyTrace[] = [
     {
       type: "scatter",
