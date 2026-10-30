@@ -268,8 +268,66 @@ def ensure_origin_master_ref() -> str:
     return f"origin/{base}"
 
 
+def _git_merge_base(master_ref: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "merge-base", "HEAD", master_ref],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _is_shallow_repository() -> bool:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git rev-parse --is-shallow-repository failed: {proc.stderr.strip()}"
+        )
+    return proc.stdout.strip() == "true"
+
+
+def ensure_metadata_diff_base_ref() -> str:
+    """Merge-base of HEAD and the default branch (not the tip of master).
+
+    Branches that are only behind master must not fail metadata diff when master
+    moved without this branch touching registry files.
+    """
+    master_ref = ensure_origin_master_ref()
+    proc = _git_merge_base(master_ref)
+    if proc.returncode != 0 and _is_shallow_repository():
+        # actions/checkout clones with depth 1, so HEAD and the default branch
+        # share no history until the clone is deepened.
+        unshallow = subprocess.run(
+            ["git", "fetch", "--no-tags", "--unshallow", "origin"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if unshallow.returncode != 0:
+            raise RuntimeError(
+                f"git fetch --unshallow origin failed: {unshallow.stderr.strip()}"
+            )
+        proc = _git_merge_base(master_ref)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git merge-base HEAD {master_ref} failed: {proc.stderr.strip()}"
+        )
+    base = proc.stdout.strip()
+    if not base:
+        raise RuntimeError(f"empty merge-base for HEAD and {master_ref}")
+    return base
+
+
 def git_show_master(relpath: str) -> str:
-    ref = ensure_origin_master_ref()
+    ref = ensure_metadata_diff_base_ref()
     proc = subprocess.run(
         ["git", "show", f"{ref}:{relpath}"],
         cwd=ROOT,
@@ -317,7 +375,7 @@ def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -
     branch_rules = _rules_by_id(branch_doc)
     if set(master_rules) != set(branch_rules):
         raise AssertionError(
-            "registry.yaml rule_id set differs from origin/master "
+            "registry.yaml rule_id set differs from merge-base with the default branch "
             "(add/remove rule entries not allowed in metadata-only PRs)"
         )
 
@@ -352,8 +410,8 @@ def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -
 
     if registry_without_role_lists(master_doc) != registry_without_role_lists(branch_doc):
         raise AssertionError(
-            "registry.yaml differs from origin/master beyond kind/effect metadata "
-            "and SQL-justified optional_roles additions"
+            "registry.yaml differs from merge-base with the default branch beyond "
+            "kind/effect metadata and SQL-justified optional_roles additions"
         )
 
 
@@ -374,7 +432,8 @@ def assert_metadata_only_tuning_diff() -> None:
     branch = strip_registry_metadata(load_json(TUNING))
     if master != branch:
         raise AssertionError(
-            "tuning_catalog.json differs from origin/master beyond kind/effect metadata"
+            "tuning_catalog.json differs from merge-base with the default branch "
+            "beyond kind/effect metadata"
         )
 
 
