@@ -39,9 +39,9 @@ class ModeDelaySharedTest(unittest.TestCase):
         self.assertEqual(effective_mode_delay_min({"mode_delay_min": 10, "startup_delay_min": 15}), 15.0)
 
     def test_missing_param_raises(self) -> None:
-        with self.assertRaises(KeyError):
+        with self.assertRaisesRegex(ValueError, "startup_delay_min"):
             effective_mode_delay_min({"mode_delay_min": 10})
-        with self.assertRaises(KeyError):
+        with self.assertRaisesRegex(ValueError, "mode_delay_min"):
             effective_mode_delay_min({"startup_delay_min": 0})
 
     def test_rows_match_render_rule(self) -> None:

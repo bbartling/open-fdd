@@ -23,7 +23,10 @@ PRODUCT_MODE_DELAY_MIN_DEFAULT = 10.0
 
 
 def effective_mode_delay_min(params: dict) -> float:
-    """max(mode_delay_min, startup_delay_min); KeyError when either is missing."""
+    """max(mode_delay_min, startup_delay_min); ValueError naming any missing param."""
+    missing = [name for name in ("mode_delay_min", "startup_delay_min") if name not in params]
+    if missing:
+        raise ValueError(f"effective_mode_delay_min: missing required param(s) {', '.join(missing)}")
     mode = float(params["mode_delay_min"])
     startup = float(params["startup_delay_min"])
     for name, value in (("mode_delay_min", mode), ("startup_delay_min", startup)):
