@@ -139,6 +139,22 @@ fn sample(
     row
 }
 
+/// Sample declared in °F the way a BACnet/NF source reports it; the single SI
+/// writer (`prepare_numeric_sample`) converts it to metric-c-v2 °C storage.
+fn sample_degf(
+    site: &str,
+    equipment_id: &str,
+    role: &str,
+    key: &str,
+    minutes: i64,
+    val_degf: f64,
+) -> SampleRow {
+    let mut row = sample(site, equipment_id, role, key, minutes, val_degf);
+    row.source_unit = Some("degF".to_string());
+    row.quantity = Some("absolute_temperature".to_string());
+    row
+}
+
 async fn run_oat_meteo(pool: &sqlx::PgPool, site: &str, fill: Option<HistoryFillOptions>) -> f64 {
     let reg = load_reg().expect("registry");
     let rule = reg
@@ -190,10 +206,10 @@ async fn t1404_sql_asof_fixture_offsets_and_gap() {
 
     let mut batch = UpsertBatch::default();
     for m in (0..=120).step_by(5) {
-        batch.push(sample(&site, "WX", "oa_t", "WX.oa_t_a", m, 57.0));
+        batch.push(sample_degf(&site, "WX", "oa_t", "WX.oa_t_a", m, 57.0));
     }
     for m in (0..=120).step_by(20) {
-        batch.push(sample(&site, "WX", "web_oa_t", "WX.web_oa_t", m, 50.0));
+        batch.push(sample_degf(&site, "WX", "web_oa_t", "WX.web_oa_t", m, 50.0));
     }
     upsert_samples(&pool, batch).await;
 
@@ -217,10 +233,10 @@ async fn t1404_sql_asof_fixture_offsets_and_gap() {
         .expect("clear samples");
     let mut mild = UpsertBatch::default();
     for m in (0..=120).step_by(5) {
-        mild.push(sample(&site, "WX", "oa_t", "WX.oa_t_a", m, 53.0));
+        mild.push(sample_degf(&site, "WX", "oa_t", "WX.oa_t_a", m, 53.0));
     }
     for m in (0..=120).step_by(20) {
-        mild.push(sample(&site, "WX", "web_oa_t", "WX.web_oa_t", m, 50.0));
+        mild.push(sample_degf(&site, "WX", "web_oa_t", "WX.web_oa_t", m, 50.0));
     }
     upsert_samples(&pool, mild).await;
     let mild_hours = run_oat_meteo(&pool, &site, Some(fill)).await;
