@@ -201,10 +201,12 @@ def _storage_bounds(
 
         return _f2c(lo), _f2c(hi)
     if unit in ("Pa", "pascal"):
+        from open_fdd.units.convert import PA_PER_IN_WC
+
         def _inwc2pa(v: float | None) -> float | None:
             if v is None:
                 return None
-            return float(v) * 249.08891
+            return float(v) * PA_PER_IN_WC
 
         return _inwc2pa(lo), _inwc2pa(hi)
     if unit in ("L/s", "L_per_s", "lps"):

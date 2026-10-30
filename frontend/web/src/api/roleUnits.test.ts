@@ -7,12 +7,17 @@ import {
   displayStoredQuantity,
   displayUnitLabel,
   fahrenheitToCelsius,
+  INWC_TO_PA,
   resolveQuantityKind,
   resolveRoleUnit,
   storeScalar,
 } from "./roleUnits";
 
 describe("roleUnits metric display", () => {
+  it("INWC_TO_PA matches sql/contract/metric_units.json PA_PER_IN_WC", () => {
+    expect(INWC_TO_PA).toBe(248.84);
+  });
+
   it("relabels temperature roles in metric", () => {
     expect(resolveRoleUnit("sat")).toBe("°F");
     expect(resolveRoleUnit("sat", "metric")).toBe("°C");
@@ -115,7 +120,7 @@ describe("quantity round-trips", () => {
     expect(displayScalar(0.13, "frac", "imperial", "fraction", "eps_vfd_spd")).toBe(0.13);
     expect(displayScalar(10, "min", "metric", "minutes", "confirm_min")).toBe(10);
     expect(displayScalar(0.12, "inwc", "metric", "pressure", "eps_dsp")).toBeCloseTo(
-      0.12 * 249.088908333,
+      0.12 * INWC_TO_PA,
       6,
     );
     expect(displayScalar(0.12, "inwc", "imperial", "pressure", "eps_dsp")).toBe(0.12);
@@ -139,7 +144,7 @@ describe("quantity round-trips", () => {
     );
     expect(displayStoredQuantity(10, "temperature_delta", "°F", "metric")).not.toBeCloseTo(0, 5);
     expect(displayStoredQuantity(0.12, "air_pressure", "in. w.c.", "metric")).toBeCloseTo(
-      0.12 * 249.088908333,
+      0.12 * INWC_TO_PA,
       6,
     );
     expect(displayStoredQuantity(0.4, "fraction", "", "metric")).toBe(0.4);

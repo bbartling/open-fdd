@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import sys
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -191,6 +192,61 @@ def check_goldens_roundtrip() -> None:
     print("PASS unit_vectors.json conversion goldens (Python)")
 
 
+def check_pa_per_in_wc_product_sites() -> None:
+    """W6-pre: every in.w.c.→Pa site must match metric_units.json PA_PER_IN_WC."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    metric = load_json(METRIC_UNITS)
+    contract = float((metric.get("constants") or {})["PA_PER_IN_WC"])
+    if abs(contract - 248.84) > 1e-9:
+        fail(f"unexpected contract PA_PER_IN_WC literal: {contract}")
+
+    from open_fdd.units.convert import PA_PER_IN_WC as py_convert
+
+    if abs(py_convert - contract) > 1e-9:
+        fail(f"open_fdd.units.convert.PA_PER_IN_WC={py_convert} != contract {contract}")
+
+    import importlib.util
+
+    profiles_path = ROOT / "open_fdd" / "rules" / "sensor_rate_profiles.py"
+    spec = importlib.util.spec_from_file_location(
+        "_ofdd_sensor_rate_profiles_contract",
+        profiles_path,
+    )
+    if spec is None or spec.loader is None:
+        fail("could not load sensor_rate_profiles.py")
+    profiles = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = profiles
+    spec.loader.exec_module(profiles)
+    if abs(profiles.IN_WC_TO_PA - contract) > 1e-9:
+        fail(f"sensor_rate_profiles.IN_WC_TO_PA={profiles.IN_WC_TO_PA} != contract")
+
+    quality_path = ROOT / "open_fdd" / "quality.py"
+    quality_text = quality_path.read_text(encoding="utf-8")
+    if "249.088" in quality_text:
+        fail("quality.py still references the 4 °C in.w.c. factor literal")
+    if "PA_PER_IN_WC" not in quality_text:
+        fail("quality.py must import PA_PER_IN_WC for in.w.c. bound scaling")
+
+    sweep_path = ROOT / "crates" / "fdd_core" / "src" / "sensor_sweep.rs"
+    sweep_text = sweep_path.read_text(encoding="utf-8")
+    if "249.088" in sweep_text:
+        fail("sensor_sweep.rs still references the 4 °C in.w.c. factor literal")
+    if "const PA_PER_IN_WC: f64 = 248.84" not in sweep_text:
+        fail("sensor_sweep.rs must define PA_PER_IN_WC = 248.84")
+
+    ts_path = ROOT / "frontend" / "web" / "src" / "api" / "roleUnits.ts"
+    text = ts_path.read_text(encoding="utf-8")
+    match = re.search(r"export const INWC_TO_PA = ([0-9.]+);", text)
+    if not match:
+        fail("roleUnits.ts missing export const INWC_TO_PA")
+    ts_val = float(match.group(1))
+    if abs(ts_val - contract) > 1e-9:
+        fail(f"roleUnits INWC_TO_PA={ts_val} != contract {contract}")
+
+    print(f"PASS PA_PER_IN_WC contract parity ({contract}) across Python + SPA sites")
+
+
 def check_metadata_only_diff() -> None:
     try:
         assert_metadata_only_registry_diff()
@@ -214,6 +270,7 @@ def main() -> int:
     check_registry_kinds()
     check_tuning_catalog()
     check_goldens_roundtrip()
+    check_pa_per_in_wc_product_sites()
     check_metadata_only_diff()
     print("All unit contract checks passed.")
     return 0

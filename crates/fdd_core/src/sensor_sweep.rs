@@ -51,10 +51,13 @@ const RH: QuantityLimits = QuantityLimits {
     hi: 100.0,
     spike: 25.0,
 };
+/// Inches of water column to pascals (`sql/contract/metric_units.json` `PA_PER_IN_WC`).
+const PA_PER_IN_WC: f64 = 248.84;
+
 const AIR_P: QuantityLimits = QuantityLimits {
-    lo: -249.08891,
-    hi: 1992.71128,
-    spike: 498.17782,
+    lo: -PA_PER_IN_WC,
+    hi: 8.0 * PA_PER_IN_WC,
+    spike: 2.0 * PA_PER_IN_WC,
 };
 
 fn norm_token(s: &str) -> String {
@@ -227,5 +230,15 @@ mod tests {
         let limits = limits_for_haystack_role("zone-air-temp").expect("limits");
         assert!((limits.lo - 4.4444444444).abs() < 1e-9);
         assert!((limits.hi - 37.7777777778).abs() < 1e-9);
+    }
+
+    #[test]
+    fn air_pressure_limits_match_contract_pa_per_in_wc() {
+        const CONTRACT: f64 = 248.84;
+        let limits = limits_for_haystack_role("duct-static-pressure").expect("limits");
+        assert!((limits.lo + CONTRACT).abs() < 1e-9);
+        assert!((limits.hi - 8.0 * CONTRACT).abs() < 1e-9);
+        assert!((limits.spike - 2.0 * CONTRACT).abs() < 1e-9);
+        assert!((PA_PER_IN_WC - CONTRACT).abs() < 1e-9);
     }
 }
