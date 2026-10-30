@@ -111,11 +111,14 @@ def _si_control_as_ip(rule_id: str, key: str, ctrl: dict[str, Any], metric: dict
 
     unit = str(ctrl.get("unit") or "")
     kind = str(ctrl.get("kind") or "")
-    if unit in _SI_FLOW_UNITS:
-        raise ValueError(
-            f"{rule_id}.{key}: SI flow control has no declared imperial base (air cfm vs water gpm)"
-        )
-    conv = _SI_TO_IP_UNITS.get((unit, kind))
+    if kind in uc.AMBIGUOUS_IP_KIND_UNITS:
+        # The medium (air cfm vs water gpm) comes from the declared ip_unit, never a guess.
+        uc.assert_ip_unit_declared(metric, f"{rule_id}.{key}", kind, ctrl)
+        conv = (kind, uc.kind_source_unit(kind, unit), str(ctrl["ip_unit"]))
+    elif unit in _SI_FLOW_UNITS:
+        raise ValueError(f"{rule_id}.{key}: SI flow control declares kind {kind!r}, not a flow kind")
+    else:
+        conv = _SI_TO_IP_UNITS.get((unit, kind))
     if conv is None:
         return dict(ctrl)
     quantity, si_unit, ip_unit = conv
@@ -132,7 +135,7 @@ def _si_control_as_ip(rule_id: str, key: str, ctrl: dict[str, Any], metric: dict
         q, su, iu = delta
         return uc.convert_from_canonical(metric, q, uc.convert_to_canonical(metric, q, float(v), su), iu)
 
-    out = dict(ctrl)
+    out = {f: v for f, v in ctrl.items() if f != "ip_unit"}
     out["unit"] = ip_unit
     for field in ("default", "min", "max"):
         if field in ctrl:

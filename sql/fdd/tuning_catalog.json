@@ -4433,7 +4433,8 @@
           "min": 0.0,
           "sql_placeholder": "MIN_CFM_DESIGN",
           "step": 47.194745,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -6579,7 +6580,8 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -6725,7 +6727,8 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "full_open_pct": {
           "control": "slider",
@@ -6885,7 +6888,8 @@
           "min": 4.71947,
           "sql_placeholder": "FLOW_BIAS_CFM",
           "step": 2.359735,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -7127,7 +7131,8 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "min_rise": {
           "control": "slider",
@@ -7285,7 +7290,8 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         }
       },
       "parity_status": "sql_screening",
@@ -7371,7 +7377,8 @@
           "min": 0.471947,
           "sql_placeholder": "FIXED_FLOW_MAX_STD",
           "step": 0.471947,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "fixed_flow_min_mean": {
           "control": "slider",
@@ -7386,7 +7393,8 @@
           "min": 23.59735,
           "sql_placeholder": "FIXED_FLOW_MIN_MEAN",
           "step": 4.71947,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "flow_on_min": {
           "control": "slider",
@@ -7401,7 +7409,8 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "high_min_flow_sp": {
           "control": "slider",
@@ -7416,7 +7425,8 @@
           "min": 23.59735,
           "sql_placeholder": "HIGH_MIN_FLOW_SP",
           "step": 4.71947,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "cfm"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -8158,7 +8168,8 @@
           "min": 12.61804,
           "sql_placeholder": "FLOW_HI",
           "step": 3.15451,
-          "unit": "L_per_s"
+          "unit": "L_per_s",
+          "ip_unit": "gpm"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
