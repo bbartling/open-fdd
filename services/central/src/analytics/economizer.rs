@@ -9,7 +9,7 @@ use super::{
     AnalyticsRequest, QV_ECONOMIZER,
 };
 
-pub const DEFAULT_DT_MIN_F: f64 = 10.0 * 5.0 / 9.0;
+pub const DEFAULT_DT_MIN_C: f64 = 10.0 * 5.0 / 9.0;
 
 /// One mixed-air diagnostic sample.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -18,11 +18,11 @@ pub struct EconomizerPointIn {
     #[serde(default)]
     pub equipment_type: Option<String>,
     pub timestamp: DateTime<Utc>,
-    pub oat_f: f64,
-    pub rat_f: f64,
-    pub mat_f: f64,
+    pub oa_t: f64,
+    pub rat: f64,
+    pub mat: f64,
     #[serde(default)]
-    pub sat_f: Option<f64>,
+    pub sat: Option<f64>,
     pub fan_on: bool,
     /// OA damper feedback, percent 0–100 (optional).
     #[serde(default)]
@@ -34,23 +34,23 @@ pub struct EconomizerPointOut {
     pub timestamp: DateTime<Utc>,
     pub equipment_id: String,
     pub equipment_type: String,
-    pub oat_f: f64,
-    pub rat_f: f64,
-    pub mat_f: f64,
+    pub oa_t: f64,
+    pub rat: f64,
+    pub mat: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sat_f: Option<f64>,
+    pub sat: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub damper_fb_pct: Option<f64>,
     pub fan_on: bool,
-    pub delta_or_f: f64,
-    pub delta_mr_f: f64,
+    pub delta_or_c: f64,
+    pub delta_mr_c: f64,
     pub identifiable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub oa_frac_temp_pct: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub mat_pred_f: Option<f64>,
+    pub mat_pred_c: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub mat_resid_f: Option<f64>,
+    pub mat_resid_c: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,10 +61,10 @@ pub struct EconomizerMetrics {
     pub n_identifiable: u64,
     pub has_damper: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub median_mat_resid_f: Option<f64>,
+    pub median_mat_resid_c: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub mat_resid_mae_f: Option<f64>,
-    pub dt_min_f: f64,
+    pub mat_resid_mae_c: Option<f64>,
+    pub dt_min_c: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,12 +84,12 @@ pub struct EconomizerResult {
 ///
 /// - Fan-on gate: only `fan_on == true` rows contribute points.
 /// - Equipment with no fan-on rows → skipped (`no_fan_on_rows`).
-/// - Identifiable when `|OAT−RAT| >= dt_min_f`.
+/// - Identifiable when `|OAT−RAT| >= dt_min_c`.
 /// - OA fraction (%) = `100 * (MAT−RAT) / (OAT−RAT)` when identifiable.
 /// - MAT residual when damper present: `MAT − (RAT + damper_frac * (OAT−RAT))`.
 pub fn compute_economizer_diagnostics(
     points: &[EconomizerPointIn],
-    dt_min_f: f64,
+    dt_min_c: f64,
     max_points_per_eq: usize,
 ) -> EconomizerResult {
     use std::collections::BTreeMap;
@@ -102,7 +102,7 @@ pub fn compute_economizer_diagnostics(
     let mut metrics = Vec::new();
     let mut out_points = Vec::new();
     let mut skipped = Vec::new();
-    let dt_min = dt_min_f.max(0.0);
+    let dt_min = dt_min_c.max(0.0);
 
     for (eq_id, pts) in by_eq {
         let fan_on_pts: Vec<_> = pts.iter().copied().filter(|p| p.fan_on).collect();
@@ -125,8 +125,8 @@ pub fn compute_economizer_diagnostics(
         let mut n_ident = 0_u64;
 
         for p in &fan_on_pts {
-            let delta_or = p.oat_f - p.rat_f;
-            let delta_mr = p.mat_f - p.rat_f;
+            let delta_or = p.oa_t - p.rat;
+            let delta_mr = p.mat - p.rat;
             let identifiable = delta_or.abs() >= dt_min;
             if identifiable {
                 n_ident += 1;
@@ -140,8 +140,8 @@ pub fn compute_economizer_diagnostics(
 
             let (mat_pred, mat_resid) = match p.oa_damper_pct {
                 Some(damp) => {
-                    let pred = p.rat_f + (damp / 100.0) * delta_or;
-                    let resid = p.mat_f - pred;
+                    let pred = p.rat + (damp / 100.0) * delta_or;
+                    let resid = p.mat - pred;
                     if identifiable {
                         resid_vals.push(resid);
                     }
@@ -154,18 +154,18 @@ pub fn compute_economizer_diagnostics(
                 timestamp: p.timestamp,
                 equipment_id: eq_id.clone(),
                 equipment_type: et.clone(),
-                oat_f: p.oat_f,
-                rat_f: p.rat_f,
-                mat_f: p.mat_f,
-                sat_f: p.sat_f,
+                oa_t: p.oa_t,
+                rat: p.rat,
+                mat: p.mat,
+                sat: p.sat,
                 damper_fb_pct: p.oa_damper_pct,
                 fan_on: true,
-                delta_or_f: delta_or,
-                delta_mr_f: delta_mr,
+                delta_or_c: delta_or,
+                delta_mr_c: delta_mr,
                 identifiable,
                 oa_frac_temp_pct: oa_frac,
-                mat_pred_f: mat_pred,
-                mat_resid_f: mat_resid,
+                mat_pred_c: mat_pred,
+                mat_resid_c: mat_resid,
             });
         }
 
@@ -200,9 +200,9 @@ pub fn compute_economizer_diagnostics(
             n_fan_on_samples: fan_on_pts.len() as u64,
             n_identifiable: n_ident,
             has_damper,
-            median_mat_resid_f: median_resid,
-            mat_resid_mae_f: mae_resid,
-            dt_min_f: dt_min,
+            median_mat_resid_c: median_resid,
+            mat_resid_mae_c: mae_resid,
+            dt_min_c: dt_min,
         });
         out_points.extend(eq_points);
     }
@@ -216,7 +216,7 @@ pub fn compute_economizer_diagnostics(
 
 pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     let (qv, mut warnings) = resolve_query_version(req, QV_ECONOMIZER);
-    let dt_min = req.dt_min_f.unwrap_or(DEFAULT_DT_MIN_F);
+    let dt_min = req.dt_min_c.unwrap_or(DEFAULT_DT_MIN_C);
     let max_pts = req.query.max_points.unwrap_or(8000);
     let mut env = envelope(&qv, &req.query, warnings.clone());
 
@@ -249,7 +249,7 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
                 "equipment_count": env.equipment.len(),
                 "point_count": env.points.len(),
                 "skipped_count": env.skipped.len(),
-                "dt_min_f": dt_min,
+                "dt_min_c": dt_min,
             }));
         }
         _ => {
@@ -267,7 +267,7 @@ pub fn handle(req: &AnalyticsRequest) -> AnalyticsEnvelope {
 /// the inline central-analytics-v1 mixing diagnostics.
 pub async fn handle_async(req: &AnalyticsRequest) -> AnalyticsEnvelope {
     if req.series.is_none() {
-        let dt_min = req.dt_min_f.unwrap_or(DEFAULT_DT_MIN_F);
+        let dt_min = req.dt_min_c.unwrap_or(DEFAULT_DT_MIN_C);
         // OFDD-070: scope the historian read to the site when building_id is set
         // so an Overview economizer for one building never mixes in another's parquet.
         match historian::economizer_from_history(
@@ -328,10 +328,10 @@ mod tests {
             equipment_id: "AHU-1".into(),
             equipment_type: Some("AHU".into()),
             timestamp: ts(0),
-            oat_f: 40.0,
-            rat_f: 70.0,
-            mat_f: 55.0,
-            sat_f: None,
+            oa_t: 40.0,
+            rat: 70.0,
+            mat: 55.0,
+            sat: None,
             fan_on: true,
             oa_damper_pct: Some(50.0),
         }];
@@ -343,7 +343,7 @@ mod tests {
         let frac = p.oa_frac_temp_pct.unwrap();
         assert!((frac - 50.0).abs() < 1e-6);
         // Perfect damper match → residual ~0
-        assert!((p.mat_resid_f.unwrap()).abs() < 1e-9);
+        assert!((p.mat_resid_c.unwrap()).abs() < 1e-9);
         assert_eq!(result.metrics[0].n_identifiable, 1);
         assert!(result.metrics[0].has_damper);
     }
@@ -354,10 +354,10 @@ mod tests {
             equipment_id: "AHU-2".into(),
             equipment_type: Some("AHU".into()),
             timestamp: ts(0),
-            oat_f: 40.0,
-            rat_f: 70.0,
-            mat_f: 55.0,
-            sat_f: None,
+            oa_t: 40.0,
+            rat: 70.0,
+            mat: 55.0,
+            sat: None,
             fan_on: false,
             oa_damper_pct: Some(50.0),
         }];
@@ -373,10 +373,10 @@ mod tests {
             equipment_id: "AHU-1".into(),
             equipment_type: Some("AHU".into()),
             timestamp: ts(0),
-            oat_f: 68.0,
-            rat_f: 70.0,
-            mat_f: 69.0,
-            sat_f: None,
+            oa_t: 68.0,
+            rat: 70.0,
+            mat: 69.0,
+            sat: None,
             fan_on: true,
             oa_damper_pct: None,
         }];
@@ -393,9 +393,9 @@ mod tests {
                 "points": [{
                     "equipment_id": "AHU-1",
                     "timestamp": "2024-01-01T00:00:00Z",
-                    "oat_f": 40.0,
-                    "rat_f": 70.0,
-                    "mat_f": 55.0,
+                    "oa_t": 40.0,
+                    "rat": 70.0,
+                    "mat": 55.0,
                     "fan_on": true,
                     "oa_damper_pct": 50.0
                 }]

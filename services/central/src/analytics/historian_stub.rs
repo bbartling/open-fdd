@@ -193,7 +193,7 @@ pub async fn schedule_from_history(
 
 pub async fn economizer_from_history(
     equipment_filter: Option<&[String]>,
-    dt_min_f: f64,
+    dt_min_c: f64,
     building_id: Option<&str>,
     max_points: usize,
     start: Option<DateTime<Utc>>,
@@ -201,7 +201,7 @@ pub async fn economizer_from_history(
 ) -> Result<Option<AnalyticsEnvelope>> {
     let _ = (
         equipment_filter,
-        dt_min_f,
+        dt_min_c,
         building_id,
         max_points,
         start,

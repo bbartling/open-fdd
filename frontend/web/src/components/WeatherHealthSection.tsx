@@ -76,7 +76,7 @@ export function WeatherHealthSection({
           postBasVsWebOat({
             building_id: buildingId,
             max_points: 4000,
-            dt_min_f: 10,
+            dt_min_c: 10 * (5 / 9),
             ...(refresh ? { refresh: true } : {}),
           }),
         ]);

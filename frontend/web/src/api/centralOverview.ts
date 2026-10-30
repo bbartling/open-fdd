@@ -442,19 +442,19 @@ export function mechFigure(
 /** vibe19 economizer_delta_scatter: (MAT−RAT) vs (OAT−RAT) + OA-fraction refs. */
 export function econDeltaScatter(
   points: Array<Record<string, unknown>>,
-  dtMinF: number,
+  dtMinC: number,
   unitSystem: UnitSystem = "imperial",
 ): PlotlyFigure | null {
   const usable = points.filter(
     (p) =>
       (p.identifiable === true || p.identifiable === "true") &&
-      num(p.delta_or_f) != null &&
-      num(p.delta_mr_f) != null,
+      num(p.delta_or_c) != null &&
+      num(p.delta_mr_c) != null,
   );
   if (usable.length < 5) return null;
 
   const showD = (v: number | null) => showQuantity(v, unitSystem, "temperature_delta");
-  const xs = usable.map((p) => showD(num(p.delta_or_f)) as number);
+  const xs = usable.map((p) => showD(num(p.delta_or_c)) as number);
   const xLo = Math.min(...xs);
   const xHi = Math.max(...xs);
   const lo = Number.isFinite(xLo) ? xLo : -20;
@@ -498,8 +498,8 @@ export function econDeltaScatter(
       type: "scatter",
       mode: "markers",
       name: eq,
-      x: rows.map((r) => showD(num(r.delta_or_f)) as number),
-      y: rows.map((r) => showD(num(r.delta_mr_f))),
+      x: rows.map((r) => showD(num(r.delta_or_c)) as number),
+      y: rows.map((r) => showD(num(r.delta_mr_c))),
       marker: hasDamper
         ? {
             size: 7,
@@ -523,8 +523,8 @@ export function econDeltaScatter(
     layout: {
       title: `Economizer free-cooling delta scatter (fan on, |OAT−RAT|≥${
         unitSystem === "metric"
-          ? (showD(dtMinF) ?? dtMinF).toFixed(1)
-          : dtMinF.toFixed(0)
+          ? (showD(dtMinC) ?? dtMinC).toFixed(1)
+          : (showD(dtMinC) ?? 10).toFixed(0)
       }${deltaAxis(unitSystem)})`,
       xaxis: { title: `OAT − RAT (${deltaAxis(unitSystem)})`, autorange: true },
       yaxis: { title: `MAT − RAT (${deltaAxis(unitSystem)})`, autorange: true },
@@ -784,7 +784,7 @@ export async function fetchCentralOverview(opts: {
   equipment?: Array<{ equipment_id: string; equipment_type?: string }>;
   econ_overlay_equipment_id?: string | null;
   oat_err?: number;
-  dt_min_f?: number;
+  dt_min_c?: number;
   signal?: AbortSignal;
   /** Recompute the parquet result cache. Routine opens omit this. */
   refresh?: boolean;
@@ -792,7 +792,7 @@ export async function fetchCentralOverview(opts: {
   const t0 = performance.now();
   const building_id = opts.building_id;
   const oatErr = opts.oat_err ?? 5;
-  const dtMin = opts.dt_min_f ?? 10;
+  const dtMin = opts.dt_min_c ?? 10 * (5 / 9);
   const signal = opts.signal;
 
   // Resolve package sampling *before* analytics so historical packages
@@ -810,7 +810,7 @@ export async function fetchCentralOverview(opts: {
   const body = {
     building_id,
     max_points: 4000,
-    dt_min_f: dtMin,
+    dt_min_c: dtMin,
     ...window,
     ...(opts.refresh ? { refresh: true } : {}),
   };
@@ -829,7 +829,7 @@ export async function fetchCentralOverview(opts: {
   const econ = normalizeTipOverviewEnvelope(
     "economizer",
     await postEconomizer(body, { signal }),
-    { dtMinF: dtMin },
+    { dtMinC: dtMin },
   );
   const bas = normalizeTipOverviewEnvelope(
     "bas-vs-web-oat",
@@ -986,7 +986,7 @@ export async function fetchCentralOverview(opts: {
       temps_overlay: tempsOverlay,
       overlay_equipment_id: overlayEq,
       skipped: [],
-      dt_min_f: dtMin,
+      dt_min_c: dtMin,
     },
     bas_vs_web_oat: {
       caption: warnCaption(

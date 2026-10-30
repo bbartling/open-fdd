@@ -113,7 +113,7 @@ def compare_economizer_points(points: list, *, limit: int = SPOT_CHECK_LIMIT) ->
         oat = _num(pt, "oat_f", "oa_t", "oat")
         rat = _num(pt, "rat_f", "ra_t", "rat")
         mat = _num(pt, "mat_f", "ma_t", "mat")
-        dor = _num(pt, "delta_or_f")
+        dor = _num(pt, "delta_or_c")
         dmr = _num(pt, "delta_mr_f")
         if None in (oat, rat, mat, dor, dmr):
             continue

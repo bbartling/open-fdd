@@ -16,7 +16,7 @@ export interface AnalyticsRequest extends AnalyticsQuery {
   samples?: unknown[];
   series?: unknown;
   max_gap_seconds?: number;
-  dt_min_f?: number;
+  dt_min_c?: number;
   /** Recompute even when the parquet result cache is fresh. */
   refresh?: boolean;
 }
