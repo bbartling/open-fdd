@@ -83,9 +83,10 @@ def _blocking_errors(
 def _fc1_t1284_si_param_post_hook(rule_id: str, params: dict[str, float]) -> dict[str, float]:
     if rule_id != "FC1":
         return params
-    out = dict(params)
-    out["eps_dsp"] = float(out.get("eps_dsp", 0.12)) + 1.0
-    return out
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+
+    rules = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
+    return pc.t1284_4_double_param_conversion(rules["FC1"], params, "eps_dsp", pc._metric_doc())
 
 
 def run_fixtures_gate(

@@ -785,6 +785,29 @@ def run_p2_all_goldens(
     )
 
 
+def t1284_4_double_param_conversion(
+    rule: dict[str, Any], params_si: dict[str, float], key: str, metric: dict[str, Any]
+) -> dict[str, float]:
+    """T1284-4 mutation: apply the declared-kind SI scale to one param twice (unit-kind bug)."""
+    spec = (rule.get("parameters") or {}).get(key)
+    if not isinstance(spec, dict):
+        raise KeyError(f"T1284-4: rule {rule.get('rule_id')} has no parameter spec {key!r}")
+    kind = str(spec.get("kind") or "")
+    unit = str(spec.get("unit") or "")
+    if not kind or not unit:
+        raise ValueError(f"T1284-4: parameter {key!r} lacks declared kind/unit")
+    scale = uc.convert_to_canonical(metric, kind, 1.0, unit) - uc.convert_to_canonical(
+        metric, kind, 0.0, unit
+    )
+    if scale == 1.0:
+        raise ValueError(f"T1284-4: parameter {key!r} kind {kind} has no unit scale to break")
+    if key not in params_si:
+        raise KeyError(f"T1284-4: SI params missing {key!r}")
+    out = dict(params_si)
+    out[key] = float(params_si[key]) * scale
+    return out
+
+
 def run_t1284_4_rule_mutation_p1(goldens: list[dict[str, Any]]) -> StageResult:
     """Mutate VAV-1 SI comfort threshold — must break IP vs SI fault seconds on COOKBOOK_VAV1."""
     return verify_vav1_rule_si_threshold_mutation()
@@ -821,8 +844,7 @@ def verify_vav1_rule_si_threshold_mutation() -> StageResult:
     si_frame = cfl.frame_to_si(ip_frame, metric)
     params_ip = cfl.rule_params_from_registry(rule)
     params_si = cfl.convert_params_to_si(rule, params_ip, metric)
-    params_broken = dict(params_si)
-    params_broken["eps_dsp"] = float(params_si.get("eps_dsp", 0.12)) + 1.0
+    params_broken = t1284_4_double_param_conversion(rule, params_si, "eps_dsp", metric)
     poll = float(golden.get("poll_seconds") or 300.0)
 
     def _fault_seconds(result, index) -> float:
@@ -845,11 +867,11 @@ def verify_vav1_rule_si_threshold_mutation() -> StageResult:
     elif not fault_seconds_equal(ip_fs, good_fs):
         errors.append(f"T1284-4 setup: golden ip={ip_fs} good_si={good_fs}")
     elif fault_seconds_equal(ip_fs, bad_fs):
-        errors.append(f"T1284-4: eps_dsp offset did not change SI faults (good={good_fs} bad={bad_fs})")
+        errors.append(f"T1284-4: double-converted eps_dsp did not change SI faults (good={good_fs} bad={bad_fs})")
     else:
         errors.append(
             f"P1 FC1 {golden.get('building_id')}/{ip_row.get('utc_day')}: "
-            f"ip={ip_fs} si={bad_fs} (mutated eps_dsp offset)"
+            f"ip={ip_fs} si={bad_fs} (eps_dsp SI conversion applied twice)"
         )
     return StageResult("T1284-4-rule", comparisons, tuple(errors))
 

@@ -4,8 +4,8 @@
   "families": {
     "W4f_analytics_si_p2": {
       "wave": "W4f",
-      "description": "Analytics postgres bodies — pandas SI vs SQL SI on CI seeds (#1284)",
-      "rules": []
+      "description": "W4f SI SQL storage path (#1284): rules whose fixture P2 SQL SI cells W4f moved from pending_W4 to computed, excluding SV-* (W4e) and VAV-7 (W4c) whose pandas SI twins are still owned by those rows. Analytics bodies are gated by test_w4f_analytics_si. P0 FC1 mode-delay is report-only (#1459).",
+      "rules": ["AHU-DUCTHI", "CMD-1", "FC1", "PID-HUNT-1", "SCHED-247", "VAV-4", "VAV-5"]
     },
     "W4b_fc1_duct_static": {
       "wave": "W4b",

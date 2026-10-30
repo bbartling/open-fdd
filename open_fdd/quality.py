@@ -89,6 +89,47 @@ POSITION_ROLES = {
     "pump-speed-feedback",
 }
 
+# SI cutover (#1447): until W4a #1450 lands ROLE_BOUNDS_SI, scale imperial ROLE_BOUNDS
+# when frame.attrs unit_system == "metric". After #1450 merges, delete _INWC_TO_PA through
+# _bounds_for_unit_system (~lines 92–128) and use ROLE_BOUNDS_SI + _bounds_table() instead.
+_INWC_TO_PA = 248.84
+_CFM_TO_LPS = 0.471947
+
+_PRESSURE_FAMILIES = frozenset({"duct-static-pressure", "chw-diff-pressure"})
+_FLOW_FAMILIES = frozenset(
+    {"zone-airflow", "supply-airflow", "airflow", "chw-flow", "water-flow"}
+)
+
+
+def _fahrenheit_bound_to_celsius(f: float) -> float:
+    return (float(f) - 32.0) * 5.0 / 9.0
+
+
+def _bounds_for_unit_system(
+    family: str,
+    lo_hi: tuple[float | None, float | None],
+    unit_system: str | None,
+) -> tuple[float | None, float | None]:
+    if unit_system != "metric":
+        return lo_hi
+    lo, hi = lo_hi
+    if family in _PRESSURE_FAMILIES:
+        return (
+            None if lo is None else lo * _INWC_TO_PA,
+            None if hi is None else hi * _INWC_TO_PA,
+        )
+    if family in _FLOW_FAMILIES:
+        return (
+            None if lo is None else lo * _CFM_TO_LPS,
+            None if hi is None else hi * _CFM_TO_LPS,
+        )
+    if "temp" in family or family.endswith("-temp") or family == "outside-air-temp":
+        return (
+            None if lo is None else _fahrenheit_bound_to_celsius(lo),
+            None if hi is None else _fahrenheit_bound_to_celsius(hi),
+        )
+    return lo_hi
+
 
 def _role_family(role: str) -> str:
     r = role.replace("_", "-").lower()
@@ -174,6 +215,7 @@ def normalize_role_series(
     *,
     sentinels: Iterable[float] = DEFAULT_SENTINELS,
     bounds: tuple[float | None, float | None] | None = None,
+    unit_system: str | None = None,
 ) -> RoleQuality:
     raw = series.copy()
     family = _role_family(role)
@@ -247,6 +289,8 @@ def normalize_role_series(
 
     lo_hi = bounds if bounds is not None else ROLE_BOUNDS.get(family)
     if lo_hi is not None:
+        lo_hi = _bounds_for_unit_system(family, lo_hi, unit_system)
+    if lo_hi is not None:
         lo, hi = lo_hi
         scaled = _scale_position(num)
         if family in POSITION_ROLES or any(k in family for k in ("valve", "damper", "speed")):
@@ -313,6 +357,7 @@ def assess_frame(
 ) -> FrameQuality:
     cols = list(roles) if roles is not None else [c for c in df.columns if c != "timestamp_utc"]
     sentinels = tuple(sentinels)
+    unit_system = str(df.attrs.get("unit_system") or "").strip().lower() or None
     fq = FrameQuality()
     any_valid = pd.Series(False, index=df.index)
     totals = {"valid": 0, "invalid": 0}
@@ -320,7 +365,9 @@ def assess_frame(
     for role in cols:
         if role not in df.columns:
             continue
-        rq = normalize_role_series(df[role], role, sentinels=sentinels)
+        rq = normalize_role_series(
+            df[role], role, sentinels=sentinels, unit_system=unit_system
+        )
         fq.roles[role] = rq
         any_valid = any_valid | rq.valid
         totals["valid"] += rq.valid_sample_count
