@@ -20,7 +20,7 @@ def _run(df, **kwargs):
     return run_rule(
         "CHW-1",
         df,
-        params={"confirm_seconds": 0, "min_dt": 4.0, **kwargs.get("params", {})},
+        params={"confirm_seconds": 0, "min_dt": 2.222222, **kwargs.get("params", {})},
         poll_seconds=300.0,
         require_operational_gates=True,
     )
