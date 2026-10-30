@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import importlib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
@@ -79,6 +80,17 @@ def ensure_ip_oracle_worktree() -> Path:
                 f"git worktree add {root} @ {IP_ORACLE_COMMIT} failed: {proc.stderr or proc.stdout}"
             )
     return root
+
+
+def purge_ip_oracle_import(root: Path | None = None) -> None:
+    """Drop pinned 4.4.9 ``open_fdd`` imports so later SI qualification tests stay isolated."""
+    root_s = os.path.normpath(str(root or IP_ORACLE_ROOT))
+    for name in list(sys.modules):
+        if name == "open_fdd" or name.startswith("open_fdd."):
+            del sys.modules[name]
+    sys.path[:] = [p for p in sys.path if os.path.normpath(p) != root_s]
+    importlib.invalidate_caches()
+
 
 MOCK_ORACLE = {
     "source_root": str(IP_ORACLE_ROOT),
@@ -225,13 +237,19 @@ class CaptureRequirements(unittest.TestCase):
 
     def test_pinned_oracle_provenance_matches_frozen_registry(self) -> None:
         oracle_root = ensure_ip_oracle_worktree()
-        oracle = capture.load_ip_oracle(oracle_root)
-        self.assertEqual(oracle["version"], "4.4.9")
-        self.assertEqual(oracle["git_head"], "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0")
-        self.assertEqual(oracle["registry_sha256"], "b0397a06d834109a77e85599c81e7c81cbacfab7d38372503c943c1f26e1fcbf")
-        capture.require_oracle_runtime(oracle)
-        self.assertEqual(len(oracle["pandas_implemented_rule_ids"]), 70)
-        self.assertGreater(len(oracle["no_pandas_function_rule_ids"]), 0)
+        try:
+            oracle = capture.load_ip_oracle(oracle_root)
+            self.assertEqual(oracle["version"], "4.4.9")
+            self.assertEqual(oracle["git_head"], "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0")
+            self.assertEqual(
+                oracle["registry_sha256"],
+                "b0397a06d834109a77e85599c81e7c81cbacfab7d38372503c943c1f26e1fcbf",
+            )
+            capture.require_oracle_runtime(oracle)
+            self.assertEqual(len(oracle["pandas_implemented_rule_ids"]), 70)
+            self.assertGreater(len(oracle["no_pandas_function_rule_ids"]), 0)
+        finally:
+            purge_ip_oracle_import(oracle_root)
 
     def test_zero_unit_inventory_with_point_map_rows_fails(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "every point_map key"):
