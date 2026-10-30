@@ -124,6 +124,47 @@ def resolve_haystack_column(role: str, role_map: dict[str, str]) -> str | None:
     return None
 
 
+def frame_builder_empty_error(equipment_id: str, *, skip_counts: dict[str, int]) -> ValueError:
+    """Distinguish missing samples from all points skipped by role mapping."""
+    parts = [
+        f"{name}={skip_counts[name]}"
+        for name in (
+            "skipped_other_equipment",
+            "skipped_unbound_no_column",
+            "skipped_no_role",
+            "skipped_unmapped_role",
+        )
+        if skip_counts.get(name)
+    ]
+    detail = ", ".join(parts) if parts else "no bindable points"
+    if skip_counts.get("skipped_no_role") and not skip_counts.get("skipped_unmapped_role"):
+        msg = (
+            f"all points skipped for equipment {equipment_id} ({detail}); "
+            "SPARQL fdd_role_candidates returned empty canonicalRole"
+        )
+    else:
+        msg = f"no historian samples for equipment {equipment_id} in window ({detail})"
+    exc = ValueError(msg)
+    exc.skip_counts = dict(skip_counts)  # type: ignore[attr-defined]
+    return exc
+
+
+def missing_required_roles_unmapped(
+    rule: dict[str, Any],
+    *,
+    role_map: dict[str, str],
+) -> list[str]:
+    """Required registry roles with no golden Haystack mapping."""
+    missing: list[str] = []
+    for role in rule.get("required_roles") or []:
+        rid = str(role).strip()
+        if not rid:
+            continue
+        if resolve_haystack_column(rid, role_map) is None:
+            missing.append(rid)
+    return missing
+
+
 def resolve_openfdd_key(equipment_id: str, column: str, explicit: str | None) -> str:
     if explicit and str(explicit).strip():
         return str(explicit).strip()
@@ -334,14 +375,35 @@ def health_shortsha(http, headers: dict[str, str]) -> str:
     return str(body.get("shortsha") or body.get("git_sha") or "local")
 
 
-def telemetry_row_counts(conn, building_id: str) -> dict[str, int]:
+def telemetry_row_counts(
+    conn,
+    building_id: str,
+    *,
+    sample_before: str | None = None,
+) -> dict[str, int]:
+    """Row counts for read-only guard.
+
+    When ``sample_before`` is set (capture ``window_end``), only ``sample`` rows
+    with ``ts < window_end`` are counted so live NF ingest after the window does
+    not trip the guard. ``point_map`` and ``authorized_series`` are full-table
+    counts (no timestamp column).
+    """
     counts: dict[str, int] = {}
     with conn.cursor() as cur:
         for table in TELEMETRY_TABLES:
-            cur.execute(
-                f"SELECT COUNT(*)::bigint FROM {table} WHERE site_id = %s",
-                (building_id,),
-            )
+            if table == "sample" and sample_before:
+                cur.execute(
+                    """
+                    SELECT COUNT(*)::bigint FROM sample
+                    WHERE site_id = %s AND ts < %s::timestamptz
+                    """,
+                    (building_id, sample_before),
+                )
+            else:
+                cur.execute(
+                    f"SELECT COUNT(*)::bigint FROM {table} WHERE site_id = %s",
+                    (building_id,),
+                )
             counts[table] = int(cur.fetchone()[0])
     return counts
 
@@ -621,8 +683,6 @@ def equipment_frame_from_db(
             "skipped_unmapped_role": 0,
         }
     )
-    unmapped_roles: list[str] = []
-
     pts = post_sparql(
         http,
         headers,
@@ -649,7 +709,6 @@ def equipment_frame_from_db(
         haystack_col = resolve_haystack_column(role_raw, role_map)
         if haystack_col is None:
             skip_counts["skipped_unmapped_role"] += 1
-            unmapped_roles.append(role_raw)
             continue
         openfdd_key = resolve_openfdd_key(
             equipment_id,
@@ -668,10 +727,8 @@ def equipment_frame_from_db(
         idx = pd.to_datetime([ts for ts, _ in samples], utc=True)
         vals = [val for _, val in samples]
         series[haystack_col] = pd.Series(vals, index=idx, name=haystack_col)
-    if unmapped_roles:
-        raise UnmappedRoleError(unmapped_roles, skip_counts=dict(skip_counts))
     if not series:
-        raise ValueError(f"no historian samples for equipment {equipment_id} in window")
+        raise frame_builder_empty_error(equipment_id, skip_counts=dict(skip_counts))
     df = pd.DataFrame(series).sort_index()
     df = df[~df.index.duplicated(keep="last")]
     df.attrs.update(
@@ -734,6 +791,7 @@ def collect_pandas_fdd_rows(
     coverage: Counter[str] = Counter()
     error_messages: list[str] = []
     frame_skip_totals: Counter[str] = Counter()
+    role_map = load_role_id_to_haystack()
 
     for rule in rules_iter:
         rule_id = str(rule.get("rule_id") or "").strip()
@@ -772,6 +830,17 @@ def collect_pandas_fdd_rows(
                 out.append({**base, "pair_status": "no_pandas_function", "reason": ""})
                 coverage["no_pandas_function"] += 1
                 continue
+            unmapped_required = missing_required_roles_unmapped(rule, role_map=role_map)
+            if unmapped_required:
+                out.append(
+                    {
+                        **base,
+                        "pair_status": "unmapped_role",
+                        "reason": ", ".join(unmapped_required),
+                    }
+                )
+                coverage["unmapped_role"] += 1
+                continue
             try:
                 params = rule_params_from_registry(rule)
                 frame, skip_counts = equipment_frame_from_db(
@@ -800,6 +869,9 @@ def collect_pandas_fdd_rows(
             except Exception as exc:
                 msg = f"{rule_id}/{eid}: {exc}"
                 error_messages.append(msg)
+                extra_skips = getattr(exc, "skip_counts", None)
+                if isinstance(extra_skips, dict):
+                    frame_skip_totals.update(extra_skips)
                 out.append({**base, "pair_status": "error", "reason": str(exc)})
                 coverage["error"] += 1
                 continue
@@ -894,7 +966,9 @@ def capture_site(
     window_start = str(site.get("window_start") or site.get("start") or "").strip() or None
     window_end = str(site.get("window_end") or site.get("end") or "").strip() or None
 
-    counts_before = telemetry_row_counts(conn, building_id)
+    counts_before = telemetry_row_counts(
+        conn, building_id, sample_before=window_end
+    )
 
     run_body: dict[str, Any] = {
         "mode": "registry",
@@ -951,7 +1025,7 @@ def capture_site(
             pandas_max_rules=pandas_max_rules,
         )
 
-    counts_after = telemetry_row_counts(conn, building_id)
+    counts_after = telemetry_row_counts(conn, building_id, sample_before=we)
     sample_counts = [
         {"building_id": building_id, "table": table, "row_count": counts_after[table]}
         for table in TELEMETRY_TABLES

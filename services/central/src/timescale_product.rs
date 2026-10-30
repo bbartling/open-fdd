@@ -42,7 +42,7 @@ pub(crate) fn sql_root_for_registry() -> PathBuf {
     PathBuf::from("sql/fdd")
 }
 
-fn load_reg() -> Result<RuleRegistry> {
+pub(crate) fn load_reg() -> Result<RuleRegistry> {
     let root = sql_root();
     load_registry(&root).with_context(|| format!("load registry {}", root.display()))
 }
@@ -2235,7 +2235,7 @@ fn ts_key(ts: DateTime<Utc>) -> String {
     ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-async fn load_live_confirmed_fault(
+pub(crate) async fn load_live_confirmed_fault(
     tsdb: &Tsdb,
     reg: &RuleRegistry,
     rule: &RuleSpec,
