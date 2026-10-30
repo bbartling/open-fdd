@@ -136,6 +136,7 @@ def oracle_seed_frame_from_imperial_wide(frame: pd.DataFrame) -> pd.DataFrame:
     """Convert Wave-0 oracle CSV magnitudes (imperial) to metric-c-v2 rule storage."""
     out = _convert_imperial_wide_columns_to_storage(frame)
     _stamp_storage_role_units(out)
+    out.attrs["storage_values_converted"] = True
     return ensure_storage_frame(
         out,
         {"storage_abi": STORAGE_ABI_METRIC, "display_units": "imperial"},
@@ -152,10 +153,17 @@ def ensure_storage_frame(frame: pd.DataFrame, column_map: dict[str, Any] | None 
         raise ValueError(f"unsupported storage_abi {abi!r}")
     out.attrs["storage_abi"] = abi
     metadata = dict(column_map)
-    if not metadata.get("display_units"):
+    explicit_display = metadata.get("display_units")
+    if not explicit_display:
         metadata["display_units"] = "imperial"
     display_pref = normalize_display_units(metadata.get("display_units"))
-    if display_pref == "imperial" and not out.attrs.get("storage_values_converted"):
+    legacy_imperial_wide = (
+        isinstance(explicit_display, str)
+        and bool(str(explicit_display).strip())
+        and display_pref == "imperial"
+        and not out.attrs.get("storage_values_converted")
+    )
+    if legacy_imperial_wide:
         out = _convert_imperial_wide_columns_to_storage(out)
         _stamp_storage_role_units(out)
         out.attrs["storage_values_converted"] = True

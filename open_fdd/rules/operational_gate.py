@@ -238,10 +238,14 @@ def resolve_conditional(
         # Evaluate when fan is proven on OR duct static itself shows live pressure.
         # This catches high static while fan-status falsely reports off.
         fan, src = resolve_fan_running(df)
+        from open_fdd.rules.cookbook_catalog import _param_si_pressure_to_series
+
         try:
-            thr = float(params.get("pressure_on_min", 0.20) or 0.20)
+            thr = _param_si_pressure_to_series(
+                df, float(params.get("pressure_on_min", 0.20) or 0.20)
+            )
         except (TypeError, ValueError):
-            thr = 0.20
+            thr = _param_si_pressure_to_series(df, 0.20)
         if "duct-static-pressure" in df.columns and df["duct-static-pressure"].notna().any():
             press = pd.to_numeric(df["duct-static-pressure"], errors="coerce").fillna(0).abs() > thr
             if src.startswith("ungated"):

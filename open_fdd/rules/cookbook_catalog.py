@@ -76,7 +76,7 @@ SCHED247_CMD_ON_FRAC = 0.05
 
 def _pressure_on_mask(d: pd.DataFrame, p: dict) -> pd.Series | None:
     """True when a pressure sensor shows live operating pressure (equipment likely on)."""
-    thr = _f(p, "pressure_on_min", 0.20)
+    thr = _param_si_pressure_to_series(d, _f(p, "pressure_on_min", 0.20))
     for role in ("duct-static-pressure", "chw-diff-pressure", "hw-diff-pressure"):
         if role not in d.columns or not d[role].notna().any():
             continue
@@ -196,6 +196,17 @@ def _param_si_delta_temp_to_series(_d: pd.DataFrame, _role: str, delta_c: float)
 def _param_si_flow_to_series(_d: pd.DataFrame, value_lps: float) -> float:
     """Rule frames store canonical SI; flow parameters already use L/s."""
     return float(value_lps)
+
+
+def _param_si_pressure_to_series(d: pd.DataFrame, value_in_wc: float) -> float:
+    """Scale in. w.c. rule parameters when the frame is metric-c-v2 storage."""
+    from open_fdd.quality import _storage_si
+    from open_fdd.units.convert import PA_PER_IN_WC
+
+    v = float(value_in_wc)
+    if _storage_si(d):
+        return v * PA_PER_IN_WC
+    return v
 
 
 def _false(index) -> pd.Series:
@@ -957,7 +968,7 @@ def ahu_sat_dev(d, p, poll):
 
 def ahu_duct_high(d, p, poll):
     """Duct static above SP + margin. Gate (not equation) decides fan-vs-pressure active window."""
-    margin = _f(p, "duct_high_margin", 0.25)
+    margin = _param_si_pressure_to_series(d, _f(p, "duct_high_margin", 0.25))
     return (
         d["duct-static-pressure"].notna()
         & d["duct-static-pressure-sp"].notna()
@@ -988,7 +999,10 @@ def econ1(d, p, poll):
 
 
 def econ2(d, p, poll):
-    oat_hi = _f(p, "econ2_oat_hi", 63.0)
+    from open_fdd.quality import _storage_si
+
+    raw_oat_hi = _f(p, "econ2_oat_hi", 63.0)
+    oat_hi = (raw_oat_hi - 32.0) * (5.0 / 9.0) if _storage_si(d) and raw_oat_hi >= 30.0 else raw_oat_hi
     dmpr = _f(p, "econ2_damper", 0.42)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return d["outside-air-temp"].notna() & d["outside-air-damper"].notna() & (d["outside-air-temp"] > oat_hi) & (econ > dmpr)
