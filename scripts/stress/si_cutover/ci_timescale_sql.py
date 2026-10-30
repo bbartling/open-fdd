@@ -514,7 +514,7 @@ def p2_pair_for_si_row(
     rule_id: str,
     equipment_id: str,
     utc_day: str,
-    pandas_si_fault_seconds: float,
+    pandas_si_fault_seconds: float | None,
     pandas_si_missing: bool = False,
     sql_si_fault_seconds: float | None = None,
 ) -> dict[str, Any]:

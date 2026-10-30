@@ -717,8 +717,8 @@ def hydrate_w4c_p2_sql_si_from_timescale(
 ) -> tuple[list[str], list[str]]:
     """When Timescale is available, fill sql_si_fault_seconds for W4c-scoped P2 rows.
 
-    Returns (errors, notes). Under strict blocking W4c, infrastructure and missing SQL
-    rows are errors; otherwise non-fatal conditions are notes only.
+    Returns (errors, notes). Infrastructure failures and SQL errors are always
+    blocking P2 errors; under strict W4c a missing SQL row is an error too.
     """
     import os
 
@@ -740,11 +740,8 @@ def hydrate_w4c_p2_sql_si_from_timescale(
     notes: list[str] = []
 
     def hydrate_fail(msg: str) -> None:
-        """Under strict W4c, infrastructure/SQL failures are P2 errors (not notes)."""
-        if strict:
-            errors.append(msg)
-        else:
-            notes.append(msg)
+        """Infrastructure/SQL failures are blocking P2 errors."""
+        errors.append(msg)
 
     url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
     if not url:
@@ -816,15 +813,18 @@ def hydrate_w4c_p2_sql_si_from_timescale(
                     f"P2 hydrate_w4c {building_id}: sql_si errors: {'; '.join(sql_err[:3])}"
                 )
                 continue
-            sql_by_key = {
-                (
-                    str(r.get("rule_id")),
-                    str(r.get("utc_day")),
-                    str(r.get("equipment_id")),
-                ): float(r.get("fault_seconds", 0.0))
-                for r in sql_rows
-                if r.get("pair_status") == "computed" and r.get("utc_day")
-            }
+            sql_by_key: dict[tuple[str, str, str], float] = {}
+            for r in sql_rows:
+                if r.get("pair_status") != "computed" or not r.get("utc_day"):
+                    continue
+                key = (str(r.get("rule_id")), str(r.get("utc_day")), str(r.get("equipment_id")))
+                if r.get("fault_seconds") is None:
+                    hydrate_fail(
+                        f"P2 hydrate_w4c {key[0]}/{key[2]}/{key[1]}: "
+                        "computed sql_si row has no fault_seconds"
+                    )
+                    continue
+                sql_by_key[key] = float(r["fault_seconds"])
             updated: list[dict[str, Any]] = []
             for row in golden.get("p2_si_pairs") or []:
                 rid = str(row.get("rule_id") or "")
@@ -837,9 +837,10 @@ def hydrate_w4c_p2_sql_si_from_timescale(
                     str(row.get("equipment_id")),
                 )
                 if key in sql_by_key:
+                    pandas_si_fs: float | None
                     if row.get("pandas_si_missing") or row.get("pandas_si_fault_seconds") is None:
                         pandas_missing = True
-                        pandas_si_fs = 0.0
+                        pandas_si_fs = None
                     else:
                         pandas_missing = False
                         pandas_si_fs = float(row["pandas_si_fault_seconds"])

@@ -332,10 +332,19 @@ _CONVERTIBLE_KINDS = frozenset(
 
 
 def _convert_kind_for_param(branch_key: str, master_unit: str, master_kind: str) -> str:
-    """Prefer infer_kind for known units; fall back to declared registry kind when unknown."""
+    """Prefer infer_kind for known units; use the declared registry kind otherwise.
+
+    Named case: the unit is not inferable but the registry declares a kind. With
+    neither an inferable unit nor a declared kind the parameter is rejected.
+    """
     try:
         inferred = infer_kind(branch_key, master_unit)
-    except ValueError:
+    except ValueError as exc:
+        if not master_kind:
+            raise ValueError(
+                f"param {branch_key!r}: unit {master_unit!r} has no inferable kind "
+                "and the registry declares none"
+            ) from exc
         return master_kind
     if inferred in _CONVERTIBLE_KINDS:
         return inferred
