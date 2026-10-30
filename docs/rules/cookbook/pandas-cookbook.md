@@ -6,13 +6,16 @@ nav_order: 2
 
 # Pandas FDD Cookbook
 
+SI (metric-c-v2) is the sole storage and processing ABI. Engineers declare source units per point; the Timescale writer normalizes supported values once. Rule parameters use semantic kinds and SI units. Display preference conversion is presentation-only. See [unit contract](../../modeling/units.md). Cookbook equations and examples use SI processing values; generated parity and qualification remain pending.
+
+
 **Oracle / documentation catalog:** packaged as `open_fdd.rules` on PyPI (`pip install "open-fdd[oracle]"`) — **71** executable diagnostics. Source of truth: [`open_fdd/rules/cookbook_catalog.py`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py). Consumers pin the wheel rather than maintaining a second copy.
 
-This cookbook is **intentionally maintained**. Production FDD is **Timescale / PostgreSQL SQL** ([ADR-010](../../architecture/adr-010-timescale-hard-cutover.md); `sql_rules/registry.yaml`, **77** entries). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity. Soft-OPEN ≠ FQ.
+This cookbook is **intentionally maintained**. Production FDD is **Timescale / PostgreSQL SQL** ([ADR-010](../../architecture/adr-010-timescale-hard-cutover.md); `sql/fdd/registry.yaml`, **77** entries). Use this pandas catalog for notebooks, CSV exports, RCx studies, and SQL↔pandas parity. Soft-OPEN ≠ FQ.
 
-See also the [Timescale SQL cookbook](datafusion-sql-cookbook.html). FCU / `zone_other`: [FCU and zone_other rules](fcu-zone-other.html).
+See also the [Timescale SQL cookbook](sql-cookbook.html). FCU / `zone_other`: [FCU and zone_other rules](fcu-zone-other.html).
 
-**Updated:** 2026-10-15 · tip **3.6.14** · PyPI `open-fdd` **4.4.9**
+**Status:** W5d candidate documentation. This page makes no release-version, parity, or qualification claim.
 
 
 ---
@@ -95,21 +98,26 @@ Every validated rule carries a default `confirm_seconds` (usually **300**). At 6
 
 Sensor-sweep rules apply to **every modeled sensor** present on the equipment (not a single fixed point).
 
-**Sweep catalog (SV-RANGE / SV-FLATLINE / SV-STALE):** pandas iterates `SENSOR_LIMITS` in `open_fdd/rules/cookbook_catalog.py` — air/water temperatures, humidity (`outside-air-humidity`, `return-air-humidity`, `zone-air-humidity`, `mixed-air-humidity`, `supply-air-humidity`), and `duct-static-pressure` with per-role hard limits (for example OAT −60–130°F, zone/RA 40–100°F, MAT −20–110°F, SAT 30–150°F, CHWS 30–80°F, CHWR 30–90°F, HWS/HWR 40–220°F, RH 0–100 %, duct static −1–8 in.w.c.). `FLATLINE_SENSOR_ROLES` / stale AND use the same catalog **minus** duct static (pressure legitimately rests near zero when off). Status, command, setpoint, and mode points are **not** sweep targets (`is_expected_constant_role` / `sweep_assessable_role`). A mapped analog with **no declared unit** in `units_map` (package / binding metadata) is **not assessed** — the sweep skips it rather than inferring scale from magnitude.
+**Sweep catalog (SV-RANGE / SV-FLATLINE / SV-STALE):** pandas iterates `SENSOR_LIMITS` in `open_fdd/rules/cookbook_catalog.py` — air/water temperatures, humidity (`outside-air-humidity`, `return-air-humidity`, `zone-air-humidity`, `mixed-air-humidity`, `supply-air-humidity`), and `duct-static-pressure`. SI range endpoints derive from the declared source limits −60–130°F → −51.11–54.44°C (absolute temperature), −1–8 in.w.c. → −248.84–1990.72 Pa (pressure), and 0–100 %RH. Other thermal roles use role-specific values in the SI catalog. `FLATLINE_SENSOR_ROLES` / stale AND use the same catalog **minus** duct static (pressure legitimately rests near zero when off). Status, command, setpoint, and mode points are **not** sweep targets (`is_expected_constant_role` / `sweep_assessable_role`). A mapped analog with **no declared unit** in `units_map` (package / binding metadata) is **not assessed** — the sweep skips it rather than inferring scale from magnitude.
 
 ### SV-RANGE — Sensor out of hard range
-**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
-**Mode:** sensor sweep (applies to every modeled sensor present)  
-**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F, RH 0–100 %).  
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`
+**Mode:** sensor sweep (applies to every modeled sensor present)
+**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −51.11–54.44°C, SAT −1.11–65.56°C, CHWS −1.11–26.67°C, RH 0–100 %).
 **Default confirmation:** 300 s
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `range_scale_temperature` | Temp range scale | x | 1.0 | 0.5–2.0 |
-| `range_scale_humidity` | Humidity range scale | x | 1.0 | 0.5–2.0 |
-| `range_scale_pressure` | Pressure range scale | x | 1.0 | 0.5–2.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `range_scale_temperature` | `dimensionless` | Temp range scale | × | 1.0 | 0.5–2.0 |
+| `range_scale_humidity` | `dimensionless` | Humidity range scale | × | 1.0 | 0.5–2.0 |
+| `range_scale_pressure` | `dimensionless` | Pressure / duct-static range scale | × | 1.0 | 0.5–2.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
@@ -142,24 +150,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### SV-FLATLINE — Sensor flatline (stuck)
-**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
-**Mode:** sensor sweep (applies to every modeled sensor present)  
-**Equation:** Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.  
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`
+**Mode:** sensor sweep (applies to every modeled sensor present)
+**Equation:** Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.
 **Default confirmation:** 300 s
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `flatline_tol` | Flatline tolerance | °F | 0.1 | 0.02–1.0 |
-| `flatline_hours` | Flatline window | h | 1.0 | 0.5–8.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `flatline_tol` | `temperature_difference` | Flatline tolerance | °C | 0.055556 | 0.011111–0.555556 |
+| `flatline_hours` | `dimensionless` | Flatline window | h | 1.0 | 0.25–12.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     idx = d.index
-    tol = _f(p, "flatline_tol", 0.10)
+    tol = _f(p, "flatline_tol", 0.055556)
     hours = _f(p, "flatline_hours", 1.0)
     window = max(2, int(round(hours * 3600 / max(poll, 1))))
     mask = _false(idx)
@@ -182,19 +195,24 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### SV-SPIKE — Sensor rate-of-change spike
-**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
-**Mode:** sensor sweep (applies to every modeled sensor present)  
-**Equation:** Sample-to-sample jump exceeds the physical spike limit for the sensor type.  
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`
+**Mode:** sensor sweep (applies to every modeled sensor present)
+**Equation:** Sample-to-sample jump exceeds the physical spike limit for the sensor type.
 **Default confirmation:** 300 s
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `spike_scale` | Spike limit scale (global) | x | 1.0 | 0.25–3.0 |
-| `spike_scale_temperature` | Temp spike scale | x | 1.0 | 0.25–3.0 |
-| `spike_scale_humidity` | Humidity spike scale | x | 1.0 | 0.25–3.0 |
-| `spike_scale_pressure` | Pressure spike scale | x | 1.0 | 0.25–3.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `spike_scale_pressure` | `dimensionless` | Spike scale pressure | × | 1.0 | 0.25–4.0 |
+| `spike_scale_humidity` | `dimensionless` | Spike scale humidity | × | 1.0 | 0.25–4.0 |
+| `spike_scale_temperature` | `dimensionless` | Spike scale temperature | × | 1.0 | 0.25–4.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `spike_scale` | `dimensionless` | Spike limit scale (global) | × | 1.0 | 0.25–3.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
@@ -221,16 +239,19 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### SV-STALE — Stale data (no fresh samples)
-**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
-**Mode:** sensor sweep (applies to every modeled sensor present)  
-**Equation:** All modeled sensors unchanged over the stale window — data feed likely dropped.  
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`
+**Mode:** sensor sweep (applies to every modeled sensor present)
+**Equation:** All modeled sensors unchanged over the stale window — data feed likely dropped.
 **Default confirmation:** 300 s
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `stale_hours` | Stale window | h | 2.0 | 0.5–12.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `stale_hours` | `dimensionless` | Stale window | h | 2.0 | 0.5–12.0 |
+| `stale_tol` | `temperature_difference` | Stale tolerance | °C | 0.027778 | 0.0–0.555556 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
@@ -266,20 +287,21 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### SV-RATE — Context-aware sensor rate of change
-**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
-**Mode:** sensor sweep (applies to every modeled sensor present)  
-**Equation:** Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.  
+**Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`
+**Mode:** sensor sweep (applies to every modeled sensor present)
+**Equation:** Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.
 **Default confirmation:** 600 s
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `persistence_min` | Fault persistence | min | 10.0 | 5.0–60.0 |
-| `transition_window_min` | Transition window | min | 20.0 | 5.0–60.0 |
-| `max_gap_hours` | Max sample gap | h | 2.0 | 0.25–6.0 |
-| `design_flow` | Design flow (flow profiles) | cfm | 0.0 | 0.0–100000.0 |
-| `sensor_span` | Sensor span (flow/pressure) | eng | 0.0 | 0.0–100000.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `sensor_span` | `dimensionless` | Sensor span | unit | 100.0 | 1.0–500.0 |
+| `max_gap_hours` | `dimensionless` | Max sample gap | h | 1.0 | 0.1–12.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `persistence_min` | `duration_minutes` | Fault persistence | min | 10.0 | 5.0–60.0 |
+| `steady_fault_per_hour` | `temperature_rate` | Steady-state slew limit | degF_per_h | 6.0 | 1.0–60.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -296,23 +318,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ## Control-loop hunting
 
 ### PID-HUNT-1 — Suspected control-output hunting
-**Family:** `control` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`  
-**Mode:** control-output sweep (dampers, valves, speeds, heat/cool cmds)  
-**Equation:** Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).  
+**Family:** `control` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`
+**Mode:** control-output sweep (dampers, valves, speeds, heat/cool cmds)
+**Equation:** Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).
 **Default confirmation:** 0 s (rolling 1h window is its own persistence)
 
 **Optional roles:** `loop-enabled`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `change_deadband_pct` | Ignore changes below | % out | 1.0 | 0.0–10.0 |
-| `minimum_span_pct` | Minimum observed span | % out | 20.0 | 5.0–100.0 |
-| `total_variation_fault_pct` | Total travel threshold | %/h | 500.0 | 50.0–2000.0 |
-| `minimum_equivalent_cycles` | Min equivalent cycles | cyc/h | 2.5 | 0.5–20.0 |
-| `minimum_reversals` | Min direction reversals | count | 4 | 1–40 |
-| `minimum_coverage_pct` | Minimum data coverage | % | 80.0 | 25.0–100.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 0.0 | 0.0–3600.0 |
+| `window_hours` | `dimensionless` | Hunting lookback window | h | 1.0 | 0.25–4.0 |
+| `change_deadband_pct` | `percent` | Ignore changes below | % | 1.0 | 0.0–10.0 |
+| `minimum_span_pct` | `percent` | Minimum observed span | % | 20.0 | 5.0–100.0 |
+| `total_variation_fault_pct` | `percent` | Total variation fault threshold | % | 500.0 | 50.0–2000.0 |
+| `minimum_equivalent_cycles` | `count` | Min equivalent cycles | count | 2.5 | 0.5–10.0 |
+| `minimum_reversals` | `count` | Min direction reversals | count | 4.0 | 1.0–20.0 |
+| `minimum_coverage_pct` | `percent` | Min window sample coverage | % | 80.0 | 50.0–100.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 0  # rolling 1h window supplies persistence
@@ -326,7 +354,7 @@ def _pid_hunt_1(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         minimum_span_pct=_f(p, "minimum_span_pct", 20.0),
         total_variation_fault_pct=_f(p, "total_variation_fault_pct", 500.0),
         minimum_equivalent_cycles=_f(p, "minimum_equivalent_cycles", 2.5),
-        minimum_reversals=int(_f(p, "minimum_reversals", 4)),
+        minimum_reversals=int(_f(p, "minimum_reversals", 4.0)),
         minimum_coverage_pct=_f(p, "minimum_coverage_pct", 80.0),
     )
     mask = _false(d.index)
@@ -357,10 +385,10 @@ fallbacks (`mix_tol`, `duct_static_err`, …), and suspend faulting for `mode_de
 minutes after an AHU operating-state change:
 
 ```python
-MIX_TOL = 1.15
-SUPPLY_TOL = 1.15
+MIX_TOL = 0.638889
+SUPPLY_TOL = 0.638889
 AHU_MIN_OA_DPR = 0.05
-DELTA_SUPPLY_FAN = 0.55
+DELTA_SUPPLY_FAN = 0.305556
 FAN_ON_MIN = 0.01
 
 def _f(p: dict, key: str, default: float) -> float:
@@ -418,21 +446,25 @@ def _gl36_fault(raw: pd.Series, d: pd.DataFrame, p: dict, poll: float) -> pd.Ser
 ```
 
 ### FC1 — Duct static below SP at full fan (GL36 A)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** DSP < DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** DSP < DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
 **Default confirmation:** 300 s
 
 **Required roles:** `duct-static-pressure`, `duct-static-pressure-sp`, `fan-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_dsp` | Duct-static error εDSP (GL36 default 0.1 in.w.c.) | in. w.c. | 0.12 | 0.0–0.5 |
-| `eps_vfd_spd` | VFD speed error εVFDSPD (GL36 default 5%) | frac | 0.13 | 0.0–0.5 |
-| `duct_static_err` | Legacy duct-static error (sets εDSP) | in. w.c. | 0.12 | 0.0–0.5 |
-| `fan_hi` | Legacy fan-high threshold (sets εVFDSPD) | frac | 0.87 | 0.5–1.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_dsp` | `air_pressure` | Duct-static error epsDSP (GL36 default 0.1 Pa) | Pa | 29.8608 | 0.0–124.42 |
+| `eps_vfd_spd` | `fraction` | VFD speed error epsVFDSPD (GL36 default 5%) | frac | 0.13 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
@@ -454,22 +486,27 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC2 — MAT below OAT/RAT envelope (GL36 B)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** MATavg + εMAT < min(RATavg − εRAT, OATavg − εOAT).  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** MATavg + εMAT < min(RATavg − εRAT, OATavg − εOAT).
 **Default confirmation:** 600 s
 
 **Required roles:** `mixed-air-temp`, `outside-air-temp`, `return-air-temp`, `fan-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_rat` | RAT sensor error εRAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `eps_rat` | `temperature_difference` | RAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -498,22 +535,27 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC3 — MAT above OAT/RAT envelope (GL36 C)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** MATavg − εMAT > max(RATavg + εRAT, OATavg + εOAT).  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** MATavg − εMAT > max(RATavg + εRAT, OATavg + εOAT).
 **Default confirmation:** 600 s
 
 **Required roles:** `mixed-air-temp`, `outside-air-temp`, `return-air-temp`, `fan-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_rat` | RAT sensor error εRAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_rat` | `temperature_difference` | RAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `fan_on_min` | `fraction` | Fan ON fraction threshold | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -536,18 +578,24 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC4 — PID hunting (operating-state oscillation)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** ΔOS > ΔOSmax during the prior 60-minute moving window.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** ΔOS > ΔOSmax during the prior 60-minute moving window.
 **Default confirmation:** 3600 s
 
 **Required roles:** `outside-air-damper`, `cooling-valve`, `fan-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `delta_os_max` | Max mode changes/hr ΔOSmax (GL36 default 7) | count | 5 | 1–30 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 3600.0 | 0.0–3600.0 |
+| `delta_os_max` | `count` | Max operating-state entries per hour | count | 5.0 | 1.0–30.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 3600
@@ -583,23 +631,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC5 — SAT cold when heating commanded (GL36 D)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 **Default confirmation:** 600 s
 
 **Required roles:** `discharge-air-temp`, `mixed-air-temp`, `fan-cmd`, `heating-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `htg_on_min` | Heating-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `htg_on_min` | `fraction` | Heating-command ON threshold | frac | 0.01 | 0.0–0.25 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -625,23 +678,26 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC6 — Estimated OA fraction mismatch
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** |RATavg−OATavg| ≥ ΔTmin AND |estimated OA% − design min OA%| > εF.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** |RATavg−OATavg| ≥ ΔTmin AND |estimated OA% − design min OA%| > εF.
 **Default confirmation:** 600 s
 
 **Required roles:** `mixed-air-temp`, `outside-air-temp`, `return-air-temp`, `vav-total-airflow`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_airflow` | Airflow error εF (GL36 default 30%) | frac | 0.15 | 0.05–1.0 |
-| `delta_t_min` | Minimum \|OAT−RAT\| ΔTmin (GL36 default 10°F) | °F | 5.0 | 0.0–30.0 |
-| `airflow_err` | Legacy OA-fraction error (sets εF) | frac | 0.15 | 0.05–1.0 |
-| `oat_rat_delta_min` | Legacy OAT/RAT guard (sets ΔTmin) | °F | 5.0 | 0.0–30.0 |
-| `min_cfm_design` | Design min OA CFM | cfm | 5000 | 500–20000 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `oat_rat_delta_min` | `temperature_difference` | Min |OAT-RAT| | °C | 2.777777778 | 0.0–16.666666667 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `eps_airflow` | `fraction` | Airflow fraction eps | frac | 0.15 | 0.05–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `min_L/s_design` | `volumetric_flow` | Design minimum outdoor airflow | L/s | 2359.73725 | 0.0–94389.49 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -649,12 +705,12 @@ FAULT_CONFIRM_SECONDS = 600
 def fc6(d, p, poll):
     airflow_err = _gl36_value(p, "eps_airflow", "airflow_err", 0.15)
     oat_rat_min = _gl36_value(p, "delta_t_min", "oat_rat_delta_min", 5.0)
-    design_cfm = _f(p, "min_cfm_design", 5000.0)
+    design_min_l_s = _f(p, "min_L/s_design", 2359.73725)
     fan_on = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
     fan = _fan(d)
     rat_minus_oat = (d["return-air-temp"] - d["outside-air-temp"]).abs()
     pct_oa = ((d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan)).clip(lower=0)
-    perc_oamin = design_cfm / d["vav-total-airflow"].replace(0, np.nan)
+    perc_oamin = design_min_l_s / d["vav-total-airflow"].replace(0, np.nan)
     oa_err = (pct_oa - perc_oamin).abs()
     raw = (
         d["mixed-air-temp"].notna() & d["outside-air-temp"].notna() & d["return-air-temp"].notna() & d["vav-total-airflow"].notna()
@@ -667,21 +723,25 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC7 — SAT low with full heating (GL36 E)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.
 **Default confirmation:** 600 s
 
 **Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`, `fan-cmd`, `heating-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.0 | 0.0–10.0 |
-| `sat_err` | Legacy SAT error (sets εSAT) | °F | 1.0 | 0.0–10.0 |
-| `htg_full_min` | Full-heating threshold (GL36 99%) | frac | 0.9 | 0.5–1.0 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `htg_full_min` | `fraction` | Full-heating threshold (GL36 99%) | frac | 0.9 | 0.5–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -703,24 +763,30 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC8 — SAT/MAT mismatch in economizer (GL36 F)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** |SATavg − ΔTSF − MATavg| > √(εSAT² + εMAT²) in OS#2.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** |SATavg − ΔTSF − MATavg| > √(εSAT² + εMAT²) in OS#2.
 **Default confirmation:** 600 s
 
 **Required roles:** `discharge-air-temp`, `mixed-air-temp`, `outside-air-damper`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `supply_tol` | Legacy SAT tolerance master (sets εSAT) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `supply_tol` | `temperature_difference` | Supply tol (alias eps_sat) | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+| `econ_min_pos` | `fraction` | Economizer OA damper minimum (fraction) | frac | 0.05 | 0.0–0.5 |
+| `clg_inactive_max` | `fraction` | Cooling valve inactive max (fraction) | frac | 0.1 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -746,23 +812,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC9 — OAT too warm for free cooling (GL36 G)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** OATavg − εOAT > SATSP − ΔTSF + εSAT in OS#2.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** OATavg − εOAT > SATSP − ΔTSF + εSAT in OS#2.
 **Default confirmation:** 600 s
 
 **Required roles:** `outside-air-temp`, `discharge-air-temp-sp`, `outside-air-damper`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+| `econ_min_pos` | `fraction` | Economizer OA damper minimum (fraction) | frac | 0.05 | 0.0–0.5 |
+| `clg_inactive_max` | `fraction` | Cooling valve inactive max (fraction) | frac | 0.1 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -787,22 +859,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC10 — OAT/MAT mismatch + mech cooling (GL36 H)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** |MATavg − OATavg| > √(εMAT² + εOAT²) in OS#3.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** |MATavg − OATavg| > √(εMAT² + εOAT²) in OS#3.
 **Default confirmation:** 600 s
 
 **Required roles:** `mixed-air-temp`, `outside-air-temp`, `outside-air-damper`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `clg_on_min` | `fraction` | Cooling valve ON minimum (fraction) | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -824,23 +902,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC11 — OAT/MAT mismatch economizer-only (GL36 I)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** OATavg + εOAT < SATSP − ΔTSF − εSAT in OS#3.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** OATavg + εOAT < SATSP − ΔTSF − εSAT in OS#3.
 **Default confirmation:** 600 s
 
 **Required roles:** `outside-air-temp`, `discharge-air-temp-sp`, `outside-air-damper`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+| `clg_on_min` | `fraction` | Cooling valve ON minimum (fraction) | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -864,25 +948,31 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC12 — SAT above blend in cooling (GL36 J)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.
 **Default confirmation:** 600 s
 
 **Required roles:** `discharge-air-temp`, `mixed-air-temp`, `outside-air-damper`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `supply_tol` | Legacy SAT tolerance master (sets εSAT) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `supply_tol` | `temperature_difference` | Supply tol (alias eps_sat) | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+| `clg_on_min` | `fraction` | Cooling valve ON minimum (fraction) | frac | 0.01 | 0.0–0.5 |
+| `econ_min_pos` | `fraction` | Economizer OA damper minimum (fraction) | frac | 0.05 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -909,22 +999,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC13 — SAT above SP at full cooling (GL36 K)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 **Default confirmation:** 600 s
 
 **Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`, `outside-air-damper`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.0 | 0.0–10.0 |
-| `sat_err` | Legacy SAT error (sets εSAT) | °F | 1.0 | 0.0–10.0 |
-| `clg_full_min` | Full-cooling threshold (GL36 99%) | frac | 0.01 | 0.5–1.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_min_pos` | `fraction` | Econ damper min pos | frac | 0.05 | 0.0–0.5 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `clg_full_min` | `fraction` | Cooling valve full min | frac | 0.9 | 0.5–1.0 |
+| `oa_damper_econ_low` | `fraction` | OA damper economizer low | frac | 0.05 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -933,7 +1029,7 @@ def fc13(d, p, poll):
     sat_err = _gl36_value(p, "eps_sat", "sat_err", 1.0)
     econ_min = _f(p, "econ_min_pos", AHU_MIN_OA_DPR)
     econ_full = _f(p, "econ_full_open", 0.9)
-    clg_full = _f(p, "clg_full_min", 0.01)
+    clg_full = _f(p, "clg_full_min", 0.9)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     clg = norm_cmd(d["cooling-valve"]).fillna(0)
     raw = (
@@ -947,24 +1043,31 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC14 — CHW coil ΔT when inactive (GL36 L)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inactive.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inactive.
 **Default confirmation:** 600 s
 
 **Required roles:** `cooling-coil-entering-temp`, `cooling-coil-leaving-temp`, `outside-air-damper`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_ccet` | Cooling-coil entering sensor error εCCET | °F | 1.15 | 0.0–10.0 |
-| `eps_cclt` | Cooling-coil leaving sensor error εCCLT | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
-| `htg_on_min` | Heating-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `clg_on_min` | `fraction` | Cooling on min | frac | 0.01 | 0.0–1.0 |
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `htg_on_min` | `fraction` | Heating on min | frac | 0.01 | 0.0–1.0 |
+| `eps_cclt` | `temperature_difference` | CHW coil leaving eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_ccet` | `temperature_difference` | CHW coil entering eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_min_pos` | `fraction` | Econ damper min pos | frac | 0.05 | 0.0–0.5 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta | °C | 0.305555556 | 0.0–2.777777778 |
+| `clg_inactive_max` | `fraction` | Cooling inactive max | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -974,7 +1077,7 @@ def fc14(d, p, poll):
     eps_cclt = _gl36_value(p, "eps_cclt", "mix_tol", MIX_TOL)
     delta_tsf = _f(p, "delta_supply_fan", DELTA_SUPPLY_FAN)
     econ_min = _f(p, "econ_min_pos", AHU_MIN_OA_DPR)
-    clg_inactive = _f(p, "clg_inactive_max", 0.1)
+    clg_inactive = _f(p, "clg_inactive_max", 0.01)
     htg_on = _f(p, "htg_on_min", 0.01)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     clg = norm_cmd(d["cooling-valve"]).fillna(0)
@@ -994,25 +1097,32 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### FC15 — HW coil ΔT when inactive (GL36 M)
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inactive.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inactive.
 **Default confirmation:** 600 s
 
 **Required roles:** `heating-coil-entering-temp`, `heating-coil-leaving-temp`, `outside-air-damper`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_hcet` | Heating-coil entering sensor error εHCET | °F | 1.15 | 0.0–10.0 |
-| `eps_hclt` | Heating-coil leaving sensor error εHCLT | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
-| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `htg_on_min` | `fraction` | Heating on min | frac | 0.01 | 0.0–1.0 |
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_hclt` | `temperature_difference` | HW coil leaving eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_hcet` | `temperature_difference` | HW coil entering eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_min_pos` | `fraction` | Econ damper min pos | frac | 0.05 | 0.0–0.5 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta | °C | 0.305555556 | 0.0–2.777777778 |
+| `clg_on_min` | `fraction` | Cooling on min | frac | 0.01 | 0.0–1.0 |
+| `clg_inactive_max` | `fraction` | Cooling inactive max | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -1023,7 +1133,7 @@ def fc15(d, p, poll):
     delta_tsf = _f(p, "delta_supply_fan", DELTA_SUPPLY_FAN)
     econ_min = _f(p, "econ_min_pos", AHU_MIN_OA_DPR)
     econ_full = _f(p, "econ_full_open", 0.9)
-    clg_inactive = _f(p, "clg_inactive_max", 0.1)
+    clg_inactive = _f(p, "clg_inactive_max", 0.01)
     clg_on = _f(p, "clg_on_min", 0.01)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     clg = norm_cmd(d["cooling-valve"]).fillna(0)
@@ -1041,23 +1151,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### AHU-SATDEV — SAT deviation from setpoint
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** abs(SAT − SAT SP) > 5°F.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** abs(SAT − SAT SP) > 2.78Δ°C.
 **Default confirmation:** 600 s
 
 **Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `sat_dev_err` | SAT deviation | °F | 5.0 | 1.0–15.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `sat_dev_err` | `temperature_difference` | SAT deviation | Δ°C | 2.777778 | 0.555556–8.333333 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
 def ahu_sat_dev(d, p, poll):
-    err = _f(p, "sat_dev_err", 5.0)
+    err = _f(p, "sat_dev_err", 2.777778)
     return d["discharge-air-temp"].notna() & d["discharge-air-temp-sp"].notna() & (d["discharge-air-temp"].sub(d["discharge-air-temp-sp"]).abs() > err)
 
 d = apply_fault(d, ahu_sat_dev(d, params, POLL_SECONDS))
@@ -1065,25 +1180,30 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### AHU-DUCTHI — Duct static pressure high
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).
 **Default confirmation:** 300 s
 
 **Required roles:** `duct-static-pressure`, `duct-static-pressure-sp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `duct_high_margin` | High margin | in. w.c. | 0.25 | 0.05–1.0 |
-| `pressure_on_min` | Pressure-on evidence | in. w.c. | 0.2 | 0.05–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `duct_high_margin` | `air_pressure` | High margin | Pa | 62.21 | 12.442–248.84 |
+| `pressure_on_min` | `air_pressure` | Pressure-on evidence | Pa | 49.768 | 12.442–248.84 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def ahu_duct_high(d, p, poll):
     """Duct static above SP + margin. Gate (not equation) decides fan-vs-pressure active window."""
-    margin = _f(p, "duct_high_margin", 0.25)
+    margin = _f(p, "duct_high_margin", 62.21)
     return (
         d["duct-static-pressure"].notna()
         & d["duct-static-pressure-sp"].notna()
@@ -1095,23 +1215,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### AHU-SIMUL — Heating and cooling simultaneous
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Heating valve > 10% AND cooling valve > 10% at once.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Heating valve > 10% AND cooling valve > 10% at once.
 **Default confirmation:** 300 s
 
 **Required roles:** `heating-valve`, `cooling-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `valve_open_pct` | Valve open threshold | frac | 0.1 | 0.05–0.5 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `valve_open_pct` | `fraction` | Valve open threshold | frac | 0.1 | 0.05–0.5 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def ahu_simul_heat_cool(d, p, poll):
-    thr = _f(p, "valve_open_pct", 0.10)
+    thr = _f(p, "valve_open_pct", 0.1)
     htg = norm_cmd(d["heating-valve"]).fillna(0)
     clg = norm_cmd(d["cooling-valve"]).fillna(0)
     return (htg > thr) & (clg > thr)
@@ -1121,19 +1246,21 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### OAT-METEO — BAS outdoor-air sensor vs Open-Meteo
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** BAS OAT sensor differs from Open-Meteo dry bulb by more than 5°F after an as-of web alignment.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** BAS OAT sensor differs from Open-Meteo dry bulb by more than 2.78Δ°C after an as-of web alignment.
 **Default confirmation:** 900 s
 
 **Required roles:** `outside-air-temp`, `web-outside-air-temp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `oat_err` | Max OAT disagreement | °F | 5.0 | 2.0–20.0 |
-| `web_cadence_seconds` | Web weather cadence | sec | 1200 | 300–7200 |
-| `web_asof_margin_seconds` | Web as-of margin | sec | 300 | 0–1800 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `oat_err` | `temperature_difference` | OAT vs meteo tolerance | °C | 2.777778 | 1.111111–11.111111 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900 | 0–3600 |
+| `web_cadence_seconds` | `duration_seconds` | Web weather cadence | s | 1200 | 300–7200 |
+| `web_asof_margin_seconds` | `duration_seconds` | Web as-of margin | s | 300 | 0–1800 |
+
 
 Web OAT is carried forward to each BAS timestamp. Samples whose last web value is older than `web_cadence_seconds + web_asof_margin_seconds` are not assessed (not fault time). Local `outside-air-temp` uses the binding marked `primary_reference` when set ([provider point overlay](../../modeling/provider-point-overlay.html)).
 
@@ -1149,23 +1276,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], poll_seconds=POLL_SECONDS, 
 ```
 
 ### ECON-1 — Economizer stuck closed
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on, OA damper < 5%, OAT > 55°F (should be economizing).  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Fan on, OA damper < 5%, OAT > 12.78°C (should be economizing).
 **Default confirmation:** 600 s
 
 **Required roles:** `fan-cmd`, `outside-air-damper`, `outside-air-temp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ1_oat_min` | Favorable OAT | °F | 55.0 | 45.0–70.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `econ1_oat_min` | `absolute_temperature` | Favorable OAT | °C | 12.777778 | 7.222222–21.111111 |
+| `econ1_damper_max` | `fraction` | Stuck-closed damper frac | frac | 0.05 | 0.0–0.2 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
 def econ1(d, p, poll):
-    oat_min = _f(p, "econ1_oat_min", 55.0)
+    oat_min = _f(p, "econ1_oat_min", 12.777778)
     fan = _fan(d)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return (fan > FAN_ON_MIN) & d["outside-air-damper"].notna() & d["outside-air-temp"].notna() & (econ < 0.05) & (d["outside-air-temp"] > oat_min)
@@ -1175,24 +1307,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### ECON-2 — Economizing when outdoor unfavorable
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** OAT > 63°F AND OA damper > 42% (should be at minimum).  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** OAT > 17.22°C AND OA damper > 42% (should be at minimum).
 **Default confirmation:** 300 s
 
 **Required roles:** `outside-air-temp`, `outside-air-damper`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ2_oat_hi` | OAT high cutoff | °F | 63.0 | 55.0–80.0 |
-| `econ2_damper` | Damper open frac | frac | 0.42 | 0.2–0.9 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `econ2_oat_hi` | `absolute_temperature` | OAT high cutoff | °C | 17.222222 | 12.777778–26.666667 |
+| `econ2_damper` | `fraction` | Damper open frac | frac | 0.42 | 0.2–0.9 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def econ2(d, p, poll):
-    oat_hi = _f(p, "econ2_oat_hi", 63.0)
+    oat_hi = _f(p, "econ2_oat_hi", 17.222222)
     dmpr = _f(p, "econ2_damper", 0.42)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return d["outside-air-temp"].notna() & d["outside-air-damper"].notna() & (d["outside-air-temp"] > oat_hi) & (econ > dmpr)
@@ -1202,20 +1339,26 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### ECON-3 — Mech cooling without integrated economizer
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Web free-cooling opportunity: 60°F ≤ dry-bulb < 72°F AND dewpoint < 60°F (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Web free-cooling opportunity: 15.56°C ≤ dry-bulb < 22.22°C AND dewpoint < 15.56°C (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.
 **Default confirmation:** 300 s
 
 **Required roles:** `outside-air-damper`, `cooling-valve` (plus web OAT/RH or dewpoint columns)
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ3_db_min` | Free-cool OA dry-bulb min | °F | 60.0 | 50.0–68.0 |
-| `econ3_db_max` | Free-cool OA dry-bulb max | °F | 72.0 | 65.0–80.0 |
-| `econ3_dp_max` | Free-cool OA dew point max | °F | 60.0 | 45.0–68.0 |
-| `econ3_damper_hi` | Integrated economizer damper | frac | 0.9 | 0.5–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `econ3_db_min` | `absolute_temperature` | Free-cool OA dry-bulb min | °C | 15.555556 | 10.0–20.0 |
+| `econ3_db_max` | `absolute_temperature` | Free-cool OA dry-bulb max | °C | 22.222222 | 18.333333–26.666667 |
+| `econ3_dp_max` | `absolute_temperature` | Free-cool OA dew point max | °C | 15.555556 | 7.222222–20.0 |
+| `econ3_damper_hi` | `fraction` | Integrated economizer damper | frac | 0.9 | 0.5–1.0 |
+| `clg_open_min` | `fraction` | Cooling valve open minimum | frac | 0.01 | 0.0–0.5 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
@@ -1226,7 +1369,7 @@ def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> 
     """Fault: mech cooling while free cooling available but OA damper not integrated-open.
 
     Weather: strict web dry-bulb + dewpoint (calculated from web RH if needed).
-    Band: 60 ≤ DB < 72°F and DP < 60°F. Damper must be ≥ integrated threshold (default 90%).
+    Band: 15.555556°C ≤ DB < 22.222222°C and DP < 15.555556°C. Damper must be ≥ integrated threshold (default 90%).
     """
     del wx_ok  # web presence is resolved explicitly below
     if not {"outside-air-damper", "cooling-valve"}.issubset(d.columns):
@@ -1236,10 +1379,10 @@ def econ3_compute(d: pd.DataFrame, p: dict, poll: float, wx_ok: bool = True) -> 
         d.attrs["econ3_weather_source"] = src
         return _false(d.index)
 
-    db_min = _f(p, "econ3_db_min", 60.0)
-    db_max = _f(p, "econ3_db_max", 72.0)
-    dp_max = _f(p, "econ3_dp_max", 60.0)
-    damper_hi = _f(p, "econ3_damper_hi", 0.90)
+    db_min = _f(p, "econ3_db_min", 15.555556)
+    db_max = _f(p, "econ3_db_max", 22.222222)
+    dp_max = _f(p, "econ3_dp_max", 15.555556)
+    damper_hi = _f(p, "econ3_damper_hi", 0.9)
 
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     clg = norm_cmd(d["cooling-valve"]).fillna(0)
@@ -1256,17 +1399,23 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 
 ### ECON-4 — Low estimated OA fraction
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on, abs(RAT−OAT) > 2.2°F, estimated OA fraction < 21%.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Fan on, abs(RAT−OAT) > 1.22Δ°C, estimated OA fraction < 21%.
 **Default confirmation:** 600 s
 
 **Required roles:** `mixed-air-temp`, `return-air-temp`, `outside-air-temp`, `fan-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `oa_min_pct` | Min OA fraction | % | 21.0 | 5.0–40.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `oa_min_pct` | `percent` | Min OA fraction | % | 21.0 | 5.0–40.0 |
+| `oat_rat_delta_min` | `temperature_difference` | Min |RAT−OAT| for OA-fraction estimate  | Δ°C | 1.222222 | 0.277778–5.555556 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -1285,23 +1434,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### ECON-5 — Preheat over-conditioning
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Preheat leaving air > 2.2°F above target while preheat active.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Preheat leaving air > 1.22Δ°C above target while preheat active.
 **Default confirmation:** 600 s
 
 **Required roles:** `preheat-leaving-temp`, `discharge-air-temp-sp`, `outside-air-temp`, `heating-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `preheat_over_f` | Preheat over ΔT | °F | 2.2 | 0.5–8.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `preheat_over` | `temperature_difference` | Preheat over ΔT | Δ°C | 1.222222 | 0.277778–4.444444 |
+| `htg_open_min` | `fraction` | Heating valve open minimum | frac | 0.01 | 0.0–0.5 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
 def econ5(d, p, poll):
-    over = _f(p, "preheat_over_f", 2.2)
+    over = _f(p, "preheat_over", 1.222222)
     return (
         d["preheat-leaving-temp"].notna() & d["discharge-air-temp-sp"].notna() & d["outside-air-temp"].notna() & d["heating-valve"].notna()
         & (norm_cmd(d["heating-valve"]).fillna(0) > 0.01)
@@ -1316,8 +1471,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### ECON-6 — Economizing in freezing weather
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Web dry-bulb < 25°F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Web dry-bulb < -3.89°C AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.
 **Default confirmation:** 600 s
 
 **Required roles:** `outside-air-damper`
@@ -1326,16 +1481,21 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ6_oat_max_f` | Winter OAT ceiling | °F | 25.0 | 15.0–40.0 |
-| `econ6_damper_max` | Winter min-OA damper | frac | 0.25 | 0.05–0.5 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `econ6_oat_max` | `absolute_temperature` | Winter OAT ceiling | °C | -3.888889 | -9.444444–4.444444 |
+| `econ6_damper_max` | `fraction` | Winter min-OA damper | frac | 0.25 | 0.05–0.5 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
 def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Fault: OA damper above winter min-OA ceiling while web OAT < 25°F."""
+    """Fault: OA damper above winter min-OA ceiling while web OAT < -3.888889°C."""
     del poll
     if "outside-air-damper" not in d.columns:
         return _false(d.index)
@@ -1343,7 +1503,7 @@ def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     d.attrs["econ6_weather_source"] = src
     if db is None:
         return _false(d.index)
-    oat_max = _f(p, "econ6_oat_max_f", 25.0)
+    oat_max = _f(p, "econ6_oat_max", -3.888889)
     damper_max = _f(p, "econ6_damper_max", 0.25)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return (db.notna() & (db < oat_max) & (econ > damper_max)).fillna(False)
@@ -1353,8 +1513,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### ECON-7 — Economizer OK but not economizing
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a 35°F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 60°F DB (MECH-OAT-1) and mech + integrated economizer in the 60–72°F band (ECON-3). All thresholds are imperial sliders.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Economizer-OK web weather: dew point < 15.56°C AND dry-bulb < 22.22°C (above a 1.67°C freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 15.56°C DB (MECH-OAT-1) and mech + integrated economizer in the 15.56–22.22°C band (ECON-3). All thresholds are SI parameters.
 **Default confirmation:** 600 s
 
 **Required roles:** `outside-air-damper`
@@ -1363,12 +1523,18 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ7_db_min` | Econ-OK dry-bulb floor (freeze guard) | °F | 35.0 | 20.0–50.0 |
-| `econ7_db_max` | Econ-OK dry-bulb max | °F | 72.0 | 65.0–80.0 |
-| `econ7_dp_max` | Econ-OK dew point max | °F | 60.0 | 45.0–68.0 |
-| `econ7_damper_min` | Economizing damper threshold | frac | 0.5 | 0.2–0.9 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `econ7_db_min` | `absolute_temperature` | Econ-OK dry-bulb floor (freeze guard) | °C | 1.666667 | -6.666667–10.0 |
+| `econ7_db_max` | `absolute_temperature` | Econ-OK dry-bulb max | °C | 22.222222 | 18.333333–26.666667 |
+| `econ7_dp_max` | `absolute_temperature` | Econ-OK dew point max | °C | 15.555556 | 7.222222–20.0 |
+| `econ7_damper_min` | `fraction` | Economizing damper threshold | frac | 0.5 | 0.2–0.9 |
+| `clg_open_min` | `fraction` | Cooling valve open minimum | frac | 0.05 | 0.0–0.5 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
@@ -1376,11 +1542,11 @@ FAULT_CONFIRM_SECONDS = 600
 def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     """Fault: economizer-OK web weather with cooling demand, but OA damper not economizing.
 
-    Economizer OK: web dew point < 60°F AND dry-bulb < 72°F (above a freeze-guard
-    floor, default 35°F). Dewpoint comes from the web sensor or is calculated from
+    Economizer OK: web dew point < 15.555556°C AND dry-bulb < 22.222222°C (above a freeze-guard
+    floor, default 1.666667°C). Dewpoint comes from the web sensor or is calculated from
     web DB+RH. Cooling demand: cooling valve open OR proven DX/chiller cooling.
-    Expected operation: economizer-only below 60°F DB (see MECH-OAT-1) and
-    mech + integrated economizer in the 60–72°F band (see ECON-3).
+    Expected operation: economizer-only below 15.555556°C DB (see MECH-OAT-1) and
+    mech + integrated economizer in the 15.555556–22.222222°C band (see ECON-3).
     """
     del poll
     if "outside-air-damper" not in d.columns:
@@ -1390,10 +1556,10 @@ def econ7_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     if db is None or dp is None:
         return _false(d.index)
 
-    db_min = _f(p, "econ7_db_min", 35.0)
-    db_max = _f(p, "econ7_db_max", 72.0)
-    dp_max = _f(p, "econ7_dp_max", 60.0)
-    damper_min = _f(p, "econ7_damper_min", 0.50)
+    db_min = _f(p, "econ7_db_min", 1.666667)
+    db_max = _f(p, "econ7_db_max", 22.222222)
+    dp_max = _f(p, "econ7_dp_max", 15.555556)
+    damper_min = _f(p, "econ7_damper_min", 0.5)
 
     econ_ok = free_cool_opportunity_mask(db, dp, db_min=db_min, db_max=db_max, dp_max=dp_max)
 
@@ -1418,30 +1584,32 @@ d = apply_fault(d, econ7_compute(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFIRM_SECONDS // POLL_SECONDS))
 ```
 
-### MECH-OAT-1 — Mechanical cooling below 60°F web OAT
-**Family:** `ahu` · **Equipment:** `ahu`, `chiller`, `heatpump`  
-**Equation:** Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 60°F is outside the free-cool + integrated economizer band.  
+### MECH-OAT-1 — Mechanical cooling below 15.56°C web OAT
+**Family:** `ahu` · **Equipment:** `ahu`, `chiller`, `heatpump`
+**Equation:** Proven DX/chiller mechanical cooling while web dry-bulb < 15.56°C. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 15.56°C is outside the free-cool + integrated economizer band.
 **Default confirmation:** 600 s
 
 **Optional roles:** `web-outside-air-temp`, `compressor-status`, `chiller-status`, `chw-pump-status`, `dx-cool-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `mech_oat_max_f` | Mech-cool OAT ceiling | °F | 60.0 | 45.0–65.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `mech_oat_max` | `absolute_temperature` | Mech-cool OAT ceiling | °C | 15.555556 | 7.222222–18.333333 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
 def mech_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Fault: proven mechanical cooling while web dry-bulb < 60°F."""
+    """Fault: proven mechanical cooling while web dry-bulb < 15.555556°C."""
     del poll
     db, _dp, src = resolve_web_drybulb_dewpoint(d)
     d.attrs["mech_oat1_weather_source"] = src
     if db is None:
         return _false(d.index)
-    oat_max = _f(p, "mech_oat_max_f", 60.0)
+    oat_max = _f(p, "mech_oat_max", 15.555556)
     run, kind = mechanical_proof_mask(d)
     d.attrs["mech_oat1_proof"] = kind
     if not kind:
@@ -1453,29 +1621,34 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### RESET-1 — SAT reset not tracking outdoor air
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on AND |SAT SP − (52 + 0.25×(OAT−65))| > 3°F.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Fan on AND |SAT SP − (11.111111 + 0.25×(OAT−18.333333))| > 1.67Δ°C.
 **Default confirmation:** 900 s
 
 **Required roles:** `discharge-air-temp-sp`, `outside-air-temp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `reset_err_f` | Reset error | °F | 3.0 | 0.5–10.0 |
-| `reset_sat_at_65` | SAT SP at 65°F OAT | °F | 52.0 | 45.0–65.0 |
-| `reset_slope` | Reset slope | °F/°F | 0.25 | 0.05–1.0 |
-| `reset_oat_ref` | Reset OAT ref | °F | 65.0 | 50.0–80.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `reset_err` | `temperature_difference` | Reset error | Δ°C | 1.666667 | 0.277778–5.555556 |
+| `reset_sat_at_65` | `absolute_temperature` | SAT SP at 18.333333°C OAT | °C | 11.111111 | 7.222222–18.333333 |
+| `reset_slope` | `fraction` | Reset slope | frac | 0.25 | 0.05–1.0 |
+| `reset_oat_ref` | `absolute_temperature` | Reset OAT ref | °C | 18.333333 | 10.0–26.666667 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
 
 def reset1(d, p, poll):
-    err = _f(p, "reset_err_f", 3.0)
-    intercept = _f(p, "reset_sat_at_65", 52.0)
+    err = _f(p, "reset_err", 1.666667)
+    intercept = _f(p, "reset_sat_at_65", 11.111111)
     slope = _f(p, "reset_slope", 0.25)
-    oat_ref = _f(p, "reset_oat_ref", 65.0)
+    oat_ref = _f(p, "reset_oat_ref", 18.333333)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
     sat_sp = pd.to_numeric(d["discharge-air-temp-sp"], errors="coerce")
     expected = intercept + slope * (oat - oat_ref)
@@ -1491,8 +1664,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### CMD-1 — Fan cmd/status mismatch
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan command and proven status disagree.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Fan command and proven status disagree.
 **Default confirmation:** 600 s
 
 **Required roles:** `fan-cmd`, `fan-status`
@@ -1513,25 +1686,30 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### OA-1 — Low OA fraction
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Estimated OA fraction < 15% with adequate OAT/RAT split.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Estimated OA fraction < 15% with adequate OAT/RAT split.
 **Default confirmation:** 900 s
 
 **Required roles:** `mixed-air-temp`, `return-air-temp`, `outside-air-temp`, `fan-status`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `min_oa_frac` | Min OA fraction | frac | 0.15 | 0.05–0.4 |
-| `oat_rat_guard` | Min abs(RAT−OAT) guard | °F | 2.2 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `min_oa_frac` | `fraction` | Min OA fraction | frac | 0.15 | 0.05–0.4 |
+| `oat_rat_guard` | `temperature_difference` | OAT/RAT guard | Δ°C | 1.222222 | 0.277778–3.333333 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
 
 def oa1(d, p, poll):
     min_oa = _f(p, "min_oa_frac", 0.15)
-    guard = _f(p, "oat_rat_guard", 2.2)
+    guard = _f(p, "oat_rat_guard", 1.222222)
     oa_frac = (d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan)
     fan = _fan(d)
     return (
@@ -1544,23 +1722,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### DMP-1 — OA damper leakage
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Damper ≤ 5% but MAT tracks OAT within 2°F — leaking OA damper.  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Damper ≤ 5% but MAT tracks OAT within 1.11Δ°C — leaking OA damper.
 **Default confirmation:** 900 s
 
 **Required roles:** `outside-air-temp`, `mixed-air-temp`, `outside-air-damper`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `leak_delta` | Leak ΔT | °F | 2.0 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `leak_delta` | `temperature_difference` | Leak ΔT | Δ°C | 1.111111 | 0.277778–3.333333 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
 
 def dmp1(d, p, poll):
-    leak_delta = _f(p, "leak_delta", 2.0)
+    leak_delta = _f(p, "leak_delta", 1.111111)
     dmp = norm_cmd(d["outside-air-damper"]).fillna(0)
     return d["outside-air-temp"].notna() & d["mixed-air-temp"].notna() & (dmp <= 0.05) & (d["mixed-air-temp"].sub(d["outside-air-temp"]).abs() < leak_delta)
 
@@ -1569,8 +1752,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VLV-1 — Cooling valve leakage
-**Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Cooling valve ≤ 5% AND (SAT < sat_sp − sat_err OR SAT < MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).  
+**Family:** `ahu` · **Equipment:** `ahu`
+**Equation:** Cooling valve ≤ 5% AND (SAT < sat_sp − sat_err OR SAT < MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).
 **Default confirmation:** 900 s
 
 **Required roles:** `discharge-air-temp`, `discharge-air-temp-sp`, `cooling-valve`
@@ -1579,10 +1762,15 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `sat_err` | SAT vs SP leak ΔT | °F | 2.0 | 0.5–8.0 |
-| `mat_leak_delta` | SAT vs MAT leak ΔT | °F | 2.0 | 0.5–12.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `sat_err` | `temperature_difference` | SAT vs SP leak ΔT | Δ°C | 1.111111 | 0.277778–4.444444 |
+| `mat_leak_delta` | `temperature_difference` | SAT vs MAT leak ΔT | Δ°C | 1.111111 | 0.277778–6.666667 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -1592,8 +1780,8 @@ def vlv1(d, p, poll):
 
     Fan proven-on is enforced by the VLV-1 operational gate when fan_status/fan_cmd exist.
     """
-    sat_err = _f(p, "sat_err", 2.0)
-    mat_delta = _f(p, "mat_leak_delta", 2.0)
+    sat_err = _f(p, "sat_err", 1.111111)
+    mat_delta = _f(p, "mat_leak_delta", 1.111111)
     clg = norm_cmd(d["cooling-valve"]).fillna(0)
     closed = clg <= 0.05
     sat = pd.to_numeric(d["discharge-air-temp"], errors="coerce")
@@ -1612,20 +1800,25 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ## VAV terminals
 
 ### VAV-1 — Zone comfort band
-**Family:** `vav` · **Equipment:** `vav`, `zone_other`, `heatpump`, `baseboard`  
-**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 70–75°F) during occupied hours when an occupancy column or Overview calendar is set (`require_occupied`, default on). Without modeled occupancy or a site schedule, the rule is **not assessed** (`NOT_ASSESSED_NO_OCCUPANCY`, 0 fault hours). The comfort band is evaluated in the zone point's declared unit (°F or °C). Unoccupied setback stays on VAV-2.  
+**Family:** `vav` · **Equipment:** `vav`, `zone_other`, `heatpump`, `baseboard`
+**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 21.11–23.89°C) during occupied hours when an occupancy column or Overview calendar is set (`require_occupied`, default on). Without modeled occupancy or a site schedule, the rule is **not assessed** (`NOT_ASSESSED_NO_OCCUPANCY`, 0 fault hours). The comfort band is evaluated in the zone point's declared unit (°C after ingest normalization). Unoccupied setback stays on VAV-2.
 **Default confirmation:** 900 s
 
-**Required roles:** `zone-air-temp`  
+**Required roles:** `zone-air-temp`
 **Optional roles:** `occupied`, `occ-mode`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `zone_lo` | Zone low | °F | 70.0 | 55.0–72.0 |
-| `zone_hi` | Zone high | °F | 75.0 | 72.0–85.0 |
-| `require_occupied` | Require occupied | bool | 1.0 | 0.0–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `zone_t_lo` | `absolute_temperature` | Zone low | °C | 21.111111111 | 12.777777778–22.222222222 |
+| `zone_t_hi` | `absolute_temperature` | Zone high | °C | 23.888888889 | 22.222222222–29.444444444 |
+| `require_occupied` | `boolean` | Require occupied | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -1641,23 +1834,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VAV-2 — Night setback miss
-**Family:** `vav` · **Equipment:** `vav`, `zone`  
-**Equation:** Unoccupied AND zone temp > setback_hi (default 68°F) — heating setback not taken.  
+**Family:** `vav` · **Equipment:** `vav`, `zone`
+**Equation:** Unoccupied AND zone temp > setback_hi (default 20°C) — heating setback not taken.
 **Default confirmation:** 900 s
 
 **Required roles:** `zone-air-temp`, `occupied`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `setback_hi` | Setback high | °F | 68.0 | 55.0–72.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `setback_hi` | `absolute_temperature` | Setback high | °C | 20.0 | 12.777777778–22.222222222 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900 | 0–3600 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
 
 def vav2(d, p, poll):
-    hi = _f(p, "setback_hi", 68.0)
+    hi = _f(p, "setback_hi", 20.0)
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     return zt.notna() & _unoccupied_mask(d) & (zt > hi)
 
@@ -1666,27 +1864,32 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VAV-3 — Excessive reheat during warm weather
-**Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Air flowing AND OAT > 78°F AND reheat valve > 52%.  
+**Family:** `vav` · **Equipment:** `vav`
+**Equation:** Air flowing AND OAT > 25.56°C AND reheat valve > 52%.
 **Default confirmation:** 300 s
 
 **Required roles:** `outside-air-temp`, `reheat-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `reheat_oat` | Warm OAT | °F | 78.0 | 65.0–90.0 |
-| `reheat_pct` | Reheat frac | frac | 0.52 | 0.1–1.0 |
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `reheat_oat` | `absolute_temperature` | Warm OAT | °C | 25.555555556 | 18.333333333–32.222222222 |
+| `reheat_pct` | `fraction` | Reheat frac | frac | 0.52 | 0.1–1.0 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def vav3(d, p, poll):
-    oat_hi = _f(p, "reheat_oat", 78.0)
+    oat_hi = _f(p, "reheat_oat", 25.555555556)
     reheat_thr = _f(p, "reheat_pct", 0.52)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798675)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     return _vav_air_on(d, flow_min) & d["outside-air-temp"].notna() & (d["outside-air-temp"] > oat_hi) & (reheat > reheat_thr)
 
@@ -1695,19 +1898,24 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VAV-4 — Damper stuck at full open
-**Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Air flowing AND damper > 97.5% sustained across the window.  
+**Family:** `vav` · **Equipment:** `vav`
+**Equation:** Air flowing AND damper > 97.5% sustained across the window.
 **Default confirmation:** 900 s
 
 **Required roles:** `damper`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `full_open_pct` | Full open frac | frac | 0.975 | 0.8–1.0 |
-| `sustain_hours` | Sustain window | h | 1.5 | 0.5–6.0 |
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `full_open_pct` | `fraction` | Full open frac | frac | 0.975 | 0.8–1.0 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+| `sustain_hours` | `dimensionless` | Sustain window | h | 1.5 | 0.5–6.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -1715,7 +1923,7 @@ FAULT_CONFIRM_SECONDS = 900
 def vav4(d, p, poll):
     full_open = _f(p, "full_open_pct", 0.975)
     hours = _f(p, "sustain_hours", 1.5)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798675)
     roll = max(2, int(round(hours * 3600 / max(poll, 1))))
     dmp = norm_cmd(d["damper"]).fillna(0)
     return (
@@ -1728,8 +1936,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VAV-5 — Airflow sensor bias
-**Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Airflow > 50 cfm while damper < 10% (implausible flow).  
+**Family:** `vav` · **Equipment:** `vav`
+**Equation:** Airflow > 23.597 L/s while damper < 10% (implausible flow).
 **Default confirmation:** 900 s
 
 **Required roles:** `zone-airflow`, `damper`
@@ -1750,24 +1958,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VAV-6 — Reheat when cooling available
-**Family:** `vav` · **Equipment:** `vav`  
-**Equation:** OAT < 65°F AND reheat valve > 25% (optional cooling-available must be true when mapped).  
+**Family:** `vav` · **Equipment:** `vav`
+**Equation:** OAT < 18.33°C AND reheat valve > 25% (optional cooling-available must be true when mapped).
 **Default confirmation:** 900 s
 
 **Required roles:** `outside-air-temp`, `reheat-valve`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `free_cool_oat` | Free-cool OAT | °F | 65.0 | 45.0–75.0 |
-| `reheat_pct` | Reheat frac | frac | 0.25 | 0.05–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `free_cool_oat` | `absolute_temperature` | Free-cool OAT | °C | 18.333333333 | 7.222222222–23.888888889 |
+| `reheat_pct` | `fraction` | Reheat frac | frac | 0.25 | 0.05–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
 
 def vav6(d, p, poll):
-    oat_hi = _f(p, "free_cool_oat", 65.0)
+    oat_hi = _f(p, "free_cool_oat", 18.333333333)
     reheat_thr = _f(p, "reheat_pct", 0.25)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
@@ -1781,19 +1994,24 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VAV-REHEAT — Reheat valve stuck / no temp rise
-**Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or failed reheat valve/coil.  
+**Family:** `vav` · **Equipment:** `vav`
+**Equation:** Air flowing AND reheat valve > 30% AND box discharge temp rises < 1.67Δ°C above duct inlet (air from AHU) — stuck or failed reheat valve/coil.
 **Default confirmation:** 900 s
 
 **Required roles:** `reheat-valve`, `vav-discharge-air-temp`, `vav-inlet-air-temp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `reheat_cmd` | Reheat open frac | frac | 0.3 | 0.1–1.0 |
-| `min_rise` | Min temp rise | °F | 3.0 | 0.5–15.0 |
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `reheat_cmd` | `fraction` | Reheat open frac | frac | 0.3 | 0.1–1.0 |
+| `min_rise` | `temperature_difference` | Min temp rise | °C | 1.666666667 | 0.277777778–8.333333333 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -1805,9 +2023,9 @@ def vav_reheat_stuck(d, p, poll):
     leaving the box after the reheat coil. Reheat open + air flowing + no rise → stuck /
     failed reheat valve or coil. Fully computed from VAV-local sensors.
     """
-    cmd_thr = _f(p, "reheat_cmd", 0.30)
-    min_rise = _f(p, "min_rise", 3.0)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    cmd_thr = _f(p, "reheat_cmd", 0.3)
+    min_rise = _f(p, "min_rise", 1.666666667)
+    flow_min = _f(p, "flow_on_min", 11.798675)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     rise = d["vav-discharge-air-temp"] - d["vav-inlet-air-temp"]
     return (
@@ -1821,18 +2039,20 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VAV-AHU-LEAVE — VAV leave vs parent AHU SAT (fedBy)
-**Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Air flowing AND |VAV discharge − parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.  
+**Family:** `vav` · **Equipment:** `vav`
+**Equation:** Air flowing AND |VAV discharge − parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.
 **Default confirmation:** 900 s
 
 **Required roles:** `vav-discharge-air-temp`, `ahu-discharge-air-temp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `delta_f` | Leave Δ vs AHU SAT | °F | 8.0 | 2.0–25.0 |
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `delta` | `temperature_difference` | Leave Δ vs AHU SAT | °C | 4.444444444 | 1.111111111–13.888888889 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -1843,8 +2063,8 @@ def vav_vs_ahu_leave(d, p, poll):
     Requires topology enrich: ``ahu_sat`` copied from parent AHU onto the VAV frame.
     Without ``ahu_sat``, the rule is SKIPPED_MISSING_ROLES by the engine.
     """
-    band = _f(p, "delta_f", 8.0)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    band = _f(p, "delta", 4.444444444)
+    flow_min = _f(p, "flow_on_min", 11.798675)
     leave = pd.to_numeric(d["vav-discharge-air-temp"], errors="coerce")
     ahu = pd.to_numeric(d["ahu-discharge-air-temp"], errors="coerce")
     return (
@@ -1859,20 +2079,26 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### VAV-7 — Min airflow / fixed high flow
-**Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.  
+**Family:** `vav` · **Equipment:** `vav`
+**Equation:** Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.
 **Default confirmation:** 900 s
 
 **Required roles:** `zone-airflow`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
-| `fixed_flow_max_std` | Fixed-flow max std | cfm | 15.0 | 1.0–80.0 |
-| `fixed_flow_min_mean` | Fixed-flow min mean | cfm | 200.0 | 50.0–2000.0 |
-| `high_min_flow_sp` | High min-flow SP | cfm | 250.0 | 50.0–2000.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `high_min_flow_sp` | `volumetric_flow` | High min-flow SP | L/s | 117.98675 | 23.59735–943.894 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+| `fixed_flow_hours` | `dimensionless` | Fixed-flow rolling window | h | 1.0 | 0.25–6.0 |
+| `fixed_flow_max_std` | `volumetric_flow` | Fixed-flow max std | L/s | 7.079205 | 0.471947–37.75576 |
+| `fixed_flow_min_mean` | `volumetric_flow` | Fixed-flow min mean | L/s | 94.3894 | 23.59735–943.894 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -1887,17 +2113,17 @@ def vav7(d, p, poll):
     flow = pd.to_numeric(d["zone-airflow"], errors="coerce") if "zone-airflow" in d.columns else None
     if flow is None:
         return under
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798675)
     air_on = _vav_air_on(d, flow_min)
     window = max(6, int(round(3600.0 / max(float(poll), 1.0))))
     roll_std = flow.rolling(window, min_periods=max(3, window // 2)).std()
     roll_mean = flow.rolling(window, min_periods=max(3, window // 2)).mean()
-    max_std = _f(p, "fixed_flow_max_std", 15.0)
-    min_mean = _f(p, "fixed_flow_min_mean", 200.0)
+    max_std = _f(p, "fixed_flow_max_std", 7.079205)
+    min_mean = _f(p, "fixed_flow_min_mean", 94.3894)
     fixed_high = air_on & flow.notna() & (roll_std < max_std) & (roll_mean > min_mean)
     high_min = _false(d.index)
     if "min-flow-sp" in d.columns:
-        high_min_thr = _f(p, "high_min_flow_sp", 250.0)
+        high_min_thr = _f(p, "high_min_flow_sp", 117.98675)
         high_min = (
             air_on
             & d["min-flow-sp"].notna()
@@ -1912,17 +2138,17 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 ## Fan coil / zone_other
 
-Nine `FCU-*` rules. This section sits in the same family order as the [DataFusion SQL cookbook](datafusion-sql-cookbook.html#fan-coil--zone_other): after VAV terminals, before central plant. Each rule below uses the same equation, parameter table, and confirmation seconds as that page. Family `fcu`, priority P1, `dashboard_wired: false`. Registry and pandas equipment kinds are `zone_other`, `general`, and `ahu`. Haystack stacks markers on one equip (`equip` + `fanCoilUnit` + `zone`) and on each point (`zone` + `air` + `temp`, valve cmds, and the other roles below). Open-FDD consumes that as a stamp plus mapped roles. A sensor-owning master stamps `canonical_kind` `zone_other` (`equipType` `zone_other`, `zone`, `fcu`, `fanCoil`, or a standalone-DDC alias). A follower without its own zone sensor is resolved kind `general`. A fan coil's stamp stays `zone_other`. Kind `ahu` is on the list so a stamped air handler that carries these roles can run the family. The equipment id is only the historian key. Stamps and the °F / °C pass-through trap: [FCU and zone_other rules](fcu-zone-other.html).
+Nine `FCU-*` rules. This section sits in the same family order as the [PostgreSQL SQL cookbook](sql-cookbook.html#fan-coil--zone_other): after VAV terminals, before central plant. Each rule below uses the same equation, parameter table, and confirmation seconds as that page. Family `fcu`, priority P1, `dashboard_wired: false`. Registry and pandas equipment kinds are `zone_other`, `general`, and `ahu`. Haystack stacks markers on one equip (`equip` + `fanCoilUnit` + `zone`) and on each point (`zone` + `air` + `temp`, valve cmds, and the other roles below). Open-FDD consumes that as a stamp plus mapped roles. A sensor-owning master stamps `canonical_kind` `zone_other` (`equipType` `zone_other`, `zone`, `fcu`, `fanCoil`, or a standalone-DDC alias). A follower without its own zone sensor is resolved kind `general`. A fan coil's stamp stays `zone_other`. Kind `ahu` is on the list so a stamped air handler that carries these roles can run the family. The equipment id is only the historian key. Stamps and the SI unit contract: [FCU and zone_other rules](fcu-zone-other.html).
 
 **Parity:** `sql_screening`. These pages document the tip predicates. They do not promote the family. Soft-OPEN closes only after tip and field stress on issue-mapped gates (mask and duration versus the pandas oracle). Cookbook CI and unit fixtures are not that gate. This docs change does not add a stress-script stub.
 
-Commands accept 0–1 or 0–100 (`> 1.0` divides by 100). Valve-shut tests use a fixed `0.05`. CO₂ below `300` ppm does not fault. Fan proof prefers status, with normalized `fan_cmd > 0.10` when status is null. DataFusion treats non-null `fan_status` as on above `0.05`. Pandas `as_bool` treats non-null numeric `fan-status` as on above `0.5`. That cut is part of why the family stays `sql_screening`.
+Commands accept 0–1 or 0–100 (`> 1.0` divides by 100). Valve-shut tests use a fixed `0.05`. CO₂ below `300` ppm does not fault. Fan proof prefers status, with normalized `fan_cmd > 0.10` when status is null. PostgreSQL SQL treats non-null `fan_status` as on above `0.05`. Pandas `as_bool` treats non-null numeric `fan-status` as on above `0.5`. That cut is part of why the family stays `sql_screening`.
 
 Six duration rules (`FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`) confirm for **900 s**. `FCU-SENSOR-NULL`, `FCU-DEADBAND`, and `FCU-MODE-CYCLE` confirm for **0 s**.
 
-DataFusion files `sql_rules/fcu_*.sql` emit `fault_hours`. The six duration files share a normalized CTE and a consecutive streak: `{{CONFIRM_ROWS}}` = ceil(`confirm_seconds` / poll seconds), minimum 1, then hours = confirmed rows × `{{POLL_SECONDS}} / 3600`. Pandas functions below (`open_fdd.rules.cookbook_catalog`) return a raw mask; `confirm_fault` returns that mask unchanged when `confirm_seconds` is 0. The `confirm_min` slider default is `confirm_seconds / 60` after catalog load.
+PostgreSQL SQL files `sql_rules/fcu_*.sql` emit `fault_hours`. The six duration files share a normalized CTE and a consecutive streak: `{{CONFIRM_ROWS}}` = ceil(`confirm_seconds` / poll seconds), minimum 1, then hours = confirmed rows × `{{POLL_SECONDS}} / 3600`. Pandas functions below (`open_fdd.rules.cookbook_catalog`) return a raw mask; `confirm_fault` returns that mask unchanged when `confirm_seconds` is 0. The `confirm_min` slider default is `confirm_seconds / 60` after catalog load.
 
-SQL registry `optional_roles` also name columns the shared CTE selects (the other valve, dampers, CO₂) when that rule's predicate does not test them. Pandas reads only the roles listed on each rule. A package that maps every **required** role plus fan proof can run both engines. Missing SQL-only optional columns are NULL in DataFusion. Role map for later tip stress: [zone terminals]({{ site.baseurl }}/modeling/zone-terminals/) and [SQL rules → Haystack]({{ site.baseurl }}/modeling/sql-rules-haystack-map.html).
+SQL registry `optional_roles` also name columns the shared CTE selects (the other valve, dampers, CO₂) when that rule's predicate does not test them. Pandas reads only the roles listed on each rule. A package that maps every **required** role plus fan proof can run both engines. Missing SQL-only optional columns are NULL in PostgreSQL SQL. Role map for later tip stress: [zone terminals]({{ site.baseurl }}/modeling/zone-terminals/) and [SQL rules → Haystack]({{ site.baseurl }}/modeling/sql-rules-haystack-map.html).
 
 ```python
 def _fcu_fan_on(d: pd.DataFrame) -> pd.Series:
@@ -1939,17 +2165,18 @@ def _fcu_fan_on(d: pd.DataFrame) -> pd.Series:
 ```
 
 ### FCU-SENSOR-NULL — Missing FCU zone sensor
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Own zone setpoint is present, and zone temperature is null for at least 90% of those rows (`null_fraction`).  
-**Default confirmation:** 0 s  
-**Required roles (both engines):** pandas `zone-air-temp-sp` → SQL `zone_air_temp_sp`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** Own zone setpoint is present, and zone temperature is null for at least 90% of those rows (`null_fraction`).
+**Default confirmation:** 0 s
+**Required roles (both engines):** pandas `zone-air-temp-sp` → SQL `zone_air_temp_sp`
 **Optional roles (both engines):** pandas `zone-air-temp` → SQL `zone_t`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `null_fraction` | Null fraction | frac | 0.90 | 0.50–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `null_fraction` | `fraction` | Null fraction | frac | 0.9 | 0.5–1 |
+
 
 If `zone-air-temp` is not a column, the mask is all false (same outcome as the SQL rewrite to zero hours when `zone_t` is absent).
 
@@ -1963,7 +2190,7 @@ def fcu_sensor_null(d, p, poll):
     sp = pd.to_numeric(d["zone-air-temp-sp"], errors="coerce")
     eligible = sp.notna()
     null_fraction = float(zone[eligible].isna().mean()) if eligible.any() else 0.0
-    return eligible & zone.isna() & (null_fraction >= _f(p, "null_fraction", 0.90))
+    return eligible & zone.isna() & (null_fraction >= _f(p, "null_fraction", 0.9))
 
 d = apply_fault(d, fcu_sensor_null(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(
@@ -1972,19 +2199,20 @@ d["fault_confirmed"] = confirm_fault(
 ```
 
 ### FCU-HTG-COIL — FCU heating coil under-delivery
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, heating valve ≥ 80% (`valve_open`), and discharge air − zone temperature < 5.4°F (`coil_delta_f`).  
-**Default confirmation:** 900 s  
-**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`  
-**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** Fan on, heating valve ≥ 80% (`valve_open`), and discharge air − zone temperature < 3Δ°C (`coil_delta`).
+**Default confirmation:** 900 s
+**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`
 **SQL registry also optional** (shared CTE; pandas predicate does not read them): `clg_valve_pct`, `damper_cmd`, `damper_pct`, `zone_co2`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `valve_open` | Valve open threshold | frac | 0.80 | 0.50–1.0 |
-| `coil_delta_f` | Minimum heating rise | °F | 5.4 | 1.0–20.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `valve_open` | `fraction` | Valve open threshold | frac | 0.8 | 0.5–1 |
+| `coil_delta` | `temperature_difference` | Minimum heating rise | °C | 3.0 | 0.555555556–11.111111111 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -1994,7 +2222,7 @@ def fcu_htg_coil(d, p, poll):
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta_f", 5.4))
+    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.8)) & (rise < _f(p, "coil_delta", 3.0))
 
 d = apply_fault(d, fcu_htg_coil(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(
@@ -2003,18 +2231,19 @@ d["fault_confirmed"] = confirm_fault(
 ```
 
 ### FCU-CLG-COIL — FCU cooling coil under-delivery
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, cooling valve ≥ 80% (`valve_open`), heating valve ≤ 0.05, and discharge air − zone temperature ≥ 0.  
-**Default confirmation:** 900 s  
-**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `cooling-valve`, `heating-valve` → SQL `sat`, `zone_t`, `clg_valve_pct`, `htg_valve_pct`  
-**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** Fan on, cooling valve ≥ 80% (`valve_open`), heating valve ≤ 0.05, and discharge air − zone temperature ≥ 0.
+**Default confirmation:** 900 s
+**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `cooling-valve`, `heating-valve` → SQL `sat`, `zone_t`, `clg_valve_pct`, `htg_valve_pct`
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`
 **SQL registry also optional** (shared CTE; pandas predicate does not read them): `damper_cmd`, `damper_pct`, `zone_co2`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `valve_open` | Valve open threshold | frac | 0.80 | 0.50–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `valve_open` | `fraction` | Valve open threshold | frac | 0.8 | 0.5–1 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -2027,7 +2256,7 @@ def fcu_clg_coil(d, p, poll):
     )
     return (
         _fcu_fan_on(d) & cool.notna() & heat.notna()
-        & (cool >= _f(p, "valve_open", 0.80)) & (heat <= 0.05) & (rise >= 0)
+        & (cool >= _f(p, "valve_open", 0.8)) & (heat <= 0.05) & (rise >= 0)
     )
 
 d = apply_fault(d, fcu_clg_coil(d, params, POLL_SECONDS))
@@ -2037,18 +2266,19 @@ d["fault_confirmed"] = confirm_fault(
 ```
 
 ### FCU-VALVE-PASS-HTG — FCU heating valve passing
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, both valves ≤ 0.05, and discharge air − zone temperature > 5.4°F (`pass_delta_f`).  
-**Default confirmation:** 900 s  
-**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`  
-**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** Fan on, both valves ≤ 0.05, and discharge air − zone temperature > 3Δ°C (`pass_delta`).
+**Default confirmation:** 900 s
+**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`
 **SQL registry also optional** (shared CTE; pandas predicate does not read them): `damper_cmd`, `damper_pct`, `zone_co2`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `pass_delta_f` | Passing temperature rise | °F | 5.4 | 1.0–20.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `pass_delta` | `temperature_difference` | Passing temperature rise | °C | 3.0 | 0.555555556–11.111111111 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -2061,7 +2291,7 @@ def fcu_valve_pass_htg(d, p, poll):
     )
     return (
         _fcu_fan_on(d) & heat.notna() & cool.notna()
-        & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta_f", 5.4))
+        & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta", 3.0))
     )
 
 d = apply_fault(d, fcu_valve_pass_htg(d, params, POLL_SECONDS))
@@ -2071,18 +2301,19 @@ d["fault_confirmed"] = confirm_fault(
 ```
 
 ### FCU-VALVE-PASS-CLG — FCU cooling valve passing
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, both valves ≤ 0.05, and zone temperature − discharge air > 5.4°F (`pass_delta_f`).  
-**Default confirmation:** 900 s  
-**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`  
-**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** Fan on, both valves ≤ 0.05, and zone temperature − discharge air > 3Δ°C (`pass_delta`).
+**Default confirmation:** 900 s
+**Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`
 **SQL registry also optional** (shared CTE; pandas predicate does not read them): `damper_cmd`, `damper_pct`, `zone_co2`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `pass_delta_f` | Passing temperature drop | °F | 5.4 | 1.0–20.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `pass_delta` | `temperature_difference` | Passing temperature drop | °C | 3.0 | 0.555555556–11.111111111 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -2095,7 +2326,7 @@ def fcu_valve_pass_clg(d, p, poll):
     )
     return (
         _fcu_fan_on(d) & heat.notna() & cool.notna()
-        & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta_f", 5.4))
+        & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta", 3.0))
     )
 
 d = apply_fault(d, fcu_valve_pass_clg(d, params, POLL_SECONDS))
@@ -2105,19 +2336,20 @@ d["fault_confirmed"] = confirm_fault(
 ```
 
 ### FCU-DAMPER-POS — FCU damper command/position mismatch
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, damper command ≥ 15% (`command_min`), and command − feedback > 0.15 (`position_error`). Feedback above command is not a fault.  
-**Default confirmation:** 900 s  
-**Required roles (both engines):** pandas `damper-cmd`, `damper` → SQL `damper_cmd`, `damper_pct`  
-**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** Fan on, damper command ≥ 15% (`command_min`), and command − feedback > 0.15 (`position_error`). Feedback above command is not a fault.
+**Default confirmation:** 900 s
+**Required roles (both engines):** pandas `damper-cmd`, `damper` → SQL `damper_cmd`, `damper_pct`
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`
 **SQL registry also optional** (shared CTE; pandas predicate does not read them): `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`, `zone_co2`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `command_min` | Minimum damper command | frac | 0.15 | 0.0–1.0 |
-| `position_error` | Position error | frac | 0.15 | 0.05–0.50 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `command_min` | `fraction` | Minimum command | frac | 0.15 | 0–1 |
+| `position_error` | `fraction` | Position error | frac | 0.15 | 0.05–0.5 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -2138,19 +2370,20 @@ d["fault_confirmed"] = confirm_fault(
 ```
 
 ### FCU-CO2-DAMPER — FCU high CO₂ with low outdoor-air command
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, zone CO₂ > 1000 ppm (`co2_high_ppm`) and CO₂ ≥ 300 ppm, and damper command < 10% (`damper_low`).  
-**Default confirmation:** 900 s  
-**Required roles (both engines):** pandas `zone-co2`, `damper-cmd` → SQL `zone_co2`, `damper_cmd`  
-**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** Fan on, zone CO₂ > 1000 ppm (`co2_high_ppm`) and CO₂ ≥ 300 ppm, and damper command < 10% (`damper_low`).
+**Default confirmation:** 900 s
+**Required roles (both engines):** pandas `zone-co2`, `damper-cmd` → SQL `zone_co2`, `damper_cmd`
+**Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`
 **SQL registry also optional** (shared CTE; pandas predicate does not read them): `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`, `damper_pct`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `co2_high_ppm` | High CO₂ | ppm | 1000 | 600–2000 |
-| `damper_low` | Low damper command | frac | 0.10 | 0.0–0.50 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `co2_high_ppm` | `dimensionless` | High CO2 | ppm | 1000 | 600–2000 |
+| `damper_low` | `fraction` | Low damper command | frac | 0.1 | 0–0.5 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -2162,7 +2395,7 @@ def fcu_co2_damper(d, p, poll):
         _fcu_fan_on(d)
         & (co2 > _f(p, "co2_high_ppm", 1000.0))
         & (co2 >= 300.0)
-        & (cmd < _f(p, "damper_low", 0.10))
+        & (cmd < _f(p, "damper_low", 0.1))
     )
 
 d = apply_fault(d, fcu_co2_damper(d, params, POLL_SECONDS))
@@ -2172,19 +2405,20 @@ d["fault_confirmed"] = confirm_fault(
 ```
 
 ### FCU-DEADBAND — FCU heat/cool deadband collapse
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Cooling setpoint − heating setpoint < 1°C (`deadband_c`). Both roles stay site-native Celsius.  
-**Default confirmation:** 0 s  
-**Required roles (both engines):** pandas `cooling-sp`, `heating-sp` → SQL `cooling_sp`, `heating_sp`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** Cooling setpoint − heating setpoint < 1°C (`deadband`). Both roles stay site-native Celsius.
+**Default confirmation:** 0 s
+**Required roles (both engines):** pandas `cooling-sp`, `heating-sp` → SQL `cooling_sp`, `heating_sp`
 **Optional roles (both engines):** none
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `deadband_c` | Minimum deadband | °C | 1.0 | 0.0–5.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `deadband` | `temperature_difference` | Minimum deadband | °C | 1 | 0–5 |
 
-The pandas runner also skips Fahrenheit quality ranges on `cooling-sp`, `heating-sp`, and `zone-air-temp-sp` for every `FCU-*` rule so those pass-through columns are not nulled before this test.
+
+FCU setpoint columns follow the same source-declared-unit and one-time writer normalization contract as other points; there is no Fahrenheit range exception. The code examples use SI processing values and SI parameter names; qualification parity remains pending the generated candidate report.
 
 ```python
 FAULT_CONFIRM_SECONDS = 0
@@ -2192,7 +2426,7 @@ FAULT_CONFIRM_SECONDS = 0
 def fcu_deadband(d, p, poll):
     cool = pd.to_numeric(d["cooling-sp"], errors="coerce")
     heat = pd.to_numeric(d["heating-sp"], errors="coerce")
-    return cool.notna() & heat.notna() & ((cool - heat) < _f(p, "deadband_c", 1.0))
+    return cool.notna() & heat.notna() & ((cool - heat) < _f(p, "deadband", 1.0))
 
 d = apply_fault(d, fcu_deadband(d, params, POLL_SECONDS))
 d["fault_confirmed"] = confirm_fault(
@@ -2201,18 +2435,19 @@ d["fault_confirmed"] = confirm_fault(
 ```
 
 ### FCU-MODE-CYCLE — FCU heating/cooling mode cycling
-**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** At least four heating/cooling valve mode changes in the window (`mode_changes`). A valve is active above 10% (`mode_valve_min`). Cooling wins when both valves are active. Idle samples are omitted from the sequence and are not fault rows after the count crosses the threshold.  
-**Default confirmation:** 0 s  
-**Required roles (both engines):** pandas `heating-valve`, `cooling-valve` → SQL `htg_valve_pct`, `clg_valve_pct`  
+**Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`
+**Equation:** At least four heating/cooling valve mode changes in the window (`mode_changes`). A valve is active above 10% (`mode_valve_min`). Cooling wins when both valves are active. Idle samples are omitted from the sequence and are not fault rows after the count crosses the threshold.
+**Default confirmation:** 0 s
+**Required roles (both engines):** pandas `heating-valve`, `cooling-valve` → SQL `htg_valve_pct`, `clg_valve_pct`
 **Optional roles (both engines):** none
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `mode_valve_min` | Active valve threshold | frac | 0.10 | 0.0–0.50 |
-| `mode_changes` | Mode changes | count | 4 | 1–20 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `mode_valve_min` | `fraction` | Active valve threshold | frac | 0.1 | 0–0.5 |
+| `mode_changes` | `count` | Mode changes | count | 4 | 1–20 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 0
@@ -2221,8 +2456,8 @@ def fcu_mode_cycle(d, p, poll):
     heat = norm_cmd(d["heating-valve"])
     cool = norm_cmd(d["cooling-valve"])
     mode = pd.Series(0, index=d.index, dtype=int)
-    mode = mode.mask(heat > _f(p, "mode_valve_min", 0.10), 1)
-    mode = mode.mask(cool > _f(p, "mode_valve_min", 0.10), -1)
+    mode = mode.mask(heat > _f(p, "mode_valve_min", 0.1), 1)
+    mode = mode.mask(cool > _f(p, "mode_valve_min", 0.1), -1)
     active = mode.where(mode != 0).ffill().fillna(0)
     changes = (
         (active != active.shift()) & (active != 0) & (active.shift().fillna(0) != 0)
@@ -2240,19 +2475,22 @@ d["fault_confirmed"] = confirm_fault(
 ## Central plant / condenser water
 
 ### CHW-NOLOAD-1 — Chiller running with no building load
-**Family:** `plant` · **Equipment:** `chiller`  
-**Equation:** Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.  
+**Family:** `plant` · **Equipment:** `chiller`
+**Equation:** Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.
 **Default confirmation:** 1800 s
 
 **Optional roles:** `chiller-status`, `chw-pump-status`, `compressor-status`, `building-zone-load-satisfied`, `building-ahu-load-satisfied`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
-| `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
-| `sat_band_f` | AHU SAT≈SP band | °F | 2.0 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `load_sat_hi` | `fraction` | Load satisfaction high (no-load fault) | frac | 0.5 | 0.0–1.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
@@ -2291,23 +2529,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### CHW-1 — Low chilled-water ΔT
-**Family:** `plant` · **Equipment:** `chiller`  
-**Equation:** Pump on AND (CHWR − CHWS) < 4°F.  
+**Family:** `plant` · **Equipment:** `chiller`
+**Equation:** Pump on AND (CHWR − CHWS) < 2.22Δ°C.
 **Default confirmation:** 900 s
 
 **Required roles:** `chilled-water-supply-temp`, `chilled-water-return-temp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `min_dt` | Min ΔT | °F | 4.0 | 1.0–12.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `min_dt` | `temperature_difference` | Minimum delta-T | °C | 2.222222 | 0.555556–6.666667 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
 
 def chw1(d, p, poll):
-    min_dt = _f(p, "min_dt", 4.0)
+    min_dt = _f(p, "min_dt", 2.222222)
     dt = d["chilled-water-return-temp"] - d["chilled-water-supply-temp"]
     if "chw-pump-cmd" in d.columns:
         pump = norm_cmd(d["chw-pump-cmd"]).fillna(0) > 0.05
@@ -2320,24 +2563,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### CHW-2 — DP below SP at max pump speed
-**Family:** `plant` · **Equipment:** `chiller`  
-**Equation:** Pump ≥ 87% AND CHW DP < DP SP − 2.2.  
+**Family:** `plant` · **Equipment:** `chiller`
+**Equation:** Pump ≥ 87% AND CHW DP < DP SP − 2.2.
 **Default confirmation:** 300 s
 
 **Required roles:** `chw-diff-pressure`, `chw-diff-pressure-sp`, `chw-pump-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `dp_margin` | DP margin | psi | 2.2 | 0.5–6.0 |
-| `pump_hi` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `dp_margin` | `hydronic_pressure` | DP margin | kPa | 15.168465 | 3.447379–41.368542 |
+| `pump_hi` | `fraction` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def chw2(d, p, poll):
-    margin = _f(p, "dp_margin", 2.2)
+    margin = _f(p, "dp_margin", 15.168465)
     pmp_hi = _f(p, "pump_hi", 0.87)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return (
@@ -2350,23 +2598,28 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### CHW-3 — Plant supply temp outside deadband
-**Family:** `plant` · **Equipment:** `chiller`  
-**Equation:** Pump on AND |CHWS − CHWS SP| > 2.2°F.  
+**Family:** `plant` · **Equipment:** `chiller`
+**Equation:** Pump on AND |CHWS − CHWS SP| > 1.22Δ°C.
 **Default confirmation:** 300 s
 
 **Required roles:** `chilled-water-supply-temp`, `chilled-water-supply-temp-sp`, `chw-pump-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `sp_band` | SP band | °F | 2.2 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `sp_band` | `temperature_difference` | SP band | °C | 1.222222 | 0.277778–3.333333 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def chw3(d, p, poll):
-    band = _f(p, "sp_band", 2.2)
+    band = _f(p, "sp_band", 1.222222)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return (
         (pump > 0.01) & d["chilled-water-supply-temp"].notna() & d["chilled-water-supply-temp-sp"].notna()
@@ -2378,24 +2631,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### CHW-4 — Flow high at max pump
-**Family:** `plant` · **Equipment:** `chiller`  
-**Equation:** Pump ≥ 87% AND CHW flow > 1100 gpm.  
+**Family:** `plant` · **Equipment:** `chiller`
+**Equation:** Pump ≥ 87% AND CHW flow > 69.39922 L/s.
 **Default confirmation:** 300 s
 
 **Required roles:** `chw-flow`, `chw-pump-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `flow_hi` | Flow high | gpm | 1100 | 200–3000 |
-| `pump_hi` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `flow_hi` | `volumetric_flow` | Flow high | L/s | 69.39922 | 12.61804–189.2706 |
+| `pump_hi` | `fraction` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def chw4(d, p, poll):
-    flow_hi = _f(p, "flow_hi", 1100.0)
+    flow_hi = _f(p, "flow_hi", 69.39922)
     pmp_hi = _f(p, "pump_hi", 0.87)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return d["chw-flow"].notna() & (d["chw-flow"] > flow_hi) & (pump >= pmp_hi)
@@ -2405,18 +2663,23 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### CW-OPT-1 — Condenser water not optimized vs wet-bulb
-**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
-**Equation:** CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized.  
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`
+**Equation:** CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized.
 **Default confirmation:** 900 s
 
 **Required roles:** `condenser-water-supply-temp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `cw_approach` | Design approach | °F | 7.0 | 3.0–15.0 |
-| `cw_slack` | Slack below target | °F | 2.0 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `cw_approach` | `temperature_difference` | Design approach | °C | 3.888889 | 1.666667–8.333333 |
+| `cw_slack` | `temperature_difference` | Slack below target | °C | 1.111111 | 0.277778–3.333333 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -2428,8 +2691,8 @@ def cw_opt(d, p, poll):
     wb = d["web-outside-air-wetbulb"] if "web-outside-air-wetbulb" in d.columns else None
     if wb is None or wb.notna().sum() == 0:
         return _false(d.index)
-    approach = _f(p, "cw_approach", 7.0)
-    slack = _f(p, "cw_slack", 2.0)
+    approach = _f(p, "cw_approach", 3.888889)
+    slack = _f(p, "cw_slack", 1.111111)
     # Over-cooled tower water: supply significantly below wet-bulb + design approach
     return (
         d["condenser-water-supply-temp"].notna()
@@ -2442,8 +2705,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### CW-APR-1 — High CW approach at full tower fan
-**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
-**Equation:** At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.  
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`
+**Equation:** At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 4.44Δ°C, typically 2.78–5.56Δ°C). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.
 **Default confirmation:** 900 s
 
 **Required roles:** `condenser-water-supply-temp`
@@ -2452,10 +2715,15 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `approach_max_f` | Max approach at full fan | °F | 8.0 | 5.0–15.0 |
-| `tower_fan_hi` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `approach_max` | `temperature_difference` | Max approach at full fan | °C | 4.444444 | 2.777778–8.333333 |
+| `tower_fan_hi` | `fraction` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -2468,8 +2736,8 @@ def cw_apr(d, p, poll):
         return _false(d.index)
     if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
         return _false(d.index)
-    limit = _f(p, "approach_max_f", 8.0)
-    apr = _cw_approach_f(d)
+    limit = _f(p, "approach_max", 4.444444)
+    apr = _cw_approach_si(d)
     return (
         d["condenser-water-supply-temp"].notna()
         & d["web-outside-air-wetbulb"].notna()
@@ -2482,8 +2750,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### CW-FAN-1 — Excess tower fan energy vs wet-bulb limit
-**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
-**Equation:** Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible — excess fan energy.  
+**Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`
+**Equation:** Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible — excess fan energy.
 **Default confirmation:** 900 s
 
 **Required roles:** `condenser-water-supply-temp`
@@ -2492,11 +2760,16 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `cw_approach` | Design approach | °F | 7.0 | 3.0–15.0 |
-| `excess_beyond_approach_f` | Excess beyond approach | °F | 5.0 | 2.0–20.0 |
-| `tower_fan_hi` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `cw_approach` | `temperature_difference` | Design approach | °C | 3.888889 | 1.666667–8.333333 |
+| `excess_beyond_approach` | `temperature_difference` | Excess beyond approach | °C | 2.777778 | 1.111111–11.111111 |
+| `tower_fan_hi` | `fraction` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 900
@@ -2509,9 +2782,9 @@ def cw_fan_excess(d, p, poll):
         return _false(d.index)
     if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
         return _false(d.index)
-    approach = _f(p, "cw_approach", 7.0)
-    excess = _f(p, "excess_beyond_approach_f", 5.0)
-    apr = _cw_approach_f(d)
+    approach = _f(p, "cw_approach", 3.888889)
+    excess = _f(p, "excess_beyond_approach", 2.777778)
+    apr = _cw_approach_si(d)
     return (
         d["condenser-water-supply-temp"].notna()
         & d["web-outside-air-wetbulb"].notna()
@@ -2526,25 +2799,30 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ## Heat pumps
 
 ### HP-1 — Discharge cold when heating
-**Family:** `heatpump` · **Equipment:** `heatpump`  
-**Equation:** Fan on, zone < 69°F, discharge SAT < 85°F.  
+**Family:** `heatpump` · **Equipment:** `heatpump`
+**Equation:** Fan on, zone < 20.56°C, discharge SAT < 29.44°C.
 **Default confirmation:** 600 s
 
 **Required roles:** `discharge-air-temp`, `zone-air-temp`, `fan-cmd`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `min_sat` | Min heating SAT | °F | 85.0 | 70.0–110.0 |
-| `zone_cold` | Zone cold | °F | 69.0 | 60.0–72.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `min_sat` | `absolute_temperature` | Min discharge SAT | °C | 29.444444 | 21.111111–43.333333 |
+| `zone_cold` | `absolute_temperature` | Zone cold threshold | °C | 20.555556 | 15.555556–22.222222 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 600
 
 def hp1(d, p, poll):
-    min_sat = _f(p, "min_sat", 85.0)
-    zone_cold = _f(p, "zone_cold", 69.0)
+    min_sat = _f(p, "min_sat", 29.444444)
+    zone_cold = _f(p, "zone_cold", 20.555556)
     fan = _fan(d)
     return (
         d["discharge-air-temp"].notna() & d["zone-air-temp"].notna() & (fan > FAN_ON_MIN)
@@ -2558,24 +2836,26 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ## Weather station
 
 ### WX-1 — OA temperature spike
-**Family:** `weather` · **Equipment:** `weather`  
-**Equation:** OAT sample-to-sample jump > 16°F.  
+**Family:** `weather` · **Equipment:** `weather`
+**Equation:** OAT sample-to-sample jump > 8.89Δ°C.
 **Default confirmation:** 300 s
 
 **Required roles:** `outside-air-temp`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `spike_limit` | Spike limit | °F | 16.0 | 4.0–40.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `spike_limit` | `temperature_difference` | Spike limit | °C | 8.888889 | 2.222222–22.222222 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 300
 
 def wx1(d, p, poll):
     """OAT sample-to-sample spike; limit scales with the sample gap vs poll."""
-    spike = _f(p, "spike_limit", 16.0)
+    spike = _f(p, "spike_limit", 8.888889)
     s = pd.to_numeric(d["outside-air-temp"], errors="coerce")
     jump = s.diff().abs()
     if isinstance(d.index, pd.DatetimeIndex) and len(d.index) > 1:
@@ -2591,24 +2871,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ## Trim & respond advisory
 
 ### TRIM-1 — Duct static trim advisory
-**Family:** `trim` · **Equipment:** `ahu`  
-**Equation:** Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low.  
+**Family:** `trim` · **Equipment:** `ahu`
+**Equation:** Duct static high (> 335.93 Pa) while VAV pressure requests are low.
 **Default confirmation:** 1800 s
 
 **Required roles:** `duct-static-pressure`, `vav-pressure-request-sum`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `duct_hi` | Duct static high | in. w.c. | 1.35 | 0.5–3.0 |
-| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `duct_hi` | `air_pressure` | Duct static high | Pa | 335.934 | 124.42–746.52 |
+| `request_lo` | `count` | Request sum low | count | 1.0 | 0.0–10.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
 
 def trim1(d, p, poll):
-    duct_hi = _f(p, "duct_hi", 1.35)
+    duct_hi = _f(p, "duct_hi", 335.934)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["duct-static-pressure"].notna() & d["vav-pressure-request-sum"].notna()
@@ -2620,24 +2905,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### TRIM-3 — HWST trim advisory
-**Family:** `trim` · **Equipment:** `boiler`  
-**Equation:** HW supply > 160°F while reset requests are low.  
+**Family:** `trim` · **Equipment:** `boiler`
+**Equation:** HW supply > 71.11°C while reset requests are low.
 **Default confirmation:** 1800 s
 
 **Required roles:** `hot-water-supply-temp`, `hw-reset-request-sum`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `hwst_hi` | HWST high | °F | 160.0 | 120.0–200.0 |
-| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `hwst_hi` | `absolute_temperature` | HWST high | °C | 71.111111 | 48.888889–93.333333 |
+| `request_lo` | `count` | Request sum low | count | 1.0 | 0.0–10.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
 
 def trim3(d, p, poll):
-    hwst_hi = _f(p, "hwst_hi", 160.0)
+    hwst_hi = _f(p, "hwst_hi", 71.111111)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["hot-water-supply-temp"].notna() & d["hw-reset-request-sum"].notna()
@@ -2649,24 +2939,29 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### TRIM-4 — CHW plant reset advisory
-**Family:** `trim` · **Equipment:** `chiller`  
-**Equation:** CHW supply < 45°F while reset requests are low.  
+**Family:** `trim` · **Equipment:** `chiller`
+**Equation:** CHW supply < 7.22°C while reset requests are low.
 **Default confirmation:** 1800 s
 
 **Required roles:** `chilled-water-supply-temp`, `chw-reset-request-sum`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `chw_lo` | CHWS low | °F | 45.0 | 35.0–55.0 |
-| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `chw_lo` | `absolute_temperature` | CHWS low | °C | 7.222222 | 1.666667–12.777778 |
+| `request_lo` | `count` | Request sum low | count | 1.0 | 0.0–10.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
 
 def trim4(d, p, poll):
-    chw_lo = _f(p, "chw_lo", 45.0)
+    chw_lo = _f(p, "chw_lo", 7.222222)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["chilled-water-supply-temp"].notna() & d["chw-reset-request-sum"].notna()
@@ -2680,8 +2975,8 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ## Schedule & occupancy
 
 ### SCHED-1 — Unoccupied runtime
-**Family:** `schedule` · **Equipment:** `ahu`  
-**Equation:** Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside comfort_low_f…comfort_high_f (defaults 70–75°F; synced from Overview zone band).  
+**Family:** `schedule` · **Equipment:** `ahu`
+**Equation:** Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside `comfort_low`…`comfort_high` (defaults 21.11–23.89°C; synced from Overview zone band).
 **Default confirmation:** 1800 s
 
 **Required roles:** `occupied`, `fan-status`
@@ -2690,10 +2985,12 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
-| `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `comfort_low` | `absolute_temperature` | Zone comfort low | °C | 21.111111 | 10.0–26.666667 |
+| `comfort_high` | `absolute_temperature` | Zone comfort high | °C | 23.888889 | 12.777778–32.222222 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 1800
@@ -2705,8 +3002,8 @@ def sched1(d, p, poll):
     base = (d["occupied"].astype(str).str.lower() == "unoccupied") & as_bool(d["fan-status"])
     if "zone-air-temp" not in d.columns or d["zone-air-temp"].notna().sum() == 0:
         return base
-    lo = _f(p, "comfort_low_f", 70.0)
-    hi = _f(p, "comfort_high_f", 75.0)
+    lo = _f(p, "comfort_low", 21.111111)
+    hi = _f(p, "comfort_high", 23.888889)
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     in_band = zt.notna() & (zt >= lo) & (zt <= hi)
     return base & in_band
@@ -2716,18 +3013,19 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 ```
 
 ### SCHED-247 — Always-on fan or pump runtime
-**Family:** `schedule` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`  
-**Equation:** Ranked proof (status/current > command) is on for ≥ always_on_pct of the analysis window. Pressure is inferred runtime only and does **not** trip this rule ID (4.3 migration).  
+**Family:** `schedule` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `heatpump`
+**Equation:** Ranked proof (status/current > command) is on for ≥ always_on_pct of the analysis window. Pressure is inferred runtime only and does **not** trip this rule ID (4.3 migration).
 **Default confirmation:** 3600 s
 
 **Optional roles:** `fan-status`, `pump-status`, `chw-pump-status`, `hw-pump-status`, `chiller-status`, `compressor-status`, `tower-fan-cmd`, `cw-fan-cmd`, `fan-cmd`, `chw-pump-cmd`, `hw-pump-cmd`, `duct-static-pressure`, `chw-diff-pressure`
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `always_on_pct` | Always-on fraction | frac | 0.95 | 0.8–1.0 |
-| `pressure_on_min` | Pressure-on evidence | eng | 0.2 | 0.05–2.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 3600.0 | 0.0–3600.0 |
+| `always_on_pct` | `fraction` | Always-on fraction | frac | 0.95 | 0.8–1.0 |
+
 
 ```python
 FAULT_CONFIRM_SECONDS = 3600
@@ -2801,7 +3099,7 @@ The following rules remain documented for continuity but are **not** in the curr
 ## Framework docs
 
 - [Rule Cookbook hub](index.html)
-- [DataFusion SQL cookbook](datafusion-sql-cookbook.html)
+- [PostgreSQL SQL cookbook](sql-cookbook.html)
 - [P0 rule catalog](p0-rule-catalog.html)
 - [Parity matrix](parity-matrix.html)
 - [Prerequisite macros](prerequisite-macros.html)

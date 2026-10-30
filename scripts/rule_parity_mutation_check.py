@@ -33,7 +33,7 @@ RULE_HEADING_RE = re.compile(r"^### [A-Z][A-Z0-9-]* —", re.MULTILINE)
 # Dual cookbooks that must exist (mutation: deleting either must fail this script).
 PROTECTED_COOKBOOK_PATHS = (
     COOKBOOK / "pandas-cookbook.md",
-    COOKBOOK / "datafusion-sql-cookbook.md",
+    COOKBOOK / "sql-cookbook.md",
     COOKBOOK / "parity-matrix.md",
 )
 
@@ -77,7 +77,7 @@ def check_dual_cookbooks_and_headings() -> None:
     for path in PROTECTED_COOKBOOK_PATHS:
         if not path.is_file():
             _fail(f"protected cookbook missing (mutation): {path.relative_to(ROOT)}")
-    for name in ("pandas-cookbook.md", "datafusion-sql-cookbook.md"):
+    for name in ("pandas-cookbook.md", "sql-cookbook.md"):
         text = (COOKBOOK / name).read_text(encoding="utf-8")
         n = len(RULE_HEADING_RE.findall(text))
         if n < MIN_RULE_HEADINGS:
@@ -86,7 +86,7 @@ def check_dual_cookbooks_and_headings() -> None:
 
 
 def check_high_risk_keywords() -> None:
-    for name in ("pandas-cookbook.md", "datafusion-sql-cookbook.md"):
+    for name in ("pandas-cookbook.md", "sql-cookbook.md"):
         text = (COOKBOOK / name).read_text(encoding="utf-8")
         missing = [kw for kw in HIGH_RISK_KEYWORDS if kw not in text]
         if missing:
@@ -120,7 +120,7 @@ def check_logical_keyword_mutation() -> None:
     Does not rewrite disk files — simulates a regression where ``fan-status`` /
     ``occupied`` language was vibe-coded out of a cookbook.
     """
-    path = COOKBOOK / "datafusion-sql-cookbook.md"
+    path = COOKBOOK / "sql-cookbook.md"
     text = path.read_text(encoding="utf-8")
     for kw in ("fan-status", "occupied", "compressor"):
         if kw not in text:

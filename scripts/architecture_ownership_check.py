@@ -20,14 +20,14 @@ OWNERSHIP = ROOT / "openfdd_agent_spec" / "ownership.yaml"
 README = ROOT / "README.md"
 COOKBOOK = ROOT / "docs" / "rules" / "cookbook"
 REQUIRED_COOKBOOKS = (
-    "datafusion-sql-cookbook.md",
+    "sql-cookbook.md",
     "pandas-cookbook.md",
     "parity-matrix.md",
 )
 
 # Dual cookbooks are large expression catalogs — reject vibe-coded stubs.
 COOKBOOK_MIN_BYTES = {
-    "datafusion-sql-cookbook.md": 40_000,
+    "sql-cookbook.md": 40_000,
     "pandas-cookbook.md": 40_000,
     "parity-matrix.md": 1_500,
 }

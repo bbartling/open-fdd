@@ -2,7 +2,7 @@
 
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
-**Repo:** [bbartling/open-fdd](https://github.com/bbartling/open-fdd)  
+**Repo:** [bbartling/open-fdd](https://github.com/bbartling/open-fdd)
 **Host:** `/home/ben/open-fdd` (WSL product agent — ships code, not bench validation)
 
 > **Agents:** paste the **compact charter block** below into a new Cursor chat before doing any work. This file is the full turn-key playbook for one monster nightly cycle.
@@ -88,7 +88,7 @@ When in doubt about layout, chart types, parameter sliders, or rule semantics �
 
 ### Product repository
 
-**Path:** `/home/ben/open-fdd`  
+**Path:** `/home/ben/open-fdd`
 **Remote:** `https://github.com/bbartling/open-fdd`
 
 | Asset | Location |
@@ -183,7 +183,7 @@ package load → data model tree → family sliders (CookbookParam)
 
 **Scope:**
 
-- Port remaining 40 rules from `docs/rules/cookbook/datafusion-sql-cookbook.md` into `sql_rules/*.sql` + `registry.yaml`.
+- Port remaining 40 rules from `docs/rules/cookbook/sql-cookbook.md` into `sql_rules/*.sql` + `registry.yaml`.
 - Full `CookbookParam` metadata per rule: `key`, `label`, `unit`, `min`, `max`, `step`, `default`, `direction`, `confirm_min`.
 - `SV-RATE` and `PID-HUNT-1` as documented simplified SQL variants (flagged, same cookbook caveats).
 - Per-rule fixture tests in `fdd-engine-ci`; extend fixtures beyond current 6; parity oracle where equation is directly checkable.
@@ -413,7 +413,7 @@ Before claiming BACnet OT PASS, the **human tester** opens YABE / BACnet Workben
 | Hosted points readable | Live present-value |
 | Device 5007 routed read | Not `UNKNOWN_OBJECT` (post-#502) |
 
-**Agent records:** `Workbench: PASS (human) | FAIL (human) | NOT RUN`  
+**Agent records:** `Workbench: PASS (human) | FAIL (human) | NOT RUN`
 **Agent must ask the human** before signing off BACnet. Do not infer PASS from curl or BIP poll alone.
 
 Full bench playbook: [linux-edge-tester-stack-nightly-prompt.md](./linux-edge-tester-stack-nightly-prompt.md)
@@ -522,7 +522,7 @@ These items are **not** part of this monster nightly. Track for a future cycle:
 |-----|------|
 | API contract | `docs/frontend/API_CONTRACT.md` |
 | SQL tuning contract | `docs/migration/vibe19/SQL_RULE_TUNING_CONTRACT.md` |
-| DataFusion cookbook (59 rules) | `docs/rules/cookbook/datafusion-sql-cookbook.md` |
+| DataFusion cookbook (59 rules) | `docs/rules/cookbook/sql-cookbook.md` |
 | Engine integration audit | `docs/architecture/FDD_ENGINE_EDGE_INTEGRATION_AUDIT.md` |
 | VERSION manifest | `docker/VERSION_MANIFEST.md` |
 | Bench stack prompt | `docs/agent/linux-edge-tester-stack-nightly-prompt.md` |

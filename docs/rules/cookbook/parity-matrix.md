@@ -8,18 +8,21 @@ nav_exclude: true
 
 # SQL ↔ Pandas parity matrix
 
-**Contract:** machine-readable inventory at [`sql_rules/generated/parity_inventory.yaml`](../../../sql_rules/generated/parity_inventory.yaml) (`parity-inventory-v2`).  
+SI (`metric-c-v2`) is canonical for storage and processing. The cutover evidence chain is frozen IP baseline → pandas IP = pandas SI → pandas SI = SQL SI → live post-cutover SQL SI = IP baseline per site (P3). Fault seconds are exact; analytics use the harness tolerance. P0–P2 fixtures do not prove live P3 or FQ. See [ADR-012](../../architecture/adr-012-si-processing-and-qualification.md).
+
+
+**Inventory:** legacy machine-readable rule parity metadata at [`sql_rules/generated/parity_inventory.yaml`](../../../sql_rules/generated/parity_inventory.yaml) (`parity-inventory-v2`). It is not the SI parity-chain report.
 Regenerate with `python3 scripts/generate_parity_inventory.py`. Drift fails CI via `--check`.
 
-**Audit:** 2026-08-07 — legacy building-100 / cookbook-port parity labels removed.  
+**Audit:** 2026-08-07 — legacy building-100 / cookbook-port parity labels removed.
 **Audit:** 2026-08-11 — flat `matrix[]` columns (title, roles, proof, thresholds, docs, tests, difference class).
 
-## Why 71 versus 77 (do not pad)
+## Catalog inventory counts (not SI parity results)
 
 | Surface | Count | Source |
 |---------|------:|------|
 | Pandas diagnostics | **71** | `CookbookRule(...)` in `open_fdd/rules/cookbook_catalog.py` (`CANONICAL_RULE_COUNT`) |
-| SQL twins of those 71 | 71 | `sql_rules/registry.yaml` |
+| SQL twins of those 71 | 71 | `sql/fdd/registry.yaml` |
 | SQL-only analytics | **4** | `FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS` |
 | Utility meter FDD | **2** | `UTIL-MONTHLY`, `UTIL-INTERVAL` |
 | SQL registry total | **77** | 71 diagnostics + 4 analytics + 2 UTIL |
@@ -82,13 +85,13 @@ P0 correctness backlog (Wave 1): `SV-STALE`, `FC2`, `FC4`, `FC6`, `FC14`/`FC15`,
 | schedule | SCHED-1, SCHED-247 | ✅ | ✅ | screening |
 | fcu / zone | FCU-* | ✅ | ✅ | screening |
 
-Per-rule equations, parameters, and shipped SQL / pandas live in the [DataFusion cookbook](datafusion-sql-cookbook.html#fan-coil--zone_other) and the [Pandas cookbook](pandas-cookbook.html#fan-coil--zone_other). Unit boundary and equipment kinds: [FCU and zone_other rules](fcu-zone-other.html).
+Per-rule equations, parameters, and shipped SQL / pandas live in the [PostgreSQL SQL cookbook](sql-cookbook.html#fan-coil--zone_other) and the [Pandas cookbook](pandas-cookbook.html#fan-coil--zone_other). Unit boundary and equipment kinds: [FCU and zone_other rules](fcu-zone-other.html).
 
 ---
 
 ## Backend-specific caveats
 
-| Topic | DataFusion SQL | Pandas |
+| Topic | PostgreSQL SQL | Pandas |
 |-------|----------------|--------|
 | Window / rolling | `LAG()`, limited `OVER` | `.shift()`, `.rolling()`, multi-sensor sweeps |
 | Confirmation | streak / interval (Wave 2 target) | `confirm_fault()` |

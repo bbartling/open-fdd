@@ -8,6 +8,9 @@ nav_exclude: true
 
 # Benchmark and regression strategy
 
+Unit scenarios must cover absolute and delta temperatures, pressure, flow, percent versus fraction, mixed declared source units, and an effective-dated unit change. The same physical frame in IP and SI must preserve fault seconds; fault seconds compare exactly. Do not infer units from magnitude. The live post-cutover P3 against the frozen IP baseline is outside this offline benchmark.
+
+
 Public, reproducible validation for cookbook rules — no proprietary datasets required.
 
 ## Goals

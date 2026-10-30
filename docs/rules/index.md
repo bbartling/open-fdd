@@ -8,6 +8,9 @@ permalink: /rules/
 
 # Rule Cookbook
 
+SI (`metric-c-v2`) is canonical for storage and processing. Source units are engineer-declared and normalized once by the single Timescale writer; display preference conversion is presentation-only. See the [unit contract]({{ site.baseurl }}/modeling/units/).
+
+
 Production FDD is **Timescale / PostgreSQL SQL** (`sql/fdd`, [ADR-010](../architecture/adr-010-timescale-hard-cutover.md)). Soft-OPEN ≠ FQ. Pandas is oracle-only.
 
 | Catalog | Count | Role |
@@ -20,7 +23,7 @@ Production FDD is **Timescale / PostgreSQL SQL** (`sql/fdd`, [ADR-010](../archit
 | Guide | Content |
 |-------|---------|
 | [SQL anomaly detection](sql-anomaly-detection.html) | Overview Z-score + Lab `SV-*` |
-| [Timescale SQL cookbook](cookbook/datafusion-sql-cookbook.html) | Production SQL catalog |
+| [Timescale SQL cookbook](cookbook/sql-cookbook.html) | Production SQL catalog |
 | [Pandas cookbook](cookbook/pandas-cookbook.html) | Oracle catalog |
 | [SQL analytics](sql-analytics-cookbook.html) | Overview / RCx SQL pack |
 | [Pandas analytics](pandas-analytics-cookbook.html) | Oracle analytics |

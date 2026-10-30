@@ -1,17 +1,21 @@
 # Cookbook ownership
 
-Both expression cookbooks are **permanent project deliverables**.
+Both expression cookbooks are **permanent project deliverables**. SI (`metric-c-v2`) is the storage and processing ABI; no engine or cookbook is a second telemetry writer.
 
 | Cookbook | Path | Engine |
 | --- | --- | --- |
-| DataFusion SQL | [`docs/rules/cookbook/datafusion-sql-cookbook.md`](rules/cookbook/datafusion-sql-cookbook.md) | Expression record (filename is historical; production rules are `sql/fdd/` on Timescale) |
+| PostgreSQL / Timescale SQL | [`docs/rules/cookbook/sql-cookbook.md`](rules/cookbook/sql-cookbook.md) | Production expression catalog and SQL reference (`sql/fdd/` on Timescale) |
 | Pandas | [`docs/rules/cookbook/pandas-cookbook.md`](rules/cookbook/pandas-cookbook.md) | Oracle (`open_fdd.rules` on PyPI) |
 | Parity matrix | [`docs/rules/cookbook/parity-matrix.md`](rules/cookbook/parity-matrix.md) | Honesty layer |
 | Parity inventory | [`sql_rules/generated/parity_inventory.yaml`](../sql_rules/generated/parity_inventory.yaml) | Machine-readable Wave 0+ contract |
 
-Product UI is **React** (`frontend/web` → `openfdd-web`). Product FDD execution is **Timescale / PostgreSQL SQL** (`sql/fdd`); DataFusion is prohibited. Pandas is the **PyPI reference/oracle** only — never a central/web request-path dependency.
+Product UI is **React** (`frontend/web` → `openfdd-web`). Product FDD execution is **Timescale / PostgreSQL SQL** (`sql/fdd`); DataFusion is prohibited on the active product path. Pandas is the **PyPI reference/oracle** only — never a central/web request-path dependency.
 
-Catalog arithmetic: **62** pandas diagnostic concepts + **4** SQL analytics (`FAN-RUNTIME-HOURS`, `AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAULT-ELAPSED-HOURS`) = **66** SQL registry entries. `FC13-SAT-HIGH` is the SQL canonical id (`FC13` alias). `SV-SLEW` aliases `SV-RATE`.
+Catalog inventory at this tip: **71** pandas diagnostics and **77** SQL registry entries (71 diagnostics plus six SQL-only/utility rules). These counts describe catalog presence, not parity proof. `FC13-SAT-HIGH` is the SQL canonical id (`FC13` alias). `SV-SLEW` aliases `SV-RATE`.
+
+## Unit and parity contract
+
+SI (`metric-c-v2`) is canonical for rule and analytics processing. Each source point has an engineer-declared unit and quantity; the single Timescale writer normalizes supported inputs once. Parameter metadata declares a semantic `kind` and SI unit. The parity chain is frozen IP baseline → pandas IP = pandas SI → pandas SI = SQL SI → live post-cutover SQL SI = IP baseline (P3). `displayIP` is allowed as a user presentation preference; it does not alter storage or computation. FQ remains unclaimed until live P3 and live P2 pass for every site. See [units](modeling/units.md) and [ADR-012](architecture/adr-012-si-processing-and-qualification.md).
 
 ## Rules for agents
 

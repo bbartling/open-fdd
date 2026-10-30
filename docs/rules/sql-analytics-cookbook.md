@@ -7,6 +7,9 @@ permalink: /rules/sql-analytics-cookbook/
 
 # SQL analytics cookbook
 
+Analytics SQL consumes SI-normalized values from Timescale. Where a query accepts a temperature difference, it is Δ°C; other parameter units follow their declared semantic kind. APIs return SI metadata and the SPA applies display preference. See [unit contract]({{ site.baseurl }}/modeling/units/).
+
+
 Overview, RCx, and plant-health analytics are PostgreSQL on the time-series database. Rust binds `$1` to the site. The operator UI calls `/api/analytics/*`. Every query under `sql/analytics/postgres/queries/` is copied below.
 
 | Query | File |
@@ -91,7 +94,7 @@ LIMIT 2000;
 --   $2 = window start (timestamptz, NULL = open)
 --   $3 = window end   (timestamptz, NULL = open)
 --   $4 = equipment_ids (text[], NULL/empty = all)
---   $5 = minimum |OAT−RAT| (°F). Rows below this are not qualified.
+--   $5 = minimum |OAT−RAT| (Δ°C). Rows below this are not qualified.
 -- x = OAT − RAT (delta_or_f), y = MAT − RAT (delta_mr_f).
 -- A row is qualified only with explicit fan_status proof, a measured MAT,
 -- and |OAT−RAT| at or above $5. Missing fan status is not fan-on.

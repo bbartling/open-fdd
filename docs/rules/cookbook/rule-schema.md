@@ -8,7 +8,7 @@ nav_exclude: true
 
 # Declarative rule schema
 
-Every cookbook rule can be described in this schema. Implementations compile to **DataFusion SQL** (edge) and **Pandas** (off-edge parity). The schema is **standards-first** — thresholds are defaults, always site-adjustable.
+Every cookbook rule can be described in this schema. Each numeric parameter declares a `kind` from the unit contract (for example `absolute_temperature`, `temperature_difference`, `air_pressure`, `volumetric_flow`, `percent`, or `duration_seconds`) and an SI unit. Source-point units are separately engineer-declared at inventory mapping. Never infer a unit or percent scale from values. Implementations are PostgreSQL/Timescale SQL for production and pandas for the PyPI oracle/parity harness. The schema is **standards-first** — thresholds are defaults, always site-adjustable.
 
 ## Full field list
 
@@ -55,12 +55,12 @@ confirmation_strategy:
   seconds: 900
   min_consecutive_samples: 15
 thresholds:
-  sat_reset_err_max: { default: 3.0, unit: "deltaF", site_adjustable: true }
-  oat_reset_slope: { default: 0.25, unit: "deltaF_per_deltaF_oa", site_adjustable: true }
+  sat_reset_err_max: { default: 1.67, kind: temperature_difference, unit: "delta_degC", site_adjustable: true }
+  oat_reset_slope: { default: 0.25, kind: ratio, unit: "delta_degC_per_delta_degC", site_adjustable: true }
 units:
-  sat: deltaF
-  sat_sp: deltaF
-  oat: deltaF
+  sat: degC
+  sat_sp: degC
+  oat: degC
 evidence_fields: [timestamp, equipment_id, sat, sat_sp, oat, fan_status]
 root_cause_candidates:
   - Reset schedule disabled or overridden
@@ -79,9 +79,13 @@ validation_tests:
 
 ---
 
+## Parameter unit kinds
+
+Every parameter row includes its semantic `kind`, SI unit, default, range, and whether it is site-adjustable. `absolute_temperature` uses °C; `temperature_difference` uses Δ°C and scale-only conversion; pressure uses Pa or kPa by quantity; flow uses L/s; power and energy use kW and kWh. Unit aliases and source conversion factors are defined by [`metric_units.json`](../../../sql/contract/metric_units.json).
+
 ## Compilation targets
 
-| Schema field | DataFusion SQL | Pandas |
+| Schema field | PostgreSQL / Timescale SQL | Pandas |
 |--------------|----------------|--------|
 | `prerequisites` | `CASE WHEN …` guards or CTE from [macros](prerequisite-macros.html) | Boolean mask helpers |
 | `detect_expr` | `CASE … END AS fault_raw` | `mask = …` → `fault_raw` |

@@ -27,6 +27,8 @@ def render(inv: dict) -> str:
         "# Generated parity report",
         "",
         "Auto-generated from `sql_rules/generated/parity_inventory.yaml`.",
+        "This legacy rule inventory is not the 4.0.7 SI parity artifact and is not P0–P2 or FQ evidence.",
+        "Replace it from a reviewed candidate `si-parity` artifact after W4 completes; do not invent missing results.",
         "Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.",
         "",
         inv["count_explanation"],

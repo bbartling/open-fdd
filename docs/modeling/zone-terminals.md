@@ -12,7 +12,7 @@ The shipped [FCU / zone_other rule family](../rules/cookbook/fcu-zone-other.md)
 covers coil delivery, passing valves, ventilation feedback, sensor loss,
 deadband, and heat/cool mode cycling for these controllers. Per-rule SQL and
 pandas live in the
-[SQL cookbook](../rules/cookbook/datafusion-sql-cookbook.md#fan-coil--zone_other)
+[SQL cookbook](../rules/cookbook/sql-cookbook.md#fan-coil--zone_other)
 and the
 [Pandas cookbook](../rules/cookbook/pandas-cookbook.md#fan-coil--zone_other).
 Haystack tags for each rule are on the

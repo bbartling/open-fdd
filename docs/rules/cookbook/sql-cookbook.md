@@ -1,20 +1,20 @@
 ---
-title: Timescale SQL cookbook
+title: PostgreSQL SQL cookbook
 parent: Rule Cookbook
 nav_order: 2
 ---
 
-# Timescale / PostgreSQL SQL FDD Cookbook
+# PostgreSQL / Timescale SQL FDD Cookbook
 
-> **Engine (Wave-X 3.6+ / [ADR-010](../../architecture/adr-010-timescale-hard-cutover.md)):** Production FDD runs as **Timescale / PostgreSQL SQL** (`sql/fdd`). Soft-OPEN ≠ FQ. Historical “DataFusion / Arrow / Parquet” wording in rule bodies below is catalog text — not the live historian.
+> **Engine (Wave-X 3.6+ / [ADR-010](../../architecture/adr-010-timescale-hard-cutover.md)):** Production FDD runs as **Timescale / PostgreSQL SQL** (`sql/fdd`). Soft-OPEN ≠ FQ. This page preserves the SQL expressions and engineering notes; it documents PostgreSQL execution, not a separate engine.
 
-Open-FDD executes production fault detection via the canonical registry [`sql_rules/registry.yaml`](https://github.com/bbartling/open-fdd/blob/master/sql_rules/registry.yaml) (**77** entries = 71 diagnostic twins + 4 SQL analytics + 2 UTIL). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Raw arbitrary SQL is rejected.
+Open-FDD executes production fault detection through the versioned PostgreSQL registry [`sql/fdd/registry.yaml`](../../../sql/fdd/registry.yaml) on Timescale (**77** entries). Operator path: React **Run Rules** → `POST /api/fdd/run` (`mode=registry`). Raw arbitrary SQL is rejected.
 
 **Pandas mirror:** the [Pandas cookbook](pandas-cookbook.html) documents the **71**-rule PyPI oracle (`open_fdd.rules`). Do **not** treat “71” as the production registry size. FCU / `zone_other`: [FCU and zone_other rules](fcu-zone-other.html).
 
 The sketches under each rule explain the check. The SQL the product runs is in [Shipped SQL files](#shipped-sql-files).
 
-**Updated:** 2026-10-15 (Timescale-only human docs) · tip **3.6.14** · PyPI `open-fdd` **4.4.9**
+**Unit contract:** Inputs and thresholds use SI processing units. Source values are normalized once by the telemetry writer from engineer-declared point units. Display preference is presentation-only. See [Unit contract](../../modeling/units.md).
 
 ---
 
@@ -59,7 +59,7 @@ SELECT
   equipment_id,
   CASE
     WHEN oa_t IS NULL THEN false
-    WHEN oa_t < -60.0 OR oa_t > 130.0 THEN true
+    WHEN oa_t < -51.111111 OR oa_t > 54.444444 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -116,18 +116,23 @@ Validated catalog roles use Haystack-style names (`outside-air-temp`, `discharge
 
 Sensor-sweep rules apply to **every modeled sensor** present on the equipment (not a single fixed point).
 
-**Sweep catalog (SV-RANGE / SV-FLATLINE / SV-STALE):** shipped SQL windows the pandas `SENSOR_LIMITS` roles on the wide `history` pivot — air/water temps (`oa_t`, `mat`, `zone_t`, `rat`, `sat`, `chw_supply_t`, `chw_return_t`, `hw_supply_t`, `hw_return_t`), humidity (`oa_h`, `ra_h`, `zone_rh`, `ma_h`, `sa_h` at 0–100 %RH with `RANGE_SCALE_HUMIDITY` / `SPIKE_SCALE_HUMIDITY`), and `duct_static` (−1–8 in.w.c., `RANGE_SCALE_PRESSURE`). Temperature limits are per-role (for example SAT 30–150°F, zone/RA 40–100°F) with `RANGE_SCALE_TEMPERATURE`. **SV-FLATLINE** and **SV-STALE** use the flatline/stale subset (no `duct_static`). Status, command, setpoint, and mode columns are energization inputs only — not flatline/stale/range targets. Before scoring, SQL masks each sweep column with `fdd.mask_sweep_val(role, authorized_series.unit, value)` so a point with **no declared binding unit** is **not assessed** (same as pandas `sweep_assessable_role`).
+**Sweep catalog (SV-RANGE / SV-FLATLINE / SV-STALE):** shipped SQL windows the pandas `SENSOR_LIMITS` roles on the wide `history` pivot — air/water temps (`oa_t`, `mat`, `zone_t`, `rat`, `sat`, `chw_supply_t`, `chw_return_t`, `hw_supply_t`, `hw_return_t`), humidity (`oa_h`, `ra_h`, `zone_rh`, `ma_h`, `sa_h` at 0–100 %RH with `RANGE_SCALE_HUMIDITY` / `SPIKE_SCALE_HUMIDITY`), and `duct_static` (−249–1991 Pa, `RANGE_SCALE_PRESSURE`). Temperature limits are per-role (for example SAT −1.11–65.56°C, zone/RA 4.44–37.78°C) with `RANGE_SCALE_TEMPERATURE`. **SV-FLATLINE** and **SV-STALE** use the flatline/stale subset (no `duct_static`). Status, command, setpoint, and mode columns are energization inputs only — not flatline/stale/range targets. Before scoring, SQL masks each sweep column with `fdd.mask_sweep_val(role, authorized_series.unit, value)` so a point with **no declared binding unit** is **not assessed** (same as pandas `sweep_assessable_role`).
 
 ### SV-RANGE — Sensor out of hard range
 **Family:** `sensor` · **Equipment:** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone`, `heatpump`  
-**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −60–130°F, SAT 30–150°F, CHWS 30–80°F, RH 0–100 %).  
+**Equation:** Any modeled sensor reads outside its physical hard range (e.g. OAT −51.11–54.44°C, SAT −1.11–65.56°C, CHWS −1.11–26.67°C, RH 0–100 %).  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `range_scale_temperature` | Temp range scale | x | 1.0 | 0.5–2.0 |
-| `range_scale_humidity` | Humidity range scale | x | 1.0 | 0.5–2.0 |
-| `range_scale_pressure` | Pressure range scale | x | 1.0 | 0.5–2.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `range_scale_temperature` | `dimensionless` | Temp range scale | × | 1.0 | 0.5–2.0 |
+| `range_scale_humidity` | `dimensionless` | Humidity range scale | × | 1.0 | 0.5–2.0 |
+| `range_scale_pressure` | `dimensionless` | Pressure / duct-static range scale | × | 1.0 | 0.5–2.0 |
+
 
 ```sql
 -- confirmation_seconds: 300
@@ -136,7 +141,7 @@ SELECT
   timestamp, equipment_id, oa_t,
   CASE
     WHEN oa_t IS NULL THEN false
-    WHEN oa_t < -60.0 OR oa_t > 130.0 THEN true
+    WHEN oa_t < -51.111111 OR oa_t > 54.444444 THEN true
     ELSE false
   END AS fault_raw
 FROM telemetry_pivot
@@ -147,10 +152,15 @@ FROM telemetry_pivot
 **Equation:** Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `flatline_tol` | Flatline tolerance | °F | 0.1 | 0.02–1.0 |
-| `flatline_hours` | Flatline window | h | 1.0 | 0.5–8.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `flatline_tol` | `temperature_difference` | Flatline tolerance | °C | 0.055556 | 0.011111–0.555556 |
+| `flatline_hours` | `dimensionless` | Flatline window | h | 1.0 | 0.25–12.0 |
+
 
 
 {: .important }
@@ -178,12 +188,17 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Sample-to-sample jump exceeds the physical spike limit for the sensor type.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `spike_scale` | Spike limit scale (global) | x | 1.0 | 0.25–3.0 |
-| `spike_scale_temperature` | Temp spike scale | x | 1.0 | 0.25–3.0 |
-| `spike_scale_humidity` | Humidity spike scale | x | 1.0 | 0.25–3.0 |
-| `spike_scale_pressure` | Pressure spike scale | x | 1.0 | 0.25–3.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `spike_scale_pressure` | `dimensionless` | Spike scale pressure | × | 1.0 | 0.25–4.0 |
+| `spike_scale_humidity` | `dimensionless` | Spike scale humidity | × | 1.0 | 0.25–4.0 |
+| `spike_scale_temperature` | `dimensionless` | Spike scale temperature | × | 1.0 | 0.25–4.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `spike_scale` | `dimensionless` | Spike limit scale (global) | × | 1.0 | 0.25–3.0 |
+
 
 
 {: .important }
@@ -211,9 +226,12 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** All modeled sensors unchanged over the stale window — data feed likely dropped.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `stale_hours` | Stale window | h | 2.0 | 0.5–12.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `stale_hours` | `dimensionless` | Stale window | h | 2.0 | 0.5–12.0 |
+| `stale_tol` | `temperature_difference` | Stale tolerance | °C | 0.027778 | 0.0–0.555556 |
+
 
 ```sql
 -- confirmation_seconds: 300
@@ -232,13 +250,14 @@ FROM telemetry_pivot
 **Equation:** Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `persistence_min` | Fault persistence | min | 10.0 | 5.0–60.0 |
-| `transition_window_min` | Transition window | min | 20.0 | 5.0–60.0 |
-| `max_gap_hours` | Max sample gap | h | 2.0 | 0.25–6.0 |
-| `design_flow` | Design flow (flow profiles) | cfm | 0.0 | 0.0–100000.0 |
-| `sensor_span` | Sensor span (flow/pressure) | eng | 0.0 | 0.0–100000.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `sensor_span` | `dimensionless` | Sensor span | unit | 100.0 | 1.0–500.0 |
+| `max_gap_hours` | `dimensionless` | Max sample gap | h | 1.0 | 0.1–12.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `persistence_min` | `duration_minutes` | Fault persistence | min | 10.0 | 5.0–60.0 |
+| `steady_fault_per_hour` | `temperature_rate` | Steady-state slew limit | degF_per_h | 6.0 | 1.0–60.0 |
+
 
 
 {: .important }
@@ -268,14 +287,20 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).  
 **Default confirmation:** 0 s (rolling 1h window is its own persistence)
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `change_deadband_pct` | Ignore changes below | % out | 1.0 | 0.0–10.0 |
-| `minimum_span_pct` | Minimum observed span | % out | 20.0 | 5.0–100.0 |
-| `total_variation_fault_pct` | Total travel threshold | %/h | 500.0 | 50.0–2000.0 |
-| `minimum_equivalent_cycles` | Min equivalent cycles | cyc/h | 2.5 | 0.5–20.0 |
-| `minimum_reversals` | Min direction reversals | count | 4 | 1–40 |
-| `minimum_coverage_pct` | Minimum data coverage | % | 80.0 | 25.0–100.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 0.0 | 0.0–3600.0 |
+| `window_hours` | `dimensionless` | Hunting lookback window | h | 1.0 | 0.25–4.0 |
+| `change_deadband_pct` | `percent` | Ignore changes below | % | 1.0 | 0.0–10.0 |
+| `minimum_span_pct` | `percent` | Minimum observed span | % | 20.0 | 5.0–100.0 |
+| `total_variation_fault_pct` | `percent` | Total variation fault threshold | % | 500.0 | 50.0–2000.0 |
+| `minimum_equivalent_cycles` | `count` | Min equivalent cycles | count | 2.5 | 0.5–10.0 |
+| `minimum_reversals` | `count` | Min direction reversals | count | 4.0 | 1.0–20.0 |
+| `minimum_coverage_pct` | `percent` | Min window sample coverage | % | 80.0 | 50.0–100.0 |
+
 
 
 {: .important }
@@ -307,13 +332,17 @@ Includes GL36 FC1–FC15, AHU auxiliaries, economizer/ventilation, leakage, and 
 **Equation:** DSP < DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_dsp` | Duct-static error εDSP (GL36 default 0.1 in.w.c.) | in. w.c. | 0.12 | 0.0–0.5 |
-| `eps_vfd_spd` | VFD speed error εVFDSPD (GL36 default 5%) | frac | 0.13 | 0.0–0.5 |
-| `duct_static_err` | Legacy duct-static error (sets εDSP) | in. w.c. | 0.12 | 0.0–0.5 |
-| `fan_hi` | Legacy fan-high threshold (sets εVFDSPD) | frac | 0.87 | 0.5–1.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_dsp` | `air_pressure` | Duct-static error epsDSP (GL36 default 0.1 Pa) | Pa | 29.8608 | 0.0–124.42 |
+| `eps_vfd_spd` | `fraction` | VFD speed error epsVFDSPD (GL36 default 5%) | frac | 0.13 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 300
@@ -335,14 +364,19 @@ WHERE equipment_id = 'equip:your-ahu'
 **Equation:** MATavg + εMAT < min(RATavg − εRAT, OATavg − εOAT).  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_rat` | RAT sensor error εRAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `eps_rat` | `temperature_difference` | RAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
@@ -365,14 +399,19 @@ WHERE equipment_id = 'equip:your-ahu'
 **Equation:** MATavg − εMAT > max(RATavg + εRAT, OATavg + εOAT).  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_rat` | RAT sensor error εRAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_rat` | `temperature_difference` | RAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `fan_on_min` | `fraction` | Fan ON fraction threshold | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
@@ -394,10 +433,16 @@ WHERE equipment_id = 'equip:your-ahu'
 **Equation:** ΔOS > ΔOSmax during the prior 60-minute moving window.  
 **Default confirmation:** 3600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `delta_os_max` | Max mode changes/hr ΔOSmax (GL36 default 7) | count | 5 | 1–30 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 3600.0 | 0.0–3600.0 |
+| `delta_os_max` | `count` | Max operating-state entries per hour | count | 5.0 | 1.0–30.0 |
+
 
 
 {: .important }
@@ -428,15 +473,20 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `htg_on_min` | Heating-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `htg_on_min` | `fraction` | Heating-command ON threshold | frac | 0.01 | 0.0–0.25 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+
 
 ```sql
 -- confirmation_seconds: 600
@@ -460,20 +510,23 @@ WHERE equipment_id = 'equip:your-ahu'
 **Equation:** |RATavg−OATavg| ≥ ΔTmin AND |estimated OA% − design min OA%| > εF.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_airflow` | Airflow error εF (GL36 default 30%) | frac | 0.15 | 0.05–1.0 |
-| `delta_t_min` | Minimum \|OAT−RAT\| ΔTmin (GL36 default 10°F) | °F | 5.0 | 0.0–30.0 |
-| `airflow_err` | Legacy OA-fraction error (sets εF) | frac | 0.15 | 0.05–1.0 |
-| `oat_rat_delta_min` | Legacy OAT/RAT guard (sets ΔTmin) | °F | 5.0 | 0.0–30.0 |
-| `min_cfm_design` | Design min OA CFM | cfm | 5000 | 500–20000 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `oat_rat_delta_min` | `temperature_difference` | Min |OAT-RAT| | °C | 2.777777778 | 0.0–16.666666667 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `eps_airflow` | `fraction` | Airflow fraction eps | frac | 0.15 | 0.05–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `min_L/s_design` | `volumetric_flow` | Design minimum outdoor airflow | L/s | 2359.73725 | 0.0–94389.49 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: FC6 — Estimated OA fraction mismatch
--- equation: |RAT−OAT| ≥ 5°F AND |estimated OA% − design min OA%| > 15% in heating/mech-only modes.
+-- equation: |RAT−OAT| ≥ 2.777778Δ°C AND |estimated OA% − design min OA%| > 15% in heating/mech-only modes.
 
 SELECT
   timestamp,
@@ -497,16 +550,20 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.0 | 0.0–10.0 |
-| `sat_err` | Legacy SAT error (sets εSAT) | °F | 1.0 | 0.0–10.0 |
-| `htg_full_min` | Full-heating threshold (GL36 99%) | frac | 0.9 | 0.5–1.0 |
-| `fan_on_min` | Fan-on command threshold | frac | 0.01 | 0.0–0.25 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `htg_full_min` | `fraction` | Full-heating threshold (GL36 99%) | frac | 0.9 | 0.5–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
--- htg_valve_pct >= HTG_FULL_MIN; fan_status then fan_cmd. sql_rules/fc7_sat_low_heating.sql
+-- htg_valve_pct >= HTG_FULL_MIN; fan_status then fan_cmd. sql/fdd/postgres/rules/fc7_sat_low_heating.sql
 SELECT equipment_id, fault_hours FROM fc7_sat_low_heating_result
 ```
 
@@ -515,21 +572,27 @@ SELECT equipment_id, fault_hours FROM fc7_sat_low_heating_result
 **Equation:** |SATavg − ΔTSF − MATavg| > √(εSAT² + εMAT²) in OS#2.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `supply_tol` | Legacy SAT tolerance master (sets εSAT) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `supply_tol` | `temperature_difference` | Supply tol (alias eps_sat) | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+| `econ_min_pos` | `fraction` | Economizer OA damper minimum (fraction) | frac | 0.05 | 0.0–0.5 |
+| `clg_inactive_max` | `fraction` | Cooling valve inactive max (fraction) | frac | 0.1 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: FC8 — SAT/MAT mismatch in economizer (GL36 F)
--- equation: Economizer open, CHW < 10%, |SAT − 0.55°F − MAT| > √(supply_tol²+mix_tol²).
+-- equation: Economizer open, CHW < 10%, |SAT − 0.305556Δ°C − MAT| > √(supply_tol²+mix_tol²).
 
 SELECT
   timestamp,
@@ -553,20 +616,26 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** OATavg − εOAT > SATSP − ΔTSF + εSAT in OS#2.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+| `econ_min_pos` | `fraction` | Economizer OA damper minimum (fraction) | frac | 0.05 | 0.0–0.5 |
+| `clg_inactive_max` | `fraction` | Cooling valve inactive max (fraction) | frac | 0.1 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: FC9 — OAT too warm for free cooling (GL36 G)
--- equation: Economizer open, CHW < 10%, OAT − mix_tol > SAT SP − 0.55°F + mix_tol.
+-- equation: Economizer open, CHW < 10%, OAT − mix_tol > SAT SP − 0.305556Δ°C + mix_tol.
 
 SELECT
   timestamp,
@@ -590,14 +659,20 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** |MATavg − OATavg| > √(εMAT² + εOAT²) in OS#3.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `clg_on_min` | `fraction` | Cooling valve ON minimum (fraction) | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
@@ -626,20 +701,26 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** OATavg + εOAT < SATSP − ΔTSF − εSAT in OS#3.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_oat` | OAT sensor error εOAT (GL36 default 2°F local / 5°F global) | °F | 1.15 | 0.0–10.0 |
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_oat` | `temperature_difference` | OAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+| `clg_on_min` | `fraction` | Cooling valve ON minimum (fraction) | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: FC11 — OAT/MAT mismatch economizer-only (GL36 I)
--- equation: CHW > 1%, economizer > 90%, OAT + mix_tol < SAT SP − 0.55°F − mix_tol.
+-- equation: CHW > 1%, economizer > 90%, OAT + mix_tol < SAT SP − 0.305556Δ°C − mix_tol.
 
 SELECT
   timestamp,
@@ -663,22 +744,28 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.15 | 0.0–10.0 |
-| `eps_mat` | MAT sensor error εMAT (GL36 default 5°F) | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `supply_tol` | Legacy SAT tolerance master (sets εSAT) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `supply_tol` | `temperature_difference` | Supply tol (alias eps_sat) | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_mat` | `temperature_difference` | MAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta (GL36 0.31Δ°C) | °C | 0.305555556 | 0.0–2.777777778 |
+| `clg_on_min` | `fraction` | Cooling valve ON minimum (fraction) | frac | 0.01 | 0.0–0.5 |
+| `econ_min_pos` | `fraction` | Economizer OA damper minimum (fraction) | frac | 0.05 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: FC12 — SAT above blend in cooling (GL36 J)
--- equation: CHW > 1%, SAT − supply_tol − 0.55°F > MAT + mix_tol at min or full economizer.
+-- equation: CHW > 1%, SAT − supply_tol − 0.305556Δ°C > MAT + mix_tol at min or full economizer.
 
 SELECT
   timestamp,
@@ -702,19 +789,25 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_sat` | SAT sensor error εSAT (GL36 default 2°F) | °F | 1.0 | 0.0–10.0 |
-| `sat_err` | Legacy SAT error (sets εSAT) | °F | 1.0 | 0.0–10.0 |
-| `clg_full_min` | Full-cooling threshold (GL36 99%) | frac | 0.01 | 0.5–1.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_sat` | `temperature_difference` | SAT sensor eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_min_pos` | `fraction` | Econ damper min pos | frac | 0.05 | 0.0–0.5 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `clg_full_min` | `fraction` | Cooling valve full min | frac | 0.9 | 0.5–1.0 |
+| `oa_damper_econ_low` | `fraction` | OA damper economizer low | frac | 0.05 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: FC13 — SAT above SP at full cooling (GL36 K)
--- equation: CHW > 1%, SAT > SAT SP + 1.0°F at min or full economizer.
+-- equation: CHW > 1%, SAT > SAT SP + 0.555556Δ°C at min or full economizer.
 
 SELECT
   timestamp,
@@ -738,21 +831,28 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inactive.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_ccet` | Cooling-coil entering sensor error εCCET | °F | 1.15 | 0.0–10.0 |
-| `eps_cclt` | Cooling-coil leaving sensor error εCCLT | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
-| `htg_on_min` | Heating-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `clg_on_min` | `fraction` | Cooling on min | frac | 0.01 | 0.0–1.0 |
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `htg_on_min` | `fraction` | Heating on min | frac | 0.01 | 0.0–1.0 |
+| `eps_cclt` | `temperature_difference` | CHW coil leaving eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_ccet` | `temperature_difference` | CHW coil entering eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_min_pos` | `fraction` | Econ damper min pos | frac | 0.05 | 0.0–0.5 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta | °C | 0.305555556 | 0.0–2.777777778 |
+| `clg_inactive_max` | `fraction` | Cooling inactive max | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: FC14 — CHW coil ΔT when inactive (GL36 L)
--- equation: Cooling coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.
+-- equation: Cooling coil ΔT ≥ √(mix_tol²+mix_tol²)+0.305556Δ°C while coil should be inactive.
 
 SELECT
   timestamp,
@@ -776,22 +876,29 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inactive.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `eps_hcet` | Heating-coil entering sensor error εHCET | °F | 1.15 | 0.0–10.0 |
-| `eps_hclt` | Heating-coil leaving sensor error εHCLT | °F | 1.15 | 0.0–10.0 |
-| `delta_supply_fan` | Supply-fan heat rise ΔTSF (GL36 default 2°F) | °F | 0.55 | 0.0–5.0 |
-| `econ_min_pos` | Economizer minimum-position threshold | frac | 0.05 | 0.0–0.5 |
-| `econ_full_open` | Economizer full-open threshold | frac | 0.9 | 0.5–1.0 |
-| `clg_inactive_max` | Cooling-command inactive ceiling | frac | 0.1 | 0.0–0.5 |
-| `clg_on_min` | Cooling-command ON threshold | frac | 0.01 | 0.0–0.25 |
-| `mix_tol` | Legacy master sensor tolerance (sets all ε values) | °F | 1.15 | 0.0–10.0 |
-| `mode_delay_min` | Mode-change suspension (GL36 default 30) | min | 0.0 | 0.0–60.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `htg_on_min` | `fraction` | Heating on min | frac | 0.01 | 0.0–1.0 |
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
+| `mode_delay_min` | `duration_minutes` | Mode delay after fan-on | min | 10.0 | 0.0–60.0 |
+| `eps_hclt` | `temperature_difference` | HW coil leaving eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `eps_hcet` | `temperature_difference` | HW coil entering eps | °C | 0.638888889 | 0.0–5.555555556 |
+| `econ_min_pos` | `fraction` | Econ damper min pos | frac | 0.05 | 0.0–0.5 |
+| `econ_full_open` | `fraction` | Econ damper full-open | frac | 0.9 | 0.5–1.0 |
+| `delta_supply_fan` | `temperature_difference` | Supply-fan delta | °C | 0.305555556 | 0.0–2.777777778 |
+| `clg_on_min` | `fraction` | Cooling on min | frac | 0.01 | 0.0–1.0 |
+| `clg_inactive_max` | `fraction` | Cooling inactive max | frac | 0.01 | 0.0–0.5 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `mix_tol` | `temperature_difference` | Legacy master sensor tolerance (sets all eps values) | °C | 0.638888889 | 0.0–5.555555556 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: FC15 — HW coil ΔT when inactive (GL36 M)
--- equation: Heating coil ΔT ≥ √(mix_tol²+mix_tol²)+0.55°F while coil should be inactive.
+-- equation: Heating coil ΔT ≥ √(mix_tol²+mix_tol²)+0.305556Δ°C while coil should be inactive.
 
 SELECT
   timestamp,
@@ -812,17 +919,22 @@ WHERE equipment_id = 'equip:your-id'
 
 ### AHU-SATDEV — SAT deviation from setpoint
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** |SAT − SAT SP| > 5°F.  
+**Equation:** |SAT − SAT SP| > 2.78Δ°C.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `sat_dev_err` | SAT deviation | °F | 5.0 | 1.0–15.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `sat_dev_err` | `temperature_difference` | SAT deviation | Δ°C | 2.777778 | 0.555556–8.333333 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: AHU-SATDEV — SAT deviation from setpoint
--- equation: |SAT − SAT SP| > 5°F.
+-- equation: |SAT − SAT SP| > 2.777778Δ°C.
 
 SELECT
   timestamp,
@@ -844,10 +956,15 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `duct_high_margin` | High margin | in. w.c. | 0.25 | 0.05–1.0 |
-| `pressure_on_min` | Pressure-on evidence | in. w.c. | 0.2 | 0.05–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `duct_high_margin` | `air_pressure` | High margin | Pa | 62.21 | 12.442–248.84 |
+| `pressure_on_min` | `air_pressure` | Pressure-on evidence | Pa | 49.768 | 12.442–248.84 |
+
 
 ```sql
 -- confirmation_seconds: 300
@@ -874,9 +991,14 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Heating valve > 10% AND cooling valve > 10% at once.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `valve_open_pct` | Valve open threshold | frac | 0.1 | 0.05–0.5 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `valve_open_pct` | `fraction` | Valve open threshold | frac | 0.1 | 0.05–0.5 |
+
 
 ```sql
 -- confirmation_seconds: 300
@@ -900,15 +1022,17 @@ WHERE equipment_id = 'equip:your-id'
 
 ### OAT-METEO — BAS outdoor-air sensor vs Open-Meteo
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** BAS outdoor-air sensor differs from Open-Meteo dry bulb by more than 5°F after an as-of web alignment.  
+**Equation:** BAS outdoor-air sensor differs from Open-Meteo dry bulb by more than 2.78Δ°C after an as-of web alignment.  
 The shipped rule (`sql/fdd/postgres/rules/oat_meteo_fault.sql`) does not filter `equipment_id`. Applicability is registry `equipment_kinds: [ahu]` plus the package stamp, so `AC_1` stamped `ahu` is in scope and an id that starts with `AHU` but is stamped `vav` is not.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `oat_err` | Max OAT disagreement | °F | 5.0 | 2.0–20.0 |
-| `web_cadence_seconds` | Web weather cadence | sec | 1200 | 300–7200 |
-| `web_asof_margin_seconds` | Web as-of margin | sec | 300 | 0–1800 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `oat_err` | `temperature_difference` | OAT vs meteo tolerance | °C | 2.777778 | 1.111111–11.111111 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900 | 0–3600 |
+| `web_cadence_seconds` | `duration_seconds` | Web weather cadence | s | 1200 | 300–7200 |
+| `web_asof_margin_seconds` | `duration_seconds` | Web as-of margin | s | 300 | 0–1800 |
+
 
 Web OAT (`web_oa_t` on equipment or weather rows) is joined **as-of** each local BAS timestamp: carry the last web sample forward. Samples whose last web value is older than `web_cadence_seconds + web_asof_margin_seconds` are **not assessed** (not fault time). Local `oa_t` uses the point marked `primary_reference` for the role when set; see [`provider-point-overlay.md`](../../modeling/provider-point-overlay.html).
 
@@ -931,12 +1055,17 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### ECON-1 — Economizer stuck closed
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on, OA damper < 5%, OAT > 55°F (should be economizing).  
+**Equation:** Fan on, OA damper < 5%, OAT > 12.78°C (should be economizing).  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ1_oat_min` | Favorable OAT | °F | 55.0 | 45.0–70.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `econ1_oat_min` | `absolute_temperature` | Favorable OAT | °C | 12.777778 | 7.222222–21.111111 |
+| `econ1_damper_max` | `fraction` | Stuck-closed damper frac | frac | 0.05 | 0.0–0.2 |
+
 
 ```sql
 -- confirmation_seconds: 600
@@ -955,18 +1084,23 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### ECON-2 — Economizing when outdoor unfavorable
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** OAT > 63°F AND OA damper > 42% (should be at minimum).  
+**Equation:** OAT > 17.22°C AND OA damper > 42% (should be at minimum).  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ2_oat_hi` | OAT high cutoff | °F | 63.0 | 55.0–80.0 |
-| `econ2_damper` | Damper open frac | frac | 0.42 | 0.2–0.9 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `econ2_oat_hi` | `absolute_temperature` | OAT high cutoff | °C | 17.222222 | 12.777778–26.666667 |
+| `econ2_damper` | `fraction` | Damper open frac | frac | 0.42 | 0.2–0.9 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 300
 -- rule: ECON-2 — Economizing when outdoor unfavorable
--- equation: OAT > 63°F AND OA damper > 42% (should be at minimum).
+-- equation: OAT > 17.222222°C AND OA damper > 42% (should be at minimum).
 
 SELECT
   timestamp,
@@ -985,15 +1119,21 @@ WHERE equipment_id = 'equip:your-id'
 
 ### ECON-3 — Mech cooling without integrated economizer
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Web free-cooling opportunity (60°F ≤ DB < 72°F AND dewpoint < 60°F) while cooling valve open and OA damper below integrated threshold (default 90%).  
+**Equation:** Web free-cooling opportunity (15.56°C ≤ DB < 22.22°C AND dewpoint < 15.56°C) while cooling valve open and OA damper below integrated threshold (default 90%).  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ3_db_min` | Free-cool OA dry-bulb min | °F | 60.0 | 50.0–68.0 |
-| `econ3_db_max` | Free-cool OA dry-bulb max | °F | 72.0 | 65.0–80.0 |
-| `econ3_dp_max` | Free-cool OA dew point max | °F | 60.0 | 45.0–68.0 |
-| `econ3_damper_hi` | Integrated economizer damper | frac | 0.9 | 0.5–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `econ3_db_min` | `absolute_temperature` | Free-cool OA dry-bulb min | °C | 15.555556 | 10.0–20.0 |
+| `econ3_db_max` | `absolute_temperature` | Free-cool OA dry-bulb max | °C | 22.222222 | 18.333333–26.666667 |
+| `econ3_dp_max` | `absolute_temperature` | Free-cool OA dew point max | °C | 15.555556 | 7.222222–20.0 |
+| `econ3_damper_hi` | `fraction` | Integrated economizer damper | frac | 0.9 | 0.5–1.0 |
+| `clg_open_min` | `fraction` | Cooling valve open minimum | frac | 0.01 | 0.0–0.5 |
+
 
 ```sql
 -- confirmation_seconds: 300
@@ -1013,17 +1153,23 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### ECON-4 — Low estimated OA fraction
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on, |RAT−OAT| > 2.2°F, estimated OA fraction < 21%.  
+**Equation:** Fan on, |RAT−OAT| > 1.22Δ°C, estimated OA fraction < 21%.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `oa_min_pct` | Min OA fraction | % | 21.0 | 5.0–40.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `oa_min_pct` | `percent` | Min OA fraction | % | 21.0 | 5.0–40.0 |
+| `oat_rat_delta_min` | `temperature_difference` | Min |RAT−OAT| for OA-fraction estimate  | Δ°C | 1.222222 | 0.277778–5.555556 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: ECON-4 — Low estimated OA fraction
--- equation: Fan on, |RAT−OAT| > 2.2°F, estimated OA fraction < 21%.
+-- equation: Fan on, |RAT−OAT| > 1.222222Δ°C, estimated OA fraction < 21%.
 
 SELECT
   timestamp,
@@ -1044,17 +1190,23 @@ WHERE equipment_id = 'equip:your-id'
 
 ### ECON-5 — Preheat over-conditioning
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Preheat leaving air > 2.2°F above target while preheat active.  
+**Equation:** Preheat leaving air > 1.22Δ°C above target while preheat active.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `preheat_over_f` | Preheat over ΔT | °F | 2.2 | 0.5–8.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `preheat_over` | `temperature_difference` | Preheat over ΔT | Δ°C | 1.222222 | 0.277778–4.444444 |
+| `htg_open_min` | `fraction` | Heating valve open minimum | frac | 0.01 | 0.0–0.5 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: ECON-5 — Preheat over-conditioning
--- equation: Preheat leaving air > 2.2°F above target while preheat active.
+-- equation: Preheat leaving air > 1.222222Δ°C above target while preheat active.
 
 SELECT
   timestamp,
@@ -1075,18 +1227,23 @@ WHERE equipment_id = 'equip:your-id'
 
 ### ECON-6 — Economizing in freezing weather
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Web dry-bulb < 25°F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.  
+**Equation:** Web dry-bulb < -3.89°C AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ6_oat_max_f` | Winter OAT ceiling | °F | 25.0 | 15.0–40.0 |
-| `econ6_damper_max` | Winter min-OA damper | frac | 0.25 | 0.05–0.5 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `econ6_oat_max` | `absolute_temperature` | Winter OAT ceiling | °C | -3.888889 | -9.444444–4.444444 |
+| `econ6_damper_max` | `fraction` | Winter min-OA damper | frac | 0.25 | 0.05–0.5 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: ECON-6 — Economizing in freezing weather
--- equation: Web dry-bulb < 25°F AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.
+-- equation: Web dry-bulb < -3.888889°C AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.
 
 SELECT
   timestamp,
@@ -1104,20 +1261,26 @@ WHERE equipment_id = 'equip:your-id'
 
 ### ECON-7 — Economizer OK but not economizing
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a 35°F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 60°F DB (MECH-OAT-1) and mech + integrated economizer in the 60–72°F band (ECON-3). All thresholds are imperial sliders.  
+**Equation:** Economizer-OK web weather: dew point < 15.56°C AND dry-bulb < 22.22°C (above a 1.67°C freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 15.56°C DB (MECH-OAT-1) and mech + integrated economizer in the 15.56–22.22°C band (ECON-3). All thresholds are SI parameters.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `econ7_db_min` | Econ-OK dry-bulb floor (freeze guard) | °F | 35.0 | 20.0–50.0 |
-| `econ7_db_max` | Econ-OK dry-bulb max | °F | 72.0 | 65.0–80.0 |
-| `econ7_dp_max` | Econ-OK dew point max | °F | 60.0 | 45.0–68.0 |
-| `econ7_damper_min` | Economizing damper threshold | frac | 0.5 | 0.2–0.9 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `econ7_db_min` | `absolute_temperature` | Econ-OK dry-bulb floor (freeze guard) | °C | 1.666667 | -6.666667–10.0 |
+| `econ7_db_max` | `absolute_temperature` | Econ-OK dry-bulb max | °C | 22.222222 | 18.333333–26.666667 |
+| `econ7_dp_max` | `absolute_temperature` | Econ-OK dew point max | °C | 15.555556 | 7.222222–20.0 |
+| `econ7_damper_min` | `fraction` | Economizing damper threshold | frac | 0.5 | 0.2–0.9 |
+| `clg_open_min` | `fraction` | Cooling valve open minimum | frac | 0.05 | 0.0–0.5 |
+
 
 ```sql
 -- confirmation_seconds: 600
 -- rule: ECON-7 — Economizer OK but not economizing
--- equation: Economizer-OK web weather: dew point < 60°F AND dry-bulb < 72°F (above a 35°F freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 60°F DB (MECH-OAT-1) and mech + integrated economizer in the 60–72°F band (ECON-3). All thresholds are imperial sliders.
+-- equation: Economizer-OK web weather: dew point < 15.555556°C AND dry-bulb < 22.222222°C (above a 1.666667°C freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 15.555556°C DB (MECH-OAT-1) and mech + integrated economizer in the 15.555556–22.222222°C band (ECON-3). All thresholds are SI parameters.
 
 SELECT
   timestamp,
@@ -1133,19 +1296,21 @@ FROM telemetry_pivot
 WHERE equipment_id = 'equip:your-id'
 ```
 
-### MECH-OAT-1 — Mechanical cooling below 60°F web OAT
+### MECH-OAT-1 — Mechanical cooling below 15.56°C web OAT
 **Family:** `ahu` · **Equipment:** `ahu`, `chiller`, `heatpump`  
-**Equation:** Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 60°F is outside the free-cool + integrated economizer band.  
+**Equation:** Proven DX/chiller mechanical cooling while web dry-bulb < 15.56°C. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 15.56°C is outside the free-cool + integrated economizer band.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `mech_oat_max_f` | Mech-cool OAT ceiling | °F | 60.0 | 45.0–65.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `mech_oat_max` | `absolute_temperature` | Mech-cool OAT ceiling | °C | 15.555556 | 7.222222–18.333333 |
+
 
 ```sql
 -- confirmation_seconds: 600
--- rule: MECH-OAT-1 — Mechanical cooling below 60°F web OAT
--- equation: Proven DX/chiller mechanical cooling while web dry-bulb < 60°F. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 60°F is outside the free-cool + integrated economizer band.
+-- rule: MECH-OAT-1 — Mechanical cooling below 15.555556°C web OAT
+-- equation: Proven DX/chiller mechanical cooling while web dry-bulb < 15.555556°C. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 15.555556°C is outside the free-cool + integrated economizer band.
 
 SELECT
   timestamp,
@@ -1162,14 +1327,14 @@ WHERE equipment_id = 'equip:your-id'
 
 ### RESET-1 — SAT reset not tracking outdoor air
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Fan on AND |SAT SP − (52 + 0.25×(OAT−65))| > 3°F.  
+**Equation:** Fan on AND |SAT SP − (11.111111 + 0.25×(OAT−18.333333))| > 1.67Δ°C.  
 **Default confirmation:** 900 s
 
-_No extra cookbook params beyond confirmation in this snippet; production SQL uses `sql_rules/reset1_sat_oa_reset.sql`._
+_No extra cookbook params beyond confirmation in this snippet; production SQL uses `sql/fdd/postgres/rules/reset1_sat_oa_reset.sql`._
 
 ```sql
 -- confirmation_seconds: 900
--- See sql_rules/reset1_sat_oa_reset.sql
+-- See sql/fdd/postgres/rules/reset1_sat_oa_reset.sql
 SELECT equipment_id, fault_hours FROM reset1_sat_oa_reset_result
 ```
 
@@ -1198,10 +1363,15 @@ WHERE equipment_id = 'equip:your-ahu'
 **Equation:** Estimated OA fraction < 15% with adequate OAT/RAT split.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `min_oa_frac` | Min OA fraction | frac | 0.15 | 0.05–0.4 |
-| `oat_rat_guard` | Min |RAT−OAT| guard | °F | 2.2 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `min_oa_frac` | `fraction` | Min OA fraction | frac | 0.15 | 0.05–0.4 |
+| `oat_rat_guard` | `temperature_difference` | OAT/RAT guard | Δ°C | 1.222222 | 0.277778–3.333333 |
+
 
 ```sql
 -- confirmation_seconds: 900
@@ -1221,12 +1391,17 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### DMP-1 — OA damper leakage
 **Family:** `ahu` · **Equipment:** `ahu`  
-**Equation:** Damper ≤ 5% but MAT tracks OAT within 2°F — leaking OA damper.  
+**Equation:** Damper ≤ 5% but MAT tracks OAT within 1.11Δ°C — leaking OA damper.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `leak_delta` | Leak ΔT | °F | 2.0 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `leak_delta` | `temperature_difference` | Leak ΔT | Δ°C | 1.111111 | 0.277778–3.333333 |
+
 
 ```sql
 -- confirmation_seconds: 900
@@ -1247,10 +1422,15 @@ WHERE equipment_id = 'equip:your-ahu'
 **Equation:** Cooling valve ≤ 5% AND (SAT < sat_sp − sat_err OR SAT < MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `sat_err` | SAT vs SP leak ΔT | °F | 2.0 | 0.5–8.0 |
-| `mat_leak_delta` | SAT vs MAT leak ΔT | °F | 2.0 | 0.5–12.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `sat_err` | `temperature_difference` | SAT vs SP leak ΔT | Δ°C | 1.111111 | 0.277778–4.444444 |
+| `mat_leak_delta` | `temperature_difference` | SAT vs MAT leak ΔT | Δ°C | 1.111111 | 0.277778–6.666667 |
+
 
 ```sql
 -- confirmation_seconds: 900
@@ -1273,18 +1453,23 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### VAV-1 — Zone comfort band
 **Family:** `vav` · **Equipment:** `vav`, `zone_other`, `heatpump`, `baseboard`  
-**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 70–75°F) during occupied hours when `occ_mode` is set (`require_occupied`, default on). A saved Overview calendar fills a missing or blank `occ_mode` before the rule runs. NULL `occ_mode` means neither the calendar nor a BAS occupied point is set, so every sample is scored. Unoccupied setback stays on VAV-2.  
+**Equation:** Zone temp outside `zone_lo`–`zone_hi` (default 21.11–23.89°C) during occupied hours when `occ_mode` is set (`require_occupied`, default on). A saved Overview calendar fills a missing or blank `occ_mode` before the rule runs. NULL `occ_mode` means neither the calendar nor a BAS occupied point is set, so every sample is scored. Unoccupied setback stays on VAV-2.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `zone_lo` / `ZONE_T_LO` | Zone low | °F | 70.0 | 55.0–72.0 |
-| `zone_hi` / `ZONE_T_HI` | Zone high | °F | 75.0 | 72.0–85.0 |
-| `require_occupied` / `REQUIRE_OCCUPIED` | Require occupied | bool | 1 | 0–1 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `zone_t_lo` | `absolute_temperature` | Zone low | °C | 21.111111111 | 12.777777778–22.222222222 |
+| `zone_t_hi` | `absolute_temperature` | Zone high | °C | 23.888888889 | 22.222222222–29.444444444 |
+| `require_occupied` | `boolean` | Require occupied | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 900
--- See sql_rules/vav1_comfort_fault.sql
+-- See sql/fdd/postgres/rules/vav1_comfort_fault.sql
 -- REQUIRE_OCCUPIED defaults to 1. Unoccupied tokens and numeric occ_mode <= 0.05
 -- do not fault. NULL occ_mode does not suppress the band.
 SELECT equipment_id, fault_hours, fault_pct FROM vav1_comfort_fault_result
@@ -1292,34 +1477,44 @@ SELECT equipment_id, fault_hours, fault_pct FROM vav1_comfort_fault_result
 
 ### VAV-2 — Night setback miss
 **Family:** `vav` · **Equipment:** `vav`, `zone`  
-**Equation:** Unoccupied AND zone temp > setback_hi (default 68°F).  
+**Equation:** Unoccupied AND zone temp > setback_hi (default 20°C).  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `setback_hi` | Setback high | °F | 68.0 | 55.0–72.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `setback_hi` | `absolute_temperature` | Setback high | °C | 20.0 | 12.777777778–22.222222222 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900 | 0–3600 |
+
 
 ```sql
 -- confirmation_seconds: 900
--- See sql_rules/vav2_night_setback.sql
+-- See sql/fdd/postgres/rules/vav2_night_setback.sql
 SELECT equipment_id, fault_hours FROM vav2_night_setback_result
 ```
 
 ### VAV-3 — Excessive reheat during warm weather
 **Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Air flowing AND OAT > 78°F AND reheat valve > 52%.  
+**Equation:** Air flowing AND OAT > 25.56°C AND reheat valve > 52%.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `reheat_oat` | Warm OAT | °F | 78.0 | 65.0–90.0 |
-| `reheat_pct` | Reheat frac | frac | 0.52 | 0.1–1.0 |
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `reheat_oat` | `absolute_temperature` | Warm OAT | °C | 25.555555556 | 18.333333333–32.222222222 |
+| `reheat_pct` | `fraction` | Reheat frac | frac | 0.52 | 0.1–1.0 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+
 
 ```sql
 -- confirmation_seconds: 300
 -- rule: VAV-3 — Excessive reheat during warm weather
--- equation: Air flowing AND OAT > 78°F AND reheat valve > 52%.
+-- equation: Air flowing AND OAT > 25.555556°C AND reheat valve > 52%.
 
 SELECT
   timestamp,
@@ -1341,21 +1536,26 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Air flowing AND damper > 97.5% sustained across the window.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `full_open_pct` | Full open frac | frac | 0.975 | 0.8–1.0 |
-| `sustain_hours` | Sustain window | h | 1.5 | 0.5–6.0 |
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `full_open_pct` | `fraction` | Full open frac | frac | 0.975 | 0.8–1.0 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+| `sustain_hours` | `dimensionless` | Sustain window | h | 1.5 | 0.5–6.0 |
+
 
 ```sql
 -- Sequential: (1) sustain full-open streak (2) confirm that mask — not max(sustain, confirm).
--- See sql_rules/vav4_damper_full_open.sql
+-- See sql/fdd/postgres/rules/vav4_damper_full_open.sql
 SELECT equipment_id, fault_hours FROM vav4_damper_full_open_result
 ```
 
 ### VAV-5 — Airflow sensor bias
 **Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Airflow > 50 cfm while damper < 10% (implausible flow).  
+**Equation:** Airflow > 23.597 L/s while damper < 10% (implausible flow).  
 **Default confirmation:** 900 s
 
 _No tunable thresholds beyond confirmation delay._
@@ -1363,7 +1563,7 @@ _No tunable thresholds beyond confirmation delay._
 ```sql
 -- confirmation_seconds: 900
 -- rule: VAV-5 — Airflow sensor bias
--- equation: Airflow > 50 cfm while damper < 10% (implausible flow).
+-- equation: Airflow > 23.59735 L/s while damper < 10% (implausible flow).
 
 SELECT
   timestamp,
@@ -1382,35 +1582,45 @@ WHERE equipment_id = 'equip:your-id'
 
 ### VAV-6 — Reheat when cooling available
 **Family:** `vav` · **Equipment:** `vav`  
-**Equation:** OAT < 65°F AND reheat valve > 25% (optional cooling-available).  
+**Equation:** OAT < 18.33°C AND reheat valve > 25% (optional cooling-available).  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `free_cool_oat` | Free-cool OAT | °F | 65.0 | 45.0–75.0 |
-| `reheat_pct` | Reheat frac | frac | 0.25 | 0.05–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `free_cool_oat` | `absolute_temperature` | Free-cool OAT | °C | 18.333333333 | 7.222222222–23.888888889 |
+| `reheat_pct` | `fraction` | Reheat frac | frac | 0.25 | 0.05–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+
 
 ```sql
 -- confirmation_seconds: 900
--- See sql_rules/vav6_reheat_free_cool.sql
+-- See sql/fdd/postgres/rules/vav6_reheat_free_cool.sql
 SELECT equipment_id, fault_hours FROM vav6_reheat_free_cool_result
 ```
 
 ### VAV-REHEAT — Reheat valve stuck / no temp rise
 **Family:** `vav` · **Equipment:** `vav`  
-**Equation:** Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or failed reheat valve/coil.  
+**Equation:** Air flowing AND reheat valve > 30% AND box discharge temp rises < 1.67Δ°C above duct inlet (air from AHU) — stuck or failed reheat valve/coil.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `reheat_cmd` | Reheat open frac | frac | 0.3 | 0.1–1.0 |
-| `min_rise` | Min temp rise | °F | 3.0 | 0.5–15.0 |
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `reheat_cmd` | `fraction` | Reheat open frac | frac | 0.3 | 0.1–1.0 |
+| `min_rise` | `temperature_difference` | Min temp rise | °C | 1.666666667 | 0.277777778–8.333333333 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+
 
 ```sql
 -- confirmation_seconds: 900
 -- rule: VAV-REHEAT — Reheat valve stuck / no temp rise
--- equation: Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet (air from AHU) — stuck or failed reheat valve/coil.
+-- equation: Air flowing AND reheat valve > 30% AND box discharge temp rises < 1.666667Δ°C above duct inlet (air from AHU) — stuck or failed reheat valve/coil.
 
 SELECT
   timestamp,
@@ -1433,10 +1643,12 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Air flowing AND |VAV discharge − parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `delta_f` | Leave Δ vs AHU SAT | °F | 8.0 | 2.0–25.0 |
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `delta` | `temperature_difference` | Leave Δ vs AHU SAT | °C | 4.444444444 | 1.111111111–13.888888889 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+
 
 ```sql
 -- confirmation_seconds: 900
@@ -1463,33 +1675,39 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `flow_on_min` | Airflow-on min | cfm | 25.0 | 0.0–200.0 |
-| `fixed_flow_max_std` | Fixed-flow max std | cfm | 15.0 | 1.0–80.0 |
-| `fixed_flow_min_mean` | Fixed-flow min mean | cfm | 200.0 | 50.0–2000.0 |
-| `high_min_flow_sp` | High min-flow SP | cfm | 250.0 | 50.0–2000.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `high_min_flow_sp` | `volumetric_flow` | High min-flow SP | L/s | 117.98675 | 23.59735–943.894 |
+| `flow_on_min` | `volumetric_flow` | Airflow-on min | L/s | 11.798675 | 0.0–94.3894 |
+| `fixed_flow_hours` | `dimensionless` | Fixed-flow rolling window | h | 1.0 | 0.25–6.0 |
+| `fixed_flow_max_std` | `volumetric_flow` | Fixed-flow max std | L/s | 7.079205 | 0.471947–37.75576 |
+| `fixed_flow_min_mean` | `volumetric_flow` | Fixed-flow min mean | L/s | 94.3894 | 23.59735–943.894 |
+
 
 ```sql
 -- confirmation_seconds: 900
 -- Three pandas branches: under-min OR fixed-high rolling std/mean OR high min_flow_sp.
--- SQL: sql_rules/vav7_min_airflow.sql (timestamp-ordered windows).
+-- SQL: sql/fdd/postgres/rules/vav7_min_airflow.sql (timestamp-ordered windows).
 SELECT equipment_id, fault_hours FROM vav7_min_airflow_result
 ```
 
 ## Fan coil / zone_other
 
-Nine `FCU-*` rules. This section sits in the same family order as the [Pandas cookbook](pandas-cookbook.html#fan-coil--zone_other): after VAV terminals, before central plant. Each rule below uses the same equation, parameter table, and confirmation seconds as that page. Family `fcu`, priority P1, `dashboard_wired: false`. Registry and pandas equipment kinds are `zone_other`, `general`, and `ahu`. Haystack stacks markers on one equip (`equip` + `fanCoilUnit` + `zone`) and on each point (`zone` + `air` + `temp`, valve cmds, and the other roles below). Open-FDD consumes that as a stamp plus mapped roles. A sensor-owning master stamps `canonical_kind` `zone_other` (`equipType` `zone_other`, `zone`, `fcu`, `fanCoil`, or a standalone-DDC alias). A follower without its own zone sensor is resolved kind `general`. A fan coil's stamp stays `zone_other`. Kind `ahu` is on the list so a stamped air handler that carries these roles can run the family. The equipment id is only the historian key. Stamps and the °F / °C pass-through trap: [FCU and zone_other rules](fcu-zone-other.html).
+Nine `FCU-*` rules. This section sits in the same family order as the [Pandas cookbook](pandas-cookbook.html#fan-coil--zone_other): after VAV terminals, before central plant. Each rule below uses the same equation, parameter table, and confirmation seconds as that page. Family `fcu`, priority P1, `dashboard_wired: false`. Registry and pandas equipment kinds are `zone_other`, `general`, and `ahu`. Haystack stacks markers on one equip (`equip` + `fanCoilUnit` + `zone`) and on each point (`zone` + `air` + `temp`, valve cmds, and the other roles below). Open-FDD consumes that as a stamp plus mapped roles. A sensor-owning master stamps `canonical_kind` `zone_other` (`equipType` `zone_other`, `zone`, `fcu`, `fanCoil`, or a standalone-DDC alias). A follower without its own zone sensor is resolved kind `general`. A fan coil's stamp stays `zone_other`. Kind `ahu` is on the list so a stamped air handler that carries these roles can run the family. The equipment id is only the historian key. Stamps and the SI unit contract: [FCU and zone_other rules](fcu-zone-other.html).
 
 **Parity:** `sql_screening`. These pages document the tip predicates. They do not promote the family. Soft-OPEN closes only after tip and field stress on issue-mapped gates (mask and duration versus the pandas oracle). Cookbook CI and unit fixtures are not that gate. This docs change does not add a stress-script stub.
 
-Commands accept 0–1 or 0–100 (`> 1.0` divides by 100). Valve-shut tests use a fixed `0.05`. CO₂ below `300` ppm does not fault. Fan proof prefers status, with normalized `fan_cmd > 0.10` when status is null. DataFusion treats non-null `fan_status` as on above `0.05`. Pandas `as_bool` treats non-null numeric `fan-status` as on above `0.5`. That cut is part of why the family stays `sql_screening`.
+Commands accept 0–1 or 0–100 (`> 1.0` divides by 100). Valve-shut tests use a fixed `0.05`. CO₂ below `300` ppm does not fault. Fan proof prefers status, with normalized `fan_cmd > 0.10` when status is null. PostgreSQL treats non-null `fan_status` as on above `0.05`. Pandas `as_bool` treats non-null numeric `fan-status` as on above `0.5`. That cut is part of why the family stays `sql_screening`.
 
 Six duration rules (`FCU-HTG-COIL`, `FCU-CLG-COIL`, `FCU-VALVE-PASS-HTG`, `FCU-VALVE-PASS-CLG`, `FCU-DAMPER-POS`, `FCU-CO2-DAMPER`) confirm for **900 s**. `FCU-SENSOR-NULL`, `FCU-DEADBAND`, and `FCU-MODE-CYCLE` confirm for **0 s**.
 
-DataFusion files `sql_rules/fcu_*.sql` emit `fault_hours`. The six duration files share a normalized CTE and a consecutive streak: `{{CONFIRM_ROWS}}` = ceil(`confirm_seconds` / poll seconds), minimum 1, then hours = confirmed rows × `{{POLL_SECONDS}} / 3600`. The CASE blocks below are the `raw_fault` predicates from those files. Pandas twins return a raw mask; `confirm_fault` returns that mask unchanged when `confirm_seconds` is 0. The `confirm_min` slider default is `confirm_seconds / 60` after catalog load.
+PostgreSQL files `sql/fdd/postgres/rules/fcu_*.sql` emit `fault_hours`. The six duration files share a normalized CTE and a consecutive streak: `{{CONFIRM_ROWS}}` = ceil(`confirm_seconds` / poll seconds), minimum 1, then hours = confirmed rows × `{{POLL_SECONDS}} / 3600`. The CASE blocks below are the `raw_fault` predicates from those files. Pandas twins return a raw mask; `confirm_fault` returns that mask unchanged when `confirm_seconds` is 0. The `confirm_min` slider default is `confirm_seconds / 60` after catalog load.
 
-SQL registry `optional_roles` also name columns the shared CTE selects (the other valve, dampers, CO₂) when that rule's predicate does not test them. Pandas reads only the roles listed on each rule. A package that maps every **required** role plus fan proof can run both engines. Missing SQL-only optional columns are NULL in DataFusion. Role map for later tip stress: [zone terminals]({{ site.baseurl }}/modeling/zone-terminals/) and [SQL rules → Haystack]({{ site.baseurl }}/modeling/sql-rules-haystack-map.html).
+SQL registry `optional_roles` also name columns the shared CTE selects (the other valve, dampers, CO₂) when that rule's predicate does not test them. Pandas reads only the roles listed on each rule. A package that maps every **required** role plus fan proof can run both engines. Missing SQL-only optional columns are NULL in PostgreSQL. Role map for later tip stress: [zone terminals]({{ site.baseurl }}/modeling/zone-terminals/) and [SQL rules → Haystack]({{ site.baseurl }}/modeling/sql-rules-haystack-map.html).
 
 ### FCU-SENSOR-NULL — Missing FCU zone sensor
 **Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
@@ -1500,11 +1718,12 @@ SQL registry `optional_roles` also name columns the shared CTE selects (the othe
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `null_fraction` | Null fraction | frac | 0.90 | 0.50–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `null_fraction` | `fraction` | Null fraction | frac | 0.9 | 0.5–1 |
 
-When `zone_t` is absent from history, the runner rewrites this file to zero hours. A setpoint-only follower must not look like a dead sensor. A mapped `zone_t` column that is present and null still runs the SQL below (`sql_rules/fcu_sensor_null.sql`).
+
+When `zone_t` is absent from history, the runner rewrites this file to zero hours. A setpoint-only follower must not look like a dead sensor. A mapped `zone_t` column that is present and null still runs the SQL below (`sql/fdd/postgres/rules/fcu_sensor_null.sql`).
 
 ```sql
 -- FCU-SENSOR-NULL — own zone setpoint exists while a mapped zone sensor is predominantly null.
@@ -1523,7 +1742,7 @@ FROM coverage;
 
 ### FCU-HTG-COIL — FCU heating coil under-delivery
 **Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, heating valve ≥ 80% (`valve_open`), and discharge air − zone temperature < 5.4°F (`coil_delta_f`).  
+**Equation:** Fan on, heating valve ≥ 80% (`valve_open`), and discharge air − zone temperature < 3Δ°C (`coil_delta`, Δ°C).  
 **Default confirmation:** 900 s  
 **Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`  
 **Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
@@ -1531,18 +1750,19 @@ FROM coverage;
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `valve_open` | Valve open threshold | frac | 0.80 | 0.50–1.0 |
-| `coil_delta_f` | Minimum heating rise | °F | 5.4 | 1.0–20.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `valve_open` | `fraction` | Valve open threshold | frac | 0.8 | 0.5–1 |
+| `coil_delta` | `temperature_difference` | Minimum heating rise | °C | 3.0 | 0.555555556–11.111111111 |
 
-`sat` and `zone_t` are canonical °F roles. 5.4°F is 3°C. Predicate from `sql_rules/fcu_htg_coil.sql` (shared streak tail follows):
+
+`sat` and `zone_t` are normalized to °C. `coil_delta` is a Δ°C threshold. Predicate from `sql/fdd/postgres/rules/fcu_htg_coil.sql` (shared streak tail follows):
 
 ```sql
 CAST(CASE
   WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1
    AND htg >= {{VALVE_OPEN}}
-   AND sat - zone_t < {{COIL_DELTA_F}}
+   AND sat - zone_t < {{COIL_DELTA}}
   THEN 1 ELSE 0 END AS INT) AS raw_fault
 ```
 
@@ -1556,11 +1776,12 @@ CAST(CASE
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `valve_open` | Valve open threshold | frac | 0.80 | 0.50–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `valve_open` | `fraction` | Valve open threshold | frac | 0.8 | 0.5–1 |
 
-The “not colder than the zone” test is fixed at `sat - zone_t >= 0`. There is no delta slider. Predicate from `sql_rules/fcu_clg_coil.sql`:
+
+The “not colder than the zone” test is fixed at `sat - zone_t >= 0`. There is no delta slider. Predicate from `sql/fdd/postgres/rules/fcu_clg_coil.sql`:
 
 ```sql
 CAST(CASE
@@ -1572,7 +1793,7 @@ CAST(CASE
 
 ### FCU-VALVE-PASS-HTG — FCU heating valve passing
 **Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, both valves ≤ 0.05, and discharge air − zone temperature > 5.4°F (`pass_delta_f`).  
+**Equation:** Fan on, both valves ≤ 0.05, and discharge air − zone temperature > 3Δ°C (`pass_delta`).  
 **Default confirmation:** 900 s  
 **Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`  
 **Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
@@ -1580,11 +1801,12 @@ CAST(CASE
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `pass_delta_f` | Passing temperature rise | °F | 5.4 | 1.0–20.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `pass_delta` | `temperature_difference` | Passing temperature rise | °C | 3.0 | 0.555555556–11.111111111 |
 
-Predicate from `sql_rules/fcu_valve_pass_htg.sql`:
+
+Predicate from `sql/fdd/postgres/rules/fcu_valve_pass_htg.sql`:
 
 ```sql
 CAST(CASE
@@ -1596,7 +1818,7 @@ CAST(CASE
 
 ### FCU-VALVE-PASS-CLG — FCU cooling valve passing
 **Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Fan on, both valves ≤ 0.05, and zone temperature − discharge air > 5.4°F (`pass_delta_f`).  
+**Equation:** Fan on, both valves ≤ 0.05, and zone temperature − discharge air > 3Δ°C (`pass_delta`).  
 **Default confirmation:** 900 s  
 **Required roles (both engines):** pandas `discharge-air-temp`, `zone-air-temp`, `heating-valve`, `cooling-valve` → SQL `sat`, `zone_t`, `htg_valve_pct`, `clg_valve_pct`  
 **Optional roles (both engines):** pandas `fan-status`, `fan-cmd` → SQL `fan_status`, `fan_cmd`  
@@ -1604,11 +1826,12 @@ CAST(CASE
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `pass_delta_f` | Passing temperature drop | °F | 5.4 | 1.0–20.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `pass_delta` | `temperature_difference` | Passing temperature drop | °C | 3.0 | 0.555555556–11.111111111 |
 
-Predicate from `sql_rules/fcu_valve_pass_clg.sql`:
+
+Predicate from `sql/fdd/postgres/rules/fcu_valve_pass_clg.sql`:
 
 ```sql
 CAST(CASE
@@ -1628,12 +1851,13 @@ CAST(CASE
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `command_min` | Minimum damper command | frac | 0.15 | 0.0–1.0 |
-| `position_error` | Position error | frac | 0.15 | 0.05–0.50 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `command_min` | `fraction` | Minimum command | frac | 0.15 | 0–1 |
+| `position_error` | `fraction` | Position error | frac | 0.15 | 0.05–0.5 |
 
-Predicate from `sql_rules/fcu_damper_pos.sql`:
+
+Predicate from `sql/fdd/postgres/rules/fcu_damper_pos.sql`:
 
 ```sql
 CAST(CASE
@@ -1653,12 +1877,13 @@ CAST(CASE
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `co2_high_ppm` | High CO₂ | ppm | 1000 | 600–2000 |
-| `damper_low` | Low damper command | frac | 0.10 | 0.0–0.50 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `co2_high_ppm` | `dimensionless` | High CO2 | ppm | 1000 | 600–2000 |
+| `damper_low` | `fraction` | Low damper command | frac | 0.1 | 0–0.5 |
 
-Predicate from `sql_rules/fcu_co2_damper.sql`:
+
+Predicate from `sql/fdd/postgres/rules/fcu_co2_damper.sql`:
 
 ```sql
 CAST(CASE
@@ -1670,21 +1895,22 @@ CAST(CASE
 
 ### FCU-DEADBAND — FCU heat/cool deadband collapse
 **Family:** `fcu` · **Equipment:** `zone_other`, `general`, `ahu` · **Parity:** `sql_screening`  
-**Equation:** Cooling setpoint − heating setpoint < 1°C (`deadband_c`). Both roles stay site-native Celsius.  
+**Equation:** Cooling setpoint − heating setpoint < 1Δ°C (`deadband`). Both source values are normalized to °C at ingest; the difference is evaluated in Δ°C.  
 **Default confirmation:** 0 s  
 **Required roles (both engines):** pandas `cooling-sp`, `heating-sp` → SQL `cooling_sp`, `heating_sp`  
 **Optional roles (both engines):** none
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `deadband_c` | Minimum deadband | °C | 1.0 | 0.0–5.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `deadband` | `temperature_difference` | Minimum deadband | °C | 1 | 0–5 |
 
-`cooling_sp` and `heating_sp` are not canonical temperature roles. Metric `history_si` does not convert them to °F. Map site-native Celsius into these two roles. Full file `sql_rules/fcu_deadband.sql`:
+
+`cooling_sp` and `heating_sp` are engineer-declared point roles normalized to °C at ingest. Their difference and the `deadband` parameter use Δ°C. Full file `sql/fdd/postgres/rules/fcu_deadband.sql`:
 
 ```sql
--- FCU-DEADBAND — pass-through FCU setpoints remain site-native Celsius
+-- FCU-DEADBAND — pass-through FCU setpoints are normalized to °C
 SELECT equipment_id,
   SUM(CASE WHEN cooling_sp IS NOT NULL AND heating_sp IS NOT NULL
     AND cooling_sp - heating_sp < {{DEADBAND_C}} THEN 1 ELSE 0 END)
@@ -1702,12 +1928,13 @@ GROUP BY equipment_id;
 
 **Tunable params**
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `mode_valve_min` | Active valve threshold | frac | 0.10 | 0.0–0.50 |
-| `mode_changes` | Mode changes | count | 4 | 1–20 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `mode_valve_min` | `fraction` | Active valve threshold | frac | 0.1 | 0–0.5 |
+| `mode_changes` | `count` | Mode changes | count | 4 | 1–20 |
 
-Mode assignment from `sql_rules/fcu_mode_cycle.sql`. The rest of the file keeps `mode <> 0` rows, counts changes with `LAG`, and sums rows whose running `change_count` is at least `{{MODE_CHANGES}}`:
+
+Mode assignment from `sql/fdd/postgres/rules/fcu_mode_cycle.sql`. The rest of the file keeps `mode <> 0` rows, counts changes with `LAG`, and sums rows whose running `change_count` is at least `{{MODE_CHANGES}}`:
 
 ```sql
 CASE
@@ -1728,11 +1955,14 @@ END AS mode
 **Equation:** Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.  
 **Default confirmation:** 1800 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
-| `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
-| `sat_band_f` | AHU SAT≈SP band | °F | 2.0 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `load_sat_hi` | `fraction` | Load satisfaction high (no-load fault) | frac | 0.5 | 0.0–1.0 |
+
 
 ```sql
 -- confirmation_seconds: 1800
@@ -1754,12 +1984,17 @@ WHERE equipment_id = 'equip:your-id'
 
 ### CHW-1 — Low chilled-water ΔT
 **Family:** `plant` · **Equipment:** `chiller`  
-**Equation:** Pump on AND (CHWR − CHWS) < 4°F.  
+**Equation:** Pump on AND (CHWR − CHWS) < 2.22Δ°C.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `min_dt` | Min ΔT | °F | 4.0 | 1.0–12.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `min_dt` | `temperature_difference` | Minimum delta-T | °C | 2.222222 | 0.555556–6.666667 |
+
 
 ```sql
 -- confirmation_seconds: 900
@@ -1783,10 +2018,15 @@ WHERE equipment_id = 'equip:your-chw-plant'
 **Equation:** Pump ≥ 87% AND CHW DP < DP SP − 2.2.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `dp_margin` | DP margin | psi | 2.2 | 0.5–6.0 |
-| `pump_hi` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `dp_margin` | `hydronic_pressure` | DP margin | kPa | 15.168465 | 3.447379–41.368542 |
+| `pump_hi` | `fraction` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
+
 
 ```sql
 -- confirmation_seconds: 300
@@ -1811,17 +2051,22 @@ WHERE equipment_id = 'equip:your-id'
 
 ### CHW-3 — Plant supply temp outside deadband
 **Family:** `plant` · **Equipment:** `chiller`  
-**Equation:** Pump on AND |CHWS − CHWS SP| > 2.2°F.  
+**Equation:** Pump on AND |CHWS − CHWS SP| > 1.22Δ°C.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `sp_band` | SP band | °F | 2.2 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `sp_band` | `temperature_difference` | SP band | °C | 1.222222 | 0.277778–3.333333 |
+
 
 ```sql
 -- confirmation_seconds: 300
 -- rule: CHW-3 — Plant supply temp outside deadband
--- equation: Pump on AND |CHWS − CHWS SP| > 2.2°F.
+-- equation: Pump on AND |CHWS − CHWS SP| > 1.222222Δ°C.
 
 SELECT
   timestamp,
@@ -1841,18 +2086,23 @@ WHERE equipment_id = 'equip:your-id'
 
 ### CHW-4 — Flow high at max pump
 **Family:** `plant` · **Equipment:** `chiller`  
-**Equation:** Pump ≥ 87% AND CHW flow > 1100 gpm.  
+**Equation:** Pump ≥ 87% AND CHW flow > 69.39922 L/s.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `flow_hi` | Flow high | gpm | 1100 | 200–3000 |
-| `pump_hi` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `flow_hi` | `volumetric_flow` | Flow high | L/s | 69.39922 | 12.61804–189.2706 |
+| `pump_hi` | `fraction` | Pump high-speed threshold | frac | 0.87 | 0.5–1.0 |
+
 
 ```sql
 -- confirmation_seconds: 300
 -- rule: CHW-4 — Flow high at max pump
--- equation: Pump ≥ 87% AND CHW flow > 1100 gpm.
+-- equation: Pump ≥ 87% AND CHW flow > 69.39922 L/s.
 
 SELECT
   timestamp,
@@ -1874,10 +2124,15 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `cw_approach` | Design approach | °F | 7.0 | 3.0–15.0 |
-| `cw_slack` | Slack below target | °F | 2.0 | 0.5–6.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `cw_approach` | `temperature_difference` | Design approach | °C | 3.888889 | 1.666667–8.333333 |
+| `cw_slack` | `temperature_difference` | Slack below target | °C | 1.111111 | 0.277778–3.333333 |
+
 
 ```sql
 -- confirmation_seconds: 900
@@ -1900,18 +2155,23 @@ WHERE equipment_id = 'equip:your-id'
 
 ### CW-APR-1 — High CW approach at full tower fan
 **Family:** `plant` · **Equipment:** `chiller`, `cooling_tower`  
-**Equation:** At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.  
+**Equation:** At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 4.44Δ°C, typically 2.78–5.56Δ°C). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `approach_max_f` | Max approach at full fan | °F | 8.0 | 5.0–15.0 |
-| `tower_fan_hi` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `approach_max` | `temperature_difference` | Max approach at full fan | °C | 4.444444 | 2.777778–8.333333 |
+| `tower_fan_hi` | `fraction` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+
 
 ```sql
 -- confirmation_seconds: 900
 -- rule: CW-APR-1 — High CW approach at full tower fan
--- equation: At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 8°F, typically 5–10°F). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.
+-- equation: At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 4.444444Δ°C, typically 2.777778–5.555556Δ°C). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.
 
 SELECT
   timestamp,
@@ -1932,11 +2192,16 @@ WHERE equipment_id = 'equip:your-id'
 **Equation:** Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible — excess fan energy.  
 **Default confirmation:** 900 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `cw_approach` | Design approach | °F | 7.0 | 3.0–15.0 |
-| `excess_beyond_approach_f` | Excess beyond approach | °F | 5.0 | 2.0–20.0 |
-| `tower_fan_hi` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 900.0 | 0.0–3600.0 |
+| `cw_approach` | `temperature_difference` | Design approach | °C | 3.888889 | 1.666667–8.333333 |
+| `excess_beyond_approach` | `temperature_difference` | Excess beyond approach | °C | 2.777778 | 1.111111–11.111111 |
+| `tower_fan_hi` | `fraction` | Tower fan full-speed threshold | frac | 0.95 | 0.8–1.0 |
+
 
 ```sql
 -- confirmation_seconds: 900
@@ -1961,13 +2226,18 @@ WHERE equipment_id = 'equip:your-id'
 
 ### HP-1 — Discharge cold when heating
 **Family:** `heatpump` · **Equipment:** `heatpump`  
-**Equation:** Fan on, zone < 69°F, discharge SAT < 85°F.  
+**Equation:** Fan on, zone < 20.56°C, discharge SAT < 29.44°C.  
 **Default confirmation:** 600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `min_sat` | Min heating SAT | °F | 85.0 | 70.0–110.0 |
-| `zone_cold` | Zone cold | °F | 69.0 | 60.0–72.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
+| `min_sat` | `absolute_temperature` | Min discharge SAT | °C | 29.444444 | 21.111111–43.333333 |
+| `zone_cold` | `absolute_temperature` | Zone cold threshold | °C | 20.555556 | 15.555556–22.222222 |
+
 
 ```sql
 -- confirmation_seconds: 600
@@ -1988,12 +2258,14 @@ WHERE equipment_id = 'equip:your-heatpump'
 
 ### WX-1 — OA temperature spike
 **Family:** `weather` · **Equipment:** `weather`  
-**Equation:** OAT sample-to-sample jump > 16°F.  
+**Equation:** OAT sample-to-sample jump > 8.89Δ°C.  
 **Default confirmation:** 300 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `spike_limit` | Spike limit | °F | 16.0 | 4.0–40.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 300.0 | 0.0–3600.0 |
+| `spike_limit` | `temperature_difference` | Spike limit | °C | 8.888889 | 2.222222–22.222222 |
+
 
 ```sql
 -- confirmation_seconds: 300
@@ -2013,13 +2285,18 @@ WHERE equipment_id = 'equip:weather'
 
 ### TRIM-1 — Duct static trim advisory
 **Family:** `trim` · **Equipment:** `ahu`  
-**Equation:** Duct static high (> 1.35 in.w.c.) while VAV pressure requests are low.  
+**Equation:** Duct static high (> 335.93 Pa) while VAV pressure requests are low.  
 **Default confirmation:** 1800 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `duct_hi` | Duct static high | in. w.c. | 1.35 | 0.5–3.0 |
-| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `duct_hi` | `air_pressure` | Duct static high | Pa | 335.934 | 124.42–746.52 |
+| `request_lo` | `count` | Request sum low | count | 1.0 | 0.0–10.0 |
+
 
 ```sql
 -- confirmation_seconds: 1800
@@ -2037,18 +2314,23 @@ WHERE equipment_id = 'equip:your-ahu'
 
 ### TRIM-3 — HWST trim advisory
 **Family:** `trim` · **Equipment:** `boiler`  
-**Equation:** HW supply > 160°F while reset requests are low.  
+**Equation:** HW supply > 71.11°C while reset requests are low.  
 **Default confirmation:** 1800 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `hwst_hi` | HWST high | °F | 160.0 | 120.0–200.0 |
-| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `hwst_hi` | `absolute_temperature` | HWST high | °C | 71.111111 | 48.888889–93.333333 |
+| `request_lo` | `count` | Request sum low | count | 1.0 | 0.0–10.0 |
+
 
 ```sql
 -- confirmation_seconds: 1800
 -- rule: TRIM-3 — HWST trim advisory
--- equation: HW supply > 160°F while reset requests are low.
+-- equation: HW supply > 71.111111°C while reset requests are low.
 
 SELECT
   timestamp,
@@ -2067,18 +2349,23 @@ WHERE equipment_id = 'equip:your-id'
 
 ### TRIM-4 — CHW plant reset advisory
 **Family:** `trim` · **Equipment:** `chiller`  
-**Equation:** CHW supply < 45°F while reset requests are low.  
+**Equation:** CHW supply < 7.22°C while reset requests are low.  
 **Default confirmation:** 1800 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `chw_lo` | CHWS low | °F | 45.0 | 35.0–55.0 |
-| `request_lo` | Request sum low | count | 1.0 | 0.0–10.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `minimum_active_coverage_pct` | `percent` | Min active coverage | % | 5.0 | 0.0–100.0 |
+| `startup_delay_min` | `duration_minutes` | Startup delay | min | 0.0 | 0.0–60.0 |
+| `require_operational_gate` | `boolean` | Require operational gate | boolean | 1.0 | 0.0–1.0 |
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `chw_lo` | `absolute_temperature` | CHWS low | °C | 7.222222 | 1.666667–12.777778 |
+| `request_lo` | `count` | Request sum low | count | 1.0 | 0.0–10.0 |
+
 
 ```sql
 -- confirmation_seconds: 1800
 -- rule: TRIM-4 — CHW plant reset advisory
--- equation: CHW supply < 45°F while reset requests are low.
+-- equation: CHW supply < 7.222222°C while reset requests are low.
 
 SELECT
   timestamp,
@@ -2099,13 +2386,15 @@ WHERE equipment_id = 'equip:your-id'
 
 ### SCHED-1 — Unoccupied runtime
 **Family:** `schedule` · **Equipment:** `ahu`  
-**Equation:** Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside comfort_low_f…comfort_high_f (defaults 70–75°F; synced from Overview zone band).  
+**Equation:** Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside `comfort_low`…`comfort_high` (defaults 21.11–23.89°C; synced from Overview zone band).  
 **Default confirmation:** 1800 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `comfort_low_f` | Comfort low | °F | 70.0 | 60.0–78.0 |
-| `comfort_high_f` | Comfort high | °F | 75.0 | 68.0–85.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 1800.0 | 0.0–3600.0 |
+| `comfort_low` | `absolute_temperature` | Zone comfort low | °C | 21.111111 | 10.0–26.666667 |
+| `comfort_high` | `absolute_temperature` | Zone comfort high | °C | 23.888889 | 12.777778–32.222222 |
+
 
 ```sql
 -- confirmation_seconds: 1800
@@ -2125,10 +2414,11 @@ WHERE equipment_id = 'equip:your-ahu'
 **Equation:** Fan or pump (or similar motor proof/command) is on for ≥ always_on_pct of the analysis window — highlights equipment that appears to run 24/7. Applies to all fans and pumps regardless of equipment family when a status/cmd role is mapped.  
 **Default confirmation:** 3600 s
 
-| Param | Label | Unit | Default | Range |
-|-------|-------|------|--------:|-------|
-| `always_on_pct` | Always-on fraction | frac | 0.95 | 0.8–1.0 |
-| `pressure_on_min` | Pressure-on evidence | eng | 0.2 | 0.05–2.0 |
+| Parameter | Kind | Label | SI unit | Default | Range |
+|---|---|---|---|---:|---:|
+| `confirm_seconds` | `duration_seconds` | Confirm time | s | 3600.0 | 0.0–3600.0 |
+| `always_on_pct` | `fraction` | Always-on fraction | frac | 0.95 | 0.8–1.0 |
+
 
 ```sql
 -- confirmation_seconds: 3600
@@ -6064,7 +6354,7 @@ GROUP BY f.equipment_id;
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fc6_oa_frac_mismatch.sql — Estimated OA fraction mismatch (GL36 fault 6)
 -- |RATavg − OATavg| >= ΔTmin AND |estimated OA% − design min OA%| > εF, where
--- design min OA% = MIN_CFM_DESIGN / total VAV airflow.
+-- design minimum outdoor airflow (L/s) = MIN_L_S_DESIGN / total VAV airflow (L/s).
 WITH h AS (
   SELECT
     equipment_id,
@@ -6092,7 +6382,7 @@ base AS (
       WHEN fan < {{FAN_ON_MIN}} THEN 0
       WHEN ABS(rat - oa_t) < {{OAT_RAT_DELTA_MIN}} THEN 0
       WHEN ABS((mat - rat) / NULLIF(oa_t - rat, 0)
-               - {{MIN_CFM_DESIGN}} / NULLIF(vav_total_flow, 0)) > {{EPS_AIRFLOW}} THEN 1
+               - {{MIN_L_S_DESIGN}} / NULLIF(vav_total_flow, 0)) > {{EPS_AIRFLOW}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM (
@@ -6850,7 +7140,7 @@ GROUP BY equipment_id;
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
--- FCU-DEADBAND — pass-through FCU setpoints remain site-native Celsius.
+-- FCU-DEADBAND — pass-through FCU setpoints are normalized to °C.
 -- Duration is the eligible forward delta, not a row count times poll.
 WITH ordered AS (
   SELECT
@@ -6916,7 +7206,7 @@ WITH normalized AS (
   FROM history
 ), base AS (
   SELECT equipment_id, timestamp_utc,
-    CAST(CASE WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1 AND htg >= {{VALVE_OPEN}} AND sat - zone_t < {{COIL_DELTA_F}} THEN 1 ELSE 0 END AS INT) AS raw_fault
+    CAST(CASE WHEN sat IS NOT NULL AND zone_t IS NOT NULL AND fan_on = 1 AND htg >= {{VALVE_OPEN}} AND sat - zone_t < {{COIL_DELTA}} THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM normalized
 ), elapsed_hold AS (
   -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
@@ -7383,7 +7673,7 @@ GROUP BY equipment_id;
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
--- mech_oat_1.sql — Mechanical cooling below 60°F web OAT
+-- mech_oat_1.sql — Mechanical cooling below 15.555556°C web OAT
 -- Proof: chiller_status OR cooling valve (pandas mechanical_proof_mask).
 WITH h AS (
   SELECT
@@ -8381,7 +8671,7 @@ GROUP BY equipment_id;
 -- Temperature/humidity analogs (SENSOR_LIMITS minus duct static). Faults when ANY
 -- mapped role is flat while the equipment is energized.
 -- {{FLATLINE_ROWS}} / {{FLATLINE_ROWS_PRECEDING}} are derived from FLATLINE_HOURS
--- and POLL_SECONDS (DataFusion requires literal ROWS frame bounds).
+-- and POLL_SECONDS (PostgreSQL requires literal ROWS frame bounds).
 -- Binding unit required per role (fdd.mask_sweep_val); status/cmd/setpoint roles are not sweep targets.
 WITH bind AS (
   SELECT
@@ -8677,21 +8967,21 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN COALESCE(energized, 0) = 0 THEN 0
-      WHEN oa_t IS NOT NULL AND (oa_t = CAST('NaN' AS DOUBLE PRECISION) OR oa_t < -60.0 * {{RANGE_SCALE_TEMPERATURE}} OR oa_t > 130.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN mat IS NOT NULL AND (mat = CAST('NaN' AS DOUBLE PRECISION) OR mat < -20.0 * {{RANGE_SCALE_TEMPERATURE}} OR mat > 110.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN zone_t IS NOT NULL AND (zone_t = CAST('NaN' AS DOUBLE PRECISION) OR zone_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR zone_t > 100.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN rat IS NOT NULL AND (rat = CAST('NaN' AS DOUBLE PRECISION) OR rat < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR rat > 100.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN sat IS NOT NULL AND (sat = CAST('NaN' AS DOUBLE PRECISION) OR sat < 30.0 * {{RANGE_SCALE_TEMPERATURE}} OR sat > 150.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN chw_supply_t IS NOT NULL AND (chw_supply_t = CAST('NaN' AS DOUBLE PRECISION) OR chw_supply_t < 30.0 * {{RANGE_SCALE_TEMPERATURE}} OR chw_supply_t > 80.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN chw_return_t IS NOT NULL AND (chw_return_t = CAST('NaN' AS DOUBLE PRECISION) OR chw_return_t < 30.0 * {{RANGE_SCALE_TEMPERATURE}} OR chw_return_t > 90.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN hw_supply_t IS NOT NULL AND (hw_supply_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_supply_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR hw_supply_t > 220.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
-      WHEN hw_return_t IS NOT NULL AND (hw_return_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_return_t < 40.0 * {{RANGE_SCALE_TEMPERATURE}} OR hw_return_t > 220.0 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN oa_t IS NOT NULL AND (oa_t = CAST('NaN' AS DOUBLE PRECISION) OR oa_t < -51.111111 * {{RANGE_SCALE_TEMPERATURE}} OR oa_t > 54.444444 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN mat IS NOT NULL AND (mat = CAST('NaN' AS DOUBLE PRECISION) OR mat < -28.888889 * {{RANGE_SCALE_TEMPERATURE}} OR mat > 43.333333 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN zone_t IS NOT NULL AND (zone_t = CAST('NaN' AS DOUBLE PRECISION) OR zone_t < 4.444444 * {{RANGE_SCALE_TEMPERATURE}} OR zone_t > 37.777778 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN rat IS NOT NULL AND (rat = CAST('NaN' AS DOUBLE PRECISION) OR rat < 4.444444 * {{RANGE_SCALE_TEMPERATURE}} OR rat > 37.777778 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN sat IS NOT NULL AND (sat = CAST('NaN' AS DOUBLE PRECISION) OR sat < -1.111111 * {{RANGE_SCALE_TEMPERATURE}} OR sat > 65.555556 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN chw_supply_t IS NOT NULL AND (chw_supply_t = CAST('NaN' AS DOUBLE PRECISION) OR chw_supply_t < -1.111111 * {{RANGE_SCALE_TEMPERATURE}} OR chw_supply_t > 26.666667 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN chw_return_t IS NOT NULL AND (chw_return_t = CAST('NaN' AS DOUBLE PRECISION) OR chw_return_t < -1.111111 * {{RANGE_SCALE_TEMPERATURE}} OR chw_return_t > 32.222222 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN hw_supply_t IS NOT NULL AND (hw_supply_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_supply_t < 4.444444 * {{RANGE_SCALE_TEMPERATURE}} OR hw_supply_t > 104.444444 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
+      WHEN hw_return_t IS NOT NULL AND (hw_return_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_return_t < 4.444444 * {{RANGE_SCALE_TEMPERATURE}} OR hw_return_t > 104.444444 * {{RANGE_SCALE_TEMPERATURE}}) THEN 1
       WHEN oa_h IS NOT NULL AND (oa_h = CAST('NaN' AS DOUBLE PRECISION) OR oa_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR oa_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
       WHEN ra_h IS NOT NULL AND (ra_h = CAST('NaN' AS DOUBLE PRECISION) OR ra_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR ra_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
       WHEN zone_rh IS NOT NULL AND (zone_rh = CAST('NaN' AS DOUBLE PRECISION) OR zone_rh < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR zone_rh > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
       WHEN ma_h IS NOT NULL AND (ma_h = CAST('NaN' AS DOUBLE PRECISION) OR ma_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR ma_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
       WHEN sa_h IS NOT NULL AND (sa_h = CAST('NaN' AS DOUBLE PRECISION) OR sa_h < 0.0 * {{RANGE_SCALE_HUMIDITY}} OR sa_h > 100.0 * {{RANGE_SCALE_HUMIDITY}}) THEN 1
-      WHEN duct_static IS NOT NULL AND (duct_static = CAST('NaN' AS DOUBLE PRECISION) OR duct_static < -1.0 * {{RANGE_SCALE_PRESSURE}} OR duct_static > 8.0 * {{RANGE_SCALE_PRESSURE}}) THEN 1
+      WHEN duct_static IS NOT NULL AND (duct_static = CAST('NaN' AS DOUBLE PRECISION) OR duct_static < -248.84 * {{RANGE_SCALE_PRESSURE}} OR duct_static > 1990.72 * {{RANGE_SCALE_PRESSURE}}) THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
@@ -8776,7 +9066,7 @@ GROUP BY equipment_id;
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sv_rate.sql — Context-aware sensor rate of change (portable channels)
--- Rate is normalized to °F/h so the threshold is poll-interval independent, and
+-- Rate is normalized to °C/h so the threshold is poll-interval independent, and
 -- the exceedance must be *sustained* (two consecutive samples) to separate a
 -- slew from a one-sample SV-SPIKE. Samples separated by more than
 -- PERSISTENCE_MIN are treated as a data gap, not a slew.
@@ -9065,7 +9355,7 @@ GROUP BY f.equipment_id;
 -- Every mapped analog must sit inside STALE_TOL across the trailing STALE_HOURS
 -- window: one live sensor is enough to prove the feed is still updating.
 -- {{STALE_ROWS}} / {{STALE_ROWS_PRECEDING}} are derived from STALE_HOURS and
--- POLL_SECONDS (DataFusion requires literal ROWS frame bounds).
+-- POLL_SECONDS (PostgreSQL requires literal ROWS frame bounds).
 -- Binding unit required per role (fdd.mask_sweep_val); duct static is not in the stale AND set.
 WITH bind AS (
   SELECT
@@ -9746,7 +10036,7 @@ FROM joined;
 -- neither a BAS occupied point nor that calendar is set. Unoccupied setback
 -- stays on VAV-2.
 -- OFDD-065: do not reference fan_cmd here. Zone-only parquet schemas
--- often lack fan_cmd; DataFusion then schema-errors → SKIPPED_MISSING_ROLES.
+-- often lack fan_cmd; PostgreSQL then schema-errors → SKIPPED_MISSING_ROLES.
 WITH h AS (
   SELECT
     equipment_id,

@@ -8,6 +8,9 @@ nav_exclude: true
 
 # Gap matrix — cookbook vs public literature
 
+This coverage map concerns rule identity and implementation presence; it does not establish SI parity or release qualification. SI proof follows the ordered baseline/P0–P3 chain in [the parity matrix](parity-matrix.html).
+
+
 Comparison of **Open-FDD cookbook coverage** against public FDD, re-tuning, and commissioning literature. Updated **2026-07-16** (vibe19 validated catalog sync).
 
 ## Legend

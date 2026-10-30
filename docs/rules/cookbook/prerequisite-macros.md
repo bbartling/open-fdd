@@ -16,7 +16,7 @@ Composable guards used across rules. Compile to SQL `CASE` predicates or Pandas 
 
 **Intent:** Rule applies only when zone/building is occupied and needs cooling (or neutral).
 
-### DataFusion SQL
+### PostgreSQL SQL
 
 ```sql
 -- occ_mode: 'occupied' | 'unoccupied' | 'bypass' (site-specific enum)
@@ -39,7 +39,7 @@ def macro_occupancy_cooling(d: pd.DataFrame) -> pd.Series:
 
 **Intent:** Supply fan commanded and proven (status feedback or inferred from static/flow).
 
-### DataFusion SQL
+### PostgreSQL SQL
 
 ```sql
 (
@@ -70,7 +70,7 @@ def macro_fan_proven_on(d: pd.DataFrame) -> pd.Series:
 
 **Intent:** Suppress faults for N minutes after mode change (GL36-style startup delay).
 
-### DataFusion SQL
+### PostgreSQL SQL
 
 ```sql
 -- Requires mode_change_ts column or infer from occ_mode / fan_cmd edges
@@ -100,10 +100,10 @@ def macro_mode_delay(d: pd.DataFrame, col: str = "fan_cmd") -> pd.Series:
 
 **Intent:** Require signal stability before evaluating control faults (e.g. hunting).
 
-### DataFusion SQL
+### PostgreSQL SQL
 
 ```sql
--- Use rolling stddev over last N samples; DataFusion window:
+-- Use rolling stddev over last N samples; PostgreSQL window:
 -- stddev(sat) OVER (ORDER BY timestamp ROWS BETWEEN 11 PRECEDING AND CURRENT ROW) < 0.5
 true  -- implement per-rule with window frame
 ```
@@ -121,7 +121,7 @@ def macro_steady_state(series: pd.Series, window: int = 12, max_std: float = 0.5
 
 **Intent:** Reset logic is active (not fixed setpoint mode).
 
-### DataFusion SQL
+### PostgreSQL SQL
 
 ```sql
 (reset_enable IS NULL OR reset_enable = true)
@@ -149,7 +149,7 @@ def macro_reset_enabled(d: pd.DataFrame) -> pd.Series:
 
 **Intent:** Skip fault when manual override, hand, or bypass active.
 
-### DataFusion SQL
+### PostgreSQL SQL
 
 ```sql
 NOT (
@@ -177,7 +177,7 @@ def macro_override_suppression(d: pd.DataFrame) -> pd.Series:
 
 **Intent:** Exclude samples where prerequisite sensors fail quality checks.
 
-### DataFusion SQL
+### PostgreSQL SQL
 
 ```sql
 oa_t IS NOT NULL AND oa_t >= 40.0 AND oa_t <= 110.0
