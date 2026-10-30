@@ -42,10 +42,13 @@ CI: ``--self-test`` (offline shapes); ``--emit-ip-goldens DIR`` for W0c fixtures
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
+import tomllib
 from collections import Counter
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -179,6 +182,53 @@ def _sparql_equipment_id(pt: dict[str, Any]) -> str:
     return str(pt.get("equipmentId") or pt.get("equipment_id") or "").strip()
 
 
+def _explicit_openfdd_key(point: dict[str, Any]) -> str | None:
+    candidates: list[str] = []
+    for key in ("openfdd_key", "history_openfdd_key", "history_key"):
+        value = point.get(key)
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+    for container_key in ("history", "history_ref", "historyRef"):
+        nested = point.get(container_key)
+        if isinstance(nested, dict):
+            for key in ("openfdd_key", "history_openfdd_key", "key"):
+                value = nested.get(key)
+                if isinstance(value, str) and value.strip():
+                    candidates.append(value.strip())
+    distinct = set(candidates)
+    if len(distinct) > 1:
+        raise ValueError("conflicting explicit history keys in typed point binding")
+    return next(iter(distinct), None)
+
+
+def resolve_bound_openfdd_key(conn, *, site_id: str, equipment_id: str, point: dict[str, Any]) -> str | None:
+    """Resolve only a declared key or exact typed portal/Haystack point identity."""
+    explicit = _explicit_openfdd_key(point)
+    point_id = str(point.get("pointId") or point.get("point_id") or "").strip()
+    with conn.cursor() as cur:
+        if explicit:
+            cur.execute(
+                "SELECT openfdd_key FROM point_map WHERE site_id = %s AND equipment_id = %s AND openfdd_key = %s",
+                (site_id, equipment_id, explicit),
+            )
+            rows = cur.fetchall()
+            if len(rows) != 1:
+                raise ValueError("explicit history key is absent or ambiguous in point_map")
+            return str(rows[0][0])
+        if not point_id:
+            return None
+        cur.execute(
+            """SELECT DISTINCT openfdd_key FROM point_map
+               WHERE site_id = %s AND equipment_id = %s
+                 AND (portal_point_id = %s OR haystack_id = %s)""",
+            (site_id, equipment_id, point_id, point_id),
+        )
+        rows = cur.fetchall()
+    if len(rows) > 1:
+        raise ValueError("typed point identity maps to multiple point_map keys")
+    return str(rows[0][0]) if rows else None
+
+
 def post_fdd_run_with_busy_retry(
     http: HttpClient,
     headers: dict[str, str],
@@ -297,6 +347,87 @@ def load_rule_registry() -> list[dict[str, Any]]:
     return rules
 
 
+def _tree_sha256(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*.py")):
+        if any(part in {".git", "__pycache__", ".venv", "venv"} for part in path.parts):
+            continue
+        digest.update(path.relative_to(root).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def load_ip_oracle(source_root: Path) -> dict[str, Any]:
+    """Load only the explicitly pinned IP oracle and report its provenance."""
+    import importlib
+    import yaml
+
+    root = source_root.expanduser().resolve()
+    project_file = root / "pyproject.toml"
+    registry_path = root / "sql" / "fdd" / "registry.yaml"
+    if not project_file.is_file() or not registry_path.is_file():
+        raise SystemExit("oracle source root must contain pyproject.toml and sql/fdd/registry.yaml")
+    project = tomllib.loads(project_file.read_text(encoding="utf-8"))
+    project_version = str(
+        project.get("project", {}).get("version")
+        or project.get("tool", {}).get("poetry", {}).get("version")
+        or ""
+    )
+    if project_version != "4.4.9":
+        raise SystemExit("IP oracle source must declare open-fdd version 4.4.9")
+    for name in tuple(sys.modules):
+        if name == "open_fdd" or name.startswith("open_fdd."):
+            del sys.modules[name]
+    sys.path.insert(0, str(root))
+    try:
+        importlib.invalidate_caches()
+        package = importlib.import_module("open_fdd")
+        package_path = Path(package.__file__).resolve()
+        if not package_path.is_relative_to(root):
+            raise SystemExit("imported open_fdd is outside the explicit oracle source root")
+        version = str(getattr(package, "__version__", ""))
+        if version != "4.4.9":
+            raise SystemExit(f"IP oracle runtime version mismatch: expected 4.4.9, found {version!r}")
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if head != "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0":
+            raise SystemExit("IP oracle source must be pinned to registry baseline commit 35c17ac")
+        dirty = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain", "--", "pyproject.toml", "open_fdd", "sql/fdd/registry.yaml"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if dirty:
+            raise SystemExit("IP oracle package and registry files must be clean at the pinned commit")
+        registry_bytes = registry_path.read_bytes()
+        registry = yaml.safe_load(registry_bytes)
+        rules = registry.get("rules") or []
+        if len(rules) < 70:
+            raise SystemExit(f"pinned IP registry expected ~77 rules, found {len(rules)}")
+        registry_hash = hashlib.sha256(registry_bytes).hexdigest()
+        if registry_hash != "b0397a06d834109a77e85599c81e7c81cbacfab7d38372503c943c1f26e1fcbf":
+            raise SystemExit("IP registry ABI mismatch for pinned 4.4.9 baseline")
+        return {
+            "source_root": str(root),
+            "version": version,
+            "import_path": str(package_path),
+            "git_head": head,
+            "registry_sha256": registry_hash,
+            "python_tree_sha256": _tree_sha256(root / "open_fdd"),
+            "rule_count": len(rules),
+            "rules": rules,
+        }
+    except subprocess.CalledProcessError as exc:
+        raise SystemExit("oracle source root must be a git checkout with a resolvable HEAD") from exc
+
+
 def require_database_url() -> str:
     url = os.environ.get("OPENFDD_DATABASE_URL", "").strip()
     if not url:
@@ -361,6 +492,27 @@ def require_pandas_oracle() -> None:
         )
 
 
+def require_oracle_runtime(oracle: dict[str, Any]) -> None:
+    """Ensure oracle imports used by the capture remain inside the pinned checkout."""
+    from open_fdd.rules import RULES_BY_ID
+
+    registry_ids = {str(rule.get("rule_id")) for rule in oracle["rules"] if rule.get("rule_id")}
+    aliases = {"economizer-high-limit": "ECON_HL", "economizer-high-limit-fault": "ECON_HL"}
+    # Registry rows without a Python implementation remain explicit in output as
+    # no_pandas_function; they must not be mistaken for package/provenance errors.
+    oracle["pandas_implemented_rule_ids"] = sorted(
+        rid for rid in registry_ids if rid in RULES_BY_ID or aliases.get(rid) in RULES_BY_ID
+    )
+    oracle["no_pandas_function_rule_ids"] = sorted(
+        registry_ids.difference(oracle["pandas_implemented_rule_ids"])
+    )
+
+
+def require_unit_inventory(point_map_count: int, rows: list[dict[str, Any]]) -> None:
+    if point_map_count > 0 and not rows:
+        raise RuntimeError("point_map contains rows but unit inventory resolved zero rows")
+
+
 def default_output_dir(shortsha: str) -> Path:
     day = datetime.now(timezone.utc).strftime("%Y%m%d")
     sha = shortsha.removeprefix("sha-")[:7] or "local"
@@ -368,7 +520,7 @@ def default_output_dir(shortsha: str) -> Path:
 
 
 def health_shortsha(http, headers: dict[str, str]) -> str:
-    body = http.get_json("/api/health", headers=headers)
+    body = http.get_json("/api/version", headers=headers)
     version = str(body.get("version") or body.get("semver") or "")
     if "+" in version:
         return version.split("+", 1)[1]
@@ -502,9 +654,6 @@ def unit_inventory_rows(
     session = mapping.get("session_config") if isinstance(mapping, dict) else {}
     if isinstance(session, dict):
         package_unit_system = str(session.get("unit_system") or "")
-    columns = mapping.get("columns") if isinstance(mapping, dict) else []
-    if not isinstance(columns, list):
-        columns = []
     sample_units: dict[str, str] = {}
     with conn.cursor() as cur:
         cur.execute(
@@ -519,23 +668,26 @@ def unit_inventory_rows(
         for key, unit in cur.fetchall():
             if key and unit:
                 sample_units[str(key)] = str(unit)
+    with conn.cursor() as cur:
+        cur.execute(
+            """SELECT equipment_id, role, openfdd_key, unit, source_unit
+               FROM point_map WHERE site_id = %s
+               ORDER BY equipment_id, role, openfdd_key""",
+            (building_id,),
+        )
+        point_rows = cur.fetchall()
     rows: list[dict[str, Any]] = []
     unresolved = 0
-    for col in columns:
-        if not isinstance(col, dict):
-            continue
-        openfdd_key = str(col.get("openfdd_key") or col.get("column") or "").strip()
+    for _equipment_id, role_value, key_value, unit_value, source_unit_value in point_rows:
+        role = str(role_value or "").strip()
+        openfdd_key = str(key_value or "").strip()
         if not openfdd_key:
             continue
-        role = str(col.get("role") or col.get("fdd_role") or "").strip()
-        point_map_unit = str(col.get("unit") or col.get("point_map_unit") or "").strip()
-        overlay_unit = str(col.get("overlay_unit") or col.get("engineer_unit") or "").strip()
-        tag_unit = str(col.get("tag_unit") or col.get("nf_unit") or "").strip()
-        column_unit = str(col.get("column_unit") or col.get("csv_unit") or "").strip()
+        point_map_unit = str(unit_value or "").strip()
         resolved = resolve_w2c_source_unit(
-            overlay_unit=overlay_unit or None,
-            tag_unit=tag_unit or None,
-            column_unit=column_unit or None,
+            overlay_unit=None,
+            tag_unit=str(source_unit_value or "").strip() or None,
+            column_unit=None,
             package_unit_system=package_unit_system or None,
         )
         if resolved == "unresolved":
@@ -681,6 +833,7 @@ def equipment_frame_from_db(
             "skipped_unbound_no_column": 0,
             "skipped_no_role": 0,
             "skipped_unmapped_role": 0,
+            "skipped_unmapped_point": 0,
         }
     )
     pts = post_sparql(
@@ -698,10 +851,8 @@ def equipment_frame_from_db(
         if row_eid and row_eid != equipment_id:
             skip_counts["skipped_other_equipment"] += 1
             continue
-        col = str(pt.get("column") or pt.get("pointId") or "").strip()
-        if not col:
-            skip_counts["skipped_unbound_no_column"] += 1
-            continue
+        point_id = str(pt.get("pointId") or pt.get("point_id") or "").strip()
+        col = str(pt.get("column") or point_id).strip()
         role_raw = str(pt.get("fddSelection") or pt.get("canonicalRole") or "").strip()
         if not role_raw:
             skip_counts["skipped_no_role"] += 1
@@ -710,11 +861,15 @@ def equipment_frame_from_db(
         if haystack_col is None:
             skip_counts["skipped_unmapped_role"] += 1
             continue
-        openfdd_key = resolve_openfdd_key(
-            equipment_id,
-            col,
-            str(pt.get("openfdd_key") or "").strip() or None,
+        openfdd_key = resolve_bound_openfdd_key(
+            conn, site_id=building_id, equipment_id=equipment_id, point=pt
         )
+        if openfdd_key is None:
+            if not point_id:
+                skip_counts["skipped_unbound_no_column"] += 1
+            else:
+                skip_counts["skipped_unmapped_point"] += 1
+            continue
         samples = load_samples_in_window(
             conn,
             site_id=building_id,
@@ -726,6 +881,10 @@ def equipment_frame_from_db(
             continue
         idx = pd.to_datetime([ts for ts, _ in samples], utc=True)
         vals = [val for _, val in samples]
+        if haystack_col in series:
+            raise ValueError(
+                f"multiple point_map identities bind to role {haystack_col} for equipment {equipment_id}"
+            )
         series[haystack_col] = pd.Series(vals, index=idx, name=haystack_col)
     if not series:
         raise frame_builder_empty_error(equipment_id, skip_counts=dict(skip_counts))
@@ -820,14 +979,10 @@ def collect_pandas_fdd_rows(
                 out.append(
                     {
                         **base,
-                        "pair_status": "not_applicable",
-                        "reason": "unknown_rule",
+                        "pair_status": "no_pandas_function",
+                        "reason": "rule absent from pinned Python oracle",
                     }
                 )
-                coverage["not_applicable"] += 1
-                continue
-            if not rule.get("pandas_function"):
-                out.append({**base, "pair_status": "no_pandas_function", "reason": ""})
                 coverage["no_pandas_function"] += 1
                 continue
             unmapped_required = missing_required_roles_unmapped(rule, role_map=role_map)
@@ -1006,6 +1161,7 @@ def capture_site(
     units, unresolved_units = unit_inventory_rows(
         http, headers, conn, building_id=building_id
     )
+    require_unit_inventory(counts_before.get("point_map", 0), units)
 
     pandas_rows: list[dict[str, Any]] = []
     pandas_coverage: dict[str, int] = {}
@@ -1192,6 +1348,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Timescale URL for host-side capture (overrides OPENFDD_DATABASE_URL)",
     )
     ap.add_argument(
+        "--oracle-source-root",
+        type=Path,
+        help="Explicit pinned open-fdd 4.4.9 source checkout used as the IP oracle",
+    )
+    ap.add_argument(
         "--jwt-env",
         type=Path,
         help="dotenv file with OPENFDD_API_BASE, OPENFDD_AGENT_PASSWORD, etc.",
@@ -1252,15 +1413,19 @@ def main(argv: list[str] | None = None) -> int:
     if not args.jwt_env or not args.sites_config:
         ap.error("--jwt-env and --sites-config are required unless --self-test")
 
+    if not args.skip_pandas and not args.oracle_source_root:
+        ap.error("--oracle-source-root is required unless --skip-pandas")
+    oracle = load_ip_oracle(args.oracle_source_root) if args.oracle_source_root else None
+    if oracle:
+        require_pandas_oracle()
+        require_oracle_runtime(oracle)
+
     load_dotenv_file(args.jwt_env.expanduser())
     if args.database_url:
         os.environ["OPENFDD_DATABASE_URL"] = str(args.database_url).strip()
     require_database_url()
-    if not args.skip_pandas:
-        require_pandas_oracle()
-
     sites = load_sites_config(args.sites_config.expanduser())
-    rules = load_rule_registry()
+    rules = oracle["rules"] if oracle else load_rule_registry()
     base = apply_base_url(
         resolve_base_url(base_url=args.base_url, host=args.host, port=args.port)
     )
@@ -1296,6 +1461,7 @@ def main(argv: list[str] | None = None) -> int:
             "health_shortsha": shortsha,
             "base_url": base,
             "skip_pandas": args.skip_pandas,
+            "ip_oracle": {k: v for k, v in oracle.items() if k != "rules"} if oracle else None,
             "pandas_max_rules": pandas_cap,
             "allow_errors": args.allow_errors,
             "request_timeout_s": args.request_timeout_s,

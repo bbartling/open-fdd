@@ -68,6 +68,125 @@ class CaptureIpBaselineSelfTest(unittest.TestCase):
 
 
 class CaptureRequirements(unittest.TestCase):
+    def test_template_binding_normalization_preserves_nested_history(self) -> None:
+        from helpers import _normalize_sparql_rows
+
+        row = _normalize_sparql_rows(
+            {
+                "equipment": [
+                    {
+                        "equipment_id": "AHU_1",
+                        "points": [
+                            {
+                                "point_id": "portal-17",
+                                "column": "dsp",
+                                "canonical_role": "duct-static-pressure",
+                                "openfdd_key": "AHU_1.dsp",
+                                "history": {"openfdd_key": "AHU_1.dsp", "samples": 8},
+                            }
+                        ],
+                    }
+                ]
+            }
+        )[0]
+        self.assertEqual(row["pointId"], "portal-17")
+        self.assertEqual(row["canonicalRole"], "duct-static-pressure")
+        self.assertEqual(row["openfdd_key"], "AHU_1.dsp")
+        self.assertEqual(row["history"]["samples"], 8)
+
+    def test_health_shortsha_reads_version_endpoint(self) -> None:
+        http = mock.MagicMock()
+        http.get_json.return_value = {"version": "4.0.7+35c17ac"}
+        self.assertEqual(capture.health_shortsha(http, {}), "35c17ac")
+        http.get_json.assert_called_once_with("/api/version", headers={})
+
+    def test_oracle_source_root_is_required_before_dotenv_or_login(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            jwt = Path(tmp) / "auth.env"
+            sites = Path(tmp) / "sites.json"
+            jwt.write_text("OPENFDD_API_BASE=http://127.0.0.1:8080\n", encoding="utf-8")
+            sites.write_text('[{"building_id":"SITE_A"}]', encoding="utf-8")
+            with mock.patch.object(capture, "load_dotenv_file") as load_env:
+                with self.assertRaises(SystemExit) as ctx:
+                    capture.main(["--jwt-env", str(jwt), "--sites-config", str(sites)])
+            self.assertEqual(ctx.exception.code, 2)
+            load_env.assert_not_called()
+
+    def test_oracle_source_validation_rejects_non_449_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "open_fdd").mkdir()
+            (root / "sql" / "fdd").mkdir(parents=True)
+            (root / "pyproject.toml").write_text('version = "5.0.0"\n', encoding="utf-8")
+            (root / "sql" / "fdd" / "registry.yaml").write_text("rules: []\n", encoding="utf-8")
+            with self.assertRaises(SystemExit) as ctx:
+                capture.load_ip_oracle(root)
+            self.assertIn("4.4.9", str(ctx.exception))
+
+    def test_oracle_source_validation_rejects_si_checkout_with_ip_version(self) -> None:
+        with self.assertRaises(SystemExit) as ctx:
+            capture.load_ip_oracle(Path("/tmp/open-fdd-wt-407-w0c"))
+        self.assertIn("4.4.9", str(ctx.exception))
+
+    def test_pinned_oracle_provenance_matches_frozen_registry(self) -> None:
+        oracle = capture.load_ip_oracle(Path("/tmp/open-fdd-wt-407-ipbase"))
+        self.assertEqual(oracle["version"], "4.4.9")
+        self.assertEqual(oracle["git_head"], "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0")
+        self.assertEqual(oracle["registry_sha256"], "b0397a06d834109a77e85599c81e7c81cbacfab7d38372503c943c1f26e1fcbf")
+        capture.require_oracle_runtime(oracle)
+        self.assertEqual(len(oracle["pandas_implemented_rule_ids"]), 70)
+        self.assertGreater(len(oracle["no_pandas_function_rule_ids"]), 0)
+
+    def test_zero_unit_inventory_with_point_map_rows_fails(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "unit inventory resolved zero"):
+            capture.require_unit_inventory(1, [])
+        capture.require_unit_inventory(0, [])
+
+    def test_unit_inventory_reads_exact_point_map_rows(self) -> None:
+        conn = mock.MagicMock()
+        cur = mock.MagicMock()
+        conn.cursor.return_value.__enter__ = mock.Mock(return_value=cur)
+        conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+        cur.fetchall.side_effect = [
+            [("AHU_1.fan_status", "1")],
+            [("AHU_1", "fan-status", "AHU_1.fan_status", "1", "1")],
+        ]
+        http = mock.MagicMock()
+        http.get_json.return_value = {
+            "ok": True,
+            "equipment": [{"equipment_id": "AHU_1", "columns": [{"column": "fan_status"}]}],
+            "session_config": {"unit_system": "imperial"},
+        }
+        rows, unresolved = capture.unit_inventory_rows(http, {}, conn, building_id="SITE_X")
+        self.assertEqual(unresolved, 0)
+        self.assertEqual(rows[0]["openfdd_key"], "AHU_1.fan_status")
+        self.assertEqual(rows[0]["sample_unit"], "1")
+        self.assertEqual(rows[0]["point_map_unit"], "1")
+
+    def test_explicit_history_key_conflict_fails_closed(self) -> None:
+        with self.assertRaises(ValueError):
+            capture._explicit_openfdd_key(
+                {"openfdd_key": "EQ.a", "history": {"openfdd_key": "EQ.b"}}
+            )
+
+    def test_typed_point_resolves_only_exact_identity(self) -> None:
+        conn = mock.MagicMock()
+        cur = mock.MagicMock()
+        conn.cursor.return_value.__enter__ = mock.Mock(return_value=cur)
+        conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+        cur.fetchall.return_value = [("AHU_1.dsp",)]
+        key = capture.resolve_bound_openfdd_key(
+            conn,
+            site_id="SITE_X",
+            equipment_id="AHU_1",
+            point={"pointId": "portal-17"},
+        )
+        self.assertEqual(key, "AHU_1.dsp")
+        self.assertEqual(
+            cur.execute.call_args.args[1],
+            ("SITE_X", "AHU_1", "portal-17", "portal-17"),
+        )
+
     def test_require_database_url_missing_fails(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(SystemExit) as ctx:
@@ -133,6 +252,8 @@ class CaptureRequirements(unittest.TestCase):
                                                                 jwt.name,
                                                                 "--sites-config",
                                                                 sites.name,
+                                                                "--output-dir",
+                                                                str(Path(jwt.name).parent / "out-first"),
                                                                 "--skip-pandas",
                                                             ]
                                                         )
@@ -164,6 +285,8 @@ class CaptureRequirements(unittest.TestCase):
                                                                 jwt.name,
                                                                 "--sites-config",
                                                                 sites.name,
+                                                                "--output-dir",
+                                                                str(Path(jwt.name).parent / "out-second"),
                                                                 "--skip-pandas",
                                                                 "--allow-errors",
                                                             ]
@@ -256,8 +379,8 @@ class CaptureFixtureStack(unittest.TestCase):
         count_values = [n for n in counts.values()] * 2
         fake_cursor.fetchone.side_effect = [(n,) for n in count_values]
         fake_cursor.fetchall.side_effect = [
-            [],
             [("AHU_1.fan_status", "1")],
+            [("AHU_1", "fan-status", "AHU_1.fan_status", "1", "1")],
         ]
 
         sql_row = {
@@ -333,27 +456,30 @@ class EquipmentFrameMetadataTest(unittest.TestCase):
             "post_sparql",
             return_value=[
                 {
+                    "equipmentId": "AHU_1",
+                    "pointId": "portal-dsp",
                     "column": "dsp",
                     "fddSelection": "duct-static-pressure",
                     "openfdd_key": "AHU_1.dsp",
                 },
             ],
         ):
-            with mock.patch.object(
-                capture,
-                "load_samples_in_window",
-                return_value=[(ts, 1.0) for ts in idx],
-            ):
-                frame, skips = capture.equipment_frame_from_db(
-                    mock.MagicMock(),
-                    mock.MagicMock(),
-                    {},
-                    building_id="SITE_X",
-                    equipment_id="AHU_1",
-                    window_start="2026-06-01T00:00:00Z",
-                    window_end="2026-06-01T01:00:00Z",
-                    equipment_type="ahu",
-                )
+            with mock.patch.object(capture, "resolve_bound_openfdd_key", return_value="AHU_1.dsp"):
+                with mock.patch.object(
+                    capture,
+                    "load_samples_in_window",
+                    return_value=[(ts, 1.0) for ts in idx],
+                ):
+                    frame, skips = capture.equipment_frame_from_db(
+                        mock.MagicMock(),
+                        mock.MagicMock(),
+                        {},
+                        building_id="SITE_X",
+                        equipment_id="AHU_1",
+                        window_start="2026-06-01T00:00:00Z",
+                        window_end="2026-06-01T01:00:00Z",
+                        equipment_type="ahu",
+                    )
         self.assertEqual(frame.attrs.get("equipment_type"), "ahu")
         self.assertEqual(frame.attrs.get("equipType"), "ahu")
         self.assertEqual(skips.get("skipped_other_equipment", 0), 0)
@@ -367,6 +493,9 @@ class CollectPandasFddRowsIntegration(unittest.TestCase):
 
         fc1_rules = [r for r in capture.load_rule_registry() if r.get("rule_id") == "FC1"]
         self.assertEqual(len(fc1_rules), 1)
+        # The frozen registry predates the optional cookbook annotation; the
+        # Python rule catalog is the authoritative implementation oracle.
+        fc1_rules[0].pop("pandas_function", None)
 
         building_id = "SYNTH_PANDAS_CAPTURE"
         window_start = "2026-06-01T00:00:00Z"
@@ -374,18 +503,14 @@ class CollectPandasFddRowsIntegration(unittest.TestCase):
         idx = pd.date_range("2026-06-01", periods=24, freq="5min", tz="UTC")
 
         sparql_points = [
+            {"equipmentId": "AHU_1", "pointId": "dsp-id", "column": "dsp", "fddSelection": "duct-static-pressure", "openfdd_key": "AHU_1.dsp"},
             {
-                "column": "dsp",
-                "fddSelection": "duct-static-pressure",
-                "openfdd_key": "AHU_1.dsp",
-            },
-            {
-                "column": "dsps",
+                "equipmentId": "AHU_1", "pointId": "dsps-id", "column": "dsps",
                 "fddSelection": "duct-static-pressure-sp",
                 "openfdd_key": "AHU_1.dsps",
             },
-            {"column": "fc", "fddSelection": "fan-cmd", "openfdd_key": "AHU_1.fc"},
-            {"column": "fs", "fddSelection": "fan-status", "openfdd_key": "AHU_1.fs"},
+            {"equipmentId": "AHU_1", "pointId": "fc-id", "column": "fc", "fddSelection": "fan-cmd", "openfdd_key": "AHU_1.fc"},
+            {"equipmentId": "AHU_1", "pointId": "fs-id", "column": "fs", "fddSelection": "fan-status", "openfdd_key": "AHU_1.fs"},
         ]
 
         def fake_load_samples(_conn, *, openfdd_key, **_kwargs):
@@ -403,18 +528,22 @@ class CollectPandasFddRowsIntegration(unittest.TestCase):
 
         with mock.patch.object(capture, "post_sparql", return_value=sparql_points):
             with mock.patch.object(
-                capture, "load_samples_in_window", side_effect=fake_load_samples
+                capture, "resolve_bound_openfdd_key",
+                side_effect=lambda _conn, *, point, **_kw: point.get("openfdd_key"),
             ):
-                rows, coverage, errors, _skips = capture.collect_pandas_fdd_rows(
-                    http,
-                    {},
-                    conn,
-                    building_id=building_id,
-                    rules=fc1_rules,
-                    window_start=window_start,
-                    window_end=window_end,
-                    pandas_max_rules=None,
-                )
+                with mock.patch.object(
+                    capture, "load_samples_in_window", side_effect=fake_load_samples
+                ):
+                    rows, coverage, errors, _skips = capture.collect_pandas_fdd_rows(
+                        http,
+                        {},
+                        conn,
+                        building_id=building_id,
+                        rules=fc1_rules,
+                        window_start=window_start,
+                        window_end=window_end,
+                        pandas_max_rules=None,
+                    )
 
         self.assertEqual(errors, [])
         self.assertGreater(coverage.get("computed", 0), 0)
@@ -447,8 +576,13 @@ class EquipmentFrameBuilderTest(unittest.TestCase):
             return [(ts, 1.0) for ts in idx]
 
         with mock.patch.object(capture, "post_sparql", return_value=points):
-            with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
-                return capture.equipment_frame_from_db(
+            with mock.patch.object(
+                capture,
+                "resolve_bound_openfdd_key",
+                side_effect=lambda _conn, *, point, **_kwargs: point.get("openfdd_key"),
+            ):
+                with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
+                    return capture.equipment_frame_from_db(
                     mock.MagicMock(),
                     mock.MagicMock(),
                     {},
@@ -457,7 +591,7 @@ class EquipmentFrameBuilderTest(unittest.TestCase):
                     window_start="2026-06-01T00:00:00Z",
                     window_end="2026-06-01T01:00:00Z",
                     equipment_type="ahu",
-                )
+                    )
 
     def test_skips_overlay_other_equipment_and_unbound_rows(self) -> None:
         points = [
@@ -476,6 +610,7 @@ class EquipmentFrameBuilderTest(unittest.TestCase):
                 "equipmentId": "RTU_A",
                 "column": "RTU_A.fc",
                 "fddSelection": "fan_cmd",
+                "openfdd_key": "RTU_A.fc",
             },
         ]
         seen: list[str] = []
@@ -488,7 +623,11 @@ class EquipmentFrameBuilderTest(unittest.TestCase):
             return [(ts, 1.0) for ts in idx]
 
         with mock.patch.object(capture, "post_sparql", return_value=points):
-            with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
+            with mock.patch.object(
+                capture, "resolve_bound_openfdd_key",
+                side_effect=lambda _conn, *, point, **_kw: point.get("openfdd_key"),
+            ):
+             with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
                 frame, _skips = capture.equipment_frame_from_db(
                     mock.MagicMock(),
                     mock.MagicMock(),
@@ -570,10 +709,10 @@ class EquipmentFrameBuilderTest(unittest.TestCase):
         self.assertEqual(len(fc1_rules), 1)
         idx = __import__("pandas").date_range("2026-06-01", periods=24, freq="5min", tz="UTC")
         points = [
-            {"equipmentId": "RTU_A", "column": "dsp", "fddSelection": "duct_static"},
-            {"equipmentId": "RTU_A", "column": "dsps", "fddSelection": "duct_static_sp"},
-            {"equipmentId": "RTU_A", "column": "fc", "fddSelection": "fan_cmd"},
-            {"equipmentId": "RTU_A", "column": "fs", "fddSelection": "fan_status"},
+            {"equipmentId": "RTU_A", "column": "dsp", "fddSelection": "duct_static", "openfdd_key": "RTU_A.dsp"},
+            {"equipmentId": "RTU_A", "column": "dsps", "fddSelection": "duct_static_sp", "openfdd_key": "RTU_A.dsps"},
+            {"equipmentId": "RTU_A", "column": "fc", "fddSelection": "fan_cmd", "openfdd_key": "RTU_A.fc"},
+            {"equipmentId": "RTU_A", "column": "fs", "fddSelection": "fan_status", "openfdd_key": "RTU_A.fs"},
         ]
 
         def fake_load(_conn, *, openfdd_key, **_kwargs):
@@ -585,7 +724,11 @@ class EquipmentFrameBuilderTest(unittest.TestCase):
             "equipment": [{"equipment_id": "RTU_A", "equip_type": "ahu"}],
         }
         with mock.patch.object(capture, "post_sparql", return_value=points):
-            with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
+            with mock.patch.object(
+                capture, "resolve_bound_openfdd_key",
+                side_effect=lambda _conn, *, point, **_kw: point.get("openfdd_key"),
+            ):
+             with mock.patch.object(capture, "load_samples_in_window", side_effect=fake_load):
                 rows, coverage, errors, skips = capture.collect_pandas_fdd_rows(
                     http,
                     {},

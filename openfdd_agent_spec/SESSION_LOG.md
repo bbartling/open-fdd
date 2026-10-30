@@ -1,5 +1,6 @@
 > **Historical, superseded by the Timescale-only mandate.** Any Parquet, Arrow, Arrow IPC, Feather, DataFusion, result-cache, or dual-write statement in this document records a past plan or outcome and is not current guidance. Current rule: **Timescale/PostgreSQL only, one canonical telemetry write path, no dual record writing** ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 
+
 ## 2026-10-27 — 4.0.6 W1a repin assert + compose env passthrough
 
 - `assert_local_stack_after_repin.sh` reads build id from `GET /api/version`, prints explicit PASS/FAIL lines and `SUMMARY:`, optional `--skip-containers` for CI stub tests.
@@ -1472,3 +1473,8 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - Logged W4f count-comparison false-pass before fix in `BUG_REPORT_OT_MODBUS_HAYSTACK.md`: exact integer counts were using continuous relative tolerance.
 - Updated analytics row schema to mark only integral SQL counts exact; kept runtime hours, ratios, occupancy values, and z-scores on continuous scalar tolerance. Added regression cases for large one-count drift, DB int/float representation, fractional/non-finite/bool rejection, and retained scalar tolerance.
 - W4f qualification module passes (10 tests, 2 expected skips: live SQL requires a disposable DB and no pending-W4 fixture is available); blocking W4f parity passes with 4,664 P1 and 4,664 P2 comparisons, zero mismatches. Regression covers a one-count mismatch at one million, int/float representation, fractional/NaN/±Inf/bool/string rejection, and continuous scalar tolerance. `git diff --check` passes. No live DB was started.
+## 2026-10-30 — 4.0.7 W0c baseline tooling integrity
+
+- Read-only review found the IP capture path could import whichever `open_fdd` was active while loading the current SI registry, and template SPARQL normalization discarded typed history keys before the frame builder guessed an `equipment.column` identity.
+- Exact typed-point to Timescale `point_map` identity checks for BOSSPI and BUILDING_50 found one mapped key and target-window samples per point; no baseline chunks or telemetry writes were made.
+- W0c tooling patch is locally implemented and focused tests pass: explicit pinned-oracle provenance, preservation of typed bindings, exact fail-closed point-map resolution, and nonempty unit-inventory validation. Full SYNTH baseline qualification remains for root to rerun; no new baseline chunks or telemetry writes were made here.

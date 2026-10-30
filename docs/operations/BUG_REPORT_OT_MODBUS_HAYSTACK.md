@@ -10,6 +10,12 @@
 |-----------|--------------------------|-----------------|
 | **W4f analytics count comparison** | The P1/P2 comparator applied continuous relative tolerance to true integral fields, allowing a small count discrepancy in a large result to pass. | **PATCHING** in PR1447: declare SQL count fields as `integer`, compare exact integral values while accepting int/float representation equivalence; preserve tolerance for hours, ratios, and z-scores. W4f blocking gate and qualification module pass; live DB golden test skipped because no disposable database was provisioned. |
 
+## 4.0.7 W0c baseline tooling integrity (2026-10-30)
+
+| Gate / ID | Symptom found before fix | Status / action |
+|-----------|--------------------------|-----------------|
+| **W0c IP baseline provenance and point identity** | Capture could label the current SI registry/oracle as the IP baseline; template SPARQL normalization dropped explicit history keys and frame construction guessed `equipment.column`. Exact `point_map` checks confirmed BOSSPI and BUILDING_50 have typed point matches and samples in the target hour, so guessed keys caused empty frames. | **PATCHED LOCALLY; full SYNTH qualification pending** in `fix/4.0.7-w0-baseline-integrity`: pinned oracle and registry provenance are validated before credentials load; typed bindings are preserved; point keys resolve only through exact identities; nonempty point maps cannot yield empty inventory. No baseline chunks captured by this tooling change. |
+
 ## 4.0.1 platform patch (2026-10-20)
 
 Workspace **4.0.1** on master `04673e4f` (prior workspace **4.0.0**). This row is the release note for the patch. It is not a new gate FAIL and it is not an ops pin.

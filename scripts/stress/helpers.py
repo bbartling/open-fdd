@@ -379,7 +379,7 @@ def post_sparql(
     return _normalize_sparql_rows(payload)
 
 
-def _normalize_sparql_rows(payload: Any) -> list[dict[str, str]]:
+def _normalize_sparql_rows(payload: Any) -> list[dict[str, Any]]:
     """Accept tip free-form shape, template bindings, or sparql-playground nesting."""
     if not isinstance(payload, dict):
         return []
@@ -405,7 +405,7 @@ def _normalize_sparql_rows(payload: Any) -> list[dict[str, str]]:
     # Template bindings: equipment[].points[]
     equipment = payload.get("equipment")
     if isinstance(equipment, list):
-        rows: list[dict[str, str]] = []
+        rows: list[dict[str, Any]] = []
         for eq in equipment:
             if not isinstance(eq, dict):
                 continue
@@ -413,14 +413,16 @@ def _normalize_sparql_rows(payload: Any) -> list[dict[str, str]]:
             for pt in eq.get("points") or []:
                 if not isinstance(pt, dict):
                     continue
-                rows.append(
-                    {
-                        "equipmentId": eid,
-                        "pointId": str(pt.get("point_id") or ""),
-                        "column": str(pt.get("column") or ""),
-                        "canonicalRole": str(pt.get("canonical_role") or ""),
-                    }
+                row = dict(pt)
+                row["equipmentId"] = str(pt.get("equipmentId") or pt.get("equipment_id") or eid)
+                row["pointId"] = str(pt.get("pointId") or pt.get("point_id") or "")
+                row["column"] = str(pt.get("column") or "")
+                row["canonicalRole"] = str(
+                    pt.get("canonicalRole") or pt.get("canonical_role") or ""
                 )
+                # Preserve typed API fields (including nested history references and
+                # explicit openfdd_key) for downstream exact identity resolution.
+                rows.append(row)
             if not eq.get("points"):
                 rows.append(
                     {
