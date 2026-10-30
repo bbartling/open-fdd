@@ -136,28 +136,9 @@ def registry_rules() -> dict[str, dict]:
     return {rule["rule_id"]: rule for rule in doc["rules"]}
 
 
-def render_sql(rule: dict) -> str:
-    path = ROOT / "sql" / "fdd" / "postgres" / "rules" / rule["sql_file"]
-    raw = path.read_text(encoding="utf-8")
-    params = {
-        "POLL_SECONDS": str(POLL),
-        "CONFIRM_SECONDS": "300",
-        "CONFIRM_ROWS": "1",
-        "MODE_DELAY_MIN": "0",
-        "MODE_DELAY_ROWS": "0",
-        "MODE_DELAY_ROWS_PRECEDING": "0",
-        "MAX_GAP_HOURS": "1",
-    }
-    for spec in (rule.get("parameters") or {}).values():
-        key = spec.get("sql_placeholder")
-        if key:
-            params[str(key)] = str(spec.get("default"))
-    for key, value in params.items():
-        raw = raw.replace("{{" + key + "}}", value)
-    if "{{" in raw:
-        start = raw.find("{{")
-        die(f"{rule['rule_id']} unrendered placeholder {raw[start:start + 40]}")
-    return raw
+def render_sql(parity, rule: dict) -> str:
+    """Product render_rule SQL from registry defaults (IP view; seeded rows are IP)."""
+    return parity.render_product_ip_sql(str(rule["rule_id"]), float(POLL))
 
 
 def seed(cur, parity) -> None:
@@ -248,11 +229,11 @@ def fill_history(cur) -> None:
     )
 
 
-def check_rules(cur, rules: dict[str, dict]) -> None:
+def check_rules(cur, parity, rules: dict[str, dict]) -> None:
     statuses: list[str] = []
     for rule_id in STARTER:
         rule = rules[rule_id]
-        sql = render_sql(rule)
+        sql = render_sql(parity, rule)
         cur.execute(sql)
         fetched = cur.fetchall()
         columns = [desc.name for desc in cur.description]
@@ -286,8 +267,8 @@ def check_rules(cur, rules: dict[str, dict]) -> None:
         die("starter rules are all NOT_APPLICABLE")
 
 
-def check_overlay(cur, rules: dict[str, dict]) -> None:
-    sql = rewrite_fault_series(render_sql(rules["FC1"]), "AHU_1")
+def check_overlay(cur, parity, rules: dict[str, dict]) -> None:
+    sql = rewrite_fault_series(render_sql(parity, rules["FC1"]), "AHU_1")
     if not sql or "confirmed AS confirmed_fault" not in sql:
         die("FC1 did not rewrite to a confirmed_fault series")
     cur.execute(sql)
@@ -343,8 +324,8 @@ def main() -> int:
             seed(cur, parity)
             check_motor(cur)
             fill_history(cur)
-            check_rules(cur, rules)
-            check_overlay(cur, rules)
+            check_rules(cur, parity, rules)
+            check_overlay(cur, parity, rules)
         conn.commit()
     print("OK ui p0 timescale")
     return 0

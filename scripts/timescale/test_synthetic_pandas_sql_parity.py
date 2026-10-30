@@ -34,20 +34,38 @@ HOUR_TOLERANCE = 1e-6
 
 
 
-def fc1_product_params() -> tuple[dict, dict[str, float]]:
-    """FC1 registry rule and its imperial (IP) params from registry/tuning catalog defaults.
+def product_rule_ip_params(rule_id: str) -> tuple[dict, dict[str, float]]:
+    """Registry rule and its imperial (IP) params from registry/tuning catalog defaults.
 
-    The synthetic rows are stored in IP (in. w.c.), so both pandas and the rendered
-    SQL use the IP view of the same registry defaults the product renders.
+    The synthetic rows in these Timescale checks are stored in IP, so pandas and
+    the rendered SQL both use the IP view of the defaults the product renders.
     """
     from scripts.ci import unit_contract_lib as uc
     from scripts.stress.si_cutover import ci_fixtures_lib as cfl
 
-    rule = next((r for r in cfl.load_rule_registry() if r.get("rule_id") == "FC1"), None)
+    rule = next((r for r in cfl.load_rule_registry() if r.get("rule_id") == rule_id), None)
     if rule is None:
-        raise SystemExit("FC1 missing from sql/fdd/registry.yaml")
+        raise SystemExit(f"{rule_id} missing from sql/fdd/registry.yaml")
     params_ip, _params_si = cfl.resolve_rule_params_ip_si(rule, uc.load_json(uc.METRIC_UNITS))
     return rule, params_ip
+
+
+def render_product_ip_sql(rule_id: str, poll_seconds: float) -> str:
+    """Product render_rule SQL for IP-stored rows, tuned from registry defaults."""
+    from scripts.stress.si_cutover.ci_timescale_sql import render_rule_sql
+    from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_registry
+
+    rule, params = product_rule_ip_params(rule_id)
+    return render_rule_sql(
+        rule,
+        poll_seconds,
+        overrides=catalog_overrides_from_registry(rule, params),
+        storage="ip",
+    )
+
+
+def fc1_product_params() -> tuple[dict, dict[str, float]]:
+    return product_rule_ip_params("FC1")
 
 
 def synthetic_rows() -> list[dict[str, object]]:
@@ -169,16 +187,7 @@ def bind_current(cur, site: str, equipment_id: str, role: str, openfdd_key: str)
 
 
 def render_fc1() -> str:
-    from scripts.stress.si_cutover.ci_timescale_sql import render_rule_sql
-    from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_registry
-
-    rule, params = fc1_product_params()
-    return render_rule_sql(
-        rule,
-        POLL_SECONDS,
-        overrides=catalog_overrides_from_registry(rule, params),
-        storage="ip",
-    )
+    return render_product_ip_sql("FC1", POLL_SECONDS)
 
 
 def connect_with_retry(database_url: str):
