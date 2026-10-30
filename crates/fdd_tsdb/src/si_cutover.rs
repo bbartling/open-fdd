@@ -65,14 +65,23 @@ pub enum SiCutoverError {
     Config(String),
 }
 
-pub fn chunk_rows_limit() -> i64 {
-    match std::env::var("OPENFDD_SI_CUTOVER_CHUNK_ROWS")
-        .ok()
-        .and_then(|v| v.trim().parse::<i64>().ok())
-        .filter(|&n| n > 0)
-    {
-        Some(n) => n,
-        None => DEFAULT_CHUNK_ROWS,
+/// Chunk size from `OPENFDD_SI_CUTOVER_CHUNK_ROWS`. Unset uses the documented
+/// default; a set but invalid value is a configuration error, not a fallback.
+pub fn chunk_rows_limit() -> Result<i64, SiCutoverError> {
+    match std::env::var("OPENFDD_SI_CUTOVER_CHUNK_ROWS") {
+        Err(std::env::VarError::NotPresent) => Ok(DEFAULT_CHUNK_ROWS),
+        Err(std::env::VarError::NotUnicode(_)) => Err(SiCutoverError::Config(
+            "OPENFDD_SI_CUTOVER_CHUNK_ROWS is not valid unicode".into(),
+        )),
+        Ok(raw) => match raw.trim().parse::<i64>() {
+            Ok(n) if n > 0 => Ok(n),
+            Ok(n) => Err(SiCutoverError::Config(format!(
+                "OPENFDD_SI_CUTOVER_CHUNK_ROWS must be > 0, got {n}"
+            ))),
+            Err(e) => Err(SiCutoverError::Config(format!(
+                "OPENFDD_SI_CUTOVER_CHUNK_ROWS={raw:?}: {e}"
+            ))),
+        },
     }
 }
 
@@ -617,19 +626,67 @@ async fn bump_data_revision(
     Ok(())
 }
 
-/// Marks derived analytics cache rows stale. Does not delete historian or FDD rows.
-pub async fn mark_analytics_cache_stale(
+/// Rows marked superseded by [`invalidate_derived_results_tx`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DerivedInvalidation {
+    pub data_revision: i64,
+    pub fdd_runs: u64,
+    pub fdd_intervals: u64,
+    pub analytics_results: u64,
+}
+
+/// Invalidates derived results for a site by revision. Never deletes rows.
+///
+/// Every current (`superseded_by_revision IS NULL`) `fdd_run`, `fdd_interval_result`
+/// computed at an older data revision, and `analytics_result` row is stamped with the
+/// site's current `data_revision`; analytics rows are also marked `stale`. Returns
+/// `Ok(None)` when the site has no data revision (nothing was converted).
+pub async fn invalidate_derived_results_tx(
     tx: &mut Transaction<'_, Postgres>,
     site_id: &str,
-) -> Result<u64, sqlx::Error> {
-    let out = sqlx::query(
-        "UPDATE analytics_result SET stale = true, updated_at = now()
-         WHERE building_id = $1 AND stale IS NOT TRUE",
+) -> Result<Option<DerivedInvalidation>, sqlx::Error> {
+    let revision: Option<i64> =
+        sqlx::query_scalar("SELECT revision FROM data_revision WHERE site_id = $1")
+            .bind(site_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    let Some(revision) = revision else {
+        return Ok(None);
+    };
+    let runs = sqlx::query(
+        "UPDATE fdd_run SET superseded_by_revision = $2
+         WHERE site_id = $1 AND superseded_by_revision IS NULL",
     )
     .bind(site_id)
+    .bind(revision)
     .execute(&mut **tx)
-    .await?;
-    Ok(out.rows_affected())
+    .await?
+    .rows_affected();
+    let intervals = sqlx::query(
+        "UPDATE fdd_interval_result SET superseded_by_revision = $2
+         WHERE site_id = $1 AND superseded_by_revision IS NULL AND data_revision < $2",
+    )
+    .bind(site_id)
+    .bind(revision)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    let analytics = sqlx::query(
+        "UPDATE analytics_result
+         SET stale = true, superseded_by_revision = $2, updated_at = now()
+         WHERE building_id = $1 AND superseded_by_revision IS NULL",
+    )
+    .bind(site_id)
+    .bind(revision)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected();
+    Ok(Some(DerivedInvalidation {
+        data_revision: revision,
+        fdd_runs: runs,
+        fdd_intervals: intervals,
+        analytics_results: analytics,
+    }))
 }
 
 pub async fn apply_sample_cutover_tx(
@@ -643,7 +700,7 @@ pub async fn apply_sample_cutover_tx(
         });
     }
     let contract = contract()?;
-    let chunk = chunk_rows_limit();
+    let chunk = chunk_rows_limit()?;
     let mut result = SiteCutoverResult {
         site_id: dry.site_id.clone(),
         ..Default::default()

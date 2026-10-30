@@ -9,7 +9,7 @@ use axum::Json;
 use fdd_core::MetricUnitsContract;
 use fdd_rules::registry::RuleParameterDef;
 use fdd_tsdb::{
-    apply_sample_cutover_tx, dry_run_site, ensure_si_cutover_schema, mark_analytics_cache_stale,
+    apply_sample_cutover_tx, dry_run_site, ensure_si_cutover_schema, invalidate_derived_results_tx,
     SiCutoverError,
 };
 use open_fdd_edge_prototype::fdd::session_config::{
@@ -534,7 +534,7 @@ pub async fn si_cutover_post_handler(
                         Json(json!({"ok": false, "error": e.to_string()})),
                     )
                 })?;
-        mark_analytics_cache_stale(&mut tx, site_id)
+        let invalidated = invalidate_derived_results_tx(&mut tx, site_id)
             .await
             .map_err(|e| {
                 (
@@ -548,13 +548,25 @@ pub async fn si_cutover_post_handler(
                 Json(json!({"ok": false, "error": e.to_string()})),
             )
         })?;
-        let _ = migrate_session_config_files(site_id);
+        let session_params_converted = migrate_session_config_files(site_id).map_err(|err| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": err, "site_id": site_id})),
+            )
+        })?;
         results.push(json!({
             "site_id": site_id,
             "dry_run": dry_run_json(&dry),
             "rows_converted": sample_result.rows_converted,
             "series_converted": sample_result.series_converted,
             "params_revisions_written": sample_result.params_revisions_written,
+            "session_params_converted": session_params_converted,
+            "invalidated": invalidated.map(|inv| json!({
+                "data_revision": inv.data_revision,
+                "fdd_runs": inv.fdd_runs,
+                "fdd_intervals": inv.fdd_intervals,
+                "analytics_results": inv.analytics_results,
+            })),
         }));
     }
     record_cutover_token(&pool, &expected).await.map_err(|e| {

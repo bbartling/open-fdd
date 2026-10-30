@@ -43,3 +43,10 @@ CREATE TABLE IF NOT EXISTS fdd.active_rule_config (
   FOREIGN KEY (tenant_id, site_id, rule_id, scope_key, revision)
     REFERENCES fdd.rule_config_revision (tenant_id, site_id, rule_id, scope_key, revision)
 );
+
+-- Derived results are invalidated by revision, never deleted (W2c review).
+-- NULL = current. A non-NULL value is the site data_revision at which the row became
+-- invalid. Rows are kept for audit and row counts never change on cutover.
+ALTER TABLE fdd_run ADD COLUMN IF NOT EXISTS superseded_by_revision bigint;
+ALTER TABLE fdd_interval_result ADD COLUMN IF NOT EXISTS superseded_by_revision bigint;
+ALTER TABLE analytics_result ADD COLUMN IF NOT EXISTS superseded_by_revision bigint

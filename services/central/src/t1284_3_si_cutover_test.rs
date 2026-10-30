@@ -2,7 +2,7 @@
 
 use chrono::{TimeZone, Utc};
 use fdd_tsdb::{
-    apply_sample_cutover_tx, dry_run_site, mark_analytics_cache_stale, SampleRow, Tsdb,
+    apply_sample_cutover_tx, dry_run_site, invalidate_derived_results_tx, SampleRow, Tsdb,
     UpsertBatch, QUALITY_UNIT_UNDECLARED,
 };
 use sqlx::postgres::PgPoolOptions;
@@ -21,6 +21,25 @@ async fn pool() -> Option<sqlx::PgPool> {
 
 async fn schema(pool: &sqlx::PgPool) {
     crate::portal_inventory_fixtures::apply_schema(pool).await;
+    // 12_si_cutover.sql alters the derived-result tables, so they must exist first.
+    static DERIVED: OnceCell<()> = OnceCell::const_new();
+    DERIVED
+        .get_or_init(|| async {
+            for blob in [
+                include_str!("../../../sql/schema/01_bps_core.sql"),
+                include_str!("../../../sql/schema/02_openfdd_dims.sql"),
+                include_str!("../../../sql/schema/08_analytics_result_cache.sql"),
+                include_str!("../../../sql/schema/10_incremental_fdd.sql"),
+            ] {
+                for sql in blob.split(';') {
+                    let stmt = sql.trim();
+                    if !stmt.is_empty() {
+                        crate::test_ddl::execute_idempotent_ddl(pool, stmt).await;
+                    }
+                }
+            }
+        })
+        .await;
     for sql in include_str!("../../../sql/schema/11_point_map_binding_metadata.sql").split(';') {
         let stmt = sql.trim();
         if !stmt.is_empty() {
@@ -40,21 +59,26 @@ async fn schema(pool: &sqlx::PgPool) {
 
 async fn schema_with_fdd_tables(pool: &sqlx::PgPool) {
     schema(pool).await;
-    static FDD: OnceCell<()> = OnceCell::const_new();
-    FDD.get_or_init(|| async {
-        for blob in [
-            include_str!("../../../sql/schema/01_bps_core.sql"),
-            include_str!("../../../sql/schema/10_incremental_fdd.sql"),
-        ] {
-            for sql in blob.split(';') {
-                let stmt = sql.trim();
-                if !stmt.is_empty() {
-                    crate::test_ddl::execute_idempotent_ddl(pool, stmt).await;
-                }
-            }
+}
+
+async fn superseded_counts(pool: &sqlx::PgPool, site: &str, rev: i64) -> (i64, i64, i64) {
+    let q = |sql: &'static str| {
+        let site = site.to_string();
+        async move {
+            let n: i64 = sqlx::query_scalar(sql)
+                .bind(site)
+                .bind(rev)
+                .fetch_one(pool)
+                .await
+                .expect("superseded count");
+            n
         }
-    })
-    .await;
+    };
+    (
+        q("SELECT count(*) FROM fdd_run WHERE site_id = $1 AND superseded_by_revision = $2").await,
+        q("SELECT count(*) FROM fdd_interval_result WHERE site_id = $1 AND superseded_by_revision = $2").await,
+        q("SELECT count(*) FROM analytics_result WHERE building_id = $1 AND superseded_by_revision = $2 AND stale IS TRUE").await,
+    )
 }
 
 fn sample(
@@ -149,9 +173,9 @@ async fn t1284_3_dry_run_rows_match_conversion_and_rerun_zero() {
     let first = apply_sample_cutover_tx(&mut tx, &dry)
         .await
         .expect("cutover");
-    mark_analytics_cache_stale(&mut tx, &site)
+    invalidate_derived_results_tx(&mut tx, &site)
         .await
-        .expect("stale");
+        .expect("invalidate");
     tx.commit().await.expect("commit");
     assert_eq!(first.rows_converted, 1);
 
@@ -220,9 +244,9 @@ async fn t1284_3_cutover_does_not_delete_derived_rows_marks_cache_stale() {
     apply_sample_cutover_tx(&mut tx, &dry)
         .await
         .expect("cutover");
-    mark_analytics_cache_stale(&mut tx, &site)
+    invalidate_derived_results_tx(&mut tx, &site)
         .await
-        .expect("stale");
+        .expect("invalidate");
     tx.commit().await.expect("commit");
 
     let after = derived_row_counts(&pool, &site).await;
@@ -231,22 +255,30 @@ async fn t1284_3_cutover_does_not_delete_derived_rows_marks_cache_stale() {
         "fdd_run / interval / analytics rows must remain"
     );
 
-    let stale_rows: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM analytics_result
-         WHERE building_id = $1 AND stale IS TRUE",
-    )
-    .bind(&site)
-    .fetch_one(&pool)
-    .await
-    .expect("stale count");
-    assert_eq!(stale_rows, 1);
-
     let revision: i64 = sqlx::query_scalar("SELECT revision FROM data_revision WHERE site_id = $1")
         .bind(&site)
         .fetch_one(&pool)
         .await
         .expect("data_revision");
     assert!(revision >= 1, "sample cutover must bump data_revision");
+    assert_eq!(
+        superseded_counts(&pool, &site, revision).await,
+        (1, 1, 1),
+        "every derived row must be invalidated by the cutover revision"
+    );
+
+    // Re-invalidating is idempotent: no row count change, no re-stamp.
+    let mut tx = pool.begin().await.expect("tx2");
+    let again = invalidate_derived_results_tx(&mut tx, &site)
+        .await
+        .expect("invalidate2")
+        .expect("revision present");
+    tx.commit().await.expect("commit2");
+    assert_eq!(
+        (again.fdd_runs, again.fdd_intervals, again.analytics_results),
+        (0, 0, 0)
+    );
+    assert_eq!(derived_row_counts(&pool, &site).await, before);
 }
 
 #[tokio::test]
@@ -308,6 +340,10 @@ async fn t1284_3_unresolved_series_blocks_cutover() {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize workspace env with other admin route tests"
+)]
 async fn t1284_3_viewer_gets_403_on_dry_run_route() {
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
@@ -429,10 +465,38 @@ async fn t1284_3_post_token_single_use_confirm_and_authz() {
     let (status, body) = post_json(
         &app,
         &hub,
+        json!({"token": TOKEN, "site_ids": [site.clone()]}),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "missing confirm: {body}"
+    );
+
+    let (status, body) = post_json(
+        &app,
+        &hub,
         json!({"confirm": true, "token": "wrong-token", "site_ids": [site.clone()]}),
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+
+    let (status, body) = post_json(
+        &app,
+        &hub,
+        json!({"confirm": true, "token": "", "site_ids": [site.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "empty token: {body}");
+
+    let unchanged = dry_run_site(&pool, &site, 0)
+        .await
+        .expect("dry-run after rejected posts");
+    assert_eq!(
+        unchanged.rows_to_convert, 1,
+        "rejected posts must not convert"
+    );
 
     let (status, body) = post_json(
         &app,
@@ -452,6 +516,15 @@ async fn t1284_3_post_token_single_use_confirm_and_authz() {
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["ok"], false);
+    assert_eq!(body["error"], "cutover token already used");
+
+    let (status, body) = post_json(
+        &app,
+        &viewer,
+        json!({"confirm": true, "token": TOKEN, "site_ids": [site.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "viewer after use: {body}");
 
     let dry2 = dry_run_site(&pool, &site, 0)
         .await
