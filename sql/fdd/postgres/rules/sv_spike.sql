@@ -1,6 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sv_spike.sql — Sensor rate-of-change spike — pandas SENSOR_LIMITS catalog
+-- Storage is SI (metric-c-v2): temperature spike limits are K (delta °C), duct static Pa, humidity percent RH.
 -- Per-role spike limits (scaled by SPIKE_SCALE). Humidity/pressure included.
 WITH h AS (
   SELECT
@@ -19,10 +20,12 @@ WITH h AS (
     LAG(hw_return_t) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_hw_return_t,
     LAG(oa_h) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_oa_h,
     LAG(duct_static) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_duct_static,
-    fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status,
+    fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status, zone_flow,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      -- VAV airflow proxy (operational_gate.resolve_fan_running): 50 cfm = 23.597350 L/s SI.
+      WHEN zone_flow IS NOT NULL THEN CASE WHEN zone_flow > 23.597350 THEN 1 ELSE 0 END
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
@@ -36,17 +39,17 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN {{REQUIRE_OPERATIONAL_GATE}} >= 0.5 AND COALESCE(energized, 0) = 0 THEN 0
-      WHEN oa_t IS NOT NULL AND prev_oa_t IS NOT NULL AND ABS(oa_t - prev_oa_t) > 36.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
-      WHEN mat IS NOT NULL AND prev_mat IS NOT NULL AND ABS(mat - prev_mat) > 25.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
-      WHEN zone_t IS NOT NULL AND prev_zone_t IS NOT NULL AND ABS(zone_t - prev_zone_t) > 12.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
-      WHEN rat IS NOT NULL AND prev_rat IS NOT NULL AND ABS(rat - prev_rat) > 12.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
-      WHEN sat IS NOT NULL AND prev_sat IS NOT NULL AND ABS(sat - prev_sat) > 40.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
-      WHEN chw_supply_t IS NOT NULL AND prev_chw_supply_t IS NOT NULL AND ABS(chw_supply_t - prev_chw_supply_t) > 20.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
-      WHEN chw_return_t IS NOT NULL AND prev_chw_return_t IS NOT NULL AND ABS(chw_return_t - prev_chw_return_t) > 20.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
-      WHEN hw_supply_t IS NOT NULL AND prev_hw_supply_t IS NOT NULL AND ABS(hw_supply_t - prev_hw_supply_t) > 60.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
-      WHEN hw_return_t IS NOT NULL AND prev_hw_return_t IS NOT NULL AND ABS(hw_return_t - prev_hw_return_t) > 60.0 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN oa_t IS NOT NULL AND prev_oa_t IS NOT NULL AND ABS(oa_t - prev_oa_t) > 20.000000 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN mat IS NOT NULL AND prev_mat IS NOT NULL AND ABS(mat - prev_mat) > 13.888889 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN zone_t IS NOT NULL AND prev_zone_t IS NOT NULL AND ABS(zone_t - prev_zone_t) > 6.666667 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN rat IS NOT NULL AND prev_rat IS NOT NULL AND ABS(rat - prev_rat) > 6.666667 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN sat IS NOT NULL AND prev_sat IS NOT NULL AND ABS(sat - prev_sat) > 22.222222 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN chw_supply_t IS NOT NULL AND prev_chw_supply_t IS NOT NULL AND ABS(chw_supply_t - prev_chw_supply_t) > 11.111111 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN chw_return_t IS NOT NULL AND prev_chw_return_t IS NOT NULL AND ABS(chw_return_t - prev_chw_return_t) > 11.111111 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN hw_supply_t IS NOT NULL AND prev_hw_supply_t IS NOT NULL AND ABS(hw_supply_t - prev_hw_supply_t) > 33.333333 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
+      WHEN hw_return_t IS NOT NULL AND prev_hw_return_t IS NOT NULL AND ABS(hw_return_t - prev_hw_return_t) > 33.333333 * {{SPIKE_SCALE_TEMPERATURE}} THEN 1
       WHEN oa_h IS NOT NULL AND prev_oa_h IS NOT NULL AND ABS(oa_h - prev_oa_h) > 25.0 * {{SPIKE_SCALE_HUMIDITY}} THEN 1
-      WHEN duct_static IS NOT NULL AND prev_duct_static IS NOT NULL AND ABS(duct_static - prev_duct_static) > 2.0 * {{SPIKE_SCALE_PRESSURE}} THEN 1
+      WHEN duct_static IS NOT NULL AND prev_duct_static IS NOT NULL AND ABS(duct_static - prev_duct_static) > 497.68 * {{SPIKE_SCALE_PRESSURE}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

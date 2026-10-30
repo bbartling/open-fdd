@@ -1,6 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- oat_meteo_fault.sql — BAS OAT vs meteo reference (|Δ| > threshold) + confirm
+-- Storage is SI (metric-c-v2): oa_t and the web reference are °C; OAT_ERR is a temperature difference in K.
 -- Web weather is joined as-of: carry the last web sample forward up to
 -- WEB_ASOF_BOUND_SECONDS (web cadence + margin from registry). Beyond that bound
 -- the local sample is not compared (not-assessed seconds, never a no-fault).

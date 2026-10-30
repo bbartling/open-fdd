@@ -1,6 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sched247_always_on.sql — Always-on fan or pump runtime
+-- Unit-free: ALWAYS_ON_PCT is a fraction of run status samples (unchanged by SI storage).
 -- Pandas `_sched247`: ranked proof (status > command), then FAULT only when
 -- mean(on) >= always_on_pct over the whole analysis window. Confirmed hours
 -- are the on-mask after that gate (not a streak-only screen).

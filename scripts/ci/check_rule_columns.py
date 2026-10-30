@@ -75,14 +75,18 @@ def history_role_reads(sql: str) -> set[str]:
             item = item.strip()
             if not item:
                 continue
+            # Bare or table-qualified column (`col`, `h.col`), optionally aliased.
+            column = r"(?:[a-z][a-z0-9_]*\.)?([a-z][a-z0-9_]*)"
             alias = re.search(r"\bas\s+([a-z][a-z0-9_]*)\s*$", item, re.I)
             if alias:
                 expr = item[: alias.start()].strip()
-                if re.fullmatch(r"[a-z][a-z0-9_]*", expr, re.I):
-                    roles.add(expr.lower())
+                qualified = re.fullmatch(column, expr, re.I)
+                if qualified:
+                    roles.add(qualified.group(1).lower())
                 continue
-            if re.fullmatch(r"[a-z][a-z0-9_]*", item, re.I):
-                roles.add(item.lower())
+            qualified = re.fullmatch(column, item, re.I)
+            if qualified:
+                roles.add(qualified.group(1).lower())
     return roles
 
 
@@ -146,6 +150,17 @@ def self_test() -> None:
     want = {"equipment_id", "timestamp_utc", "hw_supply_t", "hw_reset_request_sum"}
     if got != want:
         fail(f"self-test history_role_reads: got {sorted(got)} want {sorted(want)}")
+    qualified = """
+    gated AS (
+      SELECT h.equipment_id, h.zone_flow, fdd.mask_sweep_val('ra_h', b.u_ra_h, h.ra_h) AS ra_h
+      FROM history h
+      CROSS JOIN bind b
+    )
+    """
+    got = history_role_reads(qualified)
+    want = {"equipment_id", "zone_flow"}
+    if got != want:
+        fail(f"self-test qualified history_role_reads: got {sorted(got)} want {sorted(want)}")
 
     from unit_contract_lib import validate_registry_role_declarations_diff
 

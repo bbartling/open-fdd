@@ -10,6 +10,7 @@ REPO = Path(__file__).resolve().parents[3]
 FAMILIES_PATH = REPO / "tests" / "fixtures" / "si_cutover" / "w4_parity_families.json"
 
 W4C_SI_ZONE_FAMILY = "W4c_si_zone"
+W4E_SI_SENSOR_UTIL_FAMILY = "W4e_si_sensor_util"
 W4A_SI_AHU_FC_FAMILY = "W4a_si_ahu_fc"
 # Families whose Postgres rules run on SI storage with SI registry parameters.
 SI_SQL_PACK_FAMILIES = (W4A_SI_AHU_FC_FAMILY, W4C_SI_ZONE_FAMILY)
@@ -70,6 +71,11 @@ def family_dataset_ids(family: str) -> frozenset[str]:
 def sql_si_pack_enabled(rule_id: str) -> bool:
     """Postgres rules converted to SI storage (W4a AHU FC and W4c zone families)."""
     return any(rule_id in family_rule_ids(fam) for fam in SI_SQL_PACK_FAMILIES)
+
+
+def sensor_util_si_sql_shipped(rule_id: str) -> bool:
+    """Sensor/weather/schedule/utility rules whose product SQL is SI-native (W4e)."""
+    return rule_id in family_rule_ids(W4E_SI_SENSOR_UTIL_FAMILY)
 
 
 def ahu_econ_si_sql_shipped(rule_id: str) -> bool:

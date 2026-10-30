@@ -128,6 +128,11 @@ jobs:
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
             --family W4d_si_plant
 
+      - name: Blocking W4e sensor/weather/schedule/utility SI family (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4e_si_sensor_util
+
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |
           set +e
