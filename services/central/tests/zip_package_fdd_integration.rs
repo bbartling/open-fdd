@@ -176,7 +176,7 @@ fn build_package_zip() -> Vec<u8> {
     .to_string();
     let session_config = json!({
         "schema_version": "openfdd_session_v1",
-        "unit_system": "imperial"
+        "display_units": "imperial"
     })
     .to_string();
 
@@ -243,7 +243,7 @@ fn zip_package_upload_then_fc1_registry_run() {
         "{pkg}"
     );
     assert_eq!(
-        pkg["session_config"]["unit_system"],
+        pkg["session_config"]["display_units"],
         json!("imperial"),
         "session_config should surface for #515: {pkg}"
     );
@@ -281,14 +281,14 @@ fn zip_package_upload_then_fc1_registry_run() {
     };
     assert_eq!(status, 200, "session-config: {sess}");
     assert_eq!(sess["persisted"], json!(true), "{sess}");
-    assert_eq!(sess["config"]["unit_system"], json!("imperial"), "{sess}");
+    assert_eq!(sess["config"]["display_units"], json!("imperial"), "{sess}");
 
     // #515: PUT session config with rule params + role_map applied to the building.
     let put_body = json!({
         "building_id": "ZIP_BUILDING_1",
         "config": {
             "schema_version": "openfdd_session_v1",
-            "unit_system": "metric",
+            "display_units": "metric",
             "params": {"FC1": {"eps_dsp": 0.2}},
             "role_map": {"AHU_1": {"fan_cmd": "SF_SPD", "duct_static": "DA_P", "duct_static_sp": "DA_P_SP"}}
         }
@@ -309,7 +309,7 @@ fn zip_package_upload_then_fc1_registry_run() {
     };
     assert_eq!(status, 200, "session-config put: {put}");
     assert_eq!(put.get("ok"), Some(&json!(true)), "put: {put}");
-    assert_eq!(put["config"]["unit_system"], json!("metric"), "{put}");
+    assert_eq!(put["config"]["display_units"], json!("metric"), "{put}");
     assert_eq!(
         put["applied_role_map"][0]["ok"],
         json!(true),
