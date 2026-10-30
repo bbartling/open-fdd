@@ -581,12 +581,12 @@ def execute_sql_rule_daily(
 
     if agg_err:
         return [], agg_err
-    if aggregate_rows and aggregate_rows[0].get("covered_seconds") is None:
-        return [], (
-            "aggregate_only_coverage_unqualified: irregular or multi-day data "
-            "requires fault series overlay (no len(index)*poll fallback)"
-        )
-    return [], "aggregate_only_coverage_unqualified: requires fault series overlay"
+    for row in aggregate_rows:
+        if row.get("covered_seconds") is None:
+            row["covered_seconds"] = 0.0
+        row["pair_status"] = "aggregate_fault_total_only"
+        row["reason"] = "no_fault_series_overlay"
+    return aggregate_rows, None
 
 
 def apply_fdd_postgres_helpers(conn) -> None:
