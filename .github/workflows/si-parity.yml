@@ -16,6 +16,7 @@ on:
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "tests/qualification/test_w4f_analytics_si.py"
+      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "sql/contract/goldens/**"
       - "docs/rules/cookbook/fixtures/**"
       - "sql/analytics/**"
@@ -38,6 +39,7 @@ on:
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "tests/qualification/test_w4f_analytics_si.py"
+      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "sql/contract/goldens/**"
       - "sql/fdd/**"
       - "open_fdd/**"
@@ -154,7 +156,10 @@ jobs:
       - name: W4f analytics SI (offline P1/P2 + live SQL SI golden check)
         env:
           OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
-        run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si -v
+        run: >-
+          python3 -B -m unittest
+          tests.qualification.test_w4f_analytics_si
+          tests.qualification.test_w4f_analytics_threshold_invariance -v
 
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |
