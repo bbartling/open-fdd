@@ -101,7 +101,7 @@ async fn ingest_idempotency_backfill_and_metrics_are_tenant_scoped() {
                 .connect(&url)
                 .await
                 .expect("ingest scope postgres fixture");
-            super::postgres::apply_schema(&pool)
+            crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
                 .await
                 .expect("ingest schema");
             let lease = snapshot_scheduler(&pool).await;

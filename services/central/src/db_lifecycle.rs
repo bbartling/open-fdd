@@ -588,7 +588,7 @@ async fn relation_exists(pool: &PgPool, table: &str) -> anyhow::Result<bool> {
     Ok(reg.is_some())
 }
 
-async fn apply_forward(pool: &PgPool) -> anyhow::Result<()> {
+pub(crate) async fn apply_forward(pool: &PgPool) -> anyhow::Result<()> {
     // Session lock, same key as `begin_schema_ddl`. Each statement stays in
     // autocommit: `CREATE EXTENSION timescaledb` and `create_hypertable` are
     // not wrapped in an explicit transaction block. This connection is closed
