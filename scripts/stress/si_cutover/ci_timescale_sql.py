@@ -425,6 +425,35 @@ def compare_sql_daily_rows(
     return None
 
 
+def _execute_original_aggregate_total_fault_seconds(
+    cur,
+    *,
+    sql: str,
+    equipment_id: str,
+) -> tuple[float | None, str | None]:
+    try:
+        cur.execute(sql)
+        fetched = cur.fetchall()
+        columns = [d.name for d in cur.description]
+    except Exception as exc:
+        return None, f"aggregate sql: {exc}"
+    if not fetched:
+        return None, "aggregate sql empty"
+    hours_col: str | None = None
+    if "fault_hours" in columns:
+        hours_col = "fault_hours"
+    elif "fan_runtime_hours" in columns:
+        hours_col = "fan_runtime_hours"
+    if hours_col is None:
+        return None, "aggregate no fault_hours column"
+    equip_idx = columns.index("equipment_id")
+    hours_idx = columns.index(hours_col)
+    for row in fetched:
+        if str(row[equip_idx]) == equipment_id:
+            return float(row[hours_idx]) * 3600.0, None
+    return None, "aggregate equipment missing in sql result"
+
+
 def _execute_original_aggregate_daily(
     cur,
     *,
@@ -568,6 +597,19 @@ def execute_sql_rule_daily(
         if ov_err:
             return [], ov_err
         if agg_err:
+            if "spans multiple UTC days" in agg_err:
+                agg_total, tot_err = _execute_original_aggregate_total_fault_seconds(
+                    cur, sql=sql, equipment_id=equipment_id
+                )
+                if tot_err:
+                    return [], f"aggregate total alongside overlay: {tot_err}"
+                overlay_total = sum(float(r.get("fault_seconds", 0)) for r in overlay_rows)
+                if overlay_total != agg_total:
+                    return [], (
+                        f"ORIGINAL_AGGREGATE vs OVERLAY total fault_seconds: "
+                        f"{agg_total} != {overlay_total}"
+                    )
+                return overlay_rows, None
             return [], f"aggregate execution required alongside overlay: {agg_err}"
         cmp_err = compare_sql_daily_rows(
             aggregate_rows,
