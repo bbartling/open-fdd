@@ -126,6 +126,31 @@ class SiParityGateBlockingTests(unittest.TestCase):
             "W4d plant scope: P1/P2 for shipped SI SQL should PASS",
         )
 
+    def test_scoped_blocking_w4a_passes_with_p0_fc1_matching(self) -> None:
+        """#1459: pandas shares the product mode-delay holdoff, so P0 FC1 matches SQL."""
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(STRESS / "si_parity_gate.py"),
+                "--fixtures-only",
+                "--blocking",
+                "--family",
+                "W4a_si_ahu_fc",
+            ],
+            cwd=str(REPO),
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        output = proc.stdout + proc.stderr
+        self.assertEqual(proc.returncode, 0, f"W4a FC scope must PASS blocking:\n{output[-4000:]}")
+        fc1_p0 = [
+            line
+            for line in output.splitlines()
+            if "P0 value_mismatch" in line and "'FC1'" in line
+        ]
+        self.assertEqual(fc1_p0, [], "P0 FC1 pandas vs SQL must match")
+
     def test_scoped_blocking_passes_w4b_ahu_econ(self) -> None:
         proc = subprocess.run(
             [
@@ -138,6 +163,8 @@ class SiParityGateBlockingTests(unittest.TestCase):
             ],
             cwd=str(REPO),
             check=False,
+            capture_output=True,
+            text=True,
         )
         self.assertEqual(
             proc.returncode,

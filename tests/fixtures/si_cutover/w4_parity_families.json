@@ -2,6 +2,32 @@
   "schema": "openfdd-si-parity-w4-families-v1",
   "issue": "1284",
   "families": {
+    "W4a_si_ahu_fc": {
+      "wave": "W4a",
+      "description": "FC1–FC15 + FC13-SAT-HIGH SI pandas/SQL parity (blocking); owns T1284-4 FC1 scope",
+      "datasets": [
+        "COOKBOOK_FC1",
+        "COOKBOOK_FC2",
+        "SYNTH_AHU_CASE_FC1"
+      ],
+      "rules": [
+        "FC1",
+        "FC2",
+        "FC3",
+        "FC4",
+        "FC5",
+        "FC6",
+        "FC7",
+        "FC8",
+        "FC9",
+        "FC10",
+        "FC11",
+        "FC12",
+        "FC13-SAT-HIGH",
+        "FC14",
+        "FC15"
+      ]
+    },
     "W4c_si_zone": {
       "wave": "W4c",
       "description": "VAV/zone/FCU SI pandas/SQL parity (blocking)",
