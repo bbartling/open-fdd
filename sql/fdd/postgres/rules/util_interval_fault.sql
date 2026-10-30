@@ -1,6 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- util_interval_fault.sql — BAS 15m vs utility interval (rolling MAE proxy)
+-- Storage is SI (metric-c-v2): energy is kWh (canonical interval_energy); UTIL_INTERVAL_MAE is kWh.
 WITH bas_raw AS (
   SELECT
     timestamp_utc,

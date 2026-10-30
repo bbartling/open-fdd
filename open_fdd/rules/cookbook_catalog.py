@@ -502,6 +502,9 @@ def _units_map(d: pd.DataFrame) -> dict[str, str]:
 
 
 def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    from open_fdd.quality import _storage_si
+    from open_fdd.rules.sensor_sweep_catalog import limits_for_haystack_role_si
+
     idx = d.index
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
@@ -512,11 +515,14 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
-        lim = SENSOR_LIMITS[role]
+        lim = limits_for_haystack_role_si(role) if _storage_si(d) else SENSOR_LIMITS[role]
+        if lim is None:
+            raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
+        base_lo, base_hi = lim["lo"], lim["hi"]
         type_scale = _role_type_scale(p, role, kind="range")
         # Widen limits when scale > 1 (more forgiving); shrink when scale < 1.
-        mid = (lim["lo"] + lim["hi"]) / 2.0
-        half = (lim["hi"] - lim["lo"]) / 2.0 * max(type_scale, 1e-6)
+        mid = (base_lo + base_hi) / 2.0
+        half = (base_hi - base_lo) / 2.0 * max(type_scale, 1e-6)
         lo, hi = mid - half, mid + half
         # BACnet sensor failures commonly arrive as IEEE +/-Inf. Treat any
         # present non-finite number as a hard range fault before JSON/Parquet
@@ -530,7 +536,9 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     idx = d.index
-    tol = _f(p, "flatline_tol", 0.10)
+    from open_fdd.rules.sensor_sweep_catalog import flatline_tolerance_for_role
+
+    tol = _f(p, "flatline_tol", 0.055556)
     hours = _f(p, "flatline_hours", 1.0)
     window = max(2, int(round(hours * 3600 / max(poll, 1))))
     mask = _false(idx)
@@ -542,7 +550,7 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
-        role_mask = flatline_mask(s, tol=tol, window=window)
+        role_mask = flatline_mask(s, tol=flatline_tolerance_for_role(role, tol), window=window)
         per_role[role] = role_mask
         mask = mask | role_mask
     _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-FLATLINE")
@@ -550,6 +558,9 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 
 def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    from open_fdd.quality import _storage_si
+    from open_fdd.rules.sensor_sweep_catalog import limits_for_haystack_role_si
+
     idx = d.index
     scale = _f(p, "spike_scale", 1.0)
     mask = _false(idx)
@@ -562,7 +573,10 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         type_scale = _role_type_scale(p, role, kind="spike")
-        limit = SENSOR_LIMITS[role]["spike"] * scale * type_scale
+        lim = limits_for_haystack_role_si(role) if _storage_si(d) else SENSOR_LIMITS[role]
+        if lim is None:
+            raise ValueError(f"SV-SPIKE role {role!r} has no SI limit")
+        limit = lim["spike"] * scale * type_scale
         role_mask = s.notna() & (s.diff().abs() > limit)
         per_role[role] = role_mask
         mask = mask | role_mask
@@ -1353,7 +1367,7 @@ def hp1(d, p, poll):
 
 def wx1(d, p, poll):
     """OAT sample-to-sample spike; limit scales with the sample gap vs poll."""
-    spike = _f(p, "spike_limit", 16.0)
+    spike = _f(p, "spike_limit", 8.888889)
     s = pd.to_numeric(d["outside-air-temp"], errors="coerce")
     jump = s.diff().abs()
     if isinstance(d.index, pd.DatetimeIndex) and len(d.index) > 1:
@@ -1441,7 +1455,7 @@ def oat_vs_meteo(d, p, poll):
     """BAS outdoor-air sensor disagrees with Open-Meteo dry bulb by more than the threshold."""
     if "web-outside-air-temp" not in d.columns and "web_oat_native_frame" not in d.attrs:
         return _false(d.index)
-    err = _f(p, "oat_err", 5.0)
+    err = _f(p, "oat_err", 2.777778)
     cadence = _f(p, "web_cadence_seconds", 1200.0)
     margin = _f(p, "web_asof_margin_seconds", 300.0)
     bound_s = cadence + margin
@@ -1544,8 +1558,8 @@ def sched1(d, p, poll):
     base = unoccupied & as_bool(d["fan-status"])
     if "zone-air-temp" not in d.columns or d["zone-air-temp"].notna().sum() == 0:
         return base
-    lo = _f(p, "comfort_low_f", 70.0)
-    hi = _f(p, "comfort_high_f", 75.0)
+    lo = _f(p, "comfort_low", _f(p, "comfort_low_f", 21.111111))
+    hi = _f(p, "comfort_high", _f(p, "comfort_high_f", 23.888889))
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     in_band = zt.notna() & (zt >= lo) & (zt <= hi)
     return base & in_band

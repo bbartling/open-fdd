@@ -26,10 +26,12 @@ from scripts.stress.si_cutover.ci_fixtures_lib import (  # noqa: E402
 from scripts.stress.si_cutover.product_sql_params import (  # noqa: E402
     catalog_overrides_from_registry,
     ip_parameter_controls,
+    legacy_param_key,
 )
 from scripts.stress.si_cutover.si_parity_families import (  # noqa: E402
     W4C_SI_ZONE_FAMILY,
     family_dataset_ids,
+    sensor_util_si_sql_shipped,
     sql_si_pack_enabled,
 )
 
@@ -58,8 +60,8 @@ def w4c_target_datasets() -> frozenset[str]:
 
 
 def rule_si_sql_shipped(rule_id: str) -> bool:
-    """W4d plant rules whose P2 cells are computed live per row."""
-    return str(rule_id) in W4D_PLANT_RULES
+    """W4d plant and W4e sensor/utility rules whose P2 cells are computed live per row."""
+    return str(rule_id) in W4D_PLANT_RULES or sensor_util_si_sql_shipped(str(rule_id))
 
 
 def _load_parity_module():
@@ -163,6 +165,10 @@ def render_rule_sql(
     controls = None
     if storage == "ip":
         controls = ip_parameter_controls(rule_id)
+        if controls is not None and overrides:
+            # SI-renamed keys (parameter_si_rename_map.json) map back to the
+            # base-branch IP control names that ``controls`` is keyed by.
+            overrides = {legacy_param_key(k): v for k, v in overrides.items()}
     return render(
         rule_id,
         poll_seconds=poll_seconds,
@@ -293,6 +299,15 @@ def seed_frame(
                     """
                     UPDATE role_map SET unit = %s
                     WHERE building_id = %s AND equipment_id = %s AND openfdd_key = %s AND role = %s
+                    """,
+                    (unit, site_id, equipment_id, openfdd_key, sql_role),
+                )
+                # authorized_series projects the unit from point_map (W1a #1406);
+                # sensor-sweep SQL masks roles whose bound unit is missing.
+                cur.execute(
+                    """
+                    UPDATE point_map SET unit = %s
+                    WHERE site_id = %s AND equipment_id = %s AND openfdd_key = %s AND role = %s
                     """,
                     (unit, site_id, equipment_id, openfdd_key, sql_role),
                 )

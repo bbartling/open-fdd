@@ -1,6 +1,8 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sv_stale.sql — Stale data (no fresh samples)
+-- Storage is SI (metric-c-v2): STALE_TOL is a temperature difference in K (delta °C)
+-- for temperature roles; humidity roles use the declared 0.05 percent-RH humidity tolerance.
 -- Pandas gate is `always` — do not filter fan_cmd (off-period stale still counts).
 -- Pandas `_sweep_stale` ANDs FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
 -- SQL windows that catalog: five air temps plus chw/hw temps and oa_h.
@@ -127,11 +129,11 @@ scored AS (
       + CASE WHEN n_chw_return_t >= {{STALE_ROWS}} AND span_chw_return_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_supply_t >= {{STALE_ROWS}} AND span_hw_supply_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
       + CASE WHEN n_hw_return_t >= {{STALE_ROWS}} AND span_hw_return_t <= {{STALE_TOL}} THEN 1 ELSE 0 END
-      + CASE WHEN n_oa_h >= {{STALE_ROWS}} AND span_oa_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
-      + CASE WHEN n_ra_h >= {{STALE_ROWS}} AND span_ra_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
-      + CASE WHEN n_zone_rh >= {{STALE_ROWS}} AND span_zone_rh <= {{STALE_TOL}} THEN 1 ELSE 0 END
-      + CASE WHEN n_ma_h >= {{STALE_ROWS}} AND span_ma_h <= {{STALE_TOL}} THEN 1 ELSE 0 END
-      + CASE WHEN n_sa_h >= {{STALE_ROWS}} AND span_sa_h <= {{STALE_TOL}} THEN 1 ELSE 0 END AS roles_stale
+      + CASE WHEN n_oa_h >= {{STALE_ROWS}} AND span_oa_h <= 0.05 THEN 1 ELSE 0 END
+      + CASE WHEN n_ra_h >= {{STALE_ROWS}} AND span_ra_h <= 0.05 THEN 1 ELSE 0 END
+      + CASE WHEN n_zone_rh >= {{STALE_ROWS}} AND span_zone_rh <= 0.05 THEN 1 ELSE 0 END
+      + CASE WHEN n_ma_h >= {{STALE_ROWS}} AND span_ma_h <= 0.05 THEN 1 ELSE 0 END
+      + CASE WHEN n_sa_h >= {{STALE_ROWS}} AND span_sa_h <= 0.05 THEN 1 ELSE 0 END AS roles_stale
   FROM win
 ),
 base AS (

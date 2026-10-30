@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
+from open_fdd.units.convert import ip_bound_to_si
+
 QUANTITY_LIMITS: Final[dict[str, dict[str, float]]] = {
     "absolute_temperature": {"lo": -60.0, "hi": 130.0, "spike": 36.0},
     "relative_humidity": {"lo": 0.0, "hi": 100.0, "spike": 25.0},
@@ -59,6 +61,50 @@ def limits_for_haystack_role(role: str) -> dict[str, float] | None:
     if q and q in QUANTITY_LIMITS:
         return dict(QUANTITY_LIMITS[q])
     return None
+
+
+# Declared imperial units of the limit table above (SV-RANGE / SV-SPIKE source).
+_QUANTITY_IP_UNITS: Final[dict[str, tuple[str, str] | None]] = {
+    "absolute_temperature": ("degF", "degF_delta"),
+    "air_pressure": ("inH2O", "inH2O"),
+    "relative_humidity": None,
+}
+
+
+def limits_for_haystack_role_si(role: str) -> dict[str, float] | None:
+    """Same limit table as :func:`limits_for_haystack_role`, in canonical SI storage units."""
+    lim = limits_for_haystack_role(role)
+    if lim is None:
+        return None
+    q = quantity_for_haystack_role(role)
+    if q is None or q not in _QUANTITY_IP_UNITS:
+        raise ValueError(f"sensor limit role {role!r} has no declared quantity unit")
+    units = _QUANTITY_IP_UNITS[q]
+    if units is None:
+        return lim
+    abs_unit, delta_unit = units
+    return {
+        "lo": float(ip_bound_to_si(lim["lo"], abs_unit)),
+        "hi": float(ip_bound_to_si(lim["hi"], abs_unit)),
+        "spike": float(ip_bound_to_si(lim["spike"], delta_unit)),
+    }
+
+
+# Flatline tolerance per quantity. Temperature roles use the tuned ``flatline_tol``
+# (a temperature difference, so it is unit-system invariant up to the K/delta-F scale).
+# %RH is identical in IP and SI, so its tolerance is a declared %RH constant matching
+# ``sv_flatline.sql``; it must never inherit a temperature tolerance.
+HUMIDITY_FLATLINE_TOL_PCT: Final[float] = 0.1
+
+
+def flatline_tolerance_for_role(role: str, temperature_tol: float) -> float:
+    """Flatline span tolerance for ``role`` in the frame's storage units."""
+    q = quantity_for_haystack_role(role)
+    if q == "relative_humidity":
+        return HUMIDITY_FLATLINE_TOL_PCT
+    if q == "absolute_temperature":
+        return float(temperature_tol)
+    raise ValueError(f"flatline role {role!r} has no declared tolerance quantity ({q!r})")
 
 
 def is_expected_constant_role(role: str) -> bool:

@@ -477,33 +477,33 @@
         },
         "zone_t_hi": {
           "control": "slider",
-          "default": 76.0,
+          "default": 24.444444,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "zone_t_hi",
           "kind": "absolute_temperature",
           "label": "Zone comfort high",
-          "max": 85.0,
-          "min": 72.0,
+          "max": 29.444444,
+          "min": 22.222222,
           "sql_placeholder": "ZONE_T_HI",
-          "step": 0.5,
-          "unit": "degF"
+          "step": 0.277778,
+          "unit": "degC"
         },
         "zone_t_lo": {
           "control": "slider",
-          "default": 68.0,
+          "default": 20.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "zone_t_lo",
           "kind": "absolute_temperature",
           "label": "Zone comfort low",
-          "max": 72.0,
-          "min": 60.0,
+          "max": 22.222222,
+          "min": 15.555556,
           "sql_placeholder": "ZONE_T_LO",
-          "step": 0.5,
-          "unit": "degF"
+          "step": 0.277778,
+          "unit": "degC"
         }
       },
       "parity_status": "sql_screening",
@@ -555,18 +555,18 @@
         },
         "oat_err": {
           "control": "slider",
-          "default": 5.0,
+          "default": 2.777778,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "oat_err",
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "label": "OAT vs meteo tolerance",
-          "max": 20.0,
-          "min": 2.0,
+          "max": 11.111111,
+          "min": 1.111111,
           "sql_placeholder": "OAT_ERR",
-          "step": 0.5,
-          "unit": "degF"
+          "step": 0.277778,
+          "unit": "degC"
         },
         "web_asof_margin_seconds": {
           "control": "slider",
@@ -3321,18 +3321,18 @@
         },
         "flatline_tol": {
           "control": "slider",
-          "default": 0.1,
+          "default": 0.055556,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "flatline_tol",
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "label": "Flatline tolerance",
-          "max": 1.0,
-          "min": 0.02,
+          "max": 0.555556,
+          "min": 0.011111,
           "sql_placeholder": "FLATLINE_TOL",
-          "step": 0.02,
-          "unit": "degF"
+          "step": 0.011111,
+          "unit": "degC"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -3636,18 +3636,18 @@
         },
         "stale_tol": {
           "control": "slider",
-          "default": 0.05,
+          "default": 0.027778,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "stale_tol",
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "label": "Stale tolerance",
-          "max": 1.0,
+          "max": 0.555556,
           "min": 0.0,
           "sql_placeholder": "STALE_TOL",
-          "step": 0.01,
-          "unit": "degF"
+          "step": 0.005556,
+          "unit": "degC"
         }
       },
       "parity_status": "sql_screening",
@@ -8812,18 +8812,18 @@
         },
         "spike_limit": {
           "control": "slider",
-          "default": 16.0,
+          "default": 8.888889,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "spike_limit",
-          "kind": "absolute_temperature",
+          "kind": "temperature_difference",
           "label": "Spike limit",
-          "max": 40.0,
-          "min": 4.0,
+          "max": 22.222222,
+          "min": 2.222222,
           "sql_placeholder": "SPIKE_LIMIT",
-          "step": 1.0,
-          "unit": "degF"
+          "step": 0.555556,
+          "unit": "degC"
         }
       },
       "parity_status": "sql_screening",
@@ -9252,35 +9252,35 @@
       ],
       "pandas_function": "sched1",
       "parameters": {
-        "comfort_high_f": {
+        "comfort_high": {
           "control": "slider",
-          "default": 75.0,
+          "default": 23.888889,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "comfort_high_f",
+          "key": "comfort_high",
           "kind": "absolute_temperature",
           "label": "Zone comfort high",
-          "max": 90.0,
-          "min": 55.0,
+          "max": 32.222222,
+          "min": 12.777778,
           "sql_placeholder": "ZONE_T_HI",
-          "step": 0.5,
-          "unit": "°F"
+          "step": 0.277778,
+          "unit": "degC"
         },
-        "comfort_low_f": {
+        "comfort_low": {
           "control": "slider",
-          "default": 70.0,
+          "default": 21.111111,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "comfort_low_f",
+          "key": "comfort_low",
           "kind": "absolute_temperature",
           "label": "Zone comfort low",
-          "max": 80.0,
-          "min": 50.0,
+          "max": 26.666667,
+          "min": 10.0,
           "sql_placeholder": "ZONE_T_LO",
-          "step": 0.5,
-          "unit": "°F"
+          "step": 0.277778,
+          "unit": "degC"
         },
         "confirm_min": {
           "control": "slider",

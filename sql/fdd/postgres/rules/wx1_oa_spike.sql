@@ -1,6 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- wx1_oa_spike.sql — OA temperature spike
+-- Storage is SI (metric-c-v2): oa_t is °C and SPIKE_LIMIT is a temperature difference in K.
 WITH h AS (
   SELECT
     equipment_id,

@@ -7,6 +7,17 @@ from typing import Literal
 PA_PER_IN_WC = 248.84
 LPS_PER_CFM = 0.471947
 KPA_PER_PSI = 6.894757
+LPS_PER_GPM = 0.0630902
+
+# Imperial bound unit -> (scale, offset) into canonical SI; offset only for absolute degF.
+_IP_TO_SI_BOUND: dict[str, tuple[float, float]] = {
+    "degF": (5.0 / 9.0, -32.0 * 5.0 / 9.0),
+    "degF_delta": (5.0 / 9.0, 0.0),
+    "inH2O": (PA_PER_IN_WC, 0.0),
+    "cfm": (LPS_PER_CFM, 0.0),
+    "gpm": (LPS_PER_GPM, 0.0),
+    "psi": (KPA_PER_PSI, 0.0),
+}
 
 
 def normalize_unit_token(unit: str | None) -> str:
@@ -96,3 +107,16 @@ def series_admit_temp_to_f(values, units=None):
         except ValueError:
             out.iloc[i] = np.nan
     return out
+
+
+def ip_bound_to_si(value: float | None, ip_unit: str) -> float | None:
+    """Convert one imperial bound into canonical SI (metric-c-v2) storage units.
+
+    ``ip_unit`` must be a declared imperial unit; unknown units raise.
+    """
+    if value is None:
+        return None
+    if ip_unit not in _IP_TO_SI_BOUND:
+        raise ValueError(f"no SI bound conversion declared for unit {ip_unit!r}")
+    scale, offset = _IP_TO_SI_BOUND[ip_unit]
+    return float(value) * scale + offset
