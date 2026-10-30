@@ -280,6 +280,20 @@ def role_units_of(ip_frame) -> dict[str, tuple[str, str]]:
         if qu is None:
             continue
         out[cfl.frame_column_to_sql_role(str(col))] = qu
+    # Canonical analytics role IDs may arrive as short source columns that do
+    # not carry display metadata themselves. Resolve their units through the
+    # shared role-to-column contract rather than guessing from sample values.
+    role_source_columns = {
+        "oa_t": "outside-air-temp",
+        "web_oa_t": "web-outside-air-temp",
+        "sat": "discharge-air-temp",
+        "zone_t": "zone-air-temp",
+        "dsp": "duct-static-pressure",
+    }
+    for role, column in role_source_columns.items():
+        quantity_unit = cfl.column_quantity_unit(column)
+        if quantity_unit is not None:
+            out.setdefault(role, quantity_unit)
     return out
 
 
@@ -293,6 +307,9 @@ def pandas_rows(
     ds: AnalyticsDataset,
     params: dict[str, dict[str, tuple[float, ...]]],
     as_of: dt.datetime,
+    unit_system: str,
+    source_role_units: dict[str, tuple[str, str]],
+    metric: dict[str, Any],
 ) -> list[tuple[Any, ...]]:
     from scripts.stress.si_cutover import ci_analytics_oracles as cao
 
@@ -308,6 +325,35 @@ def pandas_rows(
     if stem == "motor_weekly_runtime":
         return cao.oracle_motor_weekly_runtime_sql(long, equip_type=ds.equipment_type)
     extra: dict[str, Any] = {}
+    if stem == "pid_hunting_proxy":
+        roles = {
+            "clg_valve_pct", "htg_valve_pct", "oa_damper_pct", "fan_cmd",
+            "dsp", "sat", "zone_t",
+        }
+        thresholds = {role: 8.0 for role in roles}
+        if unit_system == "metric":
+            for role in roles:
+                quantity_unit = source_role_units.get(role)
+                if quantity_unit is None:
+                    continue
+                quantity, unit = quantity_unit
+                if quantity == "absolute_temperature":
+                    thresholds[role] = _to_si(metric, "temperature_difference", 8.0, "deltaF")
+                elif quantity == "air_pressure":
+                    thresholds[role] = _to_si(metric, quantity, 8.0, unit)
+        extra["pid_stddev_thresholds"] = thresholds
+    if stem == "mv_change_point_daily" and unit_system == "metric":
+        extra["change_point_temperature_roles"] = {
+            role
+            for role, (quantity, _unit) in source_role_units.items()
+            if quantity == "absolute_temperature"
+        }
+        extra["change_point_temperature_origin_c"] = _to_si(
+            metric, "absolute_temperature", 0.0, "degF"
+        )
+        extra["change_point_temperature_min_delta_c"] = _to_si(
+            metric, "temperature_difference", 1.0, "deltaF"
+        )
     if stem == "bas_vs_web_oat":
         extra = {"oa_key": f"{ds.equipment_id}.oa_t", "max_age_s": 7200.0, "limit": 500}
     oracle = cao.build_oracle_for_stem(
@@ -532,8 +578,20 @@ def run_analytics_stages(
         units = role_units_of(ds.ip_frame)
         for stem in stems:
             cell = f"{ds.dataset_id}/{ds.equipment_id}"
-            pd_si = norm_rows(stem, pandas_rows(stem, si_frame, ds=ds, params=si_params, as_of=as_of))
-            pd_ip = norm_rows(stem, pandas_rows(stem, ds.ip_frame, ds=ds, params=ip_params, as_of=as_of))
+            pd_si = norm_rows(
+                stem,
+                pandas_rows(
+                    stem, si_frame, ds=ds, params=si_params, as_of=as_of,
+                    unit_system="metric", source_role_units=units, metric=metric,
+                ),
+            )
+            pd_ip = norm_rows(
+                stem,
+                pandas_rows(
+                    stem, ds.ip_frame, ds=ds, params=ip_params, as_of=as_of,
+                    unit_system="imperial", source_role_units=units, metric=metric,
+                ),
+            )
             pd_ip_si = rows_ip_to_si(stem, pd_ip, units, metric)
             n, e = compare_rows("P1-analytics", cell, stem, "pandas_ip", pd_ip_si, "pandas_si", pd_si)
             p1_n += n

@@ -190,7 +190,9 @@ def oracle_setpoints_snapshot(long: pd.DataFrame) -> OracleRowSet:
     return OracleRowSet(tuple(rows[:2000]), (0, 1, 2), (4,), "numeric_parity")
 
 
-def oracle_pid_hunting_proxy(long: pd.DataFrame) -> OracleRowSet:
+def oracle_pid_hunting_proxy(
+    long: pd.DataFrame, *, stddev_thresholds: dict[str, float] | None = None
+) -> OracleRowSet:
     roles = {
         "clg_valve_pct",
         "htg_valve_pct",
@@ -207,7 +209,8 @@ def oracle_pid_hunting_proxy(long: pd.DataFrame) -> OracleRowSet:
             continue
         vals = grp["val"]
         std = float(vals.std(ddof=1)) if len(vals) > 1 else 0.0
-        flag = "HUNT_PROXY" if len(vals) >= 24 and std > 8.0 else "OK"
+        threshold = float((stddev_thresholds or {}).get(role, 8.0))
+        flag = "HUNT_PROXY" if len(vals) >= 24 and std > threshold else "OK"
         rows.append(
             (
                 eid,
@@ -315,7 +318,13 @@ def oracle_fuel_or_metering(long: pd.DataFrame, *, fuel: bool) -> OracleRowSet:
     return OracleRowSet(tuple(rows[:2000]), (0, 1, 2, 3), (4, 5, 6, 7, 8), "numeric_parity")
 
 
-def oracle_mv_change_point_daily(long: pd.DataFrame) -> OracleRowSet:
+def oracle_mv_change_point_daily(
+    long: pd.DataFrame,
+    *,
+    temperature_roles: set[str] | None = None,
+    temperature_origin_c: float = -17.77777777777778,
+    temperature_min_delta_c: float = 0.5555555555555556,
+) -> OracleRowSet:
     roles = {
         "electric_kwh",
         "gas_therm",
@@ -345,7 +354,14 @@ def oracle_mv_change_point_daily(long: pd.DataFrame) -> OracleRowSet:
                 if pd.isna(pavg):
                     continue
                 delta = float(row["mean"] - pavg)
-                if abs(delta) < max(abs(float(pavg)) * 0.25, 1.0):
+                if temperature_roles is not None and row["role"] in temperature_roles:
+                    threshold = max(
+                        abs(float(pavg) - temperature_origin_c) * 0.25,
+                        temperature_min_delta_c,
+                    )
+                else:
+                    threshold = max(abs(float(pavg)) * 0.25, 1.0)
+                if abs(delta) < threshold:
                     continue
                 rows.append(
                     (
@@ -514,14 +530,25 @@ def build_oracle_for_stem(
         ),
         "schedule_occupancy": lambda: oracle_schedule_occupancy(long),
         "setpoints_snapshot": lambda: oracle_setpoints_snapshot(long),
-        "pid_hunting_proxy": lambda: oracle_pid_hunting_proxy(long),
+        "pid_hunting_proxy": lambda: oracle_pid_hunting_proxy(
+            long, stddev_thresholds=extra.get("pid_stddev_thresholds")
+        ),
         "rcx_preset_role_coverage": lambda: oracle_rcx_preset_role_coverage(long),
         "topology_equipment": lambda: oracle_topology_equipment(
             long, equipment_id=equipment_id, equip_type=equip_type
         ),
         "fuel_daily": lambda: oracle_fuel_or_metering(long, fuel=True),
         "metering_kwh": lambda: oracle_fuel_or_metering(long, fuel=False),
-        "mv_change_point_daily": lambda: oracle_mv_change_point_daily(long),
+        "mv_change_point_daily": lambda: oracle_mv_change_point_daily(
+            long,
+            temperature_roles=extra.get("change_point_temperature_roles"),
+            temperature_origin_c=float(
+                extra.get("change_point_temperature_origin_c", -17.77777777777778)
+            ),
+            temperature_min_delta_c=float(
+                extra.get("change_point_temperature_min_delta_c", 0.5555555555555556)
+            ),
+        ),
         "sql_anomaly_series": lambda: oracle_sql_anomaly_series(long),
         "sql_anomaly_zscore": lambda: oracle_sql_anomaly_zscore(
             long,
