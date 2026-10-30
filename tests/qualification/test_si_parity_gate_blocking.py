@@ -54,6 +54,48 @@ class SiParityGateBlockingTests(unittest.TestCase):
         failures = self.gate._blocking_errors([p0], blocking=True, scope={"FC1"})
         self.assertEqual(failures, [])
 
+    def _p2_goldens(self, statuses: list[str]) -> list[dict]:
+        rows = [
+            {
+                "rule_id": "FC1",
+                "equipment_id": "E",
+                "utc_day": f"2026-01-0{i + 1}",
+                "sql_si_status": status,
+                "sql_si_fault_seconds": None if status == "pending_W4" else 60.0,
+                "pandas_si_fault_seconds": 60.0,
+                "sql_si_pending_reason": "FC1.eps_dsp ('inwc') non-SI"
+                if status == "pending_W4"
+                else None,
+            }
+            for i, status in enumerate(statuses)
+        ]
+        return [{"p2_si_pairs": rows}]
+
+    def test_p2_pending_cells_are_not_comparisons(self) -> None:
+        p2 = self.pc.run_p2_all_goldens(
+            self._p2_goldens(["computed", "pending_W4", "pending_W4"]), scope={"FC1"}
+        )
+        self.assertEqual(p2.comparisons, 1)
+        self.assertEqual(p2.pending, 2)
+        self.assertTrue(any("eps_dsp" in note for note in p2.mismatch_table))
+
+    def test_scoped_blocking_fails_on_pending_cells(self) -> None:
+        p2 = self.pc.run_p2_all_goldens(
+            self._p2_goldens(["computed", "pending_W4"]), scope={"FC1"}
+        )
+        failures = self.gate._blocking_errors([p2], blocking=True, scope={"FC1"})
+        self.assertTrue(any("pending_W4" in f for f in failures), failures)
+
+    def test_scoped_all_pending_has_zero_real_comparisons(self) -> None:
+        p2 = self.pc.run_p2_all_goldens(self._p2_goldens(["pending_W4"]), scope={"FC1"})
+        self.assertEqual(p2.comparisons, 0)
+        self.assertTrue(self.gate._blocking_errors([p2], blocking=True, scope={"FC1"}))
+
+    def test_report_only_full_matrix_reports_pending_without_blocking(self) -> None:
+        p2 = self.pc.run_p2_all_goldens(self._p2_goldens(["computed", "pending_W4"]))
+        self.assertEqual(p2.pending, 1)
+        self.assertEqual(self.gate._blocking_errors([p2], blocking=False, scope=None), [])
+
     def test_p1_mismatch_with_mismatch_reason_still_blocks(self) -> None:
         p1 = self.pc.StageResult(
             "P1",
@@ -84,7 +126,7 @@ class SiParityGateBlockingTests(unittest.TestCase):
             "W4d plant scope: P1/P2 for shipped SI SQL should PASS",
         )
 
-    def test_scoped_blocking_passes_despite_p0_fc1_mismatches(self) -> None:
+    def test_scoped_blocking_w4e_sensor_util_passes(self) -> None:
         proc = subprocess.run(
             [
                 sys.executable,
@@ -92,7 +134,7 @@ class SiParityGateBlockingTests(unittest.TestCase):
                 "--fixtures-only",
                 "--blocking",
                 "--family",
-                "W4b_fc1_duct_static",
+                "W4e_si_sensor_util",
             ],
             cwd=str(REPO),
             check=False,
@@ -100,7 +142,26 @@ class SiParityGateBlockingTests(unittest.TestCase):
         self.assertEqual(
             proc.returncode,
             0,
-            "W4b FC1 scope: P0 mismatches are report-only; P1 clean should PASS",
+            "W4e sensor/weather/schedule/utility scope: P1/P2 for shipped SI SQL should PASS",
+        )
+
+    def test_scoped_blocking_passes_w4b_ahu_econ(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(STRESS / "si_parity_gate.py"),
+                "--fixtures-only",
+                "--blocking",
+                "--family",
+                "W4b_ahu_econ",
+            ],
+            cwd=str(REPO),
+            check=False,
+        )
+        self.assertEqual(
+            proc.returncode,
+            0,
+            "W4b AHU econ family: scoped P1/P2 gate should PASS",
         )
 
     def test_scoped_p1_mutation_still_fails_blocking(self) -> None:

@@ -10,11 +10,10 @@
   "p2_si_pairs": [
     {
       "equipment_id": "equip:test-ahu",
-      "pandas_si_fault_seconds": null,
-      "pandas_si_status": "missing_si_cell",
+      "pandas_si_fault_seconds": 0.0,
       "rule_id": "RESET-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
@@ -46,8 +45,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-RATE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "pending_W4",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
@@ -932,7 +931,7 @@
       "fault_seconds": 0.0,
       "pair_status": "computed",
       "reason": "",
-      "rule_id": "SV-RATE",
+      "rule_id": "RESET-1",
       "status": "PASS",
       "utc_day": "2026-07-01"
     },
@@ -966,6 +965,17 @@
       "pair_status": "computed",
       "reason": "",
       "rule_id": "SV-RANGE",
+      "status": "PASS",
+      "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_RESET1_FAULT",
+      "covered_seconds": 120.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "computed",
+      "reason": "",
+      "rule_id": "SV-RATE",
       "status": "PASS",
       "utc_day": "2026-07-01"
     },

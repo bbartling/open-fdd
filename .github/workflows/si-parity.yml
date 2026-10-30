@@ -33,6 +33,8 @@ on:
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "sql/contract/goldens/**"
+      - "sql/fdd/**"
+      - "open_fdd/**"
       - "docs/rules/cookbook/fixtures/**"
       - ".github/workflows/si-parity.yml"
 
@@ -111,15 +113,20 @@ jobs:
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
             --family W4c_si_zone
 
-      - name: Blocking W4b FC1 scope (clean)
+      - name: Blocking W4b AHU econ SI family (P1/P2 scope)
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
-            --family W4b_fc1_duct_static
+            --family W4b_ahu_econ
 
       - name: Blocking W4d plant scope (clean)
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
             --family W4d_si_plant
+
+      - name: Blocking W4e sensor/weather/schedule/utility SI family (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4e_si_sensor_util
 
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |

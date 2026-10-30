@@ -11,6 +11,7 @@ FAMILIES_PATH = REPO / "tests" / "fixtures" / "si_cutover" / "w4_parity_families
 
 W4C_SI_ZONE_FAMILY = "W4c_si_zone"
 W4E_SI_SENSOR_UTIL_FAMILY = "W4e_si_sensor_util"
+W4B_AHU_ECON_FAMILY = "W4b_ahu_econ"
 
 
 def load_families_doc() -> dict:
@@ -72,3 +73,8 @@ def sql_si_pack_enabled(rule_id: str) -> bool:
 def sensor_util_si_sql_shipped(rule_id: str) -> bool:
     """Sensor/weather/schedule/utility rules whose product SQL is SI-native (W4e)."""
     return rule_id in family_rule_ids(W4E_SI_SENSOR_UTIL_FAMILY)
+
+
+def ahu_econ_si_sql_shipped(rule_id: str) -> bool:
+    """AHU economizer/ventilation rules whose product SQL is SI-native (W4b)."""
+    return rule_id in family_rule_ids(W4B_AHU_ECON_FAMILY)
