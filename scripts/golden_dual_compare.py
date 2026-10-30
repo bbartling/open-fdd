@@ -50,6 +50,9 @@ def run_fixture(path: Path) -> dict:
         df = pd.DataFrame(index=pd.to_datetime(["2026-01-01T00:00:00Z"], utc=True))
     else:
         df = apply_columns(load_history(hist), path / "columns.csv")
+        from open_fdd.analytics.report_storage import oracle_seed_frame_from_imperial_wide
+
+        df = oracle_seed_frame_from_imperial_wide(df)
     df.attrs["equipment_id"] = meta.get("equipment_id", "EQ_1")
     et = meta.get("equipment_type")
     if not et:

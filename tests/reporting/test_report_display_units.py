@@ -71,8 +71,15 @@ def test_frame_for_display_rejects_legacy_or_undeclared_storage():
 
 
 def test_t1284_6_undeclared_storage_fixture_is_rejected(tmp_path):
+    undeclared = tmp_path / "undeclared_fixture"
+    shutil.copytree(FIXTURE, undeclared)
+    column_map = json.loads((undeclared / "column_map.json").read_text(encoding="utf-8"))
+    column_map.pop("storage_abi", None)
+    (undeclared / "column_map.json").write_text(
+        json.dumps(column_map, indent=2) + "\n", encoding="utf-8"
+    )
     with pytest.raises(ValueError, match="missing storage_abi"):
-        build_single_system_report(FIXTURE, tmp_path / "undeclared", month="2026-06", units="si")
+        build_single_system_report(undeclared, tmp_path / "out", month="2026-06", units="si")
 
 
 @pytest.mark.skipif(shutil.which("typst") is None, reason="typst is not on PATH")

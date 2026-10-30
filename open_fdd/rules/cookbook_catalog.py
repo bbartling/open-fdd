@@ -677,7 +677,13 @@ def _fan(d: pd.DataFrame) -> pd.Series:
 
 
 def fc1(d, p, poll):
+    from open_fdd.units.convert import PA_PER_IN_WC
+
     err = float(p["eps_dsp"]) if "eps_dsp" in p else float(p["duct_static_err"])
+    from open_fdd.quality import _storage_si
+
+    if _storage_si(d):
+        err = err * PA_PER_IN_WC
     speed_err = _gl36_value(p, "eps_vfd_spd", None, 0.13)
     fan_hi = _gl36_value(p, "fan_hi", None, 1.0 - speed_err)
     fan = _fan(d)
@@ -1504,10 +1510,20 @@ def trim4(d, p, poll):
 
 def reset1(d, p, poll):
     """SAT SP not tracking the OA reset curve."""
+    from open_fdd.quality import _storage_si
+    from open_fdd.units.convert import delta_f_to_delta_c, fahrenheit_to_celsius
+
     err = _f(p, "reset_err", 1.666667)
     intercept = _f(p, "reset_sat_at_65", 11.111111)
     slope = _f(p, "reset_slope", 0.25)
     oat_ref = _f(p, "reset_oat_ref", 18.333333)
+    if _storage_si(d):
+        if intercept >= 30.0:
+            intercept = fahrenheit_to_celsius(intercept)
+        if oat_ref >= 30.0:
+            oat_ref = fahrenheit_to_celsius(oat_ref)
+        if err >= 5.0:
+            err = delta_f_to_delta_c(err)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
     sat_sp = pd.to_numeric(d["discharge-air-temp-sp"], errors="coerce")
     expected = intercept + slope * (oat - oat_ref)

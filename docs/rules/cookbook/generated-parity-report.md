@@ -75,7 +75,7 @@ Do not edit by hand. Run `python3 scripts/generate_cookbook_report.py`.
 | `FCU-CO2-DAMPER` | High valid CO2 with low outdoor-air damper command | `fcu_co2_damper` | `fcu_co2_damper.sql` | `sql_screening` | `none` |
 | `FCU-DEADBAND` | Heating/cooling pass-through setpoint deadband below 1 C | `fcu_deadband` | `fcu_deadband.sql` | `sql_screening` | `none` |
 | `FCU-MODE-CYCLE` | Four or more heat/cool valve mode changes in window | `fcu_mode_cycle` | `fcu_mode_cycle.sql` | `sql_screening` | `none` |
-| `VAV-1` | Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2 | `vav1` | `vav1_comfort_fault.sql` | `sql_screening` | `none` |
+| `VAV-1` | Zone comfort band violation hours with confirm window | `vav1` | `vav1_comfort_fault.sql` | `sql_screening` | `none` |
 | `VAV-2` | Night setback miss — unoccupied zone above heating setback | `vav2` | `vav2_night_setback.sql` | `sql_screening` | `none` |
 | `VAV-3` | Excessive reheat during warm weather | `vav_3` | `vav3_excessive_reheat.sql` | `sql_screening` | `none` |
 | `VAV-4` | Damper stuck at full open | `vav_4` | `vav4_damper_full_open.sql` | `sql_screening` | `none` |

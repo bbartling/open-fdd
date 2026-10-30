@@ -23,6 +23,13 @@ const DEVICE: &str = "AHU_FENCE";
 const POINT: &str = "nf-point-fence-sat";
 const LEASE_SECS: i64 = 180;
 
+fn expected_canonical_sat_deg_f(f: f64) -> f64 {
+    fdd_core::MetricUnitsContract::load_embedded()
+        .expect("metric units contract")
+        .convert_to_canonical("absolute_temperature", f, "degF")
+        .expect("degF absolute temperature")
+}
+
 fn origin() -> DateTime<Utc> {
     DateTime::parse_from_rfc3339("2026-07-01T00:00:00Z")
         .expect("fence origin")
@@ -212,7 +219,7 @@ async fn stale_owner_is_fenced(replica_a: &PgPool, replica_b: &PgPool, scope: &S
     );
     assert_eq!(
         canonical_values(replica_b, &scope.site, sample_ts(0)).await,
-        vec![fdd_core::fahrenheit_to_celsius(2.0)],
+        vec![expected_canonical_sat_deg_f(2.0)],
         "canonical history must keep the reclaiming owner's value"
     );
     assert!(
@@ -253,7 +260,7 @@ async fn live_owner_commits(replica_a: &PgPool, replica_b: &PgPool, scope: &Scop
         .expect("owner a receipt");
     assert_eq!(
         canonical_values(replica_b, &scope.site, sample_ts(1)).await,
-        vec![fdd_core::fahrenheit_to_celsius(1.0)]
+        vec![expected_canonical_sat_deg_f(1.0)]
     );
     assert_eq!(receipt_count(replica_b, job.job_id).await, 1);
     assert_eq!(job_state(replica_b, job.job_id).await, "committed");

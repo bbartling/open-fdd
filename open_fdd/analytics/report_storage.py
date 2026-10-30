@@ -20,6 +20,7 @@ from open_fdd.units.convert import (
     LPS_PER_CFM,
     celsius_to_fahrenheit,
     delta_f_to_delta_c,
+    fahrenheit_to_celsius,
 )
 
 STORAGE_ABI_METRIC = "metric-c-v2"
@@ -88,6 +89,48 @@ def _storage_to_display(role: str, value: float, *, display: str) -> float:
     if display == "si":
         return float(value)
     return _storage_to_imperial(role, value)
+
+
+def oracle_seed_frame_from_imperial_wide(frame: pd.DataFrame) -> pd.DataFrame:
+    """Convert Wave-0 oracle CSV magnitudes (imperial) to metric-c-v2 rule storage."""
+    out = frame.copy()
+    out.attrs = dict(getattr(frame, "attrs", {}))
+    for col in out.columns:
+        role = str(col)
+        quantity = ROLE_QUANTITY.get(role)
+        if quantity is None:
+            continue
+        series = pd.to_numeric(out[col], errors="coerce")
+        converted: list[float] = []
+        for v in series:
+            if pd.isna(v):
+                converted.append(v)  # type: ignore[arg-type]
+                continue
+            fv = float(v)
+            if quantity == "absolute_temperature":
+                converted.append(fahrenheit_to_celsius(fv))
+            elif quantity == "air_pressure":
+                converted.append(fv * PA_PER_IN_WC)
+            elif quantity == "volumetric_flow":
+                converted.append(fv * LPS_PER_CFM)
+            else:
+                converted.append(fv)
+        out[col] = converted
+    role_units: dict[str, str] = dict(out.attrs.get("role_units") or {})
+    for col in out.columns:
+        quantity = ROLE_QUANTITY.get(str(col))
+        if quantity == "absolute_temperature":
+            role_units[str(col)] = "°C"
+        elif quantity == "air_pressure":
+            role_units[str(col)] = "Pa"
+        elif quantity == "volumetric_flow":
+            role_units[str(col)] = "L/s"
+    if role_units:
+        out.attrs["role_units"] = role_units
+    return ensure_storage_frame(
+        out,
+        {"storage_abi": STORAGE_ABI_METRIC, "display_units": "imperial"},
+    )
 
 
 def ensure_storage_frame(frame: pd.DataFrame, column_map: dict[str, Any] | None = None) -> pd.DataFrame:
