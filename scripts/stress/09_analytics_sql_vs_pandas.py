@@ -114,7 +114,7 @@ def compare_economizer_points(points: list, *, limit: int = SPOT_CHECK_LIMIT) ->
         rat = _num(pt, "rat_f", "ra_t", "rat")
         mat = _num(pt, "mat_f", "ma_t", "mat")
         dor = _num(pt, "delta_or_c")
-        dmr = _num(pt, "delta_mr_f")
+        dmr = _num(pt, "delta_mr_c")
         if None in (oat, rat, mat, dor, dmr):
             continue
         exp_or = oat - rat
@@ -125,7 +125,7 @@ def compare_economizer_points(points: list, *, limit: int = SPOT_CHECK_LIMIT) ->
                 f"sql ΔOR={dor} ΔMR={dmr} vs pandas {exp_or}/{exp_mr}",
                 checked,
             )
-        resid = _num(pt, "mat_resid_f")
+        resid = _num(pt, "mat_resid_c")
         damper = _num(pt, "oa_damper_pct")
         if resid is not None and damper is not None:
             exp_resid = mat - (rat + damper / 100.0 * exp_or)
