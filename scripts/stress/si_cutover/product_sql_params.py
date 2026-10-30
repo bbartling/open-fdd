@@ -39,8 +39,13 @@ def _si_rename_to_legacy() -> dict[str, str]:
 
 
 @lru_cache(maxsize=1)
-def _master_w4d_tuning_parameters() -> dict[str, dict[str, Any]]:
-    from scripts.ci.unit_contract_lib import W4D_SI_PLANT_RULES, ensure_origin_master_ref
+def _legacy_unit_tuning_parameters() -> dict[str, dict[str, Any]]:
+    """Base-branch tuning controls for rules whose parameter units were cut over to SI.
+
+    A rule qualifies when any parameter's declared unit on the base ref differs from
+    the current catalog; its base controls are the imperial (IP) render inputs.
+    """
+    from scripts.ci.unit_contract_lib import ensure_origin_master_ref
 
     ref = ensure_origin_master_ref()
     proc = subprocess.run(
@@ -51,18 +56,30 @@ def _master_w4d_tuning_parameters() -> dict[str, dict[str, Any]]:
         text=True,
     )
     if proc.returncode != 0:
-        return {}
-    rules = json.loads(proc.stdout).get("rules") or []
-    return {
+        raise RuntimeError(f"git show {ref}:sql/fdd/tuning_catalog.json failed: {proc.stderr}")
+    legacy = _si_rename_to_legacy()
+    current = {
         str(r["rule_id"]): dict(r.get("parameters") or {})
-        for r in rules
-        if str(r.get("rule_id")) in W4D_SI_PLANT_RULES
+        for r in json.loads(TUNING_CATALOG_PATH.read_text(encoding="utf-8"))["rules"]
     }
+    out: dict[str, dict[str, Any]] = {}
+    for rule in json.loads(proc.stdout).get("rules") or []:
+        rid = str(rule["rule_id"])
+        base_params = dict(rule.get("parameters") or {})
+        cur_params = current.get(rid)
+        if cur_params is None:
+            continue
+        for key, cur in cur_params.items():
+            base = base_params.get(key) or base_params.get(legacy.get(key, key))
+            if base is not None and base.get("unit") != cur.get("unit"):
+                out[rid] = base_params
+                break
+    return out
 
 
 def ip_parameter_controls(rule_id: str) -> dict[str, Any] | None:
-    """Imperial tuning_catalog controls for W4d rules on IP SQL / P0 paths."""
-    return _master_w4d_tuning_parameters().get(rule_id)
+    """Imperial tuning_catalog controls for SI-cutover rules on IP SQL / P0 paths."""
+    return _legacy_unit_tuning_parameters().get(rule_id)
 
 
 def catalog_overrides_from_registry(

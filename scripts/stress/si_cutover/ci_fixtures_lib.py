@@ -16,7 +16,6 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from scripts.ci import unit_contract_lib as uc  # noqa: E402
-from scripts.ci.unit_contract_lib import W4D_SI_PLANT_RULES  # noqa: E402
 from scripts.stress.si_cutover.capture_ip_baseline import (  # noqa: E402
     daily_fault_and_covered_seconds,
     rule_params_from_registry,
@@ -399,10 +398,12 @@ def resolve_rule_params_ip_si(
     *,
     param_hook: Callable[[str, float], float] | None = None,
 ) -> tuple[dict[str, float], dict[str, float]]:
-    """Return (ip_params, si_params) for registry defaults (IP or W4d SI)."""
+    """Return (ip_params, si_params) for registry defaults (IP or SI-cutover)."""
+    from scripts.stress.si_cutover.product_sql_params import ip_parameter_controls
+
     raw = rule_params_from_registry(rule)
     rid = str(rule.get("rule_id") or "")
-    if rid in W4D_SI_PLANT_RULES:
+    if ip_parameter_controls(rid) is not None:
         params_si = dict(raw)
         if param_hook:
             params_si = {k: param_hook(k, float(v)) for k, v in params_si.items()}
