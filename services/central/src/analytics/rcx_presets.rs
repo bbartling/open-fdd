@@ -543,8 +543,8 @@ pub async fn run_preset(
         return Ok(Some(
             match super::vav_health::vav_health_from_history(
                 building_id,
-                70.0,
-                75.0,
+                21.111111,
+                23.888889,
                 scope.start,
                 scope.end,
             )
@@ -603,8 +603,8 @@ pub async fn run_preset(
             historian::rcx_zone_comfort_rank_from_history(
                 building_id,
                 meta.eq_kinds,
-                70.0,
-                75.0,
+                21.111111,
+                23.888889,
                 scope,
             )
             .await?

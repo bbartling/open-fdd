@@ -175,6 +175,9 @@ def run_seeds(run_rule, inventory) -> int:
 
             df = load_history_csv(hist)
             df = apply_role_map(df, path / "columns.csv")
+            from open_fdd.analytics.units import stamp_display_units
+
+            stamp_display_units(df, {"unit_system": "imperial"})
             df.attrs["equipment_id"] = meta.get("equipment_id", "AHU_1")
             # Typed rules do not treat unknown equipment as a wildcard (#1023).
             # A seed names its stamp. Equipment-id text is not a type (#1043).

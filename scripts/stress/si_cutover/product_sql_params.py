@@ -38,6 +38,11 @@ def _si_rename_to_legacy() -> dict[str, str]:
     return {str(new): str(old) for old, new in (doc.get("renames") or {}).items()}
 
 
+def legacy_param_key(name: str) -> str:
+    """Pre-SI parameter key for a renamed SI key (identity when not renamed)."""
+    return _si_rename_to_legacy().get(name, name)
+
+
 @lru_cache(maxsize=1)
 def _legacy_unit_tuning_parameters() -> dict[str, dict[str, Any]]:
     """Base-branch tuning controls for rules whose parameter units were cut over to SI.

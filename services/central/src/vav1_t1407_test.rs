@@ -321,8 +321,8 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     let rank = rcx_zone_comfort_rank(
         &site_c,
         &["vav"],
-        70.0,
-        75.0,
+        21.111111,
+        23.888889,
         &crate::timescale_analytics::AnalyticsSqlScope {
             start: None,
             end: None,
@@ -341,5 +341,102 @@ async fn t1407_vav1_occupancy_and_comfort_units() {
     for site in [&site_no_occ, &site_sched, &site_c] {
         purge(&pool, site).await;
     }
+    fdd_tsdb::clear_shared_pool();
+}
+
+#[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize OPENFDD_DATABASE_URL with other Timescale registry tests"
+)]
+async fn t1407_2_declared_unit_same_comfort_pct() {
+    let _env = crate::test_env_lock::lock_env();
+    let Some(pool) = connect_test_pool().await else {
+        eprintln!("SKIP t1407_2: OPENFDD_TEST_DATABASE_URL unset");
+        return;
+    };
+    let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("db url");
+    std::env::set_var("OPENFDD_DATABASE_URL", &url);
+    std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+    apply_schema(&pool).await;
+    let token = uuid::Uuid::new_v4().simple().to_string();
+    let site = format!("t1407d{}", &token[..6]);
+    purge(&pool, &site).await;
+    fdd_tsdb::clear_shared_pool();
+
+    for (equip, unit) in [("VAV_F", "degF"), ("VAV_C", "degC")] {
+        seed_vav_site(&pool, &site, equip).await;
+        bind_role(
+            &pool,
+            &site,
+            equip,
+            "zone_t",
+            &format!("{equip}.zt"),
+            &format!("pt-{equip}"),
+        )
+        .await;
+        upsert_samples(
+            &pool,
+            UpsertBatch {
+                rows: vec![
+                    sample(
+                        &site,
+                        equip,
+                        "zone_t",
+                        &format!("{equip}.zt"),
+                        0,
+                        if unit == "degF" { 71.6 } else { 22.0 },
+                        Some(unit),
+                    ),
+                    sample(
+                        &site,
+                        equip,
+                        "zone_t",
+                        &format!("{equip}.zt"),
+                        5,
+                        if unit == "degF" { 82.4 } else { 28.0 },
+                        Some(unit),
+                    ),
+                ],
+            },
+        )
+        .await;
+    }
+
+    fdd_tsdb::clear_shared_pool();
+    let rank = rcx_zone_comfort_rank(
+        &site,
+        &["vav"],
+        21.111111,
+        23.888889,
+        &crate::timescale_analytics::AnalyticsSqlScope {
+            start: None,
+            end: None,
+            equipment_ids: vec!["VAV_F".into(), "VAV_C".into()],
+        },
+    )
+    .await
+    .expect("rank")
+    .expect("rank env");
+    assert_eq!(rank.points.len(), 2, "{:?}", rank.points);
+    let pct_f = rank
+        .points
+        .iter()
+        .find(|p| p.get("equipment_id").and_then(|v| v.as_str()) == Some("VAV_F"))
+        .and_then(|p| p.get("comfort_pct"))
+        .and_then(|v| v.as_f64())
+        .expect("VAV_F pct");
+    let pct_c = rank
+        .points
+        .iter()
+        .find(|p| p.get("equipment_id").and_then(|v| v.as_str()) == Some("VAV_C"))
+        .and_then(|p| p.get("comfort_pct"))
+        .and_then(|v| v.as_f64())
+        .expect("VAV_C pct");
+    assert!((pct_f - 50.0).abs() < 1e-6, "degF declared pct {pct_f}");
+    assert!((pct_c - 50.0).abs() < 1e-6, "degC declared pct {pct_c}");
+    assert!((pct_f - pct_c).abs() < 1e-9);
+
+    purge(&pool, &site).await;
     fdd_tsdb::clear_shared_pool();
 }

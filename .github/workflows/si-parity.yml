@@ -11,6 +11,8 @@ on:
       - "sql/fdd/tuning_catalog.json"
       - "open_fdd/rules/**"
       - "scripts/qualification/**"
+      - "sql/fdd/**"
+      - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "sql/contract/goldens/**"
@@ -26,6 +28,8 @@ on:
       - "sql/fdd/tuning_catalog.json"
       - "open_fdd/rules/**"
       - "scripts/qualification/**"
+      - "sql/fdd/**"
+      - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "sql/contract/goldens/**"
@@ -101,6 +105,11 @@ jobs:
         with:
           name: si-parity-report
           path: si_parity_report.json
+
+      - name: Blocking W4c zone/VAV/FCU scope (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4c_si_zone
 
       - name: Blocking W4b FC1 scope (clean)
         run: |
