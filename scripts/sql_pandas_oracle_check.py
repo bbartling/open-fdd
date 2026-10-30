@@ -18,6 +18,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INVENTORY = ROOT / "sql_rules" / "generated" / "parity_inventory.yaml"
+_ORACLE_SEED_HARNESS = ROOT / "scripts" / "stress" / "si_cutover" / "oracle_seed_storage.py"
+
+
+def _load_oracle_seed_harness():
+    """Import checkout seed helpers without pulling in checkout ``open_fdd``."""
+    import importlib.util
+
+    name = "_openfdd_oracle_seed_harness"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, _ORACLE_SEED_HARNESS)
+    if spec is None or spec.loader is None:
+        fail(f"missing oracle seed harness: {_ORACLE_SEED_HARNESS}")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def fail(msg: str) -> None:
@@ -135,9 +152,10 @@ def apply_role_map(df, columns_csv: Path):
     return df.rename(columns=mapping)
 
 
-def run_seeds(run_rule, inventory) -> int:
+def run_seeds(run_rule, inventory, *, external_oracle: bool = False) -> int:
     import pandas as pd
 
+    seed_harness = _load_oracle_seed_harness()
     n = 0
     for concept in inventory.get("concepts") or []:
         if concept.get("kind") != "diagnostic":
@@ -175,9 +193,9 @@ def run_seeds(run_rule, inventory) -> int:
 
             df = load_history_csv(hist)
             df = apply_role_map(df, path / "columns.csv")
-            from open_fdd.analytics.report_storage import oracle_seed_frame_from_imperial_wide
-
-            df = oracle_seed_frame_from_imperial_wide(df)
+            df = seed_harness.oracle_seed_frame_for_pandas_rules(
+                df, external_oracle=external_oracle
+            )
             df.attrs["equipment_id"] = meta.get("equipment_id", "AHU_1")
             # Typed rules do not treat unknown equipment as a wildcard (#1023).
             # A seed names its stamp. Equipment-id text is not a type (#1043).
@@ -239,7 +257,7 @@ def main() -> int:
 
     inv = load_inventory()
     _, run_rule = import_oracle(require_external=args.require_external_oracle)
-    n = run_seeds(run_rule, inv)
+    n = run_seeds(run_rule, inv, external_oracle=args.require_external_oracle)
     print(f"OK: sql_pandas_oracle_check ({n} seed fixtures)")
     return 0
 
