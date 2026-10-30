@@ -7,6 +7,7 @@ import gzip
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -37,7 +38,48 @@ def _load_capture():
 capture = _load_capture()
 baseline_io = importlib.import_module("si_cutover.baseline_io")
 baseline_history = importlib.import_module("si_cutover.baseline_history")
-IP_ORACLE_ROOT = Path("/tmp/open-fdd-wt-407-ipbase")
+IP_ORACLE_ROOT = Path(os.environ.get("OPENFDD_IP_ORACLE_ROOT", "/tmp/open-fdd-wt-407-ipbase"))
+IP_ORACLE_COMMIT = "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0"
+
+
+def ensure_ip_oracle_worktree() -> Path:
+    """Detached worktree at the frozen 4.0.6 / open-fdd 4.4.9 IP oracle (CI-safe)."""
+    root = IP_ORACLE_ROOT
+    if (root / "pyproject.toml").is_file() and (root / "sql" / "fdd" / "registry.yaml").is_file():
+        return root
+    root.parent.mkdir(parents=True, exist_ok=True)
+    if root.exists() and not (root / ".git").exists():
+        raise RuntimeError(f"IP oracle path exists but is not a git worktree: {root}")
+    if not root.exists():
+        proc = subprocess.run(
+            ["git", "worktree", "add", "--detach", str(root), IP_ORACLE_COMMIT],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            fetch = subprocess.run(
+                ["git", "fetch", "--depth", "1", "origin", IP_ORACLE_COMMIT],
+                cwd=REPO,
+                capture_output=True,
+                text=True,
+            )
+            if fetch.returncode != 0:
+                raise RuntimeError(
+                    f"git fetch origin {IP_ORACLE_COMMIT} failed: {fetch.stderr or fetch.stdout}"
+                )
+            proc = subprocess.run(
+                ["git", "worktree", "add", "--detach", str(root), IP_ORACLE_COMMIT],
+                cwd=REPO,
+                capture_output=True,
+                text=True,
+            )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"git worktree add {root} @ {IP_ORACLE_COMMIT} failed: {proc.stderr or proc.stdout}"
+            )
+    return root
+
 MOCK_ORACLE = {
     "source_root": str(IP_ORACLE_ROOT),
     "version": "4.4.9",
@@ -182,7 +224,8 @@ class CaptureRequirements(unittest.TestCase):
         self.assertIn("4.4.9", str(ctx.exception))
 
     def test_pinned_oracle_provenance_matches_frozen_registry(self) -> None:
-        oracle = capture.load_ip_oracle(IP_ORACLE_ROOT)
+        oracle_root = ensure_ip_oracle_worktree()
+        oracle = capture.load_ip_oracle(oracle_root)
         self.assertEqual(oracle["version"], "4.4.9")
         self.assertEqual(oracle["git_head"], "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0")
         self.assertEqual(oracle["registry_sha256"], "b0397a06d834109a77e85599c81e7c81cbacfab7d38372503c943c1f26e1fcbf")
