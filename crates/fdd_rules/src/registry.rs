@@ -47,6 +47,10 @@ pub struct RuleSpec {
     pub equipment_kinds: Vec<String>,
     #[serde(default)]
     pub output_columns: Vec<String>,
+    /// Declared unit of each quantity-bearing metric output column (pack ABI unit the
+    /// SQL emits). Metric responses convert from this unit to metric-c-v2 exactly once.
+    #[serde(default)]
+    pub output_units: HashMap<String, String>,
     #[serde(default = "default_confirm")]
     pub confirm_seconds: u32,
     #[serde(default)]

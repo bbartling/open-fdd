@@ -194,6 +194,7 @@ mod tests {
             optional_roles: vec![],
             equipment_kinds: vec!["vav".into()],
             output_columns: vec![],
+            output_units: HashMap::new(),
             confirm_seconds: 900,
             parity_status: String::new(),
             dashboard_wired: true,

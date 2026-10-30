@@ -164,7 +164,7 @@ async fn sat_scatter_binds_one_weather_series_and_scopes_the_window() {
     assert_eq!(cov["x_point"]["equipment_id"], WX_A);
     assert_eq!(cov["x_point"]["role"], "web_oa_t");
     assert_eq!(cov["x_point"]["quantity"], "dry_bulb_temperature");
-    assert_eq!(cov["x_point"]["unit"], "°F");
+    assert_eq!(cov["x_point"]["unit"], "degC");
     assert_eq!(cov["alignment"]["method"], "nearest_sample");
     assert_eq!(cov["alignment"]["max_age_seconds"], 900);
     assert_eq!(cov["alignment"]["interpolation"], false);
@@ -384,7 +384,7 @@ fn assert_pair(body: &Value, y: f64, x: f64, age: f64, quality: &str) {
             && near(p["oat_f"].as_f64(), x)
             && near(p["x_age_seconds"].as_f64(), age)
             && p["x_quality"] == quality
-            && p["x_unit"] == "°F"
+            && p["x_unit"] == "degC"
     });
     assert!(
         found,

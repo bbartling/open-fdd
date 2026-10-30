@@ -25,19 +25,62 @@ pub fn value_to_si(
     })
 }
 
-/// Legacy SQL/pivot outputs on pre-cutover stacks still evaluate in imperial-f-v1.
-pub fn default_pack_source_unit(quantity: &str) -> &'static str {
-    match quantity {
-        "absolute_temperature" | "dry_bulb_temperature" | "wet_bulb_temperature" => "degF",
-        "temperature_difference" | "temperature_delta" => "deltaF",
-        "temperature_rate" => "degF_per_h",
-        "air_pressure" => "inH2O",
-        "hydronic_pressure" => "psi",
-        "volumetric_flow" => "cfm",
-        "percent" => "pct",
-        "fraction" => "frac",
-        _ => "",
+/// Why a metric output could not be reported in metric-c-v2.
+#[derive(Debug)]
+pub enum MetricUnitError {
+    /// The rule emits a quantity-bearing column without a declared `output_units` entry.
+    UndeclaredOutputUnit {
+        rule_id: String,
+        column: String,
+    },
+    /// The SQL value is not a finite f64.
+    NonFiniteValue {
+        rule_id: String,
+        column: String,
+    },
+    Contract(ContractError),
+}
+
+impl std::fmt::Display for MetricUnitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UndeclaredOutputUnit { rule_id, column } => write!(
+                f,
+                "{rule_id}.{column}: registry declares no output unit for a quantity-bearing metric column"
+            ),
+            Self::NonFiniteValue { rule_id, column } => {
+                write!(f, "{rule_id}.{column}: metric value is not a finite number")
+            }
+            Self::Contract(err) => write!(f, "metric unit contract: {err}"),
+        }
     }
+}
+
+impl std::error::Error for MetricUnitError {}
+
+impl From<ContractError> for MetricUnitError {
+    fn from(err: ContractError) -> Self {
+        Self::Contract(err)
+    }
+}
+
+/// Report a metric output in metric-c-v2 given the unit the rule declares for it.
+/// Output already in the canonical SI unit is returned unchanged (never converted twice).
+pub fn metric_output_to_si(
+    quantity: &str,
+    declared_unit: &str,
+    value: f64,
+) -> Result<SiScalar, ContractError> {
+    let contract = MetricUnitsContract::load_embedded()?;
+    let canonical = contract.canonical_unit(quantity)?.to_string();
+    if declared_unit == canonical {
+        return Ok(SiScalar {
+            value,
+            unit: canonical,
+            quantity: quantity.to_string(),
+        });
+    }
+    value_to_si(quantity, declared_unit, value)
 }
 
 pub fn metric_column_quantity(column: &str) -> Option<&'static str> {
@@ -57,6 +100,20 @@ mod tests {
         let si = value_to_si("absolute_temperature", "degF", 72.0).expect("convert");
         assert_eq!(si.unit, "degC");
         assert!((si.value - 22.22222222222222).abs() < 1e-9);
+    }
+
+    #[test]
+    fn already_si_metric_output_is_not_converted() {
+        let si = metric_output_to_si("absolute_temperature", "degC", 22.5).expect("si");
+        assert_eq!(si.unit, "degC");
+        assert_eq!(si.value, 22.5);
+    }
+
+    #[test]
+    fn declared_imperial_metric_output_converts_once() {
+        let si = metric_output_to_si("absolute_temperature", "degF", 50.0).expect("si");
+        assert_eq!(si.unit, "degC");
+        assert!((si.value - 10.0).abs() < 1e-12);
     }
 
     #[test]

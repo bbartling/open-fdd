@@ -813,6 +813,8 @@ fn scatter_unavailable(
     reason: &str,
 ) -> AnalyticsEnvelope {
     let (role, quantity) = scatter_x_role(prefer_wetbulb);
+    // X unit is the stored series' canonical unit, the same source as Y.
+    let (_, x_unit) = role_measure(role);
     let mut env = envelope_with_engine(
         "rcx-scatter-v1",
         &AnalyticsQuery {
@@ -836,7 +838,7 @@ fn scatter_unavailable(
         "x_point": {
             "role": role,
             "quantity": quantity,
-            "unit": "°F",
+            "unit": x_unit,
             "available": false,
         },
     }));
@@ -927,6 +929,8 @@ pub async fn rcx_oat_scatter(
         return Ok(None);
     }
     let (x_role, x_quantity) = scatter_x_role(prefer_wetbulb);
+    // X unit is the stored series' canonical unit, the same source as Y.
+    let (_, x_unit) = role_measure(x_role);
     let Some((x_equipment, x_key)) =
         bound_weather_equipment(&tsdb, building_id, x_role, &read.scope).await?
     else {
@@ -1047,7 +1051,7 @@ pub async fn rcx_oat_scatter(
             "x_role": x_role,
             "x_openfdd_key": &x_key,
             "x_quantity": x_quantity,
-            "x_unit": "°F",
+            "x_unit": x_unit,
             "x_quality": r.try_get::<Option<String>, _>("x_quality").ok().flatten(),
             "x_age_seconds": r.try_get::<f64, _>("x_age_seconds").ok(),
         });
@@ -1101,7 +1105,7 @@ pub async fn rcx_oat_scatter(
             "role": x_role,
             "openfdd_key": x_key,
             "quantity": x_quantity,
-            "unit": "°F",
+            "unit": x_unit,
             "available": true,
             "selection": "lexicographically first weather equipment with this role near the window",
         },
@@ -3163,7 +3167,7 @@ fn metric_payload(
     rule: &RuleSpec,
     values: &serde_json::Map<String, Value>,
     facts: MetricWindowFacts<'_>,
-) -> Value {
+) -> Result<Value, crate::si_api_response::MetricUnitError> {
     let name = rule
         .output_columns
         .iter()
@@ -3176,32 +3180,26 @@ fn metric_payload(
         values.get(name).cloned().unwrap_or(Value::Null)
     };
     let (quantity, unit_label) = metric_unit_for_column(name);
-    let si_value = match (&value, name.is_empty()) {
-        (_, true) => value,
-        (Value::Number(n), false) => {
-            if let Some(raw) = n.as_f64() {
-                if let Some(qty) = crate::si_api_response::metric_column_quantity(name) {
-                    let src = crate::si_api_response::default_pack_source_unit(qty);
-                    if !src.is_empty() {
-                        if let Ok(si) = crate::si_api_response::value_to_si(qty, src, raw) {
-                            json!(si.value)
-                        } else {
-                            value
-                        }
-                    } else {
-                        value
-                    }
-                } else {
-                    value
+    let si_value = match (&value, crate::si_api_response::metric_column_quantity(name)) {
+        (Value::Number(n), Some(quantity_id)) => {
+            let raw = n.as_f64().filter(|v| v.is_finite()).ok_or_else(|| {
+                crate::si_api_response::MetricUnitError::NonFiniteValue {
+                    rule_id: rule.rule_id.clone(),
+                    column: name.to_string(),
                 }
-            } else {
-                value
-            }
+            })?;
+            let declared = rule.output_units.get(name).ok_or_else(|| {
+                crate::si_api_response::MetricUnitError::UndeclaredOutputUnit {
+                    rule_id: rule.rule_id.clone(),
+                    column: name.to_string(),
+                }
+            })?;
+            json!(crate::si_api_response::metric_output_to_si(quantity_id, declared, raw)?.value)
         }
         _ => value,
     };
     let unknown = facts.observed_start.is_none() || facts.observed_end.is_none();
-    json!({
+    Ok(json!({
         "name": name,
         "value": si_value,
         "unit": unit_label,
@@ -3222,7 +3220,7 @@ fn metric_payload(
             "config_fingerprint": facts.config_fingerprint,
             "watermark": facts.watermark,
         },
-    })
+    }))
 }
 
 fn config_fingerprint(payload: &Value, poll: f64) -> String {
@@ -3971,7 +3969,7 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                 Ok(rows) => {
                     if metric {
                         let values = rows.first().map(numeric_column_map).unwrap_or_default();
-                        let metric_doc = metric_payload(
+                        let metric_doc = match metric_payload(
                             rule,
                             &values,
                             MetricWindowFacts {
@@ -3983,7 +3981,20 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                                 sample_rows: n,
                                 config_fingerprint: &config_fp,
                             },
-                        );
+                        ) {
+                            Ok(doc) => doc,
+                            Err(err) => {
+                                rule_rows.push(json!({
+                                    "equipment_id": eq_id,
+                                    "status": "ERROR",
+                                    "failure_class": "metric_unit",
+                                    "output_kind": "metric",
+                                    "notes": err.to_string(),
+                                }));
+                                let _ = tx.rollback().await;
+                                continue;
+                            }
+                        };
                         let mut row_json = json!({
                             "equipment_id": eq_id,
                             "status": "METRIC",
@@ -5525,7 +5536,7 @@ rules:
         assert_eq!(partial["window"]["start"], json!("2026-06-01T00:00:00Z"));
         let metric = row_for(&partial, "AVG-ZONE-TEMP", "AHU_A");
         let value = metric["metric"]["value"].as_f64().expect("metric value");
-        assert!((value - 22.22222222222222).abs() < 1e-6, "{metric}");
+        assert!((value - 72.0).abs() < 1e-6, "{metric}");
         assert_eq!(metric["metric"]["unit"], json!("degC"));
         assert_eq!(metric["metric"]["quantity"], json!("absolute_temperature"));
         assert_eq!(metric["status"], json!("METRIC"));
@@ -5627,9 +5638,7 @@ rules:
             .expect("rest metric");
         assert_eq!(metric_rest["status"], json!("METRIC"));
         assert!(metric_rest["fault_hours"].is_null());
-        assert!(
-            (metric_rest["metric"]["value"].as_f64().unwrap() - 22.22222222222222).abs() < 1e-6
-        );
+        assert!((metric_rest["metric"]["value"].as_f64().unwrap() - 72.0).abs() < 1e-6);
         assert_eq!(metric_rest["metric"]["unit"], json!("degC"));
         assert!(metric_rest["metric"]["window"]["watermark"]
             .as_str()
@@ -5691,8 +5700,8 @@ rules:
             .expect("other site");
         assert_eq!(other["run_status"], json!("complete"), "{other}");
         let other_metric = row_for(&other, "AVG-ZONE-TEMP", "AHU_B");
-        // AVG-ZONE-TEMP pack output 50 degF is reported in SI: (50 - 32) * 5/9 = 10 degC.
-        assert!((other_metric["metric"]["value"].as_f64().unwrap() - 10.0).abs() < 1e-6);
+        // Historian samples are metric-c-v2, AVG-ZONE-TEMP declares degC output: no conversion.
+        assert!((other_metric["metric"]["value"].as_f64().unwrap() - 50.0).abs() < 1e-6);
         assert_eq!(other_metric["metric"]["unit"], json!("degC"));
         let site_a_after = rest_rows(&pool, &site_a, &stale_types).await;
         assert!(site_a_after["results"]
