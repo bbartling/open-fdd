@@ -117,8 +117,8 @@ def check_manifest_digest() -> None:
     if manifest.get("processing_abi") != "metric-c-v2":
         fail("manifest processing_abi must be metric-c-v2")
     status = manifest.get("metric_storage_status")
-    if status == "released":
-        fail("metric_storage_status must not be released until W7")
+    if status != "released":
+        fail("metric_storage_status must be released from 4.0.7 (W7)")
     print("PASS manifest metric_units_sha256 and processing_abi")
 
 
