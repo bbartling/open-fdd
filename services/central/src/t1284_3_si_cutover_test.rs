@@ -33,9 +33,11 @@ async fn schema(pool: &sqlx::PgPool) {
             ] {
                 // Other fixtures share `sample` as a plain table with rows, so
                 // hypertable conversion cannot run here; these tests only need
-                // the relations and columns.
+                // the relations and columns. CI's Rust job runs plain Postgres,
+                // so the Timescale-only statements (extension + hypertable) are
+                // left to the product bootstrap, like sibling DB fixtures.
                 for stmt in crate::db_lifecycle::statements(blob) {
-                    if !stmt.contains("create_hypertable") {
+                    if !timescale_only(&stmt) {
                         crate::test_ddl::execute_idempotent_ddl(pool, &stmt).await;
                     }
                 }
@@ -56,6 +58,11 @@ async fn schema(pool: &sqlx::PgPool) {
             }
         })
         .await;
+}
+
+fn timescale_only(stmt: &str) -> bool {
+    stmt.contains("create_hypertable")
+        || stmt.contains("CREATE EXTENSION IF NOT EXISTS timescaledb")
 }
 
 async fn schema_with_fdd_tables(pool: &sqlx::PgPool) {
