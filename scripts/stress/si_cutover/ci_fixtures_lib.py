@@ -1046,9 +1046,14 @@ def recompute_si_daily_for_golden(
         equipment_id=equipment_id,
         equipment_type=etype,
     )
+    from open_fdd.rules import RULES_BY_ID
+
     out: dict[tuple[str, str, str, str], float] = {}
     for rule_id, rule in rules_by_id.items():
-        if not rule.get("pandas_function"):
+        if not rule.get("pandas_function") and rule_id not in RULES_BY_ID:
+            continue
+        ok, _reason = rule_pair_eligible(rule, ip_frame, equipment_type=etype)
+        if not ok:
             continue
 
         def ph(name: str, val: float) -> float:
