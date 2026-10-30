@@ -12,6 +12,8 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
+from open_fdd.units.convert import ip_bound_to_si
+
 DEFAULT_SENTINELS = (999.0, 888.0, -999.0, 9999.0, -9999.0)
 
 REASON_SENTINEL = "SENTINEL"
@@ -58,13 +60,33 @@ ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "pump-speed-feedback": (0.0, 100.0),
 }
 
-# metric-c-v2 storage bounds (canonical SI units matching ROLE_BOUNDS semantics).
-_CFPM_TO_LPS = 0.471947
-_INWC_TO_PA = 248.84
-
-
-def _f_abs_to_c(v: float) -> float:
-    return (v - 32.0) * 5.0 / 9.0
+# Declared imperial unit of each ROLE_BOUNDS family that is a converted quantity.
+# Families absent here are unit-invariant (percent, power, current, speed).
+_ROLE_BOUNDS_IP_UNIT: dict[str, str] = {
+    **{
+        fam: "degF"
+        for fam in (
+            "zone-air-temp",
+            "zone-temp",
+            "discharge-air-temp",
+            "supply-air-temp",
+            "mixed-air-temp",
+            "return-air-temp",
+            "outside-air-temp",
+            "chilled-water-supply-temp",
+            "chilled-water-return-temp",
+            "hot-water-supply-temp",
+            "hot-water-return-temp",
+        )
+    },
+    "duct-static-pressure": "inH2O",
+    "chw-diff-pressure": "psi",
+    "zone-airflow": "cfm",
+    "supply-airflow": "cfm",
+    "airflow": "cfm",
+    "chw-flow": "gpm",
+    "water-flow": "gpm",
+}
 
 
 def _storage_si(df: pd.DataFrame) -> bool:
@@ -82,43 +104,16 @@ def _storage_si(df: pd.DataFrame) -> bool:
     return False
 
 
-def _convert_ip_bounds_to_si(
-    family: str, bounds: tuple[float | None, float | None]
-) -> tuple[float | None, float | None]:
+def _bounds_si(family: str, bounds: tuple[float | None, float | None]) -> tuple[float | None, float | None]:
+    unit = _ROLE_BOUNDS_IP_UNIT.get(family)
+    if unit is None:
+        return bounds
     lo, hi = bounds
-    if family in {
-        "zone-air-temp",
-        "zone-temp",
-        "discharge-air-temp",
-        "supply-air-temp",
-        "mixed-air-temp",
-        "return-air-temp",
-        "outside-air-temp",
-        "chilled-water-supply-temp",
-        "chilled-water-return-temp",
-        "hot-water-supply-temp",
-        "hot-water-return-temp",
-    }:
-        return (
-            _f_abs_to_c(lo) if lo is not None else None,
-            _f_abs_to_c(hi) if hi is not None else None,
-        )
-    if family == "duct-static-pressure":
-        return (
-            lo * _INWC_TO_PA if lo is not None else None,
-            hi * _INWC_TO_PA if hi is not None else None,
-        )
-    if family in {"zone-airflow", "supply-airflow", "airflow", "chw-flow", "water-flow"}:
-        return (
-            lo * _CFPM_TO_LPS if lo is not None else None,
-            hi * _CFPM_TO_LPS if hi is not None else None,
-        )
-    return bounds
+    return (ip_bound_to_si(lo, unit), ip_bound_to_si(hi, unit))
 
 
 ROLE_BOUNDS_SI: dict[str, tuple[float | None, float | None]] = {
-    family: _convert_ip_bounds_to_si(family, bounds)
-    for family, bounds in ROLE_BOUNDS.items()
+    family: _bounds_si(family, bounds) for family, bounds in ROLE_BOUNDS.items()
 }
 
 

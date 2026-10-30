@@ -463,7 +463,8 @@ def _units_map(d: pd.DataFrame) -> dict[str, str]:
 
 
 def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    from open_fdd.quality import _storage_si, role_bounds_for_frame
+    from open_fdd.quality import _storage_si
+    from open_fdd.rules.sensor_sweep_catalog import limits_for_haystack_role_si
 
     idx = d.index
     mask = _false(idx)
@@ -475,16 +476,10 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
-        lim = SENSOR_LIMITS[role]
-        if _storage_si(d):
-            bounds = role_bounds_for_frame(role, d)
-            if bounds is None:
-                continue
-            base_lo, base_hi = bounds
-            if base_lo is None or base_hi is None:
-                continue
-        else:
-            base_lo, base_hi = lim["lo"], lim["hi"]
+        lim = limits_for_haystack_role_si(role) if _storage_si(d) else SENSOR_LIMITS[role]
+        if lim is None:
+            raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
+        base_lo, base_hi = lim["lo"], lim["hi"]
         type_scale = _role_type_scale(p, role, kind="range")
         # Widen limits when scale > 1 (more forgiving); shrink when scale < 1.
         mid = (base_lo + base_hi) / 2.0

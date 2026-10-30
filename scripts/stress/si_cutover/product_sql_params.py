@@ -43,109 +43,34 @@ def catalog_overrides_from_registry(
     return out
 
 
-def _quantity_for_param_spec(spec: dict[str, Any]) -> str | None:
-    kind = str(spec.get("kind") or "")
-    unit = str(spec.get("unit") or "")
-    if kind == "absolute_temperature":
-        return "absolute_temperature"
-    if kind == "temperature_difference":
-        return "temperature_difference"
-    if kind == "air_pressure":
-        return "air_pressure"
-    if kind == "hydronic_pressure":
-        return "hydronic_pressure"
-    if kind in ("duration_minutes", "duration_seconds"):
-        return "duration"
-    if kind == "percent":
-        return "dimensionless"
-    if unit in ("degF", "degC", "°F", "°C"):
-        return "absolute_temperature"
-    if unit in ("degF_delta", "degC_delta"):
-        return "temperature_difference"
-    if unit in ("Pa", "inWC", "inH2O", "psi", "kPa"):
-        return "air_pressure"
-    return None
-
-
-def _source_unit_for_convert(unit: str, quantity: str) -> str:
-    if quantity == "temperature_difference" and unit == "degF":
-        return "degF_delta"
-    if quantity == "temperature_difference" and unit in ("degC", "°C"):
-        return "degC_delta"
-    if unit == "pct":
-        return "percent"
-    if unit.lower() in ("inwc", "in_wc"):
-        return "inWC"
-    return unit
-
-
 def catalog_overrides_for_si_render(
     rule: dict[str, Any],
     params_si: dict[str, float],
     metric: dict[str, Any],
 ) -> dict[str, float]:
-    """SI canonical registry params → render overrides in tuning_catalog units."""
+    """SI registry params -> render overrides for SQL that computes in SI.
+
+    No SI -> imperial conversion: every overridden catalog control must declare an
+    SI (identity-conversion) or unit-invariant unit, otherwise this raises.
+    """
     from scripts.ci import unit_contract_lib as uc
 
     rule_id = str(rule["rule_id"])
     tuning_rules = json.loads(TUNING_CATALOG_PATH.read_text(encoding="utf-8"))["rules"]
     tuning = next(r for r in tuning_rules if str(r.get("rule_id")) == rule_id)
     controls: dict[str, Any] = tuning.get("parameters") or {}
-    keys = catalog_param_keys(rule_id)
-    filtered: dict[str, float] = {}
-    reg_params = rule.get("parameters") or {}
-
-    for name, val in params_si.items():
-        catalog_key = name
-        canon = float(val)
-        if name == "confirm_seconds" and "confirm_min" in keys:
-            catalog_key = "confirm_min"
-            canon = float(val) / 60.0
-        if catalog_key not in keys:
+    by_token = uc.build_conversion_index(metric)
+    out = catalog_overrides_from_registry(rule, params_si)
+    for key in out:
+        unit = str((controls.get(key) or {}).get("unit") or "")
+        row = by_token.get(uc.normalize_alias(unit))
+        if row is None:
             continue
-        ctrl = controls.get(catalog_key) or {}
-        lo = float(ctrl.get("min", float("-inf")))
-        hi = float(ctrl.get("max", float("inf")))
-        spec = reg_params.get(name) if isinstance(reg_params.get(name), dict) else {}
-        kind = str(spec.get("kind") or ctrl.get("kind") or "")
-        unit = str(spec.get("unit") or ctrl.get("unit") or "")
-        quantity = _quantity_for_param_spec({**ctrl, **spec})
-        render_val = canon
-        if quantity and unit and kind not in (
-            "duration_minutes",
-            "duration_seconds",
-            "boolean",
-            "percent",
-        ):
-            src = _source_unit_for_convert(unit, quantity)
-            if unit in ("degC", "degC_delta", "Pa", "kPa", "L/s"):
-                render_val = canon
-            else:
-                render_val = uc.convert_from_canonical(metric, quantity, canon, src)
-            in_range = lo <= render_val <= hi
-        else:
-            in_range = lo <= canon <= hi
-            render_val = canon
-        if in_range:
-            filtered[name] = float(val) if name != "confirm_seconds" else float(val)
-            # store render-facing value under registry name; map below
-            filtered[f"__render__{name}"] = render_val
-        elif ctrl.get("effect_in_sql", True):
+        if float(row["scale"]) != 1.0 or float(row["offset"]) != 0.0:
             raise ValueError(
-                f"{rule_id}.{catalog_key} SI render value {render_val} outside [{lo}, {hi}]"
+                f"{rule_id}.{key}: tuning catalog unit {unit!r} is not SI; "
+                "SQL SI render requires SI parameters"
             )
-
-    # Build overrides dict keyed for render_rule (catalog keys, catalog-unit values)
-    out: dict[str, float] = {}
-    for name, val in params_si.items():
-        if name == "confirm_seconds" and "confirm_min" in keys:
-            rk = "__render__confirm_seconds"
-            ck = "confirm_min"
-        else:
-            rk = f"__render__{name}"
-            ck = name
-        if rk in filtered:
-            out[ck if ck != "confirm_seconds" else "confirm_min"] = filtered[rk]
     return out
 
 
