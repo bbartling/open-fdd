@@ -595,41 +595,51 @@ class CaptureFixtureStack(unittest.TestCase):
             receipt_site_dir = out_dir / building_id / "run_receipts"
             with mock.patch.object(capture, "fetch_sql_daily_rows", return_value=[sql_row]):
                 with mock.patch.object(capture, "fetch_run_status_rows", return_value={}):
-                  with mock.patch.object(
-                      capture,
-                      "fetch_run_scope",
-                      side_effect=lambda _conn, *, run_id, **_kw: (
-                          {"FC1" if run_id == "run-ci-1" else "FC2"},
-                          (
-                              capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
-                              capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
-                              capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
-                              capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
-                          ),
-                      ),
-                  ):
-                    with mock.patch.object(capture, "analytics_rows_for_site", return_value=[]):
-                      with mock.patch.object(capture, "post_sparql", return_value=[]):
+                    with mock.patch.object(
+                        capture,
+                        "validate_batch_persisted_scope",
+                        return_value=(
+                            capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                            capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                            capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
+                            capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
+                        ),
+                    ):
                         with mock.patch.object(
                             capture,
-                            "post_fdd_run_with_busy_retry",
-                            side_effect=fake_run,
+                            "fdd_run_created_at_marker",
+                            return_value=capture.datetime.fromisoformat(
+                                "2026-06-01T00:00:00+00:00"
+                            ),
                         ):
-                            summary = capture.capture_site(
-                                FakeHttp(),
-                                {},
-                                fake_conn,
-                                site={
-                                    "building_id": building_id,
-                                    "window_start": "2026-06-01T00:00:00Z",
-                                    "window_end": "2026-06-02T03:00:00Z",
-                                },
-                                out_dir=out_dir,
-                                rules=[{"rule_id": "FC1"}, {"rule_id": "FC2"}],
-                                skip_pandas=True,
-                                pandas_max_rules=None,
-                                rule_batch_size=1,
-                            )
+                            with mock.patch.object(capture, "assert_no_interleaved_fdd_run"):
+                                with mock.patch.object(
+                                    capture, "analytics_rows_for_site", return_value=[]
+                                ):
+                                    with mock.patch.object(capture, "post_sparql", return_value=[]):
+                                        with mock.patch.object(
+                                            capture,
+                                            "post_fdd_run_with_busy_retry",
+                                            side_effect=fake_run,
+                                        ):
+                                            summary = capture.capture_site(
+                                                FakeHttp(),
+                                                {},
+                                                fake_conn,
+                                                site={
+                                                    "building_id": building_id,
+                                                    "window_start": "2026-06-01T00:00:00Z",
+                                                    "window_end": "2026-06-02T03:00:00Z",
+                                                },
+                                                out_dir=out_dir,
+                                                rules=[
+                                                    {"rule_id": "FC1"},
+                                                    {"rule_id": "FC2"},
+                                                ],
+                                                skip_pandas=True,
+                                                pandas_max_rules=None,
+                                                rule_batch_size=1,
+                                            )
             self.assertEqual(summary["building_id"], building_id)
             site_dir = out_dir / building_id
             for name in (
@@ -737,6 +747,102 @@ class CaptureFixtureStack(unittest.TestCase):
                 },
             ],
         )
+
+
+class BatchPersistedScopeValidationTest(unittest.TestCase):
+    """Scoped registry persist semantics for batched IP baseline capture."""
+
+    @staticmethod
+    def _registry_rule_ids(count: int = 77) -> set[str]:
+        return {f"RULE-{index:03d}" for index in range(count)}
+
+    def test_validate_accepts_five_computed_and_seventy_two_carried(self) -> None:
+        registry = self._registry_rule_ids()
+        batch = {f"RULE-{index:03d}" for index in range(5)}
+        carried = registry - batch
+        capture.validate_batch_scope_rule_sets(
+            computed_rule_ids=set(batch),
+            carried_rule_ids=set(carried),
+            batch=set(batch),
+            registry_rule_ids=registry,
+        )
+
+    def test_validate_rejects_carried_rule_that_overlaps_batch(self) -> None:
+        registry = self._registry_rule_ids()
+        batch = {f"RULE-{index:03d}" for index in range(5)}
+        carried = (registry - batch) | {"RULE-000"}
+        with self.assertRaisesRegex(ValueError, "overlap"):
+            capture.validate_batch_scope_rule_sets(
+                computed_rule_ids=set(batch),
+                carried_rule_ids=carried,
+                batch=set(batch),
+                registry_rule_ids=registry,
+            )
+
+    def test_validate_rejects_missing_batch_rule(self) -> None:
+        registry = self._registry_rule_ids()
+        batch = {f"RULE-{index:03d}" for index in range(5)}
+        computed = set(batch)
+        computed.remove("RULE-004")
+        with self.assertRaisesRegex(ValueError, "freshly computed"):
+            capture.validate_batch_scope_rule_sets(
+                computed_rule_ids=computed,
+                carried_rule_ids=registry - batch,
+                batch=set(batch),
+                registry_rule_ids=registry,
+            )
+
+    def test_fetch_batch_run_rule_sets_fake_seventy_seven_rule_cohort(self) -> None:
+        registry = self._registry_rule_ids()
+        batch = {f"RULE-{index:03d}" for index in range(5)}
+        carried = registry - batch
+        fetch_rows = [(rule_id, True) for rule_id in sorted(batch | carried)]
+
+        fake_cursor = mock.MagicMock()
+        fake_cursor.fetchall.return_value = fetch_rows
+        fake_conn = mock.MagicMock()
+        fake_conn.cursor.return_value.__enter__ = mock.Mock(return_value=fake_cursor)
+        fake_conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+
+        computed, carried_ids = capture.fetch_batch_run_rule_sets(
+            fake_conn,
+            building_id="SITE_X",
+            run_id="run-batch-0",
+            batch=set(batch),
+        )
+        self.assertEqual(computed, batch)
+        self.assertEqual(carried_ids, carried)
+
+    def test_assert_no_interleaved_fdd_run_raises(self) -> None:
+        marker = datetime(2026, 6, 1, tzinfo=timezone.utc)
+        with mock.patch.object(
+            capture,
+            "interleaved_logical_run_ids",
+            return_value=["run-afdd-timer"],
+        ):
+            with self.assertRaises(capture.CaptureQualificationError) as ctx:
+                capture.assert_no_interleaved_fdd_run(
+                    mock.MagicMock(),
+                    building_id="SITE_X",
+                    marker=marker,
+                    allowed_run_ids={"run-capture-1"},
+                )
+        self.assertIn("concurrent_non_capture_fdd_run", str(ctx.exception.reason))
+
+    def test_manifest_records_site_disqualifiers(self) -> None:
+        meta = {
+            "skip_pandas": False,
+            "allow_errors": False,
+            "ip_oracle": {"version": "4.4.9"},
+            "sites": [
+                {
+                    "building_id": "SITE_X",
+                    "disqualifying_reasons": ["concurrent_non_capture_fdd_run:run-afdd"],
+                }
+            ],
+        }
+        reasons = capture.baseline_capture_disqualifiers(meta)
+        self.assertIn("concurrent_non_capture_fdd_run:run-afdd", reasons)
 
 
 class DailyFaultSecondsTest(unittest.TestCase):
