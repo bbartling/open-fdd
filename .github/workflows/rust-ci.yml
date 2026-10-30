@@ -365,6 +365,8 @@ jobs:
           --health-retries 20
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch base ref for IP tuning catalog diff (shallow PR checkouts)
+        run: git fetch origin master --depth=1
       - name: Pandas oracle and Timescale FC1 parity
         env:
           OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd

@@ -422,6 +422,28 @@ def _legacy_ip_control_unit(rule: dict[str, Any], name: str) -> str:
     return str(base["unit"])
 
 
+_SI_REGISTRY_PARAM_UNITS = frozenset(
+    {
+        "Pa",
+        "degC",
+        "degC_delta",
+        "degC_per_h",
+        "m3/s",
+        "L/s",
+        "kW",
+        "ppm",
+    }
+)
+
+
+def registry_defaults_stored_in_si(rule: dict[str, Any]) -> bool:
+    """True when registry.yaml defaults use SI storage units (W4d+), not legacy IP."""
+    for spec in (rule.get("parameters") or {}).values():
+        if isinstance(spec, dict) and str(spec.get("unit") or "") in _SI_REGISTRY_PARAM_UNITS:
+            return True
+    return False
+
+
 def resolve_rule_params_ip_si(
     rule: dict[str, Any],
     metric: dict[str, Any],
@@ -433,7 +455,8 @@ def resolve_rule_params_ip_si(
 
     raw = rule_params_from_registry(rule)
     rid = str(rule.get("rule_id") or "")
-    if ip_parameter_controls(rid) is not None:
+    si_storage = ip_parameter_controls(rid) is not None or registry_defaults_stored_in_si(rule)
+    if si_storage:
         params_si = dict(raw)
         if param_hook:
             params_si = {k: param_hook(k, float(v)) for k, v in params_si.items()}
