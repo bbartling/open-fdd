@@ -14,7 +14,7 @@ WITH h AS (
     CASE
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 1.0 THEN 1 ELSE 0 END
+      WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
       WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
       ELSE 0
     END AS proof_on
@@ -29,7 +29,7 @@ base AS (
       WHEN COALESCE(proof_on, 0) = 0 THEN 0
       WHEN cw_supply_t IS NULL OR web_wb_t IS NULL OR fan IS NULL THEN 0
       WHEN fan >= {{TOWER_FAN_HI}}
-       AND cw_supply_t > web_wb_t + {{CW_APPROACH}} + {{EXCESS_BEYOND_APPROACH_F}} THEN 1
+       AND cw_supply_t > web_wb_t + {{CW_APPROACH}} + {{EXCESS_BEYOND_APPROACH}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

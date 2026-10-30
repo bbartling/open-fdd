@@ -42,7 +42,7 @@ pub(crate) fn sql_root_for_registry() -> PathBuf {
     PathBuf::from("sql/fdd")
 }
 
-fn load_reg() -> Result<RuleRegistry> {
+pub(crate) fn load_reg() -> Result<RuleRegistry> {
     let root = sql_root();
     load_registry(&root).with_context(|| format!("load registry {}", root.display()))
 }
@@ -1219,14 +1219,14 @@ fn comfort_rank_point(row: &sqlx::postgres::PgRow) -> Result<Value, ComfortRankE
 pub async fn rcx_zone_comfort_rank(
     building_id: &str,
     eq_kinds: &[&str],
-    comfort_low_f: f64,
-    comfort_high_f: f64,
+    comfort_low_c: f64,
+    comfort_high_c: f64,
     scope: &crate::timescale_analytics::AnalyticsSqlScope,
 ) -> Result<Option<AnalyticsEnvelope>> {
-    if !comfort_low_f.is_finite() || !comfort_high_f.is_finite() || comfort_low_f > comfort_high_f {
+    if !comfort_low_c.is_finite() || !comfort_high_c.is_finite() || comfort_low_c > comfort_high_c {
         return Err(ComfortRankError::InvalidBand {
-            low_f: comfort_low_f,
-            high_f: comfort_high_f,
+            low_f: comfort_low_c,
+            high_f: comfort_high_c,
         }
         .into());
     }
@@ -1284,7 +1284,7 @@ pub async fn rcx_zone_comfort_rank(
                 .and_then(|entry| entry.unit.clone())
         });
         let effective = engineer.as_deref().or(sample_unit.as_deref());
-        if crate::zone_comfort_units::comfort_band_in_unit(comfort_low_f, comfort_high_f, effective)
+        if crate::zone_comfort_units::comfort_band_in_unit(comfort_low_c, comfort_high_c, effective)
             .is_some()
         {
             assessable.push(equipment_id);
@@ -1298,22 +1298,14 @@ pub async fn rcx_zone_comfort_rank(
     let rows = sqlx::query(
         r#"
         WITH band AS (
-          SELECT $2::float8 AS lo_f, $3::float8 AS hi_f
+          SELECT $2::float8 AS lo_c, $3::float8 AS hi_c
         )
         SELECT
           a.equipment_id,
           (100.0 * AVG(
             CASE
               WHEN btrim(coalesce(s.unit, '')) = '' THEN NULL
-              WHEN lower(regexp_replace(coalesce(s.unit, ''), '[^a-zA-Z0-9]', '', 'g'))
-                   IN ('c', 'degc', 'celsius')
-                THEN CASE
-                  WHEN s.val BETWEEN ((band.lo_f - 32.0) * 5.0 / 9.0)
-                                 AND ((band.hi_f - 32.0) * 5.0 / 9.0)
-                  THEN 1.0 ELSE 0.0 END
-              ELSE CASE
-                WHEN s.val BETWEEN band.lo_f AND band.hi_f THEN 1.0 ELSE 0.0 END
-            END
+              WHEN s.val BETWEEN band.lo_c AND band.hi_c THEN 1.0 ELSE 0.0 END
           ))::float8 AS comfort_pct,
           COUNT(*) FILTER (
             WHERE btrim(coalesce(s.unit, '')) <> ''
@@ -1335,8 +1327,8 @@ pub async fn rcx_zone_comfort_rank(
         "#,
     )
     .bind(building_id)
-    .bind(comfort_low_f)
-    .bind(comfort_high_f)
+    .bind(comfort_low_c)
+    .bind(comfort_high_c)
     .bind(&assessable)
     .bind(scope.start)
     .bind(scope.end)
@@ -2235,7 +2227,7 @@ fn ts_key(ts: DateTime<Utc>) -> String {
     ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-async fn load_live_confirmed_fault(
+pub(crate) async fn load_live_confirmed_fault(
     tsdb: &Tsdb,
     reg: &RuleRegistry,
     rule: &RuleSpec,

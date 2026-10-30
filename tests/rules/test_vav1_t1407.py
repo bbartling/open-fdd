@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import unittest
+
 import pandas as pd
 
 from open_fdd.analytics.occupancy import OccupancySchedule
@@ -30,7 +32,8 @@ def test_vav1_without_occupancy_is_not_assessed():
 
 def test_vav1_celsius_band_uses_declared_unit():
     df = _frame([22.0, 28.0], unit="degC", occupied=["occupied", "occupied"])
-    raw = vav1(df, {}, 300.0)
+    params = {"zone_lo": 21.111111, "zone_hi": 23.888889}
+    raw = vav1(df, params, 300.0)
     assert list(raw.fillna(False)) == [False, True]
 
 
@@ -50,7 +53,27 @@ def test_vav1_runner_not_assessed_no_occupancy():
 
 def test_vav1_overview_calendar_still_evaluates():
     idx = pd.date_range("2026-01-05 02:00", periods=2, freq="8h", tz="America/Chicago")
-    df = pd.DataFrame({"zone-air-temp": [80.0, 80.0]}, index=idx)
-    df.attrs["role_units"] = {"zone-air-temp": "degF"}
-    raw = vav1(df, {"occupancy_schedule": OccupancySchedule().to_dict()}, 300.0)
+    df = pd.DataFrame({"zone-air-temp": [22.0, 26.0]}, index=idx)
+    df.attrs["role_units"] = {"zone-air-temp": "degC"}
+    params = {"zone_lo": 21.111111, "zone_hi": 23.888889}
+    raw = vav1(df, {**params, "occupancy_schedule": OccupancySchedule().to_dict()}, 300.0)
     assert list(raw.fillna(False)) == [False, True]
+
+
+class TestVav1T1407(unittest.TestCase):
+    test_vav1_without_occupancy_is_not_assessed = staticmethod(
+        test_vav1_without_occupancy_is_not_assessed
+    )
+    test_vav1_celsius_band_uses_declared_unit = staticmethod(
+        test_vav1_celsius_band_uses_declared_unit
+    )
+    test_vav1_runner_not_assessed_no_occupancy = staticmethod(
+        test_vav1_runner_not_assessed_no_occupancy
+    )
+    test_vav1_overview_calendar_still_evaluates = staticmethod(
+        test_vav1_overview_calendar_still_evaluates
+    )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -5,7 +5,7 @@ CI default (full matrix, report-only mismatches):
   python scripts/stress/si_parity_gate.py --fixtures-only --report-json si_parity_report.json
 
 Blocking W4 family (example FC1 / W4b):
-  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4b_fc1_duct_static
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4a_si_ahu_fc
 
 T1284-4 gate failure under mutation + blocking scope:
   python scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 --inject-t1284-4-mutation
@@ -26,9 +26,9 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from helpers import EXIT_BLOCKED, EXIT_FAIL, EXIT_PASS, record_check, run_child, safe_print  # noqa: E402
-from si_cutover import ci_fixtures_lib as cfl  # noqa: E402
 from si_cutover import parity_chain as pc  # noqa: E402
-from si_cutover.si_parity_families import resolve_rule_scope  # noqa: E402
+from si_cutover import ci_fixtures_lib as cfl  # noqa: E402
+from si_cutover.si_parity_families import SI_SQL_PACK_FAMILIES, resolve_rule_scope  # noqa: E402
 
 
 def _print_mismatch_table(label: str, table: dict[str, int], *, limit: int = 20) -> None:
@@ -47,7 +47,8 @@ def _print_p0_kind_table(p0: pc.StageResult) -> None:
         kinds[k] = kinds.get(k, 0) + 1
     safe_print(
         f"  P0 by kind: sql_row_missing={kinds.get('sql_row_missing', 0)} "
-        f"value_mismatch={kinds.get('value_mismatch', 0)}"
+        f"value_mismatch={kinds.get('value_mismatch', 0)} "
+        f"ip_sql_skipped_si_pack={kinds.get('ip_sql_skipped_si_pack', 0)}"
     )
 
 
@@ -92,12 +93,16 @@ def run_fixtures_gate(
     scope: set[str] | None,
     scope_label: str,
     blocking: bool,
+    family: str | None,
     report_json: Path | None,
     inject_t1284_4: bool,
 ) -> int:
     param_hook = None
     si_post = _fc1_t1284_si_param_post_hook if inject_t1284_4 else None
-    results = pc.run_fixture_stages(scope=scope, si_param_post_hook=si_post)
+    strict_p2 = bool(blocking and family in SI_SQL_PACK_FAMILIES)
+    results = pc.run_fixture_stages(
+        scope=scope, strict_p2=strict_p2, si_param_post_hook=si_post
+    )
     stage_map = {r.stage: r for r in results}
 
     p0 = stage_map.get("P0")
@@ -120,6 +125,9 @@ def run_fixtures_gate(
     if p0 and p0.errors:
         _print_p0_kind_table(p0)
         _print_mismatch_table("P0 value_mismatch", pc.rule_mismatch_table(p0.errors, stage="P0"))
+    if p0 and p0.mismatch_table:
+        for line in p0.mismatch_table:
+            safe_print(f"  {line}")
     if p1 and p1.errors:
         _print_mismatch_table("P1", pc.rule_mismatch_table(p1.errors, stage="P1"))
 
@@ -350,6 +358,7 @@ def main(argv: list[str] | None = None) -> int:
             scope=scope,
             scope_label=scope_label,
             blocking=bool(args.blocking),
+            family=args.family,
             report_json=args.report_json,
             inject_t1284_4=bool(args.inject_t1284_4_mutation),
         )

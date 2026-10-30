@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 FAMILIES_PATH = REPO / "tests" / "fixtures" / "si_cutover" / "w4_parity_families.json"
+
+W4C_SI_ZONE_FAMILY = "W4c_si_zone"
+W4A_SI_AHU_FC_FAMILY = "W4a_si_ahu_fc"
+# Families whose Postgres rules run on SI storage with SI registry parameters.
+SI_SQL_PACK_FAMILIES = (W4A_SI_AHU_FC_FAMILY, W4C_SI_ZONE_FAMILY)
 
 
 def load_families_doc() -> dict:
@@ -40,3 +46,26 @@ def family_meta(family: str) -> dict:
     if not fam:
         raise KeyError(f"unknown parity family {family!r}")
     return dict(fam)
+
+
+@lru_cache(maxsize=16)
+def family_rule_ids(family: str) -> frozenset[str]:
+    fam = family_meta(family)
+    rules = fam.get("rules") or []
+    if rules == ["*"]:
+        raise ValueError(f"family {family!r} is full-matrix; no rule subset")
+    return frozenset(str(r) for r in rules)
+
+
+@lru_cache(maxsize=16)
+def family_dataset_ids(family: str) -> frozenset[str]:
+    fam = family_meta(family)
+    datasets = fam.get("datasets")
+    if not datasets:
+        raise KeyError(f"family {family!r} has no datasets[] in {FAMILIES_PATH.name}")
+    return frozenset(str(d) for d in datasets)
+
+
+def sql_si_pack_enabled(rule_id: str) -> bool:
+    """Postgres rules converted to SI storage (W4a AHU FC and W4c zone families)."""
+    return any(rule_id in family_rule_ids(fam) for fam in SI_SQL_PACK_FAMILIES)

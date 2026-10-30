@@ -11,8 +11,9 @@ sys.path.insert(0, str(ROOT / "scripts" / "ci"))
 
 from unit_contract_lib import (  # noqa: E402
     METRIC_UNITS,
-    _validate_registry_param_si_change,
+    declared_kind,
     load_json,
+    validate_param_si_change,
 )
 
 
@@ -21,68 +22,39 @@ class UnitContractSiCutoverDiffTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.metric = load_json(METRIC_UNITS)
 
-    def test_value_change_without_unit_or_kind_fails(self) -> None:
-        master = {"unit": "inWC", "kind": "pressure", "default": 0.5}
-        branch = {"unit": "inWC", "kind": "pressure", "default": 0.6}
+    def test_value_change_without_unit_change_fails(self) -> None:
+        master = {"unit": "in_wc", "kind": "air_pressure", "default": 0.5}
+        branch = {"unit": "in_wc", "kind": "air_pressure", "default": 0.6}
         with self.assertRaises(AssertionError) as ctx:
-            _validate_registry_param_si_change(
-                self.metric,
-                rule_id="FC1",
-                branch_key="eps_dsp",
-                master=master,
-                branch=branch,
-            )
-        self.assertIn("without unit/kind change", str(ctx.exception))
+            validate_param_si_change(self.metric, "FC1.eps_dsp", master, branch)
+        self.assertIn("value changed without a unit change", str(ctx.exception))
 
     def test_wrong_si_value_after_unit_change_fails(self) -> None:
-        master = {"unit": "inWC", "kind": "air_pressure", "default": 0.5}
+        master = {"unit": "in_wc", "kind": "air_pressure", "default": 0.5}
         branch = {"unit": "Pa", "kind": "air_pressure", "default": 999.0}
-        with self.assertRaises(AssertionError) as ctx:
-            _validate_registry_param_si_change(
-                self.metric,
-                rule_id="FC1",
-                branch_key="eps_dsp",
-                master=master,
-                branch=branch,
-            )
-        self.assertIn("SI value", str(ctx.exception))
+        with self.assertRaises(AssertionError):
+            validate_param_si_change(self.metric, "FC1.eps_dsp", master, branch)
 
     def test_kind_change_without_unit_change_fails(self) -> None:
-        master = {"unit": "°F", "kind": "temperature", "default": 72.0}
-        branch = {"unit": "°F", "kind": "temperature_difference", "default": 72.0}
+        master = {"unit": "degF", "kind": "absolute_temperature", "default": 72.0}
+        branch = {"unit": "degF", "kind": "temperature_difference", "default": 72.0}
         with self.assertRaises(AssertionError) as ctx:
-            _validate_registry_param_si_change(
-                self.metric,
-                rule_id="VAV-1",
-                branch_key="comfort_lo",
-                master=master,
-                branch=branch,
-            )
-        self.assertIn("kind changed without unit change", str(ctx.exception))
+            validate_param_si_change(self.metric, "VAV-1.zone_t_lo", master, branch)
+        self.assertIn("without a unit change", str(ctx.exception))
 
-    def test_valid_inwc_to_pa_conversion_passes(self) -> None:
-        master = {"unit": "inWC", "kind": "air_pressure", "default": 0.5}
-        branch = {"unit": "Pa", "kind": "air_pressure", "default": 124.42}
-        _validate_registry_param_si_change(
-            self.metric,
-            rule_id="FC1",
-            branch_key="eps_dsp",
-            master=master,
-            branch=branch,
-        )
+    def test_valid_zone_cfm_to_l_per_s_conversion_passes(self) -> None:
+        master = {"unit": "cfm", "kind": "volumetric_flow", "default": 25.0}
+        branch = {"unit": "L_per_s", "kind": "volumetric_flow", "default": 11.798675}
+        validate_param_si_change(self.metric, "VAV-3.flow_on_min", master, branch)
 
-    def test_resolve_convert_kind_uses_non_convertible_master_kind(self) -> None:
-        from unit_contract_lib import _resolve_convert_kind
+    def test_valid_deadband_delta_conversion_passes(self) -> None:
+        master = {"unit": "degF", "kind": "temperature_difference", "default": 1.8}
+        branch = {"unit": "degC", "kind": "temperature_difference", "default": 1.0}
+        validate_param_si_change(self.metric, "FCU-DEADBAND.deadband", master, branch)
 
-        kind = _resolve_convert_kind("FC1", "confirm_min", "min", "duration_minutes")
-        self.assertEqual(kind, "duration_minutes")
-
-    def test_resolve_convert_kind_raises_on_unknown_unit(self) -> None:
-        from unit_contract_lib import _resolve_convert_kind
-
-        with self.assertRaises(AssertionError) as ctx:
-            _resolve_convert_kind("FC1", "mystery", "unknown_unit", "temperature")
-        self.assertIn("cannot infer kind", str(ctx.exception))
+    def test_missing_declared_kind_fails(self) -> None:
+        with self.assertRaises(ValueError):
+            declared_kind("custom_knob", {"unit": "not_a_real_unit"})
 
 
 if __name__ == "__main__":

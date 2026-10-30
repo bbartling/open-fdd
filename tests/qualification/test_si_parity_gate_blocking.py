@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 REPO = Path(__file__).resolve().parents[2]
 STRESS = REPO / "scripts" / "stress"
@@ -63,6 +65,25 @@ class SiParityGateBlockingTests(unittest.TestCase):
         failures = self.gate._blocking_errors([p1], blocking=True, scope={"FC1"})
         self.assertEqual(len(failures), 1)
 
+    def test_scoped_blocking_w4d_plant_passes(self) -> None:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(STRESS / "si_parity_gate.py"),
+                "--fixtures-only",
+                "--blocking",
+                "--family",
+                "W4d_si_plant",
+            ],
+            cwd=str(REPO),
+            check=False,
+        )
+        self.assertEqual(
+            proc.returncode,
+            0,
+            "W4d plant scope: P1/P2 for shipped SI SQL should PASS",
+        )
+
     def test_scoped_blocking_passes_despite_p0_fc1_mismatches(self) -> None:
         proc = subprocess.run(
             [
@@ -71,7 +92,7 @@ class SiParityGateBlockingTests(unittest.TestCase):
                 "--fixtures-only",
                 "--blocking",
                 "--family",
-                "W4b_fc1_duct_static",
+                "W4a_si_ahu_fc",
             ],
             cwd=str(REPO),
             check=False,
@@ -79,7 +100,7 @@ class SiParityGateBlockingTests(unittest.TestCase):
         self.assertEqual(
             proc.returncode,
             0,
-            "W4b FC1 scope: P0 mismatches are report-only; P1 clean should PASS",
+            "W4a FC scope: P0 mismatches are report-only; P1 clean should PASS",
         )
 
     def test_scoped_p1_mutation_still_fails_blocking(self) -> None:
@@ -97,6 +118,33 @@ class SiParityGateBlockingTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(proc.returncode, 1, "T1284-4 P1 mismatch must fail blocking scope")
+
+    def test_strict_p2_missing_sql_row_fails(self) -> None:
+        sys.path.insert(0, str(STRESS))
+        from si_cutover.si_parity_families import W4C_SI_ZONE_FAMILY, resolve_rule_scope
+
+        scope = resolve_rule_scope(rules=None, family=W4C_SI_ZONE_FAMILY)
+        goldens = copy.deepcopy(self.pc.load_all_ip_goldens())
+        mock_conn = MagicMock()
+        with patch.dict("os.environ", {"OPENFDD_DATABASE_URL": "postgres://local/test"}):
+            with patch(
+                "scripts.stress.si_cutover.ci_timescale_sql._load_parity_module"
+            ) as load_mod:
+                load_mod.return_value.connect_with_retry.return_value = mock_conn
+                with patch(
+                    "scripts.stress.si_cutover.ci_timescale_sql.run_sql_si_for_dataset",
+                    return_value=([], []),
+                ):
+                    result = self.pc.run_p2_all_goldens(goldens, scope=scope, strict=True)
+        self.assertTrue(
+            result.errors,
+            "strict W4c P2 must fail when Timescale returns no sql_si rows",
+        )
+        joined = " ".join(result.errors)
+        self.assertTrue(
+            "missing sql_si row" in joined or "pending_W4 after hydration" in joined,
+            f"expected hydration failure, got: {result.errors[:5]}",
+        )
 
 
 if __name__ == "__main__":

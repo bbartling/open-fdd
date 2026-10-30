@@ -300,7 +300,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:duct_static",
       "rule_id": "FC1",
       "status": "",
       "utc_day": ""
@@ -311,7 +311,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:mat",
       "rule_id": "FC10",
       "status": "",
       "utc_day": ""
@@ -322,7 +322,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:oa_damper_pct",
       "rule_id": "FC11",
       "status": "",
       "utc_day": ""
@@ -333,7 +333,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:sat",
       "rule_id": "FC12",
       "status": "",
       "utc_day": ""
@@ -344,7 +344,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "unknown_rule",
+      "reason": "missing_role:sat",
       "rule_id": "FC13-SAT-HIGH",
       "status": "",
       "utc_day": ""
@@ -355,7 +355,29 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
+      "reason": "missing_role:clg_valve_pct",
+      "rule_id": "FC14",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_RESET1_NORMAL",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
       "reason": "missing_roles",
+      "rule_id": "FC15",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_RESET1_NORMAL",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:mat",
       "rule_id": "FC2",
       "status": "",
       "utc_day": ""
@@ -366,7 +388,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:mat",
       "rule_id": "FC3",
       "status": "",
       "utc_day": ""
@@ -377,7 +399,40 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:oa_damper_pct",
+      "rule_id": "FC4",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_RESET1_NORMAL",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:sat",
+      "rule_id": "FC5",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_RESET1_NORMAL",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:mat",
+      "rule_id": "FC6",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_RESET1_NORMAL",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:sat",
       "rule_id": "FC7",
       "status": "",
       "utc_day": ""
@@ -388,7 +443,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:sat",
       "rule_id": "FC8",
       "status": "",
       "utc_day": ""
@@ -399,7 +454,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_roles",
+      "reason": "missing_role:oa_damper_pct",
       "rule_id": "FC9",
       "status": "",
       "utc_day": ""

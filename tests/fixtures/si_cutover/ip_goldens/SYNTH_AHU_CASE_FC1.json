@@ -139,7 +139,7 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
-      "sql_si_fault_seconds": 28800.0,
+      "sql_si_fault_seconds": 28500.0,
       "sql_si_status": "computed",
       "utc_day": "2026-01-05"
     },
@@ -148,7 +148,7 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
-      "sql_si_fault_seconds": 28800.0,
+      "sql_si_fault_seconds": 28500.0,
       "sql_si_status": "computed",
       "utc_day": "2026-01-06"
     },
@@ -157,7 +157,7 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
-      "sql_si_fault_seconds": 28800.0,
+      "sql_si_fault_seconds": 28500.0,
       "sql_si_status": "computed",
       "utc_day": "2026-01-07"
     },
@@ -166,7 +166,7 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
-      "sql_si_fault_seconds": 28800.0,
+      "sql_si_fault_seconds": 28500.0,
       "sql_si_status": "computed",
       "utc_day": "2026-01-08"
     },
@@ -175,7 +175,7 @@
       "pandas_si_fault_seconds": 28800.0,
       "pandas_si_status": "computed",
       "rule_id": "FC1",
-      "sql_si_fault_seconds": 28800.0,
+      "sql_si_fault_seconds": 28500.0,
       "sql_si_status": "computed",
       "utc_day": "2026-01-09"
     },
@@ -805,6 +805,28 @@
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
+      "reason": "missing_role:clg_valve_pct",
+      "rule_id": "FC14",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_AHU_CASE_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "AHU_CASE_FC1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
+      "rule_id": "FC15",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_AHU_CASE_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "AHU_CASE_FC1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
       "reason": "missing_roles",
       "rule_id": "FC2",
       "status": "",
@@ -818,6 +840,39 @@
       "pair_status": "not_applicable",
       "reason": "missing_roles",
       "rule_id": "FC3",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_AHU_CASE_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "AHU_CASE_FC1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:oa_damper_pct",
+      "rule_id": "FC4",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_AHU_CASE_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "AHU_CASE_FC1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:sat",
+      "rule_id": "FC5",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_AHU_CASE_FC1",
+      "covered_seconds": 0.0,
+      "equipment_id": "AHU_CASE_FC1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:mat",
+      "rule_id": "FC6",
       "status": "",
       "utc_day": ""
     },
@@ -2201,83 +2256,6 @@
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC1",
-      "status": "OK",
-      "utc_day": "2026-01-05"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC1",
-      "status": "OK",
-      "utc_day": "2026-01-06"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC1",
-      "status": "OK",
-      "utc_day": "2026-01-07"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC1",
-      "status": "OK",
-      "utc_day": "2026-01-08"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 28800.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC1",
-      "status": "OK",
-      "utc_day": "2026-01-09"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC1",
-      "status": "OK",
-      "utc_day": "2026-01-10"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC1",
-      "status": "OK",
-      "utc_day": "2026-01-11"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
       "covered_seconds": 0.0,
       "equipment_id": "AHU_CASE_FC1",
       "fault_seconds": 0.0,
@@ -2330,83 +2308,6 @@
       "rule_id": "FC14",
       "status": "",
       "utc_day": ""
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-01-05"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-01-06"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-01-07"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-01-08"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-01-09"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86400.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-01-10"
-    },
-    {
-      "building_id": "SYNTH_AHU_CASE_FC1",
-      "covered_seconds": 86100.0,
-      "equipment_id": "AHU_CASE_FC1",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-01-11"
     },
     {
       "building_id": "SYNTH_AHU_CASE_FC1",

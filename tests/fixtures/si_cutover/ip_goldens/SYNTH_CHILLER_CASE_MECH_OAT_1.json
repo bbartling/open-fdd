@@ -292,6 +292,28 @@
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
       "reason": "equipment_type",
+      "rule_id": "FC14",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_CHILLER_CASE_MECH_OAT_1",
+      "covered_seconds": 0.0,
+      "equipment_id": "CHILLER_CASE_MECH_OAT_1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "FC15",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_CHILLER_CASE_MECH_OAT_1",
+      "covered_seconds": 0.0,
+      "equipment_id": "CHILLER_CASE_MECH_OAT_1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
       "rule_id": "FC2",
       "status": "",
       "utc_day": ""
@@ -304,6 +326,39 @@
       "pair_status": "not_applicable",
       "reason": "equipment_type",
       "rule_id": "FC3",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_CHILLER_CASE_MECH_OAT_1",
+      "covered_seconds": 0.0,
+      "equipment_id": "CHILLER_CASE_MECH_OAT_1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "FC4",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_CHILLER_CASE_MECH_OAT_1",
+      "covered_seconds": 0.0,
+      "equipment_id": "CHILLER_CASE_MECH_OAT_1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "FC5",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "SYNTH_CHILLER_CASE_MECH_OAT_1",
+      "covered_seconds": 0.0,
+      "equipment_id": "CHILLER_CASE_MECH_OAT_1",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "equipment_type",
+      "rule_id": "FC6",
       "status": "",
       "utc_day": ""
     },

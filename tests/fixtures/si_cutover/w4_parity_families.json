@@ -4,7 +4,12 @@
   "families": {
     "W4a_si_ahu_fc": {
       "wave": "W4a",
-      "description": "FC1–FC15 + FC13-SAT-HIGH SI pandas/SQL parity (blocking)",
+      "description": "FC1–FC15 + FC13-SAT-HIGH SI pandas/SQL parity (blocking); owns T1284-4 FC1 scope",
+      "datasets": [
+        "COOKBOOK_FC1",
+        "COOKBOOK_FC2",
+        "SYNTH_AHU_CASE_FC1"
+      ],
       "rules": [
         "FC1",
         "FC2",
@@ -23,20 +28,73 @@
         "FC15"
       ]
     },
-    "W4b_fc1_duct_static": {
-      "wave": "W4b",
-      "description": "FC1 duct static (GL36 A) — T1284-4 blocking scope",
-      "rules": ["FC1"]
+    "W4c_si_zone": {
+      "wave": "W4c",
+      "description": "VAV/zone/FCU SI pandas/SQL parity (blocking)",
+      "datasets": [
+        "COOKBOOK_VAV1",
+        "COOKBOOK_VAV6",
+        "COOKBOOK_VAV7",
+        "SYNTH_VAV_CASE_VAV_1"
+      ],
+      "rules": [
+        "VAV-1",
+        "VAV-2",
+        "VAV-3",
+        "VAV-4",
+        "VAV-5",
+        "VAV-6",
+        "VAV-7",
+        "VAV-REHEAT",
+        "VAV-AHU-LEAVE",
+        "AVG-ZONE-TEMP",
+        "ZONE-COMFORT-PCT",
+        "FCU-SENSOR-NULL",
+        "FCU-HTG-COIL",
+        "FCU-CLG-COIL",
+        "FCU-VALVE-PASS-HTG",
+        "FCU-VALVE-PASS-CLG",
+        "FCU-DAMPER-POS",
+        "FCU-CO2-DAMPER",
+        "FCU-DEADBAND",
+        "FCU-MODE-CYCLE"
+      ]
+    },
+    "W4d_si_plant": {
+      "wave": "W4d",
+      "description": "Central plant + trim (CHW/CW/HP/TRIM) — SI SQL pack",
+      "rules": [
+        "CHW-NOLOAD-1",
+        "CHW-1",
+        "CHW-2",
+        "CHW-3",
+        "CHW-4",
+        "CW-OPT-1",
+        "CW-APR-1",
+        "CW-FAN-1",
+        "HP-1",
+        "TRIM-1",
+        "TRIM-3",
+        "TRIM-4"
+      ]
     },
     "W4e_sensor_validation": {
       "wave": "W4e",
       "description": "Sensor validation SV-* — pandas SI vs IP parity row",
-      "rules": ["SV-RANGE", "SV-FLATLINE", "SV-RATE", "SV-SPIKE", "SV-STALE"]
+      "rules": [
+        "SV-RANGE",
+        "SV-FLATLINE",
+        "SV-RATE",
+        "SV-SPIKE",
+        "SV-STALE"
+      ]
     },
     "W3_full_matrix": {
       "wave": "W3",
       "description": "Full cookbook + SYNTH ip golden matrix (report-only on chain PR)",
-      "rules": ["*"]
+      "rules": [
+        "*"
+      ]
     }
   }
 }

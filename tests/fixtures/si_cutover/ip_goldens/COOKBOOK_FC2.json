@@ -396,6 +396,28 @@
     },
     {
       "building_id": "COOKBOOK_FC2",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:clg_valve_pct",
+      "rule_id": "FC14",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC2",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_roles",
+      "rule_id": "FC15",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC2",
       "covered_seconds": 120.0,
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
@@ -415,6 +437,39 @@
       "rule_id": "FC3",
       "status": "PASS",
       "utc_day": "2026-07-01"
+    },
+    {
+      "building_id": "COOKBOOK_FC2",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:oa_damper_pct",
+      "rule_id": "FC4",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC2",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:sat",
+      "rule_id": "FC5",
+      "status": "",
+      "utc_day": ""
+    },
+    {
+      "building_id": "COOKBOOK_FC2",
+      "covered_seconds": 0.0,
+      "equipment_id": "equip:test-ahu",
+      "fault_seconds": 0.0,
+      "pair_status": "not_applicable",
+      "reason": "missing_role:vav_total_flow",
+      "rule_id": "FC6",
+      "status": "",
+      "utc_day": ""
     },
     {
       "building_id": "COOKBOOK_FC2",
@@ -1320,39 +1375,6 @@
       "rule_id": "FC14",
       "status": "",
       "utc_day": ""
-    },
-    {
-      "building_id": "COOKBOOK_FC2",
-      "covered_seconds": 120.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_FC2",
-      "covered_seconds": 120.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC2",
-      "status": "OK",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_FC2",
-      "covered_seconds": 120.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC3",
-      "status": "OK",
-      "utc_day": "2026-07-01"
     },
     {
       "building_id": "COOKBOOK_FC2",

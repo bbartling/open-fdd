@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert FC1–FC15 + FC13-SAT-HIGH parameter defaults/units in registry + tuning (W4a)."""
+"""Convert VAV/zone/FCU rule parameter defaults/units in registry + tuning (W4c)."""
 
 from __future__ import annotations
 
@@ -18,11 +18,37 @@ from unit_contract_lib import (  # noqa: E402
     TUNING,
     REGISTRY,
     convert_to_canonical,
-    infer_kind,
+    declared_kind,
     load_json,
 )
 
-FC_RULES = frozenset(tuple(f"FC{i}" for i in range(1, 16)) + ("FC13-SAT-HIGH",))
+VAV_RULES = tuple(f"VAV-{i}" for i in range(1, 8)) + ("VAV-REHEAT", "VAV-AHU-LEAVE")
+FCU_RULES = (
+    "FCU-SENSOR-NULL",
+    "FCU-HTG-COIL",
+    "FCU-CLG-COIL",
+    "FCU-VALVE-PASS-HTG",
+    "FCU-VALVE-PASS-CLG",
+    "FCU-DAMPER-POS",
+    "FCU-CO2-DAMPER",
+    "FCU-DEADBAND",
+    "FCU-MODE-CYCLE",
+)
+ZONE_RULES = frozenset(
+    VAV_RULES + ("AVG-ZONE-TEMP", "ZONE-COMFORT-PCT") + FCU_RULES
+)
+
+_CONVERT_AS_TEMP_DELTA = frozenset(
+    {
+        "delta_f",
+        "delta",
+        "coil_delta_f",
+        "coil_delta",
+        "pass_delta_f",
+        "pass_delta",
+        "min_rise",
+    }
+)
 
 IMPERIAL_UNITS = frozenset({"degF", "inwc", "in_wc", "cfm", "degF_delta", "°F"})
 
@@ -30,7 +56,13 @@ IMPERIAL_UNITS = frozenset({"degF", "inwc", "in_wc", "cfm", "degF_delta", "°F"}
 def _quantity(kind: str, unit: str) -> str | None:
     if kind in ("duration_minutes", "duration_seconds", "boolean", "percent", "fraction"):
         return None
-    if kind in ("absolute_temperature", "temperature_difference", "air_pressure", "volumetric_flow", "temperature_rate"):
+    if kind in (
+        "absolute_temperature",
+        "temperature_difference",
+        "air_pressure",
+        "volumetric_flow",
+        "temperature_rate",
+    ):
         return kind
     if unit in ("degF", "°F"):
         return "absolute_temperature"
@@ -66,13 +98,15 @@ def _target_unit(q: str) -> str:
 
 
 def convert_param_spec(name: str, spec: dict[str, Any], metric: dict) -> dict[str, tuple[Any, Any]]:
-    """Return patch map field -> (old, new) for numeric fields plus unit."""
     patches: dict[str, tuple[Any, Any]] = {}
     unit = str(spec.get("unit") or "")
     if unit not in IMPERIAL_UNITS:
         return patches
-    kind = str(spec.get("kind") or infer_kind(name, unit))
-    q = _quantity(kind, unit)
+    kind = declared_kind(name, spec)
+    convert_kind = kind
+    if unit in ("degF", "degF_delta", "°F") and name in _CONVERT_AS_TEMP_DELTA:
+        convert_kind = "temperature_difference"
+    q = _quantity(convert_kind, unit)
     if not q:
         return patches
     src = _src_unit(q, unit)
@@ -94,7 +128,7 @@ def build_registry_patches(metric: dict) -> dict[tuple[str, str, str], tuple[Any
     out: dict[tuple[str, str, str], tuple[Any, Any]] = {}
     for rule in doc.get("rules") or []:
         rid = str(rule.get("rule_id") or "")
-        if rid not in FC_RULES:
+        if rid not in ZONE_RULES:
             continue
         for name, spec in (rule.get("parameters") or {}).items():
             if not isinstance(spec, dict):
@@ -139,13 +173,25 @@ def apply_registry_patches(text: str, patches: dict[tuple[str, str, str], tuple[
     return "\n".join(out) + "\n"
 
 
+def rename_fcu_deadband_registry(text: str) -> str:
+    text = text.replace("      deadband_c:\n", "      deadband:\n")
+    text = text.replace("sql_placeholder: DEADBAND_C", "sql_placeholder: DEADBAND")
+    return text
+
+
 def convert_tuning_json(metric: dict) -> None:
     data = load_json(TUNING)
     for rule in data.get("rules") or []:
         rid = str(rule.get("rule_id") or "")
-        if rid not in FC_RULES:
+        if rid not in ZONE_RULES:
             continue
-        for key, param in (rule.get("parameters") or {}).items():
+        params = rule.get("parameters") or {}
+        if rid == "FCU-DEADBAND" and "deadband_c" in params:
+            spec = params.pop("deadband_c")
+            if isinstance(spec, dict) and spec.get("sql_placeholder") == "DEADBAND_C":
+                spec["sql_placeholder"] = "DEADBAND"
+            params["deadband"] = spec
+        for key, param in list(params.items()):
             if isinstance(param, dict):
                 convert_param_spec(str(key), param, metric)
     TUNING.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -155,9 +201,10 @@ def main() -> int:
     metric = load_json(ROOT / "sql" / "contract" / "metric_units.json")
     original = REGISTRY.read_text(encoding="utf-8")
     patches = build_registry_patches(metric)
-    REGISTRY.write_text(apply_registry_patches(original, patches), encoding="utf-8")
+    converted = apply_registry_patches(original, patches)
+    REGISTRY.write_text(rename_fcu_deadband_registry(converted), encoding="utf-8")
     convert_tuning_json(metric)
-    print(f"Converted FC registry ({len(patches)} field patches) + tuning_catalog")
+    print(f"Converted zone registry ({len(patches)} field patches) + tuning_catalog")
     return 0
 
 
