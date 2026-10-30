@@ -266,7 +266,7 @@ export function oatScatter(
       name: isOut ? `${eq} ★` : eq,
       x: rows.map((r) =>
         shownStored(
-          r.oat_f,
+          r.oa_t ?? r.oat_f,
           String(r.x_quantity ?? "dry_bulb_temperature"),
           String(r.x_unit ?? "°F"),
           unitSystem,
