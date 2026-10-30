@@ -527,31 +527,31 @@ async fn convert_series_chunk(
         return Ok(0);
     }
 
-    let mut updated = 0_i64;
+    let mut stamps = Vec::with_capacity(samples.len());
+    let mut values = Vec::with_capacity(samples.len());
     for row in samples {
         let ts: DateTime<Utc> = row.try_get("ts")?;
         let val: Option<f64> = row.try_get("val")?;
         let Some(raw) = val else {
             continue;
         };
-        let converted = contract.convert_to_canonical(&plan.quantity, raw, &plan.from_unit)?;
-        sqlx::query(
-            r#"
-            UPDATE sample
-            SET val = $4, unit = $5, quality = NULL
-            WHERE site_id = $1 AND openfdd_key = $2 AND ts = $3
-            "#,
-        )
-        .bind(site_id)
-        .bind(&plan.openfdd_key)
-        .bind(ts)
-        .bind(converted)
-        .bind(&plan.to_unit)
-        .execute(&mut **tx)
-        .await?;
-        updated += 1;
+        stamps.push(ts);
+        values.push(contract.convert_to_canonical(&plan.quantity, raw, &plan.from_unit)?);
     }
-    Ok(updated)
+    let updated = crate::writer::rewrite_series_unit(
+        tx,
+        site_id,
+        &plan.openfdd_key,
+        &plan.to_unit,
+        &stamps,
+        &values,
+    )
+    .await?;
+    i64::try_from(updated).map_err(|err| {
+        SiCutoverError::Db(sqlx::Error::Protocol(format!(
+            "rewritten row count does not fit i64: {err}"
+        )))
+    })
 }
 
 async fn record_ledger(

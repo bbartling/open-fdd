@@ -284,6 +284,51 @@ pub async fn delete_samples_outside_stage(
     Ok(written.len() as u64)
 }
 
+/// Rewrite stored values of one series to a new unit in place (SI cutover).
+///
+/// `stamps` and `values` are parallel; each row keeps its timestamp, takes the
+/// converted value and unit, and clears `quality`. Rewritten spans are
+/// recorded as upserts in this transaction.
+pub async fn rewrite_series_unit(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+    openfdd_key: &str,
+    unit: &str,
+    stamps: &[DateTime<Utc>],
+    values: &[f64],
+) -> Result<u64, sqlx::Error> {
+    if stamps.len() != values.len() {
+        return Err(sqlx::Error::Protocol(format!(
+            "rewrite_series_unit: {} timestamps but {} values",
+            stamps.len(),
+            values.len()
+        )));
+    }
+    if stamps.is_empty() {
+        return Ok(0);
+    }
+    let written = sqlx::query(REWRITE_SERIES_UNIT_SQL)
+        .bind(site_id)
+        .bind(openfdd_key)
+        .bind(unit)
+        .bind(stamps)
+        .bind(values)
+        .fetch_all(&mut **tx)
+        .await?;
+    record_returned(tx, ChangeKind::Upsert, &written).await?;
+    Ok(written.len() as u64)
+}
+
+/// In-place unit rewrite for one series, keyed by timestamp.
+pub const REWRITE_SERIES_UNIT_SQL: &str = "\
+UPDATE sample AS s
+SET val = r.val, unit = $3, quality = NULL
+FROM UNNEST($4::timestamptz[], $5::float8[]) AS r(ts, val)
+WHERE s.site_id = $1
+  AND s.openfdd_key = $2
+  AND s.ts = r.ts
+RETURNING s.site_id, s.openfdd_key, s.ts";
+
 async fn record_returned(
     tx: &mut Transaction<'_, Postgres>,
     kind: ChangeKind,
