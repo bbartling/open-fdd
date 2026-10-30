@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
+from open_fdd.units.convert import PA_PER_IN_WC
+
 Quantity = Literal[
     "temperature",
     "relative_humidity",
@@ -56,7 +58,7 @@ class SensorRateProfile:
             raise ValueError(f"{self.profile_id}: canonical_unit required")
 
 
-IN_WC_TO_PA = 249.08891
+IN_WC_TO_PA = PA_PER_IN_WC
 PSI_TO_KPA = 6.894757
 F_TO_C_RATE = 5.0 / 9.0
 

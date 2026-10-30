@@ -17,6 +17,7 @@ import {
 } from "./vibeCharts";
 import { basOverlay, econDeltaScatter } from "./centralOverview";
 import chartContract from "./charts.contract.json";
+import { INWC_TO_PA } from "./roleUnits";
 
 describe("vibeCharts", () => {
   it("ruleResultChart stacks unit families and puts fault on the bottom axis", () => {
@@ -439,7 +440,7 @@ describe("vibeCharts", () => {
     const byName = new Map((fig?.data ?? []).map((trace) => [trace.name, trace]));
     expect(byName.get("AHU_1")?.y).toEqual([0]);
     expect(byName.get("AHU_1 · ΔT")?.y?.[0]).toBeCloseTo(10 * (5 / 9), 9);
-    expect(byName.get("AHU_1 · setpoint")?.y?.[0]).toBeCloseTo(0.12 * 249.088908333, 6);
+    expect(byName.get("AHU_1 · setpoint")?.y?.[0]).toBeCloseTo(0.12 * INWC_TO_PA, 6);
     expect(byName.get("AHU_1 · return")?.y).toEqual([0.4]);
   });
 

@@ -24,8 +24,11 @@ export type QuantityKind =
   | "dimensionless"
   | "other";
 
-/** Inches of water column (4 °C) to pascals. Store uses the inverse of this factor. */
-export const INWC_TO_PA = 249.088908333;
+/**
+ * In.w.c. / inH₂O to pascals — `sql/contract/metric_units.json` `PA_PER_IN_WC` (248.84).
+ * Display-IP round trip uses the inverse of this factor; not the 4 °C inH₂O value (~249.09).
+ */
+export const INWC_TO_PA = 248.84;
 /** Pounds per square inch to pascals. Store uses the inverse of this factor. */
 export const PSI_TO_PA = 6894.757293168;
 
