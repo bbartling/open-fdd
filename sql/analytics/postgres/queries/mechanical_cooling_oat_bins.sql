@@ -23,7 +23,7 @@ oat_choice AS (
   LIMIT 1
 ),
 oat AS (
-  SELECT s.ts, max(s.val) AS oat_f
+  SELECT s.ts, max(s.val) AS oat_c
   FROM sample s
   JOIN unique_role u
     ON u.site_id = s.site_id
@@ -61,17 +61,17 @@ comp AS (
   GROUP BY s.ts, u.equipment_id
 ),
 joined AS (
-  SELECT c.equipment_id, c.ts, c.active, o.oat_f
+  SELECT c.equipment_id, c.ts, c.active, o.oat_c
   FROM comp c
   JOIN oat o ON o.ts = c.ts
-  WHERE c.active IS NOT NULL AND o.oat_f IS NOT NULL
+  WHERE c.active IS NOT NULL AND o.oat_c IS NOT NULL
 ),
 ordered AS (
   SELECT
     equipment_id,
     ts,
     active,
-    oat_f,
+    oat_c,
     EXTRACT(EPOCH FROM (
       LEAD(ts) OVER (PARTITION BY equipment_id ORDER BY ts) - ts
     )) AS dt_seconds
@@ -81,12 +81,12 @@ SELECT
   'oat_bin'::text AS kind,
   equipment_id,
   CASE
-    WHEN oat_f < 50 THEN '<50'
-    WHEN oat_f < 60 THEN '50-60'
-    WHEN oat_f < 70 THEN '60-70'
-    WHEN oat_f < 80 THEN '70-80'
-    WHEN oat_f < 90 THEN '80-90'
-    ELSE '>=90'
+    WHEN oat_c < 10.0 THEN '<10'
+    WHEN oat_c < 15.555555555555556 THEN '10-16'
+    WHEN oat_c < 21.11111111111111 THEN '16-21'
+    WHEN oat_c < 26.666666666666668 THEN '21-27'
+    WHEN oat_c < 32.22222222222222 THEN '27-32'
+    ELSE '>=32'
   END AS oat_bin,
   (SUM(CASE
      WHEN COALESCE(active, 0) > 0.05

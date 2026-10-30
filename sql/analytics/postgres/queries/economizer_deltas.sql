@@ -4,8 +4,8 @@
 --   $2 = window start (timestamptz, NULL = open)
 --   $3 = window end   (timestamptz, NULL = open)
 --   $4 = equipment_ids (text[], NULL/empty = all)
---   $5 = minimum |OAT−RAT| (°F). Rows below this are not qualified.
--- x = OAT − RAT (delta_or_f), y = MAT − RAT (delta_mr_f).
+--   $5 = minimum |OAT−RAT| (Δ°C, scale-only). Rows below this are not qualified.
+-- x = OAT − RAT (delta_or_f field, SI °C), y = MAT − RAT (delta_mr_f, SI °C).
 -- A row is qualified only with explicit fan_status proof, a measured MAT,
 -- and |OAT−RAT| at or above $5. Missing fan status is not fan-on.
 -- MAT residual is the measured MAT minus the damper mixing model, and is

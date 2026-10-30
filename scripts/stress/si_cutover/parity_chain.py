@@ -24,7 +24,7 @@ if str(ROOT) not in sys.path:
 from scripts.ci import unit_contract_lib as uc  # noqa: E402
 
 ANALYTICS_REL_TOL = 1e-6
-FAULT_SECONDS_ATOL = 0.0  # exact — use math.isclose with rel_tol=0, abs_tol=1e-9
+FAULT_SECONDS_ATOL = 0.0  # exact equality; no tolerance
 
 REPO = ROOT
 IP_GOLDENS_DIR = REPO / "tests" / "fixtures" / "si_cutover" / "ip_goldens"
@@ -158,7 +158,8 @@ def _metric_doc() -> dict[str, Any]:
 
 
 def fault_seconds_equal(a: float, b: float) -> bool:
-    return math.isclose(float(a), float(b), rel_tol=0.0, abs_tol=1e-9)
+    """Exact FDD fault_seconds parity (P1/P2); no poll, boundary or float tolerance."""
+    return float(a) == float(b)
 
 
 def analytics_relative_equal(a: float, b: float) -> bool:
@@ -167,6 +168,21 @@ def analytics_relative_equal(a: float, b: float) -> bool:
     if a == b:
         return True
     denom = max(abs(a), abs(b), 1e-12)
+    return abs(a - b) / denom <= ANALYTICS_REL_TOL
+
+
+def analytics_spread_equal(a: float, b: float, scale: float) -> bool:
+    """Spread statistics (stddev, deltas) relative to the series magnitude ``scale``.
+
+    A spread of a constant series is 0 in exact arithmetic but round-off differs per
+    engine (Postgres stddev_samp vs NumPy); the documented ANALYTICS_REL_TOL is applied
+    against max(|a|, |b|, |scale|) where ``scale`` is the row's value magnitude.
+    """
+    if not math.isfinite(a) and not math.isfinite(b):
+        return math.isnan(a) and math.isnan(b)
+    if a == b:
+        return True
+    denom = max(abs(a), abs(b), abs(scale), 1e-12)
     return abs(a - b) / denom <= ANALYTICS_REL_TOL
 
 
@@ -1046,6 +1062,29 @@ def run_p2_all_goldens(
     )
 
 
+def t1284_4_double_param_conversion(
+    rule: dict[str, Any], params_si: dict[str, float], key: str, metric: dict[str, Any]
+) -> dict[str, float]:
+    """T1284-4 mutation: apply the declared-kind SI scale to one param twice (unit-kind bug)."""
+    spec = (rule.get("parameters") or {}).get(key)
+    if not isinstance(spec, dict):
+        raise KeyError(f"T1284-4: rule {rule.get('rule_id')} has no parameter spec {key!r}")
+    kind = str(spec.get("kind") or "")
+    unit = str(spec.get("unit") or "")
+    if not kind or not unit:
+        raise ValueError(f"T1284-4: parameter {key!r} lacks declared kind/unit")
+    scale = uc.convert_to_canonical(metric, kind, 1.0, unit) - uc.convert_to_canonical(
+        metric, kind, 0.0, unit
+    )
+    if scale == 1.0:
+        raise ValueError(f"T1284-4: parameter {key!r} kind {kind} has no unit scale to break")
+    if key not in params_si:
+        raise KeyError(f"T1284-4: SI params missing {key!r}")
+    out = dict(params_si)
+    out[key] = float(params_si[key]) * scale
+    return out
+
+
 def run_t1284_4_rule_mutation_p1(goldens: list[dict[str, Any]]) -> StageResult:
     """Mutate VAV-1 SI comfort threshold — must break IP vs SI fault seconds on COOKBOOK_VAV1."""
     return verify_vav1_rule_si_threshold_mutation()
@@ -1105,11 +1144,11 @@ def verify_vav1_rule_si_threshold_mutation() -> StageResult:
     elif not fault_seconds_equal(ip_fs, good_fs):
         errors.append(f"T1284-4 setup: golden ip={ip_fs} good_si={good_fs}")
     elif fault_seconds_equal(ip_fs, bad_fs):
-        errors.append(f"T1284-4: eps_dsp offset did not change SI faults (good={good_fs} bad={bad_fs})")
+        errors.append(f"T1284-4: double-converted eps_dsp did not change SI faults (good={good_fs} bad={bad_fs})")
     else:
         errors.append(
             f"P1 FC1 {golden.get('building_id')}/{ip_row.get('utc_day')}: "
-            f"ip={ip_fs} si={bad_fs} (mutated eps_dsp offset)"
+            f"ip={ip_fs} si={bad_fs} (eps_dsp SI conversion applied twice)"
         )
     return StageResult("T1284-4-rule", comparisons, tuple(errors))
 

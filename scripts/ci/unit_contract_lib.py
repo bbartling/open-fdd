@@ -447,10 +447,8 @@ def _without_equipment_kinds(doc: Any) -> Any:
 
 def ensure_origin_master_ref() -> str:
     """Resolve a ref for master/base file content (shallow CI checkouts may lack origin/master)."""
-    override = os.environ.get("UNIT_CONTRACT_BASE_REF", "").strip()
-    candidates = [override] if override else []
     base = os.environ.get("GITHUB_BASE_REF", "master").strip() or "master"
-    candidates.extend([f"origin/{base}", "origin/master", base, "master"])
+    candidates = [f"origin/{base}", "origin/master", base, "master"]
     for ref in candidates:
         if not ref:
             continue

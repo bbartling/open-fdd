@@ -273,6 +273,12 @@ def _quantity_for_param(spec: dict[str, Any]) -> str | None:
         return "absolute_temperature"
     if kind == "temperature_difference":
         return "temperature_difference"
+    if kind == "air_pressure":
+        return "air_pressure"
+    if kind in ("duration_minutes", "duration_seconds"):
+        return "duration"
+    if kind == "percent":
+        return "dimensionless"
     if unit in ("degF", "degC", "°F", "°C"):
         return "absolute_temperature"
     if unit in ("degF_delta", "degC_delta"):
@@ -470,6 +476,22 @@ def _apply_unit_metadata(frame, unit_system: str) -> None:
         stamp_display_units(frame, {"unit_system": unit_system})
 
 
+def column_quantity_unit(col: str) -> tuple[str, str] | None:
+    """(metric quantity, imperial unit) for a wide-frame column, or None if unitless."""
+    if col == "occ_mode":
+        return None
+    unit = _role_unit(col)
+    if not unit:
+        return None
+    if unit in ("percent", "pct"):
+        return "percent", unit
+    if unit in ("inWC", "in_wc"):
+        return "air_pressure", unit
+    if unit == "cfm":
+        return "volumetric_flow", unit
+    return "absolute_temperature", unit
+
+
 def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, float], float] | None = None):
     import pandas as pd
 
@@ -478,16 +500,10 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
     for col in out.columns:
         if col == "occ_mode":
             continue
-        unit = _role_unit(str(col))
-        if not unit:
+        qu = column_quantity_unit(str(col))
+        if qu is None:
             continue
-        q = "absolute_temperature"
-        if unit in ("percent", "pct"):
-            q = "dimensionless"
-        elif unit in ("inWC", "in_wc"):
-            q = "air_pressure"
-        elif unit == "cfm":
-            q = "volumetric_flow"
+        q, unit = qu
         series = pd.to_numeric(out[col], errors="coerce")
         converted = []
         for v in series:
@@ -497,10 +513,7 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
             fv = float(v)
             if value_hook:
                 fv = value_hook(str(col), fv)
-            try:
-                converted.append(uc.convert_to_canonical(metric, q, fv, unit))
-            except ValueError:
-                converted.append(v)
+            converted.append(uc.convert_to_canonical(metric, q, fv, unit))
         out[col] = converted
         if q == "absolute_temperature":
             role_units[str(col)] = "°C"
@@ -508,11 +521,12 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
             role_units[str(col)] = "Pa"
         elif q == "volumetric_flow":
             role_units[str(col)] = "L/s"
+        elif unit in ("percent", "pct"):
+            role_units[str(col)] = "percent"
         else:
             role_units[str(col)] = unit
     out.attrs["unit_system"] = "metric"
     out.attrs["role_units"] = role_units
-    _apply_unit_metadata(out, "metric")
     return out
 
 
@@ -791,6 +805,31 @@ def build_golden_for_dataset(
                 )
             )
 
+    rules_by_id = {str(r["rule_id"]): r for r in load_rule_registry()}
+    golden_pre: dict[str, Any] = {
+        "building_id": spec.building_id,
+        "equipment_id": spec.equipment_id,
+        "equipment_type": spec.equipment_type,
+        "poll_seconds": poll_seconds,
+        "dataset": {k: v for k, v in spec.source.items() if k != "frame"},
+        "p2_si_pairs": p2_pairs,
+    }
+    sql_si_map = recompute_p2_sql_si_fault_map(golden_pre, conn, rules_by_id, metric)
+    p2_pairs = []
+    for row in golden_pre["p2_si_pairs"]:
+        key = si_fault_key({**row, "building_id": spec.building_id})
+        sql_s = sql_si_map.get(key)
+        p2_pairs.append(
+            cts.p2_pair_for_si_row(
+                rule_id=str(row["rule_id"]),
+                equipment_id=str(row["equipment_id"]),
+                utc_day=str(row["utc_day"]),
+                pandas_si_fault_seconds=float(row.get("pandas_si_fault_seconds") or 0.0),
+                pandas_si_missing=row.get("pandas_si_status") == "missing_si_cell",
+                sql_si_fault_seconds=sql_s,
+            )
+        )
+
     error_rows = [r for r in pandas_rows if r.get("pair_status") == "error"]
     attempted_rules = sorted({str(r.get("rule_id") or "") for r in rules if r.get("rule_id")})
     golden: dict[str, Any] = {
@@ -908,6 +947,61 @@ def _normalize_daily_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             str(r.get("pair_status", "")),
         ),
     )
+
+
+def recompute_p2_sql_si_fault_map(
+    golden: dict[str, Any],
+    conn,
+    rules_by_id: dict[str, dict[str, Any]],
+    metric: dict[str, Any],
+) -> dict[tuple[str, str, str, str], float]:
+    from scripts.stress.si_cutover import ci_timescale_sql as cts
+
+    frame_raw, equipment_id = reload_dataset_frame(golden)
+    building_id = str(golden["building_id"])
+    etype = str(golden.get("equipment_type") or "")
+    ip_frame = prepare_ip_frame(
+        frame_raw,
+        building_id=building_id,
+        equipment_id=equipment_id,
+        equipment_type=etype,
+    )
+    si_frame = frame_to_si(ip_frame, metric)
+    poll = float(golden.get("poll_seconds") or cts.infer_poll_seconds(si_frame.index))
+    ds = golden.get("dataset") or {}
+    spec = DatasetSpec(
+        building_id=building_id,
+        equipment_id=str(golden.get("equipment_id") or equipment_id),
+        equipment_type=etype,
+        source=ds,
+    )
+    eligible: list[dict[str, Any]] = []
+    params_by_rule: dict[str, dict[str, float]] = {}
+    for rule_id, rule in rules_by_id.items():
+        ok, _reason = rule_pair_eligible(rule, ip_frame, equipment_type=etype)
+        if not ok or not rule.get("sql_file"):
+            continue
+        eligible.append(rule)
+        params_by_rule[rule_id] = rule_params_from_registry(rule)
+    sql_rows, errors = cts.run_sql_si_for_dataset(
+        conn,
+        spec=spec,
+        frame=si_frame,
+        equipment_id=spec.equipment_id,
+        rules=eligible,
+        poll_seconds=poll,
+        params_by_rule=params_by_rule,
+    )
+    if errors and not sql_rows:
+        raise RuntimeError(
+            f"P2 SQL SI {building_id}: {'; '.join(errors[:5])}"
+        )
+    out: dict[tuple[str, str, str, str], float] = {}
+    for row in sql_rows:
+        if not row.get("utc_day"):
+            continue
+        out[si_fault_key(row)] = float(row.get("fault_seconds", 0.0))
+    return out
 
 
 def recompute_si_daily_for_golden(

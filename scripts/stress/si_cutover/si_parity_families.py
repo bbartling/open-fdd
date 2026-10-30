@@ -36,10 +36,28 @@ def resolve_rule_scope(*, rules: tuple[str, ...] | None, family: str | None) -> 
     fam = (doc.get("families") or {}).get(family)
     if not fam:
         raise KeyError(f"unknown parity family {family!r}")
-    ids = list(fam.get("rules") or [])
+    if "rules" not in fam:
+        raise KeyError(f"parity family {family!r} has no rules list")
+    ids = list(fam["rules"])
     if ids == ["*"]:
         return None
     return {str(r) for r in ids}
+
+
+def resolve_analytics_scope(family: str | None) -> set[str] | None:
+    """Analytics query stems a family owns: None = all 19, empty set = none.
+
+    The full matrix (no family, or rules ``["*"]``) covers every query.
+    """
+    if not family:
+        return None
+    fam = family_meta(family)
+    if list(fam.get("rules", [])) == ["*"]:
+        return None
+    queries = list(fam.get("analytics_queries", []))
+    if queries == ["*"]:
+        return None
+    return {str(q) for q in queries}
 
 
 def family_meta(family: str) -> dict:

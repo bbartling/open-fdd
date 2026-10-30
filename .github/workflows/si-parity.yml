@@ -15,8 +15,14 @@ on:
       - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
+      - "tests/qualification/test_w4f_analytics_si.py"
+      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "sql/contract/goldens/**"
       - "docs/rules/cookbook/fixtures/**"
+      - "sql/analytics/**"
+      - "open_fdd/analytics/**"
+      - "services/central/src/analytics/**"
+      - "services/central/src/timescale_analytics.rs"
       - ".github/workflows/si-parity.yml"
   pull_request:
     branches: [master, main]
@@ -32,10 +38,16 @@ on:
       - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
+      - "tests/qualification/test_w4f_analytics_si.py"
+      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "sql/contract/goldens/**"
       - "sql/fdd/**"
       - "open_fdd/**"
       - "docs/rules/cookbook/fixtures/**"
+      - "sql/analytics/**"
+      - "open_fdd/analytics/**"
+      - "services/central/src/analytics/**"
+      - "services/central/src/timescale_analytics.rs"
       - ".github/workflows/si-parity.yml"
 
 concurrency:
@@ -92,6 +104,7 @@ jobs:
           doc = json.loads(Path("si_parity_report.json").read_text())
           p0 = doc["stages"]["P0"]
           p1 = doc["stages"]["P1"]
+          an = doc["analytics"]["stages"]
           print(
               f"P0 comparisons={p0['comparisons']} mismatches={p0['mismatch_count']} "
               f"by_kind={p0['by_kind']}"
@@ -100,6 +113,8 @@ jobs:
               f"P1 comparisons={p1['comparisons']} mismatches={p1['mismatch_count']} "
               f"by_rule={p1['by_rule_id']}"
           )
+          for name, st in sorted(an.items()):
+              print(f"{name} comparisons={st['comparisons']} mismatches={st['mismatch_count']}")
           PY
 
       - name: Upload si_parity_report.json
@@ -133,6 +148,19 @@ jobs:
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
             --family W4e_si_sensor_util
 
+      - name: Blocking W4f analytics family (19 queries, P1/P2-analytics)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4f_analytics_si_p2
+
+      - name: W4f analytics SI (offline P1/P2 + live SQL SI golden check)
+        env:
+          OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+        run: >-
+          python3 -B -m unittest
+          tests.qualification.test_w4f_analytics_si
+          tests.qualification.test_w4f_analytics_threshold_invariance -v
+
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |
           set +e
@@ -145,7 +173,19 @@ jobs:
             exit 1
           fi
 
-      - name: T1284-4 unit-vector + FC1 probe self-test
+      - name: T1284-4 blocking W4f analytics mutation must fail gate
+        run: |
+          set +e
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4f_analytics_si_p2 --inject-t1284-4-mutation
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 under mutation, got $code"
+            exit 1
+          fi
+
+      - name: T1284-4 unit-vector + FC1 + analytics probe self-test
         run: python3 scripts/stress/si_parity_gate.py --mutation-self-test
 
       - name: Qualification unit tests

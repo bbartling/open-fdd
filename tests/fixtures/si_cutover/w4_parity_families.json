@@ -125,6 +125,21 @@
       "rules": [
         "*"
       ]
+    },
+    "W4f_analytics_si_p2": {
+      "wave": "W4f",
+      "description": "W4f SI SQL storage path (#1284): the 19 sql/analytics/postgres/queries/* bodies. P1 = pandas IP->SI vs pandas SI, P2 = committed SQL SI goldens (analytics_si_goldens.json) vs pandas SI, per query x equipment x bucket. Rules are owned by W4a/W4b/W4c/W4e.",
+      "rules": [],
+      "analytics_queries": [
+        "*"
+      ]
+    },
+    "W4a_fc1_duct_static": {
+      "wave": "W4a",
+      "description": "FC1 duct static (GL36 A) — owned by W4a #1450; report-only until W4a lands",
+      "rules": [
+        "FC1"
+      ]
     }
   }
 }

@@ -107,6 +107,33 @@ class SiParityGateBlockingTests(unittest.TestCase):
         failures = self.gate._blocking_errors([p1], blocking=True, scope={"FC1"})
         self.assertEqual(len(failures), 1)
 
+    def test_p2_errors_report_only_in_full_matrix(self) -> None:
+        p2 = self.pc.StageResult(
+            "P2",
+            10,
+            ("P2 ECON-4/equip:test/2026-07-01: missing sql_si_fault_seconds",),
+            (),
+            (),
+        )
+        failures = self.gate._blocking_errors([p2], blocking=False, scope=None)
+        self.assertEqual(failures, [], "unmigrated rules are report-only until their W4 row")
+
+    def test_analytics_errors_block_only_under_blocking(self) -> None:
+        a2 = self.pc.StageResult("P2-analytics", 3, ("P2-analytics X: sql_si=1 pandas_si=2",), (), ())
+        self.assertEqual(self.gate._blocking_errors([a2], blocking=False, scope=None), [])
+        self.assertEqual(len(self.gate._blocking_errors([a2], blocking=True, scope=set())), 1)
+
+    def test_p0_errors_report_only_in_scoped_blocking(self) -> None:
+        p0 = self.pc.StageResult(
+            "P0",
+            10,
+            ("P0 FC1/equip:test/2026-07-01: ip_sql=28800.0 ip_pandas=28500.0",),
+            (),
+            (),
+        )
+        failures = self.gate._blocking_errors([p0], blocking=True, scope={"FC1"})
+        self.assertEqual(failures, [])
+
     def test_scoped_blocking_w4d_plant_passes(self) -> None:
         proc = subprocess.run(
             [
@@ -233,6 +260,15 @@ class SiParityGateBlockingTests(unittest.TestCase):
             "missing sql_si row" in joined or "pending_W4 after hydration" in joined,
             f"expected hydration failure, got: {result.errors[:5]}",
         )
+
+
+    def test_w4f_analytics_family_blocks_clean_and_mutation_fails(self) -> None:
+        base = [sys.executable, str(STRESS / "si_parity_gate.py"), "--fixtures-only", "--blocking",
+                "--family", "W4f_analytics_si_p2"]
+        clean = subprocess.run(base, cwd=str(REPO), check=False)
+        self.assertEqual(clean.returncode, 0, "W4f analytics P1/P2 must be clean")
+        mutated = subprocess.run(base + ["--inject-t1284-4-mutation"], cwd=str(REPO), check=False)
+        self.assertEqual(mutated.returncode, 1, "T1284-4 analytics param mutation must fail P1")
 
 
 if __name__ == "__main__":

@@ -211,6 +211,7 @@ def default_role_unit_storage(sql_role: str, *, storage: str) -> str | None:
         "hw_return_t",
         "cw_supply_t",
         "web_wb_t",
+        "web_oa_t",
     }
     if sql_role in temps:
         return "degC" if si else "degF"
@@ -227,6 +228,12 @@ def default_role_unit_storage(sql_role: str, *, storage: str) -> str | None:
     if sql_role == "zone_flow":
         return "L_per_s" if si else "cfm"
     return None
+
+
+def occ_mode_value(val: Any) -> float:
+    """Seeded numeric value of an ``occ_mode`` cell (0.0 unoccupied, else 1.0)."""
+    token = str(val).strip().lower()
+    return 0.0 if token in ("unoccupied", "0", "0.0", "false", "off") else 1.0
 
 
 def seed_frame(
@@ -256,19 +263,7 @@ def seed_frame(
         for col in frame.columns:
             val = row[col]
             if col == "occ_mode":
-                token = str(val).strip().lower()
-                fval = (
-                    0.0
-                    if token
-                    in (
-                        "unoccupied",
-                        "0",
-                        "0.0",
-                        "false",
-                        "off",
-                    )
-                    else 1.0
-                )
+                fval = occ_mode_value(val)
                 sql_role = "occ_mode"
                 openfdd_key = f"{equipment_id}.{sql_role}"
                 cur.execute(
@@ -441,10 +436,15 @@ def execute_sql_rule_daily(
         return [], f"sql: {exc}"
     if not fetched:
         return [], "sql empty"
-    if "fault_hours" not in columns:
+    hours_col: str | None = None
+    if "fault_hours" in columns:
+        hours_col = "fault_hours"
+    elif "fan_runtime_hours" in columns:
+        hours_col = "fan_runtime_hours"
+    if hours_col is None:
         return [], "no fault_hours column"
     equip_idx = columns.index("equipment_id")
-    hours_idx = columns.index("fault_hours")
+    hours_idx = columns.index(hours_col)
     hours = None
     for row in fetched:
         if str(row[equip_idx]) == equipment_id:

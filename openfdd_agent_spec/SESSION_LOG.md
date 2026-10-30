@@ -1467,4 +1467,16 @@ Published #995 candidate `sha-6914098` (3.5.51) deployed to Railway central/MQTT
 - H12–H16 tip: integration KATs + gate-36 SPARQL honesty update + perf budgets doc
 - #1002/#1123 remain Soft-OPEN until live dual-tenant + C6 smoke evidence
 - H18 VERSION/GHCR deferred to master-finish M11
+# 2026-10-30 — PR1447 W4f analytics parity correction
 
+- Logged W4f count-comparison false-pass before fix in `BUG_REPORT_OT_MODBUS_HAYSTACK.md`: exact integer counts were using continuous relative tolerance.
+- Updated analytics row schema to mark only integral SQL counts exact; kept runtime hours, ratios, occupancy values, and z-scores on continuous scalar tolerance. Added regression cases for large one-count drift, DB int/float representation, fractional/non-finite/bool rejection, and retained scalar tolerance.
+- W4f qualification module passes (10 tests, 2 expected skips: live SQL requires a disposable DB and no pending-W4 fixture is available); blocking W4f parity passes with 4,664 P1 and 4,664 P2 comparisons, zero mismatches. Regression covers a one-count mismatch at one million, int/float representation, fractional/NaN/±Inf/bool/string rejection, and continuous scalar tolerance. `git diff --check` passes. No live DB was started.
+
+
+## 2026-10-30 — W4f takeover review and SQL boundary qualification
+
+- Ben authorized Codex to finish the existing Grok/Cursor train with Luna implementation and independent review. Follow-up commits b8bf9f7b and de8c6589 address categorical comparisons, half-open motor windows, mutation positive controls, z-score zero divisors, and physical PID/change-point threshold invariance.
+- Root independently ran `OPENFDD_DATABASE_URL=<owned disposable DB> PYTHONPATH=. python -B -m unittest tests.qualification.test_w4f_analytics_threshold_invariance tests.qualification.test_w4f_analytics_si -v`: 17 tests, 16 passed, 1 skipped because global SI pack availability remains false. Both live SQL threshold boundaries and existing analytics SI SQL goldens passed. No live source data was used by these tests.
+- Added the new threshold suite to the live-database si-parity workflow and its path triggers. YAML parse and diff checks pass. This is scoped analytics evidence, not W0c baseline completion or W6/W8/W9 qualification.
+- Candidate images remain forbidden on the live stack until the full migration gate; no platform version bump or deployment was performed.
