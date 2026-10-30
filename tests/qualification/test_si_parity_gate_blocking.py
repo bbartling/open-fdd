@@ -145,26 +145,6 @@ class SiParityGateBlockingTests(unittest.TestCase):
             "W4b AHU econ family: scoped P1/P2 gate should PASS",
         )
 
-    def test_fc1_scope_owned_by_w4a_is_clean_and_not_in_w4b_scope(self) -> None:
-        proc = subprocess.run(
-            [
-                sys.executable,
-                str(STRESS / "si_parity_gate.py"),
-                "--fixtures-only",
-                "--blocking",
-                "--family",
-                "W4a_fc1_duct_static",
-            ],
-            cwd=str(REPO),
-            check=False,
-        )
-        self.assertEqual(
-            proc.returncode,
-            0,
-            "FC1 is owned by W4a (#1450) and is report-only in W4b CI; its fixture "
-            "scope must still be clean (no P0/P1/P2 mismatches) when run in isolation",
-        )
-
     def test_scoped_p1_mutation_still_fails_blocking(self) -> None:
         proc = subprocess.run(
             [

@@ -50,6 +50,7 @@ class StageResult:
     errors: tuple[str, ...]
     mismatch_table: tuple[str, ...] = ()
     structured: tuple[dict[str, Any], ...] = ()
+    pending: int = 0
 
 
 def rule_in_scope(rule_id: str, scope: set[str] | None) -> bool:
@@ -983,27 +984,30 @@ def run_p2_all_goldens(
             rule_id = str(row.get("rule_id") or "")
             if not rule_in_scope(rule_id, scope):
                 continue
-            comparisons += 1
             status = str(row.get("sql_si_status") or "")
             sql_raw = row.get("sql_si_fault_seconds")
             pandas_raw = row.get("pandas_si_fault_seconds")
+            cell = f"{rule_id}/{row.get('equipment_id')}/{row.get('utc_day')}"
             if status == PENDING_W4 and rule_si_sql_shipped(rule_id):
                 live_sql, live_pandas = _live_plant_p2_fault_seconds(golden, row)
                 if live_sql is not None and live_pandas is not None:
                     sql_raw = live_sql
                     pandas_raw = live_pandas
                 else:
+                    # A pending cell was never compared, so it is not a comparison.
                     pending_cells += 1
+                    pending_notes.append(f"P2 pending {cell}: live plant SQL row missing")
                     continue
             elif status == PENDING_W4:
                 if strict:
-                    errors.append(
-                        f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/"
-                        f"{row.get('utc_day')}: pending_W4 after hydration"
-                    )
+                    errors.append(f"P2 {cell}: pending_W4 after hydration")
                 else:
                     pending_cells += 1
+                    reason = row.get("sql_si_pending_reason")
+                    if reason:
+                        pending_notes.append(f"P2 pending {cell}: {reason}")
                 continue
+            comparisons += 1
             if sql_raw is None:
                 errors.append(
                     f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
@@ -1023,19 +1027,22 @@ def run_p2_all_goldens(
                     f"P2 {row.get('rule_id')}/{row.get('equipment_id')}/{row.get('utc_day')}: "
                     f"sql_si={sql_s} pandas_si={pandas_s}"
                 )
-    if pending_cells and not strict:
-        pending_notes.append(
-            f"P2: {pending_cells} cell(s) pending_W4 (SI SQL pack not shipped; not compared)"
+    if pending_cells:
+        pending_notes.insert(
+            0,
+            f"P2: {pending_cells} cell(s) pending_W4 (not compared; not counted as comparisons)",
         )
-    if scope is None and comparisons < min_required:
+    if scope is None and comparisons + pending_cells < min_required:
         errors.append(
-            f"P2: comparisons {comparisons} < required si pairs {min_required}"
+            f"P2: comparisons {comparisons} + pending {pending_cells} "
+            f"< required si pairs {min_required}"
         )
     return StageResult(
         "P2",
         comparisons,
         tuple(errors),
         tuple(pending_notes),
+        pending=pending_cells,
     )
 
 

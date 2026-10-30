@@ -20,7 +20,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -29,7 +28,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -38,7 +36,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -47,7 +44,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -56,7 +52,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -65,7 +60,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -74,7 +68,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -83,7 +76,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -92,7 +84,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -101,7 +92,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -110,7 +100,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -119,7 +108,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -128,7 +116,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -137,7 +124,6 @@
     {
       "equipment_id": "AHU_CASE_SV_FLATLINE",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
