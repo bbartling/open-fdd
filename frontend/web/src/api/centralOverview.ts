@@ -50,17 +50,21 @@ function showQuantity(
   value: number | null,
   unitSystem: UnitSystem,
   kind: "temperature" | "temperature_delta",
+  storageUnit?: string,
 ): number | null {
   if (value == null) return null;
-  return displayScalar(value, "°F", unitSystem, kind);
+  const unit =
+    storageUnit ??
+    (kind === "temperature_delta" ? "K_diff" : "degC");
+  return displayScalar(value, unit, unitSystem, kind);
 }
 
 function tempAxis(unitSystem: UnitSystem): string {
-  return displayUnitLabel("°F", unitSystem, "temperature");
+  return displayUnitLabel("degC", unitSystem, "temperature");
 }
 
 function deltaAxis(unitSystem: UnitSystem): string {
-  return displayUnitLabel("°F", unitSystem, "temperature_delta");
+  return displayUnitLabel("K_diff", unitSystem, "temperature_delta");
 }
 
 function groupByType(

@@ -550,7 +550,58 @@ def registry_without_role_lists(doc: Any) -> Any:
         if isinstance(rule, dict):
             rule.pop("required_roles", None)
             rule.pop("optional_roles", None)
+            rule.pop("output_units", None)
     return stripped
+
+
+def _output_unit_entry(where: str, entry: Any) -> tuple[str, str]:
+    """Return (unit, kind) of one ``output_units`` declaration; both are required."""
+    if not isinstance(entry, dict) or set(entry) != {"unit", "kind"}:
+        raise AssertionError(f"{where}: output_units entry must be a mapping of exactly unit and kind")
+    unit, kind = entry["unit"], entry["kind"]
+    if not isinstance(unit, str) or not unit or not isinstance(kind, str) or not kind:
+        raise AssertionError(f"{where}: output_units unit and kind must be non-empty strings")
+    return unit, kind
+
+
+def validate_output_units_declarations(metric: dict[str, Any], master_doc: Any, branch_doc: Any) -> None:
+    """``output_units`` is declaration-only metadata.
+
+    Each entry names an emitted output column, a quantity kind from
+    metric_units.json, and a unit that belongs to that kind. A declaration may
+    be added; an existing one may not be removed or have its unit changed,
+    because that would change reported values.
+    """
+    quantities = {str(q["id"]) for q in metric.get("quantities", [])}
+    master_rules = _rules_by_id(master_doc)
+    for rule_id, rule in _rules_by_id(branch_doc).items():
+        declared = rule.get("output_units")
+        master_declared = master_rules.get(rule_id, {}).get("output_units") or {}
+        if declared is None:
+            if master_declared:
+                raise AssertionError(f"registry.yaml {rule_id}: output_units removed")
+            continue
+        if not isinstance(declared, dict):
+            raise AssertionError(f"registry.yaml {rule_id}: output_units must be a mapping")
+        columns = {str(c) for c in rule.get("output_columns") or []}
+        for column, entry in declared.items():
+            where = f"registry.yaml {rule_id}.output_units.{column}"
+            if column not in columns or column == "equipment_id":
+                raise AssertionError(f"{where}: not a declared output column")
+            unit, kind = _output_unit_entry(where, entry)
+            if kind not in QUANTITY_KINDS or kind not in quantities:
+                raise AssertionError(f"{where}: kind {kind!r} is not a metric_units.json quantity")
+            try:
+                assert_unit_matches_kind(metric, where, kind, unit)
+            except ValueError as exc:
+                raise AssertionError(str(exc)) from exc
+        for column, master_entry in master_declared.items():
+            where = f"registry.yaml {rule_id}.output_units.{column}"
+            if column not in declared:
+                raise AssertionError(f"{where}: declaration removed")
+            master_unit, _ = _output_unit_entry(where, master_entry)
+            if _output_unit_entry(where, declared[column])[0] != master_unit:
+                raise AssertionError(f"{where}: declared unit changed from {master_unit!r}")
 
 
 def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -> None:
@@ -597,7 +648,8 @@ def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -
     if registry_without_role_lists(master_doc) != registry_without_role_lists(branch_doc):
         raise AssertionError(
             "registry.yaml differs from merge-base with the default branch beyond "
-            "kind/effect metadata and SQL-justified optional_roles additions"
+            "kind/effect metadata, SQL-justified optional_roles additions and "
+            "output_units declarations"
         )
 
 
@@ -612,6 +664,7 @@ def assert_metadata_only_registry_diff() -> None:
     branch_raw = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
     _validate_params_si_diff(metric, "registry", master_raw, branch_raw)
     validate_equipment_kinds_diff(master_raw, branch_raw)
+    validate_output_units_declarations(metric, master_raw, branch_raw)
     validate_registry_role_declarations_diff(
         _without_equipment_kinds(doc_for_metadata_diff(master_raw, renames)),
         _without_equipment_kinds(doc_for_metadata_diff(branch_raw, renames)),
